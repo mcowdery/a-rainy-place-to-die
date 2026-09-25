@@ -109,14 +109,21 @@ export interface CarSpec {
   readonly fx: number;
   readonly fz: number;
   readonly variant: number;
+  /** Force a type / paint (the model showroom); otherwise both are picked from the variant. */
+  readonly type?: CarType['name'];
+  readonly paint?: number;
 }
+
+export const CAR_TYPES: readonly CarType['name'][] = ['sedan', 'kei', 'minivan', 'taxi'];
 
 /** Adds a parked car to the builder. */
 export function addCar(mb: MeshBuilder, c: CarSpec): void {
   const rnd = rng(hash(c.variant, 0xca5));
   const roll = rnd.float();
-  const t = roll < 0.4 ? SEDAN : roll < 0.65 ? KEI : roll < 0.85 ? MINIVAN : TAXI;
-  const paintHex = t === KEI ? rnd.pick(KEI_PAINTS) : t === TAXI ? rnd.pick(TAXI_PAINTS) : rnd.pick(PAINTS);
+  const byName = { sedan: SEDAN, kei: KEI, minivan: MINIVAN, taxi: TAXI };
+  const t = c.type ? byName[c.type] : roll < 0.4 ? SEDAN : roll < 0.65 ? KEI : roll < 0.85 ? MINIVAN : TAXI;
+  const picked = t === KEI ? rnd.pick(KEI_PAINTS) : t === TAXI ? rnd.pick(TAXI_PAINTS) : rnd.pick(PAINTS);
+  const paintHex = c.paint ?? picked;
   const paint = lin(paintHex);
   const f: V3 = [c.fx, 0, c.fz];
   const s: V3 = [c.fz, 0, -c.fx]; // across: +s is the car's left... either side, both are built
