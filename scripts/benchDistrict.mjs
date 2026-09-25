@@ -1,5 +1,5 @@
 // Benchmarks the Kaburo district page in the installed Microsoft Edge: warm start, chunk generation, and
-// frame times while streaming along a boulevard at 30 m/s, then standing still in ASCII and plain WebGL.
+// frame times while streaming along a boulevard at 30 m/s, then standing still with the ASCII overlay on and off.
 //   node scripts/benchDistrict.mjs            headless (GPU flags on; check the reported GPU)
 //   node scripts/benchDistrict.mjs --headed   visible window
 import { chromium } from 'playwright-core';
@@ -19,9 +19,10 @@ try {
   for (const q of ['time=night&weather=clear', 'time=night&weather=rain']) {
     await page.goto(`${base}district.html?bench=1&${q}`);
     const r = await page.waitForFunction(() => window.__bench, null, { timeout: 180_000, polling: 500 }).then((h) => h.jsonValue());
-    console.log(`\n## Kaburo (${q})  viewport ${r.viewport}, ascii ${r.cells} cells, GPU: ${r.gpu}`);
+    console.log(`\n## Kaburo (${q})  viewport ${r.viewport}, GPU: ${r.gpu}`);
     console.log(`district: ${r.districtCells} chunks of 128 m · warm start ${r.warmStart.chunks} chunks in ${r.warmStart.ms} ms`);
-    console.log(`chunk build: ${r.chunkGen.count} built, avg ${r.chunkGen.avgMs} ms, max ${r.chunkGen.maxMs} ms, ${r.chunkGen.disposed} disposed`);
+    console.log(`chunk base: ${r.chunkGen.count} built, avg ${r.chunkGen.avgMs} ms, max ${r.chunkGen.maxMs} ms, ${r.chunkGen.disposed} disposed`);
+    console.log(`chunk detail: ${r.detailGen.count} built, avg ${r.detailGen.avgMs} ms, max ${r.detailGen.maxMs} ms`);
     console.log('phase        frames  first-5 max  avg ms  p95 ms  max ms  build frames (avg/max ms)  calls  triangles');
     for (const p of r.phases) {
       const b = p.chunkBuildFrameMs ? `${p.framesWithChunkBuild} (${p.chunkBuildFrameMs.avg}/${p.chunkBuildFrameMs.max})` : '0';

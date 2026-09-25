@@ -1,51 +1,75 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { intersect, overlaps, type Rect } from '../../core/coords';
-import { rng } from '../../core/hash';
+import { overlaps, type Rect } from '../../core/coords';
 import type { DistrictId, MacroMap } from '../../gen/macro';
-import { buildingGeometry } from '../block';
-import { CELL, cellKey, planCell3, type Building3, type CellPlan3, type Road3, type Sign3 } from './plan';
+import { addBuilding } from '../real/buildings';
+import { addGround } from '../real/ground';
+import type { Light, Lightmap } from '../real/lightmap';
+import { MeshBuilder } from '../real/meshBuilder';
+import { addProps, cellDetail, propBlocked, type CellDetail } from '../real/props';
+import { addSigns, signLights, SignBuilder, type SignAtlas } from '../real/signs';
+import { CELL, cellKey, planCell3, type Building3, type CellPlan3 } from './plan';
 import { reservedRect, type Node3, type Placed3 } from './stamps';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
 export const LOAD_RADIUS = 620;
 export const UNLOAD_RADIUS = 820;
-/** Beyond this, a chunk swaps to its simplified mesh (base boxes of buildings >= 18 m only). */
+/** Within this, a chunk shows its full detail (built on demand); beyond, plain building masses. */
 export const LOD_DISTANCE = 300;
+/** Detail is built a little before it's needed and dropped well after. */
+const NEAR_BUILD = LOD_DISTANCE + 40;
+const NEAR_DROP = LOD_DISTANCE + 160;
+
+/** What the district renders with (created by the page once it has a renderer). */
+export interface DistrictKit {
+  readonly city: THREE.Material;
+  readonly signs: THREE.Material;
+  readonly atlas: SignAtlas;
+  readonly lightmap: Lightmap;
+}
 
 interface Chunk {
   readonly key: number;
+  readonly mx: number;
+  readonly my: number;
   readonly cx: number;
   readonly cz: number;
-  readonly object: THREE.Object3D;
+  readonly group: THREE.Group;
+  readonly far: THREE.Mesh | null;
+  near: THREE.Group | null;
   readonly plan: CellPlan3;
   readonly triangles: number;
+  nearTriangles: number;
+  readonly buildings: readonly Building3[];
 }
 
-const tri = (g: THREE.BufferGeometry): number => (g.index ? g.index.count : g.getAttribute('position').count) / 3;
+const tri = (g: THREE.BufferGeometry | null): number => (g ? (g.index ? g.index.count : g.getAttribute('position').count) / 3 : 0);
 
 /**
- * One district, streamed as chunks. Plans (roads, lots, buildings, signs) are cheap and computed lazily
- * for any cell, so collision works everywhere; meshes are built only near the camera, nearest first, within
- * a per-frame time budget, and disposed when far away.
+ * One district, streamed as chunks. Plans (roads, lots, buildings, signs) and their street furniture are
+ * cheap and computed lazily for any cell, so collision works everywhere. Near the camera a chunk is built
+ * in stages, nearest first within a per-frame time budget: ground + building masses + its lightmap tile
+ * first, then full detail (building dressing, props, signs) once it's within NEAR_BUILD.
  */
 export class District {
   readonly root = new THREE.Group();
   readonly nodes: readonly Node3[];
   readonly cells: readonly (readonly [number, number])[];
   readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
-  readonly stats = { generated: 0, genMsTotal: 0, genMsMax: 0, disposed: 0 };
+  readonly stats = { generated: 0, genMsTotal: 0, genMsMax: 0, detailed: 0, detailMsTotal: 0, detailMsMax: 0, disposed: 0 };
   private readonly cellSet = new Set<number>();
   private readonly plans = new Map<number, CellPlan3>();
+  private readonly details = new Map<number, CellDetail>();
   private readonly chunks = new Map<number, Chunk>();
   private readonly placedByCell = new Map<number, Placed3[]>();
+  private kit: DistrictKit | null = null;
+  /** Scratch builders, reused for every chunk (build() copies the data out). */
+  private readonly mb = new MeshBuilder(1 << 16);
+  private readonly sb = new SignBuilder();
 
   constructor(
     private readonly macro: MacroMap,
     readonly kind: DistrictId,
     private readonly placed: readonly Placed3[],
-    private readonly facade: THREE.Material,
-    private readonly ground: THREE.Material,
     private readonly seed: number,
   ) {
     const cells: [number, number][] = [];
@@ -60,6 +84,18 @@ export class District {
       this.placedByCell.set(k, [...(this.placedByCell.get(k) ?? []), p]);
     }
     this.nodes = placed.flatMap((p) => p.nodes);
+  }
+
+  setKit(kit: DistrictKit): void {
+    this.kit = kit;
+  }
+
+  /** Every sign text the district can show (for the sign atlas). */
+  signTexts(words: readonly string[]): { text: string; vertical: boolean }[] {
+    return [
+      ...words.flatMap((text) => [{ text, vertical: false }, { text, vertical: true }]),
+      ...this.placed.flatMap((p) => p.signs.map((s) => ({ text: s.text, vertical: s.vertical }))),
+    ];
   }
 
   inDistrict(x: number, z: number): boolean {
@@ -79,7 +115,21 @@ export class District {
     return p;
   }
 
-  /** Collision: outside the district, inside a building footprint (this cell or a neighbour) or a stamp. */
+  /** Street furniture and lights of a cell (null outside the district). */
+  detail(mx: number, my: number): CellDetail | null {
+    const k = cellKey(mx, my);
+    let d = this.details.get(k);
+    if (!d) {
+      const p = this.plan(mx, my);
+      if (!p) return null;
+      const stamps = (this.placedByCell.get(k) ?? []).map((q) => q.building);
+      d = cellDetail(p, stamps);
+      this.details.set(k, d);
+    }
+    return d;
+  }
+
+  /** Collision: outside the district, inside a building footprint (this cell or a neighbour), a stamp or a prop. */
   blocked = (x: number, z: number, r: number): boolean => {
     if (!this.inDistrict(x, z)) return true;
     const mx = Math.floor(x / CELL);
@@ -89,85 +139,122 @@ export class District {
       for (let dx = -1; dx <= 1; dx++) {
         const p = this.plan(mx + dx, my + dy);
         if (p?.buildings.some(hit)) return true;
+        const d = this.detail(mx + dx, my + dy);
+        if (d && propBlocked(d.props, x, z, r)) return true;
       }
     }
     return this.placed.some((p) => hit(p.building));
   };
 
-  /** Build chunks near pos (nearest first) until the time budget is spent; drop far ones. Returns chunks built. */
+  /** Build chunk stages near pos (nearest first) until the time budget is spent; drop far ones. Returns stages built. */
   update(pos: THREE.Vector3, budgetMs: number): number {
+    const dist = (c: { cx: number; cz: number }): number => Math.hypot(c.cx - pos.x, c.cz - pos.z);
     for (const c of this.chunks.values()) {
-      if (Math.hypot(c.cx - pos.x, c.cz - pos.z) > UNLOAD_RADIUS) this.unload(c);
+      const d = dist(c);
+      if (d > UNLOAD_RADIUS) this.unload(c);
+      else if (c.near && d > NEAR_DROP) this.dropNear(c);
     }
-    const wanted = this.cells
-      .map(([mx, my]) => ({ mx, my, d: Math.hypot((mx + 0.5) * CELL - pos.x, (my + 0.5) * CELL - pos.z) }))
-      .filter((c) => c.d <= LOAD_RADIUS && !this.chunks.has(cellKey(c.mx, c.my)))
-      .sort((a, b) => a.d - b.d);
     const t0 = performance.now();
     let built = 0;
-    for (const c of wanted) {
-      if (built > 0 && performance.now() - t0 > budgetMs) break;
-      this.build(c.mx, c.my);
+    const spend = (): boolean => built > 0 && performance.now() - t0 > budgetMs;
+    const wanted = this.cells
+      .map(([mx, my]) => ({ mx, my, cx: (mx + 0.5) * CELL, cz: (my + 0.5) * CELL }))
+      .filter((c) => !this.chunks.has(cellKey(c.mx, c.my)) && dist(c) <= LOAD_RADIUS)
+      .sort((a, b) => dist(a) - dist(b));
+    const nearWanted = () => [...this.chunks.values()].filter((c) => !c.near && dist(c) <= NEAR_BUILD).sort((a, b) => dist(a) - dist(b));
+    // Interleave: whichever is closer first, so the ground under your feet and nearby detail come first.
+    for (;;) {
+      if (spend()) break;
+      const nf = wanted[0];
+      const nn = nearWanted()[0];
+      if (!nf && !nn) break;
+      if (nf && (!nn || dist(nf) < dist(nn))) {
+        wanted.shift();
+        this.build(nf.mx, nf.my);
+      } else {
+        this.buildNear(nn!);
+      }
       built++;
     }
-    return built;
-  }
-
-  /** Signs in loaded chunks within radius of (x, z), plus stamp signs. */
-  signsNear(x: number, z: number, radius: number): Sign3[] {
-    const out: Sign3[] = [];
     for (const c of this.chunks.values()) {
-      if (Math.hypot(c.cx - x, c.cz - z) > radius + CELL) continue;
-      out.push(...c.plan.signs);
-      for (const p of this.placedByCell.get(c.key) ?? []) out.push(...p.signs);
+      const showNear = c.near !== null && dist(c) < LOD_DISTANCE;
+      if (c.near) c.near.visible = showNear;
+      if (c.far) c.far.visible = !showNear;
     }
-    return out;
+    return built;
   }
 
   get loaded(): number {
     return this.chunks.size;
   }
 
+  get detailedChunks(): number {
+    let n = 0;
+    for (const c of this.chunks.values()) if (c.near) n++;
+    return n;
+  }
+
   get loadedBuildings(): number {
     let n = 0;
-    for (const c of this.chunks.values()) n += c.plan.buildings.length;
+    for (const c of this.chunks.values()) n += c.buildings.length;
     return n;
   }
 
   get loadedTriangles(): number {
     let n = 0;
-    for (const c of this.chunks.values()) n += c.triangles;
+    for (const c of this.chunks.values()) n += c.triangles + c.nearTriangles;
     return n;
   }
 
+  private cellBuildings(mx: number, my: number, plan: CellPlan3): Building3[] {
+    const stamps = (this.placedByCell.get(cellKey(mx, my)) ?? []).map((p) => p.building);
+    return [...plan.buildings, ...stamps];
+  }
+
   private build(mx: number, my: number): void {
+    const kit = this.kit!;
     const t0 = performance.now();
     const plan = this.plan(mx, my)!;
     const key = cellKey(mx, my);
     const cx = (mx + 0.5) * CELL;
     const cz = (my + 0.5) * CELL;
-    const stamps = (this.placedByCell.get(key) ?? []).map((p) => p.building);
-    const all = [...plan.buildings, ...stamps];
+    const all = this.cellBuildings(mx, my, plan);
 
-    // Full detail: every building (with setbacks/antennas) merged into one mesh = one draw call.
-    const full = mergeGeometries(all.map((b) => buildingGeometry(b, rng(b.id))));
-    full.translate(-cx, 0, -cz);
-    // Distant LOD: only buildings tall enough to show over their neighbours, as plain boxes.
-    const tall = all.filter((b) => b.h >= 18);
-    const simple = tall.length > 0 ? mergeGeometries(tall.map((b) => buildingGeometry(b, rng(b.id), true))) : null;
-    simple?.translate(-cx, 0, -cz);
-    const lod = new THREE.LOD();
-    lod.addLevel(new THREE.Mesh(full, this.facade), 0);
-    lod.addLevel(simple ? new THREE.Mesh(simple, this.facade) : new THREE.Object3D(), LOD_DISTANCE);
-    const groundGeo = groundGeometry(plan);
-    groundGeo.translate(-cx, 0, -cz);
+    const mbBase = this.mb.reset();
+    addGround(mbBase, plan);
+    const baseGeo = mbBase.build(cx, cz)!;
+    const base = new THREE.Mesh(baseGeo, kit.city);
+    base.receiveShadow = true;
+
+    const mbFar = this.mb.reset();
+    for (const b of all) addBuilding(mbFar, b, false);
+    const farGeo = mbFar.build(cx, cz);
+    const far = farGeo ? new THREE.Mesh(farGeo, kit.city) : null;
+    if (far) far.castShadow = far.receiveShadow = true;
+
     const group = new THREE.Group();
     group.position.set(cx, 0, cz);
-    lod.position.set(0, 0, 0);
-    group.add(lod, new THREE.Mesh(groundGeo, this.ground));
+    group.add(base);
+    if (far) group.add(far);
     group.updateMatrixWorld(true);
     this.root.add(group);
-    this.chunks.set(key, { key, cx, cz, object: group, plan, triangles: tri(full) + tri(groundGeo) });
+    this.chunks.set(key, { key, mx, my, cx, cz, group, far, near: null, plan, triangles: tri(baseGeo) + tri(farGeo), nearTriangles: 0, buildings: all });
+
+    // Lightmap tile: this cell's lights plus any from the neighbours that reach across the border.
+    const lights: Light[] = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const d = this.detail(mx + dx, my + dy);
+        if (d) lights.push(...d.lights);
+        const p = this.plan(mx + dx, my + dy);
+        if (p) lights.push(...signLights(p.signs));
+        for (const q of this.placedByCell.get(cellKey(mx + dx, my + dy)) ?? []) {
+          lights.push(...signLights(q.signs));
+          for (const n of q.nodes) if (n.kind === 'door') lights.push({ x: n.x, z: n.z, r: 6, color: [1.0, 0.7, 0.4], i: 0.9 });
+        }
+      }
+    }
+    kit.lightmap.paint(mx * CELL, my * CELL, lights);
 
     const ms = performance.now() - t0;
     this.stats.generated++;
@@ -175,58 +262,55 @@ export class District {
     this.stats.genMsMax = Math.max(this.stats.genMsMax, ms);
   }
 
+  private buildNear(c: Chunk): void {
+    const kit = this.kit!;
+    const t0 = performance.now();
+    const mb = this.mb.reset();
+    for (const b of c.buildings) addBuilding(mb, b, true);
+    addProps(mb, this.detail(c.mx, c.my)!);
+    const sb = this.sb.reset();
+    const stampSigns = (this.placedByCell.get(c.key) ?? []).flatMap((p) => p.signs);
+    addSigns([...c.plan.signs, ...stampSigns], c.buildings, kit.atlas, sb, mb);
+    const geo = mb.build(c.cx, c.cz);
+    const sgeo = sb.build(c.cx, c.cz);
+    const near = new THREE.Group();
+    if (geo) {
+      const m = new THREE.Mesh(geo, kit.city);
+      m.castShadow = m.receiveShadow = true;
+      near.add(m);
+    }
+    if (sgeo) {
+      const m = new THREE.Mesh(sgeo, kit.signs);
+      m.castShadow = true;
+      near.add(m);
+    }
+    c.group.add(near);
+    near.updateMatrixWorld(true);
+    c.near = near;
+    c.nearTriangles = tri(geo) + tri(sgeo);
+    const ms = performance.now() - t0;
+    this.stats.detailed++;
+    this.stats.detailMsTotal += ms;
+    this.stats.detailMsMax = Math.max(this.stats.detailMsMax, ms);
+  }
+
+  private dropNear(c: Chunk): void {
+    if (!c.near) return;
+    c.group.remove(c.near);
+    c.near.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.geometry.dispose();
+    });
+    c.near = null;
+    c.nearTriangles = 0;
+  }
+
   private unload(c: Chunk): void {
-    this.root.remove(c.object);
-    c.object.traverse((o) => {
+    this.dropNear(c);
+    this.root.remove(c.group);
+    c.group.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
     });
     this.chunks.delete(c.key);
     this.stats.disposed++;
   }
-}
-
-const GROUND = { lot: 0x3a3640, boulevard: 0x24242a, street: 0x2c2c33, alley: 0x34302e, coast: 0x3a4048, sidewalk: 0x5a5862 };
-
-/** Ground for one cell: lot/plaza base, asphalt for its share of each road, raised sidewalks cut at crossings. */
-function groundGeometry(plan: CellPlan3): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [];
-  const add = (r: Rect, y0: number, y1: number, hex: number): void => {
-    const c = intersect(r, plan.rect);
-    if (!c) return;
-    const g = new THREE.BoxGeometry(c.w, y1 - y0, c.h);
-    g.translate(c.x + c.w / 2, (y0 + y1) / 2, c.y + c.h / 2);
-    const col = new THREE.Color(hex);
-    const n = g.getAttribute('position').count;
-    const colors = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) col.toArray(colors, i * 3);
-    g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    g.deleteAttribute('uv');
-    parts.push(g);
-  };
-  add(plan.rect, -0.2, 0, GROUND.lot);
-  for (const r of plan.roads) add(r.rect, 0, 0.02, GROUND[r.kind]);
-  for (const r of plan.roads) {
-    if (r.sidewalk <= 0) continue;
-    const crossings = plan.roads.filter((o) => o !== r && o.vertical !== r.vertical && o.kind !== 'coast' && overlaps(o.rect, r.rect));
-    for (const strip of sidewalkStrips(r)) for (const piece of cut(strip, crossings, r.vertical)) add(piece, 0, 0.15, GROUND.sidewalk);
-  }
-  return mergeGeometries(parts);
-}
-
-function sidewalkStrips(r: Road3): Rect[] {
-  const s = r.sidewalk;
-  const q = r.rect;
-  return r.vertical
-    ? [{ x: q.x, y: q.y, w: s, h: q.h }, { x: q.x + q.w - s, y: q.y, w: s, h: q.h }]
-    : [{ x: q.x, y: q.y, w: q.w, h: s }, { x: q.x, y: q.y + q.h - s, w: q.w, h: s }];
-}
-
-/** Removes the spans of a strip covered by crossing roads (1D along the strip's long axis). */
-function cut(strip: Rect, crossings: readonly Road3[], vertical: boolean): Rect[] {
-  let spans: [number, number][] = [vertical ? [strip.y, strip.y + strip.h] : [strip.x, strip.x + strip.w]];
-  for (const o of crossings) {
-    const [a, b] = vertical ? [o.rect.y, o.rect.y + o.rect.h] : [o.rect.x, o.rect.x + o.rect.w];
-    spans = spans.flatMap(([s, e]) => (b <= s || a >= e ? [[s, e]] : ([[s, a], [b, e]] as [number, number][]).filter(([p, q]) => q - p > 0.1)));
-  }
-  return spans.map(([s, e]) => (vertical ? { x: strip.x, y: s, w: strip.w, h: e - s } : { x: s, y: strip.y, w: e - s, h: strip.h }));
 }

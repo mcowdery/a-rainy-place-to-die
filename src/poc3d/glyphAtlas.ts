@@ -39,6 +39,8 @@ export interface AtlasLayout {
   readonly text: ReadonlyMap<string, number>;
   /** Measured darkness per ramp entry, for reporting. */
   readonly report: { readonly pane: string; readonly kanji: string; readonly ground: string; readonly slab: string };
+  /** Measured ink coverage (0-1) of each pane / ground ramp entry, in ramp order. */
+  readonly cov: { readonly pane: readonly number[]; readonly ground: readonly number[] };
 }
 
 const GROUND_CANDIDATES = ' .,:;-=+*xo#%&@';
@@ -208,5 +210,6 @@ export function buildAtlas(cellW: number, cellH: number, signText: string): Atla
     box,
     text: textSlots,
     report: { pane: fmt(pane), kanji: fmt(kanji), ground: fmt(ground), slab: fmt(slab) },
+    cov: { pane: pane.map((x) => x.cov), ground: ground.map((x) => x.cov) },
   };
 }

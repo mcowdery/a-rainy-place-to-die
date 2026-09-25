@@ -1,0 +1,116 @@
+import { intersect, overlaps, type Rect } from '../../core/coords';
+import type { CellPlan3, Road3 } from '../district/plan';
+import { KIND, lin, type MeshBuilder } from './meshBuilder';
+
+/**
+ * Ground for one cell: lot concrete, asphalt for its share of each road, raised pavements with kerbs (cut
+ * at crossings), and road paint: centre and lane lines, edge lines, zebra crossings and stop lines at
+ * junctions. Paint belongs to the cell containing its centre so shared edge roads aren't painted twice.
+ */
+export function addGround(mb: MeshBuilder, plan: CellPlan3): void {
+  mb.id = 0;
+  mb.flags = 0;
+  mb.style = [0, 0, 0, 0];
+  mb.frontNormal = null;
+  const cell = plan.rect;
+  const slab = (r: Rect, y0: number, y1: number, kind: number, top: number, hex: number): void => {
+    const c = intersect(r, cell);
+    if (!c || c.w < 0.01 || c.h < 0.01) return;
+    mb.kind = kind;
+    mb.color = lin(hex);
+    mb.box(c.x + c.w / 2, c.y + c.h / 2, y0, y1, c.w, c.h, top);
+  };
+  slab(cell, -0.2, 0, KIND.lot, KIND.lot, 0x6a6862);
+  for (const r of plan.roads) slab(r.rect, 0, 0.02, KIND.asphalt, KIND.asphalt, r.kind === 'coast' ? 0x5a5e62 : 0x2a2a2e);
+  for (const r of plan.roads) {
+    if (r.sidewalk <= 0) continue;
+    const crossings = plan.roads.filter((o) => o !== r && o.vertical !== r.vertical && o.kind !== 'coast' && overlaps(o.rect, r.rect));
+    for (const strip of sidewalkStrips(r)) for (const piece of cut(strip, crossings, r.vertical)) slab(piece, 0, 0.15, KIND.plain, KIND.sidewalk, 0x8a867e);
+  }
+  paint(mb, plan);
+}
+
+function sidewalkStrips(r: Road3): Rect[] {
+  const s = r.sidewalk;
+  const q = r.rect;
+  return r.vertical
+    ? [{ x: q.x, y: q.y, w: s, h: q.h }, { x: q.x + q.w - s, y: q.y, w: s, h: q.h }]
+    : [{ x: q.x, y: q.y, w: q.w, h: s }, { x: q.x, y: q.y + q.h - s, w: q.w, h: s }];
+}
+
+/** Removes the spans of a strip covered by crossing roads (1D along the strip's long axis). */
+function cut(strip: Rect, crossings: readonly Road3[], vertical: boolean, margin = 0): Rect[] {
+  let spans: [number, number][] = [vertical ? [strip.y, strip.y + strip.h] : [strip.x, strip.x + strip.w]];
+  for (const o of crossings) {
+    const [a, b] = vertical ? [o.rect.y - margin, o.rect.y + o.rect.h + margin] : [o.rect.x - margin, o.rect.x + o.rect.w + margin];
+    spans = spans.flatMap(([s, e]) => (b <= s || a >= e ? [[s, e]] : ([[s, a], [b, e]] as [number, number][]).filter(([p, q]) => q - p > 0.1)));
+  }
+  return spans.map(([s, e]) => (vertical ? { x: strip.x, y: s, w: strip.w, h: e - s } : { x: s, y: strip.y, w: e - s, h: strip.h }));
+}
+
+const WHITE = 0xd8d8d0;
+const YELLOW = 0xd8a830;
+const Y = 0.028;
+
+function paint(mb: MeshBuilder, plan: CellPlan3): void {
+  const cell = plan.rect;
+  const mine = (x: number, z: number): boolean => x >= cell.x && z >= cell.y && x < cell.x + cell.w && z < cell.y + cell.h;
+  mb.kind = KIND.paint;
+  // A flat painted rectangle, kept if its centre is in this cell.
+  const mark = (x: number, z: number, w: number, d: number, hex: number): void => {
+    if (!mine(x + w / 2, z + d / 2)) return;
+    mb.color = lin(hex);
+    mb.quad([x, Y, z + d], [w, 0, 0], [0, 0, -d]);
+  };
+  for (const r of plan.roads) {
+    if (r.kind === 'coast') continue;
+    const q = r.rect;
+    const width = r.vertical ? q.w : q.h;
+    const carriage = width - 2 * r.sidewalk;
+    if (carriage < 5.5) continue;
+    const crossings = plan.roads.filter((o) => o !== r && o.vertical !== r.vertical && o.kind !== 'coast' && overlaps(o.rect, q));
+    const centre = r.vertical ? q.x + q.w / 2 : q.y + q.h / 2;
+    const lo = centre - carriage / 2;
+    const hi = centre + carriage / 2;
+    // Lines run along the free spans between junctions (stopping short for the crossings).
+    const spanRect = r.vertical ? { x: q.x, y: q.y, w: q.w, h: q.h } : { x: q.x, y: q.y, w: q.w, h: q.h };
+    for (const s of cut(spanRect, crossings, r.vertical, 4.5)) {
+      const [a, b] = r.vertical ? [s.y, s.y + s.h] : [s.x, s.x + s.w];
+      const line = (off: number, w: number, hex: number, dash: number, gap: number): void => {
+        for (let t = a; t < b - 0.5; t += dash + gap) {
+          const len = Math.min(dash, b - t);
+          if (r.vertical) mark(off - w / 2, t, w, len, hex);
+          else mark(t, off - w / 2, len, w, hex);
+        }
+      };
+      const boulevard = carriage >= 11;
+      if (boulevard) {
+        line(centre - 0.12, 0.15, YELLOW, 1e9, 0);
+        line(centre + 0.12, 0.15, YELLOW, 1e9, 0);
+        line(centre - carriage / 4, 0.15, WHITE, 5, 5);
+        line(centre + carriage / 4, 0.15, WHITE, 5, 5);
+      } else {
+        line(centre, 0.15, WHITE, 5, 5);
+      }
+      line(lo + 0.5, 0.15, WHITE, 1e9, 0);
+      line(hi - 0.5, 0.15, WHITE, 1e9, 0);
+    }
+    // Zebra crossings and stop lines at each junction with another real street.
+    for (const o of crossings) {
+      if (Math.min(o.rect.w, o.rect.h) < 3) continue;
+      const [ja, jb] = r.vertical ? [o.rect.y, o.rect.y + o.rect.h] : [o.rect.x, o.rect.x + o.rect.w];
+      for (const [edge, dir] of [[ja, -1], [jb, 1]] as const) {
+        const start = edge + dir * 0.6;
+        const end = edge + dir * 3.6;
+        const [z0, z1] = [Math.min(start, end), Math.max(start, end)];
+        for (let s = lo + 0.3; s < hi - 0.3; s += 0.9) {
+          if (r.vertical) mark(s, z0, 0.45, z1 - z0, WHITE);
+          else mark(z0, s, z1 - z0, 0.45, WHITE);
+        }
+        const stop = edge + dir * 4.4;
+        if (r.vertical) mark(dir < 0 ? lo : centre, stop - 0.2, carriage / 2, 0.4, WHITE);
+        else mark(stop - 0.2, dir < 0 ? centre : lo, 0.4, carriage / 2, WHITE);
+      }
+    }
+  }
+}

@@ -8,7 +8,7 @@ hue: '#ff5fc8'
 front: south
 signs:
   - { text: かんぱい, vertical: true, at: [1.2, 8.4], color: '#ff5fc8' }
-  - { text: BAR KANPAI, at: [6, 6.4], color: '#ffe45f' }
+  - { text: BAR KANPAI, at: [6, 3.6], color: '#ffe45f' }
   - { text: スナック, vertical: true, at: [10.8, 8.4], color: '#4fe3ff' }
 nodes:
   door:

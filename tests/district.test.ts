@@ -72,7 +72,7 @@ describe('3D stamps and atmosphere', () => {
   });
 
   it('resolves every time/weather combination for Kaburo', () => {
-    for (const t of TIMES) for (const w of WEATHERS) expect(Object.keys(content.atmosphere.resolve('neon', t, w))).toHaveLength(12);
+    for (const t of TIMES) for (const w of WEATHERS) expect(Object.keys(content.atmosphere.resolve('neon', t, w))).toHaveLength(15);
     expect(content.atmosphere.resolve('neon', 'night', 'clear').neon).toBe('flicker');
     expect(content.atmosphere.resolve('neon', 'day', 'rain').rain).toBeGreaterThan(0);
   });

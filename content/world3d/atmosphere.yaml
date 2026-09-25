@@ -1,47 +1,73 @@
 # (district, time, weather) -> 3D lighting and effects. Same layering as the 2D table: more specific
 # rules override less specific ones; ties go to file order. The base rule must set every key.
 # time: dawn | day | dusk | night    weather: clear | rain | fog
+# Colours are sRGB; sun/hemi are light intensities; lamps 0-1 switches street lighting (and the shop and
+# sign glow on the pavement); exposure feeds the tone mapper.
 rules:
   - match: {}
     set:
-      sky: '#2a3542'
-      fog: '#2a3542'
-      fogNear: 80
-      fogFar: 700
-      hemiSky: '#a8b8d0'
-      hemiGround: '#3a3530'
-      hemi: 1.1
-      sunColor: '#fff2dc'
-      sun: 2.4
+      sky: '#3f78c0'
+      horizon: '#b8cfe0'
+      fog: '#a9bccb'
+      fogNear: 120
+      fogFar: 900
+      hemiSky: '#bcd4f0'
+      hemiGround: '#5a4e40'
+      hemi: 1.3
+      sunColor: '#fff1dc'
+      sun: 3.2
       windowLit: 0.06
       neon: 'off'
       rain: 0
+      lamps: 0
+      exposure: 0.85
 
   - match: { time: dawn }
-    set: { sky: '#2e2a3c', fog: '#2e2a3c', sunColor: '#ffc8a8', sun: 1.2, hemi: 0.8, windowLit: 0.12 }
+    set: { sky: '#3a4a78', horizon: '#f0a080', fog: '#a08890', hemiSky: '#a0a8d0', sunColor: '#ffb890', sun: 1.6, hemi: 0.7, windowLit: 0.15, lamps: 0.5, exposure: 1.15, fogFar: 750 }
 
   - match: { time: dusk }
-    set: { sky: '#2c1a22', fog: '#2c1a22', sunColor: '#ff9a6a', sun: 1.0, hemi: 0.7, windowLit: 0.3, neon: 'on' }
+    set: { sky: '#1c2448', horizon: '#d86848', fog: '#58384a', hemiSky: '#8a90c0', hemiGround: '#40302a', sunColor: '#ff8a50', sun: 1.1, hemi: 0.45, windowLit: 0.35, neon: 'on', lamps: 1, exposure: 1.15, fogNear: 80, fogFar: 650 }
 
   - match: { time: night }
     set:
-      sky: '#040508'
-      fog: '#040508'
+      sky: '#03050c'
+      horizon: '#2c1e2a'
+      fog: '#15111a'
       fogNear: 60
       fogFar: 620
-      hemiSky: '#7080a8'
-      hemiGround: '#15151a'
-      hemi: 0.6
-      sunColor: '#a8b8ff'
-      sun: 1.8
+      hemiSky: '#3a4668'
+      hemiGround: '#2a2018'
+      hemi: 0.22
+      sunColor: '#9fb0ff'
+      sun: 0.22
       windowLit: 0.4
       neon: 'on'
+      lamps: 1
+      exposure: 1.1
 
   - match: { weather: rain }
-    set: { rain: 0.05, fogFar: 380 }
+    set: { rain: 0.05, fogFar: 380, sky: '#5a6068', horizon: '#80868c', fog: '#70767c', sun: 0.5, hemi: 1.1, exposure: 1.0 }
+
+  - match: { time: night, weather: rain }
+    set: { sky: '#05070c', horizon: '#34283a', fog: '#1c1a22', sun: 0.08, hemi: 0.18, exposure: 1.1 }
+
+  - match: { time: dusk, weather: rain }
+    set: { sky: '#1a1e2c', horizon: '#5a3a40', fog: '#3a3038', sun: 0.35, hemi: 0.35, exposure: 1.35 }
+
+  - match: { time: dawn, weather: rain }
+    set: { sky: '#3a4050', horizon: '#8a7a80', fog: '#6a6470', sun: 0.4, hemi: 0.5, exposure: 1.15 }
 
   - match: { weather: fog }
-    set: { fogNear: 10, fogFar: 200 }
+    set: { fogNear: 10, fogFar: 200, sky: '#8a9098', horizon: '#9aa0a8', fog: '#8a9098', sun: 1.2 }
+
+  - match: { time: night, weather: fog }
+    set: { sky: '#101018', horizon: '#2a2430', fog: '#1e1c24', sun: 0.1 }
+
+  - match: { time: dusk, weather: fog }
+    set: { sky: '#3a3040', horizon: '#6a4a50', fog: '#4a3a44', sun: 0.4 }
+
+  - match: { time: dawn, weather: fog }
+    set: { sky: '#706878', horizon: '#a08890', fog: '#8a8088', sun: 0.6 }
 
   # Kaburo never really sleeps.
   - match: { district: neon, time: night }

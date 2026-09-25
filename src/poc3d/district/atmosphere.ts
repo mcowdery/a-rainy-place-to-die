@@ -8,8 +8,10 @@ import { applicableRules, checkMatch, type RuleMatch, type TimeOfDay, type Weath
  * lookup, nothing runs a clock. The base rule (empty match) must set every key.
  */
 export interface Atmosphere3 {
-  /** Sky / background (and ASCII blank-cell) colour. */
+  /** Sky colour at the zenith. */
   readonly sky: number;
+  /** Sky colour at the horizon (the city's light-pollution glow at night). */
+  readonly horizon: number;
   readonly fog: number;
   readonly fogNear: number;
   readonly fogFar: number;
@@ -24,11 +26,15 @@ export interface Atmosphere3 {
   readonly neon: 'off' | 'on' | 'flicker';
   /** Rain streaks per blank cell (0 = dry). */
   readonly rain: number;
+  /** Street lamps: 0 off, 1 fully on (also scales shop and sign spill on the street). */
+  readonly lamps: number;
+  /** Camera exposure for tone mapping. */
+  readonly exposure: number;
 }
 
 type Key = keyof Atmosphere3;
-const COLOR_KEYS: readonly Key[] = ['sky', 'fog', 'hemiSky', 'hemiGround', 'sunColor'];
-const NUMBER_KEYS: readonly Key[] = ['fogNear', 'fogFar', 'hemi', 'sun', 'windowLit', 'rain'];
+const COLOR_KEYS: readonly Key[] = ['sky', 'horizon', 'fog', 'hemiSky', 'hemiGround', 'sunColor'];
+const NUMBER_KEYS: readonly Key[] = ['fogNear', 'fogFar', 'hemi', 'sun', 'windowLit', 'rain', 'lamps', 'exposure'];
 const ALL_KEYS: readonly Key[] = [...COLOR_KEYS, ...NUMBER_KEYS, 'neon'];
 
 interface Rule3 {

@@ -34,7 +34,7 @@ export class FirstPerson {
   /** Vertical image shift in NDC; positive looks up. */
   private shear = 0;
   private shearOn = true;
-  /** Debug: fast and ignores collision. */
+  /** Debug: fast, ignores collision, moves along the view direction and holds its altitude. */
   fly = false;
 
   constructor(
@@ -85,11 +85,18 @@ export class FirstPerson {
     const r = Number(k.has('KeyD') || k.has('ArrowRight')) - Number(k.has('KeyA') || k.has('ArrowLeft'));
     const pos = this.camera.position;
     if (f === 0 && r === 0) {
-      pos.y = EYE;
+      if (!this.fly) pos.y = EYE;
       return;
     }
     const fwd = new THREE.Vector3();
     this.camera.getWorldDirection(fwd);
+    if (this.fly && !this.shearOn) {
+      pos.addScaledVector(fwd, f * FLY * dt);
+      const right = new THREE.Vector3().crossVectors(fwd, this.camera.up).normalize();
+      pos.addScaledVector(right, r * FLY * dt);
+      pos.y = Math.max(EYE, pos.y);
+      return;
+    }
     fwd.y = 0;
     fwd.normalize();
     const right = new THREE.Vector3().crossVectors(fwd, this.camera.up).normalize();

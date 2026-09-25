@@ -208,7 +208,10 @@ function subdivide(
   out.push(r);
 }
 
-/** A block becomes one or two rows of lots along x, each fronting the block's north or south street. */
+/**
+ * A block becomes one or two rows of lots along x, each fronting the block's north or south street; the
+ * corner lots at either end of a row front the side street instead, so every street is lined with fronts.
+ */
 function fillBlock(block: Rect, style: DistrictStyle3, rnd: Rng, reserved: readonly Rect[], buildings: Building3[], signs: Sign3[], idBase: number): void {
   const rows: { r: Rect; front: Side }[] = [];
   if (block.h > style.twoRowDepth) {
@@ -225,13 +228,14 @@ function fillBlock(block: Rect, style: DistrictStyle3, rnd: Rng, reserved: reado
       let w = style.lotW[0] + rnd.float() * (style.lotW[1] - style.lotW[0]);
       if (end - x - w < style.lotW[0]) w = end - x;
       const lot: Rect = { x, y: r.y, w, h: r.h };
+      const lotFront: Side = x === r.x && end - x - w > 0.5 ? 'west' : end - x - w <= 0.5 && x > r.x ? 'east' : front;
       x += w;
       if (end - x > style.lotW[0] + 2 && rnd.chance(style.lotGap)) x += 1.5; // service alley
       const height = pickFloors(style, rnd) * FLOOR_H;
       if (reserved.some((q) => overlaps(q, lot))) continue;
       if (buildings.length >= 127) continue;
       // Small gaps between neighbours so each building reads as its own mass (edges in the ASCII pass).
-      const b: Building3 = { id: idBase + buildings.length, x: lot.x + lot.w / 2, z: lot.y + lot.h / 2, w: lot.w - 0.4, d: lot.h - 0.4, h: height, front };
+      const b: Building3 = { id: idBase + buildings.length, x: lot.x + lot.w / 2, z: lot.y + lot.h / 2, w: lot.w - 0.4, d: lot.h - 0.4, h: height, front: lotFront };
       buildings.push(b);
       if (rnd.chance(style.signChance)) signs.push(makeSign(b, style, rnd));
     }
@@ -273,6 +277,7 @@ function makeSign(b: Building3, style: DistrictStyle3, rnd: Rng): Sign3 {
     const p = frontPoint(b, rnd.chance(0.5) ? 1.2 : fw - 1.2, 0.4);
     return { text, vertical, color, x: p.x, y: Math.min(b.h - 1, 7 + rnd.float() * 6), z: p.z, nx: p.nx, nz: p.nz };
   }
+  // Horizontal signs sit on the fascia over the shopfront.
   const p = frontPoint(b, fw / 2, 0.4);
-  return { text, vertical, color, x: p.x, y: 6.4, z: p.z, nx: p.nx, nz: p.nz };
+  return { text, vertical, color, x: p.x, y: 3.6, z: p.z, nx: p.nx, nz: p.nz };
 }
