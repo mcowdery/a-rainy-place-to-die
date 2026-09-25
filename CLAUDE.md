@@ -6,11 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A browser-based engine for a large, sparse, walkable ASCII city: an alternate-reality Japan with a noir / city-pop look. The world handles traversal and atmosphere; story content runs in a separate VN mode, which will come from the Krea Studio VN generator (FastAPI + vanilla JS, a separate codebase). The world hands off to VN mode at story nodes. The real handoff convention (exit/entry keys, shared flags) will be brought in later, so don't design it; leave the seams described below in place.
 
+## Status: two prototypes
+
+- `index.html` + `src/` (everything outside `src/poc3d/`): the 2D top-down/3-4 tile prototype. **Set aside, don't extend.** The visual target turned out to be first-person 3D, but its world-data design (L0–L4 layers, stable ids, stamp validation, atmosphere lookup) is expected to carry over.
+- `poc3d.html` + `src/poc3d/`: a first-person three.js proof of concept targeting the look of GrowNow's ASCII city. The scene renders into a low-resolution target (2×2 texels per character cell). The building material (`block.ts`) writes an integer surface code into alpha: per-building style, pane / mullion / slab grid, storefront band with sign letters, and a smooth intensity from light, street glow and distance. The ASCII pass (`asciiPass.ts`) maps each code to a glyph ramp in the building's hue and draws edge glyphs from depth. Looking up is a vertical image shift, not pitch, so verticals stay vertical (P toggles to true pitch). Three switchable render modes: plain WebGL, the custom pass, and three's `AsciiEffect` for comparison. `node scripts/bench3d.mjs [--headed]` benchmarks them at several scene sizes in the installed Edge. PoC only: don't build the world on it until the approach is decided.
+
 ## Commands
 
 Node is installed at `C:\Program Files\nodejs`. If `node`/`npm` aren't on PATH in a shell, prefix with `$env:Path = "$env:ProgramFiles\nodejs;$env:Path"` (PowerShell) or `PATH="/c/Program Files/nodejs:$PATH"` (bash).
 
-- `npm run dev` starts the Vite dev server. Review shortcuts: `?spawn=bar_kanpai.out&time=dusk&weather=rain`.
+- `npm run dev` starts the Vite dev server. For the 2D prototype use `/` (review shortcuts: `?spawn=bar_kanpai.out&time=dusk&weather=rain`); for the 3D PoC use `/poc3d.html` (`?scene=downtown` gives a tall-tower canyon, `?cam=x,y,z,yaw,pitch` sets the view, `?grid=2000&merge=1` adds buildings, `?bench=1` runs the scripted benchmark).
 - `npm test` runs Vitest once. For a single file or test: `npx vitest run tests/stamps.test.ts -t "CJK"`.
 - `npm run typecheck` runs `tsc` with no emit. `npm run build` runs the typecheck plus `vite build`.
 - `npx vitest run -u` updates the generator snapshot. Only do this when a change to generated output is intended (see Determinism).

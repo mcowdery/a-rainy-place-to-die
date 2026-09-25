@@ -1,36 +1,39 @@
 import * as THREE from 'three';
-import { FACADE_CODE } from './block';
+import { FACADE, SIGN_LETTERS, SURFACE } from './block';
 
 /**
  * GPU ASCII pass, for comparison with three's CPU/DOM AsciiEffect.
  * 1. Render the scene into a small target: 2x2 texels per character cell (so 3D cost scales with
  *    the number of cells, not screen pixels).
- * 2. Fullscreen quad: per cell, average the colour, map luminance to a glyph in a density ramp,
- *    and draw that glyph from a glyph atlas texture, tinted by the scene colour (or mono).
- * 3. Buildings don't use the brightness ramp: their material writes an integer code into alpha (see
- *    FACADE_CODE). Walls map a smooth light value (angle, lamps, ground AO, distance) onto a density
- *    ramp; windows are 'o' (lit) / '.' (unlit), or +-| outlines when large; at distance, extra dim
- *    detail points stand in for windows the LOD merged away.
- * 4. Edges: where depth jumps between neighbouring cells, draw | - / \ oriented along the
+ * 2. Fullscreen quad: per cell, pick a glyph and draw it from a glyph atlas texture, tinted by the
+ *    scene colour (or mono).
+ *    - Non-building surfaces: luminance -> RAMP.
+ *    - Buildings: their material writes an integer code into alpha (see FACADE): surface type (pane /
+ *      mullion / slab), a smooth 0-15 intensity (light, ground AO, distance) and a per-window variant.
+ *      Each surface has its own ramp, so facades are near-fully filled but structured: panes are blocks
+ *      of one dense glyph, mullions are blank columns, slabs are rows. Lit windows step denser/brighter.
+ *      The storefront band (SHOP codes) draws sign letters, frames and glass in their own colours.
+ * 3. Edges: where depth jumps between neighbouring cells, draw | - / \ oriented along the
  *    silhouette instead. Background (sky) cells are left blank. This is what makes shapes read.
  */
 const RAMP = ' .,:;-=+*xo#%&@';
 const EDGES = '|-/\\';
-/**
- * Wall density ramp: light marks only, so walls never compete with window glyphs in weight. No
- * horizontal strokes (- =), which read as siding stripes and blur into edges.
- */
-const WALL_RAMP = ',:;';
-/** Distance detail point (see FACADE_CODE.detailLit): smaller and dimmer than a real window's 'o'. */
-const DETAIL = '\u00b7';
-const GLYPHS = RAMP + EDGES + WALL_RAMP + DETAIL;
+/** Facade ramps, sparse -> dense. Letters/numbers carry the mass, like image-to-ASCII conversion. */
+const PANE_RAMP = '.:+*xXZ08&';
+const SLAB_RAMP = ':00';
+/** Mullions are blank gap columns: the facade's structure comes from wide filled panes between them. */
+const MULLION_RAMP = ' ';
+/** Storefront band: frame, glass, then sign letters (see FACADE.shop). */
+const SHOP_GLYPHS = '8#' + SIGN_LETTERS;
+const GLYPHS = RAMP + EDGES + PANE_RAMP + SLAB_RAMP + MULLION_RAMP + SHOP_GLYPHS;
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
   void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
 `;
 
-const C = FACADE_CODE;
+const F = FACADE;
+const S = SURFACE;
 
 const fragmentShader = /* glsl */ `
   #include <packing>
@@ -46,19 +49,15 @@ const fragmentShader = /* glsl */ `
   uniform float uGlyphCount;
   uniform float uColor;
   uniform vec3 uBg;
-  uniform float uGlyphLit;
-  uniform float uGlyphUnlit;
-  uniform float uGlyphH;
-  uniform float uGlyphV;
-  uniform float uGlyphCorner;
-  uniform float uWallRampStart;
-  uniform float uGlyphDetail;
-  uniform float uWallRampLen;
+  uniform vec2 uPane;    // (start index in atlas, length)
+  uniform vec2 uSlab;
+  uniform vec2 uMullion;
+  uniform float uShopStart;
+  uniform float uGlyphRoofLine;
   float rawDepth(vec2 cell) { return texture2D(tDepth, (cell + 0.5) / uCells).x; }
   float viewDepth(vec2 cell) { return -perspectiveDepthToViewZ(rawDepth(cell), uNear, uFar); }
-  float codeAt(vec2 cell) { return floor(texture2D(tScene, (cell * 2.0 + 1.5) / (uCells * 2.0)).a * 255.0 + 0.5); }
-  bool isLitWindow(float code) { return code >= ${C.lit}.0 && code < ${C.lit + 10}.0; }
   float glyphFor(float l) { return floor(clamp(pow(l, 0.45) * 1.15, 0.0, 0.999) * uRampCount); }
+  float pick(vec2 ramp, float x) { return ramp.x + clamp(floor(x), 0.0, ramp.y - 1.0); }
   void main() {
     vec2 cell = floor(gl_FragCoord.xy / uCellPx);
     vec2 local = fract(gl_FragCoord.xy / uCellPx);
@@ -71,35 +70,33 @@ const fragmentShader = /* glsl */ `
     float idx = glyphFor(l);
     float level = mix(0.45, 1.0, sqrt(l));
     vec3 src = c;
-    bool building = code < ${C.other}.0;
-    if (building) {
-      // Buildings: explicit window grid from the material (see FACADE_CODE), not brightness texture.
+    bool building = code < ${F.other}.0;
+    if (code >= ${F.shop}.0 && building) {
+      // Storefront band: fixed glyph per code, colour straight from the material.
       src = t.rgb;
-      if (code >= ${C.wall}.0) {
-        // Wall: smooth wall light from the material -> a light density ramp in the building's hue.
-        // Visual hierarchy: lit window (1.0) > detail point (0.6) > unlit window (0.4) > wall (0.12-0.28).
-        // Near walls: cells right next to a lit window stay blank so it keeps clean gaps and reads at full
-        // size. Far walls (LOD-merged) skip that, so distant towers stay busy.
-        bool isFar = code >= ${C.wallFar}.0;
-        float wl = (code - (isFar ? ${C.wallFar}.0 : ${C.wall}.0)) / ${C.wallSteps}.0;
-        idx = uWallRampStart + floor(clamp(wl, 0.0, 0.999) * uWallRampLen);
-        level = mix(0.12, 0.28, wl);
-        if (!isFar && (isLitWindow(codeAt(cell + vec2(1.0, 0.0))) || isLitWindow(codeAt(cell - vec2(1.0, 0.0))))) idx = 0.0;
-      }
-      else if (code == ${C.detailLit}.0) {
-        idx = uGlyphDetail;
-        level = 0.6;
-      }
-      else if (code >= ${C.unlit}.0) {
-        bool lit = code >= ${C.lit}.0;
-        float shape = code - (lit ? ${C.lit}.0 : ${C.unlit}.0);
-        level = lit ? 1.0 : 0.4;
-        if (shape == ${C.point}.0) idx = lit ? uGlyphLit : uGlyphUnlit;
-        else if (shape == ${C.h}.0) idx = uGlyphH;
-        else if (shape == ${C.v}.0) idx = uGlyphV;
-        else idx = uGlyphCorner;
+      idx = uShopStart + code - ${F.shop}.0;
+      level = code >= ${F.shop + 2}.0 ? 1.0 : code == ${F.shop}.0 ? 0.75 : 0.45;
+    } else if (code >= ${F.base}.0 && building) {
+      src = t.rgb;
+      float k = code - ${F.base}.0;
+      float it = mod(k, ${F.levels}.0) / ${F.levels - 1}.0;       // smooth intensity 0-1
+      float sv = floor(k / ${F.levels}.0);
+      float surf = floor(sv / ${F.variants}.0);
+      float variant = mod(sv, ${F.variants}.0) - 1.0;               // -1, 0, +1 ramp steps per window
+      if (surf == ${S.mullion}.0) {
+        idx = pick(uMullion, it * uMullion.y);
+        level = mix(0.2, 0.5, it);
+      } else if (surf == ${S.slab}.0) {
+        idx = pick(uSlab, it * uSlab.y);
+        level = mix(0.25, 0.65, it);
+      } else {
+        bool lit = surf == ${S.paneLit}.0;
+        idx = pick(uPane, it * (uPane.y - 2.0) + variant + (lit ? 2.0 : 0.0));
+        level = lit ? 1.0 : mix(0.3, 0.8, it);
       }
     }
+    // Ground and props sit back so buildings carry the image (the reference's street is mostly dark).
+    if (!building) level *= 0.6;
     float sky = step(0.99999, rawDepth(cell));
     if (sky > 0.5) idx = 0.0;
     if (uEdges > 0.5) {
@@ -116,7 +113,8 @@ const fragmentShader = /* glsl */ `
       float gy = iu - id;
       if (max(ax, ay) > 0.12 && sky < 0.5) {
         // Buildings: only | and - (clean verticals like the reference). Ground: diagonals too, for perspective.
-        if (building) idx = uRampCount + (ax >= ay ? 0.0 : 1.0);
+        // Buildings: '|' sides and '=' roof lines, like the reference.
+        if (building) idx = ax >= ay ? uRampCount : uGlyphRoofLine;
         else if (ax > ay * 2.0) idx = uRampCount + 0.0;       // |
         else if (ay > ax * 2.0) idx = uRampCount + 1.0;       // -
         else idx = uRampCount + (gx * gy > 0.0 ? 3.0 : 2.0);  // backslash or slash
@@ -125,7 +123,11 @@ const fragmentShader = /* glsl */ `
     }
     float mask = texture2D(tGlyphs, vec2((idx + local.x) / uGlyphCount, local.y)).r;
     float peak = max(src.r, max(src.g, src.b));
-    vec3 hue = src / max(peak, 0.02) * level;
+    vec3 hue = src / max(peak, 0.02);
+    // Buildings: boost saturation (linear -> sRGB encoding lifts the weak channels and washes hues out),
+    // so each building reads as one strong colour band like the reference.
+    if (building) hue = pow(hue, vec3(1.8));
+    hue *= level;
     vec3 ink = mix(vec3(0.55, 0.95, 0.75) * level, hue, uColor);
     gl_FragColor = vec4(mix(uBg, ink, mask), 1.0);
     #include <colorspace_fragment>
@@ -146,12 +148,16 @@ function glyphAtlas(cellW: number, cellH: number): THREE.Texture {
   g.font = `bold ${Math.round(h * 0.82)}px Consolas, 'Cascadia Mono', monospace`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  [...GLYPHS].forEach((ch, i) => g.fillText(ch, i * w + w / 2, h / 2 + scale));
+  // '*' sits in the top of the cell in most monospace fonts and reads as '"'; centre it.
+  [...GLYPHS].forEach((ch, i) => g.fillText(ch, i * w + w / 2, h / 2 + scale + (ch === '*' ? h * 0.2 : 0)));
   const t = new THREE.CanvasTexture(c);
   t.minFilter = THREE.LinearFilter;
   t.generateMipmaps = false;
   return t;
 }
+
+/** Atlas (start, length) of a sub-ramp. */
+const range = (ramp: string): THREE.Vector2 => new THREE.Vector2(GLYPHS.indexOf(ramp), ramp.length);
 
 export class AsciiShaderPass {
   private target: THREE.WebGLRenderTarget;
@@ -183,14 +189,11 @@ export class AsciiShaderPass {
         uEdges: { value: 1 },
         uRampCount: { value: RAMP.length },
         uGlyphCount: { value: GLYPHS.length },
-        uGlyphLit: { value: GLYPHS.indexOf('o') },
-        uGlyphUnlit: { value: GLYPHS.indexOf('.') },
-        uGlyphH: { value: GLYPHS.indexOf('-') },
-        uGlyphV: { value: GLYPHS.indexOf('|') },
-        uGlyphCorner: { value: GLYPHS.indexOf('+') },
-        uWallRampStart: { value: RAMP.length + EDGES.length },
-        uWallRampLen: { value: WALL_RAMP.length },
-        uGlyphDetail: { value: GLYPHS.indexOf(DETAIL) },
+        uPane: { value: range(PANE_RAMP) },
+        uSlab: { value: range(SLAB_RAMP) },
+        uMullion: { value: range(MULLION_RAMP) },
+        uShopStart: { value: GLYPHS.indexOf(SHOP_GLYPHS) },
+        uGlyphRoofLine: { value: RAMP.indexOf('=') },
         uColor: { value: 1 },
         uBg: { value: bg },
       },

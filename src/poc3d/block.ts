@@ -26,53 +26,56 @@ interface BuildingSpec {
   h: number;
 }
 
-const BAY = 1.5; // metres between window columns (tower curtain-wall module)
-const FLOOR = 3; // metres per storey
-/** Minimum on-screen pitch in character cells: columns need a 1-cell gap; rows may be adjacent. */
-const MIN_PITCH_X = 2;
-const MIN_PITCH_Y = 1;
+const FLOOR = 3; // metres per storey (pane rows + slab row)
+/** Minimum on-screen size of a bay/floor in cells, so pane + mullion (or pane + slab) always both fit. */
+const MIN_PITCH = 2;
+/** Height of the street-level storefront band (signs, shop frames, glass). */
+const SHOP_H = 5.5;
+/** Shop frontage width in metres. */
+const SHOP_W = 4.5;
 
-/** Building hues (reference: warm yellow / teal / blue skylines). Picked per building by hashing its id. */
+/** Building hues (reference: warm yellow / teal / blue / orange skylines). Picked per building by hashing its id. */
 const HUES = [0xe6d34a, 0x3cc9a8, 0x4a9fe0, 0xe89a3c, 0x8fd14f, 0x58d6e8, 0xd9e070, 0xb48cff];
 export const hueFor = (id: number): number => HUES[hash(id, 0x4e7) % HUES.length];
 
+/** Facade surface types. Panes are the windows (most of the face); mullions and slabs frame them. */
+export const SURFACE = { mullion: 0, slab: 1, pane: 2, paneLit: 3 } as const;
+
+/** Storefront sign letters (see FACADE.shop). */
+export const SIGN_LETTERS = 'ABCDEFGHIKLMNOPRSTUY';
+
 /**
- * Integer codes (stored as code / 255 in the scene target's alpha) telling the ASCII pass what a
- * building texel is.
- * - Windows are UNLIT or LIT plus a shape: POINT (single glyph), or, for windows big enough on screen,
- *   an outline made of H (top/bottom edge), V (side edge) and CORNER cells.
- * - Walls are WALL (near) or WALL_FAR (bays/floors merged by LOD) + round(light * WALL_STEPS): a smooth
- *   0-1 "wall light" the ASCII pass maps onto a density ramp.
- * - DETAIL_LIT: at distance, a wall cell inside a merged bay/floor standing in for one of the real windows
- *   the LOD merged away. Drawn as a small dim point: apparent detail, not per-window geometry.
- * - Anything that isn't a building writes 255 (opaque default).
+ * Integer code (stored as code / 255 in the scene target's alpha) for each building texel:
+ * - facade: BASE + ((surface * VARIANTS + variant) * LEVELS + level)
+ *   level: smooth 0-11 intensity (light, street glow, distance); variant: 0-2 ramp offset by floor band.
+ * - storefront band: SHOP + 0 frame, + 1 glass, + 2.. sign letter index into SIGN_LETTERS.
+ * Roofs write ROOF; anything that isn't a building writes OTHER (opaque default).
  */
-export const FACADE_CODE = {
-  roof: 2, unlit: 10, lit: 20, point: 0, h: 1, v: 2, corner: 3,
-  detailLit: 30, wall: 32, wallFar: 140, wallSteps: 100, other: 255,
-} as const;
+export const FACADE = { roof: 2, base: 32, levels: 12, variants: 3, shop: 212, other: 255 } as const;
 
 export interface FacadeUniforms {
   /** Fraction of windows lit: stand-in for the atmosphere table's per-(district, time) value. */
   uWindowLit: { value: number };
-  /** 0: every window is a single glyph at any distance (default). 1: large windows become thin outlines. */
-  uWindowOutline: { value: number };
 }
 
 /**
- * Building material: Lambert shading plus an explicit window grid computed in the fragment shader from
- * facade coordinates in metres, measured in character cells (the scene target has 2 texels per cell).
- * - Density: bays/floors merge in whole multiples only until the pitch reaches MIN_PITCH cells, so a
- *   facade at normal distance is packed with windows (every row, every other column).
- * - Size: a window is always a single glyph however close you get (optionally, uWindowOutline draws
- *   windows >= 3x2 cells on screen as a thin outline with an empty interior). Never a filled block.
+ * Building material: Lambert shading plus, in the fragment shader, a dense facade pattern in the style
+ * of image-to-ASCII conversion (after GrowNow's ASCII city):
+ * - Each building has its own style from a hash of its id: bay width, gap (mullion) ratio, glyph
+ *   family (lighter / normal / heavier) and whether it has floor-slab rows.
+ * - Every facade texel is a pane, mullion or slab on a grid in metres, sized in character cells with
+ *   whole-multiple LOD merging at distance so it never aliases.
+ * - One smooth intensity picks the glyph from that surface's ramp: light angle, a glow from the street
+ *   (denser low down, thinning with height) and distance fade. Variety comes per floor band and
+ *   occasional odd windows, never per pixel.
+ * - The bottom SHOP_H metres are a storefront band: a row of sign letters, shop frames and glass.
  */
 export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMaterial {
-  const C = FACADE_CODE;
+  const F = FACADE;
+  const S = SURFACE;
   const m = new THREE.MeshLambertMaterial({ vertexColors: true });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uWindowLit = uniforms.uWindowLit;
-    shader.uniforms.uWindowOutline = uniforms.uWindowOutline;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute float aBuilding;
@@ -85,71 +88,90 @@ export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMat
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uWindowLit;
-        uniform float uWindowOutline;
         varying float vBid;
-        varying vec3 vFacade;`)
+        varying vec3 vFacade;
+        float h1(float a) { return fract(sin(a * 91.345) * 47453.5453); }
+        float h3(vec3 v) { return fract(sin(dot(v, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }`)
       .replace('#include <opaque_fragment>', `
-        float facadeCode = ${C.other}.0;
+        float facadeCode = ${F.other}.0;
         if (vBid > 0.5) {
-          // Smooth wall light in 0-1, independent of the building's hue. Every term varies smoothly across
-          // a face, so the density ramp shades it in gradients rather than noise:
-          // - Lambert result / base colour: directional angle + sky/ground ambient + street-lamp falloff
-          //   (with these lights: ~0.02 facing away from the moon, ~0.07 / ~0.14 on the two lit faces, 0.3+ by lamps);
-          // - ambient occlusion toward the ground over the first 15 m;
-          // - distance fade: near walls get denser, brighter glyphs; far ones thin out.
+          // Per-building style.
+          float bay = mix(2.4, 4.6, h1(vBid));                       // metres per window column
+          float mullionFrac = mix(0.18, 0.42, h1(vBid + 17.0));      // share of each bay left as a gap
+          float family = floor(h1(vBid + 31.0) * 3.0) - 1.0;         // -1 lighter, 0, +1 heavier glyphs
+          bool slabRows = h1(vBid + 47.0) > 0.3;
+          float slabEvery = 2.0 + floor(h1(vBid + 59.0) * 4.0);     // floor-slab row every 2-5 floors
+
+          // Smooth intensity 0-1, independent of the building's hue.
           vec3 luma = vec3(0.299, 0.587, 0.114);
           float shade = dot(outgoingLight, luma) / max(dot(vColor.rgb, luma), 1e-3);
-          float wallLight = 1.0 - exp(-shade * 6.0);
-          wallLight *= mix(0.55, 1.0, smoothstep(0.0, 15.0, vFacade.y));
-          wallLight *= mix(1.0, 0.35, smoothstep(20.0, 450.0, length(vViewPosition)));
+          float lightTerm = 1.0 - exp(-shade * 6.0);
+          float streetGlow = mix(1.0, 0.45, smoothstep(0.0, 140.0, vFacade.y)); // dense low, sparse high
+          float fade = mix(1.0, 0.15, smoothstep(15.0, 500.0, length(vViewPosition)));
+          float intensity = clamp((0.3 + 0.55 * lightTerm) * streetGlow * fade + family * 0.09, 0.0, 1.0);
+
           if (vFacade.z > 1.5) {
-            facadeCode = ${C.roof}.0;
+            facadeCode = ${F.roof}.0;
           } else {
             vec2 m = vFacade.xy;
             // Character cells per metre along this face (the scene target has 2 texels per cell).
             vec2 cellsPerM = 1.0 / (2.0 * max(fwidth(m), vec2(1e-5)));
-            vec2 base = vec2(${BAY.toFixed(2)}, ${FLOOR.toFixed(2)});
-            // LOD: merge whole bays/floors only until the pitch reaches the minimum; whole multiples keep
-            // the grid anchored to the building so it doesn't crawl as you walk.
-            vec2 unit = base * max(vec2(1.0), ceil(vec2(${MIN_PITCH_X.toFixed(1)}, ${MIN_PITCH_Y.toFixed(1)}) / (base * cellsPerM)));
-            vec2 cellsPerUnit = unit * cellsPerM;
-            vec2 idx = floor(m / unit);
-            vec2 pos = fract(m / unit) * cellsPerUnit; // position inside this bay/floor, in cells
-            // Window footprint in whole cells; an integer span of k cells always holds exactly k cell
-            // centres, so windows render as a consistent number of glyphs.
-            vec2 full = floor(cellsPerUnit * vec2(0.5, 0.55));
-            bool outline = uWindowOutline > 0.5 && full.x >= 3.0 && full.y >= 2.0;
-            vec2 win = outline ? full : vec2(1.0);
-            vec2 q = floor(pos - floor((cellsPerUnit - win) * 0.5)); // cell within the window
-            // Merged = LOD has combined several real bays/floors into this unit (medium-far distance).
-            bool merged = any(greaterThan(unit, base * 1.5));
-            facadeCode = (merged ? ${C.wallFar}.0 : ${C.wall}.0) + floor(clamp(wallLight, 0.0, 1.0) * ${C.wallSteps}.0 + 0.5);
-            if (merged) {
-              // Suggest the windows the merge removed: each other cell in the unit gets a stable lit/unlit
-              // hash of (building, unit, cell in unit), at the same lit fraction as real windows.
-              vec2 sub = floor(pos);
-              float hd = fract(sin(dot(vec3(vBid, idx.x * 17.0 + sub.x, idx.y * 17.0 + sub.y), vec3(39.346, 11.135, 83.155))) * 43758.5453);
-              if (hd < uWindowLit) facadeCode = ${C.detailLit}.0;
-            }
-            if (all(greaterThanEqual(q, vec2(0.0))) && all(lessThan(q, win))) {
-              float h = fract(sin(dot(vec3(vBid, idx), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
-              float state = h < uWindowLit ? ${C.lit}.0 : ${C.unlit}.0;
-              if (!outline) {
-                facadeCode = state + ${C.point}.0;
+            if (m.y < ${SHOP_H.toFixed(1)}) {
+              // Storefront band: one row of sign letters on top, a frame row, then glass between frames.
+              float shopW = ${SHOP_W.toFixed(1)} * max(1.0, ceil(3.0 / (${SHOP_W.toFixed(1)} * cellsPerM.x)));
+              float shop = floor(m.x / shopW);
+              float cx = fract(m.x / shopW) * shopW * cellsPerM.x;   // cell column within this shop
+              float fromTop = (${SHOP_H.toFixed(1)} - m.y) * cellsPerM.y; // cell rows below the band's top
+              float hs = h3(vec3(vBid, shop, 7.0));
+              vec3 signCol = hs < 0.25 ? vec3(1.0, 0.8, 0.25) : hs < 0.5 ? vec3(1.0, 0.35, 0.8) : hs < 0.75 ? vec3(0.4, 1.0, 0.5) : vec3(0.95);
+              if (fromTop < 1.0) {
+                // Letters come in pairs ("LLAANNGG") like the reference's shop signs.
+                float letter = floor(h3(vec3(vBid, shop, floor(cx / 2.0))) * ${SIGN_LETTERS.length}.0);
+                facadeCode = ${F.shop + 2}.0 + letter;
+                outgoingLight = signCol;
+              } else if (fromTop < 2.0 || cx < 1.0 || cx >= shopW * cellsPerM.x - 1.0
+                         || fract(m.x / 1.5) * 1.5 * cellsPerM.x < 1.0) {
+                // Frames: the row under the sign, both shop edges, and a column every 1.5 m splitting the glass.
+                facadeCode = ${F.shop}.0;
+                outgoingLight = hs < 0.5 ? vec3(0.85, 0.25, 0.15) : vec3(0.9, 0.5, 0.15);
               } else {
-                bool ex = q.x == 0.0 || q.x == win.x - 1.0;
-                bool ey = q.y == 0.0 || q.y == win.y - 1.0;
-                if (ex && ey) facadeCode = state + ${C.corner}.0;
-                else if (ey) facadeCode = state + ${C.h}.0;
-                else if (ex) facadeCode = state + ${C.v}.0;
-                // interior stays wall: outlines are never filled in
+                facadeCode = ${F.shop + 1}.0;
+                outgoingLight = h3(vec3(vBid, shop, 3.0)) < 0.6 ? vec3(0.15, 0.35, 0.9) : vec3(0.1, 0.6, 0.7);
               }
+            } else {
+              vec2 base = vec2(bay, ${FLOOR.toFixed(1)});
+              // LOD: merge whole bays/floors until each is >= MIN_PITCH cells; whole multiples keep the grid
+              // anchored to the building so it doesn't crawl as you walk.
+              vec2 unit = base * max(vec2(1.0), ceil(${MIN_PITCH.toFixed(1)} / (base * cellsPerM)));
+              vec2 cellsPerUnit = unit * cellsPerM;
+              vec2 idx = floor(m / unit);
+              vec2 pos = fract(m / unit) * cellsPerUnit; // position inside this bay/floor, in cells
+              // Mullion: a blank gap column at the end of each bay (>= 1 cell). Slab: the bottom row(s) of each
+              // floor; in slab rows the gap and the pane cells beside it become slab glyphs, so rows read
+              // "XXXXXX  XXXXXX" then "0XXXX0000XXXX0" like the reference.
+              float mullion = max(1.0, floor(cellsPerUnit.x * mullionFrac));
+              float slab = max(1.0, floor(cellsPerUnit.y * 0.25));
+              bool inMullion = pos.x >= cellsPerUnit.x - mullion;
+              // Slab rows only when a floor is >= 4 cells tall: on shorter floors a slab row would be every
+              // other row and read as heavy horizontal stripes (the reference's distant towers have none).
+              bool inSlab = slabRows && cellsPerUnit.y >= 4.0 && mod(idx.y, slabEvery) == 0.0 && pos.y < slab;
+              bool besideMullion = pos.x < 1.0 || pos.x >= cellsPerUnit.x - mullion - 1.0;
+              float h = h3(vec3(vBid, idx));
+              // Glyph variety by floor band (whole rows of blocks share a glyph), with ~20% odd windows out.
+              float hFloor = h3(vec3(vBid, 0.5, idx.y));
+              float variant = floor((fract(h * 3.7) < 0.2 ? fract(h * 7.31) : hFloor) * ${F.variants}.0);
+              float surf;
+              if (inSlab && (inMullion || besideMullion)) surf = ${S.slab}.0;
+              else if (inMullion) surf = ${S.mullion}.0;
+              else surf = h < uWindowLit ? ${S.paneLit}.0 : ${S.pane}.0;
+              float level = floor(intensity * ${F.levels - 1}.0 + 0.5);
+              facadeCode = ${F.base}.0 + (surf * ${F.variants}.0 + variant) * ${F.levels}.0 + level;
+              // Colour = the building's pure hue scaled by intensity (never the lit colour, whose moon/lamp
+              // tints would desaturate it): one strong colour band per building. Also drives the WebGL view.
+              float surfBright = surf == ${S.pane}.0 ? 0.8 : surf == ${S.mullion}.0 ? 0.3 : 0.55;
+              outgoingLight = surf == ${S.paneLit}.0 ? vColor.rgb * 1.4 : vColor.rgb * surfBright * (0.35 + 0.65 * intensity);
             }
           }
-          if (facadeCode >= ${C.lit}.0 && facadeCode < ${C.lit + 10}.0) outgoingLight = vColor.rgb * 1.5;
-          else if (facadeCode == ${C.detailLit}.0) outgoingLight = vColor.rgb * 0.8;
-          else if (facadeCode >= ${C.unlit}.0 && facadeCode < ${C.unlit + 10}.0) outgoingLight *= 0.3;
-          else if (facadeCode >= ${C.wall}.0) outgoingLight *= 0.55;
         }
         #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>
@@ -159,40 +181,65 @@ export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMat
 }
 
 /**
- * One building as a box. Per-vertex attributes carry what the shader needs, so any number of buildings
- * can be merged into one draw call: aBuilding (id), aFacade (u, v in metres along the face; z = 1 wall,
- * 2 roof), and colour (the building's hue).
+ * One box of a building, from height y0 to y1. Per-vertex attributes carry what the shader needs, so any
+ * number of buildings can be merged into one draw call: aBuilding (id), aFacade (u, v in metres along the
+ * face, v measured from the ground so the window grid runs on across tiers; z = 1 wall, 2 roof/plain),
+ * and colour (the building's hue).
  */
-function buildingGeometry(b: BuildingSpec, rnd: Rng): THREE.BufferGeometry {
-  const g = new THREE.BoxGeometry(b.w, b.h, b.d);
+function boxPart(b: BuildingSpec, w: number, d: number, y0: number, y1: number, offU: number, plain = false): THREE.BufferGeometry {
+  const h = y1 - y0;
+  const g = new THREE.BoxGeometry(w, h, d);
   const uv = g.getAttribute('uv') as THREE.BufferAttribute;
   const n = uv.count;
   const facade = new Float32Array(n * 3);
-  const ids = new Float32Array(n).fill(b.id);
-  const offU = rnd.int(0, 3) * 0.5; // shift the column grid so neighbours don't line up exactly
   // BoxGeometry faces: +x, -x, +y, -y, +z, -z; 4 vertices each.
   for (let i = 0; i < n; i++) {
     const face = Math.floor(i / 4);
-    const roof = face === 2 || face === 3;
-    const span = face < 2 ? b.d : b.w;
+    const roof = plain || face === 2 || face === 3;
+    const span = face < 2 ? d : w;
     facade[i * 3] = roof ? 0 : offU + uv.getX(i) * span;
-    facade[i * 3 + 1] = roof ? 0 : uv.getY(i) * b.h;
+    facade[i * 3 + 1] = roof ? 0 : y0 + uv.getY(i) * h;
     facade[i * 3 + 2] = roof ? 2 : 1;
   }
   const hue = new THREE.Color(hueFor(b.id));
   const colors = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) hue.toArray(colors, i * 3);
   g.setAttribute('aFacade', new THREE.BufferAttribute(facade, 3));
-  g.setAttribute('aBuilding', new THREE.BufferAttribute(ids, 1));
+  g.setAttribute('aBuilding', new THREE.BufferAttribute(new Float32Array(n).fill(b.id), 1));
   g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  g.translate(b.x, b.h / 2, b.z);
+  g.translate(b.x, y0 + h / 2, b.z);
   return g;
+}
+
+/**
+ * A building: one box, or for towers over 45 m a stepped silhouette (1-2 setbacks) and sometimes an
+ * antenna, for skylines like the reference's crowns and spires. The footprint (collision) is the base box.
+ */
+function buildingGeometry(b: BuildingSpec, rnd: Rng): THREE.BufferGeometry {
+  const offU = rnd.int(0, 3) * 0.5; // shift the column grid so neighbours don't line up exactly
+  if (b.h <= 45) return boxPart(b, b.w, b.d, 0, b.h, offU);
+  const parts: THREE.BufferGeometry[] = [];
+  const setbacks = rnd.int(1, 2);
+  let y = 0;
+  let scale = 1;
+  for (let t = 0; t <= setbacks; t++) {
+    const top = t === setbacks ? b.h : y + (b.h - y) * (0.55 + rnd.float() * 0.25);
+    parts.push(boxPart(b, b.w * scale, b.d * scale, y, top, offU));
+    y = top;
+    scale *= 0.62 + rnd.float() * 0.18;
+  }
+  if (rnd.chance(0.5)) parts.push(boxPart(b, 0.6, 0.6, b.h, b.h + rnd.int(8, 22), 0, true));
+  return mergeGeometries(parts);
 }
 
 const footprint = (b: BuildingSpec): Box => ({ minX: b.x - b.w / 2, maxX: b.x + b.w / 2, minZ: b.z - b.d / 2, maxZ: b.z + b.d / 2 });
 
-/** The hand-made test street. Returns collision boxes. */
-export function buildTestBlock(scene: THREE.Scene, material: THREE.Material): Box[] {
+/**
+ * The hand-made test street. Returns collision boxes.
+ * downtown=true swaps the six low buildings for a canyon of 60-160 m towers, for comparing against
+ * street-level reference shots of tall facades.
+ */
+export function buildTestBlock(scene: THREE.Scene, material: THREE.Material, downtown = false): Box[] {
   const rnd = rng(11);
   const boxes: Box[] = [];
 
@@ -218,15 +265,28 @@ export function buildTestBlock(scene: THREE.Scene, material: THREE.Material): Bo
     scene.add(dash);
   }
 
-  // Six buildings of varying height either side of the street (residential district palette).
-  const specs: BuildingSpec[] = [
-    { id: 1, x: -15, z: -30, w: 12, d: 14, h: 7 },
-    { id: 2, x: -14, z: -11, w: 10, d: 16, h: 10 },
-    { id: 3, x: -16, z: 12, w: 14, d: 20, h: 22 },
-    { id: 4, x: 16, z: -26, w: 14, d: 18, h: 35 },
-    { id: 5, x: 15, z: -2, w: 12, d: 14, h: 14 },
-    { id: 6, x: 14, z: 18, w: 10, d: 12, h: 6 },
-  ];
+  // Six buildings of varying height either side of the street (residential district palette),
+  // or the downtown canyon: facades on the building line at |x| = 9, mid-distance towers down the street.
+  const specs: BuildingSpec[] = downtown
+    ? [
+        { id: 21, x: -21, z: 20, w: 24, d: 26, h: 140 },
+        { id: 22, x: -20, z: -12, w: 22, d: 30, h: 95 },
+        { id: 23, x: -22, z: -48, w: 26, d: 34, h: 160 },
+        { id: 24, x: 21, z: 22, w: 24, d: 22, h: 120 },
+        { id: 25, x: 20, z: -8, w: 22, d: 30, h: 70 },
+        { id: 26, x: 22, z: -44, w: 26, d: 32, h: 150 },
+        { id: 27, x: -30, z: -130, w: 22, d: 22, h: 85 },
+        { id: 28, x: 28, z: -150, w: 20, d: 20, h: 110 },
+        { id: 29, x: -6, z: -200, w: 18, d: 18, h: 65 },
+      ]
+    : [
+        { id: 1, x: -15, z: -30, w: 12, d: 14, h: 7 },
+        { id: 2, x: -14, z: -11, w: 10, d: 16, h: 10 },
+        { id: 3, x: -16, z: 12, w: 14, d: 20, h: 22 },
+        { id: 4, x: 16, z: -26, w: 14, d: 18, h: 35 },
+        { id: 5, x: 15, z: -2, w: 12, d: 14, h: 14 },
+        { id: 6, x: 14, z: 18, w: 10, d: 12, h: 6 },
+      ];
   for (const s of specs) {
     scene.add(new THREE.Mesh(buildingGeometry(s, rnd), material));
     boxes.push(footprint(s));

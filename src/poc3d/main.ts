@@ -23,7 +23,7 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const hud = $('hud');
 const overlay = $('overlay');
 
-const BG = new THREE.Color(0x0b1020);
+const BG = new THREE.Color(0x040508);
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -39,11 +39,17 @@ moon.position.set(120, 200, 60);
 scene.add(moon);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 2000);
-const facade = { uWindowLit: { value: 0.35 }, uWindowOutline: { value: 0 } };
+const facade = { uWindowLit: { value: 0.35 } };
 const material = buildingMaterial(facade);
-const colliders = buildTestBlock(scene, material);
+const colliders = buildTestBlock(scene, material, params.get('scene') === 'downtown');
 const extra = gridCount > 0 ? buildGrid(scene, material, gridCount, merged) : 0;
 const controls = new FirstPerson(camera, document.body, colliders);
+// Review shortcut: ?cam=x,y,z,yawDeg,pitchDeg sets the starting view (e.g. for comparable screenshots).
+const cam = params.get('cam')?.split(',').map(Number);
+if (cam && cam.length === 5 && cam.every(Number.isFinite)) {
+  camera.position.set(cam[0], cam[1], cam[2]);
+  controls.setView(cam[3], cam[4]);
+}
 
 let cellW = 8;
 let color = true;
@@ -87,7 +93,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit3') setMode('dom');
   if (e.code === 'KeyE') shader.edges = edges = !edges;
   // Stand-in for the atmosphere lookup's per-(district, time) lit-window fraction.
-  if (e.code === 'KeyO') facade.uWindowOutline.value = 1 - facade.uWindowOutline.value;
+  if (e.code === 'KeyP') controls.setShearMode(!controls.shearMode);
   if (e.code === 'KeyN') facade.uWindowLit.value = [0.12, 0.35, 0.65][([0.12, 0.35, 0.65].indexOf(facade.uWindowLit.value) + 1) % 3];
   if (e.code === 'KeyC') {
     color = !color;
@@ -218,8 +224,8 @@ renderer.setAnimationLoop(() => {
       `mode ${mode}${mode === 'webgl' ? '' : color ? ' · colour' : ' · mono'}  ·  ${fps} fps  ·  ${work.toFixed(2)} ms/frame (CPU${bench ? '+GPU' : ''})`,
       `draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()} · buildings ${6 + 4 + extra}${merged ? ' (merged per chunk)' : ''}`,
       mode === 'shader' ? `ascii grid ${shader.cols}x${shader.rows} cells of ${cellW}x${Math.round(cellW * 1.75)} px · edges ${edges ? 'on' : 'off'}` : ' ',
-      `windows lit ${Math.round(facade.uWindowLit.value * 100)}%${facade.uWindowOutline.value ? ' · outlines' : ''}  ·  GPU: ${gpu}  ·  pos ${camera.position.x.toFixed(1)}, ${camera.position.z.toFixed(1)}`,
-      bench ? `bench: step ${Math.min(stepIdx + 1, steps.length)}/${steps.length}${stepIdx >= steps.length ? ' — done' : ''}` : 'click to look · WASD move · Shift run · 1 webgl · 2 ascii shader · 3 AsciiEffect · C colour · E edges · N lit windows · O window outlines · [ ] cell size · Esc release',
+      `windows lit ${Math.round(facade.uWindowLit.value * 100)}%  ·  GPU: ${gpu}  ·  pos ${camera.position.x.toFixed(1)}, ${camera.position.z.toFixed(1)}`,
+      bench ? `bench: step ${Math.min(stepIdx + 1, steps.length)}/${steps.length}${stepIdx >= steps.length ? ' — done' : ''}` : 'click to look · WASD move · Shift run · 1 webgl · 2 ascii shader · 3 AsciiEffect · C colour · E edges · N lit windows · P look: shift/pitch · [ ] cell size · Esc release',
     ].join('\n');
   }
 });
