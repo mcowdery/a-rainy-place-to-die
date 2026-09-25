@@ -18,16 +18,13 @@ export interface Glyph {
 }
 
 const cache = new Map<string, Glyph>();
-let ctx: CanvasRenderingContext2D | null = null;
+let ctx: OffscreenCanvasRenderingContext2D | null = null;
 
 export function glyph(ch: string): Glyph {
   let g = cache.get(ch);
   if (g) return g;
   if (!ctx) {
-    const c = document.createElement('canvas');
-    c.width = EM * 2;
-    c.height = EM;
-    ctx = c.getContext('2d', { willReadFrequently: true })!;
+    ctx = new OffscreenCanvas(EM * 2, EM).getContext('2d', { willReadFrequently: true })!;
   }
   const wide = isWide(ch.codePointAt(0)!);
   ctx.fillStyle = '#000';

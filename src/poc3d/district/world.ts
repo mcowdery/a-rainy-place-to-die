@@ -1,15 +1,14 @@
 import * as THREE from 'three';
-import { overlaps, type Rect } from '../../core/coords';
 import type { DistrictId, MacroMap } from '../../gen/macro';
-import { addBuilding } from '../real/buildings';
-import { addGround } from '../real/ground';
-import type { Light, Lightmap } from '../real/lightmap';
-import { MeshBuilder } from '../real/meshBuilder';
-import { addFigure, cellCrowd, GhostBuilder } from '../real/people';
-import { addProps, cellDetail, propBlocked, type CellDetail } from '../real/props';
-import { addSigns, signLights, SignBuilder, type SignAtlas } from '../real/signs';
-import { CELL, cellKey, planCell3, type Building3, type CellPlan3 } from './plan';
-import { reservedRect, type Node3, type Placed3 } from './stamps';
+import type { Lightmap } from '../real/lightmap';
+import { propBlocked } from '../real/props';
+import { rawBytes, rawTriangles, toGeometry } from '../real/rawGeometry';
+import type { SignAtlas } from '../real/signs';
+import type { ChunkBuilt, Stage } from './chunkBuild';
+import type { WorkerIn } from './chunkWorker';
+import { DistrictModel } from './model';
+import { CELL, cellKey, type Building3 } from './plan';
+import type { Node3, Placed3 } from './stamps';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
 export const LOAD_RADIUS = 620;
@@ -22,6 +21,13 @@ const NEAR_DROP = LOD_DISTANCE + 160;
 /** People (ghosts) are shown within this distance of a chunk's centre, and built a little before. */
 const GHOST_DISTANCE = 200;
 const GHOST_BUILD = GHOST_DISTANCE + 40;
+/**
+ * Geometry bytes integrated per frame. Creating the meshes is cheap on the CPU, but their buffers reach the
+ * GPU during the next render, and several chunks' worth in one frame (40 MB when streaming fast) is a hitch.
+ */
+const UPLOAD_BYTES_PER_FRAME = 3e6;
+/** Stage requests allowed in flight per worker (keeps the queue short so priorities follow the camera). */
+const IN_FLIGHT_PER_WORKER = 2;
 
 /** What the district renders with (created by the page once it has a renderer). */
 export interface DistrictKit {
@@ -31,6 +37,8 @@ export interface DistrictKit {
   readonly ghost: THREE.Material;
   readonly atlas: SignAtlas;
   readonly lightmap: Lightmap;
+  /** Sign words (the workers rebuild the same sign layout from them). */
+  readonly words: readonly string[];
 }
 
 interface Chunk {
@@ -44,99 +52,90 @@ interface Chunk {
   near: THREE.Group | null;
   ghosts: THREE.Mesh | null;
   ghostsBuilt: boolean;
-  readonly plan: CellPlan3;
+  people: number;
   readonly triangles: number;
   nearTriangles: number;
-  people: number;
   readonly buildings: readonly Building3[];
 }
 
-const tri = (g: THREE.BufferGeometry | null): number => (g ? (g.index ? g.index.count : g.getAttribute('position').count) / 3 : 0);
+interface Task {
+  readonly id: number;
+  readonly key: number;
+  readonly stage: Stage;
+  readonly worker: number;
+}
+
+const stageStats = (): { count: number; msTotal: number; msMax: number } => ({ count: 0, msTotal: 0, msMax: 0 });
 
 /**
- * One district, streamed as chunks. Plans (roads, lots, buildings, signs) and their street furniture are
- * cheap and computed lazily for any cell, so collision works everywhere. Near the camera a chunk is built
- * in stages, nearest first within a per-frame time budget: ground + building masses + its lightmap tile
- * first, then full detail (building dressing, props, signs) once it's within NEAR_BUILD.
+ * One district, streamed as chunks. Plans and street furniture are cheap and computed lazily on the main
+ * thread for collision (DistrictModel). Geometry is built by a pool of Web Workers (chunkWorker.ts), stage
+ * by stage, nearest first: ground + building masses + lightmap tile, then full detail within NEAR_BUILD,
+ * then the crowd within GHOST_BUILD. The main thread only turns finished arrays into meshes, within a
+ * per-frame time budget, so streaming never stalls a frame on generation.
  */
 export class District {
   readonly root = new THREE.Group();
   readonly nodes: readonly Node3[];
-  readonly cells: readonly (readonly [number, number])[];
-  readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
-  readonly stats = { generated: 0, genMsTotal: 0, genMsMax: 0, detailed: 0, detailMsTotal: 0, detailMsMax: 0, disposed: 0 };
-  private readonly cellSet = new Set<number>();
-  private readonly plans = new Map<number, CellPlan3>();
-  private readonly details = new Map<number, CellDetail>();
+  readonly model: DistrictModel;
+  /** Worker build times per stage, and main-thread time spent turning results into meshes. */
+  readonly stats = { base: stageStats(), near: stageStats(), ghosts: stageStats(), integrate: stageStats(), disposed: 0 };
   private readonly chunks = new Map<number, Chunk>();
-  private readonly placedByCell = new Map<number, Placed3[]>();
   private kit: DistrictKit | null = null;
-  /** Scratch builders, reused for every chunk (build() copies the data out). */
-  private readonly mb = new MeshBuilder(1 << 16);
-  private readonly sb = new SignBuilder();
-  private readonly gb = new GhostBuilder();
+  private workers: Worker[] = [];
+  private readonly ready: Promise<void>[] = [];
+  private readonly pending = new Map<string, Task>();
+  private readonly inFlight: number[] = [];
+  private readonly done: { task: Task; result: ChunkBuilt }[] = [];
+  private nextId = 1;
+  private wake: (() => void) | null = null;
+  /** Geometry bytes integrated by the last update() (they reach the GPU in the next render). */
+  lastBytes = 0;
 
   constructor(
-    private readonly macro: MacroMap,
+    macro: MacroMap,
     readonly kind: DistrictId,
-    private readonly placed: readonly Placed3[],
+    placed: readonly Placed3[],
     private readonly seed: number,
   ) {
-    const cells: [number, number][] = [];
-    for (let my = 0; my < macro.rows; my++) for (let mx = 0; mx < macro.cols; mx++) if (macro.kindAt(mx, my) === kind) cells.push([mx, my]);
-    this.cells = cells;
-    for (const [mx, my] of cells) this.cellSet.add(cellKey(mx, my));
-    const xs = cells.map(([mx]) => mx);
-    const zs = cells.map(([, my]) => my);
-    this.bounds = { minX: Math.min(...xs) * CELL, maxX: (Math.max(...xs) + 1) * CELL, minZ: Math.min(...zs) * CELL, maxZ: (Math.max(...zs) + 1) * CELL };
-    for (const p of placed) {
-      const k = cellKey(p.cell[0], p.cell[1]);
-      this.placedByCell.set(k, [...(this.placedByCell.get(k) ?? []), p]);
-    }
+    this.model = new DistrictModel(macro, kind, placed, seed);
     this.nodes = placed.flatMap((p) => p.nodes);
   }
 
-  setKit(kit: DistrictKit): void {
-    this.kit = kit;
+  get cells(): readonly (readonly [number, number])[] {
+    return this.model.cells;
   }
 
-  /** Every sign text the district can show (for the sign atlas). */
-  signTexts(words: readonly string[]): { text: string; vertical: boolean }[] {
-    return [
-      ...words.flatMap((text) => [{ text, vertical: false }, { text, vertical: true }]),
-      ...this.placed.flatMap((p) => p.signs.map((s) => ({ text: s.text, vertical: s.vertical }))),
-    ];
+  get bounds(): { minX: number; maxX: number; minZ: number; maxZ: number } {
+    return this.model.bounds;
+  }
+
+  /** Sets the render kit and starts the worker pool. */
+  setKit(kit: DistrictKit, workerCount = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 2))): void {
+    this.kit = kit;
+    for (let i = 0; i < workerCount; i++) {
+      const w = new Worker(new URL('./chunkWorker.ts', import.meta.url), { type: 'module' });
+      this.ready.push(
+        new Promise((resolve) => {
+          w.addEventListener('message', (e) => {
+            if (e.data.type === 'ready') resolve();
+          });
+        }),
+      );
+      w.addEventListener('message', (e) => this.onMessage(i, e.data));
+      w.addEventListener('error', (e) => console.error('chunk worker error', e.message));
+      w.postMessage({ type: 'init', kind: 'neon', seed: this.seed, words: kit.words } satisfies WorkerIn);
+      this.workers.push(w);
+      this.inFlight.push(0);
+    }
+  }
+
+  get workerCount(): number {
+    return this.workers.length;
   }
 
   inDistrict(x: number, z: number): boolean {
-    return this.cellSet.has(cellKey(Math.floor(x / CELL), Math.floor(z / CELL)));
-  }
-
-  plan(mx: number, my: number): CellPlan3 | null {
-    const k = cellKey(mx, my);
-    if (!this.cellSet.has(k)) return null;
-    let p = this.plans.get(k);
-    if (!p) {
-      const cellRect: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
-      const reserved = this.placed.map(reservedRect).filter((r) => overlaps(r, cellRect));
-      p = planCell3(this.macro, mx, my, reserved, this.seed)!;
-      this.plans.set(k, p);
-    }
-    return p;
-  }
-
-  /** Street furniture and lights of a cell (null outside the district). */
-  detail(mx: number, my: number): CellDetail | null {
-    const k = cellKey(mx, my);
-    let d = this.details.get(k);
-    if (!d) {
-      const p = this.plan(mx, my);
-      if (!p) return null;
-      const stamps = (this.placedByCell.get(k) ?? []).map((q) => q.building);
-      d = cellDetail(p, stamps);
-      this.details.set(k, d);
-    }
-    return d;
+    return this.model.has(Math.floor(x / CELL), Math.floor(z / CELL));
   }
 
   /** Collision: outside the district, inside a building footprint (this cell or a neighbour), a stamp or a prop. */
@@ -147,16 +146,19 @@ export class District {
     const hit = (b: Pick<Building3, 'x' | 'z' | 'w' | 'd'>): boolean => Math.abs(x - b.x) < b.w / 2 + r && Math.abs(z - b.z) < b.d / 2 + r;
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
-        const p = this.plan(mx + dx, my + dy);
+        const p = this.model.plan(mx + dx, my + dy);
         if (p?.buildings.some(hit)) return true;
-        const d = this.detail(mx + dx, my + dy);
+        const d = this.model.detail(mx + dx, my + dy);
         if (d && propBlocked(d.props, x, z, r)) return true;
       }
     }
-    return this.placed.some((p) => hit(p.building));
+    return this.model.placed.some((p) => hit(p.building));
   };
 
-  /** Build chunk stages near pos (nearest first) until the time budget is spent; drop far ones. Returns stages built. */
+  /**
+   * Per frame: drop far chunks, send the nearest wanted stages to the workers, and turn finished results
+   * into meshes until the time budget is spent. Returns the number of results integrated.
+   */
   update(pos: THREE.Vector3, budgetMs: number): number {
     const dist = (c: { cx: number; cz: number }): number => Math.hypot(c.cx - pos.x, c.cz - pos.z);
     for (const c of this.chunks.values()) {
@@ -164,44 +166,54 @@ export class District {
       if (d > UNLOAD_RADIUS) this.unload(c);
       else if (c.near && d > NEAR_DROP) this.dropNear(c);
     }
+    this.dispatch(pos);
     const t0 = performance.now();
-    let built = 0;
-    const spend = (): boolean => built > 0 && performance.now() - t0 > budgetMs;
-    const wanted = this.cells
-      .map(([mx, my]) => ({ mx, my, cx: (mx + 0.5) * CELL, cz: (my + 0.5) * CELL }))
-      .filter((c) => !this.chunks.has(cellKey(c.mx, c.my)) && dist(c) <= LOAD_RADIUS)
-      .sort((a, b) => dist(a) - dist(b));
-    const nearWanted = () => [...this.chunks.values()].filter((c) => !c.near && dist(c) <= NEAR_BUILD).sort((a, b) => dist(a) - dist(b));
-    const ghostWanted = () => [...this.chunks.values()].filter((c) => c.near && !c.ghostsBuilt && dist(c) <= GHOST_BUILD).sort((a, b) => dist(a) - dist(b));
-    // Interleave: whichever is closer first, so the ground under your feet and nearby detail come first.
-    for (;;) {
-      if (spend()) break;
-      const nf = wanted[0];
-      const nn = nearWanted()[0];
-      const ng = ghostWanted()[0];
-      const best = [nf, nn, ng].filter((x) => x !== undefined).sort((a, b) => dist(a!) - dist(b!))[0];
-      if (!best) break;
-      if (best === nf) {
-        wanted.shift();
-        this.build(nf.mx, nf.my);
-      } else if (best === nn) {
-        this.buildNear(nn!);
-      } else {
-        this.buildGhosts(ng!);
+    let n = 0;
+    this.lastBytes = 0;
+    // Nearest results first; at least one per frame so streaming always progresses.
+    this.done.sort((a, b) => this.taskDist(a.task, pos) - this.taskDist(b.task, pos));
+    while (this.done.length > 0 && (n === 0 || (performance.now() - t0 < budgetMs && this.lastBytes < (budgetMs === Infinity ? Infinity : UPLOAD_BYTES_PER_FRAME)))) {
+      const { task, result } = this.done.shift()!;
+      const s = performance.now();
+      if (this.integrate(task, result, pos)) {
+        n++;
+        for (const m of Object.values(result.meshes)) this.lastBytes += rawBytes(m);
+        const ms = performance.now() - s;
+        const st = this.stats.integrate;
+        st.count++;
+        st.msTotal += ms;
+        st.msMax = Math.max(st.msMax, ms);
       }
-      built++;
     }
+    if (n > 0) this.dispatch(pos);
     for (const c of this.chunks.values()) {
       const showNear = c.near !== null && dist(c) < LOD_DISTANCE;
       if (c.near) c.near.visible = showNear;
       if (c.far) c.far.visible = !showNear;
       if (c.ghosts) c.ghosts.visible = showNear && dist(c) < GHOST_DISTANCE;
     }
-    return built;
+    return n;
+  }
+
+  /**
+   * Warm start: builds everything wanted around pos (all stages) before the first frame. Resolves once
+   * nothing in range is missing or in flight.
+   */
+  async warm(pos: THREE.Vector3): Promise<void> {
+    await Promise.all(this.ready);
+    for (;;) {
+      this.update(pos, Infinity);
+      if (this.pending.size === 0 && this.done.length === 0 && this.wanted(pos).length === 0) return;
+      await new Promise<void>((resolve) => (this.wake = resolve));
+    }
   }
 
   get loaded(): number {
     return this.chunks.size;
+  }
+
+  get inFlightCount(): number {
+    return this.pending.size;
   }
 
   get detailedChunks(): number {
@@ -228,108 +240,114 @@ export class District {
     return n;
   }
 
-  private cellBuildings(mx: number, my: number, plan: CellPlan3): Building3[] {
-    const stamps = (this.placedByCell.get(cellKey(mx, my)) ?? []).map((p) => p.building);
-    return [...plan.buildings, ...stamps];
+  private taskDist(t: Task, pos: THREE.Vector3): number {
+    const mx = t.key % 4096;
+    const my = Math.floor(t.key / 4096);
+    return Math.hypot((mx + 0.5) * CELL - pos.x, (my + 0.5) * CELL - pos.z);
   }
 
-  private build(mx: number, my: number): void {
+  /** Stages wanted around pos, nearest first: missing chunks, then detail, then crowds. */
+  private wanted(pos: THREE.Vector3): { key: number; mx: number; my: number; stage: Stage; d: number }[] {
+    const out: { key: number; mx: number; my: number; stage: Stage; d: number }[] = [];
+    for (const [mx, my] of this.model.cells) {
+      const key = cellKey(mx, my);
+      const d = Math.hypot((mx + 0.5) * CELL - pos.x, (my + 0.5) * CELL - pos.z);
+      const c = this.chunks.get(key);
+      let stage: Stage | null = null;
+      if (!c) stage = d <= LOAD_RADIUS ? 'base' : null;
+      else if (!c.near) stage = d <= NEAR_BUILD ? 'near' : null;
+      else if (!c.ghostsBuilt) stage = d <= GHOST_BUILD ? 'ghosts' : null;
+      if (stage && !this.pending.has(`${key}:${stage}`)) out.push({ key, mx, my, stage, d });
+    }
+    return out.sort((a, b) => a.d - b.d);
+  }
+
+  private dispatch(pos: THREE.Vector3): void {
+    if (this.workers.length === 0) return;
+    for (const w of this.wanted(pos)) {
+      // Least-loaded worker with room.
+      let best = -1;
+      for (let i = 0; i < this.workers.length; i++) if (this.inFlight[i] < IN_FLIGHT_PER_WORKER && (best < 0 || this.inFlight[i] < this.inFlight[best])) best = i;
+      if (best < 0) return;
+      const task: Task = { id: this.nextId++, key: w.key, stage: w.stage, worker: best };
+      this.pending.set(`${w.key}:${w.stage}`, task);
+      this.inFlight[best]++;
+      this.workers[best].postMessage({ type: 'build', id: task.id, mx: w.mx, my: w.my, stage: w.stage } satisfies WorkerIn);
+    }
+  }
+
+  private onMessage(worker: number, msg: { type: string; id?: number; result?: ChunkBuilt }): void {
+    if (msg.type !== 'built' || !msg.result) return;
+    const r = msg.result;
+    const key = cellKey(r.mx, r.my);
+    const task = this.pending.get(`${key}:${r.stage}`);
+    this.inFlight[worker]--;
+    const st = this.stats[r.stage];
+    st.count++;
+    st.msTotal += r.ms;
+    st.msMax = Math.max(st.msMax, r.ms);
+    if (task && task.id === msg.id) this.done.push({ task, result: r });
+    this.wake?.();
+    this.wake = null;
+  }
+
+  /** Turns a finished stage into meshes. Returns false if it arrived too late to be useful. */
+  private integrate(task: Task, r: ChunkBuilt, pos: THREE.Vector3): boolean {
+    this.pending.delete(`${task.key}:${task.stage}`);
     const kit = this.kit!;
-    const t0 = performance.now();
-    const plan = this.plan(mx, my)!;
-    const key = cellKey(mx, my);
-    const cx = (mx + 0.5) * CELL;
-    const cz = (my + 0.5) * CELL;
-    const all = this.cellBuildings(mx, my, plan);
-
-    const mbBase = this.mb.reset();
-    addGround(mbBase, plan);
-    const baseGeo = mbBase.build(cx, cz)!;
-    const base = new THREE.Mesh(baseGeo, kit.city);
-    base.receiveShadow = true;
-
-    const mbFar = this.mb.reset();
-    for (const b of all) addBuilding(mbFar, b, false);
-    const farGeo = mbFar.build(cx, cz);
-    const far = farGeo ? new THREE.Mesh(farGeo, kit.city) : null;
-    if (far) far.castShadow = far.receiveShadow = true;
-
-    const group = new THREE.Group();
-    group.position.set(cx, 0, cz);
-    group.add(base);
-    if (far) group.add(far);
-    group.updateMatrixWorld(true);
-    this.root.add(group);
-    this.chunks.set(key, { key, mx, my, cx, cz, group, far, near: null, ghosts: null, ghostsBuilt: false, people: 0, plan, triangles: tri(baseGeo) + tri(farGeo), nearTriangles: 0, buildings: all });
-
-    // Lightmap tile: this cell's lights plus any from the neighbours that reach across the border.
-    const lights: Light[] = [];
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const d = this.detail(mx + dx, my + dy);
-        if (d) lights.push(...d.lights);
-        const p = this.plan(mx + dx, my + dy);
-        if (p) lights.push(...signLights(p.signs));
-        for (const q of this.placedByCell.get(cellKey(mx + dx, my + dy)) ?? []) {
-          lights.push(...signLights(q.signs));
-          for (const n of q.nodes) if (n.kind === 'door') lights.push({ x: n.x, z: n.z, r: 6, color: [1.0, 0.7, 0.4], i: 0.9 });
-        }
+    const cx = (r.mx + 0.5) * CELL;
+    const cz = (r.my + 0.5) * CELL;
+    const d = Math.hypot(cx - pos.x, cz - pos.z);
+    const c = this.chunks.get(task.key);
+    if (r.stage === 'base') {
+      if (c || d > UNLOAD_RADIUS) return false;
+      const base = new THREE.Mesh(toGeometry(r.meshes.base!), kit.city);
+      base.receiveShadow = true;
+      const far = r.meshes.far ? new THREE.Mesh(toGeometry(r.meshes.far), kit.city) : null;
+      if (far) far.castShadow = far.receiveShadow = true;
+      const group = new THREE.Group();
+      group.position.set(cx, 0, cz);
+      group.add(base);
+      if (far) group.add(far);
+      group.updateMatrixWorld(true);
+      this.root.add(group);
+      this.chunks.set(task.key, {
+        key: task.key, mx: r.mx, my: r.my, cx, cz, group, far, near: null, ghosts: null, ghostsBuilt: false, people: 0,
+        triangles: rawTriangles(r.meshes.base ?? null) + rawTriangles(r.meshes.far ?? null), nearTriangles: 0, buildings: this.model.buildings(r.mx, r.my),
+      });
+      if (r.lightmap) kit.lightmap.upload(r.mx * CELL, r.my * CELL, r.lightmap);
+      return true;
+    }
+    if (r.stage === 'near') {
+      if (!c || c.near || d > NEAR_DROP) return false;
+      const near = new THREE.Group();
+      if (r.meshes.near) {
+        const m = new THREE.Mesh(toGeometry(r.meshes.near), kit.city);
+        m.castShadow = m.receiveShadow = true;
+        near.add(m);
       }
+      if (r.meshes.signs) {
+        const m = new THREE.Mesh(toGeometry(r.meshes.signs), kit.signs);
+        m.castShadow = true;
+        near.add(m);
+      }
+      c.group.add(near);
+      near.updateMatrixWorld(true);
+      c.near = near;
+      c.nearTriangles = rawTriangles(r.meshes.near ?? null) + rawTriangles(r.meshes.signs ?? null);
+      return true;
     }
-    kit.lightmap.paint(mx * CELL, my * CELL, lights);
-
-    const ms = performance.now() - t0;
-    this.stats.generated++;
-    this.stats.genMsTotal += ms;
-    this.stats.genMsMax = Math.max(this.stats.genMsMax, ms);
-  }
-
-  private buildNear(c: Chunk): void {
-    const kit = this.kit!;
-    const t0 = performance.now();
-    const mb = this.mb.reset();
-    for (const b of c.buildings) addBuilding(mb, b, true);
-    addProps(mb, this.detail(c.mx, c.my)!);
-    const sb = this.sb.reset();
-    const stampSigns = (this.placedByCell.get(c.key) ?? []).flatMap((p) => p.signs);
-    addSigns([...c.plan.signs, ...stampSigns], c.buildings, kit.atlas, sb, mb);
-    const geo = mb.build(c.cx, c.cz);
-    const sgeo = sb.build(c.cx, c.cz);
-    const near = new THREE.Group();
-    if (geo) {
-      const m = new THREE.Mesh(geo, kit.city);
-      m.castShadow = m.receiveShadow = true;
-      near.add(m);
-    }
-    if (sgeo) {
-      const m = new THREE.Mesh(sgeo, kit.signs);
-      m.castShadow = true;
-      near.add(m);
-    }
-    c.group.add(near);
-    near.updateMatrixWorld(true);
-    c.near = near;
-    c.nearTriangles = tri(geo) + tri(sgeo);
-    const ms = performance.now() - t0;
-    this.stats.detailed++;
-    this.stats.detailMsTotal += ms;
-    this.stats.detailMsMax = Math.max(this.stats.detailMsMax, ms);
-  }
-
-  /** People: a crowd of ghosts along the pavements (a separate stage, only for the closest chunks). */
-  private buildGhosts(c: Chunk): void {
-    const crowd = cellCrowd(c.plan, this.detail(c.mx, c.my)!);
-    const gb = this.gb.reset();
-    for (const f of crowd) addFigure(gb, f);
-    const ggeo = gb.build(c.cx, c.cz);
+    if (!c || !c.near || c.ghostsBuilt) return false;
     c.ghostsBuilt = true;
-    c.people = crowd.length;
-    if (!ggeo || !c.near) return;
-    c.ghosts = new THREE.Mesh(ggeo, this.kit!.ghost);
-    c.ghosts.renderOrder = 2;
-    c.near.add(c.ghosts);
-    c.ghosts.updateMatrixWorld(true);
-    c.nearTriangles += tri(ggeo);
+    c.people = r.people ?? 0;
+    if (r.meshes.ghosts) {
+      c.ghosts = new THREE.Mesh(toGeometry(r.meshes.ghosts), kit.ghost);
+      c.ghosts.renderOrder = 2;
+      c.near.add(c.ghosts);
+      c.ghosts.updateMatrixWorld(true);
+      c.nearTriangles += rawTriangles(r.meshes.ghosts);
+    }
+    return true;
   }
 
   private dropNear(c: Chunk): void {

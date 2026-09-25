@@ -7,6 +7,7 @@ import type { CityUniforms } from './city';
 import { EM, glyph, textAdvance } from './letters';
 import type { Light } from './lightmap';
 import { EMIT, KIND, lin, scale3, type MeshBuilder } from './meshBuilder';
+import { sphereOf, toGeometry, type RawGeometry } from './rawGeometry';
 
 /**
  * Signs as geometry at real scale, in perspective, lit and fogged like everything else:
@@ -35,15 +36,19 @@ interface Slot {
   h: number;
 }
 
-export class SignAtlas {
-  readonly texture: THREE.DataTexture;
-  private readonly slots = new Map<string, Slot>();
+/**
+ * Where each sign text sits in the atlas: pure layout (no canvas), so the chunk worker can compute sign UVs
+ * and the main thread renders the matching texture (SignAtlas).
+ */
+export class SignLayout {
+  protected readonly slots = new Map<string, Slot>();
+  protected readonly want = new Map<string, { text: string; vertical: boolean; w: number; h: number }>();
   readonly width: number;
   readonly height: number;
 
   constructor(texts: readonly { text: string; vertical: boolean }[]) {
     const W = 2048;
-    const want = new Map<string, { text: string; vertical: boolean; w: number; h: number }>();
+    const want = this.want;
     for (const t of texts) {
       const key = `${t.vertical ? 'v' : 'h'}:${t.text}`;
       if (want.has(key)) continue;
@@ -66,9 +71,31 @@ export class SignAtlas {
       x += it.w + PAD;
       shelf = Math.max(shelf, it.h);
     }
-    const H = 2 ** Math.ceil(Math.log2(Math.max(64, y + shelf + PAD)));
     this.width = W;
-    this.height = H;
+    this.height = 2 ** Math.ceil(Math.log2(Math.max(64, y + shelf + PAD)));
+  }
+
+  /** UV rect (u0, v0 top, u1, v1 bottom) and size in metres of a text's slot. */
+  rect(text: string, vertical: boolean): { u0: number; v0: number; u1: number; v1: number; w: number; h: number } | null {
+    const s = this.slots.get(`${vertical ? 'v' : 'h'}:${text}`);
+    if (!s) return null;
+    return { u0: s.x / this.width, v0: s.y / this.height, u1: (s.x + s.w) / this.width, v1: (s.y + s.h) / this.height, w: s.w / PX_PER_M, h: s.h / PX_PER_M };
+  }
+
+  get blankUv(): [number, number] {
+    return [4 / this.width, 4 / this.height];
+  }
+}
+
+/** The sign atlas texture: every text of the layout rendered sharp (red) and blurred for the neon halo (green). */
+export class SignAtlas extends SignLayout {
+  readonly texture: THREE.DataTexture;
+
+  constructor(texts: readonly { text: string; vertical: boolean }[]) {
+    super(texts);
+    const W = this.width;
+    const H = this.height;
+    const want = this.want;
     const sharp = document.createElement('canvas');
     sharp.width = W;
     sharp.height = H;
@@ -106,17 +133,6 @@ export class SignAtlas {
     this.texture.magFilter = THREE.LinearFilter;
     this.texture.anisotropy = 8;
     this.texture.needsUpdate = true;
-  }
-
-  /** UV rect (u0, v0 top, u1, v1 bottom) and size in metres of a text's slot. */
-  rect(text: string, vertical: boolean): { u0: number; v0: number; u1: number; v1: number; w: number; h: number } | null {
-    const s = this.slots.get(`${vertical ? 'v' : 'h'}:${text}`);
-    if (!s) return null;
-    return { u0: s.x / this.width, v0: s.y / this.height, u1: (s.x + s.w) / this.width, v1: (s.y + s.h) / this.height, w: s.w / PX_PER_M, h: s.h / PX_PER_M };
-  }
-
-  get blankUv(): [number, number] {
-    return [4 / this.width, 4 / this.height];
   }
 }
 
@@ -267,10 +283,14 @@ export class SignBuilder {
   }
 
   build(ox: number, oz: number): THREE.BufferGeometry | null {
+    const r = this.raw(ox, oz);
+    return r ? toGeometry(r) : null;
+  }
+
+  raw(ox: number, oz: number): RawGeometry | null {
     if (this.n === 0) return null;
     const F = 16;
     const a = this.f;
-    const g = new THREE.BufferGeometry();
     const pos = new Float32Array(this.n * 3);
     for (let i = 0; i < this.n; i++) {
       pos[i * 3] = a[i * F] - ox;
@@ -282,15 +302,18 @@ export class SignBuilder {
       for (let i = 0; i < this.n; i++) for (let j = 0; j < k; j++) out[i * k + j] = a[i * F + off + j];
       return out;
     };
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(take(3, 3), 3));
-    g.setAttribute('aUv', new THREE.BufferAttribute(take(6, 2), 2));
-    g.setAttribute('aInk', new THREE.BufferAttribute(take(8, 3), 3));
-    g.setAttribute('aPlate', new THREE.BufferAttribute(take(11, 3), 3));
-    g.setAttribute('aSign', new THREE.BufferAttribute(take(14, 2), 2));
-    g.setIndex(this.idx);
-    g.computeBoundingSphere();
-    return g;
+    return {
+      attrs: {
+        position: { array: pos, size: 3 },
+        normal: { array: take(3, 3), size: 3 },
+        aUv: { array: take(6, 2), size: 2 },
+        aInk: { array: take(8, 3), size: 3 },
+        aPlate: { array: take(11, 3), size: 3 },
+        aSign: { array: take(14, 2), size: 2 },
+      },
+      index: new Uint32Array(this.idx),
+      sphere: sphereOf(pos),
+    };
   }
 }
 
@@ -357,7 +380,7 @@ export function signLights(signs: readonly Sign3[]): Light[] {
  * Adds a chunk's signs: textured blades and plates into sb, channel letters (and rooftop billboards for
  * the given buildings) into mb.
  */
-export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[], atlas: SignAtlas, sb: SignBuilder, mb: MeshBuilder): void {
+export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[], atlas: SignLayout, sb: SignBuilder, mb: MeshBuilder): void {
   for (const s of signs) {
     const st = signStyle(s);
     const n: C3 = [s.nx, 0, s.nz];

@@ -19,18 +19,63 @@ export interface Light {
 }
 
 /** Lightmap resolution: pixels per metre. */
-const RES = 1;
+export const LIGHTMAP_RES = 1;
+const RES = LIGHTMAP_RES;
+
+type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 /**
- * One lightmap texture over the whole district at RES px/m. Each chunk paints its own cell (lights from
- * neighbouring cells included, so pools cross cell borders seamlessly) on a small canvas and uploads just
- * that region. The city material samples it for every surface near the street.
+ * Paints a cell's lightmap tile (S x S pixels, NW corner at world (x, z)) from these lights and returns the
+ * RGBA pixels. Works on any 2D context, so the chunk worker does it on an OffscreenCanvas.
+ */
+export function paintLights(g: Ctx2D, x: number, z: number, S: number, lights: readonly Light[]): Uint8Array {
+  g.globalCompositeOperation = 'source-over';
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, S, S);
+  g.globalCompositeOperation = 'lighter';
+  const rgba = (c: C3, a: number): string => `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${Math.max(0, Math.min(1, a))})`;
+  for (const l of lights) {
+    const px = (l.x - x) * RES;
+    const pz = (l.z - z) * RES;
+    if (l.band) {
+      const b = l.band;
+      const ex = px + b.dx * RES;
+      const ez = pz + b.dz * RES;
+      const ox = b.nx * b.depth * RES;
+      const oz = b.nz * b.depth * RES;
+      const grad = g.createLinearGradient(px, pz, px + ox, pz + oz);
+      grad.addColorStop(0, rgba(l.color, l.i));
+      grad.addColorStop(0.35, rgba(l.color, l.i * 0.45));
+      grad.addColorStop(1, rgba(l.color, 0));
+      g.fillStyle = grad;
+      const x0 = Math.min(px, ex, px + ox, ex + ox);
+      const z0 = Math.min(pz, ez, pz + oz, ez + oz);
+      const x1 = Math.max(px, ex, px + ox, ex + ox);
+      const z1 = Math.max(pz, ez, pz + oz, ez + oz);
+      g.fillRect(x0, z0, x1 - x0, z1 - z0);
+      continue;
+    }
+    const rr = l.r * RES;
+    if (px < -rr || pz < -rr || px > S + rr || pz > S + rr) continue;
+    const grad = g.createRadialGradient(px, pz, 0, px, pz, rr);
+    grad.addColorStop(0, rgba(l.color, l.i));
+    grad.addColorStop(0.25, rgba(l.color, l.i * 0.62));
+    grad.addColorStop(0.6, rgba(l.color, l.i * 0.2));
+    grad.addColorStop(1, rgba(l.color, 0));
+    g.fillStyle = grad;
+    g.fillRect(px - rr, pz - rr, rr * 2, rr * 2);
+  }
+  return new Uint8Array(g.getImageData(0, 0, S, S).data.buffer);
+}
+
+/**
+ * One lightmap texture over the whole district at RES px/m. Each chunk's tile (its cell, with neighbouring
+ * cells' lights included so pools cross borders seamlessly) is painted by the chunk worker and uploaded here
+ * as just that region. The city material samples it for every surface near the street.
  */
 export class Lightmap {
   readonly texture: THREE.DataTexture;
   readonly rect: Rect;
-  private readonly canvas: HTMLCanvasElement;
-  private readonly g: CanvasRenderingContext2D;
   private readonly pos = new THREE.Vector2();
 
   constructor(
@@ -46,10 +91,6 @@ export class Lightmap {
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.needsUpdate = true;
     renderer.initTexture(this.texture);
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = cell * RES;
-    this.canvas.height = cell * RES;
-    this.g = this.canvas.getContext('2d', { willReadFrequently: true })!;
   }
 
   /** (x0, z0, 1 / width, 1 / depth) for the material's uLightRect. */
@@ -57,48 +98,10 @@ export class Lightmap {
     return new THREE.Vector4(this.rect.x, this.rect.y, 1 / this.rect.w, 1 / this.rect.h);
   }
 
-  /** Paints the cell whose NW corner is (x, z) from these lights and uploads it. */
-  paint(x: number, z: number, lights: readonly Light[]): void {
-    const g = this.g;
+  /** Uploads a painted tile for the cell whose NW corner is (x, z). */
+  upload(x: number, z: number, data: Uint8Array): void {
     const S = this.cell * RES;
-    g.globalCompositeOperation = 'source-over';
-    g.fillStyle = '#000';
-    g.fillRect(0, 0, S, S);
-    g.globalCompositeOperation = 'lighter';
-    const rgba = (c: C3, a: number): string => `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${Math.max(0, Math.min(1, a))})`;
-    for (const l of lights) {
-      const px = (l.x - x) * RES;
-      const pz = (l.z - z) * RES;
-      if (l.band) {
-        const b = l.band;
-        const ex = px + b.dx * RES;
-        const ez = pz + b.dz * RES;
-        const ox = b.nx * b.depth * RES;
-        const oz = b.nz * b.depth * RES;
-        const grad = g.createLinearGradient(px, pz, px + ox, pz + oz);
-        grad.addColorStop(0, rgba(l.color, l.i));
-        grad.addColorStop(0.35, rgba(l.color, l.i * 0.45));
-        grad.addColorStop(1, rgba(l.color, 0));
-        g.fillStyle = grad;
-        const x0 = Math.min(px, ex, px + ox, ex + ox);
-        const z0 = Math.min(pz, ez, pz + oz, ez + oz);
-        const x1 = Math.max(px, ex, px + ox, ex + ox);
-        const z1 = Math.max(pz, ez, pz + oz, ez + oz);
-        g.fillRect(x0, z0, x1 - x0, z1 - z0);
-        continue;
-      }
-      const rr = l.r * RES;
-      if (px < -rr || pz < -rr || px > S + rr || pz > S + rr) continue;
-      const grad = g.createRadialGradient(px, pz, 0, px, pz, rr);
-      grad.addColorStop(0, rgba(l.color, l.i));
-      grad.addColorStop(0.25, rgba(l.color, l.i * 0.62));
-      grad.addColorStop(0.6, rgba(l.color, l.i * 0.2));
-      grad.addColorStop(1, rgba(l.color, 0));
-      g.fillStyle = grad;
-      g.fillRect(px - rr, pz - rr, rr * 2, rr * 2);
-    }
-    const data = g.getImageData(0, 0, S, S).data;
-    const src = new THREE.DataTexture(new Uint8Array(data.buffer.slice(0)), S, S);
+    const src = new THREE.DataTexture(data, S, S);
     this.pos.set(Math.round((x - this.rect.x) * RES), Math.round((z - this.rect.y) * RES));
     if (this.pos.x < 0 || this.pos.y < 0 || this.pos.x + S > this.texture.image.width || this.pos.y + S > this.texture.image.height) return;
     this.renderer.copyTextureToTexture(src, this.texture, null, this.pos);

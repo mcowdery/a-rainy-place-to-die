@@ -18,6 +18,7 @@ import { SignAtlas, signMaterial } from '../real/signs';
 import { Sky } from '../real/sky';
 import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
+import { signTexts } from './model';
 import { CELL, STYLES3 } from './plan';
 import type { Node3 } from './stamps';
 import { District } from './world';
@@ -39,7 +40,7 @@ const CELL_H = 14;
 
 type C3 = [number, number, number];
 
-function run(): void {
+async function run(): Promise<void> {
   const content = loadDistrictContent();
   const flags = new FlagStore({ [FLAG_TIME]: params.get('time') ?? 'night', [FLAG_WEATHER]: params.get('weather') ?? 'clear' });
   const time = (): TimeOfDay => flags.get(FLAG_TIME) as TimeOfDay;
@@ -78,14 +79,14 @@ function run(): void {
   const cityU = cityUniforms();
   const city = cityMaterial(cityU);
   const district = new District(content.macro, 'neon', content.placed, SEED);
-  const atlas = new SignAtlas(district.signTexts(style.signWords));
+  const atlas = new SignAtlas(signTexts(style.signWords, content.placed));
   const M = 16;
   const b = district.bounds;
   const lightmap = new Lightmap(renderer, { x: b.minX - M, y: b.minZ - M, w: b.maxX - b.minX + 2 * M, h: b.maxZ - b.minZ + 2 * M }, CELL);
   cityU.tLight.value = lightmap.texture;
   cityU.uLightRect.value = lightmap.uniformRect;
   const ghost = ghostMaterial();
-  district.setKit({ city, signs: signMaterial(cityU, atlas), ghost, atlas, lightmap });
+  district.setKit({ city, signs: signMaterial(cityU, atlas), ghost, atlas, lightmap, words: style.signWords });
   scene.add(district.root);
 
   // Post: HDR scene with MSAA and a depth texture -> ASCII overlay -> bloom -> tone mapping + sRGB.
@@ -145,9 +146,10 @@ function run(): void {
     controls.setView(cam[3], cam[4]);
   }
 
-  // Warm start: build the neighbourhood synchronously so the first frame isn't empty.
+  // Warm start: the workers build the neighbourhood (every stage) before the first frame.
+  $('overlay').textContent = 'building the city...';
   const warm0 = performance.now();
-  district.update(camera.position, Infinity);
+  await district.warm(camera.position);
   const warmMs = performance.now() - warm0;
   const warmChunks = district.loaded;
 
@@ -191,6 +193,10 @@ function run(): void {
     overlay.setFog(atm.fogNear, atm.fogFar, fog.color);
   };
   applyAtmosphere();
+  // Compile every shader variant and upload the warm-start geometry now, rather than in the first frames.
+  await renderer.compileAsync(scene, camera);
+  composer.render(0);
+  $('overlay').textContent = 'click to walk';
 
   // Interaction: nearest visible interactable within reach, roughly in front of you.
   const bridge = new PlaceholderVnBridge($('vn'));
@@ -255,7 +261,7 @@ function run(): void {
   const px = new Uint8Array(4);
 
   // Bench: stream along a boulevard through the district at run-to-fly speed, then hold still per preset.
-  interface Sample { ms: number; calls: number; tris: number; built: number }
+  interface Sample { ms: number; calls: number; tris: number; built: number; t: number }
   const benchLog: { phase: string; samples: Sample[] }[] = [];
   const benchStart = performance.now();
   const PATH_X = 29 * CELL;
@@ -301,8 +307,10 @@ function run(): void {
     if (bench) controls.update(0);
 
     const t0 = performance.now();
-    const built = district.update(camera.position, 4);
+    // Turning worker results into meshes is the only streaming work on the main thread: ~2 ms a frame.
+    const built = district.update(camera.position, 2);
     builtThisWindow += built;
+    const tUpd = performance.now();
     applyAtmosphere();
     for (const n of nodes) {
       const m = npcMeshes.get(n.id);
@@ -322,10 +330,11 @@ function run(): void {
     composer.render(dt);
     if (bench) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     const frameMs = performance.now() - t0;
+    if (bench && phase && frameMs > 25 && params.get('diag') === '1') console.log(`slow frame ${frameMs.toFixed(1)} ms · update ${(tUpd - t0).toFixed(1)} · render ${(performance.now() - tUpd).toFixed(1)} · integrated ${built} (${(district.lastBytes / 1e6).toFixed(1)} MB) · tris ${renderer.info.render.triangles} · progs ${renderer.info.programs?.length}`);
     if (bench && phase) {
       let log = benchLog.find((l) => l.phase === phase);
       if (!log) benchLog.push((log = { phase, samples: [] }));
-      log.samples.push({ ms: frameMs, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, built });
+      log.samples.push({ ms: frameMs, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, built, t: now });
     }
 
     frames++;
@@ -345,7 +354,8 @@ function run(): void {
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
-        `chunk base avg ${(s.genMsTotal / Math.max(1, s.generated)).toFixed(1)} ms · detail avg ${(s.detailMsTotal / Math.max(1, s.detailed)).toFixed(1)} ms (max ${s.detailMsMax.toFixed(0)}) · warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms · built last 0.5 s ${builtThisWindow}`,
+        `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
+        `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t ? `[E] ${t.kind === 'door' ? 'Enter' : 'Talk'}: ${t.name ?? t.id}` : ' ',
         'click to look · WASD · Shift run · E interact · T time · R weather · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
@@ -365,13 +375,24 @@ function run(): void {
       viewport: `${renderer.domElement.width}x${renderer.domElement.height}`,
       districtCells: district.cells.length,
       warmStart: { chunks: warmChunks, ms: +warmMs.toFixed(1) },
-      chunkGen: { count: s.generated, avgMs: +(s.genMsTotal / s.generated).toFixed(2), maxMs: +s.genMsMax.toFixed(2), disposed: s.disposed },
-      detailGen: { count: s.detailed, avgMs: +(s.detailMsTotal / Math.max(1, s.detailed)).toFixed(2), maxMs: +s.detailMsMax.toFixed(2) },
+      chunkGen: { count: s.base.count, avgMs: +avg(s.base), maxMs: +s.base.msMax.toFixed(2), disposed: s.disposed },
+      detailGen: { count: s.near.count, avgMs: +avg(s.near), maxMs: +s.near.msMax.toFixed(2) },
+      mainThread: {
+        count: s.integrate.count,
+        avgMs: avg(s.integrate),
+        maxMs: s.integrate.msMax.toFixed(2),
+        workerAvg: `${avg(s.base)} / ${avg(s.near)} / ${avg(s.ghosts)} ms in ${district.workerCount} workers`,
+      },
       phases: benchLog.map((l) => ({
         phase: l.phase,
         frames: l.samples.length,
         firstFramesMaxMs: +Math.max(...l.samples.slice(0, 5).map((x) => x.ms)).toFixed(2),
         frameMs: stat(l.samples.slice(5).map((x) => x.ms)),
+        // Delivered frame rate (wall clock between frames, not just our work) and hitches.
+        fps: +((l.samples.length - 1) / ((l.samples[l.samples.length - 1].t - l.samples[0].t) / 1000)).toFixed(1),
+        intervalMax: +Math.max(...l.samples.slice(5).map((x, i, a) => (i > 0 ? x.t - a[i - 1].t : 0))).toFixed(1),
+        over33: l.samples.slice(5).filter((x) => x.ms > 33).length,
+        over16: l.samples.slice(5).filter((x) => x.ms > 16.7).length,
         framesWithChunkBuild: l.samples.filter((x) => x.built > 0).length,
         chunkBuildFrameMs: l.samples.some((x) => x.built > 0) ? stat(l.samples.filter((x) => x.built > 0).map((x) => x.ms)) : null,
         avgCalls: Math.round(l.samples.reduce((a, x) => a + x.calls, 0) / l.samples.length),
@@ -442,11 +463,11 @@ function npcSpec(n: Node3, facing: C3): FigureSpec {
   };
 }
 
-try {
-  run();
-} catch (e) {
+const avg = (s: { count: number; msTotal: number }): string => (s.msTotal / Math.max(1, s.count)).toFixed(2);
+
+run().catch((e: unknown) => {
   const pre = $('errors');
   pre.hidden = false;
   pre.textContent = e instanceof ContentError ? e.message : String((e as Error).stack ?? e);
   throw e;
-}
+});

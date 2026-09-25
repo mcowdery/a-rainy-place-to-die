@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { sphereOf, toGeometry, type RawGeometry } from './rawGeometry';
 
 /**
  * Surface kinds for the city material (city.ts). Stored in aFacade.w (+16 marks a building's street front).
@@ -335,25 +336,33 @@ export class MeshBuilder {
   }
 
   /** The finished geometry, translated by (-ox, 0, -oz), or null if nothing was added. */
-  build(ox = 0, oz = 0): THREE.BufferGeometry | null {
+  /** The finished arrays (copies), translated by (-ox, 0, -oz), or null if nothing was added. */
+  raw(ox = 0, oz = 0): RawGeometry | null {
     if (this.nv === 0) return null;
-    const g = new THREE.BufferGeometry();
     const p = this.pos.slice(0, this.nv * 3);
     for (let i = 0; i < this.nv; i++) {
       p[i * 3] -= ox;
       p[i * 3 + 2] -= oz;
     }
-    g.setAttribute('position', new THREE.BufferAttribute(p, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(this.nor.slice(0, this.nv * 3), 3));
-    g.setAttribute('color', new THREE.BufferAttribute(this.col.slice(0, this.nv * 3), 3));
-    g.setAttribute('aFacade', new THREE.BufferAttribute(this.fac.slice(0, this.nv * 4), 4));
-    g.setAttribute('aStyle', new THREE.BufferAttribute(this.sty.slice(0, this.nv * 4), 4));
-    g.setAttribute('aFlags', new THREE.BufferAttribute(this.flg.slice(0, this.nv), 1));
-    g.setAttribute('aBuilding', new THREE.BufferAttribute(this.bid.slice(0, this.nv), 1));
-    g.setIndex(new THREE.BufferAttribute(this.idx.slice(0, this.ni), 1));
-    g.computeBoundingSphere();
-    g.computeBoundingBox();
-    return g;
+    return {
+      attrs: {
+        position: { array: p, size: 3 },
+        normal: { array: this.nor.slice(0, this.nv * 3), size: 3 },
+        color: { array: this.col.slice(0, this.nv * 3), size: 3 },
+        aFacade: { array: this.fac.slice(0, this.nv * 4), size: 4 },
+        aStyle: { array: this.sty.slice(0, this.nv * 4), size: 4 },
+        aFlags: { array: this.flg.slice(0, this.nv), size: 1 },
+        aBuilding: { array: this.bid.slice(0, this.nv), size: 1 },
+      },
+      index: this.idx.slice(0, this.ni),
+      sphere: sphereOf(p),
+    };
+  }
+
+  /** The finished geometry, translated by (-ox, 0, -oz), or null if nothing was added. */
+  build(ox = 0, oz = 0): THREE.BufferGeometry | null {
+    const r = this.raw(ox, oz);
+    return r ? toGeometry(r) : null;
   }
 
   get triangles(): number {

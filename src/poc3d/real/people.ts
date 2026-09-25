@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { hash, rng, type Rng } from '../../core/hash';
 import type { CellPlan3, Road3 } from '../district/plan';
 import type { CellDetail } from './props';
+import { sphereOf, toGeometry, type RawGeometry } from './rawGeometry';
 
 /**
  * People, as translucent coloured ghosts: stand-ins that show where life is without committing to character
@@ -203,19 +204,26 @@ export class GhostBuilder {
   }
 
   build(ox: number, oz: number): THREE.BufferGeometry | null {
+    const r = this.raw(ox, oz);
+    return r ? toGeometry(r) : null;
+  }
+
+  raw(ox: number, oz: number): RawGeometry | null {
     if (this.nv === 0) return null;
     const p = this.pos.slice(0, this.nv * 3);
     for (let i = 0; i < p.length; i += 3) {
       p[i] -= ox;
       p[i + 2] -= oz;
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(p, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(this.nor.slice(0, this.nv * 3), 3));
-    g.setAttribute('color', new THREE.BufferAttribute(this.col.slice(0, this.nv * 3), 3));
-    g.setIndex(new THREE.BufferAttribute(this.idx.slice(0, this.ni), 1));
-    g.computeBoundingSphere();
-    return g;
+    return {
+      attrs: {
+        position: { array: p, size: 3 },
+        normal: { array: this.nor.slice(0, this.nv * 3), size: 3 },
+        color: { array: this.col.slice(0, this.nv * 3), size: 3 },
+      },
+      index: this.idx.slice(0, this.ni),
+      sphere: sphereOf(p),
+    };
   }
 }
 
