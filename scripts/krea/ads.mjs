@@ -8,6 +8,7 @@
 //   npm run ads:review [-- <batch>]                      list pending batches / one batch's candidates
 //   npm run ads:approve -- <batch> <file> [--as <name>]  move a candidate to assets/ads/source/<name>.png
 //   npm run ads:reject -- <batch> <file> [--reason ...]  move a candidate to pending/<batch>/rejected/
+//   node scripts/krea/ads.mjs approve-chosen            approve whatever was moved into pending/<batch>/chosen/
 //   npm run ads:status                                   check the Studio connection and login
 import fs from 'node:fs';
 import path from 'node:path';
@@ -278,7 +279,46 @@ function decide(approve) {
   writeReview(dir, m);
 }
 
-const commands = { login: cmdLogin, signup: cmdSignup, status: cmdStatus, generate: cmdGenerate, review: cmdReview, approve: () => decide(true), reject: () => decide(false) };
+/**
+ * Approves everything the user moved into a `chosen/` folder under any pending batch: each file is matched to
+ * the batch manifest that generated it (by file name), moved to assets/ads/source/NN_<item>.png (numbered
+ * after the existing art) with its provenance, and marked approved. Files it can't match are left alone.
+ */
+function cmdApproveChosen() {
+  if (!fs.existsSync(PENDING)) return console.log('No pending ad art.');
+  const batches = fs.readdirSync(PENDING).filter((b) => fs.existsSync(path.join(PENDING, b, 'manifest.json')));
+  const manifests = new Map(batches.map((b) => [b, readJson(path.join(PENDING, b, 'manifest.json'))]));
+  fs.mkdirSync(SOURCE, { recursive: true });
+  const artDir = path.join(ROOT, 'assets', 'ads');
+  const used = [...fs.readdirSync(artDir), ...fs.readdirSync(SOURCE)].map((f) => parseInt(f, 10)).filter((n) => n > 0);
+  let next = Math.max(0, ...used) + 1;
+  const touched = new Set();
+  for (const b of batches) {
+    const chosen = path.join(PENDING, b, 'chosen');
+    if (!fs.existsSync(chosen)) continue;
+    for (const file of fs.readdirSync(chosen).filter((f) => f.endsWith('.png'))) {
+      const owner = [...manifests].find(([, m]) => m.images.some((im) => im.file === file && im.status === 'pending'));
+      if (!owner) {
+        console.log(`  ? ${file}: no pending image with that name in any batch, left in place`);
+        continue;
+      }
+      const [ob, m] = owner;
+      const im = m.images.find((x) => x.file === file);
+      const name = `${String(next++).padStart(2, '0')}_${slug(im.item)}`;
+      fs.renameSync(path.join(chosen, file), path.join(SOURCE, `${name}.png`));
+      Object.assign(im, { status: 'approved', approvedAs: `assets/ads/source/${name}.png`, decided: new Date().toISOString() });
+      writeJson(path.join(SOURCE, `${name}.json`), { ...im, batch: m.batch, purpose: m.purpose, use: m.use, district: m.district });
+      touched.add(ob);
+      console.log(`  approved ${ob}/${file} -> assets/ads/source/${name}.png`);
+    }
+  }
+  for (const b of touched) {
+    writeJson(path.join(PENDING, b, 'manifest.json'), manifests.get(b));
+    writeReview(path.join(PENDING, b), manifests.get(b));
+  }
+}
+
+const commands = { login: cmdLogin, signup: cmdSignup, status: cmdStatus, generate: cmdGenerate, review: cmdReview, approve: () => decide(true), 'approve-chosen': cmdApproveChosen, reject: () => decide(false) };
 const cmd = commands[args[0]];
 if (!cmd) {
   console.log('Commands: login | status | generate <brief.json> [--dry-run] | review [batch] | approve <batch> <file> [--as name] | reject <batch> <file> [--reason ...]');
