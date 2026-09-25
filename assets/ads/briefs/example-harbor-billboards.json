@@ -1,0 +1,24 @@
+{
+  "batch": "example-harbor-billboards",
+  "purpose": "Example brief: billboard ads for the harbor district (not generated; copy and edit for a real batch).",
+  "use": "billboard",
+  "district": "harbor",
+  "defaults": { "lora": "ohwx julie", "variants": 2 },
+  "items": [
+    {
+      "id": "harbor_fish_market",
+      "brand": "港の朝市 Minato Morning Market",
+      "copy": "朝五時から、とれたて。",
+      "subject": "cheerful model in a rubber apron holding a fresh tuna at a harbor fish market at dawn, blue morning light, gulls",
+      "notes": "Billboard over the ferry terminal road."
+    },
+    {
+      "id": "harbor_ferry",
+      "brand": "ORCA FERRY",
+      "copy": "島まで、45分。",
+      "subject": "a white ferry at sea under a summer sky, wake trailing, retro travel poster feel",
+      "lora": null,
+      "notes": "No model: scenery-only variant."
+    }
+  ]
+}

@@ -21,6 +21,15 @@ A browser-based engine for a large, sparse, walkable ASCII city: an alternate-re
   - `people.ts`: people are translucent ghosts (Fresnel rim, no depth write) built from capsules on a small skeleton. It has body types (man, woman, child, elder), skirts or long coats, hair and hats, and poses (stand, walk, talk, phone, pockets, wave, hold hands). A figure is a pure function of its `FigureSpec`, so animation can re-pose it later. `cellCrowd` places deterministic groups along the pavements. Crowds are a separate streaming stage, built and shown only within about 200 m. The bar's NPCs use the same ghosts.
   - The pipeline is an HDR MSAA target with depth, then the overlay, then `UnrealBloomPass`, then `OutputPass` (ACES). Sun shadows are on only in clear weather with the sun high enough.
 
+## Generated art (Krea Studio): propose, then review
+
+Ad and signage art can be generated on request from Krea Studio (the VN generator, a local FastAPI server, default `http://127.0.0.1:7860`) with `scripts/krea/` (`studio.mjs` client, `ads.mjs` CLI). Only generate when the user asks for a batch. **Never wire generated images into the world without the user's approval.**
+
+- Auth: `npm run krea:login` (interactive, once; caches only the session cookie in `.krea/session.json`, ~30 days). `.env.krea` (see `.env.krea.example`) can hold the URL and optional credentials; both are git-ignored. `npm run ads:status` checks the connection.
+- A batch is a JSON brief in `assets/ads/briefs/` (format in the header of `ads.mjs`; `example-harbor-billboards.json` is a template). Prompts are the house style anchor, then the optional `ohwx julie` LoRA trigger (scale 0.85), then the item's subject, a composition hint for the `use` (taxi / poster / billboard / sign, which also sets the default size), then a no-lettering suffix (copy is composited in-engine). Model `krea-2-turbo`, 12 steps. `npm run ads:generate -- <brief> --dry-run` prints the exact prompts without submitting (generation costs GPU time).
+- Output goes to `assets/ads/pending/<batch>/` (git-ignored): the PNGs, `manifest.json` (purpose, prompt, seed, LoRA and Studio job per image), `REVIEW.md` and `review.html`. Generations also appear in the user's Studio Staging Area.
+- The user decides: `npm run ads:approve -- <batch> <file> --as NN_name` moves the image to `assets/ads/source/` (with a provenance `.json`); `npm run ads:reject -- <batch> <file>` moves it to `pending/<batch>/rejected/`. Only after approval, and when asked, crop it (`scripts/crop_ads.py assets/ads/source`) and add it to `models/ads.ts`.
+
 ## Commands
 
 Node is installed at `C:\Program Files\nodejs`. If `node`/`npm` aren't on PATH in a shell, prefix with `$env:Path = "$env:ProgramFiles\nodejs;$env:Path"` (PowerShell) or `PATH="/c/Program Files/nodejs:$PATH"` (bash).

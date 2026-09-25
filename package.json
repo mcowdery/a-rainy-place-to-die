@@ -8,7 +8,13 @@
     "build": "tsc && vite build",
     "typecheck": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "krea:login": "node scripts/krea/ads.mjs login",
+    "ads:status": "node scripts/krea/ads.mjs status",
+    "ads:generate": "node scripts/krea/ads.mjs generate",
+    "ads:review": "node scripts/krea/ads.mjs review",
+    "ads:approve": "node scripts/krea/ads.mjs approve",
+    "ads:reject": "node scripts/krea/ads.mjs reject"
   },
   "dependencies": {
     "three": "^0.186.1",
