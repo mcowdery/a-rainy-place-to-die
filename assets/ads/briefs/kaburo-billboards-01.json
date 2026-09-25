@@ -1,6 +1,6 @@
 {
   "batch": "kaburo-billboards-01",
-  "purpose": "Kaburo (Neon Core) building-side and rooftop billboards: the district's nightlife economy, including its shady side (love hotels, host and hostess clubs, easy loans). Adult ads are racy (lingerie, implied nudity), always clearly adult.",
+  "purpose": "Kaburo (Neon Core) building-side and rooftop billboards: the district's nightlife economy, including its shady side. Love hotel ads are explicit but censored with stars and black bars, as is common in Japan; all models clearly adult.",
   "use": "billboard",
   "district": "neon",
   "defaults": {
@@ -8,28 +8,6 @@
     "variants": 2
   },
   "items": [
-    {
-      "id": "hotel_rouge",
-      "brand": "HOTEL ROUGE ホテル ルージュ",
-      "copy": "休憩 ¥3,800〜 / 宿泊 ¥7,500〜",
-      "subject": "glamorous adult woman in her late twenties in a red silk robe lounging on satin hotel sheets, soft red and magenta neon glow, sultry but tasteful, fully covered, romantic love hotel advertisement",
-      "notes": "Love hotel. Suggestive, not explicit; no likeness LoRA."
-    },
-    {
-      "id": "hotel_rouge_julie",
-      "brand": "HOTEL ROUGE ホテル ルージュ",
-      "copy": "休憩 ¥3,800〜 / 宿泊 ¥7,500〜",
-      "subject": "glamorous adult woman in a red silk robe lounging on satin hotel sheets, soft red and magenta neon glow, sultry but tasteful, fully covered, romantic love hotel advertisement",
-      "lora": "ohwx julie",
-      "notes": "Julie version of the HOTEL ROUGE ad (Julie is a synthetic character)."
-    },
-    {
-      "id": "hotel_venus",
-      "brand": "HOTEL VENUS",
-      "copy": "ご休憩 60分 ¥2,900",
-      "subject": "silhouettes of an adult couple embracing behind a frosted glass shower screen, pink and violet neon light, steam, intimate but discreet, love hotel advertisement",
-      "notes": "Love hotel, discreet couple silhouette. No likeness LoRA."
-    },
     {
       "id": "club_adonis_hosts",
       "brand": "CLUB ADONIS",
@@ -41,8 +19,8 @@
       "id": "club_moonlight",
       "brand": "CLUB MOONLIGHT キャバクラ",
       "copy": "朝まで、あなたの隣に。",
-      "subject": "elegant adult hostess in a sequined evening gown holding a champagne glass, luxurious lounge bokeh, deep blue and gold lighting, glamorous hostess club advertisement, tasteful",
-      "notes": "Hostess club (cabaret). Glamour, not explicit. No likeness LoRA."
+      "subject": "stunning adult hostess in her mid twenties with glossy long hair and a flirtatious smile, in a sequined evening gown, holding a champagne glass, luxurious lounge bokeh, deep blue and gold lighting, glamorous hostess club advertisement",
+      "notes": "Hostess club; redone younger and more glamorous (still clearly adult). No LoRA."
     },
     {
       "id": "parlor_ginga",

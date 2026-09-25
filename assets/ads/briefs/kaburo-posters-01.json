@@ -1,6 +1,6 @@
 {
   "batch": "kaburo-posters-01",
-  "purpose": "Kaburo (Neon Core) street-level posters and lightboxes: storefront walls, alley doors, vending-machine sides and the free information centre. Adult ads are racy (lingerie, implied nudity), always clearly adult.",
+  "purpose": "Kaburo (Neon Core) street-level posters and lightboxes. Adult ads are explicit but censored with stars and black bars, as is common in Japan; all models clearly adult.",
   "use": "poster",
   "district": "neon",
   "defaults": {
@@ -8,22 +8,6 @@
     "variants": 2
   },
   "items": [
-    {
-      "id": "annaijo_girls",
-      "brand": "無料案内所 FREE INFORMATION",
-      "copy": "かわいい子、ご案内します",
-      "subject": "glamour portrait of a flirty adult woman in her late twenties in black lace lingerie, playful pose, flash photography, bright yellow and hot pink backdrop, gaudy nightlife information centre lightbox poster",
-      "notes": "The district free information centre (無料案内所) lightbox: racy glamour, adult.",
-      "lora": "ohwx julie"
-    },
-    {
-      "id": "hotel_venus_poster",
-      "brand": "HOTEL VENUS",
-      "copy": "ご休憩 60分 ¥2,900 / 空室あり",
-      "subject": "sensual adult woman in her late twenties wrapped in a white bedsheet on a round love hotel bed, bare shoulders, implied nudity, mirrored ceiling, pink and violet neon light",
-      "lora": "ohwx julie",
-      "notes": "Street poster for the love hotel entrance: racy, implied nudity, adult."
-    },
     {
       "id": "hikari_loan",
       "brand": "ヒカリ ローン",
@@ -35,17 +19,17 @@
       "id": "tsukuyomi_fortune",
       "brand": "占いの館 月詠",
       "copy": "あなたの運命、視えます。",
-      "subject": "mysterious woman in a dark hooded shawl gazing into a glowing crystal ball, candles, purple smoke, fortune teller poster",
-      "lora": "ohwx julie",
-      "notes": "Fortune teller upstairs; a possible story hook."
+      "subject": "mysterious young woman in a dark hooded shawl gazing into a glowing crystal ball, candles, purple smoke, full-frame photograph, no text anywhere",
+      "lora": null,
+      "notes": "Fortune teller upstairs; a possible story hook. Redone without the Julie LoRA (she made every face the same)."
     },
     {
       "id": "karaoke_dream",
       "brand": "カラオケ DREAM",
       "copy": "全室 朝まで ¥1,500",
-      "subject": "friends laughing and singing into microphones in a colourful karaoke room, disco lights, candid fun, karaoke chain poster",
-      "lora": "ohwx julie",
-      "notes": "Karaoke box chain; Julie as one of the group."
+      "subject": "group of friends laughing and singing into microphones in a colourful karaoke room, disco lights, candid fun, full-frame photograph, no text anywhere",
+      "lora": null,
+      "notes": "Karaoke box chain; Julie as one of the group. Redone without the Julie LoRA (she made every face the same)."
     },
     {
       "id": "yonaki_ramen",
