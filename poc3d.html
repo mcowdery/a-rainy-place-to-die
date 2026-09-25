@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>City Popper 3D PoC</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1020; color: #d8d8e0; }
+      body { font: 13px/1.4 Consolas, 'Cascadia Mono', monospace; }
+      canvas { display: block; }
+      #hud {
+        position: fixed; top: 8px; left: 8px; z-index: 2; padding: 6px 10px; white-space: pre;
+        background: rgba(7, 7, 11, 0.78); border: 1px solid #2c2c3a; pointer-events: none;
+      }
+      #overlay {
+        position: fixed; inset: 0; z-index: 1; display: grid; place-items: center; pointer-events: none;
+        color: #ff5fc8; font-size: 18px; text-shadow: 0 0 12px rgba(255, 95, 200, 0.6);
+      }
+      #overlay[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="hud"></div>
+    <div id="overlay">click to walk</div>
+    <script type="module" src="/src/poc3d/main.ts"></script>
+  </body>
+</html>
