@@ -1,0 +1,160 @@
+# (district, time, weather) -> look. More specific rules layer over less specific ones;
+# ties go to file order. The base rule (match: {}) must define every palette colour.
+# time: dawn | day | dusk | night    weather: clear | rain | fog
+# district: residential | tower | neon | oldtown | harbor | beach | water | void
+# Tints blend every non-emissive colour toward `color` by `amount` and stack in rule order.
+rules:
+  - match: {}
+    windowLit: 0
+    neon: 'off'
+    rain: 0
+    fog: null
+    palette:
+      void: '#07070b'
+      water: '#15446b'
+      water_hi: '#4a8fc0'
+      ground: '#3a3833'
+      ground_hi: '#56524a'
+      grass: '#2c4426'
+      grass_hi: '#5a8a44'
+      tree: '#7cc05a'
+      sand: '#bfae82'
+      sand_hi: '#ddcc9e'
+      sidewalk: '#6a6a70'
+      sidewalk_hi: '#88888f'
+      asphalt: '#3c3c43'
+      asphalt_hi: '#55555e'
+      road_mark: '#d8cf86'
+      alley: '#46423c'
+      plaza: '#7a766e'
+      plaza_hi: '#959088'
+      roof: '#555a64'
+      roof_hi: '#6e7480'
+      roof_tile: '#434859'
+      roof_tile_hi: '#636a86'
+      roof_house: '#7a4136'
+      roof_house_hi: '#9c5a4b'
+      roof_tower: '#46505c'
+      roof_tower_hi: '#6a7888'
+      roof_metal: '#5a6666'
+      roof_metal_hi: '#7a8a8a'
+      cornice: '#9ca0a8'
+      wall: '#8a8174'
+      wall_house: '#c8bca6'
+      wall_wood: '#6a4d36'
+      wall_metal: '#7a8080'
+      glass: '#4a6a8c'
+      window: '#b2d4ea'
+      window_lit: '#ffd27a'
+      shop: '#b8c8d0'
+      door: '#3b2a20'
+      door_story: '#e8b04a'
+      awning: '#b8505a'
+      sign_bg: '#2e2634'
+      neon_off: '#a098a8'
+      neon_pink: '#ff5fc8'
+      neon_cyan: '#4fe3ff'
+      neon_yellow: '#ffe45f'
+      neon_green: '#6bff8a'
+      neon_red: '#ff4f4f'
+      container_red: '#b0463a'
+      container_blue: '#3a6ab0'
+      container_green: '#3a8a5a'
+      container_orange: '#d0843a'
+      dock: '#524a40'
+      dock_hi: '#766b5a'
+      payphone: '#6bff8a'
+      player: '#ffffff'
+      npc: '#ffcf6b'
+      npc_alt: '#c9a0ff'
+      rain: '#8fb3d9'
+
+  - match: { time: dawn }
+    tint: { color: '#9fb0ff', amount: 0.15 }
+    windowLit: 0.05
+
+  - match: { time: dusk }
+    tint: { color: '#ff8a5a', amount: 0.2 }
+    windowLit: 0.12
+    neon: 'on'
+
+  - match: { time: night }
+    windowLit: 0.3
+    neon: 'on'
+    palette:
+      water: '#071a2e'
+      water_hi: '#1f4d74'
+      ground: '#16161a'
+      ground_hi: '#2a2a31'
+      grass: '#101c11'
+      grass_hi: '#26402a'
+      tree: '#315c2c'
+      sand: '#4a4434'
+      sand_hi: '#625a46'
+      sidewalk: '#26262e'
+      sidewalk_hi: '#383842'
+      asphalt: '#17171c'
+      asphalt_hi: '#25252d'
+      road_mark: '#6a6440'
+      alley: '#1a181c'
+      plaza: '#2a282e'
+      plaza_hi: '#3a3840'
+      roof: '#23262d'
+      roof_hi: '#30343d'
+      roof_tile: '#1c1f28'
+      roof_tile_hi: '#2c3040'
+      roof_house: '#34201c'
+      roof_house_hi: '#482c26'
+      roof_tower: '#1c222a'
+      roof_tower_hi: '#2c3440'
+      roof_metal: '#232a2a'
+      roof_metal_hi: '#323c3c'
+      cornice: '#44474e'
+      wall: '#38332e'
+      wall_house: '#4c4740'
+      wall_wood: '#2a1f18'
+      wall_metal: '#2c3232'
+      glass: '#141e2c'
+      window: '#1f2a38'
+      shop: '#ffe9b8'
+      door: '#140e0a'
+      awning: '#6a2a34'
+      sign_bg: '#130e18'
+      neon_off: '#3a3440'
+      dock: '#211e1a'
+      dock_hi: '#332e28'
+
+  - match: { weather: rain }
+    tint: { color: '#2a3a5a', amount: 0.2 }
+    rain: 0.03
+
+  - match: { weather: fog }
+    tint: { color: '#9098a0', amount: 0.3 }
+    fog: 'rgba(150,158,170,0.22)'
+
+  # District flavour at night.
+  - match: { district: neon, time: night }
+    windowLit: 0.5
+    neon: flicker
+    palette:
+      asphalt: '#1c1222'
+      sidewalk: '#2c1f33'
+      alley: '#1f1424'
+
+  - match: { district: tower, time: night }
+    windowLit: 0.42
+
+  - match: { district: residential, time: night }
+    windowLit: 0.22
+
+  - match: { district: oldtown, time: night }
+    windowLit: 0.3
+    palette:
+      window_lit: '#ffae5a'
+
+  - match: { district: harbor, time: night }
+    windowLit: 0.06
+
+  - match: { district: neon, time: night, weather: rain }
+    palette:
+      asphalt: '#241830'

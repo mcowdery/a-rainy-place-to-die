@@ -1,0 +1,44 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+A browser-based engine for a large, sparse, walkable ASCII city: an alternate-reality Japan with a noir / city-pop look. The world handles traversal and atmosphere; story content runs in a separate VN mode, which will come from the Krea Studio VN generator (FastAPI + vanilla JS, a separate codebase). The world hands off to VN mode at story nodes. The real handoff convention (exit/entry keys, shared flags) will be brought in later, so don't design it; leave the seams described below in place.
+
+## Commands
+
+Node is installed at `C:\Program Files\nodejs`. If `node`/`npm` aren't on PATH in a shell, prefix with `$env:Path = "$env:ProgramFiles\nodejs;$env:Path"` (PowerShell) or `PATH="/c/Program Files/nodejs:$PATH"` (bash).
+
+- `npm run dev` starts the Vite dev server. Review shortcuts: `?spawn=bar_kanpai.out&time=dusk&weather=rain`.
+- `npm test` runs Vitest once. For a single file or test: `npx vitest run tests/stamps.test.ts -t "CJK"`.
+- `npm run typecheck` runs `tsc` with no emit. `npm run build` runs the typecheck plus `vite build`.
+- `npx vitest run -u` updates the generator snapshot. Only do this when a change to generated output is intended (see Determinism).
+
+## Architecture: layered world generation
+
+The world is never stored. Each 64×64 **chunk** is generated on first access and kept in an LRU cache ([src/world/world.ts](src/world/world.ts)). The layers, painted in [src/gen/raster.ts](src/gen/raster.ts):
+
+- **L0 macro map.** [content/world/l0.txt](content/world/l0.txt) is hand-painted: one character per macro cell (`CONFIG.cellW × cellH` = 128×64 tiles, square on screen).
+- **L1 streets.** Every land/land cell edge carries a road split between the two cells. Both cells derive its width from a hash of the shared edge, so buildings never cross cells. Cell interiors are split into blocks by local streets (a BSP split). See [src/gen/cellplan.ts](src/gen/cellplan.ts).
+- **L2 lots.** Blocks → bands → lots → buildings, as vector data (a `CellPlan`) that's cheap to build. Per-district parameters are in [src/gen/styles.ts](src/gen/styles.ts).
+- **L3 stamps.** Hand-authored set pieces in `content/stamps/**/*.yaml`, placed by [content/world/placements.yaml](content/world/placements.yaml). They override L1/L2. The generator treats stamp rects as reserved: lots that touch them become open plaza, and local streets route around them.
+- **L4 nodes.** Story nodes (spawn / door / npc / station / hotspot) are declared inside stamps and resolved to world coordinates by [src/content/nodes.ts](src/content/nodes.ts). They aren't tiles; the `NodeIndex` buckets them by chunk.
+
+**3/4 view:** a building lot, from north to south, is yard (behind) → roof rows → facade rows facing south. What you see is what collides. Tall buildings are tall because their facade has many rows.
+
+**Atmosphere** ([src/atmosphere/atmosphere.ts](src/atmosphere/atmosphere.ts), [content/world/atmosphere.yaml](content/world/atmosphere.yaml)) is a pure lookup from (district, time, weather) to a palette plus effects. Rules layer by specificity, and tints skip `EMISSIVE` colors. Time and weather are story flags (`world.time`, `world.weather`), not clocks. Tiles reference palette *names* ([src/world/tiles.ts](src/world/tiles.ts)), so atmosphere never changes world data.
+
+**VN seam:** `VnBridge.enter(node)` in [src/game/bridge.ts](src/game/bridge.ts). The world awaits it and never reads `node.handoff`. `PlaceholderVnBridge` is the stand-in. Flags go through `FlagStore` ([src/core/flags.ts](src/core/flags.ts)), which is also a placeholder for the shared-flag convention.
+
+## Invariants (don't break these)
+
+- **One coordinate convention:** integer tiles, origin at the northwest corner, +x east, +y south, always `[x, y]`. Local coordinates (stamp, lot, cell) use the same axes from that thing's northwest corner.
+- **Stable IDs:** node ids are `<placement id>.<node id>` (e.g. `neon_station.gate`), must match `[a-z0-9_]+`, and are never reused. Placements anchor to an L0 cell plus an offset, never raw world coordinates, so retuning `cellW`/`cellH` keeps stamps in their district. A stamp must stay `CELL_MARGIN` tiles inside one cell.
+- **Wide (CJK) cells:** a wide char is `[codepoint, GLYPH_CONT]` across two cells in every layer (stamps, generated signs, chunks, renderer). In stamp art, CJK is only allowed inside `[ ]` sign brackets, and every row must have the same width in *cells*. Both rules are load errors, not visual bugs.
+- **Determinism:** generation is a pure function of `CONFIG.seed`, `CONFIG.generatorVersion`, L0 and the placements. All randomness goes through [src/core/hash.ts](src/core/hash.ts) (no `Math.random` in gen). Authored content must never depend on generated layout. [tests/world.test.ts](tests/world.test.ts) fingerprints sample chunks; if a generator change is intended, update the snapshot (and bump `generatorVersion` once saves exist).
+- **Content validation:** [src/content/load.ts](src/content/load.ts) collects *all* content errors (file/row/col) and the app shows them on screen. When adding content rules, add a check there or in the parser, not a runtime fallback.
+
+## Stamp format
+
+See the header comment in [src/content/stamps.ts](src/content/stamps.ts). In short: a `legend` maps characters to tiles; `'X': { tile, node: id }` marks a node, which must appear exactly once; text inside `[ ]` is literal sign text; `door`/`station` nodes need a `returnSpawn`.

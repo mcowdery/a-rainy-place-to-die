@@ -1,0 +1,31 @@
+# The player's home base.
+id: player_home
+legend:
+  'g': grass
+  'T': tree
+  '^': roof_house
+  '=': cornice
+  '#': wall_house
+  'w': window_house
+  '.': ground
+  '_': sidewalk
+  'D': { tile: door, node: door }
+  's': { tile: ground, node: front }
+nodes:
+  door:
+    kind: door
+    name: Home
+    returnSpawn: front
+    handoff: {}
+  front:
+    kind: spawn
+    facing: south
+art: |
+  ggTgggggggggggTg
+  gg^^^^^^^^^^^^gg
+  gg^^^^^^^^^^^^gg
+  gg============gg
+  gg#w#w##D#w#w#gg
+  ggggggggsggggggg
+  gggggggg.ggggggg
+  ________________

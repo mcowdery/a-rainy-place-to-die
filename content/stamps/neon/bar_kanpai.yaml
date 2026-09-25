@@ -1,0 +1,49 @@
+# A story location in the neon district. Two NPCs outside; the detective only shows up at night.
+id: bar_kanpai
+legend:
+  'r': roof_flat
+  '=': cornice
+  '#': wall
+  'w': window
+  'o': window_shop
+  'a': { tile: awning, fg: neon_pink }
+  '_': sidewalk
+  '[': { tile: sign, fg: neon_pink }
+  'D': { tile: door, node: door }
+  'x': { tile: sidewalk, node: out }
+  'M': { tile: sidewalk, node: mama }
+  'K': { tile: sidewalk, node: detective }
+nodes:
+  door:
+    kind: door
+    name: Bar Kanpai
+    returnSpawn: out
+    handoff: {}
+  out:
+    kind: spawn
+    facing: south
+  mama:
+    kind: npc
+    name: Mama-san
+    glyph: '&'
+    handoff: {}
+  detective:
+    kind: npc
+    name: Man in a trench coat
+    glyph: '@'
+    fg: npc_alt
+    condition: world.time == "night"
+    handoff: {}
+art: |
+  rrrrrrrrrrrrrr
+  rrrrrrrrrrrrrr
+  ==============
+  #[か]#w#w#w#w#
+  #[ん]#w#w#w#w#
+  #[ぱ]#w#w#w#w#
+  #[い]#w#w#w#w#
+  #[BAR KANPAI]#
+  aaaaaaaaaaaaaa
+  #oooo#D#oooo##
+  ______x_______
+  __M________K__

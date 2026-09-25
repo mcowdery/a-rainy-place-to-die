@@ -1,0 +1,33 @@
+# Metro station entrance. One template placed once per district (see world/placements.yaml).
+id: station
+legend:
+  'r': roof_flat
+  '=': cornice
+  '#': wall
+  'w': window_shop
+  '_': sidewalk
+  '[': { tile: sign, fg: neon_cyan }
+  'G': { tile: door, node: gate }
+  'x': { tile: sidewalk, node: exit }
+  'P': { tile: payphone, node: phone }
+nodes:
+  gate:
+    kind: station
+    name: Metro
+    returnSpawn: exit
+  exit:
+    kind: spawn
+    facing: south
+  phone:
+    kind: hotspot
+    name: Payphone
+    handoff: {}
+art: |
+  rrrrrrrrrrrrrrrrrrrrrrrrrr
+  rrrrrrrrrrrrrrrrrrrrrrrrrr
+  ==========================
+  ####[地下鉄 METRO]########
+  #wwwwwwwwww##G##wwwwwwwww#
+  __________________________
+  _____P_______x____________
+  __________________________

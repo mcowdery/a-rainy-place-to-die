@@ -1,0 +1,47 @@
+# L3 placements. cell = L0 macro cell [col, row]; offset = tiles from that cell's NW corner.
+# Node ids become "<id>.<node>", e.g. home.front, neon_station.gate. Never reuse an id.
+- id: home
+  stamp: player_home
+  cell: [17, 3]
+  offset: [50, 20]
+
+- id: res_station
+  stamp: station
+  cell: [18, 3]
+  offset: [20, 20]
+  name: Hoshigaoka (Residential)
+
+- id: tower_station
+  stamp: station
+  cell: [18, 12]
+  offset: [40, 24]
+  name: Chuo Towers
+
+- id: neon_station
+  stamp: station
+  cell: [29, 11]
+  offset: [40, 24]
+  name: Yoimachi (Neon)
+
+- id: bar_kanpai
+  stamp: bar_kanpai
+  cell: [28, 11]
+  offset: [60, 20]
+
+- id: oldtown_station
+  stamp: station
+  cell: [7, 12]
+  offset: [40, 24]
+  name: Furumachi (Old Town)
+
+- id: harbor_station
+  stamp: station
+  cell: [18, 19]
+  offset: [40, 24]
+  name: Minato Pier (Harbor)
+
+- id: beach_station
+  stamp: station
+  cell: [2, 23]
+  offset: [40, 20]
+  name: Shiosai (Beach)

@@ -1,0 +1,14 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`world generation > matches the recorded snapshot (fails on unintended generator drift; bump generatorVersion + update if intended) 1`] = `
+{
+  "0,0": 965108292,
+  "15,12": 3205096712,
+  "35,3": 2816292606,
+  "37,12": 4170484429,
+  "37,19": 3080865788,
+  "4,21": 965108292,
+  "5,23": 3662146698,
+  "59,11": 759711971,
+}
+`;
