@@ -15,6 +15,8 @@ export const KIND = {
   gloss: 4,
   /** Glass (car windows): near-black with a strong Fresnel reflection. */
   glass: 5,
+  /** Chrome / polished metal: metallic, mirror-like sky reflection. */
+  chrome: 6,
   asphalt: 7,
   sidewalk: 8,
   paint: 9,
@@ -232,6 +234,36 @@ export class MeshBuilder {
       }
       this.ni += n * 3;
     }
+  }
+
+  /**
+   * A quad with per-vertex normals (smooth surfaces). The winding is flipped automatically if it disagrees
+   * with the normals, so callers can emit grid cells in either order.
+   */
+  quadN(p0: V3, p1: V3, p2: V3, p3: V3, n0: V3, n1: V3, n2: V3, n3: V3): void {
+    this.grow(4, 6);
+    const ax = p1[0] - p0[0], ay = p1[1] - p0[1], az = p1[2] - p0[2];
+    const bx = p3[0] - p0[0], by = p3[1] - p0[1], bz = p3[2] - p0[2];
+    const gx = ay * bz - az * by;
+    const gy = az * bx - ax * bz;
+    const gz = ax * by - ay * bx;
+    const nx = n0[0] + n1[0] + n2[0] + n3[0];
+    const ny = n0[1] + n1[1] + n2[1] + n3[1];
+    const nz = n0[2] + n1[2] + n2[2] + n3[2];
+    const flip = gx * nx + gy * ny + gz * nz < 0;
+    const s = this.nv;
+    this.vert(p0[0], p0[1], p0[2], n0, 0, p0[1], 0, this.kind);
+    this.vert(p1[0], p1[1], p1[2], n1, 0, p1[1], 0, this.kind);
+    this.vert(p2[0], p2[1], p2[2], n2, 0, p2[1], 0, this.kind);
+    this.vert(p3[0], p3[1], p3[2], n3, 0, p3[1], 0, this.kind);
+    const I = this.idx;
+    const i = this.ni;
+    if (flip) {
+      I[i] = s; I[i + 1] = s + 2; I[i + 2] = s + 1; I[i + 3] = s; I[i + 4] = s + 3; I[i + 5] = s + 2;
+    } else {
+      I[i] = s; I[i + 1] = s + 1; I[i + 2] = s + 2; I[i + 3] = s; I[i + 4] = s + 2; I[i + 5] = s + 3;
+    }
+    this.ni += 6;
   }
 
   /** A general quad p0 -> p1 -> p2 -> p3 (counter-clockwise seen from the front). */

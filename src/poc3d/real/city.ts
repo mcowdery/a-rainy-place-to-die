@@ -362,15 +362,16 @@ const surface = /* glsl */ `
   } else if (kindF < 2.5) {
     albedo *= 0.75 + 0.4 * vnoise(vWPos.xz * 0.6) * (0.8 + 0.4 * vnoise(vWPos.xz * 4.0));
     sRough = 0.95;
-  } else if (kindF > 3.5 && kindF < 5.5) {
-    // Car paint and glass: glossy, reflecting the sky (and the street light below).
-    bool isGlass = kindF > 4.5;
+  } else if (kindF > 3.5 && kindF < 6.5) {
+    // Car paint, glass and chrome: glossy, reflecting the sky (and the street light below).
+    bool isGlass = kindF > 4.5 && kindF < 5.5;
+    bool isChrome = kindF > 5.5;
     float F = fresnel(cosV);
     vec3 refl = skyRefl(reflect(Vw, Nw));
-    albedo = isGlass ? vec3(0.01) : vColor.rgb;
-    sRough = isGlass ? 0.05 : 0.28;
-    sMetal = isGlass ? 0.0 : 0.25;
-    sEmit = refl * (isGlass ? mix(0.06, 1.0, F) : mix(0.02, 0.7, F));
+    albedo = isGlass ? vec3(0.01) : isChrome ? vColor.rgb * 0.35 : vColor.rgb;
+    sRough = isGlass ? 0.05 : isChrome ? 0.15 : 0.28;
+    sMetal = isGlass ? 0.0 : isChrome ? 1.0 : 0.25;
+    sEmit = refl * (isGlass ? vec3(mix(0.06, 1.0, F)) : isChrome ? vColor.rgb * mix(0.55, 1.0, F) : vec3(mix(0.02, 0.7, F)));
   } else if (kindF < 3.5) {
     float ch = vStyle.x;
     float gain = ch < 0.5 ? 1.6 : ch < 1.5 ? uLamps * 6.0 : uNeon * 3.5 * flick(vBid);

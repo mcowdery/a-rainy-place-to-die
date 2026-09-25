@@ -8,15 +8,18 @@ import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRe
 import { addCar, CAR_TYPES } from '../real/cars';
 import { cityMaterial, cityUniforms } from '../real/city';
 import { KIND, lin, MeshBuilder } from '../real/meshBuilder';
-import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Hair, type Pose } from '../real/people';
+import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Pose } from '../real/people';
+import { figureGeometry, ghostMaterials2, POSES2, type Body2, type FigureShape, type Pose2 } from '../models/figures';
+import { addVehicle, VEHICLE_TYPES, type VehicleType } from '../models/vehicles';
 
 /**
  * Model showroom: every car type and every person body type x pose, laid out in a clean space with studio
- * lighting, for reviewing the designs before they go into the world. Uses the same builders and
+ * lighting, for reviewing the designs before they go into the world. Shows the new generation under review
+ * (models/) and, for comparison, the previous one the district still uses (real/); M switches. Uses the same builders and
  * materials as the district (city material for cars, ghost material for people, ACES + bloom), but no
  * city, lightmap or ASCII overlay.
  * Mouse: left-drag orbit, right-drag pan, wheel zoom. Keys: WASD / Q E fly the view (Shift faster),
- * 1 studio / 2 night / 3 day lighting, L labels, X wireframe, B bloom, R turntable.
+ * M new/previous models, 1 studio / 2 night / 3 day lighting, L labels, X wireframe, B bloom, R turntable.
  */
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -70,7 +73,7 @@ floor.kind = KIND.lot;
 floor.color = lin(0x5e5e5c);
 floor.box(0, 6, -0.2, 0, 80, 80, KIND.lot);
 floor.kind = KIND.asphalt;
-floor.box(0, -4, 0, 0.02, 18, 16, KIND.asphalt);
+floor.box(0, -4, 0, 0.02, 22, 16, KIND.asphalt);
 floor.kind = KIND.plain;
 floor.color = lin(0x8a867e);
 floor.box(0, 17.5, 0, 0.15, 17, 23, KIND.sidewalk);
@@ -88,19 +91,125 @@ interface Item {
 }
 /** People face +z in rows; viewed from the front and ~30 degrees up, the row in front doesn't block. */
 const FRONT_VIEW = new THREE.Vector3(0, 0.55, 0.85).normalize();
-const items: Item[] = [];
-const labelObjects: CSS2DObject[] = [];
-const label = (text: string, x: number, y: number, z: number): void => {
+// Two generations of models side by side in the same layout: 'new' (models/vehicles.ts, models/figures.ts,
+// under review) and 'previous' (real/cars.ts, real/people.ts, what the district uses today).
+type Gen = 'new' | 'previous';
+let gen: Gen = 'new';
+const genRoot: Record<Gen, THREE.Group> = { new: new THREE.Group(), previous: new THREE.Group() };
+const genLabels: Record<Gen, CSS2DObject[]> = { new: [], previous: [] };
+const genItems: Record<Gen, Item[]> = { new: [], previous: [] };
+scene.add(genRoot.new, genRoot.previous);
+let labelsOn = true;
+const label = (g: Gen, text: string, x: number, y: number, z: number): void => {
   const div = document.createElement('div');
   div.className = 'label';
   div.textContent = text;
   const o = new CSS2DObject(div);
   o.position.set(x, y, z);
   scene.add(o);
-  labelObjects.push(o);
+  genLabels[g].push(o);
 };
 
-// Cars: one of each type facing the camera, and a second row with other paints, facing away.
+// ---- New generation ----
+const t0 = performance.now();
+const NEW_ROWS: { z: number; dir: number; paints: Record<VehicleType, number> }[] = [
+  { z: -1.5, dir: 1, paints: { sedan: 0xe8e8e4, taxi: 0x121316, kei: 0xa8d4bc, minivan: 0xb4b6ba, keitruck: 0xe8e8e4 } },
+  { z: -8.5, dir: -1, paints: { sedan: 0x1c2a44, taxi: 0xe0a818, kei: 0xd8c09a, minivan: 0x121316, keitruck: 0xb4b6ba } },
+];
+const NAMES: Record<VehicleType, string> = { sedan: 'sedan', taxi: 'taxi (classic)', kei: 'kei tall-wagon', minivan: 'minivan', keitruck: 'kei truck' };
+const newCars = new MeshBuilder(1 << 17);
+for (const [ri, row] of NEW_ROWS.entries()) {
+  VEHICLE_TYPES.forEach((type, i) => {
+    const x = -8 + i * 4;
+    addVehicle(newCars, { x, z: row.z, fx: 0, fz: row.dir, type, paint: row.paints[type] });
+    const name = `${NAMES[type]}${ri ? ' (alt paint)' : ''}`;
+    genItems.new.push({ name, group: 'Cars', at: new THREE.Vector3(x, 0.8, row.z), size: 4.5 });
+    label('new', name, x, 2.4, row.z);
+  });
+}
+const newCarMesh = new THREE.Mesh(newCars.build()!, city);
+newCarMesh.castShadow = newCarMesh.receiveShadow = true;
+genRoot.new.add(newCarMesh);
+const tCars = performance.now() - t0;
+
+const ghostCache = new Map<number, ReturnType<typeof ghostMaterials2>>();
+const ghostOf = (hex: number): ReturnType<typeof ghostMaterials2> => {
+  let g = ghostCache.get(hex);
+  if (!g) ghostCache.set(hex, (g = ghostMaterials2(hex)));
+  return g;
+};
+const COLORS2 = [0x5ad8ff, 0xff6ab8, 0xb08cff, 0x6affa8, 0xffb850, 0xc8d4ff, 0xff8a6a];
+const figure2 = (shape: FigureShape, x: number, z: number, yaw: number, hex: number): void => {
+  const geo = figureGeometry(shape);
+  const mats = ghostOf(hex);
+  for (const [m, order] of [[mats.depth, 1], [mats.color, 2]] as const) {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.position.set(x, 0.15, z);
+    mesh.rotation.y = yaw;
+    mesh.renderOrder = order;
+    genRoot.new.add(mesh);
+  }
+};
+const shape = (body: Body2, pose: Pose2, extra: Partial<FigureShape> = {}): FigureShape => ({
+  body,
+  pose,
+  outfit: body === 'woman' ? 'dress' : 'casual',
+  hair: body === 'woman' ? 'bob' : body === 'elder' ? 'none' : 'short',
+  hat: 'none',
+  accessory: pose === 'phone' ? 'phone' : 'none',
+  phase: 0.25,
+  side: 1,
+  look: 0,
+  ...extra,
+});
+const BODIES2: Body2[] = ['man', 'woman', 'child', 'elder'];
+const DX = 2.0;
+const DZ = 3.6;
+const x0 = -((POSES2.length - 1) * DX) / 2;
+BODIES2.forEach((body, r) => {
+  const z = 8 + r * DZ;
+  POSES2.forEach((pose, c) => {
+    const x = x0 + c * DX;
+    figure2(shape(body, pose), x, z, 0, COLORS2[r]);
+    label('new', `${body} · ${pose}`, x, body === 'child' ? 1.55 : 2.2, z);
+  });
+  genItems.new.push({ name: `${body} × all poses`, group: 'People', at: new THREE.Vector3(0, 1, z), size: 7, view: FRONT_VIEW });
+});
+const OUTFITS: [string, FigureShape][] = [
+  ['salaryman · suit + briefcase', shape('man', 'carry', { outfit: 'suit', accessory: 'briefcase' })],
+  ['salaryman · bowing (ojigi)', shape('man', 'bow', { outfit: 'suit' })],
+  ['office worker · bag + ponytail', shape('woman', 'walk', { hair: 'ponytail', accessory: 'shoulderbag', phase: 0.5 })],
+  ['kimono · obi + bun', shape('woman', 'stand', { outfit: 'kimono', hair: 'bun' })],
+  ['detective · trench + fedora', shape('man', 'pockets', { outfit: 'coat', hat: 'fedora' })],
+  ['schoolchild · randoseru + hat', shape('child', 'walk', { outfit: 'school', hat: 'schoolhat' })],
+  ['elder · cane + sun hat', shape('elder', 'carry', { accessory: 'cane', hat: 'sunhat' })],
+  ['vinyl umbrella · long hair', shape('woman', 'umbrella', { outfit: 'casual', hair: 'long', accessory: 'umbrella' })],
+];
+const zv = 8 + BODIES2.length * DZ;
+OUTFITS.forEach(([name, s], c) => {
+  const x = x0 + c * DX;
+  figure2(s, x, zv, 0, COLORS2[(c + 4) % COLORS2.length]);
+  label('new', name, x, s.body === 'child' ? 1.6 : s.accessory === 'umbrella' ? 2.7 : 2.3, zv);
+});
+genItems.new.push({ name: 'outfits & accessories', group: 'People', at: new THREE.Vector3(0, 1, zv), size: 7.5, view: FRONT_VIEW });
+const zg = zv + DZ + 0.2;
+// Groups as they'll appear in the street.
+figure2(shape('woman', 'talk', { outfit: 'kimono', hair: 'bun', look: 0 }), -5.2, zg - 0.45, 0, COLORS2[1]);
+figure2(shape('man', 'stand', { outfit: 'suit' }), -5.2, zg + 0.45, Math.PI, COLORS2[0]);
+figure2(shape('woman', 'hold', { side: 1 }), -1.9, zg, 0, COLORS2[3]);
+figure2(shape('child', 'hold', { side: -1, outfit: 'school', hat: 'schoolhat', look: -0.4 }), -1.35, zg, 0, COLORS2[4]);
+figure2(shape('man', 'walk', { phase: 0.25 }), 1.5, zg, 0, COLORS2[5]);
+figure2(shape('woman', 'walk', { phase: 0.75, look: -0.4, hair: 'long' }), 2.15, zg + 0.1, 0, COLORS2[2]);
+figure2(shape('man', 'bow', { outfit: 'suit' }), 5.2, zg - 0.55, 0, COLORS2[6]);
+figure2(shape('man', 'bow', { outfit: 'suit' }), 5.2, zg + 0.55, Math.PI, COLORS2[0]);
+label('new', 'talking pair', -5.2, 2.4, zg);
+label('new', 'parent + child', -1.6, 2.4, zg);
+label('new', 'couple walking', 1.8, 2.4, zg);
+label('new', 'bowing pair', 5.2, 2.2, zg);
+genItems.new.push({ name: 'groups', group: 'People', at: new THREE.Vector3(0, 1, zg), size: 7, view: FRONT_VIEW });
+const tPeople = performance.now() - t0 - tCars;
+
+// ---- Previous generation (for comparison) ----
 const carRows: { z: number; dir: number; paints: Record<string, number> }[] = [
   { z: -1.5, dir: 1, paints: { sedan: 0xe2e2de, kei: 0x9ac8b0, minivan: 0xa8aaae, taxi: 0x141416 } },
   { z: -8.5, dir: -1, paints: { sedan: 0x1e2c48, kei: 0xc8b48c, minivan: 0x141416, taxi: 0xd89a20 } },
@@ -111,28 +220,22 @@ for (const [ri, row] of carRows.entries()) {
     const x = -6 + i * 4;
     addCar(carMb, { x, z: row.z, fx: 0, fz: row.dir, variant: 1, type, paint: row.paints[type] });
     const name = `${type}${ri ? ' (alt paint)' : ''}`;
-    items.push({ name, group: 'Cars', at: new THREE.Vector3(x, 0.8, row.z), size: 4.5 });
-    label(name, x, 2.4, row.z);
+    genItems.previous.push({ name, group: 'Cars', at: new THREE.Vector3(x, 0.8, row.z), size: 4.5 });
+    label('previous', name, x, 2.4, row.z);
   });
 }
 const cars = new THREE.Mesh(carMb.build()!, city);
 cars.castShadow = cars.receiveShadow = true;
-scene.add(cars);
-
-// People: body types (rows) x poses (columns), plus a row of hair / clothing variants.
+genRoot.previous.add(cars);
 const BODIES: Body[] = ['man', 'woman', 'child', 'elder'];
 const POSES: Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold'];
-const DX = 2.0;
-const DZ = 3.6;
-const x0 = -((POSES.length - 1) * DX) / 2;
-const peopleRoot = new THREE.Group();
-scene.add(peopleRoot);
+const px0 = -((POSES.length - 1) * DX) / 2;
 const person = (s: FigureSpec): void => {
   const gb = new GhostBuilder();
   addFigure(gb, s);
   const m = new THREE.Mesh(gb.build(0, 0)!, ghost);
   m.renderOrder = 2;
-  peopleRoot.add(m);
+  genRoot.previous.add(m);
 };
 const base = (x: number, z: number, body: Body, pose: Pose, color: [number, number, number]): FigureSpec => ({
   x, z, yaw: 0, body, pose, color, hair: body === 'woman' ? 'long' : body === 'elder' ? 'none' : 'short',
@@ -141,40 +244,20 @@ const base = (x: number, z: number, body: Body, pose: Pose, color: [number, numb
 BODIES.forEach((body, r) => {
   const z = 8 + r * DZ;
   POSES.forEach((pose, c) => {
-    const x = x0 + c * DX;
+    const x = px0 + c * DX;
     person(base(x, z, body, pose, GHOST_COLORS[r % GHOST_COLORS.length] as [number, number, number]));
-    label(`${body} · ${pose}`, x, body === 'child' ? 1.5 : 2.2, z);
+    label('previous', `${body} · ${pose}`, x, body === 'child' ? 1.5 : 2.2, z);
   });
-  items.push({ name: `${body} × all poses`, group: 'People', at: new THREE.Vector3(0, 1, z), size: 7, view: FRONT_VIEW });
+  genItems.previous.push({ name: `${body} × all poses`, group: 'People', at: new THREE.Vector3(0, 1, z), size: 7, view: FRONT_VIEW });
 });
-const variants: [string, Body, Hair, boolean, Pose][] = [
-  ['woman · dress + bun', 'woman', 'bun', true, 'stand'],
-  ['woman · skirt + long hair', 'woman', 'long', true, 'walk'],
-  ['woman · hat', 'woman', 'hat', false, 'talk'],
-  ['man · coat + hat', 'man', 'hat', true, 'pockets'],
-  ['man · cap', 'man', 'cap', false, 'walk'],
-  ['elder · hat', 'elder', 'hat', false, 'stand'],
-  ['child · cap', 'child', 'cap', false, 'wave'],
-];
-const zv = 8 + BODIES.length * DZ;
-variants.forEach(([name, body, hair, long, pose], c) => {
-  const x = x0 + c * DX;
-  person({ ...base(x, zv, body, pose, GHOST_COLORS[(c + 4) % GHOST_COLORS.length] as [number, number, number]), hair, long });
-  label(name, x, body === 'child' ? 1.5 : 2.3, zv);
-});
-items.push({ name: 'hair / clothing variants', group: 'People', at: new THREE.Vector3(0, 1, zv), size: 7, view: FRONT_VIEW });
-// Groups as they appear in the street: talking pair, parent + child holding hands, couple walking.
-const zg = zv + DZ + 0.4;
-person({ ...base(-4.5, zg - 0.45, 'woman', 'talk', GHOST_COLORS[1] as [number, number, number]), hair: 'bun' });
-person({ ...base(-4.5, zg + 0.45, 'man', 'stand', GHOST_COLORS[0] as [number, number, number]), yaw: Math.PI });
-person({ ...base(-0.3, zg, 'woman', 'hold', GHOST_COLORS[3] as [number, number, number]), side: 1 });
-person({ ...base(0.3, zg, 'child', 'hold', GHOST_COLORS[4] as [number, number, number]), side: -1, hair: 'cap', look: -0.3 });
-person({ ...base(4.15, zg, 'man', 'walk', GHOST_COLORS[5] as [number, number, number]) });
-person({ ...base(4.85, zg + 0.1, 'woman', 'walk', GHOST_COLORS[2] as [number, number, number]), phase: 0.75, look: -0.4, long: true });
-label('talking pair', -4.5, 2.4, zg);
-label('parent + child', 0, 2.4, zg);
-label('couple walking', 4.5, 2.4, zg);
-items.push({ name: 'groups', group: 'People', at: new THREE.Vector3(0, 1, zg), size: 6, view: FRONT_VIEW });
+
+const applyGen = (g: Gen): void => {
+  gen = g;
+  genRoot.new.visible = g === 'new';
+  genRoot.previous.visible = g === 'previous';
+  for (const k of ['new', 'previous'] as const) for (const o of genLabels[k]) o.visible = labelsOn && k === g;
+  renderPanel();
+};
 
 // Lighting modes.
 type Mode = 'studio' | 'night' | 'day';
@@ -220,6 +303,25 @@ const focus = (it: Item): void => {
   glide = { t0: performance.now(), from: controls.target.clone(), to: it.at.clone(), camFrom: camera.position.clone(), camTo: it.at.clone().addScaledVector(dir, it.size * 1.3) };
 };
 
+// Click (without dragging) on a car or a person to glide to it.
+const raycaster = new THREE.Raycaster();
+let downAt: [number, number] | null = null;
+renderer.domElement.addEventListener('pointerdown', (e) => (downAt = [e.clientX, e.clientY]));
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
+  const ndc = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObjects(genRoot[gen].children, false).find((h) => h.object !== floorMesh);
+  if (!hit) return;
+  const m = hit.object as THREE.Mesh;
+  // People are placed by their mesh position (feet); cars are one merged mesh, so use the hit point.
+  const person = m.position.lengthSq() > 0;
+  const at = person ? m.position.clone().add(new THREE.Vector3(0, 0.95, 0)) : hit.point.clone().setY(0.8);
+  focus({ name: '', group: '', at, size: person ? 2.2 : 4.2 });
+});
+(window as unknown as { __focusAt: (x: number, y: number, z: number, size: number, vx: number, vy: number, vz: number) => void }).__focusAt = (x, y, z, size, vx, vy, vz) =>
+  focus({ name: '', group: '', at: new THREE.Vector3(x, y, z), size, view: new THREE.Vector3(vx, vy, vz).normalize() });
+
 function renderPanel(): void {
   const panel = $('panel');
   panel.innerHTML = '';
@@ -235,16 +337,20 @@ function renderPanel(): void {
     b.onclick = fn;
     panel.appendChild(b);
   };
+  section('Models');
+  button('new (under review)', gen === 'new', () => applyGen('new'));
+  button('previous (in the district)', gen === 'previous', () => applyGen('previous'));
   section('Lighting');
   for (const m of ['studio', 'night', 'day'] as const) button(m, mode === m, () => applyMode(m));
   for (const g of ['Cars', 'People']) {
     section(g);
-    for (const it of items.filter((i) => i.group === g)) button(it.name, false, () => focus(it));
+    for (const it of genItems[gen].filter((i) => i.group === g)) button(it.name, false, () => focus(it));
   }
   section('View');
   button('overview', false, () => focus({ name: '', group: '', at: new THREE.Vector3(0, 1, 8), size: 20, view: new THREE.Vector3(0.3, 0.6, 0.75).normalize() }));
 }
 applyMode('studio');
+applyGen('new');
 
 // Fly keys move the camera and its orbit target together.
 const keys = new Set<string>();
@@ -255,7 +361,11 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit1') applyMode('studio');
   if (e.code === 'Digit2') applyMode('night');
   if (e.code === 'Digit3') applyMode('day');
-  if (e.code === 'KeyL') for (const o of labelObjects) o.visible = !o.visible;
+  if (e.code === 'KeyL') {
+    labelsOn = !labelsOn;
+    applyGen(gen);
+  }
+  if (e.code === 'KeyM') applyGen(gen === 'new' ? 'previous' : 'new');
   if (e.code === 'KeyB') bloom.enabled = !bloom.enabled;
   if (e.code === 'KeyR') turntable = !turntable;
   if (e.code === 'KeyX') {
@@ -308,8 +418,8 @@ renderer.setAnimationLoop(() => {
   composer.render(dt);
   labels.render(scene, camera);
   $('hud').textContent = [
-    `MODEL SHOWROOM · ${mode} lighting · ${CAR_TYPES.length} car types · ${BODIES.length} bodies × ${POSES.length} poses + variants`,
-    'left-drag orbit · right-drag pan · wheel zoom · WASD / Q E fly (Shift faster)',
-    `1 studio · 2 night · 3 day · L labels · X wireframe${wire ? ' (on)' : ''} · B bloom${bloom.enabled ? '' : ' (off)'} · R turntable${turntable ? ' (on)' : ''}`,
+    `MODEL SHOWROOM · ${gen === 'new' ? 'NEW models (under review)' : 'previous models (district)'} · ${mode} lighting · built cars ${tCars.toFixed(0)} ms, people ${tPeople.toFixed(0)} ms`,
+    'click a model to focus it · left-drag orbit · right-drag pan · wheel zoom · WASD / Q E fly (Shift faster)',
+    `M new/previous models · 1 studio · 2 night · 3 day · L labels · X wireframe${wire ? ' (on)' : ''} · B bloom${bloom.enabled ? '' : ' (off)'} · R turntable${turntable ? ' (on)' : ''}`,
   ].join('\n');
 });
