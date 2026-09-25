@@ -29,8 +29,12 @@ export interface BuildingSpec {
 }
 
 const FLOOR = 3; // metres per storey (pane rows + slab row)
-/** Minimum on-screen size of a bay/floor in cells, so pane + mullion (or pane + slab) always both fit. */
-const MIN_PITCH = 2;
+/**
+ * Minimum on-screen size of a bay/floor in cells. The ASCII pass resolves half cells (its target has 2x2
+ * texels per cell and draws quadrant glyphs where they differ), so a bay can go down to 1.5 cells: a pane
+ * and a half-cell gap, which renders as sub-cell detail at distance.
+ */
+const MIN_PITCH = 1.5;
 /** Height of the street-level storefront band (signs, shop frames, glass). */
 const SHOP_H = 5.5;
 /** Shop frontage width in metres. */
@@ -171,8 +175,9 @@ export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMat
               // Mullion: a blank gap column at the end of each bay (>= 1 cell). Slab: the bottom row(s) of each
               // floor; in slab rows the gap and the pane cells beside it become slab glyphs, so rows read
               // "XXXXXX  XXXXXX" then "0XXXX0000XXXX0" like the reference.
-              float mullion = max(1.0, floor(cellsPerUnit.x * mullionFrac));
-              float slab = max(1.0, floor(cellsPerUnit.y * 0.25));
+              // Widths in half cells (= texels of the ASCII target), so a half-cell gap lands on exactly one texel.
+              float mullion = max(0.5, floor(cellsPerUnit.x * mullionFrac * 2.0) / 2.0);
+              float slab = max(0.5, floor(cellsPerUnit.y * 0.25 * 2.0) / 2.0);
               bool inMullion = pos.x >= cellsPerUnit.x - mullion;
               // Slab rows only when a floor is >= 4 cells tall: on shorter floors a slab row would be every
               // other row and read as heavy horizontal stripes (the reference's distant towers have none).

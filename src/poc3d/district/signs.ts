@@ -5,8 +5,15 @@ import type { AsciiShaderPass } from '../asciiPass';
 import type { Atmosphere3 } from './atmosphere';
 import type { Sign3 } from './plan';
 
-/** Signs further than this aren't drawn (at one cell per character they'd outgrow their building). */
-export const SIGN_RANGE = 230;
+/** Signs further than this aren't drawn. */
+export const SIGN_RANGE = 320;
+/**
+ * Beyond this, a sign is drawn as a compact strip of sub-cell (quadrant) glyphs half its text length:
+ * it still reads as a glowing sign but no longer outgrows its building the way full-size text would.
+ */
+export const SIGN_TEXT_RANGE = 110;
+/** Quadrant masks for far signs: ▚ ▞ alternating reads as fine glowing detail. */
+const FAR_MASKS = [9, 6];
 const NEON_OFF = 0x6a6470;
 /** Atlas slot 0 is the blank glyph. */
 const BLANK = 0;
@@ -17,7 +24,8 @@ const v = new THREE.Vector3();
  * Lays signs out into the ASCII pass's text layer: project each sign's anchor, snap to a cell, and write
  * its characters at one cell each (CJK two cells, via the same [cp, GLYPH_CONT] encoding as the 2D
  * prototype), horizontally or top-to-bottom. Far signs are written first so near ones win; the shader
- * hides any that nearer geometry covers. Neon mode from the atmosphere dims or flickers them.
+ * hides any that nearer geometry covers. Neon mode from the atmosphere dims or flickers them. Far signs
+ * (beyond SIGN_TEXT_RANGE) become half-length strips of quadrant glyphs.
  * Returns the number of signs drawn.
  */
 export function drawSigns(pass: AsciiShaderPass, camera: THREE.PerspectiveCamera, signs: readonly Sign3[], atm: Atmosphere3, now: number): number {
@@ -42,7 +50,15 @@ export function drawSigns(pass: AsciiShaderPass, camera: THREE.PerspectiveCamera
     const level = off ? 0.45 : 1.0 - 0.45 * (d / SIGN_RANGE);
     const cells = textToCells(s.text);
     let slot = -1;
-    if (s.vertical) {
+    if (d > SIGN_TEXT_RANGE) {
+      const n = Math.max(1, Math.ceil(cells.length / 2));
+      const farLevel = level * 0.85;
+      for (let i = 0; i < n; i++) {
+        const q = pass.quadSlot(FAR_MASKS[(i + (signId & 1)) % 2]);
+        if (s.vertical) pass.putText(col, row - i, q, color, depth, farLevel);
+        else pass.putText(col - Math.floor(n / 2) + i, row, q, color, depth, farLevel);
+      }
+    } else if (s.vertical) {
       let r = row;
       for (let i = 0; i < cells.length; i++) {
         const cp = cells[i];

@@ -170,6 +170,7 @@ function run(): void {
     if (e.code === 'Digit2') mode = 'ascii';
     if (e.code === 'KeyC') ascii.color = color = !color;
     if (e.code === 'KeyP') controls.setShearMode(!controls.shearMode);
+    if (e.code === 'KeyG') ascii.dither = !ascii.dither;
   });
   document.body.addEventListener('click', () => !bench && !inVn && controls.look.lock());
   controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
@@ -278,7 +279,8 @@ function run(): void {
         `chunk gen avg ${avgGen.toFixed(1)} ms · max ${district.stats.genMsMax.toFixed(1)} ms · warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms · built last 0.5 s ${builtThisWindow}`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t ? `[E] ${t.kind === 'door' ? 'Enter' : 'Talk'}: ${t.name ?? t.id}` : ' ',
-        'click to look · WASD · Shift run · E interact · T time · R weather · F fly · 1 webgl · 2 ascii · C colour · P look',
+        `pane ramp ${ascii.ramps.pane} · kanji ${ascii.ramps.kanji} · dither ${ascii.dither ? 'on' : 'off'} (G)`,
+        'click to look · WASD · Shift run · E interact · T time · R weather · F fly · 1 webgl · 2 ascii · C colour · P look · G dither',
       ].join('\n');
       builtThisWindow = 0;
     }

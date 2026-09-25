@@ -1,36 +1,27 @@
 import * as THREE from 'three';
-import { isWide } from '../core/wide';
-import { FACADE, SIGN_LETTERS, SURFACE } from './block';
+import { FACADE, SURFACE } from './block';
+import { buildAtlas, type AtlasLayout } from './glyphAtlas';
 
 /**
- * GPU ASCII pass, for comparison with three's CPU/DOM AsciiEffect.
- * 1. Render the scene into a small target: 2x2 texels per character cell (so 3D cost scales with
- *    the number of cells, not screen pixels).
- * 2. Fullscreen quad: per cell, pick a glyph and draw it from a glyph atlas texture, tinted by the
- *    scene colour (or mono).
- *    - Non-building surfaces: luminance -> RAMP.
- *    - Buildings: their material writes an integer code into alpha (see FACADE): surface type (pane /
- *      mullion / slab), a smooth 0-15 intensity (light, ground AO, distance) and a per-window variant.
- *      Each surface has its own ramp, so facades are near-fully filled but structured: panes are blocks
- *      of one dense glyph, mullions are blank columns, slabs are rows. Lit windows step denser/brighter.
- *      The storefront band (SHOP codes) draws sign letters, frames and glass in their own colours.
- * 3. Edges: where depth jumps between neighbouring cells, draw | - / \ oriented along the
- *    silhouette instead. Background (sky) cells are left blank. This is what makes shapes read.
- * 4. Text layer: signs are laid out on the CPU straight into a per-cell texture (glyph, colour, depth,
- *    brightness) at one cell per character, CJK as two cells, and depth-tested against the scene here, so
- *    signage stays legible at any distance and is hidden behind nearer buildings.
- * 5. Rain: falling streaks in blank cells when the atmosphere asks for it.
+ * GPU ASCII pass.
+ * 1. Render the scene into a small target: 2x2 texels per character cell (so 3D cost scales with the
+ *    number of cells, not screen pixels).
+ * 2. Fullscreen quad: per cell, pick a glyph from the atlas (glyphAtlas.ts) and tint it.
+ *    - Non-building surfaces: luminance -> measured ground ramp.
+ *    - Buildings: the material writes an integer code into alpha (see FACADE): surface (pane / mullion /
+ *      slab / storefront), a smooth intensity and a per-floor variant. Panes map a tone onto one ladder:
+ *      measured single-cell glyphs (Latin + halfwidth katakana), then dense kanji for the darkest tones,
+ *      drawn as left/right halves across screen-aligned cell pairs.
+ *    - Sub-cell detail: all four texels of the cell are read; where they disagree (a window edge, a
+ *      mullion inside the cell) the cell draws the matching quadrant glyph (▘▝▖▗▚▞▌▐…), doubling the
+ *      effective resolution of facade structure without more cells.
+ *    - Ordered (4x4 Bayer) dithering between ramp steps smooths tone transitions (toggle with dither).
+ * 3. Edges: where depth jumps, box-drawing lines (│ ─ and ┌ ┐ └ ┘ at corners; ╱ ╲ on the ground) that
+ *    connect edge-to-edge between cells.
+ * 4. Text layer: signs laid out on the CPU into a per-cell texture (glyph, colour, depth, brightness) and
+ *    depth-tested against the scene here.
+ * 5. Rain: falling streaks in blank cells.
  */
-const RAMP = ' .,:;-=+*xo#%&@';
-const EDGES = '|-/\\';
-/** Facade ramps, sparse -> dense. Letters/numbers carry the mass, like image-to-ASCII conversion. */
-const PANE_RAMP = '.:+*xXZ08&';
-const SLAB_RAMP = ':00';
-/** Mullions are blank gap columns: the facade's structure comes from wide filled panes between them. */
-const MULLION_RAMP = ' ';
-/** Storefront band: frame, glass, alternate glass row, then sign letters (see FACADE.shop). */
-const SHOP_GLYPHS = '8#:' + SIGN_LETTERS;
-const GLYPHS = RAMP + EDGES + PANE_RAMP + SLAB_RAMP + MULLION_RAMP + SHOP_GLYPHS;
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
@@ -39,6 +30,11 @@ const vertexShader = /* glsl */ `
 
 const F = FACADE;
 const S = SURFACE;
+/**
+ * Dither amplitude in ramp steps. At 1.0 every in-between tone checkerboards two glyphs, which breaks up the
+ * per-floor glyph bands; at 0.5 only tones near a step boundary blend.
+ */
+const DITHER = 0.5;
 
 const fragmentShader = /* glsl */ `
   #include <packing>
@@ -47,89 +43,163 @@ const fragmentShader = /* glsl */ `
   uniform float uNear;
   uniform float uFar;
   uniform float uEdges;
-  uniform float uRampCount;
   uniform sampler2D tGlyphs;
   uniform vec2 uCellPx;
   uniform vec2 uCells;
   uniform float uGlyphCount;
   uniform float uColor;
   uniform vec3 uBg;
-  uniform vec2 uPane;    // (start index in atlas, length)
+  uniform vec2 uGround;   // (start slot, length)
+  uniform vec2 uPane;
+  uniform vec2 uKanji;    // (start slot, number of kanji; each takes 2 slots)
   uniform vec2 uSlab;
-  uniform vec2 uMullion;
   uniform float uShopStart;
-  uniform float uGlyphRoofLine;
+  uniform float uQuad;
+  uniform vec4 uBoxA;     // │ ─ ┌ ┐
+  uniform vec4 uBoxB;     // └ ┘ ╱ ╲
   uniform sampler2D tText;
   uniform float uRain;
   uniform float uTime;
-  uniform float uRainGlyph;
+  uniform float uDither;
+
   float rawDepth(vec2 cell) { return texture2D(tDepth, (cell + 0.5) / uCells).x; }
   float viewDepth(vec2 cell) { return -perspectiveDepthToViewZ(rawDepth(cell), uNear, uFar); }
-  float glyphFor(float l) { return floor(clamp(pow(l, 0.45) * 1.15, 0.0, 0.999) * uRampCount); }
+  vec4 texel(vec2 cell, vec2 q) { return texture2D(tScene, (cell * 2.0 + q + 0.5) / (uCells * 2.0)); }
+  float codeOf(vec4 t) { return floor(t.a * 255.0 + 0.5); }
   float pick(vec2 ramp, float x) { return ramp.x + clamp(floor(x), 0.0, ramp.y - 1.0); }
+
+  // 4x4 Bayer threshold in [0, 1): the recursive 2x2 construction.
+  float bayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+  float bayer(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+  float dither(vec2 cell) { return (bayer(cell) - 0.5) * uDither; }
+
+  // Facade code decoding (see FACADE in block.ts).
+  bool isFacade(float c) { return c >= ${F.base}.0 && c < ${F.shop}.0; }
+  float surfOf(float c) { return floor(floor((c - ${F.base}.0) / ${F.levels}.0) / ${F.variants}.0); }
+  float levelOf(float c) { return mod(c - ${F.base}.0, ${F.levels}.0) / ${F.levels - 1}.0; }
+  float variantOf(float c) { return mod(floor((c - ${F.base}.0) / ${F.levels}.0), ${F.variants}.0) - 1.0; }
+  bool isPane(float c) { return isFacade(c) && surfOf(c) >= ${S.pane}.0; }
+  // "Ink" for sub-cell masks: any building surface except the gap between window columns.
+  bool inkOf(float c) { return c < ${F.other}.0 && !(isFacade(c) && surfOf(c) == ${S.mullion}.0); }
+  // Pane tone on [0, 1] across the whole ladder (single-cell glyphs, then kanji).
+  float paneTone(float c) {
+    bool lit = surfOf(c) == ${S.paneLit}.0;
+    return clamp(levelOf(c) * 0.85 + variantOf(c) * 0.07 + (lit ? 0.22 : 0.0), 0.0, 1.0);
+  }
+  float ladderStep(float c, vec2 cell) {
+    return floor(paneTone(c) * (uPane.y + uKanji.y - 1.0) + 0.5 + dither(cell));
+  }
+
   void main() {
     vec2 cell = floor(gl_FragCoord.xy / uCellPx);
     vec2 local = fract(gl_FragCoord.xy / uCellPx);
-    // Colour: average of the cell's 2x2 texels. Facade code: one exact texel (alpha can't be averaged).
+    // Colour: average of the cell's 2x2 texels. Codes: the four texels individually.
     vec3 c = texture2D(tScene, (cell + 0.5) / uCells).rgb;
-    vec4 t = texture2D(tScene, (cell * 2.0 + 1.5) / (uCells * 2.0));
-    float code = floor(t.a * 255.0 + 0.5);
-    // Scene target is linear; pow(l, 0.45) ~ perceptual lightness for picking glyph density.
+    vec4 t00 = texel(cell, vec2(0.0, 0.0));
+    vec4 t10 = texel(cell, vec2(1.0, 0.0));
+    vec4 t01 = texel(cell, vec2(0.0, 1.0));
+    vec4 t11 = texel(cell, vec2(1.0, 1.0));
+    float k00 = codeOf(t00), k10 = codeOf(t10), k01 = codeOf(t01), k11 = codeOf(t11);
+    vec4 t = t11;
+    float code = k11;
+
     float l = dot(c, vec3(0.299, 0.587, 0.114));
-    float idx = glyphFor(l);
+    float idx = pick(uGround, clamp(pow(l, 0.45) * 1.15, 0.0, 0.999) * uGround.y + dither(cell));
     float level = mix(0.45, 1.0, sqrt(l));
     vec3 src = c;
-    bool building = code < ${F.other}.0;
-    if (code >= ${F.shop}.0 && building) {
+    bool building = min(min(k00, k10), min(k01, k11)) < ${F.other}.0;
+
+    bool i00 = inkOf(k00), i10 = inkOf(k10), i01 = inkOf(k01), i11 = inkOf(k11);
+    float inkCount = float(i00) + float(i10) + float(i01) + float(i11);
+    bool allBuilding = max(max(k00, k10), max(k01, k11)) < ${F.other}.0;
+    if (allBuilding && inkCount > 0.0 && inkCount < 4.0) {
+      // Sub-cell detail inside a facade: quadrant glyph matching which quarters of the cell are pane/slab
+      // versus the gap between window columns. (Silhouettes against sky/ground get box-drawing edges.)
+      float mask = (i01 ? 1.0 : 0.0) + (i11 ? 2.0 : 0.0) + (i00 ? 4.0 : 0.0) + (i10 ? 8.0 : 0.0);
+      idx = uQuad + mask;
+      vec4 it = i11 ? t11 : i01 ? t01 : i10 ? t10 : t00;
+      float ic = codeOf(it);
+      src = it.rgb;
+      // Solid quarter-blocks carry far more ink than a letter, so they sit darker to keep the same weight.
+      level = isFacade(ic) ? mix(0.16, 0.34, levelOf(ic)) : 0.28;
+    } else if (code >= ${F.shop}.0 && code < ${F.other}.0) {
       // Storefront band: fixed glyph per code, colour straight from the material.
       src = t.rgb;
       idx = uShopStart + code - ${F.shop}.0;
       level = code >= ${F.shop + 3}.0 ? 1.0 : code == ${F.shop}.0 ? 0.75 : 0.45;
-    } else if (code >= ${F.base}.0 && building) {
+    } else if (isFacade(code)) {
       src = t.rgb;
-      float k = code - ${F.base}.0;
-      float it = mod(k, ${F.levels}.0) / ${F.levels - 1}.0;       // smooth intensity 0-1
-      float sv = floor(k / ${F.levels}.0);
-      float surf = floor(sv / ${F.variants}.0);
-      float variant = mod(sv, ${F.variants}.0) - 1.0;               // -1, 0, +1 ramp steps per window
+      float surf = surfOf(code);
+      float it = levelOf(code);
       if (surf == ${S.mullion}.0) {
-        idx = pick(uMullion, it * uMullion.y);
-        level = mix(0.2, 0.5, it);
+        idx = 0.0;
+        level = 0.3;
       } else if (surf == ${S.slab}.0) {
-        idx = pick(uSlab, it * uSlab.y);
+        idx = pick(uSlab, it * uSlab.y + dither(cell));
         level = mix(0.25, 0.65, it);
       } else {
         bool lit = surf == ${S.paneLit}.0;
-        idx = pick(uPane, it * (uPane.y - 2.0) + variant + (lit ? 2.0 : 0.0));
-        level = lit ? 1.0 : mix(0.3, 0.8, it);
+        float s = ladderStep(code, cell);
+        if (s >= uPane.y) {
+          // Kanji tier: both cells of the screen-aligned pair must be pane; both halves take the kanji
+          // from the pair's left cell so they always agree.
+          vec2 pl = vec2(floor(cell.x / 2.0) * 2.0, cell.y);
+          vec2 pr = pl + vec2(1.0, 0.0);
+          float cl = codeOf(texel(pl, vec2(1.0)));
+          float cr = codeOf(texel(pr, vec2(1.0)));
+          if (isPane(cl) && isPane(codeOf(texel(pl, vec2(0.0)))) && isPane(cr) && isPane(codeOf(texel(pr, vec2(0.0))))) {
+            float kk = clamp(ladderStep(cl, pl) - uPane.y, 0.0, uKanji.y - 1.0);
+            idx = uKanji.x + kk * 2.0 + (cell.x - pl.x);
+          } else {
+            idx = uPane.x + uPane.y - 1.0;
+          }
+        } else {
+          idx = pick(uPane, s);
+        }
+        level = lit ? 1.0 : mix(0.3, 0.85, it);
       }
     }
-    // Ground and props sit back so buildings carry the image (the reference's street is mostly dark).
+    // Ground and props sit back so buildings carry the image.
     if (!building) level *= 0.6;
     float sky = step(0.99999, rawDepth(cell));
-    if (sky > 0.5) idx = 0.0;
-    if (uEdges > 0.5) {
+    if (sky > 0.5 && !building) idx = 0.0;
+
+    if (uEdges > 0.5 && sky < 0.5) {
       // 1/depth is linear across any flat surface in screen space, so its second difference is ~0 on
       // walls, roads and roofs (even at grazing angles) and spikes only at silhouettes and creases.
-      float ic = 1.0 / viewDepth(cell);
-      float il = 1.0 / viewDepth(cell - vec2(1.0, 0.0));
-      float ir = 1.0 / viewDepth(cell + vec2(1.0, 0.0));
-      float id = 1.0 / viewDepth(cell - vec2(0.0, 1.0));
-      float iu = 1.0 / viewDepth(cell + vec2(0.0, 1.0));
-      float ax = abs(il + ir - 2.0 * ic) / ic;
-      float ay = abs(id + iu - 2.0 * ic) / ic;
-      float gx = ir - il;
-      float gy = iu - id;
-      if (max(ax, ay) > 0.12 && sky < 0.5) {
-        // Buildings: only | and - (clean verticals like the reference). Ground: diagonals too, for perspective.
-        // Buildings: '|' sides and '=' roof lines, like the reference.
-        if (building) idx = ax >= ay ? uRampCount : uGlyphRoofLine;
-        else if (ax > ay * 2.0) idx = uRampCount + 0.0;       // |
-        else if (ay > ax * 2.0) idx = uRampCount + 1.0;       // -
-        else idx = uRampCount + (gx * gy > 0.0 ? 3.0 : 2.0);  // backslash or slash
-        level = building ? 0.8 : max(level, 0.5);
+      float dc = viewDepth(cell);
+      float dl = viewDepth(cell - vec2(1.0, 0.0));
+      float dr = viewDepth(cell + vec2(1.0, 0.0));
+      float dd = viewDepth(cell - vec2(0.0, 1.0));
+      float du = viewDepth(cell + vec2(0.0, 1.0));
+      float ic = 1.0 / dc;
+      float ax = abs(1.0 / dl + 1.0 / dr - 2.0 * ic) / ic;
+      float ay = abs(1.0 / dd + 1.0 / du - 2.0 * ic) / ic;
+      float gx = 1.0 / dr - 1.0 / dl;
+      float gy = 1.0 / du - 1.0 / dd;
+      if (max(ax, ay) > 0.12) {
+        if (building) {
+          if (ax > ay * 2.0) idx = uBoxA.x;          // │
+          else if (ay > ax * 2.0) idx = uBoxA.y;     // ─
+          else {
+            // Corner: the building occupies the side away from the farther neighbours.
+            bool farL = dl > dc * 1.1, farR = dr > dc * 1.1, farU = du > dc * 1.1, farD = dd > dc * 1.1;
+            if (farL && farU) idx = uBoxA.z;          // ┌
+            else if (farR && farU) idx = uBoxA.w;     // ┐
+            else if (farL && farD) idx = uBoxB.x;     // └
+            else if (farR && farD) idx = uBoxB.y;     // ┘
+            else idx = uBoxA.x;
+          }
+          level = 0.8;
+        } else {
+          if (ax > ay * 2.0) idx = uBoxA.x;
+          else if (ay > ax * 2.0) idx = uBoxA.y;
+          else idx = gx * gy > 0.0 ? uBoxB.w : uBoxB.z; // ╲ or ╱
+          level = max(level, 0.5);
+        }
       }
     }
+
     // Text layer (signs): glyph+1, packed sRGB colour, view depth, brightness. Drawn unless the scene is
     // clearly nearer (the sign hangs just off its facade, so allow a little slack).
     vec4 tx = texture2D(tText, (cell + 0.5) / uCells);
@@ -149,7 +219,7 @@ const fragmentShader = /* glsl */ `
       float colSeed = fract(sin(cell.x * 12.9898) * 43758.5453);
       float drop = floor(cell.y * 0.5 + uTime * 9.0 + colSeed * 97.0);
       if (fract(sin(dot(vec2(cell.x, drop), vec2(12.9898, 78.233))) * 43758.5453) < uRain) {
-        idx = uRainGlyph;
+        idx = uBoxB.w;
         src = vec3(0.3, 0.42, 0.6);
         level = 0.6;
       }
@@ -167,61 +237,14 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
-/** Extra glyphs for sign text, appended after GLYPHS. Wide (CJK) characters take two slots: left, right half. */
-interface ExtraGlyphs {
-  readonly slots: ReadonlyMap<string, number>;
-  readonly list: readonly { ch: string; slot: number; wide: boolean }[];
-  readonly count: number;
-}
-
-function layoutExtra(text: string): ExtraGlyphs {
-  const slots = new Map<string, number>();
-  const list: { ch: string; slot: number; wide: boolean }[] = [];
-  let next = GLYPHS.length;
-  for (const ch of new Set(text)) {
-    if (ch === ' ') continue;
-    const wide = isWide(ch.codePointAt(0)!);
-    slots.set(ch, next);
-    list.push({ ch, slot: next, wide });
-    next += wide ? 2 : 1;
-  }
-  return { slots, list, count: next };
-}
-
-function glyphAtlas(cellW: number, cellH: number, extra: ExtraGlyphs): THREE.Texture {
-  const scale = 3;
-  const w = cellW * scale;
-  const h = cellH * scale;
-  const c = document.createElement('canvas');
-  c.width = w * extra.count;
-  c.height = h;
-  const g = c.getContext('2d')!;
-  g.fillStyle = '#000';
-  g.fillRect(0, 0, c.width, c.height);
-  g.fillStyle = '#fff';
-  g.font = `bold ${Math.round(h * 0.82)}px Consolas, 'Cascadia Mono', monospace`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  // '*' sits in the top of the cell in most monospace fonts and reads as '"'; centre it.
-  [...GLYPHS].forEach((ch, i) => g.fillText(ch, i * w + w / 2, h / 2 + scale + (ch === '*' ? h * 0.2 : 0)));
-  // Sign glyphs; CJK drawn across two slots so each half lands in its own cell.
-  g.font = `bold ${Math.round(h * 0.82)}px Consolas, 'Cascadia Mono', 'Yu Gothic', 'Meiryo', 'MS Gothic', sans-serif`;
-  for (const { ch, slot, wide } of extra.list) g.fillText(ch, slot * w + (wide ? w : w / 2), h / 2 + scale);
-  const t = new THREE.CanvasTexture(c);
-  t.minFilter = THREE.LinearFilter;
-  t.generateMipmaps = false;
-  return t;
-}
-
-/** Atlas (start, length) of a sub-ramp. */
-const range = (ramp: string): THREE.Vector2 => new THREE.Vector2(GLYPHS.indexOf(ramp), ramp.length);
+const v2 = (r: { start: number; length: number }): THREE.Vector2 => new THREE.Vector2(r.start, r.length);
 
 export class AsciiShaderPass {
   private target: THREE.WebGLRenderTarget;
   private material: THREE.ShaderMaterial;
   private quad: THREE.Scene;
   private cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  private readonly extra: ExtraGlyphs;
+  private atlas: AtlasLayout;
   private text = new Float32Array(4);
   private textTex: THREE.DataTexture;
   cols = 0;
@@ -233,9 +256,9 @@ export class AsciiShaderPass {
     private cellH: number,
     bg: THREE.Color,
     /** Every character signs may use (CJK included); gets atlas slots. */
-    extraText = '',
+    private readonly signText = '',
   ) {
-    this.extra = layoutExtra(extraText);
+    this.atlas = buildAtlas(cellW, cellH, signText);
     this.textTex = new THREE.DataTexture(this.text, 1, 1, THREE.RGBAFormat, THREE.FloatType);
     this.target = new THREE.WebGLRenderTarget(1, 1, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     this.target.depthTexture = new THREE.DepthTexture(1, 1);
@@ -244,33 +267,56 @@ export class AsciiShaderPass {
       fragmentShader,
       uniforms: {
         tScene: { value: this.target.texture },
-        tGlyphs: { value: glyphAtlas(cellW, cellH, this.extra) },
-        uCellPx: { value: new THREE.Vector2() },
-        uCells: { value: new THREE.Vector2() },
         tDepth: { value: this.target.depthTexture },
         uNear: { value: 0.1 },
         uFar: { value: 2000 },
         uEdges: { value: 1 },
-        uRampCount: { value: RAMP.length },
-        uGlyphCount: { value: this.extra.count },
+        tGlyphs: { value: null },
+        uCellPx: { value: new THREE.Vector2() },
+        uCells: { value: new THREE.Vector2() },
+        uGlyphCount: { value: 1 },
+        uColor: { value: 1 },
+        uBg: { value: bg },
+        uGround: { value: new THREE.Vector2() },
+        uPane: { value: new THREE.Vector2() },
+        uKanji: { value: new THREE.Vector2() },
+        uSlab: { value: new THREE.Vector2() },
+        uShopStart: { value: 0 },
+        uQuad: { value: 0 },
+        uBoxA: { value: new THREE.Vector4() },
+        uBoxB: { value: new THREE.Vector4() },
         tText: { value: this.textTex },
         uRain: { value: 0 },
         uTime: { value: 0 },
-        uRainGlyph: { value: GLYPHS.indexOf('\\') },
-        uPane: { value: range(PANE_RAMP) },
-        uSlab: { value: range(SLAB_RAMP) },
-        uMullion: { value: range(MULLION_RAMP) },
-        uShopStart: { value: GLYPHS.indexOf(SHOP_GLYPHS) },
-        uGlyphRoofLine: { value: RAMP.indexOf('=') },
-        uColor: { value: 1 },
-        uBg: { value: bg },
+        uDither: { value: DITHER },
       },
       depthTest: false,
       depthWrite: false,
     });
+    this.applyAtlas();
     this.quad = new THREE.Scene();
     this.quad.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material));
     this.resize();
+  }
+
+  private applyAtlas(): void {
+    const a = this.atlas;
+    const u = this.material.uniforms;
+    u.tGlyphs.value = a.texture;
+    u.uGlyphCount.value = a.count;
+    u.uGround.value = v2(a.ground);
+    u.uPane.value = v2(a.pane);
+    u.uKanji.value = v2(a.kanji);
+    u.uSlab.value = v2(a.slab);
+    u.uShopStart.value = a.shop;
+    u.uQuad.value = a.quad;
+    u.uBoxA.value.set(a.box.v, a.box.h, a.box.tl, a.box.tr);
+    u.uBoxB.value.set(a.box.bl, a.box.br, a.box.rise, a.box.fall);
+  }
+
+  /** The measured ramps, for the HUD / reports. */
+  get ramps(): AtlasLayout['report'] {
+    return this.atlas.report;
   }
 
   set edges(on: boolean) {
@@ -281,11 +327,20 @@ export class AsciiShaderPass {
     this.material.uniforms.uColor.value = on ? 1 : 0;
   }
 
+  get dither(): boolean {
+    return this.material.uniforms.uDither.value > 0;
+  }
+
+  set dither(on: boolean) {
+    this.material.uniforms.uDither.value = on ? DITHER : 0;
+  }
+
   setCell(cellW: number, cellH: number): void {
     this.cellW = cellW;
     this.cellH = cellH;
-    this.material.uniforms.tGlyphs.value.dispose();
-    this.material.uniforms.tGlyphs.value = glyphAtlas(cellW, cellH, this.extra);
+    this.atlas.texture.dispose();
+    this.atlas = buildAtlas(cellW, cellH, this.signText);
+    this.applyAtlas();
     this.resize();
   }
 
@@ -308,7 +363,12 @@ export class AsciiShaderPass {
 
   /** Atlas slot of a sign character (left half for wide ones), or undefined if it wasn't registered. */
   textSlot(ch: string): number | undefined {
-    return this.extra.slots.get(ch);
+    return this.atlas.text.get(ch);
+  }
+
+  /** Atlas slot of a quadrant glyph (mask bits: 1 top-left, 2 top-right, 4 bottom-left, 8 bottom-right). */
+  quadSlot(mask: number): number {
+    return this.atlas.quad + (mask & 15);
   }
 
   clearText(): void {
