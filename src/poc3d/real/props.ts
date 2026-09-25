@@ -3,6 +3,7 @@ import { hash, rng } from '../../core/hash';
 import type { Building3, CellPlan3, Road3 } from '../district/plan';
 import { frontFrame, styleFor } from './buildings';
 import type { Light } from './lightmap';
+import { addCar } from './cars';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
 
 /**
@@ -106,7 +107,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
             if (h % 100 > 32) continue;
             const [x, z, nx, nz] = along(t, side, r.sidewalk + 1.05);
             if (!mine(x, z)) continue;
-            props.push({ kind: 'car', x, z, nx, nz, radius: 0.95, variant: (h >>> 8) % 12, half: 1.4 });
+            props.push({ kind: 'car', x, z, nx, nz, radius: 0.95, variant: (h >>> 8) % 100000, half: 1.4 });
           }
         }
       }
@@ -232,7 +233,9 @@ export function addProps(mb: MeshBuilder, d: CellDetail): void {
     } else if (p.kind === 'tree') {
       tree(mb, p);
     } else if (p.kind === 'car') {
-      car(mb, p);
+      // Cars face either way along the kerb.
+      const dir = p.variant % 2 ? 1 : -1;
+      addCar(mb, { x: p.x, z: p.z, fx: p.nz * dir, fz: -p.nx * dir, variant: p.variant });
     } else if (p.kind === 'signal') {
       signal(mb, p);
     } else {
@@ -288,40 +291,6 @@ function tree(mb: MeshBuilder, p: Prop): void {
   mb.color = lin(LEAVES[(p.variant + 1) % LEAVES.length]);
   const ox = p.variant % 2 ? 0.7 : -0.7;
   mb.lathe(p.x + ox * p.nz, p.z - ox * p.nx, [[3.6, 0.2], [4.0, 1.1 * s], [4.9, 1.4 * s], [5.8, 1.0 * s], [6.3, 0.1]], 6);
-}
-
-const CAR_PAINT = [0xd8d8d6, 0xd8d8d6, 0x9a9ca0, 0x151516, 0x151516, 0x1c2a44, 0x7a1a1a, 0x3a3e44, 0x151516, 0x2a5a3a, 0xc8b030, 0xd8d8d6];
-
-/** Parked car along the kerb: wheels, body, cabin with dark glass, tail lights; some are taxis with a roof sign. */
-function car(mb: MeshBuilder, p: Prop): void {
-  const n: C3 = [p.nx, 0, p.nz];
-  const r: C3 = [p.nz, 0, -p.nx]; // along the road
-  const o: C3 = [p.x, 0, p.z];
-  const taxi = p.variant === 3 || p.variant === 9 || p.variant === 10;
-  mb.kind = KIND.plain;
-  mb.style = [0, 0, 0, 0];
-  const paint = lin(CAR_PAINT[p.variant]);
-  mb.color = lin(0x111111);
-  for (const u of [-1.45, 1.45]) for (const w of [-0.9, 0.62]) mb.frameBox(o, r, n, u - 0.33, u + 0.33, 0.02, 0.64, w, w + 0.28);
-  mb.color = paint;
-  mb.frameBox(o, r, n, -2.3, 2.3, 0.3, 0.92, -0.87, 0.87);
-  // Cabin: slightly inset, dark glass all round, painted roof.
-  mb.color = [0.02, 0.025, 0.03];
-  mb.frameBox(o, r, n, -1.2, 1.05, 0.92, 1.36, -0.78, 0.78);
-  mb.color = paint;
-  mb.frameBox(o, r, n, -1.1, 0.95, 1.36, 1.44, -0.74, 0.74);
-  mb.kind = KIND.emit;
-  mb.style = [EMIT.always, 0, 0, 0];
-  mb.color = [0.12, 0.0, 0.0];
-  mb.frameBox(o, r, n, -2.31, -2.29, 0.7, 0.82, -0.8, -0.5);
-  mb.frameBox(o, r, n, -2.31, -2.29, 0.7, 0.82, 0.5, 0.8);
-  if (taxi) {
-    mb.style = [EMIT.lamp, 0, 0, 0];
-    mb.color = [0.5, 0.35, 0.05];
-    mb.frameBox(o, r, n, -0.15, 0.15, 1.44, 1.62, -0.25, 0.25);
-  }
-  mb.kind = KIND.plain;
-  mb.style = [0, 0, 0, 0];
 }
 
 /** Japanese traffic signal: pole, an arm over the road and a horizontal three-lamp head. */

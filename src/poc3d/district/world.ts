@@ -5,6 +5,7 @@ import { addBuilding } from '../real/buildings';
 import { addGround } from '../real/ground';
 import type { Light, Lightmap } from '../real/lightmap';
 import { MeshBuilder } from '../real/meshBuilder';
+import { addFigure, cellCrowd, GhostBuilder } from '../real/people';
 import { addProps, cellDetail, propBlocked, type CellDetail } from '../real/props';
 import { addSigns, signLights, SignBuilder, type SignAtlas } from '../real/signs';
 import { CELL, cellKey, planCell3, type Building3, type CellPlan3 } from './plan';
@@ -18,11 +19,16 @@ export const LOD_DISTANCE = 300;
 /** Detail is built a little before it's needed and dropped well after. */
 const NEAR_BUILD = LOD_DISTANCE + 40;
 const NEAR_DROP = LOD_DISTANCE + 160;
+/** People (ghosts) are shown within this distance of a chunk's centre, and built a little before. */
+const GHOST_DISTANCE = 200;
+const GHOST_BUILD = GHOST_DISTANCE + 40;
 
 /** What the district renders with (created by the page once it has a renderer). */
 export interface DistrictKit {
   readonly city: THREE.Material;
   readonly signs: THREE.Material;
+  /** Translucent material for people. */
+  readonly ghost: THREE.Material;
   readonly atlas: SignAtlas;
   readonly lightmap: Lightmap;
 }
@@ -36,9 +42,12 @@ interface Chunk {
   readonly group: THREE.Group;
   readonly far: THREE.Mesh | null;
   near: THREE.Group | null;
+  ghosts: THREE.Mesh | null;
+  ghostsBuilt: boolean;
   readonly plan: CellPlan3;
   readonly triangles: number;
   nearTriangles: number;
+  people: number;
   readonly buildings: readonly Building3[];
 }
 
@@ -65,6 +74,7 @@ export class District {
   /** Scratch builders, reused for every chunk (build() copies the data out). */
   private readonly mb = new MeshBuilder(1 << 16);
   private readonly sb = new SignBuilder();
+  private readonly gb = new GhostBuilder();
 
   constructor(
     private readonly macro: MacroMap,
@@ -162,17 +172,22 @@ export class District {
       .filter((c) => !this.chunks.has(cellKey(c.mx, c.my)) && dist(c) <= LOAD_RADIUS)
       .sort((a, b) => dist(a) - dist(b));
     const nearWanted = () => [...this.chunks.values()].filter((c) => !c.near && dist(c) <= NEAR_BUILD).sort((a, b) => dist(a) - dist(b));
+    const ghostWanted = () => [...this.chunks.values()].filter((c) => c.near && !c.ghostsBuilt && dist(c) <= GHOST_BUILD).sort((a, b) => dist(a) - dist(b));
     // Interleave: whichever is closer first, so the ground under your feet and nearby detail come first.
     for (;;) {
       if (spend()) break;
       const nf = wanted[0];
       const nn = nearWanted()[0];
-      if (!nf && !nn) break;
-      if (nf && (!nn || dist(nf) < dist(nn))) {
+      const ng = ghostWanted()[0];
+      const best = [nf, nn, ng].filter((x) => x !== undefined).sort((a, b) => dist(a!) - dist(b!))[0];
+      if (!best) break;
+      if (best === nf) {
         wanted.shift();
         this.build(nf.mx, nf.my);
-      } else {
+      } else if (best === nn) {
         this.buildNear(nn!);
+      } else {
+        this.buildGhosts(ng!);
       }
       built++;
     }
@@ -180,6 +195,7 @@ export class District {
       const showNear = c.near !== null && dist(c) < LOD_DISTANCE;
       if (c.near) c.near.visible = showNear;
       if (c.far) c.far.visible = !showNear;
+      if (c.ghosts) c.ghosts.visible = showNear && dist(c) < GHOST_DISTANCE;
     }
     return built;
   }
@@ -191,6 +207,12 @@ export class District {
   get detailedChunks(): number {
     let n = 0;
     for (const c of this.chunks.values()) if (c.near) n++;
+    return n;
+  }
+
+  get loadedPeople(): number {
+    let n = 0;
+    for (const c of this.chunks.values()) n += c.people;
     return n;
   }
 
@@ -238,7 +260,7 @@ export class District {
     if (far) group.add(far);
     group.updateMatrixWorld(true);
     this.root.add(group);
-    this.chunks.set(key, { key, mx, my, cx, cz, group, far, near: null, plan, triangles: tri(baseGeo) + tri(farGeo), nearTriangles: 0, buildings: all });
+    this.chunks.set(key, { key, mx, my, cx, cz, group, far, near: null, ghosts: null, ghostsBuilt: false, people: 0, plan, triangles: tri(baseGeo) + tri(farGeo), nearTriangles: 0, buildings: all });
 
     // Lightmap tile: this cell's lights plus any from the neighbours that reach across the border.
     const lights: Light[] = [];
@@ -294,6 +316,22 @@ export class District {
     this.stats.detailMsMax = Math.max(this.stats.detailMsMax, ms);
   }
 
+  /** People: a crowd of ghosts along the pavements (a separate stage, only for the closest chunks). */
+  private buildGhosts(c: Chunk): void {
+    const crowd = cellCrowd(c.plan, this.detail(c.mx, c.my)!);
+    const gb = this.gb.reset();
+    for (const f of crowd) addFigure(gb, f);
+    const ggeo = gb.build(c.cx, c.cz);
+    c.ghostsBuilt = true;
+    c.people = crowd.length;
+    if (!ggeo || !c.near) return;
+    c.ghosts = new THREE.Mesh(ggeo, this.kit!.ghost);
+    c.ghosts.renderOrder = 2;
+    c.near.add(c.ghosts);
+    c.ghosts.updateMatrixWorld(true);
+    c.nearTriangles += tri(ggeo);
+  }
+
   private dropNear(c: Chunk): void {
     if (!c.near) return;
     c.group.remove(c.near);
@@ -301,6 +339,9 @@ export class District {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
     });
     c.near = null;
+    c.ghosts = null;
+    c.ghostsBuilt = false;
+    c.people = 0;
     c.nearTriangles = 0;
   }
 

@@ -11,6 +11,10 @@ export const KIND = {
   roof: 2,
   /** Emissive: colour is emission; aStyle.x = channel (EMIT). */
   emit: 3,
+  /** Glossy paint (cars): low roughness plus a Fresnel sky reflection. */
+  gloss: 4,
+  /** Glass (car windows): near-black with a strong Fresnel reflection. */
+  glass: 5,
   asphalt: 7,
   sidewalk: 8,
   paint: 9,

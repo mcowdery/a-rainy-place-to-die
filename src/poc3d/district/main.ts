@@ -13,6 +13,7 @@ import { cityMaterial, cityUniforms } from '../real/city';
 import { Lightmap } from '../real/lightmap';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
+import { addFigure, GhostBuilder, ghostMaterial, type FigureSpec } from '../real/people';
 import { SignAtlas, signMaterial } from '../real/signs';
 import { Sky } from '../real/sky';
 import type { Atmosphere3 } from './atmosphere';
@@ -83,7 +84,8 @@ function run(): void {
   const lightmap = new Lightmap(renderer, { x: b.minX - M, y: b.minZ - M, w: b.maxX - b.minX + 2 * M, h: b.maxZ - b.minZ + 2 * M }, CELL);
   cityU.tLight.value = lightmap.texture;
   cityU.uLightRect.value = lightmap.uniformRect;
-  district.setKit({ city, signs: signMaterial(cityU, atlas), atlas, lightmap });
+  const ghost = ghostMaterial();
+  district.setKit({ city, signs: signMaterial(cityU, atlas), ghost, atlas, lightmap });
   scene.add(district.root);
 
   // Post: HDR scene with MSAA and a depth texture -> ASCII overlay -> bloom -> tone mapping + sRGB.
@@ -95,13 +97,15 @@ function run(): void {
   overlay.setCamera(camera);
   const initial = params.get('ascii') as OverlayPreset | null;
   if (initial && OVERLAY_PRESETS.includes(initial)) overlay.preset = initial;
-  const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.5, 1.1);
+  // Bloom: [ ] strength, ; ' threshold, B on/off; ?bloom=strength sets it from the URL.
+  const bloomParam = Number(params.get('bloom'));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), Number.isFinite(bloomParam) && params.has('bloom') ? bloomParam : 0.22, 0.45, 1.3);
   composer.addPass(new RenderPass(scene, camera));
   composer.addPass(overlay);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
-  // Stamp dressing (door, noren, lanterns) and NPC figures (visibility follows their conditions).
+  // Stamp dressing (door, noren, lanterns) and NPCs as ghosts (visibility follows their conditions).
   const nodes = district.nodes;
   const npcMeshes = new Map<string, THREE.Object3D>();
   const dressing = new MeshBuilder();
@@ -110,10 +114,10 @@ function run(): void {
     for (const n of placed.nodes) if (n.kind === 'door') dressDoor(dressing, n, f.r, f.n);
     for (const n of placed.nodes) {
       if (n.kind !== 'npc') continue;
-      const mb = new MeshBuilder();
-      figure(mb, n, f.n);
-      const mesh = new THREE.Mesh(mb.build()!, city);
-      mesh.castShadow = true;
+      const gb = new GhostBuilder();
+      addFigure(gb, npcSpec(n, f.n));
+      const mesh = new THREE.Mesh(gb.build(0, 0)!, ghost);
+      mesh.renderOrder = 2;
       scene.add(mesh);
       npcMeshes.set(n.id, mesh);
     }
@@ -230,6 +234,10 @@ function run(): void {
     if (direct[e.code]) overlay.preset = direct[e.code];
     if (e.code === 'KeyG') overlay.dither = !overlay.dither;
     if (e.code === 'KeyB') bloom.enabled = !bloom.enabled;
+    if (e.code === 'BracketLeft') bloom.strength = Math.max(0, +(bloom.strength - 0.05).toFixed(2));
+    if (e.code === 'BracketRight') bloom.strength = Math.min(2, +(bloom.strength + 0.05).toFixed(2));
+    if (e.code === 'Semicolon') bloom.threshold = Math.max(0, +(bloom.threshold - 0.1).toFixed(2));
+    if (e.code === 'Quote') bloom.threshold = Math.min(5, +(bloom.threshold + 0.1).toFixed(2));
     if (e.code === 'KeyP') controls.setShearMode(!controls.shearMode);
   });
   document.body.addEventListener('click', () => !bench && !inVn && controls.look.lock());
@@ -335,7 +343,8 @@ function run(): void {
       $('hud').textContent = [
         `KABURO · ${style.name} (Neon Core)  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
-        `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings`,
+        `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
+        `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
         `chunk base avg ${(s.genMsTotal / Math.max(1, s.generated)).toFixed(1)} ms · detail avg ${(s.detailMsTotal / Math.max(1, s.detailed)).toFixed(1)} ms (max ${s.detailMsMax.toFixed(0)}) · warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms · built last 0.5 s ${builtThisWindow}`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t ? `[E] ${t.kind === 'door' ? 'Enter' : 'Talk'}: ${t.name ?? t.id}` : ' ',
@@ -414,42 +423,23 @@ function dressDoor(mb: MeshBuilder, n: Node3, r: C3, nn: C3): void {
   }
 }
 
-/** A simple standing figure facing out from the stamp front: legs, coat or kimono, arms, head and hair. */
-function figure(mb: MeshBuilder, n: Node3, facing: C3): void {
+/** The bar's NPCs as ghosts: Mama-san talking at the door, the detective hands in pockets under his hat. */
+function npcSpec(n: Node3, facing: C3): FigureSpec {
   const detective = n.id.endsWith('detective');
-  const o: C3 = [n.x, 0.15, n.z];
-  const r: C3 = [facing[2], 0, -facing[0]];
-  const F = (u0: number, u1: number, y0: number, y1: number, a: number, c: number, hex: number): void => {
-    mb.color = lin(hex);
-    mb.frameBox(o, r, facing, u0, u1, o[1] + y0, o[1] + y1, a, c);
+  const yaw = Math.atan2(facing[0], facing[2]);
+  return {
+    x: n.x,
+    z: n.z,
+    yaw: detective ? yaw - 0.5 : yaw + 0.4,
+    body: detective ? 'man' : 'woman',
+    pose: detective ? 'pockets' : 'talk',
+    color: detective ? [0.9, 0.82, 0.62] : [1.0, 0.42, 0.72],
+    hair: detective ? 'hat' : 'bun',
+    long: true,
+    phase: 0,
+    side: 1,
+    look: detective ? -0.4 : 0.3,
   };
-  mb.kind = KIND.plain;
-  mb.style = [0, 0, 0, 0];
-  const coat = detective ? 0x8a7a5a : 0x9a3060;
-  const legs = detective ? 0x22242a : 0xe8d0b8;
-  F(-0.17, -0.03, 0, 0.8, -0.1, 0.1, legs);
-  F(0.03, 0.17, 0, 0.8, -0.1, 0.1, legs);
-  F(-0.2, -0.02, 0, 0.08, -0.08, 0.16, 0x151515);
-  F(0.02, 0.2, 0, 0.08, -0.08, 0.16, 0x151515);
-  // Coat / kimono body, longer for the detective's trench coat.
-  F(-0.24, 0.24, detective ? 0.45 : 0.55, 1.42, -0.14, 0.14, coat);
-  if (!detective) F(-0.25, 0.25, 0.95, 1.05, -0.15, 0.15, 0xe8c040); // obi sash
-  F(-0.33, -0.24, 0.75, 1.4, -0.08, 0.08, coat);
-  F(0.24, 0.33, 0.75, 1.4, -0.08, 0.08, coat);
-  F(-0.06, 0.06, 1.42, 1.5, -0.05, 0.05, 0xd8b898);
-  mb.color = lin(0xd8b898);
-  mb.cylinder(o[0], o[2], o[1] + 1.5, o[1] + 1.74, 0.1, 10);
-  if (detective) {
-    // Fedora: brim and crown.
-    mb.color = lin(0x3a3228);
-    mb.cylinder(o[0], o[2], o[1] + 1.72, o[1] + 1.74, 0.2, 12);
-    mb.cylinder(o[0], o[2], o[1] + 1.74, o[1] + 1.86, 0.11, 10);
-  } else {
-    // Hair up in a bun.
-    mb.color = lin(0x151012);
-    mb.cylinder(o[0], o[2], o[1] + 1.66, o[1] + 1.78, 0.11, 10);
-    mb.cylinder(o[0] - facing[0] * 0.08, o[2] - facing[2] * 0.08, o[1] + 1.76, o[1] + 1.86, 0.07, 8);
-  }
 }
 
 try {

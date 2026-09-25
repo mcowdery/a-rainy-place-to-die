@@ -181,9 +181,34 @@ const surface = /* glsl */ `
           vec3 hp = roomHit(vec3(sx, v, 0.0), rd, sw, 3.0, 6.0, face);
           float hs = h1(vBid + 21.0);
           vec3 L = shopPal < 0.5 ? vec3(1.0, 0.78, 0.5) : shopPal < 1.5 ? vec3(0.92, 0.97, 1.0)
-            : shopPal < 2.5 ? (hs < 0.5 ? vec3(1.0, 0.45, 0.8) : vec3(0.4, 0.85, 1.0)) : vec3(0.9, 0.35, 0.18) * 0.45;
+            : shopPal < 2.5 ? (hs < 0.5 ? vec3(1.0, 0.45, 0.8) : vec3(0.4, 0.85, 1.0)) : vec3(1.0, 0.5, 0.22) * 0.7;
           vec3 c;
-          if (face < 0.5) {
+          bool bar = shopPal > 2.5;
+          if (bar) {
+            // Bar: a wooden counter across the back, backlit shelves of bottles above it, wood panelling,
+            // dark floor and a few warm pendant lights.
+            vec3 wood = vec3(0.16, 0.08, 0.035);
+            if (face < 0.5) {
+              if (hp.y < 1.0) c = wood * (0.8 + 0.4 * step(0.5, fract(hp.x / 0.9)));
+              else if (hp.y < 1.08) c = vec3(0.9, 0.6, 0.25);
+              else if (hp.y > 1.3 && hp.y < 2.3) {
+                float row = floor((hp.y - 1.3) / 0.5);
+                float ly = hp.y - 1.3 - row * 0.5;
+                float slot = floor(hp.x / 0.11);
+                float hb = h3(vec3(vBid, slot, row));
+                bool bottle = fract(hp.x / 0.11) < 0.6 && ly > 0.04 && ly < 0.2 + 0.2 * hb;
+                vec3 glass = hb < 0.4 ? vec3(1.0, 0.55, 0.15) : hb < 0.7 ? vec3(0.3, 0.8, 0.35) : vec3(0.9, 0.9, 0.8);
+                c = ly < 0.04 ? vec3(0.9, 0.7, 0.4) : bottle ? glass * 2.2 : vec3(0.7, 0.4, 0.18) * (0.6 + 0.8 * ly);
+              } else c = wood * 0.6;
+            } else if (face < 1.5) {
+              c = wood * (0.9 + 0.3 * step(0.5, fract(hp.z / 0.8)));
+            } else if (face < 2.5) {
+              vec2 cp = vec2(fract(hp.x / 1.6) - 0.5, fract(-hp.z / 2.0) - 0.5);
+              c = length(cp) < 0.08 ? vec3(4.0) : vec3(0.08);
+            } else {
+              c = wood * 0.7;
+            }
+          } else if (face < 0.5) {
             // Back wall: shelves of goods.
             float shelf = floor(hp.y / 0.42);
             vec3 goods = vec3(h3(vec3(vBid, floor(hp.x / 0.3), shelf)), h3(vec3(shelf, vBid, floor(hp.x / 0.3) + 5.0)), h3(vec3(floor(hp.x / 0.3), shelf, vBid + 9.0)));
@@ -334,6 +359,15 @@ const surface = /* glsl */ `
   } else if (kindF < 2.5) {
     albedo *= 0.75 + 0.4 * vnoise(vWPos.xz * 0.6) * (0.8 + 0.4 * vnoise(vWPos.xz * 4.0));
     sRough = 0.95;
+  } else if (kindF > 3.5 && kindF < 5.5) {
+    // Car paint and glass: glossy, reflecting the sky (and the street light below).
+    bool isGlass = kindF > 4.5;
+    float F = fresnel(cosV);
+    vec3 refl = skyRefl(reflect(Vw, Nw));
+    albedo = isGlass ? vec3(0.01) : vColor.rgb;
+    sRough = isGlass ? 0.05 : 0.28;
+    sMetal = isGlass ? 0.0 : 0.25;
+    sEmit = refl * (isGlass ? mix(0.06, 1.0, F) : mix(0.02, 0.7, F));
   } else if (kindF < 3.5) {
     float ch = vStyle.x;
     float gain = ch < 0.5 ? 1.6 : ch < 1.5 ? uLamps * 6.0 : uNeon * 3.5 * flick(vBid);
