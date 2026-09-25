@@ -182,7 +182,7 @@ const signCommon = /* glsl */ `
   float sh2(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 `;
 
-/** Material for textured signs: neon text on a dark plate (style 0) or a lit lightbox (style 1). */
+/** Material for textured signs: neon text on a dark plate (style 0), a lit lightbox (1), or print (2). */
 export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.1 });
   const tSigns = { value: atlas.texture };
@@ -212,6 +212,9 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
         if (vSign.y < 0.5) {
           diffuseColor.rgb = mix(vPlate, vInk * 0.6, st.r);
           totalEmissiveRadiance += vInk * (st.r * 3.0 + st.g * 0.35) * on;
+        } else if (vSign.y > 1.5) {
+          // Print (vinyl wraps, stickers): lit by the scene, no glow.
+          diffuseColor.rgb = mix(vPlate, vInk, st.r);
         } else {
           diffuseColor.rgb = mix(vPlate, vInk, st.r);
           // Dark lettering on a lit plate stays dark; white lettering on a coloured plate outshines it.
@@ -322,7 +325,7 @@ export class SignBuilder {
  * faceUv maps a face (by outward direction: 'n' front, 'r' right side, '-r' left side) to atlas UVs; other
  * faces show the blank plate.
  */
-function signBox(sb: SignBuilder, p: C3, r: C3, n: C3, u0: number, u1: number, y0: number, y1: number, o0: number, o1: number,
+export function signBox(sb: SignBuilder, p: C3, r: C3, n: C3, u0: number, u1: number, y0: number, y1: number, o0: number, o1: number,
   blank: [number, number], faceUv: Partial<Record<'n' | 'r' | '-r', readonly [number, number, number, number]>>): void {
   const P = (u: number, y: number, o: number): C3 => [p[0] + r[0] * u + n[0] * o, y, p[2] + r[2] * u + n[2] * o];
   const B = [blank[0], blank[1], blank[0], blank[1]] as const;

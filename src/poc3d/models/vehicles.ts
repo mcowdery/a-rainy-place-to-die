@@ -1,4 +1,7 @@
+import type { Light } from '../real/lightmap';
 import { EMIT, KIND, lin, type MeshBuilder } from '../real/meshBuilder';
+import { signBox, type SignBuilder, type SignLayout } from '../real/signs';
+import { addBike, BIKE_LENGTH, type BikeType } from './bikes';
 
 /**
  * Vehicles, second generation (review in models.html before they replace real/cars.ts in the district).
@@ -15,15 +18,19 @@ import { EMIT, KIND, lin, type MeshBuilder } from '../real/meshBuilder';
  * classic boxy taxi, a kei tall-wagon, a minivan and a kei truck.
  */
 
-export type VehicleType = 'sedan' | 'taxi' | 'kei' | 'minivan' | 'keitruck';
-export const VEHICLE_TYPES: readonly VehicleType[] = ['sedan', 'taxi', 'kei', 'minivan', 'keitruck'];
+export type CarType = 'sedan' | 'luxury' | 'sports' | 'taxi' | 'taxi2' | 'kei' | 'minivan' | 'keitruck';
+export type VehicleType = CarType | BikeType;
+export const CAR_TYPES2: readonly CarType[] = ['sedan', 'luxury', 'sports', 'taxi', 'taxi2', 'kei', 'minivan', 'keitruck'];
+export const BIKE_TYPES: readonly BikeType[] = ['scooter', 'motorcycle', 'delivery'];
+export const VEHICLE_TYPES: readonly VehicleType[] = [...CAR_TYPES2, ...BIKE_TYPES];
+const isTaxi = (t: VehicleType): boolean => t === 'taxi' || t === 'taxi2';
 
 type V3 = [number, number, number];
 type P2 = readonly [number, number];
 type Range = readonly [number, number];
 
 interface Design {
-  readonly name: VehicleType;
+  readonly name: CarType;
   /** Length, half-width, plan corner radius, ground clearance. */
   readonly L: number;
   readonly W: number;
@@ -54,6 +61,8 @@ interface Design {
   readonly plateY: readonly [number, number];
   readonly plate: 'white' | 'yellow' | 'green';
   readonly bumper: 'body' | 'chrome' | 'black';
+  /** Chrome strip along the beltline and window surround (luxury). */
+  readonly chromeBelt?: boolean;
 }
 
 const SEDAN: Design = {
@@ -116,15 +125,75 @@ const KEITRUCK: Design = {
   plateY: [0.42, 0.54], plate: 'yellow', bumper: 'black',
 };
 
-const DESIGNS: Record<VehicleType, Design> = { sedan: SEDAN, taxi: TAXI, kei: KEI, minivan: MINIVAN, keitruck: KEITRUCK };
+/** 80s/90s JDM coupe: low, wide, long bonnet, raked screen, fastback hatch, slit lamps, full-width tail bar. */
+const SPORTS: Design = {
+  name: 'sports', L: 4.35, W: 0.88, corner: 0.2, clear: 0.12, x0: 0,
+  top: [[0, 0.6], [0.06, 0.86], [0.35, 0.93], [0.95, 0.97], [1.55, 1.2], [2.05, 1.26], [2.5, 1.26], [2.95, 1.1], [3.3, 0.86], [4.15, 0.72], [4.35, 0.55]],
+  belt: [[0, 0.86], [2.2, 0.84], [4.35, 0.74]],
+  roofInset: 0.24,
+  windscreen: [2.55, 3.28], rearGlass: [1.0, 2.0], sideGlass: [1.6, 3.08], pillars: [], blackPillars: true,
+  wheelX: [0.86, 3.42], wheelR: 0.31, tyreW: 0.225, rims: 'alloy',
+  seams: [1.62, 3.05],
+  head: [0.6, 0.66, 0.36, 0.8], grille: [0.4, 0.5, 0, 0.5], grilleChrome: false, tail: [0.72, 0.82, 0.04, 0.84],
+  plateY: [0.34, 0.46], plate: 'white', bumper: 'body',
+};
+
+/** Executive saloon: longer, formal upright glasshouse, big chrome grille, chrome belt and window trim. */
+const LUXURY: Design = {
+  name: 'luxury', L: 5.25, W: 0.94, corner: 0.26, clear: 0.15, x0: 0,
+  top: [[0, 0.68], [0.08, 0.96], [0.55, 1.04], [1.22, 1.07], [1.74, 1.43], [2.22, 1.5], [3.15, 1.51], [3.5, 1.44], [4.12, 1.03], [4.95, 0.93], [5.18, 0.83], [5.25, 0.64]],
+  belt: [[0, 0.97], [5.25, 0.91]],
+  roofInset: 0.18,
+  windscreen: [3.52, 4.12], rearGlass: [1.24, 1.74], sideGlass: [1.66, 3.92], pillars: [[2.82, 2.98]], blackPillars: false,
+  wheelX: [1.06, 4.12], wheelR: 0.35, tyreW: 0.235, rims: 'alloy',
+  seams: [1.68, 2.9, 3.94],
+  head: [0.68, 0.8, 0.4, 0.84], grille: [0.4, 0.76, 0, 0.38], grilleChrome: true, tail: [0.8, 0.95, 0.28, 0.86],
+  plateY: [0.34, 0.46], plate: 'white', bumper: 'body', chromeBelt: true,
+};
+
+/** The modern Tokyo taxi: a tall, upright wagon in deep indigo (koiai), sliding rear door. */
+const TAXI2: Design = {
+  name: 'taxi2', L: 4.4, W: 0.85, corner: 0.2, clear: 0.15, x0: 0,
+  top: [[0, 0.72], [0.05, 1.2], [0.15, 1.68], [0.4, 1.75], [3.0, 1.75], [3.45, 1.3], [3.9, 1.02], [4.3, 0.92], [4.4, 0.7]],
+  belt: [[0, 1.05], [4.4, 1.0]],
+  roofInset: 0.1,
+  windscreen: [3.02, 3.5], rearGlass: [0.05, 0.16], sideGlass: [0.25, 3.36], pillars: [[1.4, 1.52], [2.45, 2.56]], blackPillars: true,
+  wheelX: [0.8, 3.45], wheelR: 0.31, tyreW: 0.195, rims: 'alloy',
+  seams: [1.46, 2.5, 3.38],
+  head: [0.82, 0.98, 0.44, 0.76], grille: [0.5, 0.8, 0, 0.42], grilleChrome: true, tail: [0.95, 1.4, 0.64, 0.8],
+  plateY: [0.42, 0.54], plate: 'green', bumper: 'body',
+};
+
+const DESIGNS: Record<CarType, Design> = { sedan: SEDAN, luxury: LUXURY, sports: SPORTS, taxi: TAXI, taxi2: TAXI2, kei: KEI, minivan: MINIVAN, keitruck: KEITRUCK };
 
 export const PAINTS: Record<VehicleType, readonly number[]> = {
   sedan: [0xe8e8e4, 0x121316, 0xb4b6ba, 0x1c2a44, 0x5a1a20],
+  luxury: [0x07070a, 0x1a2032, 0x2a1418, 0xf0efe8],
+  sports: [0xc01818, 0xf0f0ec, 0x121316, 0xb4b6ba, 0x1c3a7a, 0xe8c020],
   taxi: [0x121316, 0xe0a818, 0x1f5a36, 0x1c2438],
+  taxi2: [0x1c2240, 0x121316],
   kei: [0xe8e8e4, 0xa8d4bc, 0xd8c09a, 0xe0b0b8, 0x8ab0d0],
   minivan: [0xe8e8e4, 0x121316, 0xb4b6ba, 0x3a3e44],
   keitruck: [0xe8e8e4, 0xe8e8e4, 0xb4b6ba],
+  scooter: [0xe8e0c8, 0xa8d4bc, 0xe0b0b8, 0x8ab0d0, 0x121316],
+  motorcycle: [0xb81818, 0x121316, 0x1c3a7a, 0xe8e8e4],
+  delivery: [0xc81818, 0xe8e8e4],
 };
+
+/**
+ * Taxi advertising (placeholder copy for review): a lit roof panel along the car and a vinyl wrap on the
+ * rear doors with its own text. All brands are invented; some double as story hooks.
+ */
+export interface TaxiAd {
+  /** Roof lightbox text (both sides). */
+  readonly roof?: string;
+  /** Rear-door wrap text (both sides), printed on the wrap colour. */
+  readonly side?: string;
+  readonly wrap?: number;
+  /** Roof panel plate and text colours. */
+  readonly plate?: number;
+  readonly ink?: number;
+}
 
 /** Monotone cubic interpolation through (x, y) keys (no overshoot, so profiles stay clean). */
 function curve(pts: readonly P2[]): (x: number) => number {
@@ -179,11 +248,58 @@ export interface VehicleSpec {
   readonly paint2?: number;
   /** Station spacing in metres: 0.05 for close-ups, ~0.12 for the street. */
   readonly detail?: number;
+  /** Taxi advertising (needs `signs` passed to addVehicle for the text). */
+  readonly ad?: TaxiAd;
+}
+
+/** Text geometry for vehicles that carry lettering (taxi ads, delivery boxes). */
+export interface VehicleSigns {
+  readonly sb: SignBuilder;
+  readonly layout: SignLayout;
+}
+
+/** Every text a vehicle can show (for the sign atlas / layout). */
+export function vehicleTexts(ads: readonly TaxiAd[]): { text: string; vertical: boolean }[] {
+  const out = [{ text: DELIVERY_TEXT, vertical: false }];
+  for (const a of ads) {
+    if (a.roof) out.push({ text: a.roof, vertical: false });
+    if (a.side) out.push({ text: a.side, vertical: false });
+  }
+  return out;
+}
+export const DELIVERY_TEXT = '出前 らーめん';
+
+/** Overall length of a vehicle (for layout and collision). */
+export const vehicleLength = (t: VehicleType): number => (t in DESIGNS ? DESIGNS[t as CarType].L : BIKE_LENGTH);
+
+/**
+ * Light a vehicle throws on the ground at night (for the lightmap): headlight beams spreading ahead and a
+ * red glow behind.
+ */
+export function vehicleLights(spec: VehicleSpec): Light[] {
+  const L = vehicleLength(spec.type);
+  const bike = !(spec.type in DESIGNS);
+  const w = bike ? 0.3 : DESIGNS[spec.type as CarType].W;
+  const fx = spec.fx;
+  const fz = spec.fz;
+  const sx = fz;
+  const sz = -fx;
+  const front = { x: spec.x + fx * (L / 2 + 0.3), z: spec.z + fz * (L / 2 + 0.3) };
+  const rear = { x: spec.x - fx * (L / 2 + 0.3), z: spec.z - fz * (L / 2 + 0.3) };
+  const beams: Light[] = [];
+  for (const k of bike ? [0] : [-1, 1]) {
+    for (const [ahead, r, i] of [[2.2, 2.4, 0.55], [4.5, 3.4, 0.5], [7.5, 4.2, 0.35]] as const) {
+      beams.push({ x: front.x + sx * k * (w - 0.25) + fx * ahead, z: front.z + sz * k * (w - 0.25) + fz * ahead, r: bike ? r * 0.7 : r, color: [1.0, 0.92, 0.78], i: bike ? i * 0.7 : i });
+    }
+  }
+  beams.push({ x: rear.x, z: rear.z, r: bike ? 1.2 : 2.0, color: [1.0, 0.08, 0.05], i: 0.3 });
+  return beams;
 }
 
 /** Adds a vehicle to the builder (city material: gloss / glass / chrome / emit kinds). */
-export function addVehicle(mb: MeshBuilder, spec: VehicleSpec): void {
-  const d = DESIGNS[spec.type];
+export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSigns): void {
+  if (!(spec.type in DESIGNS)) return addBike(mb, spec as VehicleSpec & { type: BikeType }, signs);
+  const d = DESIGNS[spec.type as CarType];
   const top = curve(d.top);
   const belt = curve(d.belt);
   const f: V3 = [spec.fx, 0, spec.fz];
@@ -193,6 +309,9 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec): void {
   const N = (n: V3): V3 => [f[0] * n[0] + s[0] * n[2], n[1], f[2] * n[0] + s[2] * n[2]];
   const paint = lin(spec.paint);
   const paint2 = lin(spec.paint2 ?? (spec.type === 'taxi' ? (spec.paint === 0xe0a818 ? 0x121316 : spec.paint === 0x1f5a36 ? 0xe07818 : spec.paint) : spec.paint));
+  const wrap = spec.ad?.wrap !== undefined ? lin(spec.ad.wrap) : null;
+  // The wrap covers the rear doors: between the first two door seams, from the sill to the beltline.
+  const wrapX: Range = [d.seams[0] + 0.02, d.seams[1] - 0.02];
   const BLACK: V3 = [0.012, 0.012, 0.013];
   const CHROME: V3 = [0.85, 0.86, 0.88];
   const TRIM: V3 = [0.02, 0.02, 0.022];
@@ -295,6 +414,15 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec): void {
     }
     if (spec.type === 'keitruck' && k <= 2) {
       mb.color = BLACK;
+      return;
+    }
+    if (wrap && k >= 2 && k <= 4 && within(xm, wrapX)) {
+      mb.color = wrap;
+      return;
+    }
+    if (d.chromeBelt && k === 5 && within(xm, [d.rearGlass[0], d.windscreen[1]])) {
+      mb.kind = KIND.chrome;
+      mb.color = CHROME;
       return;
     }
     if (hood) return;
@@ -429,8 +557,12 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec): void {
     mb.kind = KIND.chrome;
     mb.color = [0.9, 0.9, 0.92];
     panelX(0, hy0, hy1, sd * hz0, sd * hz1, 1);
-    mb.kind = KIND.glass;
+    // Lens: emissive on the lamp channel, so headlights are on at night and dark glass by day.
+    mb.kind = KIND.emit;
+    mb.style = [EMIT.lamp, 0, 0, 0];
+    mb.color = [0.95, 0.9, 0.8];
     panelX(0.002, hy0 + (hy1 - hy0) * 0.25, hy1 - (hy1 - hy0) * 0.25, sd * (hz0 + 0.04), sd * (hz0 + 0.04 + (hz1 - hz0) * 0.35), 1);
+    mb.style = [0, 0, 0, 0];
     // Amber indicator at the outer end.
     mb.kind = KIND.emit;
     mb.style = [EMIT.always, 0, 0, 0];
@@ -445,10 +577,15 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec): void {
   // Rear: tail lights, plate.
   const [ty0, ty1, tz0, tz1] = d.tail;
   for (const sd of [-1, 1]) {
+    // Tail lights: dim red by day (always channel) with a brighter lamp layer at night.
     mb.kind = KIND.emit;
     mb.style = [EMIT.always, 0, 0, 0];
     mb.color = [0.14, 0.004, 0.004];
     panelX(0, ty0, ty1, sd * tz0, sd * tz1, -1);
+    mb.style = [EMIT.lamp, 0, 0, 0];
+    mb.color = [0.3, 0.006, 0.004];
+    panelX(0.001, ty0 + (ty1 - ty0) * 0.35, ty1 - (ty1 - ty0) * 0.15, sd * (tz0 + 0.02), sd * (tz1 - 0.02), -1);
+    mb.style = [EMIT.always, 0, 0, 0];
     mb.color = [0.1, 0.045, 0.0];
     panelX(0.002, ty0, ty0 + (ty1 - ty0) * 0.3, sd * tz0, sd * (tz0 + (tz1 - tz0) * 0.4), -1);
     mb.style = [0, 0, 0, 0];
@@ -486,6 +623,7 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec): void {
   // Mirrors: door mirrors at the base of the A-pillar (the classic taxi has fender mirrors instead).
   for (const sd of [-1, 1]) {
     if (spec.type === 'taxi') {
+      // Fender mirrors, the classic Japanese taxi's signature.
       const mx = d.L - 0.55;
       const my = top(mx) + 0.02;
       const mz = sd * (d.W - 0.12);
@@ -511,9 +649,9 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec): void {
     }
   }
 
-  if (spec.type === 'taxi') {
+  if (isTaxi(spec.type)) {
     // Roof andon (lit company sign) and the red "vacant" sign low in the windscreen.
-    const ax = 2.45;
+    const ax = spec.ad?.roof ? d.windscreen[0] - 0.25 : spec.type === 'taxi2' ? 2.6 : 2.45;
     const ay = top(ax);
     mb.kind = KIND.chrome;
     mb.color = CHROME;
@@ -590,12 +728,101 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec): void {
     for (const sd of [-1, 1]) boxL(0.25, 0.27, 0.12, 0.5, sd * (d.W - 0.25), sd * (d.W - 0.03));
   }
 
+  if (spec.ad && signs) {
+    const ad = spec.ad;
+    const toW = (x: number, z: number): [number, number, number] => P(x, 0, z);
+    if (ad.roof) {
+      // Roof ad: a lit panel along the car on a chrome rack, text on both sides.
+      const rect = signs.layout.rect(ad.roof, false);
+      const len = 1.0;
+      const ax = d.windscreen[0] - 0.95;
+      const ay = top(ax) + 0.04;
+      mb.kind = KIND.chrome;
+      mb.color = CHROME;
+      boxL(ax - len / 2 + 0.05, ax + len / 2 - 0.05, top(ax), ay, -0.04, 0.04);
+      if (rect) {
+        const h = Math.min(0.36, len * (rect.h / rect.w) * 1.15);
+        signs.sb.ink = lin(ad.ink ?? 0x141418);
+        signs.sb.plate = lin(ad.plate ?? 0xf2f0e8);
+        signs.sb.sign = [0, 1];
+        const uv = [rect.u0, rect.v0, rect.u1, rect.v1] as const;
+        for (const sd of [-1, 1]) {
+          const n: [number, number, number] = [s[0] * sd, 0, s[2] * sd];
+          const r: [number, number, number] = [n[2], 0, -n[0]];
+          signBox(signs.sb, toW(ax, 0), r, n, -len / 2, len / 2, ay, ay + h, 0, 0.05, signs.layout.blankUv, { n: uv });
+        }
+      }
+    }
+    if (ad.side) {
+      // Rear-door wrap text, printed flat just proud of the (near-vertical) door skin.
+      const rect = signs.layout.rect(ad.side, false);
+      if (rect) {
+        const x0 = wrapX[0] + 0.06;
+        const x1 = wrapX[1] - 0.06;
+        const ym = (section((x0 + x1) / 2)[2][0] + section((x0 + x1) / 2)[5][0]) / 2;
+        const w = x1 - x0;
+        const h = Math.min(0.22, w * (rect.h / rect.w));
+        signs.sb.ink = [0.95, 0.95, 0.92];
+        signs.sb.plate = wrap ?? paint;
+        signs.sb.sign = [0, 2];
+        for (const sd of [-1, 1]) {
+          const z = sd * (d.W + 0.012);
+          // The text reads left to right from outside: along +f on the right side (sd = -1), -f on the left.
+          const a0 = sd < 0 ? x0 : x1;
+          const a1 = sd < 0 ? x1 : x0;
+          const c0 = P(a0, ym - h / 2, z);
+          const c1 = P(a1, ym - h / 2, z);
+          signs.sb.quad(c0, [c1[0] - c0[0], 0, c1[2] - c0[2]], [0, h, 0], [rect.u0, rect.v0, rect.u1, rect.v1]);
+        }
+      }
+    }
+  }
+  if (spec.type === 'sports') {
+    // Ducktail spoiler on posts, and a louvred rear hatch strip.
+    const sx = 0.22;
+    const sy = top(sx);
+    mb.kind = KIND.gloss;
+    mb.color = BLACK;
+    for (const z of [-0.5, 0.5]) boxL(sx - 0.03, sx + 0.03, sy - 0.02, sy + 0.05, z - 0.02, z + 0.02);
+    mb.color = paint;
+    boxL(sx - 0.12, sx + 0.08, sy + 0.05, sy + 0.075, -0.74, 0.74);
+    mb.color = BLACK;
+    for (let i = 0; i < 5; i++) {
+      const x = 1.15 + i * 0.14;
+      const y = top(x) + 0.006;
+      const n = N([-(top(x + 0.02) - top(x - 0.02)) / 0.04, 1, 0]);
+      mb.quadN(P(x, y, -0.55), P(x + 0.05, top(x + 0.05) + 0.006, -0.55), P(x + 0.05, top(x + 0.05) + 0.006, 0.55), P(x, y, 0.55), n, n, n, n);
+    }
+  }
+  if (spec.type === 'luxury') {
+    // Stand-up bonnet ornament and chrome sills.
+    const ox = d.L - 0.3;
+    mb.kind = KIND.chrome;
+    mb.color = CHROME;
+    boxL(ox - 0.03, ox + 0.03, top(ox), top(ox) + 0.07, -0.006, 0.006);
+    for (const sd of [-1, 1]) {
+      const n = N([0, 0, sd]);
+      const y = section(2.5)[3][0] + 0.02;
+      mb.quadN(P(1.4, y, sd * (d.W + 0.006)), P(4.0, y, sd * (d.W + 0.006)), P(4.0, y + 0.03, sd * (d.W + 0.006)), P(1.4, y + 0.03, sd * (d.W + 0.006)), n, n, n, n);
+    }
+  }
+  if (spec.type === 'taxi2') {
+    // Sliding rear door rail.
+    mb.kind = KIND.plain;
+    mb.color = TRIM;
+    for (const sd of [-1, 1]) {
+      const y = section(1.0)[5][0] - 0.02;
+      const n = N([0, 0, sd]);
+      mb.quadN(P(0.3, y, sd * (d.W + 0.004)), P(1.44, y, sd * (d.W + 0.004)), P(1.44, y + 0.025, sd * (d.W + 0.004)), P(0.3, y + 0.025, sd * (d.W + 0.004)), n, n, n, n);
+    }
+  }
+
   // Wheels.
   for (const wx of d.wheelX) for (const sd of [-1, 1]) wheel(mb, P, N, wx, d.wheelR, d.tyreW, sd * (d.W - 0.035), sd, d.rims);
 }
 
 /** A turned wheel: rounded tyre, rim lip, and five alloy spokes (or a steel hubcap). */
-function wheel(mb: MeshBuilder, P: (x: number, y: number, z: number) => V3, N: (n: V3) => V3, cx: number, r: number, tw: number, zOut: number, sd: number, rims: 'alloy' | 'steel'): void {
+export function wheel(mb: MeshBuilder, P: (x: number, y: number, z: number) => V3, N: (n: V3) => V3, cx: number, r: number, tw: number, zOut: number, sd: number, rims: 'alloy' | 'steel'): void {
   const seg = 24;
   // Tyre profile: (radius, depth inward from the outer face).
   const prof: P2[] = [[r * 0.66, 0.0], [r * 0.9, 0.0], [r * 0.985, 0.025], [r, 0.06], [r, tw - 0.06], [r * 0.985, tw - 0.025], [r * 0.9, tw], [r * 0.66, tw]];

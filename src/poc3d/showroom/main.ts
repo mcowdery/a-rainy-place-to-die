@@ -10,7 +10,9 @@ import { cityMaterial, cityUniforms } from '../real/city';
 import { KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Pose } from '../real/people';
 import { figureGeometry, ghostMaterials2, POSES2, type Body2, type FigureShape, type Pose2 } from '../models/figures';
-import { addVehicle, VEHICLE_TYPES, type VehicleType } from '../models/vehicles';
+import { addVehicle, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, type TaxiAd, type VehicleSpec, type VehicleType } from '../models/vehicles';
+import { Lightmap, paintLights, type Light } from '../real/lightmap';
+import { SignAtlas, SignBuilder, signMaterial } from '../real/signs';
 
 /**
  * Model showroom: every car type and every person body type x pose, laid out in a clean space with studio
@@ -73,7 +75,7 @@ floor.kind = KIND.lot;
 floor.color = lin(0x5e5e5c);
 floor.box(0, 6, -0.2, 0, 80, 80, KIND.lot);
 floor.kind = KIND.asphalt;
-floor.box(0, -4, 0, 0.02, 22, 16, KIND.asphalt);
+floor.box(0, -10.5, 0, 0.02, 32, 26, KIND.asphalt);
 floor.kind = KIND.plain;
 floor.color = lin(0x8a867e);
 floor.box(0, 17.5, 0, 0.15, 17, 23, KIND.sidewalk);
@@ -112,24 +114,70 @@ const label = (g: Gen, text: string, x: number, y: number, z: number): void => {
 
 // ---- New generation ----
 const t0 = performance.now();
-const NEW_ROWS: { z: number; dir: number; paints: Record<VehicleType, number> }[] = [
-  { z: -1.5, dir: 1, paints: { sedan: 0xe8e8e4, taxi: 0x121316, kei: 0xa8d4bc, minivan: 0xb4b6ba, keitruck: 0xe8e8e4 } },
-  { z: -8.5, dir: -1, paints: { sedan: 0x1c2a44, taxi: 0xe0a818, kei: 0xd8c09a, minivan: 0x121316, keitruck: 0xb4b6ba } },
+// Taxi ad options for review (all invented; some are story hooks). Row 4 shows each on its own taxi.
+const ADS: (TaxiAd & { name: string })[] = [
+  { name: 'A · energy drink', roof: '夜光 YAKOU DRINK', side: '今夜も、光れ。', wrap: 0x14143a, plate: 0x14143a, ink: 0x6af0ff },
+  { name: 'B · detective agency (hook)', roof: '霧島探偵事務所', side: 'KIRISHIMA INVESTIGATIONS', wrap: 0x1f3a2a, plate: 0xf2f0e8, ink: 0x1f3a2a },
+  { name: 'C · missing person (hook)', roof: '探しています MISSING', side: '見かけた方は ☎ 0120-41-4545', wrap: 0xe8c020, plate: 0xe8c020, ink: 0x121212 },
+  { name: 'D · record shop', roof: 'SUNRISE RECORDS', side: 'CITY POP 再発盤 入荷', wrap: 0xd8406a, plate: 0xfff0e0, ink: 0xd8406a },
+  { name: 'E · life insurance', roof: 'ミライ生命 MIRAI LIFE', side: 'あなたの未来に。', wrap: 0x1c4a9a, plate: 0xf2f0e8, ink: 0x1c4a9a },
+  { name: 'F · love hotel', roof: 'ホテル パラダイス', side: '休憩 ¥3,000〜 宿泊 ¥6,800〜', wrap: 0xe070b8, plate: 0x1a0a14, ink: 0xff8ad8 },
+  { name: 'G · Bar Kanpai', roof: 'BAR KANPAI カンパイ', side: '歌舞路 2-7 深夜まで', wrap: 0x121212, plate: 0x121212, ink: 0xffd84a },
+  { name: 'H · credit union', roof: '歌舞路信用金庫', side: '夢を、貯めよう。', wrap: 0xe07818, plate: 0xf2f0e8, ink: 0xe07818 },
 ];
-const NAMES: Record<VehicleType, string> = { sedan: 'sedan', taxi: 'taxi (classic)', kei: 'kei tall-wagon', minivan: 'minivan', keitruck: 'kei truck' };
+const adAtlas = new SignAtlas(vehicleTexts(ADS));
+const signsMat = signMaterial(cityU, adAtlas);
+const adSigns = { sb: new SignBuilder(), layout: adAtlas };
+const NAMES: Record<VehicleType, string> = {
+  sedan: 'sedan', luxury: 'luxury sedan', sports: 'sports coupe', taxi: 'taxi (classic)', taxi2: 'taxi (modern)', kei: 'kei tall-wagon',
+  minivan: 'minivan', keitruck: 'kei truck', scooter: 'scooter', motorcycle: 'motorcycle', delivery: 'delivery scooter',
+};
+const PAINT_A: Record<VehicleType, number> = {
+  sedan: 0xe8e8e4, luxury: 0x07070a, sports: 0xc01818, taxi: 0x121316, taxi2: 0x1c2240, kei: 0xa8d4bc, minivan: 0xb4b6ba, keitruck: 0xe8e8e4,
+  scooter: 0xe8e0c8, motorcycle: 0xb81818, delivery: 0xc81818,
+};
+const PAINT_B: Record<VehicleType, number> = {
+  sedan: 0x1c2a44, luxury: 0xf0efe8, sports: 0xf0f0ec, taxi: 0xe0a818, taxi2: 0x121316, kei: 0xd8c09a, minivan: 0x121316, keitruck: 0xb4b6ba,
+  scooter: 0x8ab0d0, motorcycle: 0x121316, delivery: 0x1c4a9a,
+};
 const newCars = new MeshBuilder(1 << 17);
-for (const [ri, row] of NEW_ROWS.entries()) {
-  VEHICLE_TYPES.forEach((type, i) => {
-    const x = -8 + i * 4;
-    addVehicle(newCars, { x, z: row.z, fx: 0, fz: row.dir, type, paint: row.paints[type] });
-    const name = `${NAMES[type]}${ri ? ' (alt paint)' : ''}`;
-    genItems.new.push({ name, group: 'Cars', at: new THREE.Vector3(x, 0.8, row.z), size: 4.5 });
-    label('new', name, x, 2.4, row.z);
-  });
-}
+const nightLights: Light[] = [];
+const vehicle = (spec: VehicleSpec, name: string, size: number, labelY = 2.4): void => {
+  addVehicle(newCars, spec, adSigns);
+  nightLights.push(...vehicleLights(spec));
+  genItems.new.push({ name, group: 'Cars', at: new THREE.Vector3(spec.x, 0.8, spec.z), size });
+  label('new', name, spec.x, labelY, spec.z);
+};
+CAR_TYPES2.forEach((type, i) => {
+  const x = -13 + i * 3.7;
+  vehicle({ x, z: -1.5, fx: 0, fz: 1, type, paint: PAINT_A[type] }, NAMES[type], 4.5);
+  // Second row: other paints, facing away; the taxis carry ads.
+  const ad = type === 'taxi' ? ADS[1] : type === 'taxi2' ? ADS[0] : undefined;
+  vehicle({ x, z: -8.5, fx: 0, fz: -1, type, paint: PAINT_B[type], ad }, `${NAMES[type]} (alt${ad ? ' + ad' : ''})`, 4.5);
+});
+BIKE_TYPES.forEach((type, i) => {
+  for (const [j, paints] of [PAINT_A, PAINT_B].entries()) {
+    const x = -9 + i * 6 + j * 2.2;
+    vehicle({ x, z: -13.5, fx: 0, fz: 1, type, paint: paints[type], paint2: type === 'delivery' && j === 1 ? 0xe8c020 : undefined }, `${NAMES[type]}${j ? ' (alt)' : ''}`, 2.4, 1.7);
+  }
+});
+// Ad options, parked side-on so the roof panel and door wrap face the camera.
+ADS.forEach((ad, i) => {
+  const x = -13.5 + (i % 4) * 9;
+  const z = i < 4 ? -18 : -21.5;
+  const type = i % 2 ? 'taxi2' : 'taxi';
+  vehicle({ x, z, fx: 1, fz: 0, type, paint: type === 'taxi' ? [0x121316, 0xe0a818, 0x1f5a36][i % 3] : 0x1c2240, ad }, `ad ${ad.name}`, 5);
+});
 const newCarMesh = new THREE.Mesh(newCars.build()!, city);
 newCarMesh.castShadow = newCarMesh.receiveShadow = true;
 genRoot.new.add(newCarMesh);
+const signGeo = adSigns.sb.build(0, 0);
+if (signGeo) genRoot.new.add(new THREE.Mesh(signGeo, signsMat));
+// Headlight and brake-light spill on the ground, painted into a lightmap tile like the district's.
+const showLightmap = new Lightmap(renderer, { x: -64, y: -64, w: 128, h: 128 }, 128);
+showLightmap.upload(-64, -64, paintLights(new OffscreenCanvas(128, 128).getContext('2d', { willReadFrequently: true })!, -64, -64, 128, nightLights));
+cityU.tLight.value = showLightmap.texture;
+cityU.uLightRect.value = showLightmap.uniformRect;
 const tCars = performance.now() - t0;
 
 const ghostCache = new Map<number, ReturnType<typeof ghostMaterials2>>();
@@ -265,7 +313,7 @@ let mode: Mode = 'studio';
 const applyMode = (m: Mode): void => {
   mode = m;
   const L = {
-    studio: { bg: 0x2a2c30, hs: 0xdde4ee, hg: 0x4a4640, hi: 1.4, kc: 0xfff4e8, ki: 2.4, exp: 1.0, pts: 0, zen: 0x9aa4b4, hor: 0xc8ccd4, lamps: 0.3 },
+    studio: { bg: 0x2a2c30, hs: 0xdde4ee, hg: 0x4a4640, hi: 1.4, kc: 0xfff4e8, ki: 2.4, exp: 1.0, pts: 0, zen: 0x9aa4b4, hor: 0xc8ccd4, lamps: 0 },
     night: { bg: 0x05060a, hs: 0x3a4668, hg: 0x2a2018, hi: 0.25, kc: 0x9fb0ff, ki: 0.3, exp: 1.2, pts: 60, zen: 0x03050c, hor: 0x2c1e2a, lamps: 1 },
     day: { bg: 0x7aa4d4, hs: 0xbcd4f0, hg: 0x5a4e40, hi: 1.3, kc: 0xfff1dc, ki: 3.2, exp: 0.85, pts: 0, zen: 0x3f78c0, hor: 0xb8cfe0, lamps: 0 },
   }[m];
@@ -281,6 +329,7 @@ const applyMode = (m: Mode): void => {
   cityU.uHorizon.value.setHex(L.hor);
   cityU.uRoomAmbient.value.setHex(L.hs).multiplyScalar(L.hi * 0.12);
   cityU.uLamps.value = L.lamps;
+  cityU.uLightGain.value = 1.4 * L.lamps;
   cityU.uNeon.value = m === 'day' ? 0 : 1;
   renderPanel();
 };
