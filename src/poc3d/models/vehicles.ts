@@ -193,6 +193,8 @@ export interface TaxiAd {
   /** Roof panel plate and text colours. */
   readonly plate?: number;
   readonly ink?: number;
+  /** Photo ad: index into the ad atlas (VehicleSigns.photos); the photo layouts replace the text-only ones. */
+  readonly photo?: number;
 }
 
 /** Monotone cubic interpolation through (x, y) keys (no overshoot, so profiles stay clean). */
@@ -256,6 +258,14 @@ export interface VehicleSpec {
 export interface VehicleSigns {
   readonly sb: SignBuilder;
   readonly layout: SignLayout;
+  /** Photo ads: their own builder (drawn with the ad atlas material) and the atlas's UVs. */
+  readonly photos?: {
+    readonly sb: SignBuilder;
+    uv(i: number, part: 'roof' | 'door'): readonly [number, number, number, number];
+    readonly blankUv: [number, number];
+    readonly roofAspect: number;
+    readonly doorAspect: number;
+  };
 }
 
 /** Every text a vehicle can show (for the sign atlas / layout). */
@@ -731,7 +741,46 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
   if (spec.ad && signs) {
     const ad = spec.ad;
     const toW = (x: number, z: number): [number, number, number] => P(x, 0, z);
-    if (ad.roof) {
+    const photos = ad.photo !== undefined ? signs.photos : undefined;
+    if (photos && ad.photo !== undefined) {
+      // Photo roof panel: a lightbox along the car on a chrome rack, photo + brand on both sides.
+      const len = 1.05;
+      const h = len / photos.roofAspect;
+      const ax = d.windscreen[0] - 0.95;
+      const ay = top(ax) + 0.04;
+      mb.kind = KIND.chrome;
+      mb.color = CHROME;
+      boxL(ax - len / 2 + 0.05, ax + len / 2 - 0.05, top(ax), ay, -0.04, 0.04);
+      photos.sb.sign = [0, 1];
+      for (const sd of [-1, 1]) {
+        const n: [number, number, number] = [s[0] * sd, 0, s[2] * sd];
+        const r: [number, number, number] = [n[2], 0, -n[0]];
+        signBox(photos.sb, toW(ax, 0), r, n, -len / 2, len / 2, ay, ay + h, 0, 0.04, photos.blankUv, { n: photos.uv(ad.photo, 'roof') });
+      }
+      // Photo door wrap: fills the rear door, printed (no glow).
+      const x0 = wrapX[0] + 0.01;
+      const x1 = wrapX[1] - 0.01;
+      const xm = (x0 + x1) / 2;
+      const yLo = section(xm)[2][0] + 0.03;
+      const yHi = section(xm)[5][0] - 0.03;
+      let w = x1 - x0;
+      let hh = w / photos.doorAspect;
+      if (hh > yHi - yLo) {
+        hh = yHi - yLo;
+        w = hh * photos.doorAspect;
+      }
+      const ym = (yLo + yHi) / 2;
+      photos.sb.sign = [0, 2];
+      for (const sd of [-1, 1]) {
+        const z = sd * (d.W + 0.012);
+        // Reads left to right from outside: along +f on the right side (sd = -1), -f on the left.
+        const a0 = sd < 0 ? xm - w / 2 : xm + w / 2;
+        const a1 = sd < 0 ? xm + w / 2 : xm - w / 2;
+        const c0 = P(a0, ym - hh / 2, z);
+        const c1 = P(a1, ym - hh / 2, z);
+        photos.sb.quad(c0, [c1[0] - c0[0], 0, c1[2] - c0[2]], [0, hh, 0], photos.uv(ad.photo, 'door'));
+      }
+    } else if (ad.roof) {
       // Roof ad: a lit panel along the car on a chrome rack, text on both sides.
       const rect = signs.layout.rect(ad.roof, false);
       const len = 1.0;
@@ -753,7 +802,7 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
         }
       }
     }
-    if (ad.side) {
+    if (ad.side && !photos) {
       // Rear-door wrap text, printed flat just proud of the (near-vertical) door skin.
       const rect = signs.layout.rect(ad.side, false);
       if (rect) {

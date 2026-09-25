@@ -10,8 +10,10 @@ import { cityMaterial, cityUniforms } from '../real/city';
 import { KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Pose } from '../real/people';
 import { figureGeometry, ghostMaterials2, POSES2, type Body2, type FigureShape, type Pose2 } from '../models/figures';
-import { addVehicle, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, type TaxiAd, type VehicleSpec, type VehicleType } from '../models/vehicles';
+import { addVehicle, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, type VehicleSpec, type VehicleType } from '../models/vehicles';
 import { Lightmap, paintLights, type Light } from '../real/lightmap';
+import { AdAtlas, adMaterial } from '../real/adAtlas';
+import { TAXI_ADS } from '../models/ads';
 import { SignAtlas, SignBuilder, signMaterial } from '../real/signs';
 
 /**
@@ -114,20 +116,16 @@ const label = (g: Gen, text: string, x: number, y: number, z: number): void => {
 
 // ---- New generation ----
 const t0 = performance.now();
-// Taxi ad options for review (all invented; some are story hooks). Row 4 shows each on its own taxi.
-const ADS: (TaxiAd & { name: string })[] = [
-  { name: 'A · energy drink', roof: '夜光 YAKOU DRINK', side: '今夜も、光れ。', wrap: 0x14143a, plate: 0x14143a, ink: 0x6af0ff },
-  { name: 'B · detective agency (hook)', roof: '霧島探偵事務所', side: 'KIRISHIMA INVESTIGATIONS', wrap: 0x1f3a2a, plate: 0xf2f0e8, ink: 0x1f3a2a },
-  { name: 'C · missing person (hook)', roof: '探しています MISSING', side: '見かけた方は ☎ 0120-41-4545', wrap: 0xe8c020, plate: 0xe8c020, ink: 0x121212 },
-  { name: 'D · record shop', roof: 'SUNRISE RECORDS', side: 'CITY POP 再発盤 入荷', wrap: 0xd8406a, plate: 0xfff0e0, ink: 0xd8406a },
-  { name: 'E · life insurance', roof: 'ミライ生命 MIRAI LIFE', side: 'あなたの未来に。', wrap: 0x1c4a9a, plate: 0xf2f0e8, ink: 0x1c4a9a },
-  { name: 'F · love hotel', roof: 'ホテル パラダイス', side: '休憩 ¥3,000〜 宿泊 ¥6,800〜', wrap: 0xe070b8, plate: 0x1a0a14, ink: 0xff8ad8 },
-  { name: 'G · Bar Kanpai', roof: 'BAR KANPAI カンパイ', side: '歌舞路 2-7 深夜まで', wrap: 0x121212, plate: 0x121212, ink: 0xffd84a },
-  { name: 'H · credit union', roof: '歌舞路信用金庫', side: '夢を、貯めよう。', wrap: 0xe07818, plate: 0xf2f0e8, ink: 0xe07818 },
-];
+// Taxi ads (models/ads.ts): photo + printed copy, one option per taxi in row 4.
+const ADS = TAXI_ADS.map((ad, i) => ({ ...ad, photo: i }));
 const adAtlas = new SignAtlas(vehicleTexts(ADS));
 const signsMat = signMaterial(cityU, adAtlas);
-const adSigns = { sb: new SignBuilder(), layout: adAtlas };
+const photoAtlas = new AdAtlas(TAXI_ADS);
+const adSigns = {
+  sb: new SignBuilder(),
+  layout: adAtlas,
+  photos: { sb: new SignBuilder(), uv: (i: number, part: 'roof' | 'door') => photoAtlas.uv(i, part), blankUv: photoAtlas.blankUv, roofAspect: AdAtlas.ROOF_ASPECT, doorAspect: AdAtlas.DOOR_ASPECT },
+};
 const NAMES: Record<VehicleType, string> = {
   sedan: 'sedan', luxury: 'luxury sedan', sports: 'sports coupe', taxi: 'taxi (classic)', taxi2: 'taxi (modern)', kei: 'kei tall-wagon',
   minivan: 'minivan', keitruck: 'kei truck', scooter: 'scooter', motorcycle: 'motorcycle', delivery: 'delivery scooter',
@@ -163,7 +161,8 @@ BIKE_TYPES.forEach((type, i) => {
 });
 // Ad options, parked side-on so the roof panel and door wrap face the camera.
 ADS.forEach((ad, i) => {
-  const x = -13.5 + (i % 4) * 9;
+  // Two staggered rows so the back row's doors aren't hidden.
+  const x = -13.5 + (i % 4) * 9 + (i < 4 ? 0 : 4.5);
   const z = i < 4 ? -18 : -21.5;
   const type = i % 2 ? 'taxi2' : 'taxi';
   vehicle({ x, z, fx: 1, fz: 0, type, paint: type === 'taxi' ? [0x121316, 0xe0a818, 0x1f5a36][i % 3] : 0x1c2240, ad }, `ad ${ad.name}`, 5);
@@ -173,6 +172,8 @@ newCarMesh.castShadow = newCarMesh.receiveShadow = true;
 genRoot.new.add(newCarMesh);
 const signGeo = adSigns.sb.build(0, 0);
 if (signGeo) genRoot.new.add(new THREE.Mesh(signGeo, signsMat));
+const photoGeo = adSigns.photos.sb.build(0, 0);
+if (photoGeo) genRoot.new.add(new THREE.Mesh(photoGeo, adMaterial(cityU, photoAtlas)));
 // Headlight and brake-light spill on the ground, painted into a lightmap tile like the district's.
 const showLightmap = new Lightmap(renderer, { x: -64, y: -64, w: 128, h: 128 }, 128);
 showLightmap.upload(-64, -64, paintLights(new OffscreenCanvas(128, 128).getContext('2d', { willReadFrequently: true })!, -64, -64, 128, nightLights));
