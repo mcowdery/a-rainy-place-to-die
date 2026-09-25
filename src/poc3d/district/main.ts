@@ -99,7 +99,7 @@ function run(): void {
   if (initial && OVERLAY_PRESETS.includes(initial)) overlay.preset = initial;
   // Bloom: [ ] strength, ; ' threshold, B on/off; ?bloom=strength sets it from the URL.
   const bloomParam = Number(params.get('bloom'));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), Number.isFinite(bloomParam) && params.has('bloom') ? bloomParam : 0.22, 0.45, 1.3);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), Number.isFinite(bloomParam) && params.has('bloom') ? bloomParam : 0.22, 0.45, 1.6);
   composer.addPass(new RenderPass(scene, camera));
   composer.addPass(overlay);
   composer.addPass(bloom);

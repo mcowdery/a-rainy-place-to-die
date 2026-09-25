@@ -92,12 +92,15 @@ const common = /* glsl */ `
   // facade, y up, z out of the wall) from ro on the glass. Returns the hit point; face: 0 back, 1 side,
   // 2 ceiling, 3 floor.
   vec3 roomHit(vec3 ro, vec3 rd, float rw, float ch, float depth, out float face) {
+    // The glass can extend past the room (a curtain wall runs floor to floor, the ceiling sits lower): start
+    // inside the room, or the hit lands in front of the glass and the depth falloff explodes.
+    ro = vec3(clamp(ro.x, 0.001, rw - 0.001), clamp(ro.y, 0.001, ch - 0.001), 0.0);
     float rdx = abs(rd.x) < 1e-5 ? 1e-5 : rd.x;
     float rdy = abs(rd.y) < 1e-5 ? 1e-5 : rd.y;
     float tx = (rdx > 0.0 ? rw - ro.x : -ro.x) / rdx;
     float ty = (rdy > 0.0 ? ch - ro.y : -ro.y) / rdy;
     float tz = -depth / min(rd.z, -1e-3);
-    float t = min(tx, min(ty, tz));
+    float t = max(min(tx, min(ty, tz)), 0.0);
     face = t == tz ? 0.0 : t == tx ? 1.0 : rdy > 0.0 ? 2.0 : 3.0;
     return ro + rd * t;
   }
@@ -304,7 +307,7 @@ const surface = /* glsl */ `
           } else if (face < 1.5) {
             c = wallA * 0.75;
           } else if (face < 2.5) {
-            c = vec3(0.9) * (1.0 + 1.2 * exp(-depthT * 4.0) * (office ? 1.5 : 0.6));
+            c = vec3(0.9) * (1.0 + 0.9 * exp(-depthT * 4.0) * (office ? 1.2 : 0.6));
           } else {
             c = office ? vec3(0.4, 0.42, 0.45) : mix(vec3(0.36, 0.24, 0.15), vec3(0.5, 0.45, 0.38), h1(hr * 17.0));
           }
@@ -442,8 +445,15 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${common}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${surface}`)
+      .replace('#include <opaque_fragment>', `
+        // Never hand the post chain more than a bright highlight's worth of light (or a NaN).
+        outgoingLight = clamp(outgoingLight, 0.0, 48.0);
+        #include <opaque_fragment>`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
-        roughnessFactor = sRough;
+        // Floor for the analytic (sun / moon) lights: a near-mirror GGX lobe on a point light peaks in the
+        // tens of thousands, overflows the half-float target and blooms into a huge disc. Mirror-like
+        // glass and wet-ground reflections come from sEmit instead, so they stay sharp.
+        roughnessFactor = max(sRough, 0.22);
         metalnessFactor = sMetal;`);
   };
   m.customProgramCacheKey = () => 'city-v1';

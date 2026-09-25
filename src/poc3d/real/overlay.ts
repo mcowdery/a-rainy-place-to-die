@@ -55,6 +55,11 @@ const fragmentShader = /* glsl */ `
     vec3 avg = 0.25 * (texture2D(tScene, cc - q).rgb + texture2D(tScene, cc + q).rgb
       + texture2D(tScene, cc + vec2(q.x, -q.y)).rgb + texture2D(tScene, cc + vec2(-q.x, q.y)).rgb);
     vec3 img = texture2D(tScene, vUv).rgb;
+    // Guard the post chain: any NaN / Inf / runaway value from the scene would be smeared into a disc by bloom.
+    if (any(isnan(img)) || any(isinf(img))) img = vec3(0.0);
+    if (any(isnan(avg)) || any(isinf(avg))) avg = vec3(0.0);
+    img = min(img, vec3(48.0));
+    avg = min(avg, vec3(48.0));
     float raw = texture2D(tDepth, cc).x;
     bool sky = raw >= 0.999999;
     float dz = sky ? 1e6 : -perspectiveDepthToViewZ(raw, uNear, uFar);
@@ -69,7 +74,11 @@ const fragmentShader = /* glsl */ `
     // Glyph ink carries the cell's light (minus a soft backdrop share), so dissolving keeps the average
     // brightness; with no backdrop, empty cell space falls to the dark background.
     float keep = sky ? uKeep.y : uKeep.x;
-    vec3 ascii = avg * (keep + (1.0 - keep) * mask / max(uCov[int(s)], 0.18)) + uBg * (1.0 - mask) * (1.0 - keep);
+    // The boost that keeps average brightness only applies to dim cells: ink never gets brighter than about
+    // 1.0 (or the cell itself, if that's brighter). Boosting an already-bright light 5x made a super-bright
+    // glyph that bloom smeared into a huge disc.
+    float gain = min(1.0 / max(uCov[int(s)], 0.18), max(1.0, 1.0 / max(lum, 1e-4)));
+    vec3 ascii = avg * (keep + (1.0 - keep) * mask * gain) + uBg * (1.0 - mask) * (1.0 - keep);
     vec3 grain = img * (1.0 - uGrain + uGrain * (0.6 + 1.3 * mask));
     vec3 col = mix(grain, ascii, dissolve);
 
@@ -77,7 +86,7 @@ const fragmentShader = /* glsl */ `
       float drop = floor(cell.y * 0.35 + uTime * 14.0 + hh(vec2(cell.x, 3.0)) * 97.0);
       if (hh(vec2(cell.x, drop)) < uRain) col += vec3(0.32, 0.4, 0.52) * glyphMask(uRainSlot, local) * (0.06 + 0.3 * lum);
     }
-    gl_FragColor = vec4(col, 1.0);
+    gl_FragColor = vec4(clamp(col, 0.0, 48.0), 1.0);
   }
 `;
 
