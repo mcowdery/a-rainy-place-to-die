@@ -3,13 +3,15 @@
 // assets/ads/source/) or reject; wiring an approved image in is a separate, explicit step.
 //
 //   npm run krea:login                                   log in once (session cached in .krea/, 30 days)
-//   npm run ads:generate -- <brief.json> [--dry-run]     generate a batch from a brief (see assets/ads/briefs/)
+//   node scripts/krea/ads.mjs signup [name]              create this project's own Studio account (sign-ups open)
+//   npm run ads:generate -- <brief.json> [--dry-run] [--only id,id] [--skip-missing-lora]   generate a batch
 //   npm run ads:review [-- <batch>]                      list pending batches / one batch's candidates
 //   npm run ads:approve -- <batch> <file> [--as <name>]  move a candidate to assets/ads/source/<name>.png
 //   npm run ads:reject -- <batch> <file> [--reason ...]  move a candidate to pending/<batch>/rejected/
 //   npm run ads:status                                   check the Studio connection and login
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import readline from 'node:readline';
 import { ROOT, Studio, StudioError, config } from './studio.mjs';
 
@@ -27,7 +29,9 @@ const NO_TEXT = 'no text, no lettering, no logos, no watermark';
 const USES = {
   taxi: { size: [1024, 1024], hint: 'vertical composition' },
   poster: { size: [832, 1216], hint: 'vertical poster composition' },
-  billboard: { size: [1536, 768], hint: 'wide horizontal billboard composition, subject to one side leaving clean space for text' },
+  // (Avoid the word "billboard": the model then draws a photo *of* a billboard with an empty panel.)
+  // ("Leave space for text" gave blank white halves: ask for an off-centre subject in a full-frame scene.)
+  billboard: { size: [1536, 768], hint: 'wide horizontal composition, subject off-centre to one side, the background scene continues across the whole frame' },
   sign: { size: [1024, 1024], hint: 'centred composition' },
 };
 const DEFAULTS = { lora: 'ohwx julie', loraScale: 0.85, steps: 12, variants: 2, model: 'krea-2-turbo' };
@@ -65,6 +69,27 @@ async function cmdLogin() {
   console.log(`Logged in as ${user.username}. Session cached in .krea/session.json (valid ~30 days).`);
 }
 
+/**
+ * Creates this project's own Studio account (only works while Studio allows sign-ups) with a random
+ * password, saved to the git-ignored .env.krea so the client can log itself in whenever the session expires.
+ */
+async function cmdSignup() {
+  const envPath = path.join(ROOT, '.env.krea');
+  const cfg = config();
+  if (cfg.username && cfg.password) throw new StudioError(`.env.krea already has credentials for "${cfg.username}".`);
+  const username = typeof args[1] === 'string' ? args[1] : 'citypopper_bot';
+  const password = crypto.randomBytes(24).toString('base64url');
+  const res = await fetch(cfg.url + '/api/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }) });
+  if (!res.ok) throw new StudioError(`Sign-up failed (${res.status}): ${(await res.json().catch(() => ({}))).detail ?? ''}`);
+  const kept = fs.existsSync(envPath)
+    ? fs.readFileSync(envPath, 'utf8').split(/\r?\n/).filter((l) => l.trim() && !/^\s*KREA_STUDIO_(USERNAME|PASSWORD)\s*=/.test(l))
+    : [`KREA_STUDIO_URL=${cfg.url}`];
+  kept.push(`KREA_STUDIO_USERNAME=${username}`, `KREA_STUDIO_PASSWORD=${password}`);
+  fs.writeFileSync(envPath, kept.join('\n') + '\n', { mode: 0o600 });
+  const user = await new Studio(config()).login(username, password);
+  console.log(`Created Studio account "${user.username}" (role ${user.role}); credentials saved to .env.krea (git-ignored), session cached.`);
+}
+
 async function cmdStatus() {
   const studio = new Studio();
   const user = await studio.me();
@@ -89,6 +114,11 @@ async function cmdStatus() {
  */
 async function cmdGenerate() {
   const dry = Boolean(flag('dry-run'));
+  // Items whose LoRA this Studio account can't see are skipped (with a warning) instead of failing the batch.
+  const skipMissing = Boolean(flag('skip-missing-lora'));
+  // --only a,b: generate just these item ids (e.g. to redo or add to a batch).
+  const only = flag('only');
+  const onlyIds = typeof only === 'string' ? new Set(only.split(',').map((x) => x.trim())) : null;
   const briefPath = args[1];
   if (!briefPath) throw new StudioError('Usage: npm run ads:generate -- <brief.json> [--dry-run]');
   const brief = readJson(path.resolve(briefPath));
@@ -99,7 +129,7 @@ async function cmdGenerate() {
   const batch = slug(brief.batch);
   const dir = path.join(PENDING, batch);
 
-  const plan = brief.items.map((item) => {
+  const plan = brief.items.filter((item) => !onlyIds || onlyIds.has(item.id)).map((item) => {
     const lora = item.lora === undefined ? d.lora : item.lora || null;
     return {
       item,
@@ -118,7 +148,16 @@ async function cmdGenerate() {
   const studio = new Studio();
   if (!(await studio.me())) throw new StudioError('Not logged in to Krea Studio. Run: npm run krea:login');
   const loraIds = new Map();
-  for (const p of plan) if (p.lora && !loraIds.has(p.lora)) loraIds.set(p.lora, await studio.loraId(p.lora));
+  for (const p of plan) {
+    if (!p.lora || loraIds.has(p.lora)) continue;
+    try {
+      loraIds.set(p.lora, await studio.loraId(p.lora));
+    } catch (e) {
+      if (!skipMissing) throw e;
+      loraIds.set(p.lora, null);
+      console.log(`  (skipping items that use "${p.lora}": not available to this account)`);
+    }
+  }
 
   fs.mkdirSync(dir, { recursive: true });
   const manifestPath = path.join(dir, 'manifest.json');
@@ -126,6 +165,7 @@ async function cmdGenerate() {
     ? readJson(manifestPath)
     : { batch, purpose: brief.purpose ?? '', use, district: brief.district ?? null, brief: path.relative(ROOT, path.resolve(briefPath)).replace(/\\/g, '/'), created: new Date().toISOString(), images: [] };
   for (const p of plan) {
+    if (p.lora && !loraIds.get(p.lora)) continue;
     const req = {
       prompt: p.prompt,
       width: p.width,
@@ -238,7 +278,7 @@ function decide(approve) {
   writeReview(dir, m);
 }
 
-const commands = { login: cmdLogin, status: cmdStatus, generate: cmdGenerate, review: cmdReview, approve: () => decide(true), reject: () => decide(false) };
+const commands = { login: cmdLogin, signup: cmdSignup, status: cmdStatus, generate: cmdGenerate, review: cmdReview, approve: () => decide(true), reject: () => decide(false) };
 const cmd = commands[args[0]];
 if (!cmd) {
   console.log('Commands: login | status | generate <brief.json> [--dry-run] | review [batch] | approve <batch> <file> [--as name] | reject <batch> <file> [--reason ...]');

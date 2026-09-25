@@ -1,9 +1,12 @@
 {
   "batch": "kaburo-billboards-01",
-  "purpose": "Kaburo (Neon Core) building-side and rooftop billboards: the district's nightlife economy, including its shadier side (love hotels, host and hostess clubs, easy loans). Adult ads are suggestive, not explicit, like real public signage in a Japanese entertainment district.",
+  "purpose": "Kaburo (Neon Core) building-side and rooftop billboards: the district's nightlife economy, including its shady side (love hotels, host and hostess clubs, easy loans). Adult ads are racy (lingerie, implied nudity), always clearly adult.",
   "use": "billboard",
   "district": "neon",
-  "defaults": { "lora": null, "variants": 2 },
+  "defaults": {
+    "lora": null,
+    "variants": 2
+  },
   "items": [
     {
       "id": "hotel_rouge",
@@ -11,6 +14,14 @@
       "copy": "休憩 ¥3,800〜 / 宿泊 ¥7,500〜",
       "subject": "glamorous adult woman in her late twenties in a red silk robe lounging on satin hotel sheets, soft red and magenta neon glow, sultry but tasteful, fully covered, romantic love hotel advertisement",
       "notes": "Love hotel. Suggestive, not explicit; no likeness LoRA."
+    },
+    {
+      "id": "hotel_rouge_julie",
+      "brand": "HOTEL ROUGE ホテル ルージュ",
+      "copy": "休憩 ¥3,800〜 / 宿泊 ¥7,500〜",
+      "subject": "glamorous adult woman in a red silk robe lounging on satin hotel sheets, soft red and magenta neon glow, sultry but tasteful, fully covered, romantic love hotel advertisement",
+      "lora": "ohwx julie",
+      "notes": "Julie version of the HOTEL ROUGE ad (Julie is a synthetic character)."
     },
     {
       "id": "hotel_venus",
@@ -23,8 +34,8 @@
       "id": "club_adonis_hosts",
       "brand": "CLUB ADONIS",
       "copy": "No.1 ホスト 今夜も君を待つ",
-      "subject": "five stylish young adult Japanese host club hosts in sharp black suits with voluminous dyed hair, confident poses, champagne tower behind them, glossy gold and black host club billboard photography",
-      "notes": "Host club board, a Kabukicho staple. No likeness LoRA."
+      "subject": "five stylish young adult Japanese host club hosts in sharp black suits with voluminous dyed hair, confident poses, a champagne tower beside them, glossy gold and black studio photography, full-bleed photograph",
+      "notes": "Host club board, a Kabukicho staple. Reworded after v1/v2 came out as a photo of an empty billboard."
     },
     {
       "id": "club_moonlight",

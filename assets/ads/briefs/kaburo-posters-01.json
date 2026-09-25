@@ -1,16 +1,28 @@
 {
   "batch": "kaburo-posters-01",
-  "purpose": "Kaburo (Neon Core) street-level posters and lightboxes: storefront walls, alley doors, vending-machine sides and the free information centre. Adult ads are suggestive, not explicit.",
+  "purpose": "Kaburo (Neon Core) street-level posters and lightboxes: storefront walls, alley doors, vending-machine sides and the free information centre. Adult ads are racy (lingerie, implied nudity), always clearly adult.",
   "use": "poster",
   "district": "neon",
-  "defaults": { "lora": null, "variants": 2 },
+  "defaults": {
+    "lora": null,
+    "variants": 2
+  },
   "items": [
     {
       "id": "annaijo_girls",
       "brand": "無料案内所 FREE INFORMATION",
       "copy": "かわいい子、ご案内します",
-      "subject": "grid-style glamour portrait of a smiling adult woman in a cocktail dress, flash photography, bright yellow and pink backdrop, gaudy nightlife information centre lightbox poster, tasteful",
-      "notes": "The district's 無料案内所 lightbox. Glamour, not explicit. No likeness LoRA."
+      "subject": "glamour portrait of a flirty adult woman in her late twenties in black lace lingerie, playful pose, flash photography, bright yellow and hot pink backdrop, gaudy nightlife information centre lightbox poster",
+      "notes": "The district free information centre (無料案内所) lightbox: racy glamour, adult.",
+      "lora": "ohwx julie"
+    },
+    {
+      "id": "hotel_venus_poster",
+      "brand": "HOTEL VENUS",
+      "copy": "ご休憩 60分 ¥2,900 / 空室あり",
+      "subject": "sensual adult woman in her late twenties wrapped in a white bedsheet on a round love hotel bed, bare shoulders, implied nudity, mirrored ceiling, pink and violet neon light",
+      "lora": "ohwx julie",
+      "notes": "Street poster for the love hotel entrance: racy, implied nudity, adult."
     },
     {
       "id": "hikari_loan",
