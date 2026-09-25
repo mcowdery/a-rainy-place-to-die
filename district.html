@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kaburo District</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #040508; color: #d8d8e0; }
+      body { font: 13px/1.4 Consolas, 'Cascadia Mono', 'Yu Gothic', monospace; }
+      canvas { display: block; }
+      #hud {
+        position: fixed; top: 8px; left: 8px; z-index: 2; padding: 6px 10px; white-space: pre;
+        background: rgba(4, 5, 8, 0.8); border: 1px solid #2c2c3a; pointer-events: none;
+      }
+      #overlay {
+        position: fixed; inset: 0; z-index: 1; display: grid; place-items: center; pointer-events: none;
+        color: #ff5fc8; font-size: 18px; text-shadow: 0 0 12px rgba(255, 95, 200, 0.6);
+      }
+      #overlay[hidden] { display: none; }
+      .panel {
+        position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 3; min-width: 420px; max-width: 70vw;
+        padding: 16px 20px; background: rgba(12, 10, 18, 0.95); border: 1px solid #ff5fc8;
+        box-shadow: 0 0 24px rgba(255, 95, 200, 0.35);
+      }
+      .panel h2 { margin: 0 0 10px; font-size: 16px; color: #ff5fc8; }
+      .panel pre { margin: 0 0 10px; color: #b8c8d0; }
+      #errors { position: fixed; inset: 0; z-index: 4; margin: 0; padding: 20px; background: #1a0808; color: #ff8a8a; white-space: pre-wrap; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <div id="hud"></div>
+    <div id="overlay">click to walk</div>
+    <div id="vn" class="panel" hidden></div>
+    <pre id="errors" hidden></pre>
+    <script type="module" src="/src/poc3d/district/main.ts"></script>
+  </body>
+</html>

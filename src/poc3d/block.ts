@@ -16,7 +16,7 @@ export interface Box {
   readonly maxZ: number;
 }
 
-interface BuildingSpec {
+export interface BuildingSpec {
   /** Stable id: seeds the building's hue and which windows are lit, so it looks the same every visit. */
   id: number;
   x: number;
@@ -24,6 +24,8 @@ interface BuildingSpec {
   w: number;
   d: number;
   h: number;
+  /** Overrides the id-hashed hue (hand-placed stamps). */
+  hue?: number;
 }
 
 const FLOOR = 3; // metres per storey (pane rows + slab row)
@@ -48,7 +50,7 @@ export const SIGN_LETTERS = 'ABCDEFGHIKLMNOPRSTUY';
  * Integer code (stored as code / 255 in the scene target's alpha) for each building texel:
  * - facade: BASE + ((surface * VARIANTS + variant) * LEVELS + level)
  *   level: smooth 0-11 intensity (light, street glow, distance); variant: 0-2 ramp offset by floor band.
- * - storefront band: SHOP + 0 frame, + 1 glass, + 2.. sign letter index into SIGN_LETTERS.
+ * - storefront band: SHOP + 0 frame, + 1 glass, + 2 glass (alternate row), + 3.. sign letter index into SIGN_LETTERS.
  * Roofs write ROOF; anything that isn't a building writes OTHER (opaque default).
  */
 export const FACADE = { roof: 2, base: 32, levels: 12, variants: 3, shop: 212, other: 255 } as const;
@@ -127,7 +129,7 @@ export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMat
               if (fromTop < 1.0) {
                 // Letters come in pairs ("LLAANNGG") like the reference's shop signs.
                 float letter = floor(h3(vec3(vBid, shop, floor(cx / 2.0))) * ${SIGN_LETTERS.length}.0);
-                facadeCode = ${F.shop + 2}.0 + letter;
+                facadeCode = ${F.shop + 3}.0 + letter;
                 outgoingLight = signCol;
               } else if (fromTop < 2.0 || cx < 1.0 || cx >= shopW * cellsPerM.x - 1.0
                          || fract(m.x / 1.5) * 1.5 * cellsPerM.x < 1.0) {
@@ -135,7 +137,8 @@ export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMat
                 facadeCode = ${F.shop}.0;
                 outgoingLight = hs < 0.5 ? vec3(0.85, 0.25, 0.15) : vec3(0.9, 0.5, 0.15);
               } else {
-                facadeCode = ${F.shop + 1}.0;
+                // Glass: alternate rows lighter so a close-up shopfront reads as glass, not a solid block.
+                facadeCode = mod(floor(fromTop), 2.0) == 1.0 ? ${F.shop + 2}.0 : ${F.shop + 1}.0;
                 outgoingLight = h3(vec3(vBid, shop, 3.0)) < 0.6 ? vec3(0.15, 0.35, 0.9) : vec3(0.1, 0.6, 0.7);
               }
             } else {
@@ -201,7 +204,7 @@ function boxPart(b: BuildingSpec, w: number, d: number, y0: number, y1: number, 
     facade[i * 3 + 1] = roof ? 0 : y0 + uv.getY(i) * h;
     facade[i * 3 + 2] = roof ? 2 : 1;
   }
-  const hue = new THREE.Color(hueFor(b.id));
+  const hue = new THREE.Color(b.hue ?? hueFor(b.id));
   const colors = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) hue.toArray(colors, i * 3);
   g.setAttribute('aFacade', new THREE.BufferAttribute(facade, 3));
@@ -214,10 +217,11 @@ function boxPart(b: BuildingSpec, w: number, d: number, y0: number, y1: number, 
 /**
  * A building: one box, or for towers over 45 m a stepped silhouette (1-2 setbacks) and sometimes an
  * antenna, for skylines like the reference's crowns and spires. The footprint (collision) is the base box.
+ * simple = true gives just the base box at full height: the distant-LOD version.
  */
-function buildingGeometry(b: BuildingSpec, rnd: Rng): THREE.BufferGeometry {
+export function buildingGeometry(b: BuildingSpec, rnd: Rng, simple = false): THREE.BufferGeometry {
   const offU = rnd.int(0, 3) * 0.5; // shift the column grid so neighbours don't line up exactly
-  if (b.h <= 45) return boxPart(b, b.w, b.d, 0, b.h, offU);
+  if (simple || b.h <= 45) return boxPart(b, b.w, b.d, 0, b.h, offU);
   const parts: THREE.BufferGeometry[] = [];
   const setbacks = rnd.int(1, 2);
   let y = 0;

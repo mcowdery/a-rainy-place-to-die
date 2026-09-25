@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isWide } from '../core/wide';
 import { FACADE, SIGN_LETTERS, SURFACE } from './block';
 
 /**
@@ -15,6 +16,10 @@ import { FACADE, SIGN_LETTERS, SURFACE } from './block';
  *      The storefront band (SHOP codes) draws sign letters, frames and glass in their own colours.
  * 3. Edges: where depth jumps between neighbouring cells, draw | - / \ oriented along the
  *    silhouette instead. Background (sky) cells are left blank. This is what makes shapes read.
+ * 4. Text layer: signs are laid out on the CPU straight into a per-cell texture (glyph, colour, depth,
+ *    brightness) at one cell per character, CJK as two cells, and depth-tested against the scene here, so
+ *    signage stays legible at any distance and is hidden behind nearer buildings.
+ * 5. Rain: falling streaks in blank cells when the atmosphere asks for it.
  */
 const RAMP = ' .,:;-=+*xo#%&@';
 const EDGES = '|-/\\';
@@ -23,8 +28,8 @@ const PANE_RAMP = '.:+*xXZ08&';
 const SLAB_RAMP = ':00';
 /** Mullions are blank gap columns: the facade's structure comes from wide filled panes between them. */
 const MULLION_RAMP = ' ';
-/** Storefront band: frame, glass, then sign letters (see FACADE.shop). */
-const SHOP_GLYPHS = '8#' + SIGN_LETTERS;
+/** Storefront band: frame, glass, alternate glass row, then sign letters (see FACADE.shop). */
+const SHOP_GLYPHS = '8#:' + SIGN_LETTERS;
 const GLYPHS = RAMP + EDGES + PANE_RAMP + SLAB_RAMP + MULLION_RAMP + SHOP_GLYPHS;
 
 const vertexShader = /* glsl */ `
@@ -54,6 +59,10 @@ const fragmentShader = /* glsl */ `
   uniform vec2 uMullion;
   uniform float uShopStart;
   uniform float uGlyphRoofLine;
+  uniform sampler2D tText;
+  uniform float uRain;
+  uniform float uTime;
+  uniform float uRainGlyph;
   float rawDepth(vec2 cell) { return texture2D(tDepth, (cell + 0.5) / uCells).x; }
   float viewDepth(vec2 cell) { return -perspectiveDepthToViewZ(rawDepth(cell), uNear, uFar); }
   float glyphFor(float l) { return floor(clamp(pow(l, 0.45) * 1.15, 0.0, 0.999) * uRampCount); }
@@ -75,7 +84,7 @@ const fragmentShader = /* glsl */ `
       // Storefront band: fixed glyph per code, colour straight from the material.
       src = t.rgb;
       idx = uShopStart + code - ${F.shop}.0;
-      level = code >= ${F.shop + 2}.0 ? 1.0 : code == ${F.shop}.0 ? 0.75 : 0.45;
+      level = code >= ${F.shop + 3}.0 ? 1.0 : code == ${F.shop}.0 ? 0.75 : 0.45;
     } else if (code >= ${F.base}.0 && building) {
       src = t.rgb;
       float k = code - ${F.base}.0;
@@ -121,12 +130,36 @@ const fragmentShader = /* glsl */ `
         level = building ? 0.8 : max(level, 0.5);
       }
     }
+    // Text layer (signs): glyph+1, packed sRGB colour, view depth, brightness. Drawn unless the scene is
+    // clearly nearer (the sign hangs just off its facade, so allow a little slack).
+    vec4 tx = texture2D(tText, (cell + 0.5) / uCells);
+    bool text = false;
+    if (tx.r > 0.5) {
+      float sceneDepth = sky > 0.5 ? 1e9 : viewDepth(cell);
+      if (tx.b <= sceneDepth * 1.03 + 1.5) {
+        text = true;
+        idx = tx.r - 1.0;
+        vec3 srgb = vec3(floor(tx.g / 65536.0), mod(floor(tx.g / 256.0), 256.0), mod(tx.g, 256.0)) / 255.0;
+        src = pow(srgb, vec3(2.2));
+        level = tx.a;
+      }
+    }
+    // Rain: streaks falling through blank cells.
+    if (!text && idx == 0.0 && uRain > 0.0) {
+      float colSeed = fract(sin(cell.x * 12.9898) * 43758.5453);
+      float drop = floor(cell.y * 0.5 + uTime * 9.0 + colSeed * 97.0);
+      if (fract(sin(dot(vec2(cell.x, drop), vec2(12.9898, 78.233))) * 43758.5453) < uRain) {
+        idx = uRainGlyph;
+        src = vec3(0.3, 0.42, 0.6);
+        level = 0.6;
+      }
+    }
     float mask = texture2D(tGlyphs, vec2((idx + local.x) / uGlyphCount, local.y)).r;
     float peak = max(src.r, max(src.g, src.b));
-    vec3 hue = src / max(peak, 0.02);
+    vec3 hue = text ? src : src / max(peak, 0.02);
     // Buildings: boost saturation (linear -> sRGB encoding lifts the weak channels and washes hues out),
     // so each building reads as one strong colour band like the reference.
-    if (building) hue = pow(hue, vec3(1.8));
+    if (building && !text) hue = pow(hue, vec3(1.8));
     hue *= level;
     vec3 ink = mix(vec3(0.55, 0.95, 0.75) * level, hue, uColor);
     gl_FragColor = vec4(mix(uBg, ink, mask), 1.0);
@@ -134,12 +167,33 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
-function glyphAtlas(cellW: number, cellH: number): THREE.Texture {
+/** Extra glyphs for sign text, appended after GLYPHS. Wide (CJK) characters take two slots: left, right half. */
+interface ExtraGlyphs {
+  readonly slots: ReadonlyMap<string, number>;
+  readonly list: readonly { ch: string; slot: number; wide: boolean }[];
+  readonly count: number;
+}
+
+function layoutExtra(text: string): ExtraGlyphs {
+  const slots = new Map<string, number>();
+  const list: { ch: string; slot: number; wide: boolean }[] = [];
+  let next = GLYPHS.length;
+  for (const ch of new Set(text)) {
+    if (ch === ' ') continue;
+    const wide = isWide(ch.codePointAt(0)!);
+    slots.set(ch, next);
+    list.push({ ch, slot: next, wide });
+    next += wide ? 2 : 1;
+  }
+  return { slots, list, count: next };
+}
+
+function glyphAtlas(cellW: number, cellH: number, extra: ExtraGlyphs): THREE.Texture {
   const scale = 3;
   const w = cellW * scale;
   const h = cellH * scale;
   const c = document.createElement('canvas');
-  c.width = w * GLYPHS.length;
+  c.width = w * extra.count;
   c.height = h;
   const g = c.getContext('2d')!;
   g.fillStyle = '#000';
@@ -150,6 +204,9 @@ function glyphAtlas(cellW: number, cellH: number): THREE.Texture {
   g.textBaseline = 'middle';
   // '*' sits in the top of the cell in most monospace fonts and reads as '"'; centre it.
   [...GLYPHS].forEach((ch, i) => g.fillText(ch, i * w + w / 2, h / 2 + scale + (ch === '*' ? h * 0.2 : 0)));
+  // Sign glyphs; CJK drawn across two slots so each half lands in its own cell.
+  g.font = `bold ${Math.round(h * 0.82)}px Consolas, 'Cascadia Mono', 'Yu Gothic', 'Meiryo', 'MS Gothic', sans-serif`;
+  for (const { ch, slot, wide } of extra.list) g.fillText(ch, slot * w + (wide ? w : w / 2), h / 2 + scale);
   const t = new THREE.CanvasTexture(c);
   t.minFilter = THREE.LinearFilter;
   t.generateMipmaps = false;
@@ -164,6 +221,9 @@ export class AsciiShaderPass {
   private material: THREE.ShaderMaterial;
   private quad: THREE.Scene;
   private cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  private readonly extra: ExtraGlyphs;
+  private text = new Float32Array(4);
+  private textTex: THREE.DataTexture;
   cols = 0;
   rows = 0;
 
@@ -172,7 +232,11 @@ export class AsciiShaderPass {
     private cellW: number,
     private cellH: number,
     bg: THREE.Color,
+    /** Every character signs may use (CJK included); gets atlas slots. */
+    extraText = '',
   ) {
+    this.extra = layoutExtra(extraText);
+    this.textTex = new THREE.DataTexture(this.text, 1, 1, THREE.RGBAFormat, THREE.FloatType);
     this.target = new THREE.WebGLRenderTarget(1, 1, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     this.target.depthTexture = new THREE.DepthTexture(1, 1);
     this.material = new THREE.ShaderMaterial({
@@ -180,7 +244,7 @@ export class AsciiShaderPass {
       fragmentShader,
       uniforms: {
         tScene: { value: this.target.texture },
-        tGlyphs: { value: glyphAtlas(cellW, cellH) },
+        tGlyphs: { value: glyphAtlas(cellW, cellH, this.extra) },
         uCellPx: { value: new THREE.Vector2() },
         uCells: { value: new THREE.Vector2() },
         tDepth: { value: this.target.depthTexture },
@@ -188,7 +252,11 @@ export class AsciiShaderPass {
         uFar: { value: 2000 },
         uEdges: { value: 1 },
         uRampCount: { value: RAMP.length },
-        uGlyphCount: { value: GLYPHS.length },
+        uGlyphCount: { value: this.extra.count },
+        tText: { value: this.textTex },
+        uRain: { value: 0 },
+        uTime: { value: 0 },
+        uRainGlyph: { value: GLYPHS.indexOf('\\') },
         uPane: { value: range(PANE_RAMP) },
         uSlab: { value: range(SLAB_RAMP) },
         uMullion: { value: range(MULLION_RAMP) },
@@ -217,7 +285,7 @@ export class AsciiShaderPass {
     this.cellW = cellW;
     this.cellH = cellH;
     this.material.uniforms.tGlyphs.value.dispose();
-    this.material.uniforms.tGlyphs.value = glyphAtlas(cellW, cellH);
+    this.material.uniforms.tGlyphs.value = glyphAtlas(cellW, cellH, this.extra);
     this.resize();
   }
 
@@ -231,6 +299,43 @@ export class AsciiShaderPass {
     this.target.setSize(this.cols * 2, this.rows * 2);
     this.material.uniforms.uCellPx.value.set(cw, ch);
     this.material.uniforms.uCells.value.set(this.cols, this.rows);
+    this.text = new Float32Array(this.cols * this.rows * 4);
+    this.textTex.dispose();
+    this.textTex = new THREE.DataTexture(this.text, this.cols, this.rows, THREE.RGBAFormat, THREE.FloatType);
+    this.textTex.needsUpdate = true;
+    this.material.uniforms.tText.value = this.textTex;
+  }
+
+  /** Atlas slot of a sign character (left half for wide ones), or undefined if it wasn't registered. */
+  textSlot(ch: string): number | undefined {
+    return this.extra.slots.get(ch);
+  }
+
+  clearText(): void {
+    this.text.fill(0);
+  }
+
+  /** Writes one text cell. col/row count from the bottom-left; rgb is 0xRRGGBB (sRGB); depth in metres. */
+  putText(col: number, row: number, slot: number, rgb: number, depth: number, level: number): void {
+    if (col < 0 || row < 0 || col >= this.cols || row >= this.rows) return;
+    const i = (row * this.cols + col) * 4;
+    this.text[i] = slot + 1;
+    this.text[i + 1] = rgb;
+    this.text[i + 2] = depth;
+    this.text[i + 3] = level;
+  }
+
+  commitText(): void {
+    this.textTex.needsUpdate = true;
+  }
+
+  setBackground(color: number): void {
+    (this.material.uniforms.uBg.value as THREE.Color).setHex(color);
+  }
+
+  setRain(density: number, timeSeconds: number): void {
+    this.material.uniforms.uRain.value = density;
+    this.material.uniforms.uTime.value = timeSeconds;
   }
 
   render(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void {

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { AsciiEffect } from 'three/examples/jsm/effects/AsciiEffect.js';
 import { AsciiShaderPass } from './asciiPass';
 import { buildGrid, buildingMaterial, buildTestBlock } from './block';
-import { FirstPerson } from './controls';
+import { FirstPerson, boxBlocker } from './controls';
 
 /**
  * 3D rendering proof of concept. Three render modes to compare:
@@ -43,7 +43,7 @@ const facade = { uWindowLit: { value: 0.35 } };
 const material = buildingMaterial(facade);
 const colliders = buildTestBlock(scene, material, params.get('scene') === 'downtown');
 const extra = gridCount > 0 ? buildGrid(scene, material, gridCount, merged) : 0;
-const controls = new FirstPerson(camera, document.body, colliders);
+const controls = new FirstPerson(camera, document.body, boxBlocker(colliders, 150));
 // Review shortcut: ?cam=x,y,z,yawDeg,pitchDeg sets the starting view (e.g. for comparable screenshots).
 const cam = params.get('cam')?.split(',').map(Number);
 if (cam && cam.length === 5 && cam.every(Number.isFinite)) {

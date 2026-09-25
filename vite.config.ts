@@ -3,8 +3,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   build: {
     rollupOptions: {
-      // index.html: the 2D tile prototype (set aside). poc3d.html: the first-person 3D rendering PoC.
-      input: { main: 'index.html', poc3d: 'poc3d.html' },
+      // index.html: 2D tile prototype (set aside). poc3d.html: 3D rendering test block. district.html: Kaburo district.
+      input: { main: 'index.html', poc3d: 'poc3d.html', district: 'district.html' },
     },
   },
   test: {

@@ -1,0 +1,6 @@
+# 3D stamp placements. cell = L0 macro cell [col, row]; offset = metres from the cell's NW corner to the
+# stamp footprint's NW corner. Node ids become "<id>.<node>" (e.g. bar_kanpai.door). Never reuse an id.
+- id: bar_kanpai
+  stamp: bar_kanpai
+  cell: [29, 12]
+  offset: [52, 48]

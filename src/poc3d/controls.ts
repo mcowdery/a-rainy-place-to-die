@@ -6,8 +6,17 @@ const EYE = 1.7;
 const RADIUS = 0.4;
 const WALK = 4.5; // m/s: brisk game-walk, not realistic 1.4 m/s
 const RUN = 9;
-const BOUNDS = 150;
+const FLY = 36;
 const MAX_SHEAR = 1.6;
+
+/** Collision query: is a circle of this radius at (x, z) blocked? */
+export type Blocker = (x: number, z: number, radius: number) => boolean;
+
+/** A Blocker over a fixed list of footprints inside a square bound. */
+export function boxBlocker(boxes: readonly Box[], bounds: number): Blocker {
+  return (x, z, r) =>
+    Math.abs(x) > bounds || Math.abs(z) > bounds || boxes.some((b) => x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r);
+}
 
 /**
  * First-person WASD + mouse-look, with circle-vs-AABB collision resolved per axis (so you slide along walls).
@@ -25,11 +34,13 @@ export class FirstPerson {
   /** Vertical image shift in NDC; positive looks up. */
   private shear = 0;
   private shearOn = true;
+  /** Debug: fast and ignores collision. */
+  fly = false;
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
     dom: HTMLElement,
-    private readonly colliders: readonly Box[],
+    private readonly blocked: Blocker,
   ) {
     this.look = new PointerLockControls(camera, dom);
     camera.position.set(0, EYE, 38);
@@ -83,11 +94,11 @@ export class FirstPerson {
     fwd.normalize();
     const right = new THREE.Vector3().crossVectors(fwd, this.camera.up).normalize();
     const move = fwd.multiplyScalar(f).add(right.multiplyScalar(r)).normalize();
-    const speed = k.has('ShiftLeft') || k.has('ShiftRight') ? RUN : WALK;
+    const speed = this.fly ? FLY : k.has('ShiftLeft') || k.has('ShiftRight') ? RUN : WALK;
     const dx = move.x * speed * dt;
     const dz = move.z * speed * dt;
-    if (!this.blocked(pos.x + dx, pos.z)) pos.x += dx;
-    if (!this.blocked(pos.x, pos.z + dz)) pos.z += dz;
+    if (this.fly || !this.blocked(pos.x + dx, pos.z, RADIUS)) pos.x += dx;
+    if (this.fly || !this.blocked(pos.x, pos.z + dz, RADIUS)) pos.z += dz;
     this.bob += dt * speed * 1.8;
     pos.y = EYE + Math.sin(this.bob) * 0.04;
   }
@@ -105,8 +116,4 @@ export class FirstPerson {
     return Math.tan(((this.camera.fov / 2) * Math.PI) / 180);
   }
 
-  private blocked(x: number, z: number): boolean {
-    if (Math.abs(x) > BOUNDS || Math.abs(z) > BOUNDS) return true;
-    return this.colliders.some((b) => x > b.minX - RADIUS && x < b.maxX + RADIUS && z > b.minZ - RADIUS && z < b.maxZ + RADIUS);
-  }
 }

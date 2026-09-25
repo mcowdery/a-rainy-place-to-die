@@ -1,12 +1,15 @@
 import type { WorldNode } from '../content/nodes';
 
+/** What the VN side sees of a node. 2D WorldNodes and 3D district nodes both satisfy it. */
+export type HandoffNode = Pick<WorldNode, 'id' | 'kind' | 'name' | 'placementId' | 'returnSpawn' | 'handoff'>;
+
 /**
  * The seam where VN mode plugs in. The world calls enter() with the triggered node and waits.
  * It never interprets node.handoff and holds no VN logic; the real VN integration (exit/entry keys,
  * shared flags) replaces PlaceholderVnBridge without touching the world.
  */
 export interface VnBridge {
-  enter(node: WorldNode): Promise<VnReturn>;
+  enter(node: HandoffNode): Promise<VnReturn>;
 }
 
 export interface VnReturn {
@@ -18,7 +21,7 @@ export interface VnReturn {
 export class PlaceholderVnBridge implements VnBridge {
   constructor(private readonly panel: HTMLElement) {}
 
-  enter(node: WorldNode): Promise<VnReturn> {
+  enter(node: HandoffNode): Promise<VnReturn> {
     this.panel.innerHTML = '';
     const h = document.createElement('h2');
     h.textContent = `VN mode — ${node.name ?? node.id}`;

@@ -1,0 +1,34 @@
+# Bar Kanpai: a small three-storey snack bar in Kaburo (Neon Core). The door hands off to VN mode.
+# Coordinates: at: [u along the front face from its left end seen from the street, metres out from it]
+# (signs: [u, height]).
+id: bar_kanpai
+footprint: [12, 10]
+height: 9
+hue: '#ff5fc8'
+front: south
+signs:
+  - { text: かんぱい, vertical: true, at: [1.2, 8.4], color: '#ff5fc8' }
+  - { text: BAR KANPAI, at: [6, 6.4], color: '#ffe45f' }
+  - { text: スナック, vertical: true, at: [10.8, 8.4], color: '#4fe3ff' }
+nodes:
+  door:
+    kind: door
+    name: Bar Kanpai
+    at: [6, 0]
+    returnSpawn: out
+    handoff: {}
+  out:
+    kind: spawn
+    at: [6, 3.5]
+    facing: south
+  mama:
+    kind: npc
+    name: Mama-san
+    at: [3.2, 1.6]
+    handoff: {}
+  detective:
+    kind: npc
+    name: Man in a trench coat
+    at: [10.5, 2.2]
+    condition: world.time == "night"
+    handoff: {}

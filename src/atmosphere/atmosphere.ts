@@ -1,6 +1,9 @@
 import YAML from 'yaml';
 import { CELL_CHARS, type CellKind } from '../gen/macro';
 import { EMISSIVE, PALETTE_NAMES, isPaletteName, type PaletteName } from '../world/tiles';
+import { applicableRules, checkMatch, type TimeOfDay, type Weather } from './rules';
+
+export { FLAG_TIME, FLAG_WEATHER, TIMES, WEATHERS, type TimeOfDay, type Weather } from './rules';
 
 /**
  * (district, time of day, weather) -> how the world looks. A pure lookup: nothing runs a clock or a
@@ -8,17 +11,11 @@ import { EMISSIVE, PALETTE_NAMES, isPaletteName, type PaletteName } from '../wor
  *
  * Rules are layered by specificity: a rule matching nothing specific (the base) must define the full
  * palette; more specific rules override on top ({time: night} < {district: neon, time: night} < all three).
- * Ties go to file order. Tints stack and never affect EMISSIVE colours (lights stay bright).
+ * Ties go to file order (see rules.ts, shared with the 3D table). Tints stack and never affect EMISSIVE
+ * colours (lights stay bright).
  */
 
-export const TIMES = ['dawn', 'day', 'dusk', 'night'] as const;
-export const WEATHERS = ['clear', 'rain', 'fog'] as const;
-export type TimeOfDay = (typeof TIMES)[number];
-export type Weather = (typeof WEATHERS)[number];
 export type NeonMode = 'off' | 'on' | 'flicker';
-
-export const FLAG_TIME = 'world.time';
-export const FLAG_WEATHER = 'world.weather';
 
 interface Rule {
   match: { district?: CellKind; time?: TimeOfDay; weather?: Weather };
@@ -61,17 +58,14 @@ export class AtmosphereTable {
   }
 
   private compute(district: CellKind, time: TimeOfDay, weather: Weather): Atmosphere {
-    const matching = this.rules
-      .map((r, order) => ({ r, order, spec: Object.keys(r.match).length }))
-      .filter(({ r }) => (r.match.district ?? district) === district && (r.match.time ?? time) === time && (r.match.weather ?? weather) === weather)
-      .sort((a, b) => a.spec - b.spec || a.order - b.order);
+    const matching = applicableRules(this.rules, district, time, weather);
     const palette: Partial<Record<PaletteName, string>> = {};
     const tints: { color: string; amount: number }[] = [];
     let windowLit = 0;
     let neon: NeonMode = 'off';
     let rain = 0;
     let fog: string | null = null;
-    for (const { r } of matching) {
+    for (const r of matching) {
       Object.assign(palette, r.palette);
       if (r.tint) tints.push(r.tint);
       if (r.windowLit !== undefined) windowLit = r.windowLit;
@@ -109,10 +103,7 @@ export function parseAtmosphere(file: string, text: string, errors: string[]): A
   list.forEach((raw: Record<string, unknown>, i) => {
     const at = `rule ${i}`;
     const m = (raw.match ?? {}) as Record<string, string>;
-    for (const k of Object.keys(m)) if (!['district', 'time', 'weather'].includes(k)) err(`${at}: unknown match key '${k}'`);
-    if (m.district !== undefined && !DISTRICT_KINDS.has(m.district)) err(`${at}: unknown district '${m.district}'`);
-    if (m.time !== undefined && !TIMES.includes(m.time as TimeOfDay)) err(`${at}: unknown time '${m.time}'`);
-    if (m.weather !== undefined && !WEATHERS.includes(m.weather as Weather)) err(`${at}: unknown weather '${m.weather}'`);
+    checkMatch(m, DISTRICT_KINDS, (msg) => err(`${at}: ${msg}`));
     const palette = (raw.palette ?? {}) as Record<string, string>;
     for (const [k, v] of Object.entries(palette)) {
       if (!isPaletteName(k)) err(`${at}: unknown palette colour '${k}'`);

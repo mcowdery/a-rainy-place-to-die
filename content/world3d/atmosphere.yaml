@@ -1,0 +1,51 @@
+# (district, time, weather) -> 3D lighting and effects. Same layering as the 2D table: more specific
+# rules override less specific ones; ties go to file order. The base rule must set every key.
+# time: dawn | day | dusk | night    weather: clear | rain | fog
+rules:
+  - match: {}
+    set:
+      sky: '#2a3542'
+      fog: '#2a3542'
+      fogNear: 80
+      fogFar: 700
+      hemiSky: '#a8b8d0'
+      hemiGround: '#3a3530'
+      hemi: 1.1
+      sunColor: '#fff2dc'
+      sun: 2.4
+      windowLit: 0.06
+      neon: 'off'
+      rain: 0
+
+  - match: { time: dawn }
+    set: { sky: '#2e2a3c', fog: '#2e2a3c', sunColor: '#ffc8a8', sun: 1.2, hemi: 0.8, windowLit: 0.12 }
+
+  - match: { time: dusk }
+    set: { sky: '#2c1a22', fog: '#2c1a22', sunColor: '#ff9a6a', sun: 1.0, hemi: 0.7, windowLit: 0.3, neon: 'on' }
+
+  - match: { time: night }
+    set:
+      sky: '#040508'
+      fog: '#040508'
+      fogNear: 60
+      fogFar: 620
+      hemiSky: '#7080a8'
+      hemiGround: '#15151a'
+      hemi: 0.6
+      sunColor: '#a8b8ff'
+      sun: 1.8
+      windowLit: 0.4
+      neon: 'on'
+
+  - match: { weather: rain }
+    set: { rain: 0.05, fogFar: 380 }
+
+  - match: { weather: fog }
+    set: { fogNear: 10, fogFar: 200 }
+
+  # Kaburo never really sleeps.
+  - match: { district: neon, time: night }
+    set: { windowLit: 0.55, neon: flicker }
+
+  - match: { district: neon, time: day }
+    set: { windowLit: 0.12 }
