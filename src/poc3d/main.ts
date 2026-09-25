@@ -24,7 +24,9 @@ const hud = $('hud');
 const overlay = $('overlay');
 
 const BG = new THREE.Color(0x040508);
-const renderer = new THREE.WebGLRenderer({ antialias: false });
+// MSAA for the plain WebGL view: at grazing angles many buildings' faces are only a few pixels wide and
+// alias into streaks. (The ASCII pass renders to its own target, which stays unsampled on purpose.)
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.info.autoReset = false;
@@ -39,7 +41,7 @@ moon.position.set(120, 200, 60);
 scene.add(moon);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 2000);
-const facade = { uWindowLit: { value: 0.35 } };
+const facade = { uWindowLit: { value: 0.35 }, uPxPerCell: { value: new THREE.Vector2(2, 2) } };
 const material = buildingMaterial(facade);
 const colliders = buildTestBlock(scene, material, params.get('scene') === 'downtown');
 const extra = gridCount > 0 ? buildGrid(scene, material, gridCount, merged) : 0;
@@ -116,6 +118,10 @@ const px = new Uint8Array(4);
 
 function renderFrame(): void {
   renderer.info.reset();
+  // Facade pattern is sized in character cells: 2x2 texels per cell in the ASCII target, real cell size on screen.
+  const dpr = renderer.getPixelRatio();
+  if (mode === 'shader') facade.uPxPerCell.value.set(2, 2);
+  else facade.uPxPerCell.value.set(cellW * dpr, Math.round(cellW * 1.75) * dpr);
   if (mode === 'webgl') renderer.render(scene, camera);
   else if (mode === 'shader') shader.render(scene, camera);
   else ensureDom().render(scene, camera);

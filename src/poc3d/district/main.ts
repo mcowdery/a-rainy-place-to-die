@@ -30,7 +30,9 @@ function run(): void {
   const time = (): TimeOfDay => flags.get(FLAG_TIME) as TimeOfDay;
   const weather = (): Weather => flags.get(FLAG_WEATHER) as Weather;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: false });
+  // MSAA for the plain WebGL view: at grazing angles many buildings' faces are only a few pixels wide and
+  // alias into streaks. (The ASCII pass renders to its own target, which stays unsampled on purpose.)
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.info.autoReset = false;
@@ -45,14 +47,16 @@ function run(): void {
   scene.add(hemi, sun);
   const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1200);
 
-  const facade = { uWindowLit: { value: 0.4 } };
+  const facade = { uWindowLit: { value: 0.4 }, uPxPerCell: { value: new THREE.Vector2(2, 2) } };
+  const CELL_W = 8;
+  const CELL_H = 14;
   const style = STYLES3.neon!;
   const district = new District(content.macro, 'neon', content.placed, buildingMaterial(facade), new THREE.MeshLambertMaterial({ vertexColors: true }), SEED);
   scene.add(district.root);
 
   // Every character any sign can show gets an atlas slot (CJK as two).
   const signText = [...style.signWords, ...content.placed.flatMap((p) => p.stamp.signs.map((s) => s.text))].join('');
-  const ascii = new AsciiShaderPass(renderer, 8, 14, new THREE.Color(0x000000), signText);
+  const ascii = new AsciiShaderPass(renderer, CELL_W, CELL_H, new THREE.Color(0x000000), signText);
 
   // Stamp props: a lit door and simple figures for NPCs (visibility follows their conditions).
   const nodes = district.nodes;
@@ -240,8 +244,11 @@ function run(): void {
     if (mode === 'ascii') {
       signsDrawn = drawSigns(ascii, camera, district.signsNear(camera.position.x, camera.position.z, SIGN_RANGE), atm, now);
       ascii.setRain(atm.rain, now / 1000);
+      facade.uPxPerCell.value.set(2, 2); // the ASCII pass's scene target: 2x2 texels per cell
       ascii.render(scene, camera);
     } else {
+      const dpr = renderer.getPixelRatio();
+      facade.uPxPerCell.value.set(CELL_W * dpr, CELL_H * dpr); // full-resolution screen
       renderer.render(scene, camera);
     }
     if (bench) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);

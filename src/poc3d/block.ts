@@ -58,6 +58,12 @@ export const FACADE = { roof: 2, base: 32, levels: 12, variants: 3, shop: 212, o
 export interface FacadeUniforms {
   /** Fraction of windows lit: stand-in for the atmosphere table's per-(district, time) value. */
   uWindowLit: { value: number };
+  /**
+   * Pixels of the current render target per character cell. The facade pattern is sized in cells, so this
+   * must match what's being rendered: (2, 2) for the ASCII pass's scene target, (cellW, cellH) * dpr when
+   * drawing straight to the screen. Wrong values make the pattern far too fine and it aliases.
+   */
+  uPxPerCell: { value: THREE.Vector2 };
 }
 
 /**
@@ -78,11 +84,12 @@ export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMat
   const m = new THREE.MeshLambertMaterial({ vertexColors: true });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uWindowLit = uniforms.uWindowLit;
+    shader.uniforms.uPxPerCell = uniforms.uPxPerCell;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute float aBuilding;
         attribute vec3 aFacade;
-        varying float vBid;
+        flat varying float vBid;
         varying vec3 vFacade;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vBid = aBuilding;
@@ -90,12 +97,20 @@ export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMat
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uWindowLit;
-        varying float vBid;
+        uniform vec2 uPxPerCell;
+        flat varying float vBid;
         varying vec3 vFacade;
-        float h1(float a) { return fract(sin(a * 91.345) * 47453.5453); }
-        float h3(vec3 v) { return fract(sin(dot(v, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }`)
+        // Sin-free hashes (Dave Hoskins' hash11/hash13): stable for large inputs like district building ids.
+        // (fract(sin(x * k)) with x in the 100,000s amplified float error into per-pixel noise.)
+        float h1(float p) { p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
+        float h3(vec3 p3) { p3 = fract(p3 * 0.1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y) * p3.z); }`)
       .replace('#include <opaque_fragment>', `
         float facadeCode = ${F.other}.0;
+        // Screen-space derivatives must be taken in uniform control flow: inside the branches below they're
+        // undefined (on D3D11/ANGLE they came back near zero for some pixel quads, so the LOD thought every
+        // bay was huge and fine patterns shimmered at grazing angles).
+        // Character cells per metre along the face, from the derivative and the target's pixels per cell.
+        vec2 cellsPerM = 1.0 / (uPxPerCell * max(fwidth(vFacade.xy), vec2(1e-5)));
         if (vBid > 0.5) {
           // Per-building style.
           float bay = mix(2.4, 4.6, h1(vBid));                       // metres per window column
@@ -116,11 +131,9 @@ export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMat
             facadeCode = ${F.roof}.0;
           } else {
             vec2 m = vFacade.xy;
-            // Character cells per metre along this face (the scene target has 2 texels per cell).
-            vec2 cellsPerM = 1.0 / (2.0 * max(fwidth(m), vec2(1e-5)));
             if (m.y < ${SHOP_H.toFixed(1)}) {
               // Storefront band: one row of sign letters on top, a frame row, then glass between frames.
-              float shopW = ${SHOP_W.toFixed(1)} * max(1.0, ceil(3.0 / (${SHOP_W.toFixed(1)} * cellsPerM.x)));
+              float shopW = ${SHOP_W.toFixed(1)} * exp2(max(0.0, ceil(log2(3.0 / (${SHOP_W.toFixed(1)} * cellsPerM.x)))));
               float shop = floor(m.x / shopW);
               float cx = fract(m.x / shopW) * shopW * cellsPerM.x;   // cell column within this shop
               float fromTop = (${SHOP_H.toFixed(1)} - m.y) * cellsPerM.y; // cell rows below the band's top
@@ -132,8 +145,9 @@ export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMat
                 facadeCode = ${F.shop + 3}.0 + letter;
                 outgoingLight = signCol;
               } else if (fromTop < 2.0 || cx < 1.0 || cx >= shopW * cellsPerM.x - 1.0
-                         || fract(m.x / 1.5) * 1.5 * cellsPerM.x < 1.0) {
-                // Frames: the row under the sign, both shop edges, and a column every 1.5 m splitting the glass.
+                         || (1.5 * cellsPerM.x >= 3.0 && fract(m.x / 1.5) * 1.5 * cellsPerM.x < 1.0)) {
+                // Frames: the row under the sign, both shop edges, and (when panes are >= 3 cells wide, so it
+                // can't alias) a column every 1.5 m splitting the glass.
                 facadeCode = ${F.shop}.0;
                 outgoingLight = hs < 0.5 ? vec3(0.85, 0.25, 0.15) : vec3(0.9, 0.5, 0.15);
               } else {
@@ -141,11 +155,16 @@ export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMat
                 facadeCode = mod(floor(fromTop), 2.0) == 1.0 ? ${F.shop + 2}.0 : ${F.shop + 1}.0;
                 outgoingLight = h3(vec3(vBid, shop, 3.0)) < 0.6 ? vec3(0.15, 0.35, 0.9) : vec3(0.1, 0.6, 0.7);
               }
+              // Same prefilter for the shop band: fade to an average shopfront colour when shops are tiny on screen.
+              float shopDetail = smoothstep(0.6, 2.0, ${SHOP_W.toFixed(1)} * cellsPerM.x);
+              outgoingLight = mix(vec3(0.35, 0.3, 0.55), outgoingLight, shopDetail);
             } else {
               vec2 base = vec2(bay, ${FLOOR.toFixed(1)});
-              // LOD: merge whole bays/floors until each is >= MIN_PITCH cells; whole multiples keep the grid
-              // anchored to the building so it doesn't crawl as you walk.
-              vec2 unit = base * max(vec2(1.0), ceil(${MIN_PITCH.toFixed(1)} / (base * cellsPerM)));
+              // LOD, like mipmapping: merge bays/floors x2, x4, x8... until each is >= MIN_PITCH cells. Power-of-two
+              // levels nest (a coarser grid is a subset of the finer one), so where the level changes along a
+              // wall seen at a grazing angle, every other column drops out instead of the grid shifting; that
+              // shift left seam lines and shimmer. Anchored to the building so it doesn't crawl as you walk.
+              vec2 unit = base * exp2(max(vec2(0.0), ceil(log2(${MIN_PITCH.toFixed(1)} / (base * cellsPerM)))));
               vec2 cellsPerUnit = unit * cellsPerM;
               vec2 idx = floor(m / unit);
               vec2 pos = fract(m / unit) * cellsPerUnit; // position inside this bay/floor, in cells
@@ -172,7 +191,12 @@ export function buildingMaterial(uniforms: FacadeUniforms): THREE.MeshLambertMat
               // Colour = the building's pure hue scaled by intensity (never the lit colour, whose moon/lamp
               // tints would desaturate it): one strong colour band per building. Also drives the WebGL view.
               float surfBright = surf == ${S.pane}.0 ? 0.8 : surf == ${S.mullion}.0 ? 0.3 : 0.55;
-              outgoingLight = surf == ${S.paneLit}.0 ? vColor.rgb * 1.4 : vColor.rgb * surfBright * (0.35 + 0.65 * intensity);
+              vec3 patterned = surf == ${S.paneLit}.0 ? vColor.rgb * 1.4 : vColor.rgb * surfBright * (0.35 + 0.65 * intensity);
+              // Prefilter (what mipmapping does for textures): once a bay is under ~1 cell on screen, fade the
+              // colour pattern to its average, or each building's few-pixel-wide frontage shows as stripes at
+              // grazing angles. Colour only: the surface code for the ASCII pass is unaffected.
+              float detail = smoothstep(0.3, 1.2, min(bay * cellsPerM.x, ${FLOOR.toFixed(1)} * cellsPerM.y));
+              outgoingLight = mix(vColor.rgb * 0.7 * (0.35 + 0.65 * intensity), patterned, detail);
             }
           }
         }
