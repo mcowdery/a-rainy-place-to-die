@@ -1,0 +1,53 @@
+{
+  "batch": "kaburo-posters-01",
+  "purpose": "Kaburo (Neon Core) street-level posters and lightboxes: storefront walls, alley doors, vending-machine sides and the free information centre. Adult ads are suggestive, not explicit.",
+  "use": "poster",
+  "district": "neon",
+  "defaults": { "lora": null, "variants": 2 },
+  "items": [
+    {
+      "id": "annaijo_girls",
+      "brand": "無料案内所 FREE INFORMATION",
+      "copy": "かわいい子、ご案内します",
+      "subject": "grid-style glamour portrait of a smiling adult woman in a cocktail dress, flash photography, bright yellow and pink backdrop, gaudy nightlife information centre lightbox poster, tasteful",
+      "notes": "The district's 無料案内所 lightbox. Glamour, not explicit. No likeness LoRA."
+    },
+    {
+      "id": "hikari_loan",
+      "brand": "ヒカリ ローン",
+      "copy": "即日融資 審査かんたん!",
+      "subject": "overly cheerful middle-aged salaryman giving a thumbs up in front of a stack of yen banknotes, harsh flat lighting, cheap consumer loan poster, slightly unsettling",
+      "notes": "Shady consumer-finance / loan-shark poster."
+    },
+    {
+      "id": "tsukuyomi_fortune",
+      "brand": "占いの館 月詠",
+      "copy": "あなたの運命、視えます。",
+      "subject": "mysterious woman in a dark hooded shawl gazing into a glowing crystal ball, candles, purple smoke, fortune teller poster",
+      "lora": "ohwx julie",
+      "notes": "Fortune teller upstairs; a possible story hook."
+    },
+    {
+      "id": "karaoke_dream",
+      "brand": "カラオケ DREAM",
+      "copy": "全室 朝まで ¥1,500",
+      "subject": "friends laughing and singing into microphones in a colourful karaoke room, disco lights, candid fun, karaoke chain poster",
+      "lora": "ohwx julie",
+      "notes": "Karaoke box chain; Julie as one of the group."
+    },
+    {
+      "id": "yonaki_ramen",
+      "brand": "ラーメン 夜鳴き",
+      "copy": "深夜3時まで",
+      "subject": "steaming bowl of tonkotsu ramen with chashu and a soft-boiled egg on a worn wooden counter, late-night warm light, food photography",
+      "notes": "Late-night ramen shop."
+    },
+    {
+      "id": "kirishima_poster",
+      "brand": "霧島探偵事務所",
+      "copy": "人探し・浮気調査・秘密厳守",
+      "subject": "man in a trench coat and fedora standing in a rainy neon alley, face in shadow, noir detective agency poster",
+      "notes": "Street version of taxi ad B (detective hook)."
+    }
+  ]
+}
