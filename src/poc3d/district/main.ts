@@ -332,7 +332,10 @@ async function run(): Promise<void> {
     base.fogFar = atm.fogFar * vis;
     fog.color.setHex(atm.fog).multiplyScalar(1 - 0.8 * d);
     base.hemi = atm.hemi * keep;
-    sun.intensity = atm.sun * keep;
+    // At night the moon has no shadows (they only switch on for a strong sun), so it lights every wall facing it
+    // evenly; the atmosphere keeps it faint. The slider overrides it: 1.0 is the old, brighter moon (0.22).
+    const night = atm.lamps > 0.5;
+    sun.intensity = (night && mood.moon !== null ? mood.moon * 0.22 : atm.sun) * keep;
     base.zenith.setHex(atm.sky).multiplyScalar(1 - 0.85 * d);
     base.horizon.setHex(atm.horizon).multiplyScalar(1 - 0.85 * d);
     base.cloudLit.setHex(atm.cloudLit).multiplyScalar(1 - 0.7 * d);
