@@ -208,6 +208,9 @@ const surface = /* glsl */ `
     float row = floor(v / 0.1);
     float grout = max(step(fract(v / 0.1), 0.12), step(fract(u / 0.3 + 0.5 * mod(row, 2.0)), 0.035));
     wallCol *= 1.0 - 0.12 * grout * tileFade;
+    // Wet walls go darker, the splash zone at the foot most.
+    float wW = uWet * (0.55 + 0.45 * smoothstep(0.7, 0.0, v));
+    wallCol *= 1.0 - 0.32 * wW;
     albedo = wallCol;
 
     vec3 T = vec3(Nw.z, 0.0, -Nw.x);
@@ -393,6 +396,17 @@ const surface = /* glsl */ `
           detailAlbedo = vec3(0.015);
           detailRough = 0.05;
           detailEmit = (interior * (1.0 - F) + refl * F) * tint;
+          // Drops on wet glass, up close: beads catching the sky and the room, a few sliding down.
+          if (uWet > 0.0) {
+            vec2 dq = vec2(xb, yf) * 8.0;
+            vec2 dc = floor(dq);
+            float dr = h2(dc + vBid);
+            float slide = step(0.85, dr) * fract(uTime * 0.05 + dr * 9.0);
+            vec2 dp = fract(dq) - vec2(0.25 + 0.5 * h2(dc * 1.7), 0.75 - 0.5 * h2(dc * 2.3) - slide * 0.6);
+            float drop = smoothstep(0.12, 0.05, length(dp * vec2(1.0, 0.8))) * step(0.4, dr);
+            float closeG = 1.0 - smoothstep(0.004, 0.02, max(fwUV.x, fwUV.y));
+            detailEmit += (refl * 0.7 + interior * 0.9 + vec3(0.02)) * drop * uWet * closeG;
+          }
         }
       } else if (inGrid) {
         // Floor-slab bands and window sills.
@@ -425,9 +439,23 @@ const surface = /* glsl */ `
       sRough = mix(0.6, detailRough, dd);
       sMetal = detailMetal * dd;
     }
+    if (uWet > 0.0) {
+      // A wet sheen (sky at grazing angles) and rivulets running down some lanes of the facade, catching
+      // the street light and the sky.
+      sEmit += refl * fresnel(cosV) * 0.3 * wW;
+      float lane = floor(u * 4.0);
+      float closeW = 1.0 - smoothstep(0.03, 0.12, max(fwUV.x, fwUV.y));
+      float line = step(0.7, h1(lane * 3.7 + vBid)) * smoothstep(0.06, 0.0, abs(fract(u * 4.0) - 0.5 - 0.3 * (h1(lane + vBid) - 0.5)));
+      float flow = smoothstep(0.55, 1.0, fract(v * 0.4 + uTime * (0.5 + h1(lane * 1.3)) + h1(lane)));
+      sEmit += (refl * 0.6 + lightAt(vWPos.xz + Nw.xz * 0.6) * 0.25) * line * (0.35 + 0.65 * flow) * uWet * closeW * 0.5;
+      sRough = mix(sRough, sRough * 0.45, uWet);
+    }
   } else if (kindF < 2.5) {
     albedo *= 0.75 + 0.4 * vnoise(vWPos.xz * 0.6) * (0.8 + 0.4 * vnoise(vWPos.xz * 4.0));
     sRough = 0.95;
+    // Wet roofs: darker, and glossy enough for the reflections (ssr.ts) to read.
+    albedo *= 1.0 - 0.35 * uWet;
+    sRough = mix(0.95, 0.25, uWet);
   } else if (kindF > 3.5 && kindF < 6.5) {
     // Car paint, glass and chrome: glossy, reflecting the sky (and the street light below).
     bool isGlass = kindF > 4.5 && kindF < 5.5;
@@ -438,6 +466,13 @@ const surface = /* glsl */ `
     sRough = isGlass ? 0.05 : isChrome ? 0.15 : 0.28;
     sMetal = isGlass ? 0.0 : isChrome ? 1.0 : 0.25;
     sEmit = refl * (isGlass ? vec3(mix(0.06, 1.0, F)) : isChrome ? vColor.rgb * mix(0.55, 1.0, F) : vec3(mix(0.02, 0.7, F)));
+    // Beads of rain on paint and glass, up close.
+    if (uWet > 0.0) {
+      vec2 bq = vWPos.xz * 16.0 + vWPos.y * 9.0;
+      float bead = step(0.82, h2(floor(bq))) * smoothstep(0.32, 0.1, length(fract(bq) - 0.5));
+      float closeC = 1.0 - smoothstep(0.02, 0.06, max(fwW.x, fwW.y));
+      sEmit += (refl * 1.4 + 0.02) * bead * uWet * closeC;
+    }
   } else if (kindF < 3.5) {
     float ch = vStyle.x;
     if (ch > 2.5) {
@@ -472,10 +507,12 @@ const surface = /* glsl */ `
       sRough = 0.9;
     }
     if (uWet > 0.0) {
-      float puddle = smoothstep(0.5, 0.75, vnoise(p * 0.22));
-      float wet = uWet * mix(0.5, 1.0, puddle);
-      albedo *= mix(1.0, 0.35, wet);
-      sRough = mix(sRough, 0.08, wet);
+      // Puddles form once the ground is wet through (the same noise as ssr.ts, which reflects in them).
+      float pn = vnoise(p * 0.22) + 0.12 * vnoise(p * 1.9);
+      float puddle = smoothstep(0.62, 0.68, pn) * smoothstep(0.35, 0.9, uWet);
+      float wet = uWet * mix(0.6, 1.0, puddle);
+      albedo *= mix(1.0, 0.4, wet) * mix(1.0, 0.25, puddle);
+      sRough = mix(mix(sRough, 0.14, wet), 0.02, puddle);
       // Reflections: the light pools further along the view direction, stretched toward the viewer
       // (strongest in puddles), plus the sky.
       vec2 away = normalize(p - cameraPosition.xz + vec2(1e-4));
@@ -493,7 +530,7 @@ const surface = /* glsl */ `
     vec3 cl = carLights(vWPos, Nw, groundKind);
     sEmit += albedo * cl;
     // A wet road throws the headlights back at you: a glare stretched toward the viewer.
-    if (groundKind && uWet > 0.0) sEmit += cl * 0.12 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * 4.0;
+    if (groundKind && uWet > 0.0) sEmit += cl * 0.05 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * 2.0 * uWet;
   }
   diffuseColor.rgb = albedo;
   totalEmissiveRadiance += sEmit;

@@ -25,6 +25,7 @@ import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { TrafficSystem } from '../real/traffic';
 import { GRADE_NAMES, GradePass } from '../real/grade';
 import { DofPass } from '../real/dof';
+import { SsrPass } from '../real/ssr';
 import { CityAudio } from '../real/audio';
 import { LampCones, LampShadows, Lightning, RainSystem } from '../real/weather';
 import { moodFromUrl, MoodPanel } from './moodPanel';
@@ -124,6 +125,9 @@ async function run(): Promise<void> {
   const bloomParam = Number(params.get('bloom'));
   const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), Number.isFinite(bloomParam) && params.has('bloom') ? bloomParam : 0.22, 0.45, 1.6);
   composer.addPass(new RenderPass(scene, camera));
+  // Reflections on wet ground and roofs, straight after the scene (it reads the scene's depth there).
+  const ssr = new SsrPass(camera);
+  composer.addPass(ssr);
   composer.addPass(overlay);
   // Depth of field after the overlay (it reads the scene's depth from the first target) and before bloom.
   const dof = new DofPass(() => overlay.depth, camera);
@@ -330,13 +334,13 @@ async function run(): Promise<void> {
     cityU.uLightGain.value = 1.4 * atm.lamps;
     cityU.uNeon.value = atm.neon === 'off' ? 0 : 1;
     cityU.uFlicker.value = atm.neon === 'flicker' ? 1 : 0;
-    cityU.uWet.value = atm.rain > 0 ? 1 : 0;
     renderer.toneMappingExposure = atm.exposure;
     applyMood();
   };
   // The mood settings layered on the atmosphere: rain strength, fog density, darkness, lamp shadows.
   const base = { zenith: new THREE.Color(), horizon: new THREE.Color(), cloudLit: new THREE.Color(), hemi: 0, fogNear: 60, fogFar: 620 };
   let rainAmount = 0;
+  let wetness = -1;
   const applyMood = (): void => {
     const fog = scene.fog as THREE.Fog;
     rainAmount = mood.rain ?? (atm.rain > 0 ? 0.45 : 0);
@@ -362,7 +366,9 @@ async function run(): Promise<void> {
     cityU.uHorizon.value.copy(base.horizon);
     cityU.uRoomAmbient.value.setHex(atm.hemiSky).multiplyScalar(atm.hemi * 0.12 * keep);
     cityU.uWindowLit.value = atm.windowLit * (1 - 0.85 * d);
-    cityU.uWet.value = rainAmount > 0 || atm.rain > 0 ? 1 : 0;
+    // Wet streets: straight to the target when set up (a scene starts wet), then eased per frame.
+    if (wetness < 0) wetness = mood.wetness ?? (rainAmount > 0 ? 1 : 0);
+    cityU.uWet.value = wetness;
     // With shadow-casting lamps, the lamps' share of the baked street light is handed to the real lights.
     lampShadows.setCount(mood.shadows);
     cityU.uLightGain.value = 1.4 * atm.lamps * (mood.shadows > 0 ? 0.6 : 1);
@@ -596,6 +602,13 @@ async function run(): Promise<void> {
     for (const update of landmarkUpdates) update(camera.position, dt);
     trains?.update(dt, camera);
     traffic.update(dt, camera.position);
+    // Streets wet through over ~20-60 s of rain (faster when heavy) and dry over a few minutes.
+    const wetTarget = mood.wetness ?? (rainAmount > 0 ? 1 : 0);
+    const wetRate = mood.wetness !== null ? 2 : wetTarget > wetness ? 0.015 + 0.05 * rainAmount : 0.006;
+    wetness += Math.max(-wetRate * dt, Math.min(wetRate * dt, wetTarget - wetness));
+    cityU.uWet.value = wetness;
+    ssr.wet = wetness;
+    ssr.rain = rainAmount;
     cityU.uCarCount.value = traffic.fillLights(camera.position, cityU.uCars.value);
     // Headlights come on with the street lamps (dusk, dawn, night, dark storms).
     cityU.uHeadlights.value = Math.max(atm.lamps, mood.darkness, rainAmount > 0.5 ? 0.6 : 0);
@@ -689,7 +702,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        trains?.status ?? `${(district.districtAt(p.x, p.z) ?? style.name).toUpperCase()} · ${district.zoneAt(p.x, p.z) ?? ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
+        trains?.status ?? `${(district.districtAt(p.x, p.z) ?? style.name).toUpperCase()} · ${district.zoneAt(p.x, p.z) ?? ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
