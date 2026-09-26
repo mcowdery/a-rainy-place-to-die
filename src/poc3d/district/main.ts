@@ -18,6 +18,7 @@ import { buildLoveHotel } from '../real/loveHotel';
 import { buildLiveHouse } from '../real/liveHouse';
 import { buildYokocho } from '../real/yokocho';
 import { buildRyujin } from '../real/ryujin';
+import { buildDiscount } from '../real/discount';
 import { destinations, TravelMap, type Destination } from './travel';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
@@ -151,6 +152,10 @@ async function run(): Promise<void> {
       landmarkUpdates.push(k.update);
     } else if (lm === 'shrine') {
       scene.add(buildShrine(placed.building, city));
+    } else if (lm === 'discount') {
+      const d = buildDiscount(placed.building, city, cityU);
+      scene.add(d.group);
+      landmarkUpdates.push(d.update);
     } else if (lm === 'ryujin') {
       scene.add(buildRyujin(placed.building, city, ghost));
     } else if (lm === 'yokocho') {

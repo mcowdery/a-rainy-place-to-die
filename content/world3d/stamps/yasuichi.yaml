@@ -1,0 +1,16 @@
+# 激安の殿堂 ヤスイチ YASUICHI: the discount megastore on the crossing's north-west corner. A landmark
+# built by real/discount.ts (22 m front, 20 m deep): signs everywhere, goods out on the pavement under an
+# arcade, a corner LED column, and two chain shops (牛丼 たつ屋, ミドリ薬局) along the east side.
+id: yasuichi
+name: 激安の殿堂 ヤスイチ
+footprint: [22, 20]
+height: 27
+front: south
+landmark: discount
+nodes:
+  front:
+    kind: spawn
+    name: Yasuichi discount store
+    at: [9, 15]
+    facing: north
+    view: [4, 20]

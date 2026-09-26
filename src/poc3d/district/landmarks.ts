@@ -5,6 +5,7 @@ import { shrineColliders, shrineLights } from '../real/shrine';
 import { loveHotelColliders, loveHotelLights } from '../real/loveHotel';
 import { yokochoColliders, yokochoLights } from '../real/yokocho';
 import { ryujinColliders, ryujinLights } from '../real/ryujin';
+import { discountColliders, discountLights } from '../real/discount';
 import { liveHouseColliders, liveHouseFloor, liveHouseHoles, liveHouseLights } from '../real/liveHouse';
 import type { Building3 } from './plan';
 import type { Placed3 } from './stamps';
@@ -32,6 +33,8 @@ export function landmarkColliders(p: Placed3, floor = 0): Rect[] | null {
       return yokochoColliders(p.building);
     case 'ryujin':
       return ryujinColliders(p.building);
+    case 'discount':
+      return discountColliders(p.building);
     default:
       return null;
   }
@@ -54,6 +57,8 @@ export function landmarkLights(p: Placed3): Light[] {
       return yokochoLights(p.building);
     case 'ryujin':
       return ryujinLights(p.building);
+    case 'discount':
+      return discountLights(p.building);
     default:
       return [];
   }
