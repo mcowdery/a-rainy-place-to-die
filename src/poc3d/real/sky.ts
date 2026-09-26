@@ -18,6 +18,9 @@ export class Sky {
     uTime: { value: 0 },
     /** Cloud cover 0-1, the lit underside colour, the colour of the cloud tops / unlit parts. */
     uCover: { value: 0.3 },
+    /** Lightning: the flash 0-1 and the direction toward the strike. */
+    uFlash: { value: 0 },
+    uFlashDir: { value: new THREE.Vector3(1, 0.3, 0).normalize() },
     uCloudLit: { value: new THREE.Color() },
     uCloudDark: { value: new THREE.Color() },
   };
@@ -45,6 +48,8 @@ export class Sky {
         uniform float uStars;
         uniform float uTime;
         uniform float uCover;
+        uniform float uFlash;
+        uniform vec3 uFlashDir;
         uniform vec3 uCloudLit;
         uniform vec3 uCloudDark;
         varying vec3 vDir;
@@ -78,9 +83,13 @@ export class Sky {
             // Underside lit where the cloud is thick (city glow from below at night), darker where thin.
             float under = smoothstep(0.3, 0.85, vn(q * 3.4 + 3.0) * 0.6 + vn(q * 7.1) * 0.4);
             vec3 cloud = mix(uCloudDark, uCloudLit, 0.35 + 0.65 * under);
+            // Lightning lights the clouds round the strike from inside, thick parts most.
+            cloud += vec3(0.8, 0.84, 1.0) * uFlash * (0.25 + 3.5 * pow(max(dot(d, uFlashDir), 0.0), 5.0)) * (0.3 + 0.7 * under);
             float fade = smoothstep(0.0, 0.18, d.y);
             col = mix(col, cloud, dens * fade * 0.92);
           }
+          // And the sky itself glows toward the strike.
+          col += vec3(0.55, 0.6, 0.85) * uFlash * (0.04 + 0.6 * pow(max(dot(d, uFlashDir), 0.0), 8.0)) * smoothstep(-0.05, 0.1, d.y);
           gl_FragColor = vec4(col, 1.0);
         }`,
     });

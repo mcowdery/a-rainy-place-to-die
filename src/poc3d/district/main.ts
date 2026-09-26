@@ -191,7 +191,12 @@ async function run(): Promise<void> {
   const lightning = new Lightning();
   // Sound: starts on the first click (browsers need a gesture); thunder follows each strike.
   const audio = new CityAudio();
-  lightning.onStrike = () => audio.thunder(600 + Math.random() * 5000, Math.random() * 1.6 - 0.8);
+  lightning.onStrike = (s) => {
+    // Pan: how far right of the view the strike is (yaw 0 looks toward -z; its right is +x).
+    const yaw = (lookYaw() * Math.PI) / 180;
+    audio.thunder(s.cloudOnly ? s.distance * 1.3 : s.distance, s.dirX * Math.cos(yaw) - s.dirZ * Math.sin(yaw));
+  };
+  scene.add(lightning.bolt, lightning.light, lightning.light.target);
   scene.add(rain.group, cones.mesh, lampShadows.group);
   const windVec = new THREE.Vector2();
   let skyTime = 0;
@@ -266,7 +271,10 @@ async function run(): Promise<void> {
     travel.hide();
     controls.look.lock();
   });
-  if (params.get('diag') === '1') Object.assign(window, { __renderer: renderer, __dof: dof, __audio: audio });
+  if (params.get('diag') === '1') Object.assign(window, { __renderer: renderer, __dof: dof, __audio: audio, __strike: () => {
+    const d = camera.getWorldDirection(new THREE.Vector3());
+    lightning.strikeNow(camera.position, { x: d.x, z: d.z });
+  } });
   // Review hook for screenshot scripts: point the view (yaw, pitch in degrees).
   (window as unknown as { __look: (y: number, p: number) => void }).__look = (y, p) => controls.setView(y, p);
   const spawnParam = params.get('spawn');
@@ -610,12 +618,15 @@ async function run(): Promise<void> {
     sky.uniforms.uTime.value = skyTime;
     grade.tick(tt, inside ? 0 : rainAmount * (1 + mood.wind));
     // Lightning in a storm (or on demand): the sky, the clouds and the ambient light flash.
-    const storm = mood.lightning === 'on' ? 1 : mood.lightning === 'auto' && rainAmount > 0.6 && mood.wind > 0.35 ? rainAmount * mood.wind : 0;
-    const flash = lightning.update(dt, storm);
-    hemi.intensity = base.hemi + flash * 2.4;
-    sky.uniforms.uZenith.value.copy(base.zenith).addScalar(flash * 0.35);
-    sky.uniforms.uHorizon.value.copy(base.horizon).addScalar(flash * 0.25);
-    sky.uniforms.uCloudLit.value.copy(base.cloudLit).addScalar(flash * 0.6);
+    // Strikes per minute: auto brings them with a real storm (heavy rain and wind).
+    const perMinute = mood.lightning === 'storm' ? 6 : mood.lightning === 'occasional' ? 1.2 : mood.lightning === 'auto' && rainAmount > 0.55 && mood.wind > 0.3 ? 1.5 + 6 * rainAmount * mood.wind : 0;
+    const flash = lightning.update(dt, perMinute, cp);
+    hemi.intensity = base.hemi + flash * 0.5;
+    sky.uniforms.uFlash.value = flash;
+    sky.uniforms.uFlashDir.value.copy(lightning.dir);
+    sky.uniforms.uZenith.value.copy(base.zenith);
+    sky.uniforms.uHorizon.value.copy(base.horizon);
+    sky.uniforms.uCloudLit.value.copy(base.cloudLit);
     fitFog();
     // Sound follows the same weather: what's overhead, the wind, the nearest cars.
     const cover = trains?.riding ? 'enclosed' : district.shelterAt(cp.x, cp.z, cp.y)?.enclosed ? 'enclosed' : inside ? 'roof' : 'open';

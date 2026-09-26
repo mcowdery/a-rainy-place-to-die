@@ -205,27 +205,158 @@ export class RainSystem {
   }
 }
 
-/** Lightning: occasional double flashes, more often the stronger the storm. update() returns 0-1. */
+/** A lightning strike: where it is (unit direction from the camera, flat) and how far. */
+export interface Strike {
+  readonly dirX: number;
+  readonly dirZ: number;
+  readonly distance: number;
+  /** Cloud-to-cloud: a flash in the clouds, no bolt to the ground. */
+  readonly cloudOnly: boolean;
+}
+
+/**
+ * Lightning: strikes at a rate (per minute), each a double-flicker flash. A strike draws a branching bolt
+ * in the sky behind the city (a camera-facing ribbon at 1 km, HDR white-violet so bloom catches it; the
+ * buildings hide its foot), lights the clouds round its bearing (the sky reads flash / flashDir), and
+ * throws a brief hard light from its direction with a shadow map rendered once per strike, so the city
+ * casts shadows for an instant. onStrike fires at the start (for the thunder).
+ */
 export class Lightning {
-  private next = 5;
+  readonly bolt: THREE.Mesh;
+  /** The strike's light: always cast-shadow (so shaders never change), intensity 0 between strikes. */
+  readonly light: THREE.DirectionalLight;
+  onStrike: ((s: Strike) => void) | null = null;
+  /** Current flash 0-1 and the direction toward the strike (world, from the camera). */
+  flash = 0;
+  readonly dir = new THREE.Vector3(1, 0, 0);
+  private next = 3;
   private t = -1;
   private time = 0;
-  /** Called at the start of each strike (the thunder follows). */
-  onStrike: (() => void) | null = null;
+  private strike: Strike | null = null;
+  private readonly boltMat: THREE.MeshBasicMaterial;
 
-  update(dt: number, storm: number): number {
+  constructor() {
+    this.boltMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
+    this.bolt = new THREE.Mesh(new THREE.BufferGeometry(), this.boltMat);
+    this.bolt.frustumCulled = false;
+    this.bolt.renderOrder = 1001;
+    this.bolt.visible = false;
+    this.light = new THREE.DirectionalLight(0xc8d4ff, 0);
+    this.light.castShadow = true;
+    this.light.shadow.autoUpdate = false;
+    this.light.shadow.mapSize.set(2048, 2048);
+    const c = this.light.shadow.camera;
+    c.left = -120;
+    c.right = 120;
+    c.top = 120;
+    c.bottom = -120;
+    c.near = 1;
+    c.far = 800;
+    this.light.shadow.bias = -0.0005;
+    this.light.shadow.normalBias = 0.05;
+    // Render the shadow map once up front: materials that sample a never-rendered shadow map fail to draw.
+    this.light.shadow.needsUpdate = true;
+  }
+
+  /** perMinute: the strike rate (0 stops them). Returns the flash 0-1. */
+  update(dt: number, perMinute: number, camera: THREE.Vector3): number {
     this.time += dt;
-    if (storm <= 0) return 0;
-    if (this.t < 0 && this.time > this.next) {
-      this.t = 0;
-      this.next = this.time + 4 + Math.random() * (22 - storm * 16);
-      this.onStrike?.();
+    if (this.t < 0 && perMinute > 0 && this.time > this.next) this.begin(camera, perMinute);
+    if (this.t < 0) {
+      this.flash = 0;
+      this.bolt.visible = false;
+      this.light.intensity = 0;
+      return 0;
     }
-    if (this.t < 0) return 0;
     this.t += dt;
-    const f = this.t < 0.07 ? 1 : this.t < 0.15 ? 0.12 : this.t < 0.22 ? 0.85 : Math.max(0, 1 - (this.t - 0.22) * 3.5) * 0.45;
-    if (this.t > 0.6) this.t = -1;
+    const t = this.t;
+    // Leader, a gap, the return stroke, then a fading flicker.
+    const f = t < 0.06 ? 1 : t < 0.13 ? 0.1 : t < 0.2 ? 0.9 : t < 0.26 ? 0.25 : t < 0.32 ? 0.6 : Math.max(0, 1 - (t - 0.32) * 3) * 0.35;
+    if (t > 0.7) this.t = -1;
+    this.flash = f;
+    const cloud = this.strike?.cloudOnly ?? true;
+    this.bolt.visible = !cloud && f > 0.05;
+    this.boltMat.color.setRGB(9, 9, 14).multiplyScalar(f);
+    // Near strikes light the city harder.
+    const near = this.strike ? Math.max(0.25, 1 - this.strike.distance / 6000) : 0;
+    this.light.intensity = f * (cloud ? 0.6 : 2.4) * near;
     return f;
+  }
+
+  /** Strike now (debug and scripted scenes), optionally toward a world direction (x, z) and always a bolt. */
+  strikeNow(camera: THREE.Vector3, toward?: { x: number; z: number }): void {
+    this.begin(camera, 1, toward);
+  }
+
+  private begin(camera: THREE.Vector3, perMinute: number, toward?: { x: number; z: number }): void {
+    this.t = 0;
+    // Poisson-ish gaps, never closer than 2.5 s.
+    this.next = this.time + 2.5 + (-Math.log(1 - Math.random() * 0.98) * 60) / perMinute;
+    const a = toward ? Math.atan2(toward.z, toward.x) + (Math.random() - 0.5) * 0.5 : Math.random() * Math.PI * 2;
+    const s: Strike = { dirX: Math.cos(a), dirZ: Math.sin(a), distance: 700 + Math.random() * 5500, cloudOnly: !toward && Math.random() < 0.3 };
+    this.strike = s;
+    this.dir.set(s.dirX, 0.35, s.dirZ).normalize();
+    // The light comes from the strike, high up; one shadow map per strike, round the camera.
+    this.light.position.set(camera.x + s.dirX * 300, camera.y + 260, camera.z + s.dirZ * 300);
+    this.light.target.position.copy(camera);
+    this.light.target.updateMatrixWorld();
+    this.light.shadow.needsUpdate = true;
+    if (!s.cloudOnly) this.buildBolt(camera, s);
+    this.onStrike?.(s);
+  }
+
+  /** A jagged main channel from the cloud base to the ground, with a few forks, as camera-facing ribbons. */
+  private buildBolt(camera: THREE.Vector3, s: Strike): void {
+    const R = 1000;
+    const cx = camera.x + s.dirX * R;
+    const cz = camera.z + s.dirZ * R;
+    const top = R * Math.tan(((16 + Math.random() * 12) * Math.PI) / 180);
+    const side = new THREE.Vector3(-s.dirZ, 0, s.dirX);
+    const pos: number[] = [];
+    const ribbon = (pts: THREE.Vector3[], width: number): void => {
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const a = pts[i];
+        const b = pts[i + 1];
+        const seg = b.clone().sub(a);
+        const view = a.clone().sub(camera).normalize();
+        const w = seg.clone().cross(view).normalize().multiplyScalar((width * (1 - (i / pts.length) * 0.5)) / 2);
+        const q = [a.clone().add(w), a.clone().sub(w), b.clone().sub(w), b.clone().add(w)];
+        for (const k of [0, 1, 2, 0, 2, 3]) pos.push(q[k].x, q[k].y, q[k].z);
+      }
+    };
+    // Midpoint displacement down the channel, drifting sideways.
+    const channel = (from: THREE.Vector3, to: THREE.Vector3, rough: number, depth: number): THREE.Vector3[] => {
+      let pts = [from, to];
+      for (let d = 0; d < depth; d++) {
+        const next: THREE.Vector3[] = [pts[0]];
+        for (let i = 0; i + 1 < pts.length; i++) {
+          const m = pts[i].clone().add(pts[i + 1]).multiplyScalar(0.5);
+          const len = pts[i].distanceTo(pts[i + 1]);
+          m.addScaledVector(side, (Math.random() - 0.5) * len * rough);
+          m.y += (Math.random() - 0.5) * len * rough * 0.3;
+          next.push(m, pts[i + 1]);
+        }
+        pts = next;
+      }
+      return pts;
+    };
+    const drift = (Math.random() - 0.5) * 160;
+    const main = channel(new THREE.Vector3(cx, top, cz), new THREE.Vector3(cx + side.x * drift, -20, cz + side.z * drift), 0.55, 7);
+    ribbon(main, 5);
+    // Forks off the upper two thirds, shorter and thinner, reaching down and out.
+    const forks = 3 + Math.floor(Math.random() * 4);
+    for (let k = 0; k < forks; k++) {
+      const from = main[Math.floor(Math.random() * main.length * 0.66)];
+      const len = 60 + Math.random() * 180;
+      const out = (Math.random() < 0.5 ? -1 : 1) * len * (0.5 + Math.random() * 0.6);
+      const to = from.clone().addScaledVector(side, out);
+      to.y -= len;
+      ribbon(channel(from, to, 0.6, 5), 2.2);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    this.bolt.geometry.dispose();
+    this.bolt.geometry = g;
   }
 }
 

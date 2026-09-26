@@ -14,7 +14,8 @@ export interface MoodSettings {
   wind: number;
   /** Degrees the wind blows toward: 0 north, 90 east. */
   windDir: number;
-  lightning: 'auto' | 'on' | 'off';
+  /** Strikes: auto (in storms), off, occasional (~1/min) or storm (~6/min). */
+  lightning: 'auto' | 'off' | 'occasional' | 'storm';
   /** Fog density multiplier (0.25 thin, 4 thick). */
   fog: number;
   /** Night only: the moon's strength, 0-1 (1 is the old default); null follows the atmosphere. */
@@ -48,7 +49,8 @@ export function moodFromUrl(params: URLSearchParams): MoodSettings {
   m.wind = num('wind', 0, 1) ?? m.wind;
   m.windDir = num('windDir', 0, 360) ?? m.windDir;
   const l = params.get('lightning');
-  if (l === 'on' || l === 'off' || l === 'auto') m.lightning = l;
+  if (l === 'on') m.lightning = 'storm';
+  else if (l === 'off' || l === 'auto' || l === 'occasional' || l === 'storm') m.lightning = l;
   m.fog = num('fog', 0.25, 4) ?? m.fog;
   const moon = num('moon', 0, 1);
   if (moon !== undefined) m.moon = moon;
@@ -108,7 +110,7 @@ export class MoodPanel {
     this.slider('rain', 'Rain', 0, 1, 0.01, () => s.rain ?? -1, (v) => (s.rain = v), (v) => (v < 0 ? 'from weather' : v < 0.2 ? `drizzle ${v.toFixed(2)}` : v < 0.6 ? `rain ${v.toFixed(2)}` : `downpour ${v.toFixed(2)}`), () => (s.rain = null));
     this.slider('wind', 'Wind', 0, 1, 0.01, () => s.wind, (v) => (s.wind = v), (v) => (v < 0.05 ? 'calm' : v < 0.35 ? `breeze ${v.toFixed(2)}` : v < 0.7 ? `gale ${v.toFixed(2)}` : `hurricane ${v.toFixed(2)}`));
     this.slider('windDir', 'Wind toward', 0, 360, 5, () => s.windDir, (v) => (s.windDir = v), (v) => `${Math.round(v)}° ${['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(v / 45) % 8]}`);
-    this.choice('lightning', 'Lightning', ['auto', 'on', 'off'], () => s.lightning, (v) => (s.lightning = v as MoodSettings['lightning']));
+    this.choice('lightning', 'Lightning', ['auto', 'off', 'occasional', 'storm'], () => s.lightning, (v) => (s.lightning = v as MoodSettings['lightning']));
     this.slider('fog', 'Fog', 0.25, 4, 0.05, () => s.fog, (v) => (s.fog = v), (v) => `x${v.toFixed(2)}`);
     this.slider('moon', 'Moonlight (night)', 0, 1, 0.01, () => s.moon ?? -1, (v) => (s.moon = v), (v) => (v < 0 ? 'from time of day' : v.toFixed(2)), () => (s.moon = null));
     this.slider('dark', 'Darkness', 0, 1, 0.01, () => s.darkness, (v) => (s.darkness = v), (v) => (v < 0.05 ? 'normal' : `${Math.round(v * 100)}%`));
