@@ -306,6 +306,8 @@ const surface = /* glsl */ `
       float yf = fv - fl * FH;
       bool inGrid = ux >= 0.0 && ux < span && fv >= 0.0 && fl < floors;
 
+      // How much of a room shows past the window reveal (recess ~0.25 m): little when seen side-on.
+      float reveal = smoothstep(0.06, 0.4, cosV);
       // Window rectangle within the bay (x) and floor (y), by type.
       float x0 = 0.0, x1 = b, y0 = 0.9, y1 = 0.9 + winH;
       bool office = type > 0.5 && type < 2.5;
@@ -382,6 +384,9 @@ const surface = /* glsl */ `
               interior = fabric * fold * (L * 0.5 + uRoomAmbient + 0.005);
             }
           }
+          // Windows sit back in the wall: seen from a steep angle the reveal hides the room, so a wall seen
+          // side-on doesn't turn into one flat sheet of lit interiors.
+          interior *= reveal;
           float F = fresnel(cosV);
           vec3 tint = office ? vec3(0.62, 0.78, 0.82) : vec3(1.0);
           if (type > 1.5 && type < 2.5) F = mix(F, 1.0, 0.3);
@@ -400,7 +405,15 @@ const surface = /* glsl */ `
       float detailY = smoothstep(1.5, 4.0, FH / fwUV.y);
       float xFrac = type < 0.5 ? ratio : type < 2.5 ? 0.95 : type < 3.5 ? 0.86 : 0.1;
       float yFrac = (y1 - y0) / FH;
-      vec3 glassAvg = litFrac * vec3(1.0, 0.72, 0.45) * 0.4 + refl * 0.2 + uRoomAmbient * 0.3;
+      // The glass's average look where windows are too small to draw. It needs the same Fresnel as the windows
+      // up close: at a grazing angle glass mostly reflects the (dark) sky, and only a sliver of each lit room
+      // shows past its frame. Without it, walls seen edge-on glowed a flat gold.
+      float Fa = fresnel(cosV);
+      // The lit share averages what the rooms look like up close: offices cool white behind tinted glass, homes
+      // warm; each room about 0.3 of its light (wall colour, depth falloff). It was a flat warm gold at 0.4,
+      // so distant towers glowed gold until you came close enough to see their windows.
+      vec3 roomAvg = office ? vec3(0.53, 0.74, 0.82) : vec3(1.0, 0.72, 0.45);
+      vec3 glassAvg = (litFrac * roomAvg * 0.28 + uRoomAmbient * 0.3) * reveal * (1.0 - Fa) + refl * mix(0.2, 0.9, Fa);
       bool rowY = ux >= 0.0 && ux < span && fv >= 0.0 && fl < floors && yf > y0 && yf < y1;
       vec3 bandAlbedo = rowY ? mix(wallCol, vec3(0.02), xFrac) : detailAlbedo;
       vec3 bandEmit = rowY ? glassAvg * xFrac : vec3(0.0);
