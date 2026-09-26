@@ -1,0 +1,25 @@
+{
+  "file": "gabunomi_izakaya_v3.png",
+  "item": "gabunomi_izakaya",
+  "brand": "居酒屋 がぶ飲み屋",
+  "copy": "生ビール 一杯 ¥190",
+  "notes": "Izakaya chain.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, frosty glass mug of draft beer overflowing with foam beside yakitori skewers on a wooden counter, warm izakaya light, appetising food photography, plain blurred background, vertical composition, photograph only, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 461474192,
+  "studioJob": "46eec807-4769-4b81-afe5-9e08cc5cef51-u1",
+  "generated": "2026-09-26T00:28:56.657Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/23_gabunomi_izakaya.png",
+  "decided": "2026-09-26T00:38:12.116Z",
+  "batch": "kaburo_posters_02",
+  "purpose": "Kaburo round 2 street posters and lightboxes: maid cafe, live house gigs, konbini, pawn shop and quick cash, love hotels and an esthe, snack bar, izakaya, net cafe, capsule hotel, mahjong, and story-hook posters (wanted notice, election poster, an album). Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon"
+}

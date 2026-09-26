@@ -19,22 +19,23 @@ import { hasRooftopLetters, signBox, type SignBuilder } from './signs';
 type C3 = [number, number, number];
 type Rect4 = readonly [number, number, number, number];
 
-export const DISTRICT_ATLAS = { W: 4096, H: 2048, billboard: [1024, 512], poster: [512, 768] } as const;
+/** Slots: billboards 768x384 (5 per row, 6 rows), posters 384x576 (10 per row, 3 rows below): 30 of each. */
+export const DISTRICT_ATLAS = { W: 4096, H: 4096, billboard: [768, 384], poster: [384, 576], posterTop: 2304 } as const;
 
 export const BILLBOARDS = DISTRICT_ADS.map((a, i) => ({ a, i })).filter((x) => x.a.format === 'billboard');
 export const POSTERS = DISTRICT_ADS.map((a, i) => ({ a, i })).filter((x) => x.a.format === 'poster');
 
-/** Pixel rect of catalogue entry i in the atlas: billboards in rows of 4 at the top, posters in a row of 8 below. */
+/** Pixel rect of catalogue entry i in the atlas: billboards in rows of 5 at the top, posters in rows of 10 below. */
 export function districtAdRect(i: number): [number, number, number, number] {
   const ad = DISTRICT_ADS[i];
   const list = ad.format === 'billboard' ? BILLBOARDS : POSTERS;
   const k = list.findIndex((x) => x.i === i);
   if (ad.format === 'billboard') {
     const [w, h] = DISTRICT_ATLAS.billboard;
-    return [(k % 4) * w, Math.floor(k / 4) * h, w, h];
+    return [(k % 5) * w, Math.floor(k / 5) * h, w, h];
   }
   const [w, h] = DISTRICT_ATLAS.poster;
-  return [(k % 8) * w, 1024 + Math.floor(k / 8) * h, w, h];
+  return [(k % 10) * w, DISTRICT_ATLAS.posterTop + Math.floor(k / 10) * h, w, h];
 }
 
 export function districtAdUv(i: number): Rect4 {
@@ -43,8 +44,8 @@ export function districtAdUv(i: number): Rect4 {
   return [(x + 1) / W, (y + 1) / H, (x + w - 1) / W, (y + h - 1) / H];
 }
 
-/** A dark spot for the panels' edges (below the poster row). */
-export const DISTRICT_BLANK: [number, number] = [20 / DISTRICT_ATLAS.W, 1900 / DISTRICT_ATLAS.H];
+/** A dark spot for the panels' edges (the unused corner below the poster rows). */
+export const DISTRICT_BLANK: [number, number] = [4000 / DISTRICT_ATLAS.W, 4050 / DISTRICT_ATLAS.H];
 
 const STEEL = lin(0x2c2e32);
 

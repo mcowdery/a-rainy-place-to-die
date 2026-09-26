@@ -1,0 +1,25 @@
+{
+  "file": "cash_one_poster_v3.png",
+  "item": "cash_one_poster",
+  "brand": "キャッシュ・ワン",
+  "copy": "ブラックOK 即日",
+  "notes": "Noir loan poster.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, smiling man in a suit handing an envelope stuffed with Japanese ten-thousand-yen banknotes over a desk, forced cheerful smile, harsh flash photography, slightly sinister, vertical composition, photograph only, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 854786128,
+  "studioJob": "3a931498-6eeb-438e-bcd8-90f74a45987e-u1",
+  "generated": "2026-09-26T00:28:24.135Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/24_cash_one_poster.png",
+  "decided": "2026-09-26T00:38:54.526Z",
+  "batch": "kaburo_posters_02",
+  "purpose": "Kaburo round 2 street posters and lightboxes: maid cafe, live house gigs, konbini, pawn shop and quick cash, love hotels and an esthe, snack bar, izakaya, net cafe, capsule hotel, mahjong, and story-hook posters (wanted notice, election poster, an album). Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon"
+}

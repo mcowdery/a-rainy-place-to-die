@@ -1,0 +1,25 @@
+{
+  "file": "yorumart_poster_v2.png",
+  "item": "yorumart_poster",
+  "brand": "ヨルマート",
+  "copy": "ホットスナック 全品20円引き",
+  "notes": "Konbini promo.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, crispy golden Japanese convenience store fried chicken in a paper bag, steam, bright clean commercial food photography, vertical poster composition, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 952017676,
+  "studioJob": "aaed3e26-dfc3-4ed4-9db1-dfc8d61c13d3-u1",
+  "generated": "2026-09-26T00:23:50.722Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/32_yorumart_poster.png",
+  "decided": "2026-09-26T00:49:56.208Z",
+  "batch": "kaburo_posters_02",
+  "purpose": "Kaburo round 2 street posters and lightboxes: maid cafe, live house gigs, konbini, pawn shop and quick cash, love hotels and an esthe, snack bar, izakaya, net cafe, capsule hotel, mahjong, and story-hook posters (wanted notice, election poster, an album). Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon"
+}

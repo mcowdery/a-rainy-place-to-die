@@ -1,0 +1,25 @@
+{
+  "file": "live_singer_poster_v2.png",
+  "item": "live_singer_poster",
+  "brand": "LIVE HOUSE 地下室",
+  "copy": "YUKO MIDNIGHT ONE MAN LIVE",
+  "notes": "Gig poster.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, glamorous adult Japanese female city pop singer in her late twenties in a shoulder-padded 80s dress singing into a vintage microphone, blue spotlight, smoky stage, vertical poster composition, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 771315144,
+  "studioJob": "ff4f818d-074d-4bf6-a8a0-02d4debc79f5-u2",
+  "generated": "2026-09-26T00:23:34.468Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/35_live_singer_poster.png",
+  "decided": "2026-09-26T00:50:07.695Z",
+  "batch": "kaburo_posters_02",
+  "purpose": "Kaburo round 2 street posters and lightboxes: maid cafe, live house gigs, konbini, pawn shop and quick cash, love hotels and an esthe, snack bar, izakaya, net cafe, capsule hotel, mahjong, and story-hook posters (wanted notice, election poster, an album). Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon"
+}

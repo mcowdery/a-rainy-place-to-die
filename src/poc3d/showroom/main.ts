@@ -188,9 +188,11 @@ cityU.uLightRect.value = showLightmap.uniformRect;
   const amb = new MeshBuilder();
   const n: [number, number, number] = [1, 0, 0];
   const r: [number, number, number] = [0, 0, -1];
-  const place = (list: typeof BILLBOARDS, w: number, h: number, y0: number, z0: number, dz: number, group: string): void => {
+  const place = (list: typeof BILLBOARDS, w: number, h: number, y0: number, z0: number, dz: number, group: string, perTier = 99, tierDy = 0): void => {
     list.forEach(({ a, i }, k) => {
-      const z = z0 + k * dz;
+      const z = z0 + (k % perTier) * dz;
+      const tier = Math.floor(k / perTier);
+      y0 += tier > 0 && k % perTier === 0 ? tierDy : 0;
       const p: [number, number, number] = [wallX, 0, z];
       amb.kind = KIND.plain;
       amb.color = lin(0x2c2e32);
@@ -202,8 +204,9 @@ cityU.uLightRect.value = showLightmap.uniformRect;
       genItems.new.push({ name: `${a.brand}`, group, at: new THREE.Vector3(wallX, y0 + h / 2, z), size: Math.max(w, h) * 0.9, view: new THREE.Vector3(1, 0.1, 0).normalize() });
     });
   };
-  place(BILLBOARDS, 6, 3, 3.2, -24, 7.2, 'Billboards');
-  place(POSTERS, 1.2, 1.8, 0.4, -20.4, 7.2, 'Posters');
+  // Billboards in tiers of 7 (stacked upward), posters in one long row at eye level.
+  place(BILLBOARDS, 6, 3, 3.2, -24, 7.2, 'Billboards', 7, 3.8);
+  place(POSTERS, 1.2, 1.8, 0.4, -25, 2.4, 'Posters');
   genRoot.new.add(new THREE.Mesh(asb.build(0, 0)!, adMaterial(cityU, dAtlas)));
   const frames = new THREE.Mesh(amb.build()!, city);
   frames.castShadow = true;

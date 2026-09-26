@@ -1,0 +1,25 @@
+{
+  "file": "wanted_notice_v1.png",
+  "item": "wanted_notice",
+  "brand": "指名手配",
+  "copy": "この顔にピンときたら110番",
+  "notes": "Police wanted notice (story hook).",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, police wanted-poster mugshot of a gaunt middle-aged Japanese man with a scar on his cheek, plain grey background, flat harsh lighting, front-facing, vertical poster composition, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 2051738956,
+  "studioJob": "05df4b4a-fb36-4796-98e9-26235b88014b-u2",
+  "generated": "2026-09-26T00:26:33.094Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/30_wanted_notice.png",
+  "decided": "2026-09-26T00:41:28.677Z",
+  "batch": "kaburo_posters_02",
+  "purpose": "Kaburo round 2 street posters and lightboxes: maid cafe, live house gigs, konbini, pawn shop and quick cash, love hotels and an esthe, snack bar, izakaya, net cafe, capsule hotel, mahjong, and story-hook posters (wanted notice, election poster, an album). Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon"
+}

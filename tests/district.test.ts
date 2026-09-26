@@ -91,6 +91,12 @@ describe('district ads', async () => {
     return out;
   };
 
+  it('fits the whole catalogue in the ad atlas', async () => {
+    const { BILLBOARDS, POSTERS } = await import('../src/poc3d/real/districtAds');
+    expect(BILLBOARDS.length).toBeLessThanOrEqual(30);
+    expect(POSTERS.length).toBeLessThanOrEqual(30);
+  });
+
   it('is deterministic and places every kind somewhere', () => {
     const cells = neonCells.slice(0, 20);
     expect(cells.map(([x, y]) => place(x, y))).toEqual(cells.map(([x, y]) => place(x, y)));

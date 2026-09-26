@@ -242,13 +242,19 @@ export class DistrictAdAtlas {
     });
   }
 
+  /** Draws one ad into its slot: laid out in reference units (billboard 1024x512, poster 512x768) and scaled to fit. */
   private draw(ad: DistrictAd, i: number, img: HTMLImageElement | null): void {
     const g = this.g;
-    const [x, y, w, h] = districtAdRect(i);
+    const [sx, sy, sw, sh] = districtAdRect(i);
+    const [w, h] = ad.format === 'poster' ? [512, 768] : [1024, 512];
     g.save();
     g.beginPath();
-    g.rect(x, y, w, h);
+    g.rect(sx, sy, sw, sh);
     g.clip();
+    g.translate(sx, sy);
+    g.scale(sw / w, sh / h);
+    const x = 0;
+    const y = 0;
     g.fillStyle = hex(ad.accent);
     g.fillRect(x, y, w, h);
     const ink = hex(ad.ink);
@@ -277,8 +283,7 @@ export class DistrictAdAtlas {
     if (img) g.drawImage(img, x, y, w, h);
     const side = ad.text ?? 'left';
     // Gradient scrim behind the text so it reads over any photo.
-    const [gx0, gy0, gx1, gy1] = side === 'left' ? [x, 0, x + w * 0.5, 0] : side === 'right' ? [x + w, 0, x + w * 0.5, 0] : [0, y + h, 0, y + h * 0.55];
-    const grad = g.createLinearGradient(gx0, gy0 || y, gx1, gy1 || y);
+    const grad = side === 'left' ? g.createLinearGradient(x, 0, x + w * 0.5, 0) : side === 'right' ? g.createLinearGradient(x + w, 0, x + w * 0.5, 0) : g.createLinearGradient(0, y + h, 0, y + h * 0.55);
     grad.addColorStop(0, 'rgba(0,0,0,0.78)');
     grad.addColorStop(0.6, 'rgba(0,0,0,0.45)');
     grad.addColorStop(1, 'rgba(0,0,0,0)');

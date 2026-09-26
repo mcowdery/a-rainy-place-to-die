@@ -1,0 +1,25 @@
+{
+  "file": "tokyo_noir_film_v1.png",
+  "item": "tokyo_noir_film",
+  "brand": "映画『東京ノワール』",
+  "copy": "今夜、この街で誰かが消える。",
+  "notes": "Cinema billboard; ties to the detective thread.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, film still of a detective in a trench coat and a woman in a red dress under a neon-lit rainy bridge, cinematic noir, dramatic lighting, wide horizontal composition, subject off-centre to one side, the background scene continues across the whole frame, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    768
+  ],
+  "steps": 12,
+  "seed": 1587609219,
+  "studioJob": "e325c874-5dbf-4103-bc3b-1e7bc875485b-u1",
+  "generated": "2026-09-26T00:22:45.330Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/46_tokyo_noir_film.png",
+  "decided": "2026-09-26T01:06:44.453Z",
+  "batch": "kaburo_billboards_02",
+  "purpose": "Kaburo round 2 billboards: many more distinct businesses (maid cafe, live house, konbini, noir money trades, love hotels, arcade, whisky, a yakuza front company, cinema, idols) so exploring keeps surfacing new ads. Love hotel ads explicit but censored Japanese-style; all models adults.",
+  "use": "billboard",
+  "district": "neon"
+}
