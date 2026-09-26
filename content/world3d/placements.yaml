@@ -28,3 +28,7 @@
   stamp: yokocho
   cell: [26, 10]
   offset: [60, 88]
+- id: ryujin_kogyo
+  stamp: ryujin_kogyo
+  cell: [29, 10]
+  offset: [58, 88]

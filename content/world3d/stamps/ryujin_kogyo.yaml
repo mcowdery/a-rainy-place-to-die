@@ -1,0 +1,27 @@
+# Ryujin Kogyo (竜神興業): the yakuza front company whose dragon crowns the mega-sign. A landmark built by
+# real/ryujin.ts (18 m front, 22 m deep, the building set back 8 m behind a gated forecourt).
+id: ryujin_kogyo
+name: 竜神興業 Ryujin Kogyo
+footprint: [18, 22]
+height: 21
+front: south
+landmark: ryujin
+nodes:
+  street:
+    kind: spawn
+    name: Ryujin Kogyo
+    at: [9, 7]
+    facing: north
+    view: [0, 12]
+  door:
+    kind: door
+    name: Ryujin Kogyo
+    at: [9, -6.4]
+    returnSpawn: street
+    handoff: {}
+  guard:
+    kind: npc
+    name: Man in a dark suit
+    at: [11, -1.4]
+    handoff: {}
+    figure: { body: man, pose: pockets, hair: short, long: true, color: '#c8d0e8', turn: 0.3 }

@@ -28,7 +28,7 @@ These are hand-authored stamps with interiors or VN hooks, placed on L0 cells li
 - **Maid café ♡ぴゅあ♡**: upstairs café with a street tout.
 - **Hotel Rouge**: the flagship love hotel in the Love District, with a hidden side entrance. **Built (2026-09-26)** as a castle love hotel.
 - **Maruyoshi pawn shop**: the noir hub (items, information).
-- **Ryujin Kogyo office**: the yakuza front company, a story antagonist hook.
+- **Ryujin Kogyo office**: the yakuza front company, a story antagonist hook. **Built (2026-09-26)** on Host Street: granite block, gated forecourt, black sedans, CCTV, gold 竜 crest, guards; door to the VN.
 - **Koban (police box)**: wanted notices; story source.
 - **Hoshikuzu Yokocho 星屑横丁**: **built (2026-09-26)**, a Golden Gai-style bar alley in the back alleys; BAR 黒猫 (door to VN) and its mama-san outside are a story hook.
 - **Konbini (Yoru Mart)**: several copies; a save/rest point or recurring hangout. **Built (2026-09-26):** one you can walk into, on the crossing's south-east corner.
