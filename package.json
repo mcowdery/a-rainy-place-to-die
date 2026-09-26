@@ -14,7 +14,8 @@
     "ads:generate": "node scripts/krea/ads.mjs generate",
     "ads:review": "node scripts/krea/ads.mjs review",
     "ads:approve": "node scripts/krea/ads.mjs approve",
-    "ads:reject": "node scripts/krea/ads.mjs reject"
+    "ads:reject": "node scripts/krea/ads.mjs reject",
+    "ads:serve": "node scripts/krea/review-server.mjs"
   },
   "dependencies": {
     "three": "^0.186.1",

@@ -5,7 +5,8 @@
 //   npm run krea:login                                   log in once (session cached in .krea/, 30 days)
 //   node scripts/krea/ads.mjs signup [name]              create this project's own Studio account (sign-ups open)
 //   npm run ads:generate -- <brief.json> [--dry-run] [--only id,id] [--skip-missing-lora]   generate a batch
-//   npm run ads:review [-- <batch>]                      list pending batches / one batch's candidates
+//   npm run ads:serve                                   review in the browser (Approve / Reject / Undo + notes)
+//   npm run ads:review [-- <batch>]                      list pending batches / one batch's candidates and notes
 //   npm run ads:approve -- <batch> <file> [--as <name>]  move a candidate to assets/ads/source/<name>.png
 //   npm run ads:reject -- <batch> <file> [--reason ...]  move a candidate to pending/<batch>/rejected/
 //   node scripts/krea/ads.mjs approve-chosen            approve whatever was moved into pending/<batch>/chosen/
@@ -14,10 +15,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import readline from 'node:readline';
+import { batches, decide, loadBatch, PENDING, readJson, slug, writeJson, writeReview } from './review.mjs';
 import { ROOT, Studio, StudioError, config } from './studio.mjs';
 
-const PENDING = path.join(ROOT, 'assets', 'ads', 'pending');
-const SOURCE = path.join(ROOT, 'assets', 'ads', 'source');
 
 /**
  * The house style: the anchor prefix used for the taxi ads, then the (optional) LoRA trigger, then the
@@ -46,9 +46,6 @@ const flag = (name) => {
   args.splice(i, v && !v.startsWith('--') ? 2 : 1);
   return v && !v.startsWith('--') ? v : true;
 };
-const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48);
-const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
-const writeJson = (p, v) => fs.writeFileSync(p, JSON.stringify(v, null, 2) + '\n');
 
 function ask(question, hidden = false) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
@@ -207,119 +204,55 @@ async function cmdGenerate() {
   console.log(`\nDone. Review: assets/ads/pending/${batch}/review.html (or REVIEW.md). Nothing has been wired into the world.`);
 }
 
-/** REVIEW.md (text) and review.html (contact sheet) for a batch. */
-function writeReview(dir, m) {
-  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-  const md = [
-    `# Pending ad art: ${m.batch}`,
-    '',
-    `Purpose: ${m.purpose || '-'}  `,
-    `Use: ${m.use}${m.district ? ` · district: ${m.district}` : ''} · brief: \`${m.brief}\``,
-    '',
-    'Approve: `npm run ads:approve -- ' + m.batch + ' <file> [--as NN_name]` · Reject: `npm run ads:reject -- ' + m.batch + ' <file>`',
-    '',
-    '| file | item | brand / copy | status | seed |',
-    '|---|---|---|---|---|',
-    ...m.images.map((im) => `| ${im.file} | ${im.item} | ${[im.brand, im.copy].filter(Boolean).join(' · ') || '-'} | ${im.status} | ${im.seed ?? ''} |`),
-    '',
-    ...m.images.map((im) => `- **${im.file}** prompt: ${im.prompt}${im.notes ? `\n  notes: ${im.notes}` : ''}`),
-    '',
-  ].join('\n');
-  fs.writeFileSync(path.join(dir, 'REVIEW.md'), md);
-  const cards = m.images
-    .map((im) => `<figure class="${im.status}"><img src="${esc(im.status === 'pending' ? im.file : '')}" alt=""><figcaption><b>${esc(im.file)}</b> · ${esc(im.status)}<br>${esc([im.brand, im.copy].filter(Boolean).join(' · '))}<br><small>${esc(im.prompt)}</small></figcaption></figure>`)
-    .join('\n');
-  fs.writeFileSync(
-    path.join(dir, 'review.html'),
-    `<!doctype html><meta charset="utf-8"><title>${esc(m.batch)}</title><style>body{font:13px system-ui;background:#16161a;color:#ddd;margin:16px}figure{display:inline-block;width:300px;margin:8px;vertical-align:top}img{width:300px;background:#333}figure.approved,figure.rejected{opacity:.4}small{color:#999}</style><h2>${esc(m.batch)}</h2><p>${esc(m.purpose)}</p>${cards}`,
-  );
-}
-
 function cmdReview() {
   const batch = args[1];
-  if (!fs.existsSync(PENDING)) return console.log('No pending ad art.');
-  const batches = batch ? [slug(batch)] : fs.readdirSync(PENDING).filter((b) => fs.existsSync(path.join(PENDING, b, 'manifest.json')));
-  if (batches.length === 0) return console.log('No pending ad art.');
-  for (const b of batches) {
-    const m = readJson(path.join(PENDING, b, 'manifest.json'));
-    const count = (s) => m.images.filter((im) => im.status === s).length;
+  const list = batch ? [slug(batch)] : batches();
+  if (list.length === 0) return console.log('No pending ad art.');
+  for (const b of list) {
+    const m = loadBatch(b).m;
+    const count = (st) => m.images.filter((im) => im.status === st).length;
     console.log(`${b}: ${m.purpose || '(no purpose)'} · ${count('pending')} pending, ${count('approved')} approved, ${count('rejected')} rejected`);
-    if (batch) for (const im of m.images) console.log(`  [${im.status}] ${im.file}  ${[im.brand, im.copy].filter(Boolean).join(' · ')}`);
+    for (const im of m.images) if (batch || im.note) console.log(`  [${im.status}] ${im.file}  ${[im.brand, im.copy].filter(Boolean).join(' · ')}${im.note ? `
+      note: ${im.note}` : ''}`);
   }
 }
 
-function decide(approve) {
+function cmdDecide(action) {
   const [, batchArg, file] = args;
   const as = flag('as');
-  const reason = flag('reason');
-  if (!batchArg || !file) throw new StudioError(`Usage: npm run ads:${approve ? 'approve' : 'reject'} -- <batch> <file>${approve ? ' [--as NN_name]' : ' [--reason ...]'}`);
-  const dir = path.join(PENDING, slug(batchArg));
-  const manifestPath = path.join(dir, 'manifest.json');
-  const m = readJson(manifestPath);
-  const im = m.images.find((x) => x.file === file);
-  if (!im) throw new StudioError(`No ${file} in batch ${batchArg}.`);
-  if (im.status !== 'pending') throw new StudioError(`${file} is already ${im.status}.`);
-  const from = path.join(dir, file);
-  if (approve) {
-    const name = typeof as === 'string' ? slug(as) : `${slug(m.batch)}_${path.basename(file, '.png')}`;
-    const to = path.join(SOURCE, `${name}.png`);
-    if (fs.existsSync(to)) throw new StudioError(`assets/ads/source/${name}.png already exists; pick another --as.`);
-    fs.mkdirSync(SOURCE, { recursive: true });
-    fs.renameSync(from, to);
-    Object.assign(im, { status: 'approved', approvedAs: `assets/ads/source/${name}.png`, decided: new Date().toISOString() });
-    // Keep the provenance next to the approved image.
-    writeJson(path.join(SOURCE, `${name}.json`), { ...im, batch: m.batch, purpose: m.purpose, use: m.use, district: m.district });
-    console.log(`Approved -> assets/ads/source/${name}.png (not wired into the world yet).`);
-  } else {
-    fs.mkdirSync(path.join(dir, 'rejected'), { recursive: true });
-    fs.renameSync(from, path.join(dir, 'rejected', file));
-    Object.assign(im, { status: 'rejected', reason: typeof reason === 'string' ? reason : null, decided: new Date().toISOString() });
-    console.log(`Rejected -> pending/${slug(batchArg)}/rejected/${file}`);
-  }
-  writeJson(manifestPath, m);
-  writeReview(dir, m);
+  const note = flag('reason') ?? flag('note');
+  if (!batchArg || !file) throw new StudioError(`Usage: npm run ads:${action} -- <batch> <file>${action === 'approve' ? ' [--as NN_name]' : ''} [--note ...]`);
+  const im = decide(batchArg, file, action, { as: typeof as === 'string' ? as : undefined, note: typeof note === 'string' ? note : undefined });
+  console.log(action === 'approve' ? `Approved -> ${im.approvedAs} (not wired into the world yet).` : `Rejected -> pending/${slug(batchArg)}/rejected/${file}`);
 }
 
 /**
- * Approves everything the user moved into a `chosen/` folder under any pending batch: each file is matched to
- * the batch manifest that generated it (by file name), moved to assets/ads/source/NN_<item>.png (numbered
- * after the existing art) with its provenance, and marked approved. Files it can't match are left alone.
+ * Approves everything the user moved into a `chosen/` folder under any pending batch. Each file is matched to
+ * the batch that generated it (by file name, so it may sit in another batch's chosen/ folder).
  */
 function cmdApproveChosen() {
-  if (!fs.existsSync(PENDING)) return console.log('No pending ad art.');
-  const batches = fs.readdirSync(PENDING).filter((b) => fs.existsSync(path.join(PENDING, b, 'manifest.json')));
-  const manifests = new Map(batches.map((b) => [b, readJson(path.join(PENDING, b, 'manifest.json'))]));
-  fs.mkdirSync(SOURCE, { recursive: true });
-  const artDir = path.join(ROOT, 'assets', 'ads');
-  const used = [...fs.readdirSync(artDir), ...fs.readdirSync(SOURCE)].map((f) => parseInt(f, 10)).filter((n) => n > 0);
-  let next = Math.max(0, ...used) + 1;
-  const touched = new Set();
-  for (const b of batches) {
+  const all = batches();
+  for (const b of all) {
     const chosen = path.join(PENDING, b, 'chosen');
     if (!fs.existsSync(chosen)) continue;
     for (const file of fs.readdirSync(chosen).filter((f) => f.endsWith('.png'))) {
-      const owner = [...manifests].find(([, m]) => m.images.some((im) => im.file === file && im.status === 'pending'));
+      const owner = all.find((ob) => loadBatch(ob).m.images.some((im) => im.file === file && im.status === 'pending'));
       if (!owner) {
         console.log(`  ? ${file}: no pending image with that name in any batch, left in place`);
         continue;
       }
-      const [ob, m] = owner;
-      const im = m.images.find((x) => x.file === file);
-      const name = `${String(next++).padStart(2, '0')}_${slug(im.item)}`;
-      fs.renameSync(path.join(chosen, file), path.join(SOURCE, `${name}.png`));
-      Object.assign(im, { status: 'approved', approvedAs: `assets/ads/source/${name}.png`, decided: new Date().toISOString() });
-      writeJson(path.join(SOURCE, `${name}.json`), { ...im, batch: m.batch, purpose: m.purpose, use: m.use, district: m.district });
-      touched.add(ob);
-      console.log(`  approved ${ob}/${file} -> assets/ads/source/${name}.png`);
+      const ownerChosen = path.join(PENDING, owner, 'chosen');
+      if (owner !== b) {
+        fs.mkdirSync(ownerChosen, { recursive: true });
+        fs.renameSync(path.join(chosen, file), path.join(ownerChosen, file));
+      }
+      const im = decide(owner, file, 'approve');
+      console.log(`  approved ${owner}/${file} -> ${im.approvedAs}`);
     }
-  }
-  for (const b of touched) {
-    writeJson(path.join(PENDING, b, 'manifest.json'), manifests.get(b));
-    writeReview(path.join(PENDING, b), manifests.get(b));
   }
 }
 
-const commands = { login: cmdLogin, signup: cmdSignup, status: cmdStatus, generate: cmdGenerate, review: cmdReview, approve: () => decide(true), 'approve-chosen': cmdApproveChosen, reject: () => decide(false) };
+const commands = { login: cmdLogin, signup: cmdSignup, status: cmdStatus, generate: cmdGenerate, review: cmdReview, approve: () => cmdDecide('approve'), 'approve-chosen': cmdApproveChosen, reject: () => cmdDecide('reject') };
 const cmd = commands[args[0]];
 if (!cmd) {
   console.log('Commands: login | status | generate <brief.json> [--dry-run] | review [batch] | approve <batch> <file> [--as name] | reject <batch> <file> [--reason ...]');
@@ -328,6 +261,6 @@ if (!cmd) {
 try {
   await cmd();
 } catch (e) {
-  console.error(e instanceof StudioError ? `Error: ${e.message}` : e);
+  console.error(e instanceof StudioError || e?.name === 'ReviewError' || e?.constructor?.name === 'ReviewError' ? `Error: ${e.message}` : e);
   process.exit(1);
 }
