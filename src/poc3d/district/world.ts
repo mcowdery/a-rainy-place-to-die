@@ -144,7 +144,19 @@ export class District {
    * (basements, platforms, the observatory), or inside a walk-in building on the ground.
    */
   sheltered(x: number, z: number, y: number): boolean {
-    return this.shelters.some((s) => y > s.y0 && y < s.y1 && x > s.rect.x && x < s.rect.x + s.rect.w && z > s.rect.y && z < s.rect.y + s.rect.h);
+    return this.shelterAt(x, z, y) !== null;
+  }
+
+  /** The covered volume a point is in (enclosed ones first), or null out in the open. */
+  shelterAt(x: number, z: number, y: number): Shelter | null {
+    let best: Shelter | null = null;
+    for (const s of this.shelters) {
+      if (y > s.y0 && y < s.y1 && x > s.rect.x && x < s.rect.x + s.rect.w && z > s.rect.y && z < s.rect.y + s.rect.h) {
+        if (s.enclosed) return s;
+        best = s;
+      }
+    }
+    return best;
   }
 
   /** Every covered volume (landmarks, plus any added: the viaduct). */

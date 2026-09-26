@@ -25,6 +25,7 @@ import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { TrafficSystem } from '../real/traffic';
 import { GRADE_NAMES, GradePass } from '../real/grade';
 import { DofPass } from '../real/dof';
+import { CityAudio } from '../real/audio';
 import { LampCones, LampShadows, Lightning, RainSystem } from '../real/weather';
 import { moodFromUrl, MoodPanel } from './moodPanel';
 import { routeFor } from './traffic';
@@ -188,6 +189,9 @@ async function run(): Promise<void> {
   const cones = new LampCones();
   const lampShadows = new LampShadows();
   const lightning = new Lightning();
+  // Sound: starts on the first click (browsers need a gesture); thunder follows each strike.
+  const audio = new CityAudio();
+  lightning.onStrike = () => audio.thunder(600 + Math.random() * 5000, Math.random() * 1.6 - 0.8);
   scene.add(rain.group, cones.mesh, lampShadows.group);
   const windVec = new THREE.Vector2();
   let skyTime = 0;
@@ -262,7 +266,7 @@ async function run(): Promise<void> {
     travel.hide();
     controls.look.lock();
   });
-  if (params.get('diag') === '1') Object.assign(window, { __renderer: renderer, __dof: dof });
+  if (params.get('diag') === '1') Object.assign(window, { __renderer: renderer, __dof: dof, __audio: audio });
   // Review hook for screenshot scripts: point the view (yaw, pitch in degrees).
   (window as unknown as { __look: (y: number, p: number) => void }).__look = (y, p) => controls.setView(y, p);
   const spawnParam = params.get('spawn');
@@ -516,7 +520,10 @@ async function run(): Promise<void> {
     if (e.code === 'Quote') bloom.threshold = Math.min(5, +(bloom.threshold + 0.1).toFixed(2));
     if (e.code === 'KeyP') controls.setShearMode(!controls.shearMode);
   });
-  document.body.addEventListener('click', () => !bench && !inVn && !travel.open && !panel.open && controls.look.lock());
+  document.body.addEventListener('click', () => {
+    audio.start();
+    if (!bench && !inVn && !travel.open && !panel.open) controls.look.lock();
+  });
   controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
   controls.look.addEventListener('unlock', () => ($('overlay').hidden = bench));
   window.addEventListener('resize', () => {
@@ -610,6 +617,22 @@ async function run(): Promise<void> {
     sky.uniforms.uHorizon.value.copy(base.horizon).addScalar(flash * 0.25);
     sky.uniforms.uCloudLit.value.copy(base.cloudLit).addScalar(flash * 0.6);
     fitFog();
+    // Sound follows the same weather: what's overhead, the wind, the nearest cars.
+    const cover = trains?.riding ? 'enclosed' : district.shelterAt(cp.x, cp.z, cp.y)?.enclosed ? 'enclosed' : inside ? 'roof' : 'open';
+    audio.update({
+      dt,
+      rain: rainAmount,
+      wind: mood.wind,
+      gust,
+      cover,
+      train: !!trains?.riding,
+      volume: mood.volume,
+      x: cp.x,
+      z: cp.z,
+      yaw: (lookYaw() * Math.PI) / 180,
+      cars: traffic.nearest(cp, 3),
+      wet: cityU.uWet.value,
+    });
 
     const t0 = performance.now();
     // Turning worker results into meshes is the only streaming work on the main thread: ~2 ms a frame.

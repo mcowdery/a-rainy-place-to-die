@@ -210,6 +210,8 @@ export class Lightning {
   private next = 5;
   private t = -1;
   private time = 0;
+  /** Called at the start of each strike (the thunder follows). */
+  onStrike: (() => void) | null = null;
 
   update(dt: number, storm: number): number {
     this.time += dt;
@@ -217,6 +219,7 @@ export class Lightning {
     if (this.t < 0 && this.time > this.next) {
       this.t = 0;
       this.next = this.time + 4 + Math.random() * (22 - storm * 16);
+      this.onStrike?.();
     }
     if (this.t < 0) return 0;
     this.t += dt;

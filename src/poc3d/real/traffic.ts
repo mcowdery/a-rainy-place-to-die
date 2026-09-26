@@ -319,6 +319,15 @@ export class TrafficSystem {
     return near.length;
   }
 
+  /** The n moving vehicles nearest a point, as (x, z), nearest first. */
+  nearest(p: THREE.Vector3, n: number): [number, number][] {
+    return this.vehicles
+      .map((v) => ({ v, d: (v.x - p.x) ** 2 + (v.z - p.z) ** 2 }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, n)
+      .map(({ v }) => [v.x, v.z]);
+  }
+
   /** Whether a walker at (x, z) of radius r touches a vehicle. */
   blocked(x: number, z: number, r: number): boolean {
     for (const v of this.vehicles) {
