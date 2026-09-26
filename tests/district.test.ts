@@ -4,6 +4,11 @@ import { TIMES, WEATHERS } from '../src/atmosphere/rules';
 import { loadDistrictContent } from '../src/poc3d/district/content';
 import { CELL, planCell3, STYLES3 } from '../src/poc3d/district/plan';
 import { DistrictModel } from '../src/poc3d/district/model';
+import { parseZones3 } from '../src/poc3d/district/zones';
+import { DISTRICT_ADS } from '../src/poc3d/models/ads';
+import { addDistrictAds, type AdPlacement } from '../src/poc3d/real/districtAds';
+import { MeshBuilder } from '../src/poc3d/real/meshBuilder';
+import { SignBuilder } from '../src/poc3d/real/signs';
 import { parseStamp3, plazaRect, reservedRect } from '../src/poc3d/district/stamps';
 
 const content = loadDistrictContent();
@@ -139,5 +144,41 @@ describe('district ads', async () => {
         }
       }
     }
+  });
+});
+
+describe('Kaburo zones', () => {
+  const model = new DistrictModel(content.macro, 'neon', content.placed, 7, content.zones);
+  const inZone = (id: string) => model.cells.filter(([mx, my]) => content.zones.at(mx, my)?.id === id);
+
+  it('gives every Kaburo cell a zone, and Kaburo a real district size', () => {
+    expect(model.cells.length).toBeLessThanOrEqual(30);
+    for (const [mx, my] of model.cells) expect(content.zones.at(mx, my), `cell ${mx},${my}`).toBeDefined();
+    expect(new Set(model.cells.map(([mx, my]) => content.zones.at(mx, my)!.id)).size).toBe(6);
+  });
+
+  it('plans the back alleys lower and finer-grained than the crossing', () => {
+    const stats = (id: string) => {
+      const bs = inZone(id).flatMap(([mx, my]) => model.plan(mx, my)!.buildings);
+      return { h: bs.reduce((t, b) => t + b.h, 0) / bs.length, n: bs.length / inZone(id).length };
+    };
+    const alleys = stats('back_alleys');
+    const crossing = stats('crossing');
+    expect(alleys.h).toBeLessThan(crossing.h / 2);
+    expect(alleys.n).toBeGreaterThan(crossing.n * 1.5);
+  });
+
+  it('fills love hotel hill with love hotel and adult ads only', () => {
+    const out: AdPlacement[] = [];
+    for (const [mx, my] of inZone('hotel_hill')) addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), model.plan(mx, my)!.signs, model.detail(mx, my)!.props, out);
+    expect(out.length).toBeGreaterThan(20);
+    for (const a of out) expect(['lovehotel', 'adult']).toContain(DISTRICT_ADS[a.ad].cat);
+  });
+
+  it('rejects malformed zones', () => {
+    const errors: string[] = [];
+    parseZones3('z.yaml', 'district: neon\norigin: [26, 9]\nmap: [XQ]\nzones:\n  Q: { id: q, name: Q, plan: { lotW: [9, 3], wat: 1 }, ads: { nope: 1 }, look: { windows: { round: 1 } } }', content.macro, errors);
+    const all = errors.join('\n');
+    for (const m of [/no zone 'X'/, /lotW must be/, /unknown plan key 'wat'/, /unknown ad category 'nope'/, /unknown window type 'round'/]) expect(all).toMatch(m);
   });
 });

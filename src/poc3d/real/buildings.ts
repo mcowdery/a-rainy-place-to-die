@@ -62,15 +62,23 @@ export function styleFor(b: Building3): RealStyle {
   if (s) return s;
   const rnd = rng(hash(b.id, 0x5719e));
   const stamp = b.hue !== undefined;
+  const look = b.zone?.look;
+  // A zone's window mix applies below tower height (towers keep curtain walls and ribbons).
   const type = stamp
     ? WIN.small
-    : b.h >= 45
+    : look?.windows && b.h < 45
+      ? weighted(rnd, look.windows)
+      : b.h >= 45
       ? weighted(rnd, [[45, WIN.curtain], [30, WIN.ribbon], [25, WIN.punched]])
       : b.h >= 15
         ? weighted(rnd, [[40, WIN.punched], [20, WIN.balcony], [25, WIN.ribbon], [5, WIN.curtain], [10, WIN.small]])
         : weighted(rnd, [[45, WIN.punched], [25, WIN.small], [15, WIN.ribbon], [15, WIN.balcony]]);
   let [, hexes, tiled] = weighted(rnd, PALETTES.map((p) => [p[0], p] as const));
   let wallHex = rnd.pick(hexes);
+  if (look?.walls) {
+    wallHex = rnd.pick(look.walls);
+    tiled = look.tiled;
+  }
   if (type === WIN.curtain) {
     wallHex = rnd.pick(GLASS_BODY);
     tiled = false;
@@ -86,8 +94,8 @@ export function styleFor(b: Building3): RealStyle {
     : 3.0;
   const ratio = 0.4 + rnd.float() * 0.25;
   const winH = type === WIN.ribbon ? 1.1 + rnd.float() * 0.4 : 1.2 + rnd.float() * 0.5;
-  const shopOpen = stamp || rnd.chance(0.8);
-  const shopPal = stamp ? 3 : weighted(rnd, [[40, 0], [30, 1], [15, 2], [15, 3]]);
+  const shopOpen = stamp || rnd.chance(look?.open ?? 0.8);
+  const shopPal = stamp ? 3 : weighted(rnd, look?.shops ?? [[40, 0], [30, 1], [15, 2], [15, 3]]);
   const darkFrame = rnd.chance(0.4) || type === WIN.curtain;
   const litBias = rnd.int(0, 7);
   const flags = (shopOpen ? 1 : 0) + shopPal * 2 + (darkFrame ? 8 : 0) + litBias * 16 + (tiled ? 128 : 0);

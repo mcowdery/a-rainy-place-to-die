@@ -1,0 +1,139 @@
+# Kaburo's zones (format: src/poc3d/district/zones.ts). One letter per 128 m L0 cell, from origin [26, 9],
+# the district's north-west cell. Loosely after Kabukicho: the crossing and the mega-sign at the south
+# centre facing the station side, love hotels up the hill to the north-east, host clubs between them,
+# the old back alleys to the north-west, and a lane of food and music west of the crossing.
+district: neon
+origin: [26, 9]
+map:
+  - AAHHLL
+  - AAMHLL
+  - MMCCCH
+  - SSSCCS
+
+zones:
+  C:
+    id: crossing
+    name: Kaburo Crossing
+    plan:
+      floors: [[5, 10, 50], [12, 22, 42], [25, 32, 8]]
+      lotW: [9, 16]
+      localStreet: [6, 9]
+      block: [30, 56]
+      lotGap: 0.04
+      signChance: 0.95
+      verticalSign: 0.5
+    signs:
+      words: [GAME CENTER, パチンコ, カラオケ館, ドラッグ, 牛丼, 回転寿司, メガネ, カメラ, SHOES, CAFE, ヨルマート, 映画館]
+      colors: ['#ff5fc8', '#4fe3ff', '#ffe45f', '#ffffff', '#ff4f4f']
+    ads: { mainstream: 5, gaming: 2, fun: 2, food: 1 }
+    look:
+      windows: { ribbon: 30, curtain: 25, punched: 30, small: 15 }
+      walls: ['#d8d5cc', '#8e8d88', '#3a3a3e', '#c2b49a', '#2c2e33']
+      shops: { cool: 4, colourful: 4, warm: 2 }
+      open: 0.95
+
+  H:
+    id: host_street
+    name: Host Street
+    plan:
+      floors: [[5, 9, 55], [10, 16, 45]]
+      lotW: [6, 10]
+      localStreet: [5, 7]
+      lotGap: 0.08
+      signChance: 1
+      verticalSign: 0.75
+    signs:
+      words: [CLUB, HOST, ホストクラブ, キャバクラ, LOUNGE, 指名, シャンパン, 姫, 王子, 初回¥1000, BAR, 二次会]
+      colors: ['#ffd070', '#ff5fc8', '#ffffff', '#b48cff']
+    ads: { host: 4, hostess: 4, adult: 1, mainstream: 1 }
+    look:
+      windows: { blank: 25, small: 35, punched: 25, ribbon: 15 }
+      walls: ['#1e1c20', '#2a2426', '#3a3036', '#241c18', '#4a4046']
+      shops: { bar: 7, warm: 2, colourful: 1 }
+      open: 0.85
+
+  L:
+    id: hotel_hill
+    name: Love Hotel Hill
+    plan:
+      floors: [[3, 6, 55], [7, 10, 45]]
+      lotW: [10, 18]
+      localStreet: [4, 6]
+      block: [22, 44]
+      lotGap: 0.25
+      signChance: 0.9
+      verticalSign: 0.8
+    signs:
+      words: [ホテル, HOTEL, 休憩, 宿泊, 空室, 満室, レジャーホテル, 無料案内所, HOTEL VENUS, HOTEL AQUA, ホテル 桜]
+      colors: ['#ff5fc8', '#b48cff', '#4fe3ff', '#ff8ad8']
+    ads: { lovehotel: 6, adult: 2 }
+    look:
+      windows: { small: 60, blank: 25, punched: 15 }
+      walls: ['#e8d8e0', '#d8c0d0', '#f0e8d8', '#c8d8e8', '#b8a0c8', '#e0c8a8']
+      tiled: true
+      shops: { bar: 6, warm: 3, colourful: 1 }
+      open: 0.6
+
+  A:
+    id: back_alleys
+    name: Back Alleys
+    plan:
+      floors: [[2, 4, 70], [5, 7, 30]]
+      lotW: [4, 7]
+      localStreet: [2.5, 4]
+      block: [14, 30]
+      twoRowDepth: 18
+      lotGap: 0.35
+      signChance: 0.7
+      verticalSign: 0.6
+    signs:
+      words: [質, 金融, 麻雀, 雀荘, スナック, 酒, 占い, 探偵, BAR, 焼鳥, 金貸し, 両替]
+      colors: ['#ff4f4f', '#ffb040', '#6bff8a', '#ff5fc8']
+    ads: { loan: 4, street: 3, adult: 1, gaming: 1, hostess: 1 }
+    look:
+      windows: { punched: 50, small: 40, balcony: 10 }
+      walls: ['#6c5242', '#7c604c', '#5a5550', '#8e8d88', '#4a4644', '#6f6e6b']
+      tiled: true
+      shops: { warm: 4, bar: 4, cool: 2 }
+      open: 0.55
+
+  M:
+    id: food_lane
+    name: Music & Food Lane
+    plan:
+      floors: [[3, 7, 80], [8, 12, 20]]
+      lotW: [5, 9]
+      localStreet: [4, 6]
+      lotGap: 0.15
+      signChance: 1
+      verticalSign: 0.7
+    signs:
+      words: [ラーメン, 居酒屋, 焼き鳥, 餃子, 寿司, LIVE, レコード, カラオケ, 酒場, 立ち飲み, 定食, そば]
+      colors: ['#ffe45f', '#ff4f4f', '#ffb040', '#4fe3ff', '#ffffff']
+    ads: { food: 4, fun: 4, mainstream: 1, street: 1 }
+    look:
+      windows: { punched: 45, small: 25, ribbon: 20, balcony: 10 }
+      walls: ['#b8a88c', '#c2b49a', '#a89878', '#7c604c', '#d8d5cc']
+      tiled: true
+      shops: { warm: 6, colourful: 2, bar: 2 }
+      open: 0.95
+
+  S:
+    id: station_edge
+    name: Station Edge
+    plan:
+      floors: [[6, 12, 60], [14, 24, 40]]
+      lotW: [10, 18]
+      localStreet: [5, 8]
+      lotGap: 0.05
+      signChance: 0.8
+      verticalSign: 0.4
+    signs:
+      words: [ネットカフェ, カプセル, 24H, ヨルマート, 薬, 牛丼, 定食, 両替, HOTEL, 駐車場, 不動産, 歯科]
+      colors: ['#ffffff', '#4fe3ff', '#ffe45f', '#6bff8a']
+    ads: { lodging: 4, food: 2, mainstream: 2, street: 1, loan: 1 }
+    look:
+      windows: { ribbon: 40, curtain: 25, punched: 25, balcony: 10 }
+      walls: ['#8e8d88', '#7c7b77', '#d8d5cc', '#a3b3ba', '#2e3b45']
+      shops: { cool: 6, warm: 3, colourful: 1 }
+      open: 0.9

@@ -3,6 +3,7 @@ import { hash, rng, type Rng } from '../../core/hash';
 import { isWide } from '../../core/wide';
 import { isLand, type CellKind, type DistrictId, type MacroMap } from '../../gen/macro';
 import { STYLES } from '../../gen/styles';
+import type { AdCategory } from '../models/ads';
 
 /**
  * 3D district planner: the 2D prototype's model (L0 macro cells, hashed cell-edge roads, BSP into
@@ -50,6 +51,36 @@ export interface Building3 {
   /** Which face fronts the street. */
   readonly front: Side;
   readonly hue?: number;
+  /** The zone it was generated in (look and ads); absent for stamps and zone-less districts. */
+  readonly zone?: Zone3;
+}
+
+/** How a zone's buildings look: window-type weights and wall colours (see real/buildings.ts). */
+export interface ZoneLook {
+  /** [weight, WIN type] pairs. */
+  readonly windows: readonly (readonly [number, number])[] | null;
+  readonly walls: readonly number[] | null;
+  /** Whether those walls are tiled (the small-tile finish of Japanese mid-rises). */
+  readonly tiled: boolean;
+  /** Storefront interiors: [weight, palette] pairs (0 warm, 1 cool white, 2 colourful, 3 dim bar). */
+  readonly shops: readonly (readonly [number, number])[] | null;
+  /** Share of storefronts open (the rest are shuttered). */
+  readonly open: number | null;
+}
+
+/**
+ * An area within a district with its own character (content/world3d/zones.yaml): planner parameters
+ * (street and alley density, lot widths, heights, signs), the look of its buildings and its ad mix.
+ */
+export interface Zone3 {
+  /** Its letter in the zone map. */
+  readonly key: string;
+  readonly id: string;
+  readonly name: string;
+  readonly style: DistrictStyle3;
+  readonly look: ZoneLook;
+  /** Category weights for the zone's billboards and posters. */
+  readonly ads: Readonly<Partial<Record<AdCategory, number>>>;
 }
 
 export interface CellPlan3 {
@@ -113,11 +144,11 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
 
 export const cellKey = (mx: number, my: number): number => my * 4096 + mx;
 
-export function planCell3(macro: MacroMap, mx: number, my: number, reserved: readonly Rect[], seed: number): CellPlan3 | null {
+export function planCell3(macro: MacroMap, mx: number, my: number, reserved: readonly Rect[], seed: number, zone?: Zone3): CellPlan3 | null {
   const kind = macro.kindAt(mx, my);
   if (!isLand(kind)) return null;
-  const style = STYLES3[kind];
-  if (!style) return null;
+  if (!STYLES3[kind]) return null;
+  const style = zone?.style ?? STYLES3[kind]!;
   const R: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
   const roads: Road3[] = [];
 
@@ -167,8 +198,9 @@ export function planCell3(macro: MacroMap, mx: number, my: number, reserved: rea
 
   const buildings: Building3[] = [];
   const signs: Sign3[] = [];
-  const idBase = 1 + (my * macro.cols + mx) * 128;
-  for (const b of blocks) fillBlock(b, style, rnd, reserved, buildings, signs, idBase);
+  // 256 ids per cell (dense zones have many small lots); stamps use 900000 and up.
+  const idBase = 1 + (my * macro.cols + mx) * 256;
+  for (const b of blocks) fillBlock(b, style, rnd, reserved, buildings, signs, idBase, zone);
   return { mx, my, kind, rect: R, roads, buildings, signs };
 }
 
@@ -212,7 +244,7 @@ function subdivide(
  * A block becomes one or two rows of lots along x, each fronting the block's north or south street; the
  * corner lots at either end of a row front the side street instead, so every street is lined with fronts.
  */
-function fillBlock(block: Rect, style: DistrictStyle3, rnd: Rng, reserved: readonly Rect[], buildings: Building3[], signs: Sign3[], idBase: number): void {
+function fillBlock(block: Rect, style: DistrictStyle3, rnd: Rng, reserved: readonly Rect[], buildings: Building3[], signs: Sign3[], idBase: number, zone?: Zone3): void {
   const rows: { r: Rect; front: Side }[] = [];
   if (block.h > style.twoRowDepth) {
     const split = block.h * (0.4 + rnd.float() * 0.2);
@@ -233,9 +265,9 @@ function fillBlock(block: Rect, style: DistrictStyle3, rnd: Rng, reserved: reado
       if (end - x > style.lotW[0] + 2 && rnd.chance(style.lotGap)) x += 1.5; // service alley
       const height = pickFloors(style, rnd) * FLOOR_H;
       if (reserved.some((q) => overlaps(q, lot))) continue;
-      if (buildings.length >= 127) continue;
+      if (buildings.length >= 255) continue;
       // Small gaps between neighbours so each building reads as its own mass (edges in the ASCII pass).
-      const b: Building3 = { id: idBase + buildings.length, x: lot.x + lot.w / 2, z: lot.y + lot.h / 2, w: lot.w - 0.4, d: lot.h - 0.4, h: height, front: lotFront };
+      const b: Building3 = { id: idBase + buildings.length, x: lot.x + lot.w / 2, z: lot.y + lot.h / 2, w: lot.w - 0.4, d: lot.h - 0.4, h: height, front: lotFront, ...(zone ? { zone } : {}) };
       buildings.push(b);
       if (rnd.chance(style.signChance)) signs.push(makeSign(b, style, rnd));
     }

@@ -3,6 +3,7 @@ import type { DistrictId, MacroMap } from '../../gen/macro';
 import { cellDetail, type CellDetail } from '../real/props';
 import { CELL, cellKey, planCell3, type Building3, type CellPlan3 } from './plan';
 import { plazaRect, reservedRect, type Placed3 } from './stamps';
+import { ZoneMap } from './zones';
 
 /**
  * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings, signs) and
@@ -23,6 +24,7 @@ export class DistrictModel {
     readonly kind: DistrictId,
     readonly placed: readonly Placed3[],
     private readonly seed: number,
+    readonly zones: ZoneMap = ZoneMap.EMPTY,
   ) {
     const cells: [number, number][] = [];
     for (let my = 0; my < macro.rows; my++) for (let mx = 0; mx < macro.cols; mx++) if (macro.kindAt(mx, my) === kind) cells.push([mx, my]);
@@ -48,7 +50,7 @@ export class DistrictModel {
     if (!p) {
       const cellRect: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
       const reserved = this.placed.flatMap((q) => [reservedRect(q), plazaRect(q) ?? []].flat()).filter((r) => overlaps(r, cellRect));
-      p = planCell3(this.macro, mx, my, reserved, this.seed)!;
+      p = planCell3(this.macro, mx, my, reserved, this.seed, this.zones.at(mx, my))!;
       this.plans.set(k, p);
     }
     return p;

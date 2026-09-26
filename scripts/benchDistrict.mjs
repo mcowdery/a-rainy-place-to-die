@@ -1,5 +1,5 @@
 // Benchmarks the Kaburo district page in the installed Microsoft Edge: warm start, chunk generation, and
-// frame times while streaming along a boulevard at 30 m/s, then standing still with the ASCII overlay on and off.
+// frame times while streaming up and down a street through the district at 30 m/s, then standing still with the ASCII overlay on and off.
 //   node scripts/benchDistrict.mjs            headless (GPU flags on; check the reported GPU)
 //   node scripts/benchDistrict.mjs --headed   visible window
 import { chromium } from 'playwright-core';

@@ -109,17 +109,18 @@ export class SignAtlas extends SignLayout {
       g.fillStyle = '#000';
       g.fillRect(0, 0, W, H);
     }
-    gb.filter = 'blur(7px)';
     for (const [key, it] of want) {
       const s = this.slots.get(key)!;
-      for (const g of [gs, gb]) {
-        g.fillStyle = '#fff';
-        g.save();
-        if (it.vertical) drawVertical(g, it.text, s);
-        else drawHorizontal(g, it.text, s);
-        g.restore();
-      }
+      gs.fillStyle = '#fff';
+      gs.save();
+      if (it.vertical) drawVertical(gs, it.text, s);
+      else drawHorizontal(gs, it.text, s);
+      gs.restore();
     }
+    // The halo: the sharp text blurred in one pass (a filter on every text draw was very slow).
+    gb.filter = 'blur(7px)';
+    gb.drawImage(sharp, 0, 0);
+    gb.filter = 'none';
     const a = gs.getImageData(0, 0, W, H).data;
     const b = gb.getImageData(0, 0, W, H).data;
     const data = new Uint8Array(W * H * 4);

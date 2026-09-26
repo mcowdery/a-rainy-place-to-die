@@ -241,7 +241,7 @@ export function placeStamps3(file: string, text: string, macro: MacroMap, stamps
     const clash = out.find((o) => overlaps(pad(o.rect, 2), rect));
     if (clash) return err(`${at}: overlaps placement '${clash.id}'`);
     const building: Building3 = {
-      id: 60000 + i,
+      id: 900000 + i,
       x: rect.x + stamp.w / 2,
       z: rect.y + stamp.d / 2,
       w: stamp.w,

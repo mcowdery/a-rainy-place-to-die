@@ -4,6 +4,8 @@ Direction (2026-09-25): Kaburo should feel dense, vibrant and lived-in, not spar
 
 ## Zones
 
+**Built (2026-09-26):** Kaburo is now district-sized (6×4 cells, 768×512 m) with the six zones below in `content/world3d/zones.yaml` (planner, building look, storefronts, signs and ads per zone). Still to do per zone: props (lanterns, touts, vending clusters) and hand-made set pieces.
+
 The district stays procedurally generated, but zones steer what each block gets: building mix, signage, ad pool and props. Hand-built stamps mark the primary areas.
 
 | Zone | Feel | Businesses / signage | Ad pool |

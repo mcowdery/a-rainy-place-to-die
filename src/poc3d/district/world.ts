@@ -9,6 +9,7 @@ import type { WorkerIn } from './chunkWorker';
 import { DistrictModel } from './model';
 import { CELL, cellKey, type Building3 } from './plan';
 import type { Node3, Placed3 } from './stamps';
+import type { ZoneMap } from './zones';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
 export const LOAD_RADIUS = 620;
@@ -99,13 +100,19 @@ export class District {
     readonly kind: DistrictId,
     placed: readonly Placed3[],
     private readonly seed: number,
+    zones?: ZoneMap,
   ) {
-    this.model = new DistrictModel(macro, kind, placed, seed);
+    this.model = new DistrictModel(macro, kind, placed, seed, zones);
     this.nodes = placed.flatMap((p) => p.nodes);
   }
 
   get cells(): readonly (readonly [number, number])[] {
     return this.model.cells;
+  }
+
+  /** The zone at a world position (for the HUD), if any. */
+  zoneAt(x: number, z: number): string | null {
+    return this.model.zones.at(Math.floor(x / CELL), Math.floor(z / CELL))?.name ?? null;
   }
 
   get bounds(): { minX: number; maxX: number; minZ: number; maxZ: number } {

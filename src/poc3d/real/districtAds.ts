@@ -80,6 +80,28 @@ export interface AdPlacement {
   readonly nz: number;
 }
 
+type Entry = (typeof BILLBOARDS)[number];
+
+/**
+ * An ad for a building: by its zone's category weights (content/world3d/zones.yaml), among the categories
+ * that have ads in this format; any ad, uniformly, outside zones.
+ */
+function pickAd(list: readonly Entry[], b: Building3, salt: number): Entry | undefined {
+  if (list.length === 0) return undefined;
+  const weights = b.zone ? Object.entries(b.zone.ads) : [];
+  const cats = weights.filter(([c]) => list.some((e) => e.a.cat === c));
+  if (cats.length === 0) return list[hash(b.id, salt) % list.length];
+  const total = cats.reduce((t, [, w]) => t + w, 0);
+  let r = (hash(b.id, salt, 0xca7) / 0x100000000) * total;
+  let cat = cats[0][0];
+  for (const [c, w] of cats) if ((r -= w) < 0) {
+    cat = c;
+    break;
+  }
+  const pool = list.filter((e) => e.a.cat === cat);
+  return pool[hash(b.id, salt) % pool.length];
+}
+
 /** Adds a chunk's district ads: panels into sb (ad atlas material), frames and lamps into mb. */
 export function addDistrictAds(
   sb: SignBuilder,
@@ -95,8 +117,8 @@ export function addDistrictAds(
     if (b.hue !== undefined) continue; // stamps are hand-dressed
     const rnd = rng(hash(b.id, 0xad5));
     const f = frontFrame(b);
-    const billboard = BILLBOARDS[hash(b.id, 1) % BILLBOARDS.length];
-    const poster = POSTERS[hash(b.id, 2) % POSTERS.length];
+    const billboard = pickAd(BILLBOARDS, b, 1);
+    const poster = pickAd(POSTERS, b, 2);
     // Billboards only where they can be seen from the street (a junction, a square, a street running away
     // from them, lower roofs across the way); where they can, they're more likely than before.
     const rooftop = b.h >= 15 && !hasRooftopLetters(b, seen) && rnd.chance(0.45) && seen(b, b.h + 4);

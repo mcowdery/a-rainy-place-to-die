@@ -80,8 +80,9 @@ async function run(): Promise<void> {
   const style = STYLES3.neon!;
   const cityU = cityUniforms();
   const city = cityMaterial(cityU);
-  const district = new District(content.macro, 'neon', content.placed, SEED);
-  const atlas = new SignAtlas(signTexts(style.signWords, content.placed));
+  const district = new District(content.macro, 'neon', content.placed, SEED, content.zones);
+  const words = content.zones.words(style.signWords);
+  const atlas = new SignAtlas(signTexts(words, content.placed));
   const M = 16;
   const b = district.bounds;
   const lightmap = new Lightmap(renderer, { x: b.minX - M, y: b.minZ - M, w: b.maxX - b.minX + 2 * M, h: b.maxZ - b.minZ + 2 * M }, CELL);
@@ -89,7 +90,7 @@ async function run(): Promise<void> {
   cityU.uLightRect.value = lightmap.uniformRect;
   const ghost = ghostMaterial();
   const ads = adMaterial(cityU, new DistrictAdAtlas());
-  district.setKit({ city, signs: signMaterial(cityU, atlas), ghost, ads, atlas, lightmap, words: style.signWords });
+  district.setKit({ city, signs: signMaterial(cityU, atlas), ghost, ads, atlas, lightmap, words });
   scene.add(district.root);
 
   // Post: HDR scene with MSAA and a depth texture -> ASCII overlay -> bloom -> tone mapping + sRGB.
@@ -277,7 +278,9 @@ async function run(): Promise<void> {
   const benchLog: { phase: string; samples: Sample[] }[] = [];
   const benchStart = performance.now();
   const PATH_X = 29 * CELL;
-  const PATH_Z0 = 8 * CELL + 20;
+  // Up and down the north-south street through the district, turning at its edges.
+  const PATH_Z0 = district.bounds.minZ + 12;
+  const PATH_SPAN = district.bounds.maxZ - district.bounds.minZ - 24;
   const PATH_SPEED = 30;
   const PATH_S = 30;
   let benchDone = false;
@@ -305,8 +308,9 @@ async function run(): Promise<void> {
       const t = (now - benchStart) / 1000;
       phase = benchPhase(t);
       if (phase === 'stream') {
-        camera.position.set(PATH_X, 1.7, PATH_Z0 + t * PATH_SPEED);
-        controls.setView(180, 4);
+        const d = (t * PATH_SPEED) % (2 * PATH_SPAN);
+        camera.position.set(PATH_X, 1.7, PATH_Z0 + (d < PATH_SPAN ? d : 2 * PATH_SPAN - d));
+        controls.setView(d < PATH_SPAN ? 180 : 0, 4);
       } else if (phase) {
         overlay.preset = phase === 'still-plain' ? 'off' : 'vibe';
       } else if (!benchDone) {
@@ -362,7 +366,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        `KABURO · ${style.name} (Neon Core)  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}`,
+        `KABURO · ${district.zoneAt(p.x, p.z) ?? style.name} (Neon Core)  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
