@@ -301,6 +301,24 @@ export class TrafficSystem {
     }
   }
 
+  /**
+   * Writes the vehicles nearest the camera into the city shader's headlight list: (x, z, dx, dz), front
+   * direction normalised. Visible vehicles only (the others are far away anyway).
+   */
+  fillLights(camera: THREE.Vector3, out: THREE.Vector4[]): number {
+    const near = this.vehicles
+      .filter((v) => v.obj.visible)
+      .map((v) => ({ v, d: (v.x - camera.x) ** 2 + (v.z - camera.z) ** 2 }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, out.length);
+    near.forEach(({ v }, i) => {
+      // The light list takes the car's centre; buses are longer, so move their origin forward.
+      const k = v.bus ? v.half - 2.4 : 0;
+      out[i].set(v.x + v.dx * k, v.z + v.dz * k, v.dx, v.dz);
+    });
+    return near.length;
+  }
+
   /** Whether a walker at (x, z) of radius r touches a vehicle. */
   blocked(x: number, z: number, r: number): boolean {
     for (const v of this.vehicles) {

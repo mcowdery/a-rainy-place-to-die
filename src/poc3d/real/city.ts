@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 
+/** Cars whose headlights light the city (the nearest to the camera). */
+export const CAR_LIGHTS = 16;
+
 /**
  * The city material: one MeshStandardMaterial (so sun, sky light, shadows and fog all work) patched to draw
  * every surface kind in meshBuilder.ts KIND from per-vertex attributes, so a whole chunk is one draw call.
@@ -26,6 +29,10 @@ export interface CityUniforms {
   uWet: { value: number };
   /** 0-1: street light pools under its sources and falls off to black between them. */
   uDark: { value: number };
+  /** Moving cars' headlights near the camera: (x, z, dx, dz) per car, and how many; uHeadlights 0-1 switches them. */
+  uCars: { value: THREE.Vector4[] };
+  uCarCount: { value: number };
+  uHeadlights: { value: number };
   uZenith: { value: THREE.Color };
   uHorizon: { value: THREE.Color };
   /** Daylight reaching room interiors (unlit rooms read as dim by day, black by night). */
@@ -45,6 +52,9 @@ export function cityUniforms(): CityUniforms {
     uFlicker: { value: 0 },
     uWet: { value: 0 },
     uDark: { value: 0 },
+    uCars: { value: Array.from({ length: CAR_LIGHTS }, () => new THREE.Vector4()) },
+    uCarCount: { value: 0 },
+    uHeadlights: { value: 0 },
     uZenith: { value: new THREE.Color(0x0a0e18) },
     uHorizon: { value: new THREE.Color(0x2a2230) },
     uRoomAmbient: { value: new THREE.Color(0x000000) },
@@ -62,6 +72,43 @@ const common = /* glsl */ `
   uniform float uFlicker;
   uniform float uWet;
   uniform float uDark;
+  uniform vec4 uCars[${CAR_LIGHTS}];
+  uniform int uCarCount;
+  uniform float uHeadlights;
+  // Headlights and tail lights of the cars near the camera, as light on the surfaces round them (no
+  // volumes): two beams ahead that spread and fade over ~35 m, low down; a short red glow behind.
+  vec3 carLights(vec3 wp, vec3 n, bool ground) {
+    vec3 acc = vec3(0.0);
+    for (int i = 0; i < ${CAR_LIGHTS}; i++) {
+      if (i >= uCarCount) break;
+      vec4 c = uCars[i];
+      vec2 rel = wp.xz - c.xy;
+      if (dot(rel, rel) > 1600.0) continue;
+      vec2 d = c.zw;
+      vec2 sd = vec2(-d.y, d.x);
+      float along = dot(rel, d) - 2.2;
+      float side = dot(rel, sd);
+      // Facing: ground always; walls and people only on the side toward the car.
+      float face = ground ? 1.0 : clamp(dot(n.xz, -normalize(rel + d * 0.5)), 0.0, 1.0);
+      // Height: the beams sit low (0.7 m) and dip toward the road.
+      float hgt = exp(-max(wp.y - 0.4 - along * 0.02, 0.0) / 1.6);
+      if (along > 0.0) {
+        float beam = 0.0;
+        for (int k = -1; k <= 1; k += 2) {
+          float o = side - float(k) * 0.75;
+          float spread = 0.45 + along * 0.14;
+          beam += exp(-o * o / (spread * spread));
+        }
+        // Fades in off the bumper and out to nothing by 34 m (no edge where the list's reach ends).
+        float fall = smoothstep(0.0, 2.0, along) * smoothstep(34.0, 14.0, along) / (1.0 + along * along * 0.01);
+        acc += vec3(1.0, 0.9, 0.72) * beam * fall * hgt * face * 5.0;
+      } else if (along > -7.5) {
+        float back = -along - 2.4;
+        if (back > 0.0) acc += vec3(1.0, 0.05, 0.03) * exp(-side * side / 1.6) * exp(-back * 0.7) * hgt * face * 2.0;
+      }
+    }
+    return acc * uHeadlights;
+  }
   uniform vec3 uZenith;
   uniform vec3 uHorizon;
   uniform vec3 uRoomAmbient;
@@ -429,6 +476,12 @@ const surface = /* glsl */ `
   vec3 Lm = lightAt(vWPos.xz + Nw.xz * 0.6);
   float hf = groundKind ? 1.0 : exp(-max(vWPos.y - 0.2, 0.0) / 4.5) * 0.8;
   sEmit += albedo * Lm * hf;
+  if (uCarCount > 0 && uHeadlights > 0.0) {
+    vec3 cl = carLights(vWPos, Nw, groundKind);
+    sEmit += albedo * cl;
+    // A wet road throws the headlights back at you: a glare stretched toward the viewer.
+    if (groundKind && uWet > 0.0) sEmit += cl * 0.12 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * 4.0;
+  }
   diffuseColor.rgb = albedo;
   totalEmissiveRadiance += sEmit;
 `;

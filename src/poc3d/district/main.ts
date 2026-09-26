@@ -572,6 +572,9 @@ async function run(): Promise<void> {
     for (const update of landmarkUpdates) update(camera.position, dt);
     trains?.update(dt, camera);
     traffic.update(dt, camera.position);
+    cityU.uCarCount.value = traffic.fillLights(camera.position, cityU.uCars.value);
+    // Headlights come on with the street lamps (dusk, dawn, night, dark storms).
+    cityU.uHeadlights.value = Math.max(atm.lamps, mood.darkness, rainAmount > 0.5 ? 0.6 : 0);
     // Wind: a direction and strength with gusts; the rain slants by up to ~3 m sideways per metre of fall.
     const tt = now / 1000;
     const gust = 0.72 + 0.2 * Math.sin(tt * 0.83) + 0.12 * Math.sin(tt * 2.31 + 1.3) + 0.06 * Math.sin(tt * 5.7);
