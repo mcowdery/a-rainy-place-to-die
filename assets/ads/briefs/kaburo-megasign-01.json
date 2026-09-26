@@ -1,0 +1,19 @@
+{
+  "batch": "kaburo-megasign-01",
+  "purpose": "Content for Kaburo's landmark mega-sign: a stack of giant screens on the central crossing that cycle through ads (16:9). Big, bright, glossy.",
+  "use": "billboard",
+  "district": "neon",
+  "defaults": { "lora": null, "variants": 2, "width": 1536, "height": 864 },
+  "items": [
+    { "id": "mega_cosmetics", "brand": "SHISEIKA ルージュ", "copy": "夜に、咲く。", "lora": "ohwx julie", "notes": "Mega-sign cosmetics; Julie.",
+      "subject": "close-up beauty shot of a glamorous model applying glossy red lipstick, flawless skin, dramatic red and black backdrop, luxury cosmetics commercial" },
+    { "id": "mega_soda", "brand": "ネオンサイダー NEON CIDER", "copy": "シュワっと、夜更かし。", "notes": "Mega-sign soft drink.",
+      "subject": "a bottle of glowing cyan soda splashing in slow motion with ice cubes against a neon cityscape at night, vivid commercial product shot" },
+    { "id": "mega_idol", "brand": "ミッドナイト☆シスターズ", "copy": "真夜中サイダー MV 解禁", "notes": "Mega-sign idol MV (matches the billboard).",
+      "subject": "three adult Japanese idol singers dancing on a huge glittering stage with lasers and confetti, music video still" },
+    { "id": "mega_kaburo", "brand": "WELCOME TO KABURO 歌舞路", "copy": "眠らない街へ、ようこそ。", "notes": "Mega-sign district ident.",
+      "subject": "sweeping night view of a dense neon Japanese entertainment district crossing crowded with people, glowing signs everywhere, long exposure light trails" },
+    { "id": "mega_whisky", "brand": "WHISKY 月光 GEKKO", "copy": "夜は、琥珀色。", "notes": "Mega-sign whisky (matches the billboard).",
+      "subject": "slow-motion whisky pouring over a large ice sphere in a crystal glass, amber light, black background, luxurious commercial" }
+  ]
+}

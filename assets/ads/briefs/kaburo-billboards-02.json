@@ -1,0 +1,75 @@
+{
+  "batch": "kaburo-billboards-02",
+  "purpose": "Kaburo round 2 billboards: many more distinct businesses (maid cafe, live house, konbini, noir money trades, love hotels, arcade, whisky, a yakuza front company, cinema, idols) so exploring keeps surfacing new ads. Love hotel ads explicit but censored Japanese-style; all models adults.",
+  "use": "billboard",
+  "district": "neon",
+  "defaults": {
+    "lora": null,
+    "variants": 2
+  },
+  "items": [
+    {
+      "id": "live_nightdrive",
+      "brand": "LIVE HOUSE 地下室",
+      "copy": "NIGHT DRIVE 今夜 23:00",
+      "notes": "Live house / music venue.",
+      "subject": "city pop band playing on a small basement club stage, female vocalist in an 80s blazer at a vintage microphone, saxophone player, coloured spotlights through haze, energetic concert photography"
+    },
+    {
+      "id": "yorumart_food",
+      "brand": "ヨルマート YORU MART",
+      "copy": "24時間、あなたの夜に。",
+      "notes": "Konbini chain.",
+      "subject": "Japanese convenience store hot snacks: fried chicken, steaming oden, rice balls and a canned coffee on a clean counter, bright appetising commercial food photography"
+    },
+    {
+      "id": "cash_one",
+      "brand": "キャッシュ・ワン CASH ONE",
+      "copy": "ご融資 最短30分",
+      "notes": "Noir quick-cash office.",
+      "subject": "stern middle-aged man in a cheap suit counting a thick stack of yen banknotes under a green desk lamp in a dim office, cigarette smoke, noir mood"
+    },
+    {
+      "id": "club_prince",
+      "brand": "CLUB PRINCE",
+      "copy": "指名No.1 レン",
+      "notes": "Second host club.",
+      "subject": "handsome young adult Japanese host in a white suit with silver hair, confident smile, holding a champagne glass, glittering silver and white studio backdrop, host club photography"
+    },
+    {
+      "id": "gzone_arcade",
+      "brand": "GAME CENTER G-ZONE",
+      "copy": "UFOキャッチャー 新景品!",
+      "notes": "Arcade.",
+      "subject": "brightly lit Japanese game arcade full of claw machines and rhythm games, young adults playing and cheering, rainbow LED light, energetic"
+    },
+    {
+      "id": "gekko_whisky",
+      "brand": "WHISKY 月光 GEKKO",
+      "copy": "夜は、琥珀色。",
+      "notes": "80s-style whisky ad.",
+      "subject": "a glass of whisky on the rocks on a dark bar counter beside a bottle, amber backlight, cigarette smoke curling, 1980s Japanese whisky advertisement, moody noir"
+    },
+    {
+      "id": "ryujin_kogyo",
+      "brand": "竜神興業 RYUJIN KOGYO",
+      "copy": "街の未来を、築く。",
+      "notes": "Yakuza front company (noir hook).",
+      "subject": "stern middle-aged man in a dark double-breasted suit standing with arms folded in front of a construction site at night, cranes and floodlights, intimidating corporate portrait"
+    },
+    {
+      "id": "tokyo_noir_film",
+      "brand": "映画『東京ノワール』",
+      "copy": "今夜、この街で誰かが消える。",
+      "notes": "Cinema billboard; ties to the detective thread.",
+      "subject": "film still of a detective in a trench coat and a woman in a red dress under a neon-lit rainy bridge, cinematic noir, dramatic lighting"
+    },
+    {
+      "id": "midnight_sisters",
+      "brand": "ミッドナイト☆シスターズ",
+      "copy": "NEW SINGLE「真夜中サイダー」",
+      "notes": "Idol group.",
+      "subject": "three adult Japanese idol singers in matching sparkly pastel stage costumes posing together, confetti, pink and cyan stage lights, idol group promotional photography"
+    }
+  ]
+}

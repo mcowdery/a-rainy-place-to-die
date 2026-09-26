@@ -1,0 +1,104 @@
+{
+  "batch": "kaburo-posters-02",
+  "purpose": "Kaburo round 2 street posters and lightboxes: maid cafe, live house gigs, konbini, pawn shop and quick cash, love hotels and an esthe, snack bar, izakaya, net cafe, capsule hotel, mahjong, and story-hook posters (wanted notice, election poster, an album). Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon",
+  "defaults": {
+    "lora": null,
+    "variants": 2
+  },
+  "items": [
+    {
+      "id": "maid_cafe_pure_poster",
+      "brand": "めいどかふぇ ♡ぴゅあ♡",
+      "copy": "チェキ撮影 ¥500",
+      "notes": "Maid cafe street poster (no LoRA).",
+      "subject": "cute adult maid cafe waitress in her early twenties in a pastel blue maid outfit holding a cream parfait and winking, pastel cafe interior"
+    },
+    {
+      "id": "live_singer_poster",
+      "brand": "LIVE HOUSE 地下室",
+      "copy": "YUKO MIDNIGHT ONE MAN LIVE",
+      "notes": "Gig poster.",
+      "subject": "glamorous adult Japanese female city pop singer in her late twenties in a shoulder-padded 80s dress singing into a vintage microphone, blue spotlight, smoky stage"
+    },
+    {
+      "id": "yorumart_poster",
+      "brand": "ヨルマート",
+      "copy": "ホットスナック 全品20円引き",
+      "notes": "Konbini promo.",
+      "subject": "crispy golden Japanese convenience store fried chicken in a paper bag, steam, bright clean commercial food photography"
+    },
+    {
+      "id": "maruyoshi_pawn",
+      "brand": "質 まるよし MARUYOSHI",
+      "copy": "ブランド品・貴金属 高価買取",
+      "notes": "Noir pawn shop.",
+      "subject": "a glass shop counter full of luxury watches, gold rings and jewellery under harsh fluorescent light, a pawn shop in a back alley, slightly seedy"
+    },
+    {
+      "id": "cash_one_poster",
+      "brand": "キャッシュ・ワン",
+      "copy": "ブラックOK 即日",
+      "notes": "Noir loan poster.",
+      "subject": "smiling man in a suit handing an envelope of cash over a desk, forced cheerful smile, harsh flash photography, cheap and slightly sinister"
+    },
+    {
+      "id": "snack_yasoukyoku",
+      "brand": "スナック 夜想曲",
+      "copy": "ママがお待ちしております",
+      "notes": "Snack bar.",
+      "subject": "elegant Japanese mama-san in her forties in a kimono smiling behind a small snack bar counter with a karaoke microphone, warm amber light"
+    },
+    {
+      "id": "gabunomi_izakaya",
+      "brand": "居酒屋 がぶ飲み屋",
+      "copy": "生ビール 一杯 ¥190",
+      "notes": "Izakaya chain.",
+      "subject": "frosty mug of Japanese draft beer overflowing with foam beside yakitori skewers, cheerful izakaya counter, warm light, appetising"
+    },
+    {
+      "id": "netcafe_yobune",
+      "brand": "ネットカフェ 夜舟",
+      "copy": "ナイトパック 8時間 ¥1,480",
+      "notes": "Net cafe (for people with nowhere to go home to).",
+      "subject": "a small private booth in a Japanese internet cafe with a reclining chair, computer screen glow and a drink bar cup, lonely late-night mood"
+    },
+    {
+      "id": "capsule_hotel",
+      "brand": "カプセルホテル 蜂の巣",
+      "copy": "1泊 ¥2,900 サウナ付",
+      "notes": "Capsule hotel.",
+      "subject": "long corridor of stacked white capsule hotel pods with soft blue lighting, one curtain half open, clean and futuristic"
+    },
+    {
+      "id": "mahjong_tonpu",
+      "brand": "雀荘 東風",
+      "copy": "フリー 1卓より 24H",
+      "notes": "Mahjong parlour.",
+      "subject": "hands mid-game over an automatic mahjong table with tiles and an ashtray, overhead green light, smoky back room"
+    },
+    {
+      "id": "wanted_notice",
+      "brand": "指名手配",
+      "copy": "この顔にピンときたら110番",
+      "notes": "Police wanted notice (story hook).",
+      "subject": "police wanted-poster mugshot of a gaunt middle-aged Japanese man with a scar on his cheek, plain grey background, flat harsh lighting, front-facing"
+    },
+    {
+      "id": "election_tadokoro",
+      "brand": "田所 誠一郎",
+      "copy": "明日の歌舞路を、もう一度。",
+      "notes": "Election poster (story hook).",
+      "subject": "confident silver-haired Japanese politician in his sixties in a navy suit with a party pin, fist raised, plain white background, Japanese election campaign poster photo"
+    },
+    {
+      "id": "julie_album",
+      "brand": "JULIE『MIDNIGHT PLASTIC』",
+      "copy": "NEW ALBUM 11.11 ON SALE",
+      "lora": "ohwx julie",
+      "notes": "City-pop album poster; Julie as the singer.",
+      "subject": "80s city pop album cover portrait, model in a pastel satin jacket leaning on a convertible at dusk, palm trees and a pink and purple sky"
+    }
+  ]
+}
