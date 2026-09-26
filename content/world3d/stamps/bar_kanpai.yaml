@@ -2,6 +2,7 @@
 # Coordinates: at: [u along the front face from its left end seen from the street, metres out from it]
 # (signs: [u, height]).
 id: bar_kanpai
+name: Bar Kanpai かんぱい
 footprint: [12, 10]
 height: 9
 hue: '#ff5fc8'
@@ -19,6 +20,7 @@ nodes:
     handoff: {}
   out:
     kind: spawn
+    name: Bar Kanpai
     at: [6, 3.5]
     facing: south
   mama:

@@ -5,6 +5,9 @@ import { loadDistrictContent } from '../src/poc3d/district/content';
 import { CELL, planCell3, STYLES3 } from '../src/poc3d/district/plan';
 import { DistrictModel } from '../src/poc3d/district/model';
 import { parseZones3 } from '../src/poc3d/district/zones';
+import { destinations } from '../src/poc3d/district/travel';
+import { District } from '../src/poc3d/district/world';
+import { localFrame, toWorld } from '../src/poc3d/real/localFrame';
 import { DISTRICT_ADS } from '../src/poc3d/models/ads';
 import { addDistrictAds, type AdPlacement } from '../src/poc3d/real/districtAds';
 import { MeshBuilder } from '../src/poc3d/real/meshBuilder';
@@ -180,5 +183,43 @@ describe('Kaburo zones', () => {
     parseZones3('z.yaml', 'district: neon\norigin: [26, 9]\nmap: [XQ]\nzones:\n  Q: { id: q, name: Q, plan: { lotW: [9, 3], wat: 1 }, ads: { nope: 1 }, look: { windows: { round: 1 } } }', content.macro, errors);
     const all = errors.join('\n');
     for (const m of [/no zone 'X'/, /lotW must be/, /unknown plan key 'wat'/, /unknown ad category 'nope'/, /unknown window type 'round'/]) expect(all).toMatch(m);
+  });
+});
+
+describe('Places you can walk into, and fast travel', () => {
+  const district = new District(content.macro, 'neon', content.placed, 7, content.zones);
+  const placed = (id: string) => content.placed.find((p) => p.id === id)!;
+
+  it('lets you walk into Yoru Mart through its doors, but not through the glass or the shelves', () => {
+    const f = localFrame(placed('yoru_mart').building);
+    const at = (u: number, t: number) => toWorld(f, u, t);
+    expect(district.blocked(...at(3, -1.5), 0.3)).toBe(false); // outside the doors
+    expect(district.blocked(...at(3, 0.1), 0.3)).toBe(false); // in the doorway
+    expect(district.blocked(...at(3.55, 5), 0.3)).toBe(false); // an aisle (a customer browses further in)
+    expect(district.blocked(...at(8, 0.1), 0.3)).toBe(true); // the shop window
+    expect(district.blocked(...at(4.7, 7), 0.3)).toBe(true); // a gondola
+    expect(district.blocked(...at(11, 3.2), 0.3)).toBe(true); // the counter (the staff area behind it is walled off)
+  });
+
+  it('lets you walk the shrine path up to the hall', () => {
+    const f = localFrame(placed('kaburo_inari').building);
+    for (const t of [0.5, 3.7, 8, 12, 15]) expect(district.blocked(...toWorld(f, 5, t), 0.3), `path at ${t}`).toBe(false);
+    expect(district.blocked(...toWorld(f, 5, 20), 0.3)).toBe(true);
+  });
+
+  it('widens the roads into the scramble crossing', () => {
+    const mega = placed('kaburo_crossing');
+    const [x, z] = [mega.rect.x + mega.stamp.scramble![0], mega.rect.y + mega.stamp.scramble![1]];
+    const roads = district.plan(Math.floor(x / CELL), Math.floor(z / CELL))!.roads.filter((r) => x >= r.rect.x && x <= r.rect.x + r.rect.w && z >= r.rect.y && z <= r.rect.y + r.rect.h);
+    expect(roads.length).toBeGreaterThanOrEqual(2);
+    for (const r of roads) expect(r.kind).toBe('boulevard');
+  });
+
+  it('offers every named spawn and every zone as a free fast-travel spot', () => {
+    const dests = destinations(district, district.nodes, content.zones);
+    const names = dests.map((d) => d.name);
+    expect(names).toEqual(expect.arrayContaining(['Kaburo Crossing', 'Bar Kanpai', 'Yoru Mart', 'Yoru Mart (inside)', 'Kaburo Inari Shrine']));
+    expect(dests.filter((d) => d.group === 'Zones')).toHaveLength(content.zones.zones.length);
+    for (const d of dests) expect(district.blocked(d.x, d.z, 0.3), d.name).toBe(false);
   });
 });

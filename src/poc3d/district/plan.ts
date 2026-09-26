@@ -144,7 +144,22 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
 
 export const cellKey = (mx: number, my: number): number => my * 4096 + mx;
 
-export function planCell3(macro: MacroMap, mx: number, my: number, reserved: readonly Rect[], seed: number, zone?: Zone3): CellPlan3 | null {
+/** Width of the boulevards that meet at a scramble crossing. */
+export const SCRAMBLE_ROAD = 18;
+
+/** Key of a cell-edge road: the west/north cell of the pair and the edge's direction. */
+export const edgeKey = (keyX: number, keyY: number, vertical: boolean): string => `${keyX},${keyY},${vertical ? 'v' : 'h'}`;
+
+export function planCell3(
+  macro: MacroMap,
+  mx: number,
+  my: number,
+  reserved: readonly Rect[],
+  seed: number,
+  zone?: Zone3,
+  /** Cell edges widened to boulevards (edgeKey), e.g. the approaches to a scramble crossing. */
+  wide?: ReadonlySet<string>,
+): CellPlan3 | null {
   const kind = macro.kindAt(mx, my);
   if (!isLand(kind)) return null;
   if (!STYLES3[kind]) return null;
@@ -154,6 +169,7 @@ export function planCell3(macro: MacroMap, mx: number, my: number, reserved: rea
 
   const edge = (neighbour: CellKind, keyX: number, keyY: number, vertical: boolean): number => {
     if (neighbour !== kind) return BOUNDARY_ROAD;
+    if (wide?.has(edgeKey(keyX, keyY, vertical))) return SCRAMBLE_ROAD;
     const opts = style.edgeRoads;
     return opts[hash(seed, keyX, keyY, vertical ? 1 : 2) % opts.length];
   };

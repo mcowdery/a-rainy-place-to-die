@@ -3,6 +3,7 @@
 # and dragon are built on the main thread by real/megaSign.ts. Its rounded corner faces south-west, so place
 # it on the north-east corner of a junction.
 id: mega_sign
+name: Kaburo Crossing
 footprint: [20, 20]
 height: 35
 front: south
@@ -10,10 +11,13 @@ landmark: mega_sign
 # The crossing: the junction's south-west corner, across from the tower, is an open square (the junction
 # centre is 10 m west and 30 m south of the footprint's NW corner when placed at offset [10, 98]).
 plaza: { at: [-44, 30], size: [40, 40] }
+# The junction itself is a scramble crossing.
+scramble: [-10, 30]
 nodes:
   # Kaburo's front door: across the crossing from the tower, looking up at the dragon.
   view:
     kind: spawn
+    name: Kaburo Crossing
     at: [-34, 34]
     facing: north
     view: [-42, 20]

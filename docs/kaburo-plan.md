@@ -30,7 +30,8 @@ These are hand-authored stamps with interiors or VN hooks, placed on L0 cells li
 - **Maruyoshi pawn shop**: the noir hub (items, information).
 - **Ryujin Kogyo office**: the yakuza front company, a story antagonist hook.
 - **Koban (police box)**: wanted notices; story source.
-- **Konbini (Yoru Mart)**: several copies; a save/rest point or recurring hangout.
+- **Konbini (Yoru Mart)**: several copies; a save/rest point or recurring hangout. **Built (2026-09-26):** one you can walk into, on the crossing's south-east corner.
+- **Kaburo Inari shrine**: **built (2026-09-26)** in the back alleys: torii tunnel, fox guardians, lanterns, hall, an offering box hotspot.
 
 ## The mega-sign (landmark)
 
@@ -41,7 +42,7 @@ Recommended. A corner building on the central crossing, wrapped in a stack of th
 
 It should be visible from most of the district, and it's the natural spawn view.
 
-**Built (2026-09-26):** the mega-sign stands on the north-east corner of the junction at cells [29–30, 11–12], with an open square (Hachikō-style) on the south-west corner where the district now starts. Next for the crossing: a proper scramble (diagonal zebra), a wider boulevard, and big chains and a konbini on the other corners.
+**Built (2026-09-26):** the mega-sign stands on the north-east corner of the junction at cells [29–30, 11–12], with an open square (Hachikō-style) on the south-west corner where the district now starts, Yoru Mart on the south-east corner, and a scramble crossing where four boulevards meet. Next for the crossing: big chains on the north-west corner.
 
 **Decision (2026-09-26): the neon dragon.** A long serpentine Japanese dragon in pink and cyan neon tubing, coiled around the rooftop edge with its head rising over the crossing, facing the main approach. Its body pulses in a slow wave along the tubes. It ties the landmark to Ryujin Kogyo (竜神, dragon god), whose office should be nearby, so the district's symbol quietly belongs to the people who run it. It reads as a clear silhouette against the sky at any distance. Screen content: approved art 49–52, 64, 65 and 80.
 

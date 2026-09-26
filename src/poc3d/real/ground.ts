@@ -7,7 +7,7 @@ import { KIND, lin, type MeshBuilder } from './meshBuilder';
  * at crossings), and road paint: centre and lane lines, edge lines, zebra crossings and stop lines at
  * junctions. Paint belongs to the cell containing its centre so shared edge roads aren't painted twice.
  */
-export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rect[] = []): void {
+export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rect[] = [], scrambles: readonly Rect[] = []): void {
   mb.id = 0;
   mb.flags = 0;
   mb.style = [0, 0, 0, 0];
@@ -30,6 +30,37 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rec
   // Stamp plazas: paving raised to pavement height, in a lighter stone.
   for (const q of plazas) slab(q, 0, 0.15, KIND.plain, KIND.sidewalk, 0xa09a90);
   paint(mb, plan);
+  for (const s of scrambles) scramble(mb, plan, s);
+}
+
+/**
+ * A scramble crossing: zebra bands along both diagonals of the junction box (bars 0.45 m across the
+ * walking direction, 3 m long), each bar painted by the cell holding its centre.
+ */
+function scramble(mb: MeshBuilder, plan: CellPlan3, box: Rect): void {
+  const cell = plan.rect;
+  mb.kind = KIND.paint;
+  mb.color = lin(WHITE);
+  const corners: [[number, number], [number, number]][] = [
+    [[box.x, box.y], [box.x + box.w, box.y + box.h]],
+    [[box.x + box.w, box.y], [box.x, box.y + box.h]],
+  ];
+  for (const [a, c] of corners) {
+    const len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+    const d = [(c[0] - a[0]) / len, (c[1] - a[1]) / len];
+    const p = [-d[1], d[0]];
+    for (let s = 1.2; s < len - 1.2; s += 0.9) {
+      const cx = a[0] + d[0] * s;
+      const cz = a[1] + d[1] * s;
+      if (cx < cell.x || cz < cell.y || cx >= cell.x + cell.w || cz >= cell.y + cell.h) continue;
+      const along: [number, number, number] = [d[0] * 0.45, 0, d[1] * 0.45];
+      const across: [number, number, number] = [p[0] * 3, 0, p[1] * 3];
+      const o: [number, number, number] = [cx - along[0] / 2 - across[0] / 2, Y + 0.002, cz - along[2] / 2 - across[2] / 2];
+      // Keep the painted face up: flip the edge order if along x across points down.
+      if (along[2] * across[0] - along[0] * across[2] > 0) mb.quad(o, along, across);
+      else mb.quad(o, across, along);
+    }
+  }
 }
 
 function sidewalkStrips(r: Road3): Rect[] {

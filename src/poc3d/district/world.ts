@@ -7,9 +7,11 @@ import type { SignAtlas } from '../real/signs';
 import type { ChunkBuilt, Stage } from './chunkBuild';
 import type { WorkerIn } from './chunkWorker';
 import { DistrictModel } from './model';
-import { CELL, cellKey, type Building3 } from './plan';
+import { CELL, cellKey, type Building3, type CellPlan3 } from './plan';
 import type { Node3, Placed3 } from './stamps';
 import type { ZoneMap } from './zones';
+import { landmarkColliders } from './landmarks';
+import type { Rect } from '../../core/coords';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
 export const LOAD_RADIUS = 620;
@@ -104,6 +106,28 @@ export class District {
   ) {
     this.model = new DistrictModel(macro, kind, placed, seed, zones);
     this.nodes = placed.flatMap((p) => p.nodes);
+    // Stamps collide as their footprint, or (landmarks you can walk into) as their walls and fixtures.
+    this.stampColliders = placed.map((p) => landmarkColliders(p) ?? [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }]);
+  }
+
+  private readonly stampColliders: readonly (readonly Rect[])[];
+
+  get placed(): readonly Placed3[] {
+    return this.model.placed;
+  }
+
+  /** A cell's plan (roads, buildings) for maps and fast travel. */
+  plan(mx: number, my: number): CellPlan3 | null {
+    return this.model.plan(mx, my);
+  }
+
+  /** The named stamp at a world position (for the HUD), if any. */
+  placeAt(x: number, z: number): string | null {
+    for (const p of this.model.placed) {
+      const r = p.rect;
+      if (p.stamp.name && x >= r.x && x <= r.x + r.w && z >= r.y && z <= r.y + r.h) return p.stamp.name;
+    }
+    return null;
   }
 
   get cells(): readonly (readonly [number, number])[] {
@@ -161,7 +185,7 @@ export class District {
         if (d && propBlocked(d.props, x, z, r)) return true;
       }
     }
-    return this.model.placed.some((p) => hit(p.building));
+    return this.stampColliders.some((rs) => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r));
   };
 
   /**

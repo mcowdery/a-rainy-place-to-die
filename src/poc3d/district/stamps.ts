@@ -22,9 +22,12 @@ import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan'
  *
  * A landmark stamp (landmark: mega_sign) keeps its footprint, collision and forecourt, but its mass is not
  * built by the chunk workers: the main thread adds the landmark itself (see real/megaSign.ts). A node may
- * set view: [yaw, pitch] in degrees for the camera when spawning there (overrides facing). A stamp may
+ * set view: [yaw, pitch] in degrees for the camera when spawning there (overrides facing). A named spawn is
+ * a fast-travel destination. An npc may set figure: { body, pose, hair, long, color, turn } for its ghost
+ * (turn: radians from facing the street). A stamp's name is shown in the HUD while you're inside it. A stamp may
  * reserve an open plaza, plaza: { at: [x, z], size: [w, d] } in metres from the footprint's NW corner; it
  * may reach into neighbouring cells (e.g. the other corners of a junction), and no lot is built on it.
+ * scramble: [x, z] (from the footprint's NW corner) marks a junction to paint as a scramble crossing.
  *
  * u runs along the front face from its left end as seen from the street. Placements anchor a template to
  * an L0 macro cell + offset (content/world3d/placements.yaml), exactly like the 2D placements.
@@ -32,8 +35,19 @@ import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan'
  */
 
 /** Landmarks built on the main thread instead of as a plain building mass. */
-export const LANDMARKS = ['mega_sign'] as const;
+export const LANDMARKS = ['mega_sign', 'konbini', 'shrine'] as const;
 export type Landmark = (typeof LANDMARKS)[number];
+
+/** How an npc's ghost looks (see real/people.ts); anything left out gets a default. */
+export interface NodeFigure {
+  readonly body?: 'man' | 'woman' | 'child' | 'elder';
+  readonly pose?: 'stand' | 'walk' | 'talk' | 'phone' | 'pockets' | 'wave' | 'hold';
+  readonly hair?: 'short' | 'long' | 'bun' | 'hat' | 'cap' | 'none';
+  readonly long?: boolean;
+  readonly color?: number;
+  /** Radians, relative to facing the street. */
+  readonly turn?: number;
+}
 
 export interface StampSign {
   readonly text: string;
@@ -52,6 +66,7 @@ export interface StampNode {
   readonly returnSpawn: string | null;
   readonly facing: Facing | null;
   readonly view: readonly [number, number] | null;
+  readonly figure: NodeFigure | null;
   readonly u: number;
   readonly out: number;
   readonly handoff: unknown;
@@ -60,6 +75,8 @@ export interface StampNode {
 export interface Stamp3 {
   readonly id: string;
   readonly file: string;
+  /** Display name (HUD), if any. */
+  readonly name: string | null;
   readonly w: number;
   readonly d: number;
   readonly height: number;
@@ -68,6 +85,8 @@ export interface Stamp3 {
   readonly landmark: Landmark | null;
   /** Open ground kept free of lots, relative to the footprint's NW corner. */
   readonly plaza: Rect | null;
+  /** A junction (its centre, relative to the footprint's NW corner) painted as a scramble crossing. */
+  readonly scramble: readonly [number, number] | null;
   readonly signs: readonly StampSign[];
   readonly nodes: readonly StampNode[];
 }
@@ -83,6 +102,10 @@ export interface Node3 {
   readonly facing: Facing | null;
   /** Spawn camera [yaw, pitch] in degrees, if the stamp sets one. */
   readonly view: readonly [number, number] | null;
+  readonly figure: NodeFigure | null;
+  /** The facade normal of the stamp's street face (npcs face it by default). */
+  readonly nx: number;
+  readonly nz: number;
   readonly x: number;
   readonly z: number;
   readonly handoff: unknown;
@@ -126,6 +149,7 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
   if (doc.hue !== undefined && !HEX.test(String(doc.hue))) err("hue must be '#rrggbb'");
   const landmark = doc.landmark === undefined ? null : (String(doc.landmark) as Landmark);
   if (landmark !== null && !LANDMARKS.includes(landmark)) err(`landmark must be one of ${LANDMARKS.join(', ')}`);
+  if (doc.scramble !== undefined && !isPair(doc.scramble)) err('scramble must be [x, z] in metres from the footprint');
   let plaza: Rect | null = null;
   if (doc.plaza !== undefined) {
     const q = doc.plaza;
@@ -168,6 +192,27 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
     const returnSpawn = raw.returnSpawn === undefined ? null : String(raw.returnSpawn);
     if ((kind === 'door' || kind === 'station') && returnSpawn === null) err(`node '${nid}': ${kind} needs returnSpawn`);
     if (raw.view !== undefined && !isPair(raw.view)) err(`node '${nid}': view must be [yaw, pitch] in degrees`);
+    let figure: NodeFigure | null = null;
+    if (raw.figure !== undefined) {
+      const f = raw.figure;
+      if (!isObj(f)) err(`node '${nid}': figure must be a mapping`);
+      else {
+        const pick = <T extends string>(k: string, opts: readonly T[]): T | undefined => {
+          if (f[k] === undefined) return undefined;
+          if (!opts.includes(f[k] as T)) err(`node '${nid}': figure.${k} must be one of ${opts.join(', ')}`);
+          return f[k] as T;
+        };
+        if (f.color !== undefined && !HEX.test(String(f.color))) err(`node '${nid}': figure.color must be '#rrggbb'`);
+        figure = {
+          body: pick('body', ['man', 'woman', 'child', 'elder'] as const),
+          pose: pick('pose', ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold'] as const),
+          hair: pick('hair', ['short', 'long', 'bun', 'hat', 'cap', 'none'] as const),
+          long: f.long === undefined ? undefined : f.long === true,
+          color: f.color === undefined ? undefined : parseInt(String(f.color).slice(1), 16),
+          turn: typeof f.turn === 'number' ? f.turn : undefined,
+        };
+      }
+    }
     const [u, out] = isPair(raw.at) ? raw.at : [0, 0];
     nodes.push({
       id: nid,
@@ -178,13 +223,14 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
       returnSpawn,
       facing: (raw.facing ?? null) as Facing | null,
       view: isPair(raw.view) ? raw.view : null,
+      figure,
       u,
       out,
       handoff: raw.handoff ?? {},
     });
   }
   if (errors.length > before) return null;
-  return { id, file, w, d, height: doc.height as number, hue: doc.hue === undefined ? null : parseInt(String(doc.hue).slice(1), 16), front, landmark, plaza, signs, nodes };
+  return { id, file, name: typeof doc.name === 'string' ? doc.name : null, w, d, height: doc.height as number, hue: doc.hue === undefined ? null : parseInt(String(doc.hue).slice(1), 16), front, landmark, plaza, scramble: isPair(doc.scramble) ? doc.scramble : null, signs, nodes };
 }
 
 /** The planner's reserved area for a stamp: its footprint plus an open forecourt in front of the street face. */
@@ -265,6 +311,9 @@ export function placeStamps3(file: string, text: string, macro: MacroMap, stamps
         returnSpawn: n.returnSpawn === null ? null : n.returnSpawn.includes('.') ? n.returnSpawn : `${id}.${n.returnSpawn}`,
         facing: n.facing,
         view: n.view,
+        figure: n.figure,
+        nx: q.nx,
+        nz: q.nz,
         x: q.x,
         z: q.z,
         handoff: n.handoff,

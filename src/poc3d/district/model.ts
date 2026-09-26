@@ -1,7 +1,7 @@
 import { intersect, overlaps, type Rect } from '../../core/coords';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import { cellDetail, type CellDetail } from '../real/props';
-import { CELL, cellKey, planCell3, type Building3, type CellPlan3 } from './plan';
+import { CELL, cellKey, edgeKey, planCell3, type Building3, type CellPlan3 } from './plan';
 import { plazaRect, reservedRect, type Placed3 } from './stamps';
 import { ZoneMap } from './zones';
 
@@ -18,6 +18,7 @@ export class DistrictModel {
   private readonly plans = new Map<number, CellPlan3>();
   private readonly details = new Map<number, CellDetail>();
   readonly placedByCell = new Map<number, Placed3[]>();
+  private readonly wide = new Set<string>();
 
   constructor(
     private readonly macro: MacroMap,
@@ -33,6 +34,15 @@ export class DistrictModel {
     const xs = cells.map(([mx]) => mx);
     const zs = cells.map(([, my]) => my);
     this.bounds = { minX: Math.min(...xs) * CELL, maxX: (Math.max(...xs) + 1) * CELL, minZ: Math.min(...zs) * CELL, maxZ: (Math.max(...zs) + 1) * CELL };
+    // Scramble crossings on a cell corner widen the four roads that meet there.
+    for (const p of placed) {
+      const s = p.stamp.scramble;
+      if (!s) continue;
+      const gx = (p.rect.x + s[0]) / CELL;
+      const gy = (p.rect.y + s[1]) / CELL;
+      if (!Number.isInteger(gx) || !Number.isInteger(gy)) continue;
+      for (const k of [edgeKey(gx - 1, gy - 1, true), edgeKey(gx - 1, gy, true), edgeKey(gx - 1, gy - 1, false), edgeKey(gx, gy - 1, false)]) this.wide.add(k);
+    }
     for (const p of placed) {
       const k = cellKey(p.cell[0], p.cell[1]);
       this.placedByCell.set(k, [...(this.placedByCell.get(k) ?? []), p]);
@@ -50,7 +60,7 @@ export class DistrictModel {
     if (!p) {
       const cellRect: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
       const reserved = this.placed.flatMap((q) => [reservedRect(q), plazaRect(q) ?? []].flat()).filter((r) => overlaps(r, cellRect));
-      p = planCell3(this.macro, mx, my, reserved, this.seed, this.zones.at(mx, my))!;
+      p = planCell3(this.macro, mx, my, reserved, this.seed, this.zones.at(mx, my), this.wide)!;
       this.plans.set(k, p);
     }
     return p;
@@ -94,6 +104,38 @@ export class DistrictModel {
         piece = sides.sort((a, b) => b.w * b.h - a.w * a.h)[0] ?? null;
       }
       if (piece) out.push(piece);
+    }
+    return out;
+  }
+
+  /**
+   * Scramble crossings whose junction touches this cell: the carriageway box where the two streets cross
+   * (from the roads of the cells around the junction centre, sidewalks excluded).
+   */
+  scrambles(mx: number, my: number): Rect[] {
+    const out: Rect[] = [];
+    for (const p of this.placed) {
+      const s = p.stamp.scramble;
+      if (!s) continue;
+      const x = p.rect.x + s[0];
+      const z = p.rect.y + s[1];
+      let hx = 0;
+      let hz = 0;
+      // The cells just either side of the point (four when it's on a cell corner).
+      const cxs = new Set([Math.floor((x - 0.01) / CELL), Math.floor((x + 0.01) / CELL)]);
+      const czs = new Set([Math.floor((z - 0.01) / CELL), Math.floor((z + 0.01) / CELL)]);
+      for (const cz of czs) {
+        for (const cx of cxs) {
+          for (const r of this.plan(cx, cz)?.roads ?? []) {
+            const q = r.rect;
+            if (x < q.x || x > q.x + q.w || z < q.y || z > q.y + q.h) continue;
+            if (r.vertical) hx = Math.max(hx, q.w / 2 - r.sidewalk);
+            else hz = Math.max(hz, q.h / 2 - r.sidewalk);
+          }
+        }
+      }
+      const box: Rect = { x: x - hx, y: z - hz, w: 2 * hx, h: 2 * hz };
+      if (hx > 0 && hz > 0 && overlaps(box, { x: mx * CELL, y: my * CELL, w: CELL, h: CELL })) out.push(box);
     }
     return out;
   }

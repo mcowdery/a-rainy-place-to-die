@@ -1,0 +1,28 @@
+# Yoru Mart (ヨルマート): a konbini you can walk into, under three floors of offices. A landmark: the
+# store, its interior and the sign are built on the main thread by real/konbini.ts, which needs a 14 m
+# street face and 12 m of depth. The doors slide open as you walk up.
+id: yoru_mart
+name: Yoru Mart ヨルマート
+footprint: [12, 14]
+height: 13.2
+front: west
+landmark: konbini
+nodes:
+  front:
+    kind: spawn
+    name: Yoru Mart
+    at: [3, 6]
+    facing: east
+    view: [-90, 2]
+  inside:
+    kind: spawn
+    name: Yoru Mart (inside)
+    at: [3, -1.5]
+    facing: east
+    view: [-78, -4]
+  clerk:
+    kind: npc
+    name: Clerk
+    at: [11.2, -4.4]
+    handoff: {}
+    figure: { body: woman, pose: stand, hair: bun, color: '#40e090' }

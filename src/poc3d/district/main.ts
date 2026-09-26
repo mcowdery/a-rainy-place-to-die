@@ -12,6 +12,9 @@ import { frontFrame } from '../real/buildings';
 import { cityMaterial, cityUniforms } from '../real/city';
 import { Lightmap } from '../real/lightmap';
 import { buildMegaSign } from '../real/megaSign';
+import { buildKonbini } from '../real/konbini';
+import { buildShrine } from '../real/shrine';
+import { destinations, TravelMap, type Destination } from './travel';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
 import { addFigure, GhostBuilder, ghostMaterial, type FigureSpec } from '../real/people';
@@ -29,7 +32,7 @@ import { District } from './world';
  * Kaburo (Neon Core), generated at full scale from the L0 map and streamed in chunks, rendered
  * realistically with an ASCII overlay for mood (see real/overlay.ts).
  * URL: ?time=night|day|dusk|dawn &weather=clear|rain|fog &cam=x,y,z,yaw,pitch &spawn=<node id> &ascii=vibe|heavy|ascii|off &bench=1
- * Keys: WASD/mouse, Shift run, E interact, T time, R weather, F fly, V overlay (1-4 direct), G dither,
+ * Keys: WASD/mouse, Shift run, E interact, M map / fast travel, T time, R weather, F fly, V overlay (1-4 direct), G dither,
  * B bloom, P look mode.
  */
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -130,11 +133,20 @@ async function run(): Promise<void> {
   const dressingGeo = dressing.build();
   if (dressingGeo) scene.add(new THREE.Mesh(dressingGeo, city));
   // Landmarks: built here rather than by the chunk workers (their own shaders and animation), always shown.
+  const landmarkUpdates: ((camera: THREE.Vector3, dt: number) => void)[] = [];
   for (const placed of content.placed) {
-    if (placed.stamp.landmark !== 'mega_sign') continue;
-    const mega = buildMegaSign(cityU, city);
-    mega.group.position.set(placed.building.x, 0, placed.building.z);
-    scene.add(mega.group);
+    const lm = placed.stamp.landmark;
+    if (lm === 'mega_sign') {
+      const mega = buildMegaSign(cityU, city);
+      mega.group.position.set(placed.building.x, 0, placed.building.z);
+      scene.add(mega.group);
+    } else if (lm === 'konbini') {
+      const k = buildKonbini(placed.building, city, ghost);
+      scene.add(k.group);
+      landmarkUpdates.push(k.update);
+    } else if (lm === 'shrine') {
+      scene.add(buildShrine(placed.building, city));
+    }
   }
   const visibleNode = (n: Node3): boolean => n.condition === null || n.condition(flags.get);
   const npcBlocked = (x: number, z: number, r: number): boolean =>
@@ -151,6 +163,17 @@ async function run(): Promise<void> {
     if (n.view) controls.setView(n.view[0], n.view[1]);
     else controls.setView(YAW[n.facing ?? 'north'], 4);
   };
+  // Fast travel: M opens a map of the district's places and zones.
+  const lookYaw = (): number => {
+    const d = camera.getWorldDirection(new THREE.Vector3());
+    return (Math.atan2(-d.x, -d.z) * 180) / Math.PI;
+  };
+  const travel = new TravelMap(district, content.zones, destinations(district, nodes, content.zones), (d: Destination) => {
+    camera.position.set(d.x, controls.fly ? Math.max(camera.position.y, 1.7) : 1.7, d.z);
+    controls.setView(d.yaw, d.pitch);
+    travel.hide();
+    controls.look.lock();
+  });
   const spawnParam = params.get('spawn');
   teleport(spawnParam && nodeById.get(spawnParam)?.kind === 'spawn' ? spawnParam : START_SPAWN);
   const cam = params.get('cam')?.split(',').map(Number);
@@ -245,6 +268,15 @@ async function run(): Promise<void> {
   const direct: Record<string, OverlayPreset> = { Digit1: 'off', Digit2: 'vibe', Digit3: 'heavy', Digit4: 'ascii' };
   window.addEventListener('keydown', (e) => {
     if (bench || inVn) return;
+    if (e.code === 'KeyM' || (e.code === 'Escape' && travel.open)) {
+      if (travel.open) travel.hide();
+      else {
+        document.exitPointerLock();
+        travel.show(camera.position.x, camera.position.z, lookYaw());
+      }
+      return;
+    }
+    if (travel.open) return;
     if (e.code === 'KeyE') void interact();
     if (e.code === 'KeyT') flags.set(FLAG_TIME, TIMES[(TIMES.indexOf(time()) + 1) % TIMES.length]);
     if (e.code === 'KeyR') flags.set(FLAG_WEATHER, WEATHERS[(WEATHERS.indexOf(weather()) + 1) % WEATHERS.length]);
@@ -259,7 +291,7 @@ async function run(): Promise<void> {
     if (e.code === 'Quote') bloom.threshold = Math.min(5, +(bloom.threshold + 0.1).toFixed(2));
     if (e.code === 'KeyP') controls.setShearMode(!controls.shearMode);
   });
-  document.body.addEventListener('click', () => !bench && !inVn && controls.look.lock());
+  document.body.addEventListener('click', () => !bench && !inVn && !travel.open && controls.look.lock());
   controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
   controls.look.addEventListener('unlock', () => ($('overlay').hidden = bench));
   window.addEventListener('resize', () => {
@@ -321,6 +353,7 @@ async function run(): Promise<void> {
       controls.update(dt);
     }
     if (bench) controls.update(0);
+    for (const update of landmarkUpdates) update(camera.position, dt);
 
     const t0 = performance.now();
     // Turning worker results into meshes is the only streaming work on the main thread: ~2 ms a frame.
@@ -366,7 +399,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        `KABURO · ${district.zoneAt(p.x, p.z) ?? style.name} (Neon Core)  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}`,
+        `KABURO · ${district.zoneAt(p.x, p.z) ?? style.name}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''} (Neon Core)  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
@@ -374,7 +407,7 @@ async function run(): Promise<void> {
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t ? `[E] ${t.kind === 'door' ? 'Enter' : 'Talk'}: ${t.name ?? t.id}` : ' ',
-        'click to look · WASD · Shift run · E interact · T time · R weather · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
+        'click to look · WASD · Shift run · E interact · M map / fast travel · T time · R weather · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
       ].join('\n');
       builtThisWindow = 0;
     }
@@ -464,6 +497,23 @@ function dressDoor(mb: MeshBuilder, n: Node3, r: C3, nn: C3): void {
 function npcSpec(n: Node3, facing: C3): FigureSpec {
   const detective = n.id.endsWith('detective');
   const yaw = Math.atan2(facing[0], facing[2]);
+  const f = n.figure;
+  if (f) {
+    const c = f.color ?? 0x60c0ff;
+    return {
+      x: n.x,
+      z: n.z,
+      yaw: yaw + (f.turn ?? 0),
+      body: f.body ?? 'woman',
+      pose: f.pose ?? 'stand',
+      color: [((c >> 16) & 255) / 255, ((c >> 8) & 255) / 255, (c & 255) / 255],
+      hair: f.hair ?? 'short',
+      long: f.long ?? false,
+      phase: 0,
+      side: 1,
+      look: 0,
+    };
+  }
   return {
     x: n.x,
     z: n.z,
