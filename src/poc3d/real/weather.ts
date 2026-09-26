@@ -68,15 +68,27 @@ export class RainSystem {
   constructor(city: CityUniforms) {
     const shared = { ...this.u, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain, uLamps: city.uLamps };
     // Streaks: two vertices each (top and bottom), with a random seed; uAmount picks the share that fall.
-    const N = 32000;
-    const seed = new Float32Array(N * 2 * 4);
+    // Streaks: polylines of SEG segments (a drop's trail over the last instant), each segment two vertices.
+    // aSeed: position seed (xyz) and size (w); aK: the vertex's point index along the trail, 0 at the head.
+    const N = 26000;
+    const SEG = 3;
+    const V = N * SEG * 2;
+    const seed = new Float32Array(V * 4);
+    const kk = new Float32Array(V);
     for (let i = 0; i < N; i++) {
-      const s = [Math.random(), Math.random(), Math.random(), Math.random()];
-      for (let e = 0; e < 2; e++) seed.set([s[0], s[1], s[2], e === 0 ? s[3] : -1 - s[3]], (i * 2 + e) * 4);
+      const sd = [Math.random(), Math.random(), Math.random(), Math.random()];
+      for (let k = 0; k < SEG; k++) {
+        for (let e = 0; e < 2; e++) {
+          const v = (i * SEG + k) * 2 + e;
+          seed.set(sd, v * 4);
+          kk[v] = k + e;
+        }
+      }
     }
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(N * 2 * 3), 3));
+    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(V * 3), 3));
     g.setAttribute('aSeed', new THREE.Float32BufferAttribute(seed, 4));
+    g.setAttribute('aK', new THREE.Float32BufferAttribute(kk, 1));
     this.streaks = new THREE.LineSegments(
       g,
       new THREE.ShaderMaterial({
@@ -86,32 +98,52 @@ export class RainSystem {
         blending: THREE.AdditiveBlending,
         vertexShader: /* glsl */ `
           attribute vec4 aSeed;
+          attribute float aK;
           uniform vec3 uCam;
           uniform vec3 uBox;
           uniform float uAmount;
           uniform vec3 uOffset;
           uniform vec2 uSlant;
+          uniform float uTime;
           uniform float uLamps;
           ${lightmapGlsl}
           ${shelterGlsl}
           varying vec3 vCol;
           varying float vA;
+          // The wind where a drop is: the mean wind (uSlant: drift per metre of fall) varied by gust fronts
+          // travelling downwind and by height (stronger aloft), so the rain bends and sweeps in curtains.
+          vec2 windAt(vec3 p) {
+            float w = length(uSlant);
+            if (w < 1e-3) return vec2(0.0);
+            vec2 dir = uSlant / w;
+            float along = dot(p.xz, dir);
+            float across = dot(p.xz, vec2(-dir.y, dir.x));
+            float gust = 0.72 + 0.32 * sin(along * 0.05 - uTime * 1.4 + across * 0.02) + 0.18 * sin(along * 0.13 + p.y * 0.1 - uTime * 2.3);
+            float shear = 0.75 + 0.5 * clamp((p.y - uCam.y + 8.0) / 24.0, 0.0, 1.0);
+            return dir * w * gust * shear;
+          }
           void main() {
-            float bottom = aSeed.w < 0.0 ? 1.0 : 0.0;
-            float r = bottom > 0.5 ? -1.0 - aSeed.w : aSeed.w;
-            float live = step(r, uAmount);
-            // Each drop falls a little faster or slower than the rest.
+            float r = aSeed.w;
+            // Heavier rain comes in sheets: bands of more and fewer drops sweeping downwind.
+            float band = uAmount > 0.4 ? 0.85 + 0.3 * sin(dot(aSeed.xz * uBox.xz, normalize(uSlant + vec2(1e-3, 0.0))) * 0.08 - uTime * 0.9) : 1.0;
+            float live = step(r, uAmount * band);
             vec3 p = aSeed.xyz * uBox + uOffset * (0.85 + r * 0.3);
             p = mod(p - uCam + uBox * 0.5, uBox) + uCam - uBox * 0.5;
-            // The streak runs along the fall direction; wind stretches it.
-            vec3 dir = normalize(vec3(uSlant.x, -1.0, uSlant.y));
-            float len = (0.5 + r * 0.35) * (1.0 + length(uSlant) * 0.5);
-            vec3 top = p;
-            p += dir * bottom * len;
+            // Gusts push drops sideways as well as slanting them: curtains, not a uniform grid.
+            p.xz += (windAt(p) - uSlant) * 1.4;
+            vec3 head = p;
+            // Walk up the trail against the local wind: each segment bends a little more.
+            float seg = (0.5 + r * 0.35) * (1.0 + length(uSlant) * 0.5) / 3.0;
+            for (int i = 0; i < 3; i++) {
+              if (float(i) >= aK) break;
+              vec2 w = windAt(p);
+              p -= normalize(vec3(w.x, -1.0, w.y)) * seg;
+            }
             float dist = length(p - uCam);
             vA = live * smoothstep(1.2, 3.0, dist) * (1.0 - smoothstep(12.0, 23.0, dist)) * step(0.0, p.y);
-            if (sheltered(top) || sheltered(p)) vA = 0.0;
-            // Lit by the street below it (stronger low down), plus a faint sky-lit base.
+            if (sheltered(head) || sheltered(p)) vA = 0.0;
+            // The head is brightest; the trail fades.
+            vA *= 1.0 - aK * 0.22;
             vec3 L = lightAt(p.xz) * mix(1.0, 0.35, clamp(p.y / 14.0, 0.0, 1.0));
             vCol = vec3(0.10, 0.12, 0.15) * (0.4 + 0.6 * (1.0 - uLamps)) + L * 0.55;
             gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
@@ -161,7 +193,8 @@ export class RainSystem {
             vec4 mv = viewMatrix * vec4(p, 1.0);
             gl_Position = projectionMatrix * mv;
             // A fleck of spray about 6 cm across, gone in a fraction of its cycle.
-            gl_PointSize = live * step(vPhase, 0.18) * 0.06 * 900.0 / max(-mv.z, 0.5);
+            // Capped: close to the camera a 6 cm fleck would otherwise fill dozens of pixels.
+            gl_PointSize = min(live * step(vPhase, 0.18) * (0.045 + 0.02 * uAmount) * 900.0 / max(-mv.z, 0.5), 5.0);
           }`,
         fragmentShader: /* glsl */ `
           varying vec3 vCol;

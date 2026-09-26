@@ -203,6 +203,7 @@ async function run(): Promise<void> {
   scene.add(lightning.bolt, lightning.light, lightning.light.target);
   scene.add(rain.group, cones.mesh, lampShadows.group);
   const windVec = new THREE.Vector2();
+  const windTarget = new THREE.Vector2();
   let skyTime = 0;
   // The viaduct keeps the rain off the street under it.
   if (rail) district.shelters.push({ rect: { x: rail.x - 5, y: rail.z0, w: 10, h: rail.z1 - rail.z0 }, y0: -1, y1: 7.8 });
@@ -617,7 +618,9 @@ async function run(): Promise<void> {
     const gust = 0.72 + 0.2 * Math.sin(tt * 0.83) + 0.12 * Math.sin(tt * 2.31 + 1.3) + 0.06 * Math.sin(tt * 5.7);
     const blow = mood.wind * gust;
     const wa = (mood.windDir * Math.PI) / 180;
-    windVec.set(Math.sin(wa), -Math.cos(wa)).multiplyScalar(blow * 3.2);
+    // The wind turns and builds with a little inertia rather than snapping to the settings.
+    windTarget.set(Math.sin(wa), -Math.cos(wa)).multiplyScalar(blow * 3.2);
+    windVec.lerp(windTarget, Math.min(1, dt * 1.5));
     const cp = camera.position;
     const lamps = (x: number, z: number, r: number) => district.lampsNear(x, z, r);
     // Riding the train, the car is the shelter.
