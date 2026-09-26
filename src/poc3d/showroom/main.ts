@@ -13,6 +13,7 @@ import { figureGeometry, ghostMaterials2, POSES2, type Body2, type FigureShape, 
 import { addVehicle, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, type VehicleSpec, type VehicleType } from '../models/vehicles';
 import { Lightmap, paintLights, type Light } from '../real/lightmap';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
+import { buildMegaSign } from '../real/megaSign';
 import { TAXI_ADS } from '../models/ads';
 import { SignAtlas, SignBuilder, signBox, signMaterial } from '../real/signs';
 import { BILLBOARDS, DISTRICT_BLANK, districtAdUv, POSTERS } from '../real/districtAds';
@@ -212,6 +213,36 @@ cityU.uLightRect.value = showLightmap.uniformRect;
   frames.castShadow = true;
   genRoot.new.add(frames);
   genItems.new.push({ name: 'all district ads', group: 'Billboards', at: new THREE.Vector3(wallX, 3, -2), size: 30, view: new THREE.Vector3(1, 0.2, 0).normalize() });
+}
+// Kaburo mega-sign (the corner tower with its screens and the neon dragon) on its own plaza.
+{
+  const at = new THREE.Vector3(62, 0, 18);
+  const plaza = new MeshBuilder();
+  plaza.kind = KIND.lot;
+  plaza.color = lin(0x5e5e5c);
+  plaza.box(at.x - 6, at.z + 6, -0.2, 0.01, 56, 56, KIND.lot);
+  plaza.kind = KIND.asphalt;
+  plaza.box(at.x - 20, at.z + 20, 0.01, 0.03, 16, 16, KIND.asphalt);
+  // Scramble-crossing stripes in front of the corner.
+  plaza.kind = KIND.paint;
+  plaza.color = lin(0xd8d8d0);
+  for (let k = -6; k <= 6; k++) {
+    plaza.quad([at.x - 27, 0.035, at.z + 17 + k + 0.25], [14, 0, 0], [0, 0, -0.5]);
+    plaza.quad([at.x - 17 + k - 0.25, 0.035, at.z + 27], [0.5, 0, 0], [0, 0, -14]);
+  }
+  const plazaMesh = new THREE.Mesh(plaza.build()!, city);
+  plazaMesh.receiveShadow = true;
+  genRoot.new.add(plazaMesh);
+  const mega = buildMegaSign(cityU, city);
+  mega.group.position.copy(at);
+  genRoot.new.add(mega.group);
+  const head = mega.headAt.clone().add(at);
+  label('new', 'Kaburo mega-sign', at.x - 14, 38, at.z + 14);
+  genItems.new.push({ name: 'mega-sign', group: 'Mega-sign', at: new THREE.Vector3(at.x - 4, 28, at.z + 4), size: 48, view: new THREE.Vector3(-1, 0.12, 1).normalize() });
+  genItems.new.push({ name: 'screens (close)', group: 'Mega-sign', at: new THREE.Vector3(at.x - 10, 20, at.z + 10), size: 16, view: new THREE.Vector3(-1, 0.05, 1).normalize() });
+  genItems.new.push({ name: 'dragon', group: 'Mega-sign', at: new THREE.Vector3(at.x - 4, 40, at.z + 4), size: 40, view: new THREE.Vector3(-1, 0.05, -0.3).normalize() });
+  genItems.new.push({ name: 'dragon head', group: 'Mega-sign', at: head, size: 14, view: new THREE.Vector3(-0.35, 0.1, 1).normalize() });
+  genItems.new.push({ name: 'from the crossing', group: 'Mega-sign', at: new THREE.Vector3(at.x - 4, 34, at.z + 4), size: 70, view: new THREE.Vector3(-1, -0.62, 1.1).normalize() });
 }
 const tCars = performance.now() - t0;
 
@@ -426,7 +457,7 @@ function renderPanel(): void {
   button('previous (in the district)', gen === 'previous', () => applyGen('previous'));
   section('Lighting');
   for (const m of ['studio', 'night', 'day'] as const) button(m, mode === m, () => applyMode(m));
-  for (const g of ['Cars', 'Billboards', 'Posters', 'People']) {
+  for (const g of ['Mega-sign', 'Cars', 'Billboards', 'Posters', 'People']) {
     section(g);
     for (const it of genItems[gen].filter((i) => i.group === g)) button(it.name, false, () => focus(it));
   }

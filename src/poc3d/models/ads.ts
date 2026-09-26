@@ -107,3 +107,22 @@ export const DISTRICT_ADS: readonly DistrictAd[] = [
   { art: '76_cash_one_poster', format: 'poster', brand: 'キャッシュ・ワン', copy: 'ブラックOK 即日', accent: 0x101010, ink: 0xffd040 },
   { art: '78_maruyoshi_pawn', format: 'poster', brand: '質 まるよし', copy: 'ブランド品・貴金属 高価買取', accent: 0x101010, ink: 0xe8c060 },
 ];
+
+/** The Kaburo mega-sign's screen content (16:9, assets/ads/kaburo/mega/), cycled across its screens. */
+export interface MegaAd {
+  readonly art: string;
+  readonly brand: string;
+  readonly copy: string;
+  readonly accent: number;
+  readonly ink: number;
+}
+
+export const MEGA_ADS: readonly MegaAd[] = [
+  { art: '80_mega_kaburo', brand: 'WELCOME TO KABURO 歌舞路', copy: '眠らない街へ、ようこそ。', accent: 0xff70c8, ink: 0xffffff },
+  { art: '49_mega_cosmetics', brand: 'SHISEIKA ルージュ', copy: '夜に、咲く。', accent: 0xff3040, ink: 0xffffff },
+  { art: '64_mega_soda', brand: 'ネオンサイダー NEON CIDER', copy: 'シュワっと、夜更かし。', accent: 0x40f0ff, ink: 0xffffff },
+  { art: '51_mega_whisky', brand: 'WHISKY 月光 GEKKO', copy: '夜は、琥珀色。', accent: 0xe8b060, ink: 0xffffff },
+  { art: '65_mega_idol', brand: 'ミッドナイト☆シスターズ', copy: '真夜中サイダー MV 解禁', accent: 0xff80d0, ink: 0xffffff },
+  { art: '50_mega_cosmetics', brand: 'SHISEIKA ルージュ', copy: '夜に、咲く。', accent: 0xff3040, ink: 0xffffff },
+  { art: '52_mega_whisky', brand: 'WHISKY 月光 GEKKO', copy: '夜は、琥珀色。', accent: 0xe8b060, ink: 0xffffff },
+];

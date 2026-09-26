@@ -17,6 +17,7 @@ SRC = os.path.join(ROOT, 'assets', 'ads', 'source')
 OUT = os.path.join(ROOT, 'assets', 'ads', 'kaburo')
 
 BILLBOARD = (1024, 512)
+MEGA = (1024, 576)  # the mega-sign's 16:9 screens (assets/ads/kaburo/mega/)
 POSTER = (512, 620)
 
 # name: (format, crop box (l, t, r, b) in source pixels or None for the whole image)
@@ -65,6 +66,14 @@ CROPS = {
     # Round 3.
     '53_maid_cafe_pure': ('billboard', None),
     '81_maid_cafe_pure': ('billboard', None),
+    # Mega-sign screens.
+    '49_mega_cosmetics': ('mega', None),
+    '50_mega_cosmetics': ('mega', None),
+    '51_mega_whisky': ('mega', None),
+    '52_mega_whisky': ('mega', None),
+    '64_mega_soda': ('mega', None),
+    '65_mega_idol': ('mega', None),
+    '80_mega_kaburo': ('mega', None),
     '54_cash_one': ('billboard', None),
     '55_hotel_orient': ('billboard', None),
     '56_hotel_orient': ('billboard', None),
@@ -116,6 +125,11 @@ for name, (fmt, box) in CROPS.items():
         patch_can(im)
     if box:
         im = im.crop(box)
+    if fmt == 'mega':
+        os.makedirs(os.path.join(OUT, 'mega'), exist_ok=True)
+        im.resize(MEGA, Image.LANCZOS).save(os.path.join(OUT, 'mega', name + '.jpg'), quality=87)
+        print(name, fmt, MEGA)
+        continue
     if fmt == 'billboard' and abs(im.width / im.height - 2) > 0.05:
         # Not 2:1 (the cropped Hotel Venus): keep its own aspect at billboard height.
         im = im.resize((round(BILLBOARD[1] * im.width / im.height), BILLBOARD[1]), Image.LANCZOS)
