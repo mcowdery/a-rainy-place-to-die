@@ -140,7 +140,7 @@ function screenMaterialRaw(atlas: THREE.Texture): THREE.ShaderMaterial {
         vec2 g = abs(fract(px) - 0.5);
         float led = smoothstep(0.5, 0.36, max(g.x, g.y));
         col *= mix(led * 1.25, 0.85, smoothstep(0.3, 1.0, fw));
-        gl_FragColor = vec4(col * mix(1.3, 2.2, uNeon), 1.0);
+        gl_FragColor = vec4(col * mix(1.4, 2.6, uNeon), 1.0);
         #include <fog_fragment>
       }`,
   });

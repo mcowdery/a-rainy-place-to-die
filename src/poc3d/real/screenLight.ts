@@ -131,3 +131,73 @@ export class ScreenLights {
     this.u.uScreenCount.value = near.length;
   }
 }
+
+/**
+ * A soft glow round each screen, in the colour it's showing: a quad a little larger than the screen, just
+ * in front of it, adding light that is strongest at the screen's edges and falls off over a few metres
+ * across the wall and into the air (and gently over the image itself). It reads as bloom without needing
+ * the whole ad to be bright enough to cross the bloom threshold, and it thickens in wet air. It fades when
+ * a screen is seen edge-on.
+ */
+export class ScreenGlows {
+  readonly group = new THREE.Group();
+  private readonly items: { light: ScreenLight; mat: THREE.ShaderMaterial }[] = [];
+  private readonly col = new THREE.Color();
+  /** Overall strength; the page raises it in rain and fog. */
+  strength = 1;
+  private static readonly PAD = 5;
+
+  add(...lights: ScreenLight[]): void {
+    for (const light of lights) {
+      const P = ScreenGlows.PAD;
+      const w = light.halfW * 2 + 2 * P;
+      const h = light.halfH * 2 + 2 * P;
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { uColor: { value: new THREE.Color() }, uHalf: { value: new THREE.Vector2(light.halfW, light.halfH) }, uSize: { value: new THREE.Vector2(w / 2, h / 2) }, uNormal: { value: light.normal.clone() } },
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: /* glsl */ `
+          uniform vec2 uSize;
+          varying vec2 vLocal;
+          varying vec3 vWorld;
+          void main() {
+            vLocal = position.xy;
+            vec4 wp = modelMatrix * vec4(position, 1.0);
+            vWorld = wp.xyz;
+            gl_Position = projectionMatrix * viewMatrix * wp;
+          }`,
+        fragmentShader: /* glsl */ `
+          uniform vec3 uColor;
+          uniform vec2 uHalf;
+          uniform vec3 uNormal;
+          varying vec2 vLocal;
+          varying vec3 vWorld;
+          void main() {
+            // Distance outside the screen's rectangle (0 inside), and inside it, the distance in from the edge.
+            vec2 q = abs(vLocal) - uHalf;
+            float out_ = length(max(q, 0.0));
+            float in_ = -min(max(q.x, q.y), 0.0);
+            float g = out_ > 0.0 ? (0.5 * exp(-out_ / 0.9) + 0.2 * exp(-out_ / 2.6)) * (1.0 - smoothstep(2.5, 4.9, out_)) : 0.08 + 0.62 * exp(-in_ / 0.7);
+            // Seen edge-on the halo is a thin sheet: fade it.
+            float facing = abs(dot(normalize(cameraPosition - vWorld), uNormal));
+            g *= smoothstep(0.05, 0.4, facing);
+            gl_FragColor = vec4(uColor * g, 1.0);
+          }`,
+      });
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+      m.position.copy(light.centre).addScaledVector(light.normal, 0.12);
+      m.rotation.y = Math.atan2(light.normal.x, light.normal.z);
+      m.renderOrder = 6;
+      this.group.add(m);
+      this.items.push({ light, mat });
+    }
+  }
+
+  update(time: number, neon: number): void {
+    for (const { light, mat } of this.items) {
+      light.colour(time, neon, this.col);
+      (mat.uniforms.uColor.value as THREE.Color).copy(this.col).multiplyScalar(this.strength);
+    }
+  }
+}

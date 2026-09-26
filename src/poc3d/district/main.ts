@@ -23,7 +23,7 @@ import { buildStation } from '../real/station';
 import { ASAGIRI_KINDS, buildAsagiri, type AsagiriKind } from '../real/asagiri';
 import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { SignalLamps, TrafficSystem } from '../real/traffic';
-import { ScreenLights } from '../real/screenLight';
+import { ScreenGlows, ScreenLights } from '../real/screenLight';
 import { GRADE_NAMES, GradePass } from '../real/grade';
 import { DofPass } from '../real/dof';
 import { SsrPass } from '../real/ssr';
@@ -166,6 +166,8 @@ async function run(): Promise<void> {
   const landmarkUpdates: ((camera: THREE.Vector3, dt: number) => void)[] = [];
   // Big screens light their surroundings in the colours they show.
   const screens = new ScreenLights(cityU);
+  const glows = new ScreenGlows();
+  scene.add(glows.group);
   // The Toto Line: its stations (station stamps) and the viaduct and trains between them.
   const rail = content.rail;
   const stationPlaced = content.placed.filter((p) => p.stamp.landmark === 'station');
@@ -226,6 +228,7 @@ async function run(): Promise<void> {
       const a = buildAsagiri(lm as AsagiriKind, placed.building, placed.id, city, ghost, cityU);
       scene.add(a.group);
       screens.add(...a.lights);
+      glows.add(...a.lights);
       landmarkUpdates.push(a.update);
     } else if (lm === 'station' && rail) {
       const other = railStations.find((s) => s.id !== placed.id)?.names ?? null;
@@ -236,6 +239,7 @@ async function run(): Promise<void> {
       scene.add(mega.group);
       for (const l of mega.lights) l.centre.add(mega.group.position);
       screens.add(...mega.lights);
+      glows.add(...mega.lights);
     } else if (lm === 'konbini') {
       const k = buildKonbini(placed.building, city, ghost);
       scene.add(k.group);
@@ -621,6 +625,9 @@ async function run(): Promise<void> {
     traffic.update(dt, camera.position);
     signalLamps.update(camera.position, traffic.clock);
     screens.update(camera.position, now / 1000, cityU.uNeon.value);
+    // Screen glow: dimmer by day, thicker in wet air.
+    glows.strength = 0.8 * (0.35 + 0.65 * cityU.uNeon.value) * (1 + 0.8 * Math.min(1, rainAmount + (weather() === 'fog' ? 0.6 : 0)));
+    glows.update(now / 1000, cityU.uNeon.value);
     // Streets wet through over ~20-60 s of rain (faster when heavy) and dry over a few minutes.
     const wetTarget = mood.wetness ?? (rainAmount > 0 ? 1 : 0);
     const wetRate = mood.wetness !== null ? 2 : wetTarget > wetness ? 0.015 + 0.05 * rainAmount : 0.006;
