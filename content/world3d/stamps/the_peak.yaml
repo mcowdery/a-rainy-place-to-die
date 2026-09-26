@@ -1,0 +1,27 @@
+# THE PEAK ASAGIRI (ザ・ピーク朝霧): a luxury residential tower crowned by a CEO's penthouse. A landmark built by
+# real/asagiri.ts (34 m front, 34 m deep): porte-cochere, concierge, the lit penthouse and its roof terrace.
+id: the_peak
+name: THE PEAK ザ・ピーク朝霧
+footprint: [34, 34]
+height: 141
+front: south
+landmark: residence
+nodes:
+  front:
+    kind: spawn
+    name: The Peak (CEO's residence)
+    at: [17, 11]
+    facing: north
+    view: [0, 26]
+  penthouse:
+    kind: door
+    name: Private elevator · Penthouse
+    at: [17, -13.2]
+    returnSpawn: front
+    handoff: {}
+  concierge:
+    kind: npc
+    name: Concierge
+    at: [17, -15.6]
+    handoff: {}
+    figure: { body: man, pose: stand, hair: short, long: true, color: '#e6d19e' }

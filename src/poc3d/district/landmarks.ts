@@ -7,6 +7,9 @@ import { yokochoColliders, yokochoLights } from '../real/yokocho';
 import { ryujinColliders, ryujinLights } from '../real/ryujin';
 import { discountColliders, discountLights } from '../real/discount';
 import { stationColliders, stationFloor, stationLights } from '../real/station';
+import { ASAGIRI_KINDS, asagiriColliders, asagiriFloor, asagiriLights, type AsagiriKind } from '../real/asagiri';
+
+const asagiri = (p: Placed3): AsagiriKind | null => ((ASAGIRI_KINDS as readonly string[]).includes(p.stamp.landmark ?? '') ? (p.stamp.landmark as AsagiriKind) : null);
 import { liveHouseColliders, liveHouseFloor, liveHouseHoles, liveHouseLights } from '../real/liveHouse';
 import type { Building3 } from './plan';
 import type { Placed3 } from './stamps';
@@ -21,6 +24,8 @@ import type { Placed3 } from './stamps';
  * is 0, a basement is below -1); null means its footprint is solid.
  */
 export function landmarkColliders(p: Placed3, floor = 0): Rect[] | null {
+  const a = asagiri(p);
+  if (a) return floor < -1 ? [] : asagiriColliders(a, p.building, floor);
   switch (p.stamp.landmark) {
     case 'live_house':
       return liveHouseColliders(p.building, floor);
@@ -45,6 +50,8 @@ export function landmarkColliders(p: Placed3, floor = 0): Rect[] | null {
 
 /** Lightmap lights a landmark adds to its surroundings. */
 export function landmarkLights(p: Placed3): Light[] {
+  const a = asagiri(p);
+  if (a) return asagiriLights(a, p.building);
   switch (p.stamp.landmark) {
     case 'mega_sign':
       return megaSignLights(p.building);
@@ -79,6 +86,8 @@ export function landmarkHoles(p: Placed3): Rect[] {
  * (street level). current: the walker's floor, to choose between levels that overlap.
  */
 export function landmarkFloor(p: Placed3, x: number, z: number, current = 0): number | null {
+  const a = asagiri(p);
+  if (a) return asagiriFloor(a, p.building, x, z, current);
   switch (p.stamp.landmark) {
     case 'live_house':
       return liveHouseFloor(p.building, x, z);
@@ -91,6 +100,8 @@ export function landmarkFloor(p: Placed3, x: number, z: number, current = 0): nu
 
 /** Collision above street level (station stairs, concourse and platforms); null if the landmark has none. */
 export function landmarkRaisedColliders(p: Placed3, floor: number): Rect[] | null {
+  const a = asagiri(p);
+  if (a) return asagiriColliders(a, p.building, floor);
   return p.stamp.landmark === 'station' ? stationColliders(p.building, floor) : null;
 }
 

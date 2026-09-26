@@ -44,3 +44,43 @@
   stamp: station_asagiri
   cell: [25, 9]
   offset: [94, 30]
+- id: city_hall
+  stamp: city_hall
+  cell: [21, 10]
+  offset: [24, 58]
+- id: the_peak
+  stamp: the_peak
+  cell: [22, 11]
+  offset: [44, 84]
+- id: stella_production
+  stamp: stella_production
+  cell: [22, 9]
+  offset: [40, 82]
+- id: police_hq
+  stamp: police_hq
+  cell: [20, 12]
+  offset: [30, 74]
+- id: toto_bank
+  stamp: toto_bank
+  cell: [24, 10]
+  offset: [20, 92]
+- id: law_firm
+  stamp: law_firm
+  cell: [23, 12]
+  offset: [50, 94]
+- id: hakkodo
+  stamp: hakkodo
+  cell: [23, 10]
+  offset: [40, 88]
+- id: hotel_tabiji
+  stamp: hotel_tabiji
+  cell: [25, 10]
+  offset: [20, 100]
+- id: hotel_totoinn
+  stamp: hotel_totoinn
+  cell: [24, 12]
+  offset: [60, 100]
+- id: club_shirasagi
+  stamp: club_shirasagi
+  cell: [21, 12]
+  offset: [48, 92]

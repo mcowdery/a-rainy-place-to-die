@@ -101,8 +101,10 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
               if (mine(x, z)) props.push({ kind: 'signal', x, z, nx, nz, radius: 0.2, variant: hash(Math.round(x), Math.round(z)) % 3, arm: (width - 2 * r.sidewalk) / 2 - 0.5 });
             }
           }
-          // Parked cars along the kerb.
-          for (let t = s + 7; t < e - 7; t += 6.5) {
+          // Parked cars along the kerb, on the side streets only: the roads along the cell edges carry the
+          // moving traffic (real/traffic.ts) in their kerb lanes.
+          const edgeRoad = q.x < cell.x || q.y < cell.y || q.x + q.w > cell.x + cell.w || q.y + q.h > cell.y + cell.h;
+          for (let t = s + 7; t < (edgeRoad ? s : e - 7); t += 6.5) {
             const h = hash(Math.round(t * 10), Math.round(q.x), Math.round(q.y), side + 5);
             if (h % 100 > 32) continue;
             const [x, z, nx, nz] = along(t, side, r.sidewalk + 1.05);

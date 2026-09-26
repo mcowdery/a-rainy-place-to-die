@@ -20,7 +20,10 @@ import { buildYokocho } from '../real/yokocho';
 import { buildRyujin } from '../real/ryujin';
 import { buildDiscount } from '../real/discount';
 import { buildStation } from '../real/station';
+import { ASAGIRI_KINDS, buildAsagiri, type AsagiriKind } from '../real/asagiri';
 import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
+import { TrafficSystem } from '../real/traffic';
+import { routeFor } from './traffic';
 import { destinations, TravelMap, type Destination } from './travel';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
@@ -158,9 +161,23 @@ async function run(): Promise<void> {
     scene.add(trains.group);
     district.addColliders(viaductPiers(rail, railStations));
   }
+  // Traffic: cars and taxis clockwise round their loops, buses anticlockwise round theirs.
+  const piers = rail ? [rail.x] : [];
+  const plan = (mx: number, my: number) => district.plan(mx, my);
+  const traffic = new TrafficSystem(
+    content.traffic.cars.map((c) => ({ route: routeFor(c.rect, true, plan, piers), spacing: c.spacing })),
+    content.traffic.buses.map((line) => ({ line, route: routeFor(line.rect, false, plan, piers) })),
+    city,
+  );
+  scene.add(traffic.group);
+  district.addColliders(traffic.colliders);
   for (const placed of content.placed) {
     const lm = placed.stamp.landmark;
-    if (lm === 'station' && rail) {
+    if (lm && (ASAGIRI_KINDS as readonly string[]).includes(lm)) {
+      const a = buildAsagiri(lm as AsagiriKind, placed.building, placed.id, city, ghost, cityU);
+      scene.add(a.group);
+      landmarkUpdates.push(a.update);
+    } else if (lm === 'station' && rail) {
       const other = railStations.find((s) => s.id !== placed.id)?.names ?? null;
       scene.add(buildStation(placed.building, city, placed.stamp.station!, other, rail));
     } else if (lm === 'mega_sign') {
@@ -195,7 +212,7 @@ async function run(): Promise<void> {
   const npcBlocked = (x: number, z: number, r: number): boolean =>
     nodes.some((n) => n.kind === 'npc' && visibleNode(n) && Math.hypot(n.x - x, n.z - z) < r + 0.35);
 
-  const controls = new FirstPerson(camera, document.body, (x, z, r, floor) => district.blocked(x, z, r, floor) || (floor ?? 0) > -1 && npcBlocked(x, z, r));
+  const controls = new FirstPerson(camera, document.body, (x, z, r, floor) => district.blocked(x, z, r, floor) || ((floor ?? 0) > -1 && (floor ?? 0) < 1 && (npcBlocked(x, z, r) || traffic.blocked(x, z, r))));
   controls.setShearMode(false);
   controls.fly = params.get('fly') === '1';
   controls.floorAt = district.floorAt;
@@ -278,6 +295,18 @@ async function run(): Promise<void> {
     cityU.uWet.value = atm.rain > 0 ? 1 : 0;
     renderer.toneMappingExposure = atm.exposure;
     overlay.setFog(atm.fogNear, atm.fogFar, fog.color);
+    fogScale = 1;
+  };
+  // Up high (the observatory, flying) the air clears: the fog and the overlay's dissolve move out.
+  let fogScale = 1;
+  const fitFog = (): void => {
+    const k = Math.round(Math.min(4, Math.max(1, 1 + (camera.position.y - 20) / 45)) * 20) / 20;
+    if (k === fogScale) return;
+    fogScale = k;
+    const fog = scene.fog as THREE.Fog;
+    fog.near = atm.fogNear * k;
+    fog.far = atm.fogFar * k;
+    overlay.setFog(fog.near, fog.far, fog.color);
   };
   applyAtmosphere();
   // Compile every shader variant and upload the warm-start geometry now, rather than in the first frames.
@@ -335,7 +364,10 @@ async function run(): Promise<void> {
   const interact = async (): Promise<void> => {
     const n = target();
     if (!n || inVn) return;
-    if (n.kind === 'station' && trains && n.returnSpawn) return rideTrain(n.placementId, n.returnSpawn);
+    if (n.kind === 'station' && n.returnSpawn) {
+      if (isRailStation(n.placementId)) return trains ? rideTrain(n.placementId, n.returnSpawn) : undefined;
+      return ride(n.returnSpawn);
+    }
     inVn = true;
     document.exitPointerLock();
     const result = await bridge.enter(n);
@@ -352,6 +384,16 @@ async function run(): Promise<void> {
     fade.style.opacity = String(o);
     setTimeout(r, 380);
   });
+  // Elevators: a station node in a building that isn't a railway station takes you to its spawn.
+  const isRailStation = (placementId: string): boolean => railStations.some((s) => s.id === placementId);
+  async function ride(spawn: string): Promise<void> {
+    inVn = true;
+    await fadeTo(1);
+    teleport(spawn);
+    await new Promise((r) => setTimeout(r, 500));
+    await fadeTo(0);
+    inVn = false;
+  }
   async function rideTrain(fromId: string, spawn: string): Promise<void> {
     const from = railStations.find((s) => s.id === fromId);
     const to = railStations.find((s) => s.id === nodeById.get(spawn)?.placementId);
@@ -464,6 +506,8 @@ async function run(): Promise<void> {
     if (bench) controls.update(0);
     for (const update of landmarkUpdates) update(camera.position, dt);
     trains?.update(dt, camera);
+    traffic.update(dt, camera.position);
+    fitFog();
 
     const t0 = performance.now();
     // Turning worker results into meshes is the only streaming work on the main thread: ~2 ms a frame.
@@ -516,7 +560,7 @@ async function run(): Promise<void> {
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
-        t ? `[E] ${t.kind === 'door' ? 'Enter' : t.kind === 'station' ? 'Take the train' : 'Talk'}: ${t.name ?? t.id}` : ' ',
+        t ? `[E] ${t.kind === 'door' ? 'Enter' : t.kind === 'station' ? (isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : ' ',
         'click to look · WASD · Shift run · E interact · M map / fast travel · T time · R weather · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
       ].join('\n');
       builtThisWindow = 0;

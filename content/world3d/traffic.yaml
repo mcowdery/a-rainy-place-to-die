@@ -1,0 +1,24 @@
+# Traffic on the roads along the L0 cell edges. A loop is a rectangle of grid lines [col0, row0, col1, row1];
+# every edge must have generated cells on both sides (both halves of the road exist). Cars drive the loops
+# clockwise and keep left; loops that share an edge use its two lanes in opposite directions. Buses drive
+# their loops anticlockwise (the other lane of the outer edges) and stop at the middle of each edge.
+cars:
+  - { rect: [26, 10, 28, 12], spacing: 48 }
+  - { rect: [28, 10, 30, 12], spacing: 48 }
+  - { rect: [30, 10, 31, 12], spacing: 56 }
+  - { rect: [21, 10, 23, 13], spacing: 52 }
+  - { rect: [23, 10, 25, 13], spacing: 52 }
+  - { rect: [25, 10, 26, 12], spacing: 44 }
+buses:
+  - id: kaburo
+    name: 歌舞路循環
+    en: KABURO LOOP
+    rect: [26, 10, 31, 12]
+    buses: 2
+    stops: [歌舞路北, 歌舞路東口, 歌舞路二丁目, 歌舞路西口]
+  - id: asagiri
+    name: 朝霧循環
+    en: ASAGIRI LOOP
+    rect: [21, 10, 25, 13]
+    buses: 2
+    stops: [朝霧北, 朝霧駅西口, 都庁通り, 朝霧西]

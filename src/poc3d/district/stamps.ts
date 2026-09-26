@@ -3,6 +3,7 @@ import { compileCondition, type Condition } from '../../core/condition';
 import { overlaps, pad, type Rect } from '../../core/coords';
 import { isLand, type MacroMap } from '../../gen/macro';
 import { ID_PATTERN, type Facing, type NodeKind, type Trigger } from '../../content/stamps';
+import { ASAGIRI_KINDS } from '../real/asagiri';
 import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan';
 
 /**
@@ -38,7 +39,7 @@ import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan'
  */
 
 /** Landmarks built on the main thread instead of as a plain building mass. */
-export const LANDMARKS = ['mega_sign', 'konbini', 'shrine', 'love_hotel', 'live_house', 'yokocho', 'ryujin', 'discount', 'station'] as const;
+export const LANDMARKS = ['mega_sign', 'konbini', 'shrine', 'love_hotel', 'live_house', 'yokocho', 'ryujin', 'discount', 'station', ...ASAGIRI_KINDS] as const;
 export type Landmark = (typeof LANDMARKS)[number];
 
 /** How an npc's ghost looks (see real/people.ts); anything left out gets a default. */

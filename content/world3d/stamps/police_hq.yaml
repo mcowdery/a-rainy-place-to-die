@@ -1,0 +1,27 @@
+# TOTO METROPOLITAN POLICE HQ (東都警視庁): serious, institutional, solid stone. A landmark built by
+# real/asagiri.ts (50 m front, 44 m deep): the tower with its comms mast, flags, a guard post, patrol cars.
+id: police_hq
+name: 東都警視庁 Police HQ
+footprint: [50, 44]
+height: 158
+front: south
+landmark: police_hq
+nodes:
+  front:
+    kind: spawn
+    name: Police HQ
+    at: [25, 12]
+    facing: north
+    view: [0, 18]
+  entrance:
+    kind: door
+    name: Police HQ 警視庁
+    at: [25, -8.6]
+    returnSpawn: front
+    handoff: {}
+  officer:
+    kind: npc
+    name: Duty officer
+    at: [37.2, -5.2]
+    handoff: {}
+    figure: { body: man, pose: stand, hair: cap, long: true, color: '#6a8cff' }

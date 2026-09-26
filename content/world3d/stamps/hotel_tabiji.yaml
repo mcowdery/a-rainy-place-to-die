@@ -1,0 +1,9 @@
+# ホテル旅路 HOTEL TABIJI: a business hotel by the station (flavour). real/asagiri.ts (biz_hotel)
+id: hotel_tabiji
+name: ホテル旅路
+footprint: [16, 18]
+height: 48.8
+front: south
+landmark: biz_hotel
+nodes:
+  front: { kind: spawn, name: Hotel Tabiji (business hotel), at: [8, 6], facing: north, view: [0, 16] }

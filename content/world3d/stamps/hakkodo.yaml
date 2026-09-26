@@ -1,0 +1,9 @@
+# 博光堂 HAKKODO: the ad agency. A dark glass tower, a big LED screen of the mega ads, a coloured crown (flavour).
+id: hakkodo
+name: 博光堂 Hakkodo
+footprint: [36, 30]
+height: 116
+front: south
+landmark: ad_agency
+nodes:
+  front: { kind: spawn, name: Hakkodo ad agency, at: [18, 10], facing: north, view: [0, 18] }

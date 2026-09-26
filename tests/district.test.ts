@@ -6,6 +6,7 @@ import { CELL, DISTRICTS3, planCell3, STYLES3 } from '../src/poc3d/district/plan
 import { DistrictModel } from '../src/poc3d/district/model';
 import { parseZones3 } from '../src/poc3d/district/zones';
 import { destinations } from '../src/poc3d/district/travel';
+import { along, parseTraffic3, routeFor } from '../src/poc3d/district/traffic';
 import { District } from '../src/poc3d/district/world';
 import { localFrame, toWorld } from '../src/poc3d/real/localFrame';
 import { DISTRICT_ADS } from '../src/poc3d/models/ads';
@@ -268,5 +269,44 @@ describe('Hoshikuzu Yokocho', () => {
     for (let u = 6.5; u < 14; u += 0.5) if (u < 9.5 || u > 11.5) expect(district.blocked(...at(u, 15), 0.3), `cross ${u}`).toBe(false);
     expect(district.blocked(...at(2, 10), 0.3)).toBe(true);
     expect(district.blocked(...at(8, 5), 0.3)).toBe(true);
+  });
+});
+
+describe('Asagiri set pieces and traffic', () => {
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const plan = (mx: number, my: number) => district.plan(mx, my);
+
+  it('keeps every traffic lane clear of buildings, props and stops', () => {
+    for (const loop of [...content.traffic.cars.map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
+      const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail.x] : []);
+      for (let s = 0; s < route.length; s += 2) {
+        const p = along(route, s);
+        expect(district.blocked(p.x, p.z, 0.8), `${loop[0].join(',')} at ${s}`).toBe(false);
+      }
+    }
+  });
+
+  it('rejects traffic loops off the generated districts', () => {
+    const errors: string[] = [];
+    parseTraffic3('t.yaml', 'cars:\n  - { rect: [30, 10, 33, 12] }', content.macro, errors);
+    expect(errors.join('\n')).toMatch(/generated cells on both sides/);
+  });
+
+  it('takes the city hall elevator up to a walkable observatory', () => {
+    const hall = content.placed.find((p) => p.id === 'city_hall')!;
+    const deck = hall.nodes.find((n) => n.id === 'city_hall.observatory')!;
+    const lift = hall.nodes.find((n) => n.id === 'city_hall.elevator')!;
+    expect(lift.kind).toBe('station');
+    expect(lift.returnSpawn).toBe('city_hall.observatory');
+    expect(district.floorAt(deck.x, deck.z, deck.floor)).toBe(172);
+    expect(district.floorAt(deck.x, deck.z, 0)).toBe(0);
+    expect(district.blocked(deck.x, deck.z, 0.4, 172)).toBe(false);
+  });
+
+  it('gives the story locations their doors and people', () => {
+    const ids = content.placed.flatMap((p) => p.nodes.map((n) => `${n.id}:${n.kind}`));
+    for (const want of ['stella_production.lobby:door', 'stella_production.staff_door:door', 'police_hq.entrance:door', 'police_hq.officer:npc', 'the_peak.penthouse:door', 'the_peak.concierge:npc']) {
+      expect(ids).toContain(want);
+    }
   });
 });

@@ -1,0 +1,9 @@
+# 藤堂・桐生法律事務所 TODO & KIRYU: a dark granite mid-rise with a brass plate (flavour). real/asagiri.ts
+id: law_firm
+name: 藤堂・桐生法律事務所
+footprint: [24, 24]
+height: 49
+front: south
+landmark: law_firm
+nodes:
+  front: { kind: spawn, name: Todo & Kiryu law offices, at: [12, 6], facing: north, view: [0, 12] }

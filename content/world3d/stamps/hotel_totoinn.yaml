@@ -1,0 +1,9 @@
+# 東都イン TOTO INN: a business hotel (flavour). real/asagiri.ts (biz_hotel)
+id: hotel_totoinn
+name: 東都イン
+footprint: [16, 18]
+height: 48.8
+front: south
+landmark: biz_hotel
+nodes:
+  front: { kind: spawn, name: Toto Inn (business hotel), at: [8, 6], facing: north, view: [0, 16] }

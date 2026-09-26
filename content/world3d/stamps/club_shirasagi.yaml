@@ -1,0 +1,21 @@
+# 会員制 倶楽部 白鷺 SHIRASAGI: a private members' club behind a garden wall. A landmark built by real/asagiri.ts
+# (30 m front, 26 m deep). Flavour, with a door and a doorman for later story use.
+id: club_shirasagi
+name: 倶楽部 白鷺 Shirasagi
+footprint: [30, 26]
+height: 9.4
+front: south
+landmark: members_club
+nodes:
+  front:
+    kind: spawn
+    name: Club Shirasagi (members only)
+    at: [15, 7]
+    facing: north
+    view: [0, 6]
+  entrance:
+    kind: door
+    name: Club Shirasagi · Members only
+    at: [15, -7.6]
+    returnSpawn: front
+    handoff: {}

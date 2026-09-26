@@ -1,0 +1,9 @@
+# 東都銀行 TOTO BANK: a stone colonnade and a green-signed office block (flavour). real/asagiri.ts
+id: toto_bank
+name: 東都銀行 Toto Bank
+footprint: [30, 26]
+height: 44
+front: south
+landmark: bank
+nodes:
+  front: { kind: spawn, name: Toto Bank, at: [13, 5.5], facing: north, view: [0, 10] }

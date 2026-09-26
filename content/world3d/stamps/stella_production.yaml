@@ -1,0 +1,40 @@
+# STELLA PRODUCTION (ステラプロダクション): the idol agency. Glamour out front (banners, the LED screen, a red
+# carpet, fans behind the rope); round the west side a staff entrance, a black van and the car-park ramp.
+# A landmark built by real/asagiri.ts (46 m front, 36 m deep). Story: glamorous surface, darker underneath.
+id: stella_production
+name: STELLA PRODUCTION ステラプロ
+footprint: [46, 36]
+height: 164
+front: south
+landmark: idol_agency
+nodes:
+  front:
+    kind: spawn
+    name: Stella Production
+    at: [27, 9]
+    facing: north
+    view: [0, 22]
+  lobby:
+    kind: door
+    name: Stella Production (lobby)
+    at: [27, -7.4]
+    returnSpawn: front
+    handoff: {}
+  staff_door:
+    kind: door
+    name: Staff entrance 関係者口
+    at: [7.4, -21.7]
+    returnSpawn: side
+    handoff: {}
+  side:
+    kind: spawn
+    name: Stella Production (staff entrance)
+    at: [5, -8]
+    facing: north
+    view: [-40, 4]
+  security:
+    kind: npc
+    name: Security guard
+    at: [6.2, -24]
+    handoff: {}
+    figure: { body: man, pose: pockets, hair: short, long: true, color: '#4a5a7a', turn: -1.6 }

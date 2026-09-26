@@ -1,0 +1,33 @@
+# 東都市庁舎 TOTO CITY HALL: twin towers on a civic podium. A landmark built by real/asagiri.ts (80 m front,
+# 60 m deep). The elevator at the front takes you to the observatory at the top of the east tower (172 m).
+id: city_hall
+name: 東都市庁舎 Toto City Hall
+footprint: [80, 60]
+height: 186
+front: south
+landmark: city_hall
+nodes:
+  plaza:
+    kind: spawn
+    name: Toto City Hall
+    at: [40, 10]
+    facing: north
+    view: [0, 28]
+  elevator:
+    kind: station
+    name: Observatory 展望室
+    at: [59, 1]
+    returnSpawn: observatory
+  observatory:
+    kind: spawn
+    name: City Hall observatory (172 m)
+    at: [68.6, -41]
+    floor: 172
+    facing: east
+    view: [-80, -16]
+  elevator_down:
+    kind: station
+    name: Down to the plaza
+    at: [59, -28]
+    floor: 172
+    returnSpawn: plaza
