@@ -626,7 +626,7 @@ async function run(): Promise<void> {
     signalLamps.update(camera.position, traffic.clock);
     screens.update(camera.position, now / 1000, cityU.uNeon.value);
     // Screen glow: dimmer by day, thicker in wet air.
-    glows.strength = 0.45 * (0.35 + 0.65 * cityU.uNeon.value) * (1 + 0.8 * Math.min(1, rainAmount + (weather() === 'fog' ? 0.6 : 0)));
+    glows.strength = mood.screenGlow * (0.35 + 0.65 * cityU.uNeon.value) * (1 + 0.8 * Math.min(1, rainAmount + (weather() === 'fog' ? 0.6 : 0)));
     glows.update(now / 1000, cityU.uNeon.value);
     // Streets wet through over ~20-60 s of rain (faster when heavy) and dry over a few minutes.
     const wetTarget = mood.wetness ?? (rainAmount > 0 ? 1 : 0);

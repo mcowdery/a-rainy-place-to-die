@@ -24,6 +24,8 @@ export interface MoodSettings {
   darkness: number;
   /** Ground wetness 0-1; null follows the rain (wets over ~30 s, dries over a few minutes). */
   wetness: number | null;
+  /** Glow round the big screens, 0 off to 1.5 (0.45 default). */
+  screenGlow: number;
   /** Depth of field: 0 off, 1 strong. */
   dof: number;
   /** Focus distance in metres; null focuses on the centre of the view. */
@@ -37,7 +39,7 @@ export interface MoodSettings {
   volume: number;
 }
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: null, darkness: 0, wetness: null, dof: 0, focus: null, shadows: 0, grade: 'neutral', cycle: false, volume: 0.7 };
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: null, darkness: 0, wetness: null, screenGlow: 0.45, dof: 0, focus: null, shadows: 0, grade: 'neutral', cycle: false, volume: 0.7 };
 const SHADOW_COUNTS = [0, 2, 4, 8];
 
 export function moodFromUrl(params: URLSearchParams): MoodSettings {
@@ -61,6 +63,7 @@ export function moodFromUrl(params: URLSearchParams): MoodSettings {
   m.darkness = num('dark', 0, 1) ?? m.darkness;
   const wet = num('wet', 0, 1);
   if (wet !== undefined) m.wetness = wet;
+  m.screenGlow = num('glow', 0, 1.5) ?? m.screenGlow;
   m.dof = num('dof', 0, 1) ?? m.dof;
   const focus = num('focus', 1, 300);
   if (focus !== undefined) m.focus = focus;
@@ -84,6 +87,7 @@ function moodToUrl(m: MoodSettings): string {
   set('moon', m.moon === null ? null : m.moon.toFixed(2));
   set('dark', m.darkness ? m.darkness.toFixed(2) : null);
   set('wet', m.wetness === null ? null : m.wetness.toFixed(2));
+  set('glow', m.screenGlow === MOOD_DEFAULTS.screenGlow ? null : m.screenGlow.toFixed(2));
   set('dof', m.dof ? m.dof.toFixed(2) : null);
   set('focus', m.dof && m.focus !== null ? m.focus.toFixed(1) : null);
   set('shadows', m.shadows ? String(m.shadows) : null);
@@ -125,6 +129,7 @@ export class MoodPanel {
     this.slider('moon', 'Moonlight (night)', 0, 1, 0.01, () => s.moon ?? -1, (v) => (s.moon = v), (v) => (v < 0 ? 'from time of day' : v.toFixed(2)), () => (s.moon = null));
     this.slider('dark', 'Darkness', 0, 1, 0.01, () => s.darkness, (v) => (s.darkness = v), (v) => (v < 0.05 ? 'normal' : `${Math.round(v * 100)}%`));
     this.slider('wet', 'Wet streets', 0, 1, 0.01, () => s.wetness ?? -1, (v) => (s.wetness = v), (v) => (v < 0 ? 'follows the rain' : v < 0.35 ? `damp ${v.toFixed(2)}` : `puddles ${v.toFixed(2)}`), () => (s.wetness = null));
+    this.slider('glow', 'Screen glow', 0, 1.5, 0.01, () => s.screenGlow, (v) => (s.screenGlow = v), (v) => (v < 0.01 ? 'off' : v.toFixed(2)));
     this.slider('dof', 'Depth of field', 0, 1, 0.01, () => s.dof, (v) => (s.dof = v), (v) => (v < 0.01 ? 'off' : v.toFixed(2)));
     // Focus on a log scale (1 m to 300 m), or auto (the centre of the view).
     const toM = (v: number): number => Math.exp(Math.log(1) + v * (Math.log(300) - Math.log(1)));
