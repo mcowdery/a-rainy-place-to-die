@@ -1,0 +1,25 @@
+{
+  "file": "cash_one_v2.png",
+  "item": "cash_one",
+  "brand": "キャッシュ・ワン CASH ONE",
+  "copy": "ご融資 最短30分",
+  "notes": "Redo: make it read as an ad (the classic Japanese consumer-loan TV/billboard look), with a slightly sinister edge.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, smiling spokeswoman in a crisp office uniform bowing politely beside a giant fanned-out stack of ten-thousand-yen banknotes on a bright clean studio set with a smiling mascot-like shine, glossy consumer finance advertisement, the smile slightly too perfect, wide horizontal composition, subject off-centre to one side, the background scene continues across the whole frame, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    768
+  ],
+  "steps": 12,
+  "seed": 1984000770,
+  "studioJob": "b47d63a7-7653-4a0f-9e1b-c2d3454c9963-u1",
+  "generated": "2026-09-26T01:15:28.952Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/54_cash_one.png",
+  "decided": "2026-09-26T01:22:56.491Z",
+  "batch": "kaburo_redos_03_billboards",
+  "purpose": "Round 3 redos from the user's review notes: billboards and mega-sign screens. Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "billboard",
+  "district": "neon"
+}

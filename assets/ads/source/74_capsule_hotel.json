@@ -1,0 +1,25 @@
+{
+  "file": "capsule_hotel_v1.png",
+  "item": "capsule_hotel",
+  "brand": "カプセルホテル 蜂の巣",
+  "copy": "1泊 ¥2,900 サウナ付",
+  "notes": "Redo: a different aesthetic.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, warm wooden capsule hotel pods lit in amber, a tired salaryman in a yukata climbing into his capsule with a canned beer, cosy and a little melancholy, late night, vertical composition, photograph only, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 1600856736,
+  "studioJob": "fda8adb6-0744-4b74-b643-0d2f272a25b6-u2",
+  "generated": "2026-09-26T01:19:29.012Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/74_capsule_hotel.png",
+  "decided": "2026-09-26T01:28:31.804Z",
+  "batch": "kaburo_redos_03_posters",
+  "purpose": "Round 3 redos from the user's review notes: street posters. Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon"
+}

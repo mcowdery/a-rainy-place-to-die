@@ -1,0 +1,25 @@
+{
+  "file": "mega_soda_v1.png",
+  "item": "mega_soda",
+  "brand": "ネオンサイダー NEON CIDER",
+  "copy": "シュワっと、夜更かし。",
+  "notes": "Redo: something different.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, young adult woman on a rooftop at night laughing as she drinks a glowing cyan soda from the bottle, hair blowing, the neon city spread out below her, fizzing bubbles catching the light, vivid youthful commercial, wide horizontal composition, subject off-centre to one side, the background scene continues across the whole frame, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    864
+  ],
+  "steps": 12,
+  "seed": 1677435423,
+  "studioJob": "7e7b935b-2b65-4ded-ba69-2d7f935a75f2-u2",
+  "generated": "2026-09-26T01:17:13.278Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/64_mega_soda.png",
+  "decided": "2026-09-26T01:24:45.760Z",
+  "batch": "kaburo_redos_03_billboards",
+  "purpose": "Round 3 redos from the user's review notes: billboards and mega-sign screens. Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "billboard",
+  "district": "neon"
+}

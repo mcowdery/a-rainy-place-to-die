@@ -19,23 +19,25 @@ import { hasRooftopLetters, signBox, type SignBuilder } from './signs';
 type C3 = [number, number, number];
 type Rect4 = readonly [number, number, number, number];
 
-/** Slots: billboards 768x384 (5 per row, 6 rows), posters 384x576 (10 per row, 3 rows below): 30 of each. */
-export const DISTRICT_ATLAS = { W: 4096, H: 4096, billboard: [768, 384], poster: [384, 576], posterTop: 2304 } as const;
+/** Slots: billboards 640x320 (6 per row, 6 rows = 36), posters 320x480 (12 per row, 4 rows below = 48). */
+export const DISTRICT_ATLAS = { W: 4096, H: 4096, billboard: [640, 320], poster: [320, 480], posterTop: 1920, perRow: { billboard: 6, poster: 12 } } as const;
 
 export const BILLBOARDS = DISTRICT_ADS.map((a, i) => ({ a, i })).filter((x) => x.a.format === 'billboard');
 export const POSTERS = DISTRICT_ADS.map((a, i) => ({ a, i })).filter((x) => x.a.format === 'poster');
 
-/** Pixel rect of catalogue entry i in the atlas: billboards in rows of 5 at the top, posters in rows of 10 below. */
+/** Pixel rect of catalogue entry i in the atlas: billboards in rows at the top, posters in rows below. */
 export function districtAdRect(i: number): [number, number, number, number] {
   const ad = DISTRICT_ADS[i];
   const list = ad.format === 'billboard' ? BILLBOARDS : POSTERS;
   const k = list.findIndex((x) => x.i === i);
   if (ad.format === 'billboard') {
     const [w, h] = DISTRICT_ATLAS.billboard;
-    return [(k % 5) * w, Math.floor(k / 5) * h, w, h];
+    const n = DISTRICT_ATLAS.perRow.billboard;
+    return [(k % n) * w, Math.floor(k / n) * h, w, h];
   }
   const [w, h] = DISTRICT_ATLAS.poster;
-  return [(k % 10) * w, DISTRICT_ATLAS.posterTop + Math.floor(k / 10) * h, w, h];
+  const n = DISTRICT_ATLAS.perRow.poster;
+  return [(k % n) * w, DISTRICT_ATLAS.posterTop + Math.floor(k / n) * h, w, h];
 }
 
 export function districtAdUv(i: number): Rect4 {

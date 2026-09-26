@@ -1,0 +1,25 @@
+{
+  "file": "maid_cafe_pure_poster_v1.png",
+  "item": "maid_cafe_pure_poster",
+  "brand": "めいどかふぇ ♡ぴゅあ♡",
+  "copy": "チェキ撮影 ¥500",
+  "notes": "Redo: black French maid look with stockings.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, pretty adult maid in her early twenties in a short black French maid dress with a white frilled apron, black thigh-high stockings and a lace headband, winking and holding a cream parfait, stylish dark café interior with warm lamps, vertical composition, photograph only, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 1855158451,
+  "studioJob": "f57a1736-c0ee-42e0-9985-99dd96184104-u2",
+  "generated": "2026-09-26T01:18:07.699Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/66_maid_cafe_pure_poster.png",
+  "decided": "2026-09-26T01:27:12.819Z",
+  "batch": "kaburo_redos_03_posters",
+  "purpose": "Round 3 redos from the user's review notes: street posters. Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon"
+}

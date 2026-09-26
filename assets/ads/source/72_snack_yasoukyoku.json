@@ -1,0 +1,25 @@
+{
+  "file": "snack_yasoukyoku_v1.png",
+  "item": "snack_yasoukyoku",
+  "brand": "スナック 夜想曲",
+  "copy": "ママがお待ちしております",
+  "notes": "Redo: no microphone.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, elegant Japanese mama-san in her forties in a kimono pouring whisky into a glass behind a small snack bar counter, bottles with name tags on the shelf behind her, warm amber light, no microphone, vertical composition, photograph only, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 897103667,
+  "studioJob": "9549d0f4-9aa6-48df-b56c-36e91655581a-u2",
+  "generated": "2026-09-26T01:18:56.568Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/72_snack_yasoukyoku.png",
+  "decided": "2026-09-26T01:27:45.904Z",
+  "batch": "kaburo_redos_03_posters",
+  "purpose": "Round 3 redos from the user's review notes: street posters. Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon"
+}

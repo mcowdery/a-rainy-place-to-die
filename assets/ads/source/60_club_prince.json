@@ -1,0 +1,25 @@
+{
+  "file": "club_prince_v2.png",
+  "item": "club_prince",
+  "brand": "CLUB PRINCE",
+  "copy": "指名No.1 レン",
+  "notes": "Redo (both rejected, no note): a different take on the host club board.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, three handsome young adult Japanese hosts with styled dyed hair in tailored black and burgundy suits posing on a staircase in a gold and crystal host club, champagne glasses raised, dramatic glamour lighting, wide horizontal composition, subject off-centre to one side, the background scene continues across the whole frame, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    768
+  ],
+  "steps": 12,
+  "seed": 115971732,
+  "studioJob": "c93ffab0-124a-47db-9ba3-2529f9de3ac0-u1",
+  "generated": "2026-09-26T01:16:18.247Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/60_club_prince.png",
+  "decided": "2026-09-26T01:23:28.012Z",
+  "batch": "kaburo_redos_03_billboards",
+  "purpose": "Round 3 redos from the user's review notes: billboards and mega-sign screens. Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "billboard",
+  "district": "neon"
+}

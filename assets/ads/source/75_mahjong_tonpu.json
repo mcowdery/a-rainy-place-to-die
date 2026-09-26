@@ -1,0 +1,25 @@
+{
+  "file": "mahjong_tonpu_v1.png",
+  "item": "mahjong_tonpu",
+  "brand": "雀荘 東風",
+  "copy": "フリー 1卓より 24H",
+  "notes": "Redo: a man smoking at the table.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, tough middle-aged Japanese man with slicked-back hair smoking a cigarette at an automatic mahjong table, studying his tiles, smoke curling under a green lamp, a cigar-smoking rival across the table in shadow, smoky back room, vertical composition, photograph only, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 335445129,
+  "studioJob": "1f6c89d5-8792-4fdb-8c35-8f0ca15a239d-u2",
+  "generated": "2026-09-26T01:19:45.273Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/75_mahjong_tonpu.png",
+  "decided": "2026-09-26T01:28:33.968Z",
+  "batch": "kaburo_redos_03_posters",
+  "purpose": "Round 3 redos from the user's review notes: street posters. Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon"
+}

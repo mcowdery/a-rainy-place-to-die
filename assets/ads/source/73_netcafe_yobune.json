@@ -1,0 +1,25 @@
+{
+  "file": "netcafe_yobune_v2.png",
+  "item": "netcafe_yobune",
+  "brand": "ネットカフェ 夜舟",
+  "copy": "ナイトパック 8時間 ¥1,480",
+  "notes": "Redo: a realistic modern Japanese net café, no 80s/90s look.",
+  "prompt": "clean modern commercial photography, contemporary, natural colours, sharp digital photo, inside a modern Japanese manga and internet café: a narrow corridor of private booths with partition walls, a flat reclining seat with a blanket, a PC monitor glowing, shelves of manga volumes, a free drink bar, late at night, vertical composition, photograph only, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 167811338,
+  "studioJob": "ef0e8d47-3ec9-45bb-95a6-852bd12b46fd-u2",
+  "generated": "2026-09-26T01:19:12.821Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/73_netcafe_yobune.png",
+  "decided": "2026-09-26T01:28:12.176Z",
+  "batch": "kaburo_redos_03_posters",
+  "purpose": "Round 3 redos from the user's review notes: street posters. Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon"
+}

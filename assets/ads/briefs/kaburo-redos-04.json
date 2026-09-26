@@ -1,0 +1,12 @@
+{
+  "batch": "kaburo-redos-04",
+  "purpose": "Round 4 redo from review notes: the mega-sign district ident.",
+  "use": "billboard",
+  "district": "neon",
+  "defaults": { "lora": null, "variants": 2, "width": 1536, "height": 864 },
+  "items": [
+    { "id": "mega_kaburo", "brand": "WELCOME TO KABURO 歌舞路", "copy": "眠らない街へ、ようこそ。",
+      "notes": "Redo: Japanese models, attire that fits a nightlife district, a close-up.",
+      "subject": "close-up of a stylish young adult Japanese couple laughing together on a rain-soaked neon street at night, she in a glossy black mini dress and leather jacket, he in an open-collar shirt and loose blazer, faces lit pink and cyan by the signs, bokeh of countless neon signs behind them, cinematic nightlife commercial" }
+  ]
+}

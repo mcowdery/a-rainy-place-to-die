@@ -1,0 +1,25 @@
+{
+  "file": "maruyoshi_pawn_v2.png",
+  "item": "maruyoshi_pawn",
+  "brand": "質 まるよし MARUYOSHI",
+  "copy": "ブランド品・貴金属 高価買取",
+  "notes": "Redo: an actual ad, not a photo of a shop.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, shrewd elderly Japanese pawnbroker in a waistcoat holding up a gold wristwatch with one hand and a thick stack of ten-thousand-yen notes with the other, looking straight at the camera, dramatic black background with gold rim light, bold advertising portrait, vertical composition, photograph only, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 2074820985,
+  "studioJob": "aa6c778f-d562-4477-84ad-0bdd4211aaf4-u1",
+  "generated": "2026-09-26T01:20:17.824Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/78_maruyoshi_pawn.png",
+  "decided": "2026-09-26T01:28:54.675Z",
+  "batch": "kaburo_redos_03_posters",
+  "purpose": "Round 3 redos from the user's review notes: street posters. Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon"
+}
