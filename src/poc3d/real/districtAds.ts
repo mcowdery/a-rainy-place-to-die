@@ -4,6 +4,7 @@ import { DISTRICT_ADS } from '../models/ads';
 import { FH, frontFrame, GF, styleFor, tiers, WIN } from './buildings';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
 import type { Prop } from './props';
+import { ALWAYS_SEEN, type Sightline } from './sightline';
 import { hasRooftopLetters, signBox, type SignBuilder } from './signs';
 
 /**
@@ -80,7 +81,15 @@ export interface AdPlacement {
 }
 
 /** Adds a chunk's district ads: panels into sb (ad atlas material), frames and lamps into mb. */
-export function addDistrictAds(sb: SignBuilder, mb: MeshBuilder, buildings: readonly Building3[], signs: readonly Sign3[], props: readonly Prop[], out?: AdPlacement[]): void {
+export function addDistrictAds(
+  sb: SignBuilder,
+  mb: MeshBuilder,
+  buildings: readonly Building3[],
+  signs: readonly Sign3[],
+  props: readonly Prop[],
+  out?: AdPlacement[],
+  seen: Sightline = ALWAYS_SEEN,
+): void {
   if (BILLBOARDS.length === 0 && POSTERS.length === 0) return;
   for (const b of buildings) {
     if (b.hue !== undefined) continue; // stamps are hand-dressed
@@ -88,9 +97,11 @@ export function addDistrictAds(sb: SignBuilder, mb: MeshBuilder, buildings: read
     const f = frontFrame(b);
     const billboard = BILLBOARDS[hash(b.id, 1) % BILLBOARDS.length];
     const poster = POSTERS[hash(b.id, 2) % POSTERS.length];
-    const rooftop = b.h >= 15 && !hasRooftopLetters(b) && rnd.chance(0.3);
+    // Billboards only where they can be seen from the street (a junction, a square, a street running away
+    // from them, lower roofs across the way); where they can, they're more likely than before.
+    const rooftop = b.h >= 15 && !hasRooftopLetters(b, seen) && rnd.chance(0.45) && seen(b, b.h + 4);
     // Not on balcony fronts (the slabs stick out 1.15 m, through the panel).
-    const wall = !rooftop && b.h >= 15 && rnd.chance(0.16) && styleFor(b).type !== WIN.balcony;
+    const wall = !rooftop && b.h >= 15 && rnd.chance(0.3) && styleFor(b).type !== WIN.balcony && seen(b, GF + FH * 1.2 + 3);
     const street = rnd.chance(0.35);
 
     if (rooftop && billboard) {

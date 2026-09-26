@@ -7,6 +7,7 @@ import type { CityUniforms } from './city';
 import { EM, glyph, textAdvance } from './letters';
 import type { Light } from './lightmap';
 import { EMIT, KIND, lin, scale3, type MeshBuilder } from './meshBuilder';
+import { ALWAYS_SEEN, type Sightline } from './sightline';
 import { sphereOf, toGeometry, type RawGeometry } from './rawGeometry';
 
 /**
@@ -383,7 +384,7 @@ export function signLights(signs: readonly Sign3[]): Light[] {
  * Adds a chunk's signs: textured blades and plates into sb, channel letters (and rooftop billboards for
  * the given buildings) into mb.
  */
-export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[], atlas: SignLayout, sb: SignBuilder, mb: MeshBuilder): void {
+export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[], atlas: SignLayout, sb: SignBuilder, mb: MeshBuilder, seen: Sightline = ALWAYS_SEEN): void {
   for (const s of signs) {
     const st = signStyle(s);
     const n: C3 = [s.nx, 0, s.nz];
@@ -414,7 +415,7 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
       signBox(sb, p, r, n, -w / 2, w / 2, 3.62 - h / 2, 3.62 + h / 2, 0.02, 0.2, atlas.blankUv, { n: uv });
     }
   }
-  for (const b of buildings) rooftopBillboard(mb, b);
+  for (const b of buildings) rooftopBillboard(mb, b, seen);
 }
 
 /**
@@ -460,16 +461,19 @@ function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: 
   mb.style = [0, 0, 0, 0];
 }
 
-/** Whether a building carries the channel-letter rooftop billboard (so photo billboards go elsewhere). */
-export function hasRooftopLetters(b: Building3): boolean {
-  return b.h >= 18 && b.hue === undefined && rng(hash(b.id, 0xb111)).chance(0.22);
+/**
+ * Whether a building carries the channel-letter rooftop billboard (so photo billboards go elsewhere): only
+ * where the letters can be seen from the street (see sightline.ts).
+ */
+export function hasRooftopLetters(b: Building3, seen: Sightline = ALWAYS_SEEN): boolean {
+  return b.h >= 18 && b.hue === undefined && rng(hash(b.id, 0xb111)).chance(0.3) && seen(b, b.h + 3);
 }
 
 /** Rooftop billboard: big channel letters on a steel frame near the front edge of some taller buildings. */
-function rooftopBillboard(mb: MeshBuilder, b: Building3): void {
-  if (!hasRooftopLetters(b)) return;
+function rooftopBillboard(mb: MeshBuilder, b: Building3, seen: Sightline): void {
+  if (!hasRooftopLetters(b, seen)) return;
   const rnd = rng(hash(b.id, 0xb111));
-  rnd.chance(0.22);
+  rnd.chance(0.3);
   const ts = tiers(b);
   const top = ts[ts.length - 1][3] + styleFor(b).parapet;
   const f = frontFrame(b);

@@ -6,6 +6,7 @@ import { MeshBuilder } from '../real/meshBuilder';
 import { addFigure, cellCrowd, GhostBuilder } from '../real/people';
 import { addProps } from '../real/props';
 import type { RawGeometry } from '../real/rawGeometry';
+import { sightline } from '../real/sightline';
 import { addSigns, signLights, SignBuilder, type SignLayout } from '../real/signs';
 import type { Building3 } from './plan';
 import type { DistrictModel } from './model';
@@ -82,9 +83,13 @@ export class ChunkBuilder {
       for (const b of buildings) addBuilding(mb, b, true);
       addProps(mb, m.detail(mx, my)!);
       const sb = this.sb.reset();
-      addSigns([...plan.signs, ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb);
+      // Sightlines for billboards and rooftop letters: this cell's and the neighbours' buildings.
+      const around: Building3[] = [];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) around.push(...m.buildings(mx + dx, my + dy));
+      const seen = sightline(around);
+      addSigns([...plan.signs, ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb, seen);
       const ab = this.ab.reset();
-      addDistrictAds(ab, mb, buildings, plan.signs, m.detail(mx, my)!.props);
+      addDistrictAds(ab, mb, buildings, plan.signs, m.detail(mx, my)!.props, undefined, seen);
       return { mx, my, stage, meshes: { near: mb.raw(cx, cz), signs: sb.raw(cx, cz), ads: ab.raw(cx, cz) }, ms: performance.now() - t0 };
     }
     const crowd = cellCrowd(plan, m.detail(mx, my)!, m.plazas(mx, my));
