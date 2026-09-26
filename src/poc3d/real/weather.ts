@@ -238,6 +238,232 @@ export class RainSystem {
   }
 }
 
+/**
+ * Rain's depth layers round the main streaks (RainSystem, a few to 23 m):
+ * - near: a few long, soft, thick streaks within ~3.5 m (camera-facing ribbons), the drops you'd see
+ *   whip past your face;
+ * - far: rain curtains, open cylinders round the camera at 30, 70 and 140 m with streaks drawn on them,
+ *   slanted by the wind and swaying in bands, lit by the street below (the lightmap), fading with distance
+ *   and height. Buildings in front hide them; distant streets look veiled;
+ * - spray: water thrown up behind the moving cars' wheels (the city shader's headlight list, uCars).
+ */
+export class RainLayers {
+  readonly group = new THREE.Group();
+  private readonly u = {
+    uTime: { value: 0 },
+    uCam: { value: new THREE.Vector3() },
+    uAmount: { value: 0 },
+    uSlant: { value: new THREE.Vector2() },
+    uWet: { value: 0 },
+    uFogFar: { value: 400 },
+    uHorizon: { value: new THREE.Color() },
+    uShelter: { value: Array.from({ length: SHELTERS }, () => new THREE.Vector4()) },
+    uShelterY: { value: Array.from({ length: SHELTERS }, () => new THREE.Vector2()) },
+    uShelters: { value: 0 },
+  };
+
+  constructor(city: CityUniforms) {
+    const shared = { ...this.u, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain, uLamps: city.uLamps, uCars: city.uCars, uCarCount: city.uCarCount };
+    const additive = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending } as const;
+
+    // Near: ribbons (instanced quads), each a drop's streak close to the camera.
+    const NEAR = 260;
+    const quad = new THREE.PlaneGeometry(1, 1);
+    quad.translate(0, 0.5, 0);
+    const nearGeo = new THREE.InstancedBufferGeometry();
+    nearGeo.index = quad.index;
+    nearGeo.setAttribute('position', quad.getAttribute('position'));
+    nearGeo.setAttribute('uv', quad.getAttribute('uv'));
+    const ns = new Float32Array(NEAR * 4);
+    for (let i = 0; i < NEAR; i++) ns.set([Math.random(), Math.random(), Math.random(), Math.random()], i * 4);
+    nearGeo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(ns, 4));
+    nearGeo.instanceCount = NEAR;
+    const near = new THREE.Mesh(
+      nearGeo,
+      new THREE.ShaderMaterial({
+        uniforms: shared,
+        ...additive,
+        side: THREE.DoubleSide,
+        vertexShader: /* glsl */ `
+          attribute vec4 aSeed;
+          uniform float uTime;
+          uniform vec3 uCam;
+          uniform float uAmount;
+          uniform vec2 uSlant;
+          uniform float uLamps;
+          ${lightmapGlsl}
+          ${shelterGlsl}
+          varying vec2 vUv;
+          varying vec3 vCol;
+          void main() {
+            vUv = uv;
+            // A box of 7 x 6 x 7 m round the camera; each drop falls at 12 m/s on its own offset.
+            vec3 box = vec3(7.0, 6.0, 7.0);
+            vec3 p = aSeed.xyz * box;
+            p.y -= uTime * 12.0 + aSeed.w * 40.0;
+            p.xz += uSlant * uTime * 12.0;
+            p = mod(p - uCam + box * 0.5, box) + uCam - box * 0.5;
+            vec3 dir = normalize(vec3(uSlant.x, -1.0, uSlant.y));
+            vec3 toCam = normalize(uCam - p);
+            vec3 side = normalize(cross(dir, toCam));
+            float len = 1.4 + aSeed.w * 0.8;
+            vec3 wp = p - dir * position.y * len + side * position.x * 0.012;
+            float d = length(p - uCam);
+            float a = step(aSeed.w, uAmount * 0.9) * smoothstep(0.35, 0.9, d) * (1.0 - smoothstep(2.5, 3.6, d));
+            if (sheltered(p)) a = 0.0;
+            vCol = (vec3(0.12, 0.13, 0.16) * (1.0 - 0.6 * uLamps) + lightAt(p.xz) * 0.35) * a;
+            gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+          }`,
+        fragmentShader: /* glsl */ `
+          varying vec2 vUv;
+          varying vec3 vCol;
+          void main() {
+            // Soft across, tapered at both ends: an out-of-focus streak.
+            float x = 1.0 - abs(vUv.x - 0.5) * 2.0;
+            float y = sin(vUv.y * 3.14159);
+            float a = x * x * y;
+            if (a < 0.01) discard;
+            gl_FragColor = vec4(vCol * a * 0.6, 1.0);
+          }`,
+      }),
+    );
+    near.frustumCulled = false;
+    near.renderOrder = 6;
+
+    // Far: curtains on cylinders round the camera.
+    const curtain = new THREE.ShaderMaterial({
+      uniforms: { ...shared, uRadius: { value: 30 } },
+      ...additive,
+      side: THREE.BackSide,
+      vertexShader: /* glsl */ `
+        uniform vec3 uCam;
+        uniform float uRadius;
+        varying vec3 vWorld;
+        varying float vAng;
+        void main() {
+          vec3 wp = vec3(uCam.x + position.x * uRadius, position.y, uCam.z + position.z * uRadius);
+          vWorld = wp;
+          vAng = atan(position.z, position.x);
+          gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform float uTime;
+        uniform vec3 uCam;
+        uniform float uAmount;
+        uniform vec2 uSlant;
+        uniform float uRadius;
+        uniform float uFogFar;
+        uniform vec3 uHorizon;
+        uniform float uLamps;
+        ${lightmapGlsl}
+        varying vec3 vWorld;
+        varying float vAng;
+        float hh(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        void main() {
+          // Streak coordinates on the cylinder: u round it (metres), v up; slanted by the wind across it.
+          float u = vAng * uRadius;
+          float v = vWorld.y;
+          vec2 tang = vec2(-sin(vAng), cos(vAng));
+          u -= dot(uSlant, tang) * v;
+          float cols = 3.0;
+          float c = floor(u * cols);
+          float r = hh(vec2(c, uRadius));
+          float line = 1.0 - smoothstep(0.08, 0.3, abs(fract(u * cols) - 0.5));
+          float seg = smoothstep(0.55, 1.0, fract(v * (0.12 + 0.05 * r) + uTime * (1.1 + 0.6 * r) + r * 7.0));
+          // Heavier bands sweeping along the curtain.
+          float band = 0.55 + 0.45 * sin(u * 0.04 + v * 0.03 - uTime * 0.7 + uRadius);
+          float live = step(r, uAmount * 1.1);
+          float fade = (1.0 - smoothstep(0.35, 1.0, uRadius / uFogFar)) * (1.0 - smoothstep(18.0, 60.0, v)) * smoothstep(0.0, 1.5, v);
+          vec3 L = lightAt(vWorld.xz) * mix(1.0, 0.3, clamp(v / 25.0, 0.0, 1.0));
+          vec3 col = (L * 0.3 + uHorizon * 0.25 + vec3(0.03) * (1.0 - uLamps)) * line * seg * band * live * fade;
+          // A faint lit veil between the streaks.
+          col += (L * 0.05 + uHorizon * 0.04) * uAmount * band * fade;
+          gl_FragColor = vec4(col * 0.55, 1.0);
+        }`,
+    });
+    const cyl = new THREE.CylinderGeometry(1, 1, 60, 96, 1, true);
+    cyl.translate(0, 30, 0);
+    for (const R of [30, 70, 140]) {
+      const m = new THREE.Mesh(cyl, curtain.clone());
+      (m.material as THREE.ShaderMaterial).uniforms = { ...shared, uRadius: { value: R } };
+      m.frustumCulled = false;
+      m.renderOrder = 4;
+      this.group.add(m);
+    }
+
+    // Spray behind the moving cars' wheels.
+    const SPRAY = 2000;
+    const sp = new Float32Array(SPRAY * 4);
+    for (let i = 0; i < SPRAY; i++) sp.set([Math.random(), Math.random(), Math.random(), Math.floor(Math.random() * 16)], i * 4);
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(SPRAY * 3), 3));
+    sg.setAttribute('aSeed', new THREE.Float32BufferAttribute(sp, 4));
+    const spray = new THREE.Points(
+      sg,
+      new THREE.ShaderMaterial({
+        uniforms: shared,
+        ...additive,
+        vertexShader: /* glsl */ `
+          attribute vec4 aSeed;
+          uniform float uTime;
+          uniform float uWet;
+          uniform vec4 uCars[16];
+          uniform int uCarCount;
+          uniform float uLamps;
+          ${lightmapGlsl}
+          varying vec3 vCol;
+          void main() {
+            int i = int(aSeed.w);
+            vec4 car = vec4(0.0);
+            for (int k = 0; k < 16; k++) if (k == i) car = uCars[k];
+            float on = float(i < uCarCount) * uWet;
+            // Each droplet: thrown back and up from a rear wheel, over half a second.
+            float t = fract(uTime * 2.2 + aSeed.z * 9.0);
+            vec2 d = car.zw;
+            vec2 s = vec2(-d.y, d.x);
+            float wheel = aSeed.x < 0.5 ? -0.75 : 0.75;
+            vec2 xz = car.xy - d * (1.6 + t * (2.0 + aSeed.y * 2.5)) + s * (wheel + (aSeed.y - 0.5) * 0.9 * t);
+            float y = 0.12 + t * (1.0 - t) * (1.6 + aSeed.x);
+            vec3 p = vec3(xz.x, y, xz.y);
+            vCol = (vec3(0.05, 0.055, 0.065) * (1.0 - 0.6 * uLamps) + lightAt(xz) * 0.35) * on * (1.0 - t);
+            vec4 mv = viewMatrix * vec4(p, 1.0);
+            gl_Position = projectionMatrix * mv;
+            gl_PointSize = on > 0.01 ? min(0.05 * 900.0 / max(-mv.z, 0.5), 4.0) : 0.0;
+          }`,
+        fragmentShader: /* glsl */ `
+          varying vec3 vCol;
+          void main() {
+            float a = smoothstep(0.5, 0.1, length(gl_PointCoord - 0.5));
+            if (a < 0.01) discard;
+            gl_FragColor = vec4(vCol * a * 1.5, 1.0);
+          }`,
+      }),
+    );
+    spray.frustumCulled = false;
+    spray.renderOrder = 5;
+    this.group.add(near, spray);
+  }
+
+  update(time: number, camera: THREE.Vector3, amount: number, wind: THREE.Vector2, wet: number, fogFar: number, horizon: THREE.Color, shelters: readonly RainShelter[]): void {
+    this.u.uTime.value = time;
+    this.u.uCam.value.copy(camera);
+    this.u.uAmount.value = amount;
+    this.u.uSlant.value.copy(wind);
+    this.u.uWet.value = wet;
+    this.u.uFogFar.value = fogFar;
+    this.u.uHorizon.value.copy(horizon);
+    const n = Math.min(SHELTERS, shelters.length);
+    for (let i = 0; i < n; i++) {
+      const s = shelters[i];
+      this.u.uShelter.value[i].set(s.rect.x, s.rect.y, s.rect.x + s.rect.w, s.rect.y + s.rect.h);
+      this.u.uShelterY.value[i].set(s.y0, s.y1);
+    }
+    this.u.uShelters.value = n;
+    // The curtains and near streaks need rain; the spray only needs a wet road.
+    for (const c of this.group.children) c.visible = c instanceof THREE.Points ? wet > 0.05 : amount > 0;
+  }
+}
+
 /** A lightning strike: where it is (unit direction from the camera, flat) and how far. */
 export interface Strike {
   readonly dirX: number;

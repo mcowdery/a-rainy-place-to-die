@@ -27,7 +27,7 @@ import { GRADE_NAMES, GradePass } from '../real/grade';
 import { DofPass } from '../real/dof';
 import { SsrPass } from '../real/ssr';
 import { CityAudio } from '../real/audio';
-import { LampCones, LampShadows, Lightning, RainSystem } from '../real/weather';
+import { LampCones, LampShadows, Lightning, RainLayers, RainSystem } from '../real/weather';
 import { moodFromUrl, MoodPanel } from './moodPanel';
 import { routeFor } from './traffic';
 import { destinations, TravelMap, type Destination } from './travel';
@@ -192,6 +192,7 @@ async function run(): Promise<void> {
   const rain = new RainSystem(cityU);
   const cones = new LampCones();
   const lampShadows = new LampShadows();
+  const rainLayers = new RainLayers(cityU);
   const lightning = new Lightning();
   // Sound: starts on the first click (browsers need a gesture); thunder follows each strike.
   const audio = new CityAudio();
@@ -201,7 +202,7 @@ async function run(): Promise<void> {
     audio.thunder(s.cloudOnly ? s.distance * 1.3 : s.distance, s.dirX * Math.cos(yaw) - s.dirZ * Math.sin(yaw));
   };
   scene.add(lightning.bolt, lightning.light, lightning.light.target);
-  scene.add(rain.group, cones.mesh, lampShadows.group);
+  scene.add(rain.group, rainLayers.group, cones.mesh, lampShadows.group);
   const windVec = new THREE.Vector2();
   const windTarget = new THREE.Vector2();
   let skyTime = 0;
@@ -627,6 +628,9 @@ async function run(): Promise<void> {
     const shelters = district.sheltersNear(cp.x, cp.z, 45, 11);
     if (trains?.riding) shelters.unshift({ rect: { x: cp.x - 1.6, y: cp.z - 30, w: 3.2, h: 60 }, y0: 0, y1: 20 });
     rain.update(tt, dt, cp, rainAmount, windVec, shelters);
+    rainLayers.update(tt, cp, rainAmount, windVec, wetness, (scene.fog as THREE.Fog).far, base.horizon, shelters);
+    // Wet air spreads the glow round lights.
+    bloom.radius = 0.45 + 0.35 * Math.min(1, rainAmount + (weather() === 'fog' ? 0.5 : 0));
     const inside = trains?.riding || district.sheltered(cp.x, cp.z, cp.y);
     cones.update(cp, lamps, Math.max(atm.haze, rainAmount * 1.2) * atm.lamps * 0.05 * (1 - 0.3 * mood.darkness));
     lampShadows.update(cp, lamps, atm.lamps * 55);
