@@ -1,0 +1,62 @@
+{
+  "batch": "kaburo-redos-03-posters",
+  "purpose": "Round 3 redos from the user's review notes: street posters. Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "poster",
+  "district": "neon",
+  "defaults": {
+    "lora": null,
+    "variants": 2
+  },
+  "items": [
+    {
+      "id": "maid_cafe_pure_poster",
+      "brand": "めいどかふぇ ♡ぴゅあ♡",
+      "copy": "チェキ撮影 ¥500",
+      "notes": "Redo: black French maid look with stockings.",
+      "subject": "pretty adult maid in her early twenties in a short black French maid dress with a white frilled apron, black thigh-high stockings and a lace headband, winking and holding a cream parfait, stylish dark café interior with warm lamps"
+    },
+    {
+      "id": "snack_yasoukyoku",
+      "brand": "スナック 夜想曲",
+      "copy": "ママがお待ちしております",
+      "notes": "Redo: no microphone.",
+      "subject": "elegant Japanese mama-san in her forties in a kimono pouring whisky into a glass behind a small snack bar counter, bottles with name tags on the shelf behind her, warm amber light, no microphone"
+    },
+    {
+      "id": "netcafe_yobune",
+      "brand": "ネットカフェ 夜舟",
+      "copy": "ナイトパック 8時間 ¥1,480",
+      "style": "clean modern commercial photography, contemporary, natural colours, sharp digital photo",
+      "notes": "Redo: a realistic modern Japanese net café, no 80s/90s look.",
+      "subject": "inside a modern Japanese manga and internet café: a narrow corridor of private booths with partition walls, a flat reclining seat with a blanket, a PC monitor glowing, shelves of manga volumes, a free drink bar, late at night"
+    },
+    {
+      "id": "capsule_hotel",
+      "brand": "カプセルホテル 蜂の巣",
+      "copy": "1泊 ¥2,900 サウナ付",
+      "notes": "Redo: a different aesthetic.",
+      "subject": "warm wooden capsule hotel pods lit in amber, a tired salaryman in a yukata climbing into his capsule with a canned beer, cosy and a little melancholy, late night"
+    },
+    {
+      "id": "mahjong_tonpu",
+      "brand": "雀荘 東風",
+      "copy": "フリー 1卓より 24H",
+      "notes": "Redo: a man smoking at the table.",
+      "subject": "tough middle-aged Japanese man with slicked-back hair smoking a cigarette at an automatic mahjong table, studying his tiles, smoke curling under a green lamp, a cigar-smoking rival across the table in shadow, smoky back room"
+    },
+    {
+      "id": "cash_one_poster",
+      "brand": "キャッシュ・ワン",
+      "copy": "ブラックOK 即日",
+      "notes": "Redo: more sinister (v3 stays approved).",
+      "subject": "grinning loan shark in a shiny grey suit with gold rings and tinted glasses leaning over a desk in a dim office, fanning out ten-thousand-yen banknotes, predatory smile, harsh single light from above, sinister"
+    },
+    {
+      "id": "maruyoshi_pawn",
+      "brand": "質 まるよし MARUYOSHI",
+      "copy": "ブランド品・貴金属 高価買取",
+      "notes": "Redo: an actual ad, not a photo of a shop.",
+      "subject": "shrewd elderly Japanese pawnbroker in a waistcoat holding up a gold wristwatch with one hand and a thick stack of ten-thousand-yen notes with the other, looking straight at the camera, dramatic black background with gold rim light, bold advertising portrait"
+    }
+  ]
+}

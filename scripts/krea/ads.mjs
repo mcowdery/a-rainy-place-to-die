@@ -56,7 +56,8 @@ function ask(question, hidden = false) {
 /** The prompt for one brief item, exactly as sent. */
 export function promptFor(item, use, lora) {
   const hint = item.composition ?? USES[use]?.hint;
-  return [STYLE_ANCHOR, lora || null, item.subject, hint, item.noText === false ? null : NO_TEXT].filter(Boolean).join(', ');
+  // item.style replaces the house style anchor (e.g. a modern look instead of the 80s/90s magazine one).
+  return [item.style ?? STYLE_ANCHOR, lora || null, item.subject, hint, item.noText === false ? null : NO_TEXT].filter(Boolean).join(', ');
 }
 
 async function cmdLogin() {

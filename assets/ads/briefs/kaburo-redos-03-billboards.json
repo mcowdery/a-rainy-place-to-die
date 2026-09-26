@@ -1,0 +1,67 @@
+{
+  "batch": "kaburo-redos-03-billboards",
+  "purpose": "Round 3 redos from the user's review notes: billboards and mega-sign screens. Adult ads explicit but censored Japanese-style; all models adults.",
+  "use": "billboard",
+  "district": "neon",
+  "defaults": {
+    "lora": null,
+    "variants": 2
+  },
+  "items": [
+    {
+      "id": "cash_one",
+      "brand": "キャッシュ・ワン CASH ONE",
+      "copy": "ご融資 最短30分",
+      "notes": "Redo: make it read as an ad (the classic Japanese consumer-loan TV/billboard look), with a slightly sinister edge.",
+      "subject": "smiling spokeswoman in a crisp office uniform bowing politely beside a giant fanned-out stack of ten-thousand-yen banknotes on a bright clean studio set with a smiling mascot-like shine, glossy consumer finance advertisement, the smile slightly too perfect"
+    },
+    {
+      "id": "club_prince",
+      "brand": "CLUB PRINCE",
+      "copy": "指名No.1 レン",
+      "notes": "Redo (both rejected, no note): a different take on the host club board.",
+      "subject": "three handsome young adult Japanese hosts with styled dyed hair in tailored black and burgundy suits posing on a staircase in a gold and crystal host club, champagne glasses raised, dramatic glamour lighting"
+    },
+    {
+      "id": "gzone_arcade_dirty",
+      "brand": "GAME CENTER G-ZONE",
+      "copy": "UFOキャッチャー 新景品!",
+      "notes": "Extra variant from the note: a dirtier, grittier 80s/90s arcade, less pastel (v1 stays approved).",
+      "subject": "gritty late-1980s Japanese game centre at night, rows of worn arcade cabinets glowing in the dark, cigarette smoke hanging in the air, delinquent teenagers in school uniforms and leather jackets crowded around a fighting game, grimy floor, dim red and green light"
+    },
+    {
+      "id": "tokyo_noir_film_jp",
+      "brand": "映画『東京ノワール』",
+      "copy": "今夜、この街で誰かが消える。",
+      "notes": "Extra variant from the note: Japanese leads (v1/v2 stay approved).",
+      "subject": "film still of a Japanese detective in his forties in a trench coat and a Japanese woman in a red dress under a neon-lit rainy bridge in Tokyo, cinematic noir, dramatic lighting"
+    },
+    {
+      "id": "mega_soda",
+      "brand": "ネオンサイダー NEON CIDER",
+      "copy": "シュワっと、夜更かし。",
+      "width": 1536,
+      "height": 864,
+      "notes": "Redo: something different.",
+      "subject": "young adult woman on a rooftop at night laughing as she drinks a glowing cyan soda from the bottle, hair blowing, the neon city spread out below her, fizzing bubbles catching the light, vivid youthful commercial"
+    },
+    {
+      "id": "mega_idol",
+      "brand": "ミッドナイト☆シスターズ",
+      "copy": "真夜中サイダー MV 解禁",
+      "width": 1536,
+      "height": 864,
+      "notes": "Redo: better-looking models.",
+      "subject": "three strikingly beautiful adult Japanese idol singers in their early twenties with polished makeup and glossy hair, matching sparkly pastel stage costumes, dancing in sync on a huge glittering stage with lasers and confetti, music video still"
+    },
+    {
+      "id": "mega_kaburo",
+      "brand": "WELCOME TO KABURO 歌舞路",
+      "copy": "眠らない街へ、ようこそ。",
+      "width": 1536,
+      "height": 864,
+      "notes": "Redo (both rejected, no note): a different district ident.",
+      "subject": "a glamorous couple in evening wear walking toward the camera through a rain-soaked neon Japanese entertainment district at night, reflections on the wet street, bokeh of countless signs, cinematic travel commercial"
+    }
+  ]
+}
