@@ -177,27 +177,55 @@ export function adMaterial(u: CityUniforms, atlas: { readonly texture: THREE.Tex
   m.onBeforeCompile = (shader) => {
     shader.uniforms.tAds = tAds;
     shader.uniforms.uNeon = u.uNeon;
+    // Atlas size over the billboard slot size: fract(uv * this) is where on the panel a pixel is.
+    shader.uniforms.uSlot = { value: new THREE.Vector4(DISTRICT_ATLAS.W / DISTRICT_ATLAS.billboard[0], DISTRICT_ATLAS.H / DISTRICT_ATLAS.billboard[1], 0, 0) };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec2 aUv;
         attribute vec2 aSign;
         varying vec2 vAUv;
-        flat varying float vLit;`)
+        flat varying float vLit;
+        flat varying float vLamps;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vAUv = aUv;
-        vLit = aSign.y > 0.5 && aSign.y < 1.5 ? 1.0 : 0.0;`);
+        vLit = aSign.y > 0.5 && aSign.y < 1.5 ? 1.0 : 0.0;
+        vLamps = aSign.y > 9.5 ? aSign.y - 10.0 : 0.0;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform sampler2D tAds;
         uniform float uNeon;
         varying vec2 vAUv;
-        flat varying float vLit;`)
+        flat varying float vLit;
+        flat varying float vLamps;
+        uniform vec4 uSlot;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec3 ad = texture2D(tAds, vAUv).rgb;
         diffuseColor.rgb = ad;
-        totalEmissiveRadiance += ad * 0.9 * uNeon * vLit;`);
+        // Lightboxes (posters, taxi roofs) glow from behind, evenly.
+        totalEmissiveRadiance += ad * 0.9 * uNeon * vLit;
+        if (vLamps > 0.5) {
+          // Floodlit billboards: lit only by their lamps on the top edge. Where on the panel we are, from the
+          // atlas slot (x across, y down from the top), in metres (the panel is ~3 m per lamp, 2:1).
+          vec2 local = fract(vAUv * uSlot.xy);
+          float W = vLamps * 3.0;
+          vec2 m = vec2(local.x * W, local.y * W * 0.5);
+          float light = 0.0;
+          for (int k = 0; k < 8; k++) {
+            if (float(k) >= vLamps) break;
+            float lx = (float(k) + 0.5) / vLamps * W;
+            // Each lamp throws a pool that widens and fades down the face; brightest just under the lamp.
+            float spread = 0.3 + 0.35 * m.y;
+            float dx = m.x - lx;
+            // A scalloped hot spot just under each lamp, then the pool widening and fading down the face.
+            float pool = exp(-dx * dx / (2.0 * spread * spread)) * 1.5 * exp(-0.95 * m.y);
+            light += pool * smoothstep(0.0, 0.12, m.y);
+          }
+          // A little stray light everywhere, so the lower panel isn't black.
+          light = light + 0.04;
+          totalEmissiveRadiance += ad * min(light, 2.0) * 0.8 * uNeon;
+        }`);
   };
-  m.customProgramCacheKey = () => 'ads-v1';
+  m.customProgramCacheKey = () => 'ads-v2';
   return m;
 }
 

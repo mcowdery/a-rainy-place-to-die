@@ -52,9 +52,18 @@ export const DISTRICT_BLANK: [number, number] = [4000 / DISTRICT_ATLAS.W, 4050 /
 
 const STEEL = lin(0x2c2e32);
 
+/** How many floodlights a panel of width w gets. */
+const lampCount = (w: number): number => Math.max(2, Math.round(w / 3));
+
+/**
+ * The ad material's style for a floodlit billboard: 10 + its lamp count (the shader lights the panel from
+ * that many lamps along its top edge, each pool fading down the face). Style 1 is a backlit lightbox.
+ */
+export const floodlit = (w: number): number => 10 + lampCount(w);
+
 /** Floodlight arms reaching out over a panel from its top edge. */
 function floodlights(mb: MeshBuilder, p: C3, r: C3, n: C3, u0: number, u1: number, y: number, out: number): void {
-  const count = Math.max(2, Math.round((u1 - u0) / 3));
+  const count = lampCount(u1 - u0);
   for (let k = 0; k < count; k++) {
     const u = u0 + ((k + 0.5) * (u1 - u0)) / count;
     mb.kind = KIND.plain;
@@ -146,7 +155,7 @@ export function addDistrictAds(
         for (let u = -W / 2 + 0.3; u <= W / 2 - 0.29; u += Math.max(1.6, (W - 0.6) / 4)) mb.frameBox(centre, f.r, f.n, u - 0.08, u + 0.08, top - 1, base + H * 0.8, -0.5, -0.3);
         sb.ink = [1, 1, 1];
         sb.plate = [0, 0, 0];
-        sb.sign = [b.id % 100000, 1];
+        sb.sign = [b.id % 100000, floodlit(W)];
         signBox(sb, centre, f.r, f.n, -W / 2, W / 2, base, base + H, -0.1, 0.05, DISTRICT_BLANK, { n: districtAdUv(billboard.i) });
         floodlights(mb, centre, f.r, f.n, -W / 2, W / 2, base + H + 0.35, 0.05);
         out?.push({ kind: 'rooftop', ad: billboard.i, x: centre[0], y: base + H / 2, z: centre[2], nx: f.n[0], nz: f.n[2] });
@@ -167,7 +176,7 @@ export function addDistrictAds(
         mb.frameBox(centre, f.r, f.n, -W / 2 - 0.1, W / 2 + 0.1, y0 - 0.1, y0 + H + 0.1, off, off + 0.18);
         sb.ink = [1, 1, 1];
         sb.plate = [0, 0, 0];
-        sb.sign = [b.id % 100000, 1];
+        sb.sign = [b.id % 100000, floodlit(W)];
         signBox(sb, centre, f.r, f.n, -W / 2, W / 2, y0, y0 + H, off + 0.18, off + 0.26, DISTRICT_BLANK, { n: districtAdUv(billboard.i) });
         floodlights(mb, centre, f.r, f.n, -W / 2, W / 2, y0 + H + 0.4, off + 0.26);
         out?.push({ kind: 'wall', ad: billboard.i, x: centre[0], y: y0 + H / 2, z: centre[2], nx: f.n[0], nz: f.n[2] });
