@@ -464,6 +464,163 @@ export class RainLayers {
   }
 }
 
+/**
+ * Water off the buildings and litter in the wind, near the camera:
+ * - drips: streaks falling from the edges of the canopies, awnings and viaduct nearby (the covered
+ *   volumes that aren't enclosed), steady while wet, lit by the street;
+ * - debris: scraps of paper and a plastic bag or two tumbling along the ground downwind in strong wind.
+ */
+export class StreetWater {
+  readonly group = new THREE.Group();
+  private readonly u = {
+    uTime: { value: 0 },
+    uCam: { value: new THREE.Vector3() },
+    uWet: { value: 0 },
+    uWind: { value: new THREE.Vector2() },
+    uShelter: { value: Array.from({ length: SHELTERS }, () => new THREE.Vector4()) },
+    uShelterY: { value: Array.from({ length: SHELTERS }, () => new THREE.Vector2()) },
+    uShelters: { value: 0 },
+  };
+
+  constructor(city: CityUniforms) {
+    const shared = { ...this.u, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain, uLamps: city.uLamps };
+    // Drips: each a short streak on its own cycle, from a random point on a random nearby edge.
+    const N = 900;
+    const seed = new Float32Array(N * 2 * 4);
+    for (let i = 0; i < N; i++) {
+      const sd = [Math.random(), Math.random(), Math.random(), Math.floor(Math.random() * SHELTERS)];
+      for (let e = 0; e < 2; e++) seed.set([sd[0], sd[1], sd[2], sd[3] + e * 0.5], (i * 2 + e) * 4);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(N * 2 * 3), 3));
+    g.setAttribute('aSeed', new THREE.Float32BufferAttribute(seed, 4));
+    const drips = new THREE.LineSegments(
+      g,
+      new THREE.ShaderMaterial({
+        uniforms: shared,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: /* glsl */ `
+          attribute vec4 aSeed;
+          uniform float uTime;
+          uniform vec3 uCam;
+          uniform float uWet;
+          uniform vec4 uShelter[${SHELTERS}];
+          uniform vec2 uShelterY[${SHELTERS}];
+          uniform int uShelters;
+          uniform float uLamps;
+          ${lightmapGlsl}
+          varying vec3 vCol;
+          void main() {
+            int i = int(aSeed.w);
+            float end = fract(aSeed.w);
+            vec4 r = vec4(0.0);
+            vec2 hy = vec2(0.0);
+            for (int k = 0; k < ${SHELTERS}; k++) if (k == i) { r = uShelter[k]; hy = uShelterY[k]; }
+            float on = float(i < uShelters) * step(0.15, uWet) * step(hy.y, 25.0);
+            // A point on the rect's perimeter.
+            float w = r.z - r.x;
+            float d = r.w - r.y;
+            float per = aSeed.x * 2.0 * (w + d);
+            vec2 xz = per < w ? vec2(r.x + per, r.y) : per < w + d ? vec2(r.z, r.y + per - w) : per < 2.0 * w + d ? vec2(r.z - (per - w - d), r.w) : vec2(r.x, r.w - (per - 2.0 * w - d));
+            // Falling under gravity from the edge (y1) on a cycle; the streak is the last few centimetres.
+            float cycle = 0.6 + aSeed.y * 1.4;
+            float t = fract(uTime / cycle + aSeed.z) * cycle;
+            float fall = 4.9 * t * t;
+            float speed = 9.8 * t;
+            float y = hy.y - fall + end * min(speed * 0.03, 0.35);
+            vec3 p = vec3(xz.x, max(y, 0.0), xz.y);
+            float near = 1.0 - smoothstep(18.0, 30.0, length(p - uCam));
+            float a = on * near * step(0.0, y) * uWet;
+            vCol = (vec3(0.1, 0.11, 0.13) * (1.0 - 0.6 * uLamps) + lightAt(xz) * 0.5) * a * (0.6 + end * 0.4);
+            gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+          }`,
+        fragmentShader: /* glsl */ `
+          varying vec3 vCol;
+          void main() { if (dot(vCol, vCol) < 1e-6) discard; gl_FragColor = vec4(vCol, 1.0); }`,
+      }),
+    );
+    drips.frustumCulled = false;
+    drips.renderOrder = 5;
+    // Debris: small quads tumbling along the ground downwind, in a 50 m box round the camera.
+    const D = 36;
+    const quad = new THREE.PlaneGeometry(1, 1);
+    const dg = new THREE.InstancedBufferGeometry();
+    dg.index = quad.index;
+    dg.setAttribute('position', quad.getAttribute('position'));
+    const ds = new Float32Array(D * 4);
+    for (let i = 0; i < D; i++) ds.set([Math.random(), Math.random(), Math.random(), Math.random()], i * 4);
+    dg.setAttribute('aSeed', new THREE.InstancedBufferAttribute(ds, 4));
+    dg.instanceCount = D;
+    const debris = new THREE.Mesh(
+      dg,
+      new THREE.ShaderMaterial({
+        uniforms: shared,
+        side: THREE.DoubleSide,
+        vertexShader: /* glsl */ `
+          attribute vec4 aSeed;
+          uniform float uTime;
+          uniform vec3 uCam;
+          uniform vec2 uWind;
+          uniform float uLamps;
+          ${lightmapGlsl}
+          varying vec3 vCol;
+          void main() {
+            float w = length(uWind);
+            vec2 dir = w > 1e-3 ? uWind / w : vec2(1.0, 0.0);
+            vec3 box = vec3(50.0, 1.0, 50.0);
+            vec3 c = aSeed.xyz * box;
+            float travel = uTime * w * (2.5 + aSeed.w * 2.0);
+            c.xz += dir * travel;
+            c = mod(c - uCam + box * 0.5, box) + uCam - box * 0.5;
+            // Skipping along: hops, and a sideways wander.
+            float hop = abs(sin(uTime * (3.0 + aSeed.w * 4.0) + aSeed.x * 20.0)) * (0.2 + 0.8 * w);
+            c.y = 0.05 + hop * 0.8;
+            c.xz += vec2(-dir.y, dir.x) * sin(uTime * 1.3 + aSeed.z * 30.0) * 0.6;
+            // Tumbling.
+            float a1 = uTime * (4.0 + aSeed.w * 6.0) + aSeed.y * 6.28;
+            float a2 = uTime * (3.0 + aSeed.x * 5.0);
+            vec3 q = position * (aSeed.w < 0.12 ? 0.55 : 0.3);
+            q = vec3(q.x, q.y * cos(a1), q.y * sin(a1));
+            q = vec3(q.x * cos(a2) - q.z * sin(a2), q.y, q.x * sin(a2) + q.z * cos(a2));
+            // Mostly lying flat, lifting as it hops.
+            q.y *= 0.25 + 0.75 * hop;
+            vec3 p = c + q;
+            float show = step(0.2, w) * (1.0 - smoothstep(18.0, 25.0, length(p - uCam)));
+            // Paper (white), newsprint (grey) or a plastic bag (the bigger ones, pale), lit by the street.
+            vec3 alb = aSeed.w < 0.12 ? vec3(0.8, 0.82, 0.78) : aSeed.z < 0.5 ? vec3(0.9, 0.88, 0.82) : vec3(0.55, 0.55, 0.52);
+            vCol = alb * (lightAt(p.xz) * 0.45 + vec3(0.03) + vec3(0.3) * (1.0 - uLamps));
+            gl_Position = projectionMatrix * viewMatrix * vec4(p * show + uCam * (1.0 - show) - vec3(0.0, 100.0, 0.0) * (1.0 - show), 1.0);
+          }`,
+        fragmentShader: /* glsl */ `
+          varying vec3 vCol;
+          void main() { gl_FragColor = vec4(vCol, 1.0); }`,
+      }),
+    );
+    debris.frustumCulled = false;
+    this.group.add(drips, debris);
+  }
+
+  /** shelters: covered volumes near the camera (the open ones drip from their edges). */
+  update(time: number, camera: THREE.Vector3, wet: number, wind: THREE.Vector2, shelters: readonly (RainShelter & { readonly enclosed?: boolean })[]): void {
+    this.u.uTime.value = time;
+    this.u.uCam.value.copy(camera);
+    this.u.uWet.value = wet;
+    this.u.uWind.value.copy(wind).multiplyScalar(1 / 3.2);
+    const open = shelters.filter((s) => !s.enclosed);
+    const n = Math.min(SHELTERS, open.length);
+    for (let i = 0; i < n; i++) {
+      const s = open[i];
+      this.u.uShelter.value[i].set(s.rect.x, s.rect.y, s.rect.x + s.rect.w, s.rect.y + s.rect.h);
+      this.u.uShelterY.value[i].set(s.y0, s.y1);
+    }
+    this.u.uShelters.value = n;
+    this.group.children[0].visible = wet > 0.15 && n > 0;
+    this.group.children[1].visible = wind.length() > 0.6;
+  }
+}
+
 /** A lightning strike: where it is (unit direction from the camera, flat) and how far. */
 export interface Strike {
   readonly dirX: number;

@@ -27,7 +27,7 @@ import { GRADE_NAMES, GradePass } from '../real/grade';
 import { DofPass } from '../real/dof';
 import { SsrPass } from '../real/ssr';
 import { CityAudio } from '../real/audio';
-import { LampCones, LampShadows, Lightning, RainLayers, RainSystem } from '../real/weather';
+import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater } from '../real/weather';
 import { moodFromUrl, MoodPanel } from './moodPanel';
 import { routeFor } from './traffic';
 import { destinations, TravelMap, type Destination } from './travel';
@@ -193,6 +193,7 @@ async function run(): Promise<void> {
   const cones = new LampCones();
   const lampShadows = new LampShadows();
   const rainLayers = new RainLayers(cityU);
+  const streetWater = new StreetWater(cityU);
   const lightning = new Lightning();
   // Sound: starts on the first click (browsers need a gesture); thunder follows each strike.
   const audio = new CityAudio();
@@ -202,7 +203,7 @@ async function run(): Promise<void> {
     audio.thunder(s.cloudOnly ? s.distance * 1.3 : s.distance, s.dirX * Math.cos(yaw) - s.dirZ * Math.sin(yaw));
   };
   scene.add(lightning.bolt, lightning.light, lightning.light.target);
-  scene.add(rain.group, rainLayers.group, cones.mesh, lampShadows.group);
+  scene.add(rain.group, rainLayers.group, streetWater.group, cones.mesh, lampShadows.group);
   const windVec = new THREE.Vector2();
   const windTarget = new THREE.Vector2();
   let skyTime = 0;
@@ -343,6 +344,7 @@ async function run(): Promise<void> {
   const base = { zenith: new THREE.Color(), horizon: new THREE.Color(), cloudLit: new THREE.Color(), hemi: 0, fogNear: 60, fogFar: 620 };
   let rainAmount = 0;
   let wetness = -1;
+  let cycleTick = 1;
   const applyMood = (): void => {
     const fog = scene.fog as THREE.Fog;
     rainAmount = mood.rain ?? (atm.rain > 0 ? 0.45 : 0);
@@ -614,6 +616,16 @@ async function run(): Promise<void> {
     cityU.uCarCount.value = traffic.fillLights(camera.position, cityU.uCars.value);
     // Headlights come on with the street lamps (dusk, dawn, night, dark storms).
     cityU.uHeadlights.value = Math.max(atm.lamps, mood.darkness, rainAmount > 0.5 ? 0.6 : 0);
+    // Weather cycle: a storm that builds, peaks, eases and clears over six minutes, then again.
+    if (mood.cycle && (cycleTick += dt) > 1) {
+      cycleTick = 0;
+      const c = ((now / 1000) % 360) / 360;
+      const env = c < 0.15 ? 0 : c < 0.35 ? (c - 0.15) / 0.2 : c < 0.55 ? 1 : c < 0.85 ? 1 - ((c - 0.55) / 0.3) * 0.85 : Math.max(0, 0.15 - ((c - 0.85) / 0.15) * 0.15);
+      mood.rain = env <= 0 ? 0 : 0.08 + 0.9 * env;
+      mood.wind = Math.max(0, env - 0.3) * 0.9;
+      applyMood();
+      if (panel.open) panel.refresh();
+    }
     // Wind: a direction and strength with gusts; the rain slants by up to ~3 m sideways per metre of fall.
     const tt = now / 1000;
     const gust = 0.72 + 0.2 * Math.sin(tt * 0.83) + 0.12 * Math.sin(tt * 2.31 + 1.3) + 0.06 * Math.sin(tt * 5.7);
@@ -629,6 +641,8 @@ async function run(): Promise<void> {
     if (trains?.riding) shelters.unshift({ rect: { x: cp.x - 1.6, y: cp.z - 30, w: 3.2, h: 60 }, y0: 0, y1: 20 });
     rain.update(tt, dt, cp, rainAmount, windVec, shelters);
     rainLayers.update(tt, cp, rainAmount, windVec, wetness, (scene.fog as THREE.Fog).far, base.horizon, shelters);
+    streetWater.update(tt, cp, wetness, windVec, district.sheltersNear(cp.x, cp.z, 30, 24));
+    district.umbrellas = rainAmount > 0.15;
     // Wet air spreads the glow round lights.
     bloom.radius = 0.45 + 0.35 * Math.min(1, rainAmount + (weather() === 'fog' ? 0.5 : 0));
     const inside = trains?.riding || district.sheltered(cp.x, cp.z, cp.y);

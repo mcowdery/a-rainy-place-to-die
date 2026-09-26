@@ -56,6 +56,7 @@ interface Chunk {
   readonly far: THREE.Mesh | null;
   near: THREE.Group | null;
   ghosts: THREE.Mesh | null;
+  umbrellas: THREE.Mesh | null;
   ghostsBuilt: boolean;
   people: number;
   readonly triangles: number;
@@ -94,6 +95,8 @@ export class District {
   private readonly done: { task: Task; result: ChunkBuilt }[] = [];
   private nextId = 1;
   private wake: (() => void) | null = null;
+  /** People carry their umbrellas (while it rains). */
+  umbrellas = false;
   /** Geometry bytes integrated by the last update() (they reach the GPU in the next render). */
   lastBytes = 0;
 
@@ -307,6 +310,7 @@ export class District {
       if (c.near) c.near.visible = showNear;
       if (c.far) c.far.visible = !showNear;
       if (c.ghosts) c.ghosts.visible = showNear && dist(c) < GHOST_DISTANCE;
+      if (c.umbrellas) c.umbrellas.visible = this.umbrellas && showNear && dist(c) < GHOST_DISTANCE;
     }
     return n;
   }
@@ -428,7 +432,7 @@ export class District {
       group.updateMatrixWorld(true);
       this.root.add(group);
       this.chunks.set(task.key, {
-        key: task.key, mx: r.mx, my: r.my, cx, cz, group, far, near: null, ghosts: null, ghostsBuilt: false, people: 0,
+        key: task.key, mx: r.mx, my: r.my, cx, cz, group, far, near: null, ghosts: null, umbrellas: null, ghostsBuilt: false, people: 0,
         triangles: rawTriangles(r.meshes.base ?? null) + rawTriangles(r.meshes.far ?? null), nearTriangles: 0, buildings: this.model.buildings(r.mx, r.my),
       });
       if (r.lightmap) kit.lightmap.upload(r.mx * CELL, r.my * CELL, r.lightmap);
@@ -467,6 +471,13 @@ export class District {
       c.near.add(c.ghosts);
       c.ghosts.updateMatrixWorld(true);
       c.nearTriangles += rawTriangles(r.meshes.ghosts);
+    }
+    if (r.meshes.umbrellas) {
+      c.umbrellas = new THREE.Mesh(toGeometry(r.meshes.umbrellas), kit.ghost);
+      c.umbrellas.renderOrder = 2;
+      c.umbrellas.visible = false;
+      c.near.add(c.umbrellas);
+      c.umbrellas.updateMatrixWorld(true);
     }
     return true;
   }

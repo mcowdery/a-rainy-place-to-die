@@ -3,7 +3,7 @@ import { addDistrictAds } from '../real/districtAds';
 import { addGround } from '../real/ground';
 import { paintLights, type Light } from '../real/lightmap';
 import { MeshBuilder } from '../real/meshBuilder';
-import { addFigure, cellCrowd, GhostBuilder } from '../real/people';
+import { addFigure, addUmbrella, cellCrowd, GhostBuilder } from '../real/people';
 import { addProps } from '../real/props';
 import type { RawGeometry } from '../real/rawGeometry';
 import { sightline } from '../real/sightline';
@@ -27,7 +27,7 @@ export interface ChunkBuilt {
   readonly mx: number;
   readonly my: number;
   readonly stage: Stage;
-  readonly meshes: Partial<Record<'base' | 'far' | 'near' | 'signs' | 'ads' | 'ghosts', RawGeometry | null>>;
+  readonly meshes: Partial<Record<'base' | 'far' | 'near' | 'signs' | 'ads' | 'ghosts' | 'umbrellas', RawGeometry | null>>;
   readonly lightmap?: Uint8Array;
   readonly people?: number;
   /** Time spent building, in the worker. */
@@ -39,6 +39,7 @@ export class ChunkBuilder {
   private readonly sb = new SignBuilder();
   private readonly ab = new SignBuilder();
   private readonly gb = new GhostBuilder();
+  private readonly ub = new GhostBuilder();
   private readonly canvas = new OffscreenCanvas(CELL, CELL);
   private readonly g = this.canvas.getContext('2d', { willReadFrequently: true })!;
 
@@ -95,8 +96,12 @@ export class ChunkBuilder {
     }
     const crowd = cellCrowd(plan, m.detail(mx, my)!, m.plazas(mx, my));
     const gb = this.gb.reset();
-    for (const f of crowd) addFigure(gb, f);
-    return { mx, my, stage, meshes: { ghosts: gb.raw(cx, cz) }, people: crowd.length, ms: performance.now() - t0 };
+    const ub = this.ub.reset();
+    for (const f of crowd) {
+      addFigure(gb, f);
+      addUmbrella(ub, f);
+    }
+    return { mx, my, stage, meshes: { ghosts: gb.raw(cx, cz), umbrellas: ub.raw(cx, cz) }, people: crowd.length, ms: performance.now() - t0 };
   }
 }
 

@@ -31,11 +31,13 @@ export interface MoodSettings {
   /** Street lamps nearest you that cast real shadows (each is a shadow-map render). */
   shadows: number;
   grade: GradeName;
+  /** Weather cycle: rain builds to a storm, eases and clears on its own over ~6 minutes (rain and wind follow it). */
+  cycle: boolean;
   /** 0-1 master volume (0 mutes). */
   volume: number;
 }
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: null, darkness: 0, wetness: null, dof: 0, focus: null, shadows: 0, grade: 'neutral', volume: 0.7 };
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: null, darkness: 0, wetness: null, dof: 0, focus: null, shadows: 0, grade: 'neutral', cycle: false, volume: 0.7 };
 const SHADOW_COUNTS = [0, 2, 4, 8];
 
 export function moodFromUrl(params: URLSearchParams): MoodSettings {
@@ -65,6 +67,7 @@ export function moodFromUrl(params: URLSearchParams): MoodSettings {
   const s = num('shadows', 0, 8);
   if (s !== undefined) m.shadows = SHADOW_COUNTS.reduce((a, b) => (Math.abs(b - s) < Math.abs(a - s) ? b : a));
   m.volume = num('volume', 0, 1) ?? m.volume;
+  m.cycle = params.get('cycle') === '1';
   const g = params.get('grade') as GradeName | null;
   if (g && GRADE_NAMES.includes(g)) m.grade = g;
   return m;
@@ -86,6 +89,7 @@ function moodToUrl(m: MoodSettings): string {
   set('shadows', m.shadows ? String(m.shadows) : null);
   set('grade', m.grade === MOOD_DEFAULTS.grade ? null : m.grade);
   set('volume', m.volume === MOOD_DEFAULTS.volume ? null : m.volume.toFixed(2));
+  set('cycle', m.cycle ? '1' : null);
   const q = p.toString();
   return `${location.pathname}${q ? `?${q}` : ''}`;
 }
@@ -112,6 +116,7 @@ export class MoodPanel {
 
     const s = this.settings;
     this.slider('volume', 'Sound', 0, 1, 0.01, () => s.volume, (v) => (s.volume = v), (v) => (v < 0.01 ? 'muted' : `${Math.round(v * 100)}%`));
+    this.choice('cycle', 'Weather cycle', ['off', 'on'], () => (s.cycle ? 'on' : 'off'), (v) => (s.cycle = v === 'on'));
     this.slider('rain', 'Rain', 0, 1, 0.01, () => s.rain ?? -1, (v) => (s.rain = v), (v) => (v < 0 ? 'from weather' : v < 0.2 ? `drizzle ${v.toFixed(2)}` : v < 0.6 ? `rain ${v.toFixed(2)}` : `downpour ${v.toFixed(2)}`), () => (s.rain = null));
     this.slider('wind', 'Wind', 0, 1, 0.01, () => s.wind, (v) => (s.wind = v), (v) => (v < 0.05 ? 'calm' : v < 0.35 ? `breeze ${v.toFixed(2)}` : v < 0.7 ? `gale ${v.toFixed(2)}` : `hurricane ${v.toFixed(2)}`));
     this.slider('windDir', 'Wind toward', 0, 360, 5, () => s.windDir, (v) => (s.windDir = v), (v) => `${Math.round(v)}° ${['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(v / 45) % 8]}`);

@@ -299,6 +299,39 @@ function skeleton(s: FigureSpec): Skeleton {
 }
 
 /** Builds one ghost figure into gb. */
+/**
+ * A clear vinyl umbrella (the konbini kind) held over a figure: a shallow dome over the head, tilted a
+ * little forward, and its shaft down to the hand on the figure's side. Built separately from the figure
+ * (the district shows umbrellas only while it rains). Most people carry one: whether this one does is a
+ * pure function of where they stand.
+ */
+export function addUmbrella(gb: GhostBuilder, s: FigureSpec): boolean {
+  const h = (Math.imul(Math.round(s.x * 10), 73856093) ^ Math.imul(Math.round(s.z * 10), 19349663)) >>> 0;
+  if (h % 100 >= 72) return false;
+  const child = s.body === 'child';
+  const k = child ? 0.62 : s.body === 'woman' ? 0.95 : 1;
+  const fwd: V3 = [Math.sin(s.yaw), 0, Math.cos(s.yaw)];
+  const right: V3 = [fwd[2], 0, -fwd[0]];
+  const hand = s.side >= 0 ? 0.2 : -0.2;
+  // Canopy centre: over the head, a little forward and toward the hand.
+  const cx = s.x + right[0] * hand * 0.5 * k + fwd[0] * 0.1;
+  const cz = s.z + right[2] * hand * 0.5 * k + fwd[2] * 0.1;
+  const top = 1.95 * k + 0.35;
+  const R = child ? 0.42 : 0.52;
+  gb.color = [0.82, 0.88, 0.95];
+  gb.lathe([cx, 0, cz], right, fwd, [
+    [top - 0.22, R, R],
+    [top - 0.14, R * 0.86, R * 0.86],
+    [top - 0.05, R * 0.55, R * 0.55],
+    [top, R * 0.15, R * 0.15],
+    [top + 0.02, 0.01, 0.01],
+  ], 12);
+  const hx = s.x + right[0] * hand * k + fwd[0] * 0.15;
+  const hz = s.z + right[2] * hand * k + fwd[2] * 0.15;
+  gb.capsule([hx, 1.05 * k, hz], [cx, top, cz], 0.012, 0.012, right, 1, 4);
+  return true;
+}
+
 export function addFigure(gb: GhostBuilder, s: FigureSpec): void {
   gb.color = s.color;
   const child = s.body === 'child';
