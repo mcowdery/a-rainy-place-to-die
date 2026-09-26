@@ -7,6 +7,7 @@ import { addFigure, cellCrowd, GhostBuilder } from '../real/people';
 import { addProps } from '../real/props';
 import type { RawGeometry } from '../real/rawGeometry';
 import { addSigns, signLights, SignBuilder, type SignLayout } from '../real/signs';
+import type { Building3 } from './plan';
 import type { DistrictModel } from './model';
 import { CELL } from './plan';
 
@@ -50,9 +51,10 @@ export class ChunkBuilder {
     const plan = m.plan(mx, my)!;
     const cx = (mx + 0.5) * CELL;
     const cz = (my + 0.5) * CELL;
-    const buildings = m.buildings(mx, my);
+    // Landmarks keep their footprint (collision, prop clearance) but are built on the main thread.
+    const buildings = m.massed(mx, my);
     if (stage === 'base') {
-      addGround(this.mb.reset(), plan);
+      addGround(this.mb.reset(), plan, m.plazas(mx, my));
       const base = this.mb.raw(cx, cz);
       const mb = this.mb.reset();
       for (const b of buildings) addBuilding(mb, b, false);
@@ -67,6 +69,7 @@ export class ChunkBuilder {
           if (p) lights.push(...signLights(p.signs));
           for (const q of m.stamps(mx + dx, my + dy)) {
             lights.push(...signLights(q.signs));
+            if (q.stamp.landmark === 'mega_sign') lights.push(...megaSignLights(q.building));
             for (const n of q.nodes) if (n.kind === 'door') lights.push({ x: n.x, z: n.z, r: 6, color: [1.0, 0.7, 0.4], i: 0.9 });
           }
         }
@@ -84,9 +87,23 @@ export class ChunkBuilder {
       addDistrictAds(ab, mb, buildings, plan.signs, m.detail(mx, my)!.props);
       return { mx, my, stage, meshes: { near: mb.raw(cx, cz), signs: sb.raw(cx, cz), ads: ab.raw(cx, cz) }, ms: performance.now() - t0 };
     }
-    const crowd = cellCrowd(plan, m.detail(mx, my)!);
+    const crowd = cellCrowd(plan, m.detail(mx, my)!, m.plazas(mx, my));
     const gb = this.gb.reset();
     for (const f of crowd) addFigure(gb, f);
     return { mx, my, stage, meshes: { ghosts: gb.raw(cx, cz) }, people: crowd.length, ms: performance.now() - t0 };
   }
+}
+
+/** Street glow from the mega-sign's screens: its west and south faces (the corner is at the south-west). */
+function megaSignLights(b: Building3): Light[] {
+  const x0 = b.x - b.w / 2;
+  const z1 = b.z + b.d / 2;
+  const glow = (x: number, z: number, color: [number, number, number]): Light => ({ x, z, r: 16, color, i: 1.1 });
+  return [
+    glow(x0 - 4, b.z - b.d * 0.25, [1.0, 0.45, 0.8]),
+    glow(x0 - 4, b.z + b.d * 0.25, [0.6, 0.8, 1.0]),
+    glow(b.x - b.w * 0.25, z1 + 4, [1.0, 0.7, 0.5]),
+    glow(b.x + b.w * 0.25, z1 + 4, [0.7, 0.6, 1.0]),
+    glow(x0 - 3, z1 + 3, [1.0, 0.35, 0.7]),
+  ];
 }

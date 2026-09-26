@@ -1,4 +1,4 @@
-import { overlaps } from '../../core/coords';
+import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng } from '../../core/hash';
 import type { Building3, CellPlan3, Road3 } from '../district/plan';
 import { frontFrame, styleFor } from './buildings';
@@ -54,7 +54,7 @@ function freeSpans(r: Road3, roads: readonly Road3[], margin: number): [number, 
   return spans;
 }
 
-export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]): CellDetail {
+export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[], plazas: readonly Rect[] = []): CellDetail {
   const props: Prop[] = [];
   const wires: C3[][] = [];
   const lights: Light[] = [];
@@ -175,6 +175,33 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
         lights.push({ x: x + f.n[0] * 0.8, z: z + f.n[2] * 0.8, r: 3.5, color: [0.8, 0.9, 1.0], i: 0.55 });
       }
     }
+  }
+  // Plazas: lamps round the edge facing in, and a loose grid of trees in the middle.
+  for (const q of plazas) {
+    const rnd = rng(hash(Math.round(q.x), Math.round(q.y), 0x91a2));
+    const cx = q.x + q.w / 2;
+    const cz = q.y + q.h / 2;
+    const edge = (x: number, z: number, nx: number, nz: number): void => {
+      if (inBuilding(x, z, 1)) return;
+      props.push({ kind: 'lamp', x, z, nx, nz, radius: 0.2, variant: 0 });
+      lights.push({ x: x + nx * 1.4, z: z + nz * 1.4, r: 10, color: LAMP_COLOR, i: 0.75 });
+    };
+    for (let x = q.x + 5; x < q.x + q.w - 3; x += 12) {
+      edge(x, q.y + 0.8, 0, 1);
+      edge(x + 6, q.y + q.h - 0.8, 0, -1);
+    }
+    for (let z = q.y + 8; z < q.y + q.h - 3; z += 12) {
+      edge(q.x + 0.8, z, 1, 0);
+      edge(q.x + q.w - 0.8, z + 6, -1, 0);
+    }
+    for (let x = q.x + 7; x < q.x + q.w - 5; x += 9) {
+      for (let z = q.y + 7; z < q.y + q.h - 5; z += 9) {
+        if (Math.abs(x - cx) < 5 && Math.abs(z - cz) < 5) continue; // keep the middle open
+        if (!rnd.chance(0.55) || inBuilding(x, z, 2)) continue;
+        props.push({ kind: 'tree', x, z, nx: 0, nz: 1, radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8 });
+      }
+    }
+    lights.push({ x: cx, z: cz, r: Math.max(q.w, q.h) * 0.6, color: [0.9, 0.75, 0.85], i: 0.35 });
   }
   return { props, wires, lights };
 }

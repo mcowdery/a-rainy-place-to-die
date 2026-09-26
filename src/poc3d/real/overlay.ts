@@ -63,7 +63,11 @@ const fragmentShader = /* glsl */ `
     float raw = texture2D(tDepth, cc).x;
     bool sky = raw >= 0.999999;
     float dz = sky ? 1e6 : -perspectiveDepthToViewZ(raw, uNear, uFar);
-    float dissolve = max(sky ? uSky : smoothstep(uDissolve.x, uDissolve.y, dz), uAll);
+    // Dissolve by this pixel's own depth, so thin things against the sky (the neon dragon, antennas, wires)
+    // keep their shape instead of taking the sky's heavier dissolve from the cell centre.
+    float rawPx = texture2D(tDepth, vUv).x;
+    float dzPx = rawPx >= 0.999999 ? 1e6 : -perspectiveDepthToViewZ(rawPx, uNear, uFar);
+    float dissolve = max(rawPx >= 0.999999 ? uSky : smoothstep(uDissolve.x, uDissolve.y, dzPx), uAll);
 
     // Glyph for the cell: brighter cells get denser glyphs.
     float lum = dot(avg, vec3(0.2126, 0.7152, 0.0722));
@@ -78,7 +82,10 @@ const fragmentShader = /* glsl */ `
     // 1.0 (or the cell itself, if that's brighter). Boosting an already-bright light 5x made a super-bright
     // glyph that bloom smeared into a huge disc.
     float gain = min(1.0 / max(uCov[int(s)], 0.18), max(1.0, 1.0 / max(lum, 1e-4)));
-    vec3 ascii = avg * (keep + (1.0 - keep) * mask * gain) + uBg * (1.0 - mask) * (1.0 - keep);
+    // The soft backdrop is the cell's average, except on sky pixels: there it's the pixel's own sky, so a
+    // bright thin shape in the cell (neon tubes) doesn't fill the whole cell with its colour.
+    vec3 backdrop = rawPx >= 0.999999 ? min(img, avg) : avg;
+    vec3 ascii = backdrop * keep + avg * (1.0 - keep) * mask * gain + uBg * (1.0 - mask) * (1.0 - keep);
     vec3 grain = img * (1.0 - uGrain + uGrain * (0.6 + 1.3 * mask));
     vec3 col = mix(grain, ascii, dissolve);
 

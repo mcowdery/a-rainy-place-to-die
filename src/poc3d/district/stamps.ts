@@ -20,10 +20,20 @@ import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan'
  *     door: { kind: door, name: Bar Kanpai, at: [6, 0], returnSpawn: out }    # at: [u along front, metres out]
  *     out:  { kind: spawn, at: [6, 3], facing: south }
  *
+ * A landmark stamp (landmark: mega_sign) keeps its footprint, collision and forecourt, but its mass is not
+ * built by the chunk workers: the main thread adds the landmark itself (see real/megaSign.ts). A node may
+ * set view: [yaw, pitch] in degrees for the camera when spawning there (overrides facing). A stamp may
+ * reserve an open plaza, plaza: { at: [x, z], size: [w, d] } in metres from the footprint's NW corner; it
+ * may reach into neighbouring cells (e.g. the other corners of a junction), and no lot is built on it.
+ *
  * u runs along the front face from its left end as seen from the street. Placements anchor a template to
  * an L0 macro cell + offset (content/world3d/placements.yaml), exactly like the 2D placements.
  * Node ids are "<placement id>.<node id>".
  */
+
+/** Landmarks built on the main thread instead of as a plain building mass. */
+export const LANDMARKS = ['mega_sign'] as const;
+export type Landmark = (typeof LANDMARKS)[number];
 
 export interface StampSign {
   readonly text: string;
@@ -41,6 +51,7 @@ export interface StampNode {
   readonly condition: string | null;
   readonly returnSpawn: string | null;
   readonly facing: Facing | null;
+  readonly view: readonly [number, number] | null;
   readonly u: number;
   readonly out: number;
   readonly handoff: unknown;
@@ -54,6 +65,9 @@ export interface Stamp3 {
   readonly height: number;
   readonly hue: number | null;
   readonly front: Side;
+  readonly landmark: Landmark | null;
+  /** Open ground kept free of lots, relative to the footprint's NW corner. */
+  readonly plaza: Rect | null;
   readonly signs: readonly StampSign[];
   readonly nodes: readonly StampNode[];
 }
@@ -67,6 +81,8 @@ export interface Node3 {
   readonly condition: Condition | null;
   readonly returnSpawn: string | null;
   readonly facing: Facing | null;
+  /** Spawn camera [yaw, pitch] in degrees, if the stamp sets one. */
+  readonly view: readonly [number, number] | null;
   readonly x: number;
   readonly z: number;
   readonly handoff: unknown;
@@ -108,6 +124,14 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
   const front = (doc.front ?? 'south') as Side;
   if (!SIDES.includes(front)) err(`front must be one of ${SIDES.join(', ')}`);
   if (doc.hue !== undefined && !HEX.test(String(doc.hue))) err("hue must be '#rrggbb'");
+  const landmark = doc.landmark === undefined ? null : (String(doc.landmark) as Landmark);
+  if (landmark !== null && !LANDMARKS.includes(landmark)) err(`landmark must be one of ${LANDMARKS.join(', ')}`);
+  let plaza: Rect | null = null;
+  if (doc.plaza !== undefined) {
+    const q = doc.plaza;
+    if (!isObj(q) || !isPair(q.at) || !isPair(q.size) || q.size.some((n) => n <= 0)) err('plaza must be { at: [x, z], size: [w, d] } in metres');
+    else plaza = { x: q.at[0], y: q.at[1], w: q.size[0], h: q.size[1] };
+  }
   const [w, d] = isPair(doc.footprint) ? doc.footprint : [1, 1];
   const frontLen = front === 'north' || front === 'south' ? w : d;
 
@@ -143,6 +167,7 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
     }
     const returnSpawn = raw.returnSpawn === undefined ? null : String(raw.returnSpawn);
     if ((kind === 'door' || kind === 'station') && returnSpawn === null) err(`node '${nid}': ${kind} needs returnSpawn`);
+    if (raw.view !== undefined && !isPair(raw.view)) err(`node '${nid}': view must be [yaw, pitch] in degrees`);
     const [u, out] = isPair(raw.at) ? raw.at : [0, 0];
     nodes.push({
       id: nid,
@@ -152,13 +177,14 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
       condition,
       returnSpawn,
       facing: (raw.facing ?? null) as Facing | null,
+      view: isPair(raw.view) ? raw.view : null,
       u,
       out,
       handoff: raw.handoff ?? {},
     });
   }
   if (errors.length > before) return null;
-  return { id, file, w, d, height: doc.height as number, hue: doc.hue === undefined ? null : parseInt(String(doc.hue).slice(1), 16), front, signs, nodes };
+  return { id, file, w, d, height: doc.height as number, hue: doc.hue === undefined ? null : parseInt(String(doc.hue).slice(1), 16), front, landmark, plaza, signs, nodes };
 }
 
 /** The planner's reserved area for a stamp: its footprint plus an open forecourt in front of the street face. */
@@ -171,6 +197,12 @@ export function reservedRect(p: Placed3): Rect {
     case 'east': return { ...r, w: r.w + apron };
     case 'west': return { ...r, x: r.x - apron, w: r.w + apron };
   }
+}
+
+/** A stamp's plaza in world metres, if it has one. */
+export function plazaRect(p: Placed3): Rect | null {
+  const q = p.stamp.plaza;
+  return q ? { x: p.rect.x + q.x, y: p.rect.y + q.y, w: q.w, h: q.h } : null;
 }
 
 /** Stamps keep this far inside their cell so they clear the widest edge road (half of 16 m) plus a margin. */
@@ -232,6 +264,7 @@ export function placeStamps3(file: string, text: string, macro: MacroMap, stamps
         condition: n.condition === null ? null : compileCondition(n.condition),
         returnSpawn: n.returnSpawn === null ? null : n.returnSpawn.includes('.') ? n.returnSpawn : `${id}.${n.returnSpawn}`,
         facing: n.facing,
+        view: n.view,
         x: q.x,
         z: q.z,
         handoff: n.handoff,
@@ -240,6 +273,11 @@ export function placeStamps3(file: string, text: string, macro: MacroMap, stamps
     });
     out.push({ id, stamp, rect, cell: [mx, my], building, signs, nodes });
   });
+  for (const p of out) {
+    const q = plazaRect(p);
+    const clash = q && out.find((o) => o !== p && overlaps(o.rect, q));
+    if (clash) err(`placement '${p.id}': its plaza covers placement '${clash.id}'`);
+  }
   const all = new Map(out.flatMap((p) => p.nodes.map((n) => [n.id, n] as const)));
   for (const n of all.values()) {
     if (n.returnSpawn === null) continue;

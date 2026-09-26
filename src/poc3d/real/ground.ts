@@ -7,7 +7,7 @@ import { KIND, lin, type MeshBuilder } from './meshBuilder';
  * at crossings), and road paint: centre and lane lines, edge lines, zebra crossings and stop lines at
  * junctions. Paint belongs to the cell containing its centre so shared edge roads aren't painted twice.
  */
-export function addGround(mb: MeshBuilder, plan: CellPlan3): void {
+export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rect[] = []): void {
   mb.id = 0;
   mb.flags = 0;
   mb.style = [0, 0, 0, 0];
@@ -27,6 +27,8 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3): void {
     const crossings = plan.roads.filter((o) => o !== r && o.vertical !== r.vertical && o.kind !== 'coast' && overlaps(o.rect, r.rect));
     for (const strip of sidewalkStrips(r)) for (const piece of cut(strip, crossings, r.vertical)) slab(piece, 0, 0.15, KIND.plain, KIND.sidewalk, 0x8a867e);
   }
+  // Stamp plazas: paving raised to pavement height, in a lighter stone.
+  for (const q of plazas) slab(q, 0, 0.15, KIND.plain, KIND.sidewalk, 0xa09a90);
   paint(mb, plan);
 }
 

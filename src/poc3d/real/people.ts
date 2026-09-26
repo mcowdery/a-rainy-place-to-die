@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Rect } from '../../core/coords';
 import { hash, rng, type Rng } from '../../core/hash';
 import type { CellPlan3, Road3 } from '../district/plan';
 import type { CellDetail } from './props';
@@ -451,7 +452,7 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
  * Deterministic groups of people along a cell's pavements: lone walkers, couples walking together, people
  * talking face to face, a parent with a child, a few friends chatting, someone on the phone.
  */
-export function cellCrowd(plan: CellPlan3, detail: CellDetail): FigureSpec[] {
+export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly Rect[] = []): FigureSpec[] {
   const out: FigureSpec[] = [];
   const cell = plan.rect;
   const mine = (x: number, z: number): boolean => x >= cell.x && z >= cell.y && x < cell.x + cell.w && z < cell.y + cell.h;
@@ -514,6 +515,35 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail): FigureSpec[] {
           out.push(randomPerson(rnd, x1, z1, Math.atan2(r.vertical ? -side : 0, r.vertical ? 0 : -side), 'phone'));
         } else {
           out.push(randomPerson(rnd, x, z, dirYaw + Math.PI / 2, 'wave'));
+        }
+      }
+    }
+  }
+  // Plazas: a busy square of people crossing, waiting to meet someone, and standing in groups.
+  for (const q of plazas) {
+    const rnd = rng(hash(Math.round(q.x), Math.round(q.y), 0x9e1));
+    for (let x = q.x + 2.5; x < q.x + q.w - 2; x += 4.2) {
+      for (let z = q.y + 2.5; z < q.y + q.h - 2; z += 4.2) {
+        if (!rnd.chance(0.5)) continue;
+        const px = x + (rnd.float() - 0.5) * 2.4;
+        const pz = z + (rnd.float() - 0.5) * 2.4;
+        if (!clear(px, pz)) continue;
+        const yaw = rnd.float() * Math.PI * 2;
+        const roll = rnd.float();
+        if (roll < 0.45) {
+          out.push(randomPerson(rnd, px, pz, yaw, 'walk'));
+        } else if (roll < 0.6) {
+          const [sx, sz] = [Math.cos(yaw) * 0.35, -Math.sin(yaw) * 0.35];
+          out.push(randomPerson(rnd, px - sx, pz - sz, yaw, 'walk', 'man'));
+          out.push({ ...randomPerson(rnd, px + sx, pz + sz, yaw, 'walk', 'woman'), look: -0.4 });
+        } else if (roll < 0.8) {
+          out.push(randomPerson(rnd, px, pz, yaw, rnd.pick(['phone', 'pockets', 'stand'] as const)));
+        } else {
+          const n = rnd.int(2, 4);
+          for (let i = 0; i < n; i++) {
+            const ang = (i / n) * Math.PI * 2 + rnd.float() * 0.4;
+            out.push({ ...randomPerson(rnd, px + Math.sin(ang) * 0.6, pz + Math.cos(ang) * 0.6, ang + Math.PI, rnd.pick(['talk', 'stand', 'pockets', 'phone'] as const)), look: (rnd.float() - 0.5) * 0.8 });
+          }
         }
       }
     }

@@ -1,8 +1,8 @@
-import { overlaps, type Rect } from '../../core/coords';
+import { intersect, overlaps, type Rect } from '../../core/coords';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import { cellDetail, type CellDetail } from '../real/props';
 import { CELL, cellKey, planCell3, type Building3, type CellPlan3 } from './plan';
-import { reservedRect, type Placed3 } from './stamps';
+import { plazaRect, reservedRect, type Placed3 } from './stamps';
 
 /**
  * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings, signs) and
@@ -47,7 +47,7 @@ export class DistrictModel {
     let p = this.plans.get(k);
     if (!p) {
       const cellRect: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
-      const reserved = this.placed.map(reservedRect).filter((r) => overlaps(r, cellRect));
+      const reserved = this.placed.flatMap((q) => [reservedRect(q), plazaRect(q) ?? []].flat()).filter((r) => overlaps(r, cellRect));
       p = planCell3(this.macro, mx, my, reserved, this.seed)!;
       this.plans.set(k, p);
     }
@@ -61,17 +61,52 @@ export class DistrictModel {
     if (!d) {
       const p = this.plan(mx, my);
       if (!p) return null;
-      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building));
+      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my));
       this.details.set(k, d);
     }
     return d;
+  }
+
+  /**
+   * The parts of stamp plazas in this cell that are off the roads (paved, with lamps and trees). A road
+   * crossing a plaza piece trims it to the largest side left over.
+   */
+  plazas(mx: number, my: number): Rect[] {
+    const p = this.plan(mx, my);
+    if (!p) return [];
+    const out: Rect[] = [];
+    for (const q of this.placed) {
+      const pr = plazaRect(q);
+      let piece = pr && intersect(pr, p.rect);
+      for (const r of p.roads) {
+        if (!piece) break;
+        const c = intersect(piece, r.rect);
+        if (!c) continue;
+        const s: Rect = piece;
+        const sides: Rect[] = [
+          { x: s.x, y: s.y, w: c.x - s.x, h: s.h },
+          { x: c.x + c.w, y: s.y, w: s.x + s.w - c.x - c.w, h: s.h },
+          { x: s.x, y: s.y, w: s.w, h: c.y - s.y },
+          { x: s.x, y: c.y + c.h, w: s.w, h: s.y + s.h - c.y - c.h },
+        ].filter((t) => t.w > 0.5 && t.h > 0.5);
+        piece = sides.sort((a, b) => b.w * b.h - a.w * a.h)[0] ?? null;
+      }
+      if (piece) out.push(piece);
+    }
+    return out;
   }
 
   stamps(mx: number, my: number): readonly Placed3[] {
     return this.placedByCell.get(cellKey(mx, my)) ?? [];
   }
 
-  /** The cell's generated buildings plus any stamp buildings. */
+  /** The cell's buildings with a plain mass (generated ones and non-landmark stamps). */
+  massed(mx: number, my: number): Building3[] {
+    const p = this.plan(mx, my);
+    return p ? [...p.buildings, ...this.stamps(mx, my).filter((q) => q.stamp.landmark === null).map((q) => q.building)] : [];
+  }
+
+  /** The cell's generated buildings plus any stamp buildings (landmarks included). */
   buildings(mx: number, my: number): Building3[] {
     const p = this.plan(mx, my);
     return p ? [...p.buildings, ...this.stamps(mx, my).map((q) => q.building)] : [];

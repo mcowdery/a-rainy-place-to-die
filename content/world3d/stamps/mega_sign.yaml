@@ -1,0 +1,19 @@
+# Kaburo mega-sign: the corner tower on the central crossing, wrapped in LED screens and crowned by the
+# neon dragon. A landmark: the chunk workers only reserve its footprint and forecourt; the tower, screens
+# and dragon are built on the main thread by real/megaSign.ts. Its rounded corner faces south-west, so place
+# it on the north-east corner of a junction.
+id: mega_sign
+footprint: [20, 20]
+height: 35
+front: south
+landmark: mega_sign
+# The crossing: the junction's south-west corner, across from the tower, is an open square (the junction
+# centre is 10 m west and 30 m south of the footprint's NW corner when placed at offset [10, 98]).
+plaza: { at: [-44, 30], size: [40, 40] }
+nodes:
+  # Kaburo's front door: across the crossing from the tower, looking up at the dragon.
+  view:
+    kind: spawn
+    at: [-34, 34]
+    facing: north
+    view: [-42, 20]

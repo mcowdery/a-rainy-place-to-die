@@ -4,3 +4,7 @@
   stamp: bar_kanpai
   cell: [29, 12]
   offset: [52, 48]
+- id: kaburo_crossing
+  stamp: mega_sign
+  cell: [30, 11]
+  offset: [10, 98]

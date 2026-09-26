@@ -11,6 +11,7 @@ import { FirstPerson } from '../controls';
 import { frontFrame } from '../real/buildings';
 import { cityMaterial, cityUniforms } from '../real/city';
 import { Lightmap } from '../real/lightmap';
+import { buildMegaSign } from '../real/megaSign';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
 import { addFigure, GhostBuilder, ghostMaterial, type FigureSpec } from '../real/people';
@@ -27,14 +28,14 @@ import { District } from './world';
 /**
  * Kaburo (Neon Core), generated at full scale from the L0 map and streamed in chunks, rendered
  * realistically with an ASCII overlay for mood (see real/overlay.ts).
- * URL: ?time=night|day|dusk|dawn &weather=clear|rain|fog &cam=x,y,z,yaw,pitch &ascii=vibe|heavy|ascii|off &bench=1
+ * URL: ?time=night|day|dusk|dawn &weather=clear|rain|fog &cam=x,y,z,yaw,pitch &spawn=<node id> &ascii=vibe|heavy|ascii|off &bench=1
  * Keys: WASD/mouse, Shift run, E interact, T time, R weather, F fly, V overlay (1-4 direct), G dither,
  * B bloom, P look mode.
  */
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const params = new URLSearchParams(location.search);
 const bench = params.get('bench') === '1';
-const START_SPAWN = 'bar_kanpai.out';
+const START_SPAWN = 'kaburo_crossing.view';
 const SEED = 0x0c179090;
 const CELL_W = 8;
 const CELL_H = 14;
@@ -127,6 +128,13 @@ async function run(): Promise<void> {
   }
   const dressingGeo = dressing.build();
   if (dressingGeo) scene.add(new THREE.Mesh(dressingGeo, city));
+  // Landmarks: built here rather than by the chunk workers (their own shaders and animation), always shown.
+  for (const placed of content.placed) {
+    if (placed.stamp.landmark !== 'mega_sign') continue;
+    const mega = buildMegaSign(cityU, city);
+    mega.group.position.set(placed.building.x, 0, placed.building.z);
+    scene.add(mega.group);
+  }
   const visibleNode = (n: Node3): boolean => n.condition === null || n.condition(flags.get);
   const npcBlocked = (x: number, z: number, r: number): boolean =>
     nodes.some((n) => n.kind === 'npc' && visibleNode(n) && Math.hypot(n.x - x, n.z - z) < r + 0.35);
@@ -139,9 +147,11 @@ async function run(): Promise<void> {
   const teleport = (id: string): void => {
     const n = nodeById.get(id)!;
     camera.position.set(n.x, 1.7, n.z);
-    controls.setView(YAW[n.facing ?? 'north'], 4);
+    if (n.view) controls.setView(n.view[0], n.view[1]);
+    else controls.setView(YAW[n.facing ?? 'north'], 4);
   };
-  teleport(START_SPAWN);
+  const spawnParam = params.get('spawn');
+  teleport(spawnParam && nodeById.get(spawnParam)?.kind === 'spawn' ? spawnParam : START_SPAWN);
   const cam = params.get('cam')?.split(',').map(Number);
   if (cam && cam.length === 5 && cam.every(Number.isFinite)) {
     camera.position.set(cam[0], cam[1], cam[2]);

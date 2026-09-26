@@ -3,7 +3,8 @@ import { overlaps, type Rect } from '../src/core/coords';
 import { TIMES, WEATHERS } from '../src/atmosphere/rules';
 import { loadDistrictContent } from '../src/poc3d/district/content';
 import { CELL, planCell3, STYLES3 } from '../src/poc3d/district/plan';
-import { parseStamp3, reservedRect } from '../src/poc3d/district/stamps';
+import { DistrictModel } from '../src/poc3d/district/model';
+import { parseStamp3, plazaRect, reservedRect } from '../src/poc3d/district/stamps';
 
 const content = loadDistrictContent();
 const neonCells: [number, number][] = [];
@@ -69,6 +70,28 @@ describe('3D stamps and atmosphere', () => {
     expect(errors.join('\n')).toMatch(/id must match/);
     expect(errors.join('\n')).toMatch(/footprint/);
     expect(errors.join('\n')).toMatch(/door needs returnSpawn/);
+    const more: string[] = [];
+    parseStamp3('bad2.yaml', 'id: ok\nfootprint: [4, 4]\nheight: 5\nlandmark: castle\nplaza: { at: [0, 0] }', more);
+    expect(more.join('\n')).toMatch(/landmark must be one of/);
+    expect(more.join('\n')).toMatch(/plaza must be/);
+  });
+
+  it('places the mega-sign as a landmark on an open crossing', () => {
+    const mega = content.placed.find((p) => p.id === 'kaburo_crossing')!;
+    expect(mega.stamp.landmark).toBe('mega_sign');
+    const model = new DistrictModel(content.macro, 'neon', content.placed, 7);
+    const [mx, my] = mega.cell;
+    // The tower keeps its footprint for collision but is not built as a plain mass.
+    expect(model.buildings(mx, my)).toContain(mega.building);
+    expect(model.massed(mx, my)).not.toContain(mega.building);
+    // No generated building stands on the plaza, in any cell it reaches.
+    const plaza = plazaRect(mega)!;
+    for (let y = my - 1; y <= my + 1; y++)
+      for (let x = mx - 1; x <= mx + 1; x++) expect(model.plan(x, y)?.buildings.some((b) => overlaps(footprint(b), plaza)) ?? false).toBe(false);
+    // The spawn stands on the plaza with a camera view set.
+    const view = mega.nodes.find((n) => n.id === 'kaburo_crossing.view')!;
+    expect(view.x > plaza.x && view.x < plaza.x + plaza.w && view.z > plaza.y && view.z < plaza.y + plaza.h).toBe(true);
+    expect(view.view).not.toBeNull();
   });
 
   it('resolves every time/weather combination for Kaburo', () => {
