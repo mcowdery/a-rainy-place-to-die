@@ -35,6 +35,8 @@ export interface DistrictKit {
   readonly signs: THREE.Material;
   /** Translucent material for people. */
   readonly ghost: THREE.Material;
+  /** Photo ads (billboards and posters). */
+  readonly ads: THREE.Material;
   readonly atlas: SignAtlas;
   readonly lightmap: Lightmap;
   /** Sign words (the workers rebuild the same sign layout from them). */
@@ -331,10 +333,15 @@ export class District {
         m.castShadow = true;
         near.add(m);
       }
+      if (r.meshes.ads) {
+        const m = new THREE.Mesh(toGeometry(r.meshes.ads), kit.ads);
+        m.castShadow = true;
+        near.add(m);
+      }
       c.group.add(near);
       near.updateMatrixWorld(true);
       c.near = near;
-      c.nearTriangles = rawTriangles(r.meshes.near ?? null) + rawTriangles(r.meshes.signs ?? null);
+      c.nearTriangles = rawTriangles(r.meshes.near ?? null) + rawTriangles(r.meshes.signs ?? null) + rawTriangles(r.meshes.ads ?? null);
       return true;
     }
     if (!c || !c.near || c.ghostsBuilt) return false;

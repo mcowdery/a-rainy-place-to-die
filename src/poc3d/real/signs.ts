@@ -460,11 +460,16 @@ function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: 
   mb.style = [0, 0, 0, 0];
 }
 
+/** Whether a building carries the channel-letter rooftop billboard (so photo billboards go elsewhere). */
+export function hasRooftopLetters(b: Building3): boolean {
+  return b.h >= 18 && b.hue === undefined && rng(hash(b.id, 0xb111)).chance(0.22);
+}
+
 /** Rooftop billboard: big channel letters on a steel frame near the front edge of some taller buildings. */
 function rooftopBillboard(mb: MeshBuilder, b: Building3): void {
-  if (b.h < 18 || b.hue !== undefined) return;
+  if (!hasRooftopLetters(b)) return;
   const rnd = rng(hash(b.id, 0xb111));
-  if (!rnd.chance(0.22)) return;
+  rnd.chance(0.22);
   const ts = tiers(b);
   const top = ts[ts.length - 1][3] + styleFor(b).parapet;
   const f = frontFrame(b);

@@ -1,0 +1,25 @@
+{
+  "file": "hikari_loan_v1.png",
+  "item": "hikari_loan",
+  "brand": "ヒカリ ローン",
+  "copy": "即日融資 審査かんたん!",
+  "notes": "Shady consumer-finance / loan-shark poster.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, overly cheerful middle-aged salaryman giving a thumbs up in front of a stack of yen banknotes, harsh flat lighting, cheap consumer loan poster, slightly unsettling, vertical poster composition, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 314796539,
+  "studioJob": "52b50677-7780-4efd-932e-d38534265105-u2",
+  "generated": "2026-09-25T23:08:16.358Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/11_hikari_loan.png",
+  "decided": "2026-09-25T23:39:48.968Z",
+  "batch": "kaburo_posters_01",
+  "purpose": "Kaburo (Neon Core) street-level posters and lightboxes: storefront walls, alley doors, vending-machine sides and the free information centre. Adult ads are racy (lingerie, implied nudity), always clearly adult.",
+  "use": "poster",
+  "district": "neon"
+}

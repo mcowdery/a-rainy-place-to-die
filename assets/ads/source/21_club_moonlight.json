@@ -1,0 +1,25 @@
+{
+  "file": "club_moonlight_v5.png",
+  "item": "club_moonlight",
+  "brand": "CLUB MOONLIGHT キャバクラ",
+  "copy": "朝まで、あなたの隣に。",
+  "notes": "Hostess club; redone with a Japanese-looking model.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, stunning Japanese hostess in her mid twenties, East Asian features, glossy long black hair in an elegant updo, flirtatious smile, sequined evening gown, holding a champagne glass, luxurious lounge bokeh, deep blue and gold lighting, glamorous Japanese kyabakura hostess club advertisement, wide horizontal composition, subject off-centre to one side, the background scene continues across the whole frame, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    768
+  ],
+  "steps": 12,
+  "seed": 1709135679,
+  "studioJob": "626942b7-a54c-47de-bbf8-374ab7abb72f-u2",
+  "generated": "2026-09-25T23:40:36.988Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/21_club_moonlight.png",
+  "decided": "2026-09-25T23:44:08.310Z",
+  "batch": "kaburo_billboards_01",
+  "purpose": "Kaburo (Neon Core) building-side and rooftop billboards: the district's nightlife economy, including its shadier side (love hotels, host and hostess clubs, easy loans). Adult ads are suggestive, not explicit, like real public signage in a Japanese entertainment district.",
+  "use": "billboard",
+  "district": "neon"
+}

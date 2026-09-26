@@ -1,4 +1,5 @@
 import { addBuilding } from '../real/buildings';
+import { addDistrictAds } from '../real/districtAds';
 import { addGround } from '../real/ground';
 import { paintLights, type Light } from '../real/lightmap';
 import { MeshBuilder } from '../real/meshBuilder';
@@ -23,7 +24,7 @@ export interface ChunkBuilt {
   readonly mx: number;
   readonly my: number;
   readonly stage: Stage;
-  readonly meshes: Partial<Record<'base' | 'far' | 'near' | 'signs' | 'ghosts', RawGeometry | null>>;
+  readonly meshes: Partial<Record<'base' | 'far' | 'near' | 'signs' | 'ads' | 'ghosts', RawGeometry | null>>;
   readonly lightmap?: Uint8Array;
   readonly people?: number;
   /** Time spent building, in the worker. */
@@ -33,6 +34,7 @@ export interface ChunkBuilt {
 export class ChunkBuilder {
   private readonly mb = new MeshBuilder(1 << 16);
   private readonly sb = new SignBuilder();
+  private readonly ab = new SignBuilder();
   private readonly gb = new GhostBuilder();
   private readonly canvas = new OffscreenCanvas(CELL, CELL);
   private readonly g = this.canvas.getContext('2d', { willReadFrequently: true })!;
@@ -78,7 +80,9 @@ export class ChunkBuilder {
       addProps(mb, m.detail(mx, my)!);
       const sb = this.sb.reset();
       addSigns([...plan.signs, ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb);
-      return { mx, my, stage, meshes: { near: mb.raw(cx, cz), signs: sb.raw(cx, cz) }, ms: performance.now() - t0 };
+      const ab = this.ab.reset();
+      addDistrictAds(ab, mb, buildings, plan.signs, m.detail(mx, my)!.props);
+      return { mx, my, stage, meshes: { near: mb.raw(cx, cz), signs: sb.raw(cx, cz), ads: ab.raw(cx, cz) }, ms: performance.now() - t0 };
     }
     const crowd = cellCrowd(plan, m.detail(mx, my)!);
     const gb = this.gb.reset();

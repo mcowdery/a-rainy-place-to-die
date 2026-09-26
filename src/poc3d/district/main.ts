@@ -15,6 +15,7 @@ import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
 import { addFigure, GhostBuilder, ghostMaterial, type FigureSpec } from '../real/people';
 import { SignAtlas, signMaterial } from '../real/signs';
+import { adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { Sky } from '../real/sky';
 import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
@@ -86,7 +87,8 @@ async function run(): Promise<void> {
   cityU.tLight.value = lightmap.texture;
   cityU.uLightRect.value = lightmap.uniformRect;
   const ghost = ghostMaterial();
-  district.setKit({ city, signs: signMaterial(cityU, atlas), ghost, atlas, lightmap, words: style.signWords });
+  const ads = adMaterial(cityU, new DistrictAdAtlas());
+  district.setKit({ city, signs: signMaterial(cityU, atlas), ghost, ads, atlas, lightmap, words: style.signWords });
   scene.add(district.root);
 
   // Post: HDR scene with MSAA and a depth texture -> ASCII overlay -> bloom -> tone mapping + sRGB.

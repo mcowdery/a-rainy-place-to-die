@@ -1,0 +1,25 @@
+{
+  "file": "tsukuyomi_fortune_v3.png",
+  "item": "tsukuyomi_fortune",
+  "brand": "占いの館 月詠",
+  "copy": "あなたの運命、視えます。",
+  "notes": "Fortune teller upstairs; a possible story hook. Redone without the Julie LoRA (she made every face the same).",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, mysterious woman in a dark hooded shawl gazing into a glowing crystal ball, candles, purple smoke, fortune teller poster, vertical poster composition, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 1748375899,
+  "studioJob": "8dd24398-ae42-41bd-84f4-70a5fec91732-u2",
+  "generated": "2026-09-25T23:24:33.170Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/18_tsukuyomi_fortune.png",
+  "decided": "2026-09-25T23:39:49.007Z",
+  "batch": "kaburo_posters_01",
+  "purpose": "Kaburo (Neon Core) street-level posters and lightboxes: storefront walls, alley doors, vending-machine sides and the free information centre. Adult ads are racy (lingerie, implied nudity), always clearly adult.",
+  "use": "poster",
+  "district": "neon"
+}

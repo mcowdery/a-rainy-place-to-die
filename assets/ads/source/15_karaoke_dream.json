@@ -1,0 +1,25 @@
+{
+  "file": "karaoke_dream_v4.png",
+  "item": "karaoke_dream",
+  "brand": "カラオケ DREAM",
+  "copy": "全室 朝まで ¥1,500",
+  "notes": "Karaoke box chain; Julie as one of the group. Redone without the Julie LoRA (she made every face the same).",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, friends laughing and singing into microphones in a colourful karaoke room, disco lights, candid fun, karaoke chain poster, vertical poster composition, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 623352890,
+  "studioJob": "b55bde37-8f2a-46e2-8173-548e8e942240-u1",
+  "generated": "2026-09-25T23:24:49.569Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/15_karaoke_dream.png",
+  "decided": "2026-09-25T23:39:48.999Z",
+  "batch": "kaburo_posters_01",
+  "purpose": "Kaburo (Neon Core) street-level posters and lightboxes: storefront walls, alley doors, vending-machine sides and the free information centre. Adult ads are racy (lingerie, implied nudity), always clearly adult.",
+  "use": "poster",
+  "district": "neon"
+}

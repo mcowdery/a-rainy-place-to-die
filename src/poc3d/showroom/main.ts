@@ -12,9 +12,10 @@ import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type F
 import { figureGeometry, ghostMaterials2, POSES2, type Body2, type FigureShape, type Pose2 } from '../models/figures';
 import { addVehicle, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, type VehicleSpec, type VehicleType } from '../models/vehicles';
 import { Lightmap, paintLights, type Light } from '../real/lightmap';
-import { AdAtlas, adMaterial } from '../real/adAtlas';
+import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { TAXI_ADS } from '../models/ads';
-import { SignAtlas, SignBuilder, signMaterial } from '../real/signs';
+import { SignAtlas, SignBuilder, signBox, signMaterial } from '../real/signs';
+import { BILLBOARDS, DISTRICT_BLANK, districtAdUv, POSTERS } from '../real/districtAds';
 
 /**
  * Model showroom: every car type and every person body type x pose, laid out in a clean space with studio
@@ -179,6 +180,36 @@ const showLightmap = new Lightmap(renderer, { x: -64, y: -64, w: 128, h: 128 }, 
 showLightmap.upload(-64, -64, paintLights(new OffscreenCanvas(128, 128).getContext('2d', { willReadFrequently: true })!, -64, -64, 128, nightLights));
 cityU.tLight.value = showLightmap.texture;
 cityU.uLightRect.value = showLightmap.uniformRect;
+// Kaburo district ads: a wall of every approved billboard (on stands) with the posters below, facing +x.
+{
+  const wallX = -34;
+  const dAtlas = new DistrictAdAtlas();
+  const asb = new SignBuilder();
+  const amb = new MeshBuilder();
+  const n: [number, number, number] = [1, 0, 0];
+  const r: [number, number, number] = [0, 0, -1];
+  const place = (list: typeof BILLBOARDS, w: number, h: number, y0: number, z0: number, dz: number, group: string): void => {
+    list.forEach(({ a, i }, k) => {
+      const z = z0 + k * dz;
+      const p: [number, number, number] = [wallX, 0, z];
+      amb.kind = KIND.plain;
+      amb.color = lin(0x2c2e32);
+      amb.frameBox(p, r, n, -w / 2 - 0.1, w / 2 + 0.1, y0 - 0.1, y0 + h + 0.1, -0.2, 0);
+      amb.frameBox(p, r, n, -0.1, 0.1, 0, y0, -0.2, -0.05);
+      asb.sign = [i, 1];
+      signBox(asb, p, r, n, -w / 2, w / 2, y0, y0 + h, 0, 0.05, DISTRICT_BLANK, { n: districtAdUv(i) });
+      label('new', a.brand, wallX + 0.3, y0 + h + 0.35, z);
+      genItems.new.push({ name: `${a.brand}`, group, at: new THREE.Vector3(wallX, y0 + h / 2, z), size: Math.max(w, h) * 0.9, view: new THREE.Vector3(1, 0.1, 0).normalize() });
+    });
+  };
+  place(BILLBOARDS, 6, 3, 3.2, -24, 7.2, 'Billboards');
+  place(POSTERS, 1.2, 1.8, 0.4, -20.4, 7.2, 'Posters');
+  genRoot.new.add(new THREE.Mesh(asb.build(0, 0)!, adMaterial(cityU, dAtlas)));
+  const frames = new THREE.Mesh(amb.build()!, city);
+  frames.castShadow = true;
+  genRoot.new.add(frames);
+  genItems.new.push({ name: 'all district ads', group: 'Billboards', at: new THREE.Vector3(wallX, 3, -2), size: 30, view: new THREE.Vector3(1, 0.2, 0).normalize() });
+}
 const tCars = performance.now() - t0;
 
 const ghostCache = new Map<number, ReturnType<typeof ghostMaterials2>>();
@@ -392,7 +423,7 @@ function renderPanel(): void {
   button('previous (in the district)', gen === 'previous', () => applyGen('previous'));
   section('Lighting');
   for (const m of ['studio', 'night', 'day'] as const) button(m, mode === m, () => applyMode(m));
-  for (const g of ['Cars', 'People']) {
+  for (const g of ['Cars', 'Billboards', 'Posters', 'People']) {
     section(g);
     for (const it of genItems[gen].filter((i) => i.group === g)) button(it.name, false, () => focus(it));
   }

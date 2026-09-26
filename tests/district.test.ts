@@ -77,3 +77,38 @@ describe('3D stamps and atmosphere', () => {
     expect(content.atmosphere.resolve('neon', 'day', 'rain').rain).toBeGreaterThan(0);
   });
 });
+
+describe('district ads', async () => {
+  const { addDistrictAds } = await import('../src/poc3d/real/districtAds');
+  const { styleFor, WIN } = await import('../src/poc3d/real/buildings');
+  const { MeshBuilder } = await import('../src/poc3d/real/meshBuilder');
+  const { SignBuilder } = await import('../src/poc3d/real/signs');
+  const { DistrictModel } = await import('../src/poc3d/district/model');
+  const model = new DistrictModel(content.macro, 'neon', content.placed, 7);
+  const place = (mx: number, my: number) => {
+    const out: import('../src/poc3d/real/districtAds').AdPlacement[] = [];
+    addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), model.plan(mx, my)!.signs, model.detail(mx, my)!.props, out);
+    return out;
+  };
+
+  it('is deterministic and places every kind somewhere', () => {
+    const cells = neonCells.slice(0, 20);
+    expect(cells.map(([x, y]) => place(x, y))).toEqual(cells.map(([x, y]) => place(x, y)));
+    const kinds = new Set(cells.flatMap(([x, y]) => place(x, y).map((p) => p.kind)));
+    expect([...kinds].sort()).toEqual(['poster', 'rooftop', 'wall']);
+  });
+
+  it('keeps facade billboards off balcony fronts and posters clear of vending machines', () => {
+    for (const [mx, my] of neonCells.slice(0, 20)) {
+      const buildings = model.buildings(mx, my);
+      const vending = model.detail(mx, my)!.props.filter((p) => p.kind === 'vending');
+      for (const p of place(mx, my)) {
+        if (p.kind === 'poster') expect(vending.every((v) => Math.hypot(v.x - p.x, v.z - p.z) >= 1.3)).toBe(true);
+        if (p.kind === 'wall') {
+          const b = buildings.find((q) => Math.abs(q.x - p.x) <= q.w / 2 + 0.01 && Math.abs(q.z - p.z) <= q.d / 2 + 0.01)!;
+          expect(styleFor(b).type).not.toBe(WIN.balcony);
+        }
+      }
+    }
+  });
+});

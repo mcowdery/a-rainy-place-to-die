@@ -1,0 +1,25 @@
+{
+  "file": "kirishima_poster_v2.png",
+  "item": "kirishima_poster",
+  "brand": "霧島探偵事務所",
+  "copy": "人探し・浮気調査・秘密厳守",
+  "notes": "Street version of taxi ad B (detective hook).",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, man in a trench coat and fedora standing in a rainy neon alley, face in shadow, noir detective agency poster, vertical poster composition, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 251327457,
+  "studioJob": "47e13c76-a197-456b-9807-5d9dc0aaf643-u2",
+  "generated": "2026-09-25T23:09:21.024Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/16_kirishima_poster.png",
+  "decided": "2026-09-25T23:39:49.003Z",
+  "batch": "kaburo_posters_01",
+  "purpose": "Kaburo (Neon Core) street-level posters and lightboxes: storefront walls, alley doors, vending-machine sides and the free information centre. Adult ads are racy (lingerie, implied nudity), always clearly adult.",
+  "use": "poster",
+  "district": "neon"
+}

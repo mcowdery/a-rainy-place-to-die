@@ -1,0 +1,25 @@
+{
+  "file": "yonaki_ramen_v2.png",
+  "item": "yonaki_ramen",
+  "brand": "ラーメン 夜鳴き",
+  "copy": "深夜3時まで",
+  "notes": "Late-night ramen shop.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, steaming bowl of tonkotsu ramen with chashu and a soft-boiled egg on a worn wooden counter, late-night warm light, food photography, vertical poster composition, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 1270145704,
+  "studioJob": "13d53488-961a-4b0b-9a97-0ca6f559b4f9-u1",
+  "generated": "2026-09-25T23:09:04.877Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/20_yonaki_ramen.png",
+  "decided": "2026-09-25T23:39:49.010Z",
+  "batch": "kaburo_posters_01",
+  "purpose": "Kaburo (Neon Core) street-level posters and lightboxes: storefront walls, alley doors, vending-machine sides and the free information centre. Adult ads are racy (lingerie, implied nudity), always clearly adult.",
+  "use": "poster",
+  "district": "neon"
+}

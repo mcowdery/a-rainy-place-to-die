@@ -1,0 +1,28 @@
+{
+  "file": "parlor_ginga_v1.png",
+  "item": "parlor_ginga",
+  "brand": "パーラー銀河 PARLOR GINGA",
+  "copy": "新台入替! 朝10時オープン",
+  "notes": "Pachinko campaign girl (not sexual): Julie allowed.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, ohwx julie, smiling campaign girl in a sparkly silver jacket posing beside a glowing pachinko machine, exploding confetti and fireworks, bright gaudy pachinko parlor advertisement, wide horizontal composition, subject to one side leaving clean space for text, no text, no lettering, no logos, no watermark",
+  "lora": {
+    "trigger": "ohwx julie",
+    "scale": 0.85
+  },
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    768
+  ],
+  "steps": 12,
+  "seed": 328414713,
+  "studioJob": "386d86eb-3962-45b6-8ace-020a9f7b483c-u2",
+  "generated": "2026-09-25T23:04:51.935Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/17_parlor_ginga.png",
+  "decided": "2026-09-25T23:39:49.005Z",
+  "batch": "kaburo_billboards_01",
+  "purpose": "Kaburo (Neon Core) building-side and rooftop billboards: the district's nightlife economy, including its shadier side (love hotels, host and hostess clubs, easy loans). Adult ads are suggestive, not explicit, like real public signage in a Japanese entertainment district.",
+  "use": "billboard",
+  "district": "neon"
+}

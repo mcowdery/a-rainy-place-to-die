@@ -21,3 +21,37 @@ export const TAXI_ADS: readonly AdDef[] = [
   { name: 'G · Bar Kanpai', art: '07_bar_kanpai', roof: 'BAR KANPAI カンパイ', side: '歌舞路 2-7 深夜まで', wrap: 0x121212, plate: 0x121212, ink: 0xffd84a },
   { name: 'H · credit union', art: '08_kabura_credit_union', roof: '歌舞路信用金庫', side: '夢を、貯めよう。', wrap: 0xe07818, plate: 0xf2f0e8, ink: 0xe07818 },
 ];
+
+/**
+ * District ads (Kaburo): approved art in assets/ads/source/, cropped by scripts/crop_district_ads.py into
+ * assets/ads/kaburo/. Billboards (2:1) go on rooftops and facades, posters (2:3, photo over a brand band)
+ * on shopfronts at street level. `text` says where a billboard's copy goes so it avoids the subject.
+ */
+export interface DistrictAd {
+  readonly art: string;
+  readonly format: 'billboard' | 'poster';
+  readonly brand: string;
+  readonly copy: string;
+  /** Accent colour: billboard brand text / poster band. */
+  readonly accent: number;
+  /** Text colour on the poster band / billboard text panel. */
+  readonly ink: number;
+  readonly text?: 'left' | 'right' | 'bottom';
+}
+
+export const DISTRICT_ADS: readonly DistrictAd[] = [
+  { art: '10_club_adonis_hosts', format: 'billboard', brand: 'CLUB ADONIS', copy: 'No.1 ホスト 今夜も君を待つ', accent: 0xe8c060, ink: 0xffffff, text: 'bottom' },
+  { art: '12_hotel_rouge_julie', format: 'billboard', brand: 'HOTEL ROUGE ホテル ルージュ', copy: '休憩 ¥3,800〜 / 宿泊 ¥7,500〜', accent: 0xff5070, ink: 0xffffff, text: 'left' },
+  { art: '13_hotel_rouge', format: 'billboard', brand: 'HOTEL ROUGE', copy: '休憩 ¥3,800〜 / 宿泊 ¥7,500〜', accent: 0xff5070, ink: 0xffffff, text: 'right' },
+  { art: '14_hotel_venus', format: 'billboard', brand: 'HOTEL VENUS', copy: 'ご休憩 60分 ¥2,900', accent: 0x3a0a2c, ink: 0xffd0f0 },
+  { art: '17_parlor_ginga', format: 'billboard', brand: 'パーラー銀河', copy: '新台入替! 朝10時オープン', accent: 0xffd040, ink: 0xffffff, text: 'left' },
+  { art: '19_yakou_drink_billboard', format: 'billboard', brand: '夜光 YAKOU', copy: '今夜も、光れ。', accent: 0xff4040, ink: 0xffffff, text: 'bottom' },
+  { art: '21_club_moonlight', format: 'billboard', brand: 'CLUB MOONLIGHT', copy: '朝まで、あなたの隣に。', accent: 0xa8c8ff, ink: 0xffffff, text: 'left' },
+  { art: '09_annaijo_girls', format: 'poster', brand: '無料案内所', copy: 'かわいい子、ご案内します', accent: 0xffd400, ink: 0x141414 },
+  { art: '11_hikari_loan', format: 'poster', brand: 'ヒカリ ローン', copy: '即日融資 審査かんたん!', accent: 0xd01818, ink: 0xffffff },
+  { art: '15_karaoke_dream', format: 'poster', brand: 'カラオケ DREAM', copy: '全室 朝まで ¥1,500', accent: 0xd83090, ink: 0xffffff },
+  { art: '16_kirishima_poster', format: 'poster', brand: '霧島探偵事務所', copy: '人探し・浮気調査・秘密厳守', accent: 0x101418, ink: 0xe8d8a0 },
+  { art: '18_tsukuyomi_fortune', format: 'poster', brand: '占いの館 月詠', copy: 'あなたの運命、視えます。', accent: 0x2a1440, ink: 0xd8b8ff },
+  { art: '20_yonaki_ramen', format: 'poster', brand: 'ラーメン 夜鳴き', copy: '深夜3時まで', accent: 0x201008, ink: 0xffc070 },
+  { art: '22_hotel_venus_poster', format: 'poster', brand: 'HOTEL VENUS', copy: 'ご休憩 60分 ¥2,900 空室あり', accent: 0xe070b8, ink: 0xffffff },
+];

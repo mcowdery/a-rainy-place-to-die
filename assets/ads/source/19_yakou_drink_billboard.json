@@ -1,0 +1,28 @@
+{
+  "file": "yakou_drink_billboard_v1.png",
+  "item": "yakou_drink_billboard",
+  "brand": "夜光 YAKOU DRINK",
+  "copy": "今夜も、光れ。",
+  "notes": "Billboard version of taxi ad A, for brand continuity.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, ohwx julie, model holding up a glowing red energy drink can, hair in motion, red neon frame, energetic nightlife mood, wide horizontal composition, subject to one side leaving clean space for text, no text, no lettering, no logos, no watermark",
+  "lora": {
+    "trigger": "ohwx julie",
+    "scale": 0.85
+  },
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    768
+  ],
+  "steps": 12,
+  "seed": 1104975031,
+  "studioJob": "0641bed8-26c1-4702-9835-5081a1b70628-u1",
+  "generated": "2026-09-25T23:05:10.927Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/19_yakou_drink_billboard.png",
+  "decided": "2026-09-25T23:39:49.009Z",
+  "batch": "kaburo_billboards_01",
+  "purpose": "Kaburo (Neon Core) building-side and rooftop billboards: the district's nightlife economy, including its shadier side (love hotels, host and hostess clubs, easy loans). Adult ads are suggestive, not explicit, like real public signage in a Japanese entertainment district.",
+  "use": "billboard",
+  "district": "neon"
+}

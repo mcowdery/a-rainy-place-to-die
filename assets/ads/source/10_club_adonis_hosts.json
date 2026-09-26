@@ -1,0 +1,25 @@
+{
+  "file": "club_adonis_hosts_v6.png",
+  "item": "club_adonis_hosts",
+  "brand": "CLUB ADONIS",
+  "copy": "No.1 ホスト 今夜も君を待つ",
+  "notes": "Host club board, a Kabukicho staple. Reworded after v1/v2 came out as a photo of an empty billboard.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, five stylish young adult Japanese host club hosts in sharp black suits with voluminous dyed hair, confident poses, a champagne tower beside them, glossy gold and black studio photography, full-bleed photograph, wide horizontal composition, subject off-centre to one side, the background scene continues across the whole frame, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    768
+  ],
+  "steps": 12,
+  "seed": 1669599828,
+  "studioJob": "6b5083d1-3866-4c52-94f6-68bf7d418e7a-u1",
+  "generated": "2026-09-25T23:07:21.297Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/10_club_adonis_hosts.png",
+  "decided": "2026-09-25T23:39:48.967Z",
+  "batch": "kaburo_billboards_01",
+  "purpose": "Kaburo (Neon Core) building-side and rooftop billboards: the district's nightlife economy, including its shadier side (love hotels, host and hostess clubs, easy loans). Adult ads are suggestive, not explicit, like real public signage in a Japanese entertainment district.",
+  "use": "billboard",
+  "district": "neon"
+}
