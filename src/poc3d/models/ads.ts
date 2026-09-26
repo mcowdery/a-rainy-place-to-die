@@ -83,6 +83,7 @@ export const DISTRICT_ADS: readonly DistrictAd[] = [
   { art: '48_ryujin_kogyo', format: 'billboard', brand: '竜神興業', copy: '街の未来を、築く。', accent: 0xd8b060, ink: 0xffffff, text: 'left' },
   // Round 3.
   { art: '53_maid_cafe_pure', format: 'billboard', brand: 'めいどかふぇ ♡ぴゅあ♡', copy: 'おかえりなさいませ、ご主人様♡', accent: 0xff90c8, ink: 0xffffff, text: 'right' },
+  { art: '81_maid_cafe_pure', format: 'billboard', brand: 'めいどかふぇ ♡ぴゅあ♡', copy: 'おかえりなさいませ、ご主人様♡', accent: 0xff90c8, ink: 0xffffff, text: 'right' },
   { art: '54_cash_one', format: 'billboard', brand: 'キャッシュ・ワン', copy: 'ご融資 最短30分', accent: 0x1060d0, ink: 0xffffff, text: 'bottom' },
   { art: '55_hotel_orient', format: 'billboard', brand: 'HOTEL ORIENT EXPRESS', copy: '寝台列車ルーム 新登場', accent: 0xe8c070, ink: 0xffffff, text: 'left' },
   { art: '56_hotel_orient', format: 'billboard', brand: 'HOTEL ORIENT EXPRESS', copy: '寝台列車ルーム 新登場', accent: 0xe8c070, ink: 0xffffff, text: 'left' },

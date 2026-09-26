@@ -64,6 +64,7 @@ CROPS = {
     '48_ryujin_kogyo': ('billboard', None),
     # Round 3.
     '53_maid_cafe_pure': ('billboard', None),
+    '81_maid_cafe_pure': ('billboard', None),
     '54_cash_one': ('billboard', None),
     '55_hotel_orient': ('billboard', None),
     '56_hotel_orient': ('billboard', None),
