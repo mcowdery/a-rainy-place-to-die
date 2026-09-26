@@ -30,6 +30,7 @@ These are hand-authored stamps with interiors or VN hooks, placed on L0 cells li
 - **Maruyoshi pawn shop**: the noir hub (items, information).
 - **Ryujin Kogyo office**: the yakuza front company, a story antagonist hook.
 - **Koban (police box)**: wanted notices; story source.
+- **Hoshikuzu Yokocho 星屑横丁**: **built (2026-09-26)**, a Golden Gai-style bar alley in the back alleys; BAR 黒猫 (door to VN) and its mama-san outside are a story hook.
 - **Konbini (Yoru Mart)**: several copies; a save/rest point or recurring hangout. **Built (2026-09-26):** one you can walk into, on the crossing's south-east corner.
 - **Kaburo Inari shrine**: **built (2026-09-26)** in the back alleys: torii tunnel, fox guardians, lanterns, hall, an offering box hotspot.
 

@@ -24,3 +24,7 @@
   stamp: live_house
   cell: [27, 11]
   offset: [60, 96]
+- id: yokocho
+  stamp: yokocho
+  cell: [26, 10]
+  offset: [60, 88]

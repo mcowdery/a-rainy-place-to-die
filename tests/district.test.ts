@@ -253,3 +253,20 @@ describe('Live house 地下室', () => {
     expect(model.holes(Math.floor(x / CELL), Math.floor(z / CELL)).some((r) => x > r.x && x < r.x + r.w && z > r.y && z < r.y + r.h)).toBe(true);
   });
 });
+
+describe('Hoshikuzu Yokocho', () => {
+  const district = new District(content.macro, 'neon', content.placed, 7, content.zones);
+  const f = localFrame(content.placed.find((p) => p.id === 'yokocho')!.building);
+  const at = (u: number, t: number) => toWorld(f, u, t);
+
+  it('lets you walk both alleys and the cross alley, but not into the bars', () => {
+    // Down the middle of each alley, skipping the spots where the regulars stand.
+    for (let t = -1; t < 28; t += 0.5) {
+      if (t < 8.4 || t > 10.3) expect(district.blocked(...at(5, t), 0.3), `west alley ${t}`).toBe(false);
+      if (Math.abs(t - 6) > 0.6 && Math.abs(t - 21.5) > 0.6) expect(district.blocked(...at(15, t), 0.3), `east alley ${t}`).toBe(false);
+    }
+    for (let u = 6.5; u < 14; u += 0.5) if (u < 9.5 || u > 11.5) expect(district.blocked(...at(u, 15), 0.3), `cross ${u}`).toBe(false);
+    expect(district.blocked(...at(2, 10), 0.3)).toBe(true);
+    expect(district.blocked(...at(8, 5), 0.3)).toBe(true);
+  });
+});

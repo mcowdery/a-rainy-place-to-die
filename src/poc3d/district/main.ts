@@ -16,6 +16,7 @@ import { buildKonbini } from '../real/konbini';
 import { buildShrine } from '../real/shrine';
 import { buildLoveHotel } from '../real/loveHotel';
 import { buildLiveHouse } from '../real/liveHouse';
+import { buildYokocho } from '../real/yokocho';
 import { destinations, TravelMap, type Destination } from './travel';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
@@ -149,6 +150,8 @@ async function run(): Promise<void> {
       landmarkUpdates.push(k.update);
     } else if (lm === 'shrine') {
       scene.add(buildShrine(placed.building, city));
+    } else if (lm === 'yokocho') {
+      scene.add(buildYokocho(placed.building, city, ghost));
     } else if (lm === 'live_house') {
       const h = buildLiveHouse(placed.building, city, ghost);
       scene.add(h.group);

@@ -35,7 +35,7 @@ import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan'
  */
 
 /** Landmarks built on the main thread instead of as a plain building mass. */
-export const LANDMARKS = ['mega_sign', 'konbini', 'shrine', 'love_hotel', 'live_house'] as const;
+export const LANDMARKS = ['mega_sign', 'konbini', 'shrine', 'love_hotel', 'live_house', 'yokocho'] as const;
 export type Landmark = (typeof LANDMARKS)[number];
 
 /** How an npc's ghost looks (see real/people.ts); anything left out gets a default. */
