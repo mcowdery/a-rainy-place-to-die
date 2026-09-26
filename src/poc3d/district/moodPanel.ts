@@ -21,12 +21,16 @@ export interface MoodSettings {
   moon: number | null;
   /** 0-1: how far ambient light, the sky and lit windows drop, leaving only light sources. */
   darkness: number;
+  /** Depth of field: 0 off, 1 strong. */
+  dof: number;
+  /** Focus distance in metres; null focuses on the centre of the view. */
+  focus: number | null;
   /** Street lamps nearest you that cast real shadows (each is a shadow-map render). */
   shadows: number;
   grade: GradeName;
 }
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: null, darkness: 0, shadows: 0, grade: 'neutral' };
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: null, darkness: 0, dof: 0, focus: null, shadows: 0, grade: 'neutral' };
 const SHADOW_COUNTS = [0, 2, 4, 8];
 
 export function moodFromUrl(params: URLSearchParams): MoodSettings {
@@ -47,6 +51,9 @@ export function moodFromUrl(params: URLSearchParams): MoodSettings {
   const moon = num('moon', 0, 1);
   if (moon !== undefined) m.moon = moon;
   m.darkness = num('dark', 0, 1) ?? m.darkness;
+  m.dof = num('dof', 0, 1) ?? m.dof;
+  const focus = num('focus', 1, 300);
+  if (focus !== undefined) m.focus = focus;
   const s = num('shadows', 0, 8);
   if (s !== undefined) m.shadows = SHADOW_COUNTS.reduce((a, b) => (Math.abs(b - s) < Math.abs(a - s) ? b : a));
   const g = params.get('grade') as GradeName | null;
@@ -64,6 +71,8 @@ function moodToUrl(m: MoodSettings): string {
   set('fog', m.fog === 1 ? null : m.fog.toFixed(2));
   set('moon', m.moon === null ? null : m.moon.toFixed(2));
   set('dark', m.darkness ? m.darkness.toFixed(2) : null);
+  set('dof', m.dof ? m.dof.toFixed(2) : null);
+  set('focus', m.dof && m.focus !== null ? m.focus.toFixed(1) : null);
   set('shadows', m.shadows ? String(m.shadows) : null);
   set('grade', m.grade === MOOD_DEFAULTS.grade ? null : m.grade);
   const q = p.toString();
@@ -98,6 +107,11 @@ export class MoodPanel {
     this.slider('fog', 'Fog', 0.25, 4, 0.05, () => s.fog, (v) => (s.fog = v), (v) => `x${v.toFixed(2)}`);
     this.slider('moon', 'Moonlight (night)', 0, 1, 0.01, () => s.moon ?? -1, (v) => (s.moon = v), (v) => (v < 0 ? 'from time of day' : v.toFixed(2)), () => (s.moon = null));
     this.slider('dark', 'Darkness', 0, 1, 0.01, () => s.darkness, (v) => (s.darkness = v), (v) => (v < 0.05 ? 'normal' : `${Math.round(v * 100)}%`));
+    this.slider('dof', 'Depth of field', 0, 1, 0.01, () => s.dof, (v) => (s.dof = v), (v) => (v < 0.01 ? 'off' : v.toFixed(2)));
+    // Focus on a log scale (1 m to 300 m), or auto (the centre of the view).
+    const toM = (v: number): number => Math.exp(Math.log(1) + v * (Math.log(300) - Math.log(1)));
+    const fromM = (m: number): number => Math.log(m) / Math.log(300);
+    this.slider('focus', 'Focus', 0, 1, 0.005, () => (s.focus === null ? -1 : fromM(s.focus)), (v) => (s.focus = toM(v)), (v) => (v < 0 ? 'auto (centre of view)' : `${toM(v) < 10 ? toM(v).toFixed(1) : Math.round(toM(v))} m`), () => (s.focus = null));
     this.choice('shadows', 'Lamp shadows', SHADOW_COUNTS.map(String), () => String(s.shadows), (v) => (s.shadows = Number(v)));
     this.choice('grade', 'Grade', GRADE_NAMES, () => s.grade, (v) => (s.grade = v as GradeName));
 

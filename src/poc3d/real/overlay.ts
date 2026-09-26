@@ -200,6 +200,11 @@ export class AsciiOverlayPass extends Pass {
     this.quad.render(renderer);
   }
 
+  /** The scene's depth this frame (the composer alternates targets, so later passes take it from here). */
+  get depth(): THREE.Texture | null {
+    return this.material.uniforms.tDepth.value as THREE.Texture | null;
+  }
+
   setCamera(camera: THREE.PerspectiveCamera): void {
     this.material.uniforms.uNear.value = camera.near;
     this.material.uniforms.uFar.value = camera.far;

@@ -24,6 +24,7 @@ import { ASAGIRI_KINDS, buildAsagiri, type AsagiriKind } from '../real/asagiri';
 import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { TrafficSystem } from '../real/traffic';
 import { GRADE_NAMES, GradePass } from '../real/grade';
+import { DofPass } from '../real/dof';
 import { LampCones, LampShadows, Lightning, RainSystem } from '../real/weather';
 import { moodFromUrl, MoodPanel } from './moodPanel';
 import { routeFor } from './traffic';
@@ -123,6 +124,9 @@ async function run(): Promise<void> {
   const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), Number.isFinite(bloomParam) && params.has('bloom') ? bloomParam : 0.22, 0.45, 1.6);
   composer.addPass(new RenderPass(scene, camera));
   composer.addPass(overlay);
+  // Depth of field after the overlay (it reads the scene's depth from the first target) and before bloom.
+  const dof = new DofPass(() => overlay.depth, camera);
+  composer.addPass(dof);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
   // The colour grade, last, on the display image: C cycles the looks, ?grade= picks one.
@@ -258,7 +262,7 @@ async function run(): Promise<void> {
     travel.hide();
     controls.look.lock();
   });
-  if (params.get('diag') === '1') (window as unknown as { __renderer: THREE.WebGLRenderer }).__renderer = renderer;
+  if (params.get('diag') === '1') Object.assign(window, { __renderer: renderer, __dof: dof });
   // Review hook for screenshot scripts: point the view (yaw, pitch in degrees).
   (window as unknown as { __look: (y: number, p: number) => void }).__look = (y, p) => controls.setView(y, p);
   const spawnParam = params.get('spawn');
@@ -351,6 +355,8 @@ async function run(): Promise<void> {
     lampShadows.setCount(mood.shadows);
     cityU.uLightGain.value = 1.4 * atm.lamps * (mood.shadows > 0 ? 0.6 : 1);
     cityU.uDark.value = d;
+    dof.strength = mood.dof;
+    dof.focus = mood.focus;
     renderer.toneMappingExposure = atm.exposure * (1 - 0.3 * d);
     grade.grade = mood.grade;
     fogScale = 0;
@@ -649,7 +655,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        trains?.status ?? `${(district.districtAt(p.x, p.z) ?? style.name).toUpperCase()} · ${district.zoneAt(p.x, p.z) ?? ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}`,
+        trains?.status ?? `${(district.districtAt(p.x, p.z) ?? style.name).toUpperCase()} · ${district.zoneAt(p.x, p.z) ?? ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
