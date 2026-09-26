@@ -142,11 +142,6 @@ function megaSignLights(b: Building3): Light[] {
   const x0 = b.x - b.w / 2;
   const z1 = b.z + b.d / 2;
   const glow = (x: number, z: number, color: [number, number, number]): Light => ({ x, z, r: 16, color, i: 1.1 });
-  return [
-    glow(x0 - 4, b.z - b.d * 0.25, [1.0, 0.45, 0.8]),
-    glow(x0 - 4, b.z + b.d * 0.25, [0.6, 0.8, 1.0]),
-    glow(b.x - b.w * 0.25, z1 + 4, [1.0, 0.7, 0.5]),
-    glow(b.x + b.w * 0.25, z1 + 4, [0.7, 0.6, 1.0]),
-    glow(x0 - 3, z1 + 3, [1.0, 0.35, 0.7]),
-  ];
+  // The screens light the street live (screenLight.ts); the lightmap keeps only the lobby's glow.
+  return [{ ...glow(x0 - 3, z1 + 3, [1.0, 0.85, 0.7]), r: 8, i: 0.5 }];
 }

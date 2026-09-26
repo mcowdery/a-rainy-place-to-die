@@ -5,6 +5,7 @@ import { GF, WIN } from './buildings';
 import type { CityUniforms } from './city';
 import { buildDragon, neonMaterial } from './dragon';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
+import { averageColour, type ScreenLight } from './screenLight';
 
 /**
  * Kaburo's landmark: a corner tower on the central crossing wrapped in giant LED screens, crowned by the
@@ -31,8 +32,8 @@ const SLOT = [1024, 576] as const;
 const ATLAS = [4096, 2048] as const;
 const slotRect = (i: number): [number, number, number, number] => [(i % 4) * SLOT[0], Math.floor(i / 4) * SLOT[1], SLOT[0], SLOT[1]];
 
-/** The screens' content: each mega ad with its brand and copy over a bottom scrim. */
-function megaAtlas(): THREE.CanvasTexture {
+/** The screens' content: each mega ad with its brand and copy over a bottom scrim; avg: each slot's average colour. */
+function megaAtlas(avg: THREE.Color[]): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = ATLAS[0];
   c.height = ATLAS[1];
@@ -68,6 +69,7 @@ function megaAtlas(): THREE.CanvasTexture {
       fitText(g, ad.brand, x + 40, y + h - 170, w * 0.7, 100, `#${ad.accent.toString(16).padStart(6, '0')}`);
       fitText(g, ad.copy, x + 40, y + h - 72, w * 0.7, 54, `#${ad.ink.toString(16).padStart(6, '0')}`, '600');
       g.restore();
+      avg[i] = averageColour(c, x, y, w, h);
       settle();
     };
     img.onerror = settle;
@@ -259,6 +261,8 @@ export interface MegaSign {
   readonly group: THREE.Group;
   /** Local position of the dragon's head (for camera framing). */
   readonly headAt: THREE.Vector3;
+  /** The screens and the corner sign as area lights, in local coordinates (add the group's position). */
+  readonly lights: ScreenLight[];
 }
 
 /** Builds the mega-sign. Local origin: the building's centre at ground level; corner at (-HALF, +HALF). */
@@ -335,7 +339,45 @@ export function buildMegaSign(u: CityUniforms, city: THREE.Material): MegaSign {
     screens.push(strip(wrap, s0, s1, LOW.y0, LOW.y1, 0.3, k));
   }
   const screenGeo = mergeAll(screens);
-  group.add(new THREE.Mesh(screenGeo, screenMaterial(u, megaAtlas())));
+  const avg: THREE.Color[] = MEGA_ADS.map(() => new THREE.Color(0.05, 0.05, 0.06));
+  group.add(new THREE.Mesh(screenGeo, screenMaterial(u, megaAtlas(avg))));
+  // The screens as lights, following the same crossfade as the screen shader.
+  const lights: ScreenLight[] = [];
+  const screenLight = (s: number, y0: number, y1: number, w: number, k: number): ScreenLight => {
+    const { p, n } = wrap.at(s);
+    return {
+      centre: p.clone().addScaledVector(n, 0.35).setY((y0 + y1) / 2),
+      normal: n.clone(),
+      halfW: w / 2,
+      halfH: (y1 - y0) / 2,
+      colour(time, neon, out) {
+        const ph = time / 7 + k * 0.37;
+        const i0 = Math.floor(ph);
+        const f = ph - i0;
+        const t = Math.min(1, Math.max(0, (f - 0.9) / 0.1));
+        const mix = t * t * (3 - 2 * t);
+        const n = MEGA_ADS.length;
+        const a = avg[((i0 + k * 2) % n + n) % n];
+        const b = avg[((i0 + 1 + k * 2) % n + n) % n];
+        return out.copy(a).lerp(b, mix).multiplyScalar((1.3 + 0.9 * neon) * 0.95);
+      },
+    };
+  };
+  lights.push(
+    screenLight(mid(wrap.faceA), MAIN.y0, MAIN.y1, MAIN.w, 0),
+    screenLight(mid(wrap.faceB), MAIN.y0, MAIN.y1, MAIN.w, 1),
+    screenLight(mid(wrap.faceA), LOW.y0, LOW.y1, LOW.w, 2),
+    screenLight(mid(wrap.faceB), LOW.y0, LOW.y1, LOW.w, 3),
+  );
+  // The corner sign: pink text on black, about a third lit.
+  const corner = wrap.at(mid(wrap.arc));
+  lights.push({
+    centre: corner.p.clone().addScaledVector(corner.n, 0.35).setY((MAIN.y0 + MAIN.y1) / 2),
+    normal: corner.n.clone(),
+    halfW: 3,
+    halfH: (MAIN.y1 - MAIN.y0) / 2,
+    colour: (_t, neon, out) => out.setRGB(1.0, 0.25, 0.7).multiplyScalar(0.3 * (1.6 + 1.6 * neon)),
+  });
 
   // Vertical 歌舞路 LED sign on the corner, between the two main screens.
   // Canvas aspect matches the strip (~6.9 x 9 m) so the characters aren't stretched.
@@ -367,7 +409,7 @@ export function buildMegaSign(u: CityUniforms, city: THREE.Material): MegaSign {
   const tower = new THREE.Mesh(mb.build()!, city);
   tower.castShadow = tower.receiveShadow = true;
   group.add(tower, steel, dragon);
-  return { group, headAt: built.head.clone().setY(built.head.y + HEIGHT + 0.6) };
+  return { group, headAt: built.head.clone().setY(built.head.y + HEIGHT + 0.6), lights };
 }
 
 function mergeAll(gs: THREE.BufferGeometry[]): THREE.BufferGeometry {

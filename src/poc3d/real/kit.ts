@@ -5,6 +5,7 @@ import type { CityUniforms } from './city';
 import { localBox, localFrame, localYaw, toWorld, type LocalFrame } from './localFrame';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 import { addFigure, GhostBuilder, type FigureSpec } from './people';
+import type { ScreenLight } from './screenLight';
 
 type C3 = [number, number, number];
 export type Facing = 'out' | 'in' | '+u' | '-u';
@@ -18,6 +19,8 @@ export class Kit {
   readonly f: LocalFrame;
   readonly mb = new MeshBuilder();
   readonly group = new THREE.Group();
+  /** Screens on this landmark that light their surroundings. */
+  readonly lights: ScreenLight[] = [];
   private readonly glassB = new MeshBuilder();
   private readonly people = new GhostBuilder();
   private readonly neon: THREE.MeshBasicMaterial[] = [];

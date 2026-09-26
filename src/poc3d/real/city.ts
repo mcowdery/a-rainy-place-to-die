@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { screenLightGlsl, screenUniforms, type ScreenUniforms } from './screenLight';
 
 /** Cars whose headlights light the city (the nearest to the camera). */
 export const CAR_LIGHTS = 16;
@@ -20,7 +21,7 @@ export const CAR_LIGHTS = 16;
  * just in front of every surface and fading with height; in rain the ground darkens, turns glossy and
  * reflects that light as streaks stretched toward the viewer.
  */
-export interface CityUniforms {
+export interface CityUniforms extends ScreenUniforms {
   uTime: { value: number };
   uWindowLit: { value: number };
   uLamps: { value: number };
@@ -61,6 +62,7 @@ export function cityUniforms(): CityUniforms {
     tLight: { value: null },
     uLightRect: { value: new THREE.Vector4(0, 0, 1, 1) },
     uLightGain: { value: 1 },
+    ...screenUniforms(),
   };
 }
 
@@ -75,6 +77,7 @@ const common = /* glsl */ `
   uniform vec4 uCars[${CAR_LIGHTS}];
   uniform int uCarCount;
   uniform float uHeadlights;
+  ${screenLightGlsl}
   // Headlights and tail lights of the cars near the camera, as light on the surfaces round them (no
   // volumes): two beams ahead that spread and fade over ~35 m, low down; a short red glow behind.
   vec3 carLights(vec3 wp, vec3 n, bool ground) {
@@ -526,6 +529,8 @@ const surface = /* glsl */ `
   vec3 Lm = lightAt(vWPos.xz + Nw.xz * 0.6);
   float hf = groundKind ? 1.0 : exp(-max(vWPos.y - 0.2, 0.0) / 4.5) * 0.8;
   sEmit += albedo * Lm * hf;
+  // Big screens light what's in front of them in the colour of what they're showing (screenLight.ts).
+  if (uScreenCount > 0) sEmit += albedo * screenLight(vWPos + Nw * 0.05, Nw, 1.0) * 0.3183;
   if (uCarCount > 0 && uHeadlights > 0.0) {
     vec3 cl = carLights(vWPos, Nw, groundKind);
     sEmit += albedo * cl;

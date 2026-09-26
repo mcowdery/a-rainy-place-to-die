@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { CityUniforms } from './city';
+import { screenLightGlsl } from './screenLight';
 
 /**
  * Weather and night lighting close to the camera, in the HDR scene (so bloom and the grade see it):
@@ -66,7 +67,7 @@ export class RainSystem {
   private static readonly FALL = 11;
 
   constructor(city: CityUniforms) {
-    const shared = { ...this.u, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain, uLamps: city.uLamps };
+    const shared = { ...this.u, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain, uLamps: city.uLamps, uScreenP: city.uScreenP, uScreenA: city.uScreenA, uScreenC: city.uScreenC, uScreenCount: city.uScreenCount };
     // Streaks: two vertices each (top and bottom), with a random seed; uAmount picks the share that fall.
     // Streaks: polylines of SEG segments (a drop's trail over the last instant), each segment two vertices.
     // aSeed: position seed (xyz) and size (w); aK: the vertex's point index along the trail, 0 at the head.
@@ -108,6 +109,7 @@ export class RainSystem {
           uniform float uLamps;
           ${lightmapGlsl}
           ${shelterGlsl}
+          ${screenLightGlsl}
           varying vec3 vCol;
           varying float vA;
           // The wind where a drop is: the mean wind (uSlant: drift per metre of fall) varied by gust fronts
@@ -145,7 +147,8 @@ export class RainSystem {
             // The head is brightest; the trail fades.
             vA *= 1.0 - aK * 0.22;
             vec3 L = lightAt(p.xz) * mix(1.0, 0.35, clamp(p.y / 14.0, 0.0, 1.0));
-            vCol = vec3(0.10, 0.12, 0.15) * (0.4 + 0.6 * (1.0 - uLamps)) + L * 0.55;
+            // Drops in front of a screen glitter in its colour.
+            vCol = vec3(0.10, 0.12, 0.15) * (0.4 + 0.6 * (1.0 - uLamps)) + L * 0.55 + screenLight(p, vec3(0.0), 0.0) * 0.07;
             gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
           }`,
         fragmentShader: /* glsl */ `

@@ -8,6 +8,8 @@ import { Kit, neonText, text } from './kit';
 import type { Light } from './lightmap';
 import { localFrame, localRect, toLocal, toWorld } from './localFrame';
 import { EMIT } from './meshBuilder';
+import { averageColour } from './screenLight';
+import type { ScreenLight } from './screenLight';
 
 /**
  * Asagiri's set pieces, all in the building's local frame (u along the street face, t inward; see
@@ -131,6 +133,8 @@ export function asagiriLights(kind: AsagiriKind, b: Building3): Light[] {
 
 export interface AsagiriBuilt {
   readonly group: THREE.Group;
+  /** Screens that light their surroundings. */
+  readonly lights: ScreenLight[];
   update(camera: THREE.Vector3, dt: number): void;
 }
 
@@ -141,6 +145,7 @@ export function buildAsagiri(kind: AsagiriKind, b: Building3, id: string, city: 
   const group = k.finish(city, ghost);
   return {
     group,
+    lights: k.lights,
     update(camera, dt) {
       k.update(u);
       extra?.(camera, dt);
@@ -163,6 +168,21 @@ function screen(k: Kit, urls: readonly string[], w: number, h: number, u: number
   const texes = urls.map((url) => k.image(url));
   const m = k.plane(texes[0], w, h, u, t, y, 'out', 1.15);
   let time = 0;
+  // The screen as a light: the average colour of the image showing (measured once each has loaded).
+  const avg: (THREE.Color | null)[] = texes.map(() => null);
+  const [cx, cz] = toWorld(k.f, u, t);
+  k.lights.push({
+    centre: new THREE.Vector3(cx, y, cz),
+    normal: new THREE.Vector3(k.f.n[0], 0, k.f.n[2]),
+    halfW: w / 2,
+    halfH: h / 2,
+    colour(_t, _neon, out) {
+      const i = Math.floor(time / period) % texes.length;
+      const img = texes[i].image as HTMLImageElement | undefined;
+      if (!avg[i] && img?.complete && img.naturalWidth) avg[i] = averageColour(img, 0, 0, img.naturalWidth, img.naturalHeight);
+      return avg[i] ? out.copy(avg[i]!).multiplyScalar(1.15) : out.setRGB(0, 0, 0);
+    },
+  });
   return (_c, dt) => {
     time += dt;
     (m.material as THREE.MeshBasicMaterial).map = texes[Math.floor(time / period) % texes.length];
