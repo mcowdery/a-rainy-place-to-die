@@ -220,6 +220,36 @@ describe('Places you can walk into, and fast travel', () => {
     const names = dests.map((d) => d.name);
     expect(names).toEqual(expect.arrayContaining(['Kaburo Crossing', 'Bar Kanpai', 'Yoru Mart', 'Yoru Mart (inside)', 'Kaburo Inari Shrine']));
     expect(dests.filter((d) => d.group === 'Zones')).toHaveLength(content.zones.zones.length);
-    for (const d of dests) expect(district.blocked(d.x, d.z, 0.3), d.name).toBe(false);
+    for (const d of dests) expect(district.blocked(d.x, d.z, 0.3, district.floorAt(d.x, d.z)), d.name).toBe(false);
+  });
+});
+
+describe('Live house 地下室', () => {
+  const district = new District(content.macro, 'neon', content.placed, 7, content.zones);
+  const f = localFrame(content.placed.find((p) => p.id === 'live_house')!.building);
+  const at = (u: number, t: number) => toWorld(f, u, t);
+
+  it('takes you down the stairs into the basement', () => {
+    expect(district.floorAt(...at(1.7, -1))).toBe(0);
+    expect(district.floorAt(...at(1.7, 3.25))).toBeCloseTo(-2.25, 1);
+    expect(district.floorAt(...at(5, 12))).toBe(-4.5);
+    // Walking the stairwell's centre line never hits anything, at whatever level you're on.
+    for (let t = -1; t < 11; t += 0.25) {
+      const [x, z] = at(t < 6.5 ? 1.7 : 2.7, t);
+      expect(district.blocked(x, z, 0.4, district.floorAt(x, z)), `t ${t}`).toBe(false);
+    }
+  });
+
+  it('keeps the building solid at street level and the basement walled in below', () => {
+    expect(district.blocked(...at(6, 12), 0.4, 0)).toBe(true);
+    expect(district.blocked(...at(5, 12), 0.4, -4.5)).toBe(false);
+    expect(district.blocked(...at(5, 19), 0.4, -4.5)).toBe(true); // the stage
+    expect(district.blocked(...at(10.2, 12), 0.4, -4.5)).toBe(true); // the side wall
+  });
+
+  it('cuts the stairwell out of the pavement', () => {
+    const [x, z] = at(1.7, 3);
+    const model = new DistrictModel(content.macro, 'neon', content.placed, 7, content.zones);
+    expect(model.holes(Math.floor(x / CELL), Math.floor(z / CELL)).some((r) => x > r.x && x < r.x + r.w && z > r.y && z < r.y + r.h)).toBe(true);
   });
 });

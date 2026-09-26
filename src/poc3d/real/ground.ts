@@ -7,7 +7,7 @@ import { KIND, lin, type MeshBuilder } from './meshBuilder';
  * at crossings), and road paint: centre and lane lines, edge lines, zebra crossings and stop lines at
  * junctions. Paint belongs to the cell containing its centre so shared edge roads aren't painted twice.
  */
-export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rect[] = [], scrambles: readonly Rect[] = []): void {
+export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rect[] = [], scrambles: readonly Rect[] = [], holes: readonly Rect[] = []): void {
   mb.id = 0;
   mb.flags = 0;
   mb.style = [0, 0, 0, 0];
@@ -20,7 +20,8 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rec
     mb.color = lin(hex);
     mb.box(c.x + c.w / 2, c.y + c.h / 2, y0, y1, c.w, c.h, top);
   };
-  slab(cell, -0.2, 0, KIND.lot, KIND.lot, 0x6a6862);
+  // Lot concrete, with any openings (stairwells to basements) cut out.
+  for (const piece of subtract(cell, holes)) slab(piece, -0.2, 0, KIND.lot, KIND.lot, 0x6a6862);
   for (const r of plan.roads) slab(r.rect, 0, 0.02, KIND.asphalt, KIND.asphalt, r.kind === 'coast' ? 0x5a5e62 : 0x2a2a2e);
   for (const r of plan.roads) {
     if (r.sidewalk <= 0) continue;
@@ -61,6 +62,30 @@ function scramble(mb: MeshBuilder, plan: CellPlan3, box: Rect): void {
       else mb.quad(o, across, along);
     }
   }
+}
+
+/** A rect minus some holes, as a list of rects (each hole splits a piece into up to four). */
+function subtract(r: Rect, holes: readonly Rect[]): Rect[] {
+  let pieces = [r];
+  for (const h of holes) {
+    const next: Rect[] = [];
+    for (const p of pieces) {
+      const c = intersect(p, h);
+      if (!c) {
+        next.push(p);
+        continue;
+      }
+      const parts: Rect[] = [
+        { x: p.x, y: p.y, w: p.w, h: c.y - p.y },
+        { x: p.x, y: c.y + c.h, w: p.w, h: p.y + p.h - c.y - c.h },
+        { x: p.x, y: c.y, w: c.x - p.x, h: c.h },
+        { x: c.x + c.w, y: c.y, w: p.x + p.w - c.x - c.w, h: c.h },
+      ];
+      next.push(...parts.filter((q) => q.w > 0.01 && q.h > 0.01));
+    }
+    pieces = next;
+  }
+  return pieces;
 }
 
 function sidewalkStrips(r: Road3): Rect[] {

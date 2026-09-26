@@ -10,7 +10,7 @@ import { DistrictModel } from './model';
 import { CELL, cellKey, type Building3, type CellPlan3 } from './plan';
 import type { Node3, Placed3 } from './stamps';
 import type { ZoneMap } from './zones';
-import { landmarkColliders } from './landmarks';
+import { landmarkColliders, landmarkFloor } from './landmarks';
 import type { Rect } from '../../core/coords';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
@@ -107,10 +107,23 @@ export class District {
     this.model = new DistrictModel(macro, kind, placed, seed, zones);
     this.nodes = placed.flatMap((p) => p.nodes);
     // Stamps collide as their footprint, or (landmarks you can walk into) as their walls and fixtures.
-    this.stampColliders = placed.map((p) => landmarkColliders(p) ?? [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }]);
+    const solid = (p: Placed3): Rect[] => [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }];
+    this.stampColliders = placed.map((p) => landmarkColliders(p, 0) ?? solid(p));
+    this.basementColliders = placed.map((p) => landmarkColliders(p, -4) ?? []);
   }
 
   private readonly stampColliders: readonly (readonly Rect[])[];
+  /** Below street level only basements collide (their walls keep you inside). */
+  private readonly basementColliders: readonly (readonly Rect[])[];
+
+  /** Floor height: 0 on the street, a ramp on stairs, negative in a basement. */
+  floorAt = (x: number, z: number): number => {
+    for (const p of this.model.placed) {
+      const y = landmarkFloor(p, x, z);
+      if (y !== null) return y;
+    }
+    return 0;
+  };
 
   get placed(): readonly Placed3[] {
     return this.model.placed;
@@ -172,7 +185,9 @@ export class District {
   }
 
   /** Collision: outside the district, inside a building footprint (this cell or a neighbour), a stamp or a prop. */
-  blocked = (x: number, z: number, r: number): boolean => {
+  blocked = (x: number, z: number, r: number, floor = 0): boolean => {
+    const inRects = (rs: readonly Rect[]): boolean => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
+    if (floor < -1) return this.basementColliders.some(inRects);
     if (!this.inDistrict(x, z)) return true;
     const mx = Math.floor(x / CELL);
     const my = Math.floor(z / CELL);
@@ -185,7 +200,7 @@ export class District {
         if (d && propBlocked(d.props, x, z, r)) return true;
       }
     }
-    return this.stampColliders.some((rs) => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r));
+    return this.stampColliders.some(inRects);
   };
 
   /**

@@ -1,0 +1,27 @@
+# LIVE HOUSE 地下室: a music venue you walk down into, off the food lane. A landmark built by
+# real/liveHouse.ts (10 m front, 22 m deep): a poster-lined stairwell from the pavement down to B1, with a
+# bar, a crowd and a band on stage. A record shop and offices above.
+id: live_house
+name: LIVE HOUSE 地下室
+footprint: [10, 22]
+height: 16.2
+front: south
+landmark: live_house
+nodes:
+  front:
+    kind: spawn
+    name: Live House 地下室
+    at: [5.5, 7]
+    facing: north
+    view: [14, 10]
+  inside:
+    kind: spawn
+    name: Live House 地下室 (inside)
+    at: [5, -10.5]
+    facing: north
+    view: [0, 4]
+  show:
+    kind: hotspot
+    name: Julie's show
+    at: [5, -17.2]
+    handoff: {}

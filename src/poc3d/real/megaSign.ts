@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { MEGA_ADS } from '../models/ads';
 import { fitText } from './adAtlas';
-import { WIN } from './buildings';
+import { GF, WIN } from './buildings';
 import type { CityUniforms } from './city';
 import { buildDragon, neonMaterial } from './dragon';
-import { KIND, lin, MeshBuilder } from './meshBuilder';
+import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 
 /**
  * Kaburo's landmark: a corner tower on the central crossing wrapped in giant LED screens, crowned by the
@@ -271,12 +271,33 @@ export function buildMegaSign(u: CityUniforms, city: THREE.Material): MegaSign {
   mb.color = lin(0x22262c);
   mb.flags = 1 + 8 + 5 * 16;
   mb.style = [1.8, 0.6, 1.4, WIN.curtain + 8 * 9];
-  mb.frontNormal = [-1, 0, 0];
+  // Both street faces get shopfronts at ground level (south: box A, west: box B).
+  mb.frontNormal = [0, 0, 1];
   mb.box(CR / 2, 0, 0, HEIGHT, 2 * HALF - CR, 2 * HALF);
+  mb.frontNormal = [-1, 0, 0];
   mb.box(-HALF + CR / 2, -CR / 2, 0, HEIGHT, CR, 2 * HALF - CR);
   mb.frontNormal = null;
   mb.kind = KIND.plain;
-  mb.cylinder(-HALF + CR, HALF - CR, 0, HEIGHT, CR, 16);
+  const [ccx, ccz] = [-HALF + CR, HALF - CR];
+  mb.cylinder(ccx, ccz, GF, HEIGHT, CR, 16);
+  // The corner at street level: a glass lobby (lit drum behind mullions) under a round canopy.
+  mb.kind = KIND.emit;
+  mb.style = [EMIT.always, 0, 0, 0];
+  mb.color = [0.5, 0.44, 0.36];
+  mb.lathe(ccx, ccz, [[0, CR - 0.3], [GF, CR - 0.3]], 20);
+  mb.color = [1.1, 1.0, 0.9];
+  mb.lathe(ccx, ccz, [[GF - 0.22, CR + 1.3], [GF - 0.2, CR + 1.3]], 24);
+  mb.style = [0, 0, 0, 0];
+  mb.kind = KIND.plain;
+  mb.color = lin(0x1a1c20);
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    mb.cylinder(ccx + Math.cos(a) * (CR - 0.05), ccz + Math.sin(a) * (CR - 0.05), 0, GF, 0.07, 5);
+  }
+  mb.color = lin(0x2c2e32);
+  for (const rings of [[[GF, CR], [GF, CR + 1.4]], [[GF, CR + 1.4], [GF, CR]], [[GF - 0.2, CR + 1.4], [GF - 0.2, CR]], [[GF - 0.2, CR], [GF - 0.2, CR + 1.4]], [[GF - 0.2, CR + 1.4], [GF, CR + 1.4]]] as [number, number][][]) {
+    mb.lathe(ccx, ccz, rings, 24);
+  }
   // Parapet and a roof deck.
   mb.color = lin(0x2c2e32);
   mb.box(0, 0, HEIGHT, HEIGHT + 0.6, 2 * HALF, 2 * HALF, KIND.roof);

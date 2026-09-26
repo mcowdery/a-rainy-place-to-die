@@ -29,6 +29,13 @@ export function toWorld(f: LocalFrame, u: number, t: number): [number, number] {
   return [f.p[0] + f.r[0] * u - f.n[0] * t, f.p[2] + f.r[2] * u - f.n[2] * t];
 }
 
+/** Local (u, t) of a world point. */
+export function toLocal(f: LocalFrame, x: number, z: number): [number, number] {
+  const dx = x - f.p[0];
+  const dz = z - f.p[2];
+  return [dx * f.r[0] + dz * f.r[2], -(dx * f.n[0] + dz * f.n[2])];
+}
+
 /** World yaw (FigureSpec convention: 0 faces +z) of a local direction (du along u, dt inward). */
 export function localYaw(f: LocalFrame, du: number, dt: number): number {
   const x = f.r[0] * du - f.n[0] * dt;
@@ -43,9 +50,13 @@ export function localRect(f: LocalFrame, u0: number, u1: number, t0: number, t1:
   return { x: Math.min(ax, bx), y: Math.min(az, bz), w: Math.abs(bx - ax), h: Math.abs(bz - az) };
 }
 
-/** An axis-aligned local box into the builder (with the builder's current kind and colour). */
-export function localBox(mb: MeshBuilder, f: LocalFrame, u0: number, u1: number, t0: number, t1: number, y0: number, y1: number, topKind?: number): void {
-  mb.frameBox(f.p, f.r, f.n, u0, u1, y0, y1, -t1, -t0, topKind);
+/**
+ * An axis-aligned local box into the builder (with the builder's current kind and colour). It gets a
+ * bottom face when raised off the ground, or when asked (ceilings seen from a basement below).
+ */
+export function localBox(mb: MeshBuilder, f: LocalFrame, u0: number, u1: number, t0: number, t1: number, y0: number, y1: number, topKind?: number, bottom = y0 > 0.3): void {
+  const r = localRect(f, u0, u1, t0, t1);
+  mb.box(r.x + r.w / 2, r.y + r.h / 2, y0, y1, r.w, r.h, topKind ?? mb.kind, bottom);
 }
 
 /** A solid part of a layout: a local box that also blocks walking. */

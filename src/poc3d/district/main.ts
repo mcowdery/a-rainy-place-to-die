@@ -15,6 +15,7 @@ import { buildMegaSign } from '../real/megaSign';
 import { buildKonbini } from '../real/konbini';
 import { buildShrine } from '../real/shrine';
 import { buildLoveHotel } from '../real/loveHotel';
+import { buildLiveHouse } from '../real/liveHouse';
 import { destinations, TravelMap, type Destination } from './travel';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
@@ -148,6 +149,10 @@ async function run(): Promise<void> {
       landmarkUpdates.push(k.update);
     } else if (lm === 'shrine') {
       scene.add(buildShrine(placed.building, city));
+    } else if (lm === 'live_house') {
+      const h = buildLiveHouse(placed.building, city, ghost);
+      scene.add(h.group);
+      landmarkUpdates.push(h.update);
     } else if (lm === 'love_hotel') {
       const h = buildLoveHotel(placed.building, city, ghost, cityU);
       scene.add(h.group);
@@ -158,14 +163,15 @@ async function run(): Promise<void> {
   const npcBlocked = (x: number, z: number, r: number): boolean =>
     nodes.some((n) => n.kind === 'npc' && visibleNode(n) && Math.hypot(n.x - x, n.z - z) < r + 0.35);
 
-  const controls = new FirstPerson(camera, document.body, (x, z, r) => district.blocked(x, z, r) || npcBlocked(x, z, r));
+  const controls = new FirstPerson(camera, document.body, (x, z, r, floor) => district.blocked(x, z, r, floor) || (floor ?? 0) > -1 && npcBlocked(x, z, r));
   controls.setShearMode(false);
   controls.fly = params.get('fly') === '1';
+  controls.floorAt = district.floorAt;
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
   const YAW: Record<string, number> = { north: 0, south: 180, east: -90, west: 90 };
   const teleport = (id: string): void => {
     const n = nodeById.get(id)!;
-    camera.position.set(n.x, 1.7, n.z);
+    camera.position.set(n.x, district.floorAt(n.x, n.z) + 1.7, n.z);
     if (n.view) controls.setView(n.view[0], n.view[1]);
     else controls.setView(YAW[n.facing ?? 'north'], 4);
   };
@@ -175,7 +181,7 @@ async function run(): Promise<void> {
     return (Math.atan2(-d.x, -d.z) * 180) / Math.PI;
   };
   const travel = new TravelMap(district, content.zones, destinations(district, nodes, content.zones), (d: Destination) => {
-    camera.position.set(d.x, controls.fly ? Math.max(camera.position.y, 1.7) : 1.7, d.z);
+    camera.position.set(d.x, controls.fly ? Math.max(camera.position.y, 1.7) : district.floorAt(d.x, d.z) + 1.7, d.z);
     controls.setView(d.yaw, d.pitch);
     travel.hide();
     controls.look.lock();

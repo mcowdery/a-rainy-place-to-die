@@ -4,6 +4,7 @@ import { cellDetail, type CellDetail } from '../real/props';
 import { CELL, cellKey, edgeKey, planCell3, type Building3, type CellPlan3 } from './plan';
 import { plazaRect, reservedRect, type Placed3 } from './stamps';
 import { ZoneMap } from './zones';
+import { landmarkHoles } from './landmarks';
 
 /**
  * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings, signs) and
@@ -138,6 +139,12 @@ export class DistrictModel {
       if (hx > 0 && hz > 0 && overlaps(box, { x: mx * CELL, y: my * CELL, w: CELL, h: CELL })) out.push(box);
     }
     return out;
+  }
+
+  /** Openings in this cell's pavement (stairwells down to basements). */
+  holes(mx: number, my: number): Rect[] {
+    const cell: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
+    return this.placed.flatMap(landmarkHoles).filter((r) => overlaps(r, cell));
   }
 
   stamps(mx: number, my: number): readonly Placed3[] {

@@ -20,3 +20,7 @@
   stamp: hotel_rouge
   cell: [30, 10]
   offset: [44, 97]
+- id: live_house
+  stamp: live_house
+  cell: [27, 11]
+  offset: [60, 96]

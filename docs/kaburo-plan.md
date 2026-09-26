@@ -24,7 +24,7 @@ These are hand-authored stamps with interiors or VN hooks, placed on L0 cells li
 - **Bar Kanpai** (exists): Mama-san and the detective.
 - **Kirishima Investigations**: the detective agency's office up a narrow stairwell (taxi ad B, poster).
 - **Kaburo Crossing / mega-sign building**: the landmark, see below.
-- **Live house 地下室**: basement venue with a lit stairwell and gig posters; a natural event location.
+- **Live house 地下室**: basement venue with a lit stairwell and gig posters; a natural event location. **Built (2026-09-26)**: walk down into B1 (Julie's MIDNIGHT PLASTIC release show on stage; a hotspot for the VN).
 - **Maid café ♡ぴゅあ♡**: upstairs café with a street tout.
 - **Hotel Rouge**: the flagship love hotel in the Love District, with a hidden side entrance. **Built (2026-09-26)** as a castle love hotel.
 - **Maruyoshi pawn shop**: the noir hub (items, information).
