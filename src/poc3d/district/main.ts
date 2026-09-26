@@ -22,7 +22,7 @@ import { buildDiscount } from '../real/discount';
 import { buildStation } from '../real/station';
 import { ASAGIRI_KINDS, buildAsagiri, type AsagiriKind } from '../real/asagiri';
 import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
-import { TrafficSystem } from '../real/traffic';
+import { SignalLamps, TrafficSystem } from '../real/traffic';
 import { ScreenLights } from '../real/screenLight';
 import { GRADE_NAMES, GradePass } from '../real/grade';
 import { DofPass } from '../real/dof';
@@ -30,7 +30,7 @@ import { SsrPass } from '../real/ssr';
 import { CityAudio } from '../real/audio';
 import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater } from '../real/weather';
 import { moodFromUrl, MoodPanel } from './moodPanel';
-import { routeFor } from './traffic';
+import { routeFor, Signals } from './traffic';
 import { destinations, TravelMap, type Destination } from './travel';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
@@ -185,12 +185,19 @@ async function run(): Promise<void> {
   // Traffic: cars and taxis clockwise round their loops, buses anticlockwise round theirs.
   const piers = rail ? [rail.x] : [];
   const plan = (mx: number, my: number) => district.plan(mx, my);
+  // Every grid-corner junction has signals; scramble crossings add a pedestrian phase.
+  const scrambles = new Set(
+    content.placed.filter((p) => p.stamp.scramble).map((p) => `${Math.round((p.rect.x + p.stamp.scramble![0]) / CELL)},${Math.round((p.rect.y + p.stamp.scramble![1]) / CELL)}`),
+  );
+  const signals = new Signals(scrambles);
   const traffic = new TrafficSystem(
     content.traffic.cars.map((c) => ({ route: routeFor(c.rect, true, plan, piers), spacing: c.spacing })),
     content.traffic.buses.map((line) => ({ line, route: routeFor(line.rect, false, plan, piers) })),
     city,
+    signals,
   );
-  scene.add(traffic.group);
+  const signalLamps = new SignalLamps(signals, (x, z, r) => district.signalsNear(x, z, r));
+  scene.add(traffic.group, signalLamps.mesh);
   // Weather near the camera: rain streaks and splashes lit by the street, light cones under the lamps.
   const rain = new RainSystem(cityU);
   const cones = new LampCones();
@@ -284,7 +291,7 @@ async function run(): Promise<void> {
     travel.hide();
     controls.look.lock();
   });
-  if (params.get('diag') === '1') Object.assign(window, { __renderer: renderer, __dof: dof, __audio: audio, __city: cityU, __strike: () => {
+  if (params.get('diag') === '1') Object.assign(window, { __renderer: renderer, __dof: dof, __audio: audio, __city: cityU, __traffic: traffic, __strike: () => {
     const d = camera.getWorldDirection(new THREE.Vector3());
     lightning.strikeNow(camera.position, { x: d.x, z: d.z });
   } });
@@ -612,6 +619,7 @@ async function run(): Promise<void> {
     for (const update of landmarkUpdates) update(camera.position, dt);
     trains?.update(dt, camera);
     traffic.update(dt, camera.position);
+    signalLamps.update(camera.position, traffic.clock);
     screens.update(camera.position, now / 1000, cityU.uNeon.value);
     // Streets wet through over ~20-60 s of rain (faster when heavy) and dry over a few minutes.
     const wetTarget = mood.wetness ?? (rainAmount > 0 ? 1 : 0);

@@ -6,7 +6,7 @@ import { CELL, DISTRICTS3, planCell3, STYLES3 } from '../src/poc3d/district/plan
 import { DistrictModel } from '../src/poc3d/district/model';
 import { parseZones3 } from '../src/poc3d/district/zones';
 import { destinations } from '../src/poc3d/district/travel';
-import { along, parseTraffic3, routeFor } from '../src/poc3d/district/traffic';
+import { along, parseTraffic3, routeFor, Signals } from '../src/poc3d/district/traffic';
 import { District } from '../src/poc3d/district/world';
 import { localFrame, toWorld } from '../src/poc3d/real/localFrame';
 import { DISTRICT_ADS } from '../src/poc3d/models/ads';
@@ -307,6 +307,40 @@ describe('Asagiri set pieces and traffic', () => {
     const ids = content.placed.flatMap((p) => p.nodes.map((n) => `${n.id}:${n.kind}`));
     for (const want of ['stella_production.lobby:door', 'stella_production.staff_door:door', 'police_hq.entrance:door', 'police_hq.officer:npc', 'the_peak.penthouse:door', 'the_peak.concierge:npc']) {
       expect(ids).toContain(want);
+    }
+  });
+});
+
+describe('Traffic signals and junctions', () => {
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const plan = (mx: number, my: number) => district.plan(mx, my);
+
+  it('never shows green (or amber) to both roads at once, and clears with all-red', () => {
+    const sig = new Signals(new Set(['30,12']));
+    for (const [gx, gy] of [[27, 11], [30, 12], [22, 10]]) {
+      let allRed = 0;
+      for (let t = 0; t < 200; t += 0.25) {
+        const ns = sig.state(gx, gy, true, t);
+        const ew = sig.state(gx, gy, false, t);
+        expect(ns !== 'red' && ew !== 'red', `${gx},${gy} at ${t}`).toBe(false);
+        if (ns === 'red' && ew === 'red') allRed++;
+      }
+      expect(allRed).toBeGreaterThan(0);
+    }
+    // The scramble crossing has a longer cycle (the pedestrian phase).
+    expect(sig.cycle(30, 12)).toBeGreaterThan(sig.cycle(27, 11));
+  });
+
+  it('puts a junction with a stop line before it at every grid corner along each loop', () => {
+    for (const loop of content.traffic.cars) {
+      const route = routeFor(loop.rect, true, plan, []);
+      const [c0, r0, c1, r1] = loop.rect;
+      expect(route.junctions).toHaveLength(2 * (c1 - c0) + 2 * (r1 - r0));
+      expect(route.junctions.filter((j) => j.turn)).toHaveLength(4);
+      for (const j of route.junctions) {
+        expect(j.stop).toBeLessThan(j.s);
+        expect(j.s - j.stop).toBeGreaterThan(j.cross / 2);
+      }
     }
   });
 });

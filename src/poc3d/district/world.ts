@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import type { Lightmap } from '../real/lightmap';
-import { propBlocked } from '../real/props';
+import { propBlocked, type Prop } from '../real/props';
 import { rawBytes, rawTriangles, toGeometry } from '../real/rawGeometry';
 import type { SignAtlas } from '../real/signs';
 import type { ChunkBuilt, Stage } from './chunkBuild';
@@ -169,6 +169,17 @@ export class District {
   sheltersNear(x: number, z: number, r: number, max: number): Shelter[] {
     const d = (s: Shelter): number => Math.hypot(Math.max(s.rect.x - x, 0, x - s.rect.x - s.rect.w), Math.max(s.rect.y - z, 0, z - s.rect.y - s.rect.h));
     return this.shelters.filter((s) => d(s) < r).sort((a, b) => d(a) - d(b)).slice(0, max);
+  }
+
+  /** Traffic signal poles within r metres of (x, z). */
+  signalsNear(x: number, z: number, r: number): Prop[] {
+    const out: Prop[] = [];
+    for (let my = Math.floor((z - r) / CELL); my <= Math.floor((z + r) / CELL); my++) {
+      for (let mx = Math.floor((x - r) / CELL); mx <= Math.floor((x + r) / CELL); mx++) {
+        for (const p of this.model.detail(mx, my)?.props ?? []) if (p.kind === 'signal' && Math.hypot(p.x - x, p.z - z) < r) out.push(p);
+      }
+    }
+    return out;
   }
 
   /** Street lamp heads within r metres (for the light cones in wet air), nearest first. */

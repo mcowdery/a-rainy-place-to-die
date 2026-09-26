@@ -2,25 +2,27 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Rect } from '../../core/coords';
 import { hash } from '../../core/hash';
-import { along, SIDES, type BusLine, type Route } from '../district/traffic';
+import { along, SIDES, Signals, type BusLine, type Junction, type Route } from '../district/traffic';
+import type { Prop } from './props';
 import { addCar } from './cars';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 
 /**
- * Moving traffic: cars and taxis round their loops at a steady speed, spaced so they never meet in a lane,
- * and city buses round theirs, pulling in at each stop for a while. Vehicles are meshes (one per vehicle,
- * geometry shared per model) placed each frame; only those within DRAW metres are drawn. Buses are lit
- * inside at night and carry their line on the front. Bus stops: a shelter and a pole sign on the kerb.
+ * Moving traffic. Cars, taxis and buses drive their loops with a car-following model (the Intelligent
+ * Driver Model): each keeps a safe time gap to whatever is ahead in its lane, whichever loop that is on,
+ * accelerating and braking smoothly, each with its own temperament (top speed, pull-away, braking, gap).
+ * Virtual obstacles make them stop at red lights (and at amber when they can stop comfortably), slow for
+ * corners, hold right turns for oncoming traffic, and pull in at bus stops. Brake lights come on when they
+ * brake or stand; the body dips under braking and lifts pulling away. Vehicles are meshes (geometry shared
+ * per model) placed each frame; only those within DRAW metres are drawn. Buses are lit inside at night and
+ * carry their line on the front. Bus stops: a shelter and a pole sign on the kerb.
  */
 
 const DRAW = 320;
-const CAR_SPEED = 10;
-const BUS_SPEED = 7.5;
 const BUS_DWELL = 12;
-const BUS_EASE = 18;
 const BUS_LEN = 10.5;
 
-type Model = { geo: THREE.BufferGeometry; half: number };
+type Model = { geo: THREE.BufferGeometry; half: number; brake: THREE.BufferGeometry };
 
 /** A car model at the origin pointing +z, with headlight glows added (the district's cars are parked). */
 function carModel(type: 'sedan' | 'kei' | 'minivan' | 'taxi', paint: number | undefined, variant: number): Model {
@@ -36,7 +38,12 @@ function carModel(type: 'sedan' | 'kei' | 'minivan' | 'taxi', paint: number | un
   for (const s of [-1, 1]) lamps.box(s * (bb.max.x - 0.3), bb.max.z + 0.01, 0.62, 0.74, 0.3, 0.03, KIND.emit, true);
   lamps.color = [0.25, 0.01, 0.01];
   for (const s of [-1, 1]) lamps.box(s * (bb.max.x - 0.25), bb.min.z - 0.01, 0.8, 0.9, 0.28, 0.03, KIND.emit, true);
-  return { geo: mergeGeometries([body, lamps.build()!])!, half: (bb.max.z - bb.min.z) / 2 };
+  // Brake lights: brighter lamps just behind the tail lights, shown while braking.
+  const brake = new MeshBuilder();
+  brake.kind = KIND.plain;
+  brake.color = [1, 1, 1];
+  for (const s of [-1, 1]) brake.box(s * (bb.max.x - 0.25), bb.min.z - 0.025, 0.79, 0.91, 0.3, 0.02, KIND.plain, true);
+  return { geo: mergeGeometries([body, lamps.build()!])!, half: (bb.max.z - bb.min.z) / 2, brake: brake.build()! };
 }
 
 /** A city bus at the origin pointing +z (10.5 m): cream and green, glass sides, lit inside, a destination board. */
@@ -200,19 +207,50 @@ function busStops(lines: readonly { line: BusLine; route: Route }[], city: THREE
   return { mesh: group, colliders };
 }
 
+/** A driver's temperament (Intelligent Driver Model parameters). */
+interface Driver {
+  /** Desired speed (m/s), comfortable acceleration and braking (m/s²), time gap (s), standstill gap (m). */
+  readonly v0: number;
+  readonly a: number;
+  readonly b: number;
+  readonly T: number;
+  readonly s0: number;
+}
+
 interface Vehicle {
   readonly obj: THREE.Object3D;
+  readonly brake: THREE.Object3D;
   readonly route: Route;
   readonly half: number;
-  /** Distance along the route at time 0 (cars), or the bus's timetable offset. */
-  readonly s0: number;
-  readonly speed: number;
+  readonly width: number;
   readonly bus: boolean;
+  readonly driver: Driver;
+  /** Distance along the route, speed, acceleration. */
+  s: number;
+  v: number;
+  acc: number;
+  /** Buses: the stop being served (edge index) and how long they have stood there. */
+  stopDone: number;
+  dwell: number;
+  /** The junction (route index) the vehicle has committed to crossing, or -1. */
+  committed: number;
+  pitch: number;
   x: number;
   z: number;
   dx: number;
   dz: number;
 }
+
+/** IDM acceleration toward an obstacle gap metres ahead closing at dv (own speed minus the obstacle's). */
+function idm(d: Driver, v: number, v0: number, gap: number, dv: number): number {
+  const free = 1 - Math.pow(v / Math.max(v0, 0.1), 4);
+  if (gap === Infinity) return d.a * free;
+  const sStar = d.s0 + Math.max(0, v * d.T + (v * dv) / (2 * Math.sqrt(d.a * d.b)));
+  return d.a * (free - Math.pow(sStar / Math.max(gap, 0.05), 2));
+}
+
+/** Distance from a to b going forward round a loop of length L, in [0, L). */
+const ahead = (a: number, b: number, L: number): number => (((b - a) % L) + L) % L;
 
 export class TrafficSystem {
   readonly group = new THREE.Group();
@@ -220,25 +258,47 @@ export class TrafficSystem {
   private readonly vehicles: Vehicle[] = [];
   private time = 0;
 
-  constructor(cars: readonly { route: Route; spacing: number }[], buses: readonly { line: BusLine; route: Route }[], city: THREE.Material) {
+  constructor(
+    cars: readonly { route: Route; spacing: number }[],
+    buses: readonly { line: BusLine; route: Route }[],
+    city: THREE.Material,
+    private readonly signals: Signals,
+  ) {
     const models: Model[] = [];
     const PAINTS = [0xe8e8e4, 0x1a1a1c, 0x8a8e94, 0x2a3a5a, 0x7a1a1a, 0xc8c0b0];
     for (let i = 0; i < 6; i++) models.push(carModel('sedan', PAINTS[i], 900 + i));
     models.push(carModel('kei', undefined, 911), carModel('kei', undefined, 912), carModel('minivan', 0xe8e8e4, 913), carModel('minivan', 0x2a2a2e, 914));
     const taxis = [carModel('taxi', undefined, 921), carModel('taxi', undefined, 922), carModel('taxi', undefined, 923)];
+    const brakeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 0.12, 0.06) });
     let k = 0;
+    const add = (obj: THREE.Object3D, brakeGeo: THREE.BufferGeometry, route: Route, half: number, width: number, bus: boolean, driver: Driver, s: number): void => {
+      const brake = new THREE.Mesh(brakeGeo, brakeMat);
+      brake.visible = false;
+      obj.add(brake);
+      obj.rotation.order = 'YXZ';
+      this.group.add(obj);
+      this.vehicles.push({ obj, brake, route, half, width, bus, driver, s, v: driver.v0 * 0.6, acc: 0, stopDone: -1, dwell: 0, committed: -1, pitch: 0, x: 0, z: 0, dx: 0, dz: 1 });
+    };
     for (const { route, spacing } of cars) {
       const n = Math.max(2, Math.floor(route.length / spacing));
       for (let i = 0; i < n; i++) {
         const h = hash(k++, 0x7a1);
-        const m = h % 10 < 3 ? taxis[h % taxis.length] : models[(h >>> 4) % models.length];
+        const taxi = h % 10 < 3;
+        const m = taxi ? taxis[h % taxis.length] : models[(h >>> 4) % models.length];
         const obj = new THREE.Mesh(m.geo, city);
         obj.castShadow = true;
-        this.group.add(obj);
-        this.vehicles.push({ obj, route, half: m.half, s0: (route.length * i) / n + ((h >>> 8) % 100) / 10, speed: CAR_SPEED * (0.9 + ((h >>> 12) % 20) / 100), bus: false, x: 0, z: 0, dx: 0, dz: 1 });
+        // Temperaments: taxis a little brisker; everyone a little different.
+        const r = (b: number): number => ((h >>> b) % 1000) / 1000;
+        const driver: Driver = { v0: (taxi ? 12.5 : 11) + r(8) * 3, a: 1.4 + r(12) * 1.2 + (taxi ? 0.4 : 0), b: 2.2 + r(16) * 1.2, T: 1.1 + r(20) * 0.6, s0: 2.2 + r(4) * 0.8 };
+        add(obj, m.brake, route, m.half, 1.8, false, driver, (route.length * i) / n + r(2) * 8);
       }
     }
     const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.22, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
+    const busBrake = new MeshBuilder();
+    busBrake.kind = KIND.plain;
+    busBrake.color = [1, 1, 1];
+    for (const sd of [-1, 1]) busBrake.box(sd * 0.75, -BUS_LEN / 2 - 0.08, 0.9, 1.1, 0.35, 0.02, KIND.plain, true);
+    const busBrakeGeo = busBrake.build()!;
     for (const { line, route } of buses) {
       const model = busModel(line);
       for (let i = 0; i < line.buses; i++) {
@@ -248,8 +308,7 @@ export class TrafficSystem {
         const gl = new THREE.Mesh(model.glass, glass);
         gl.renderOrder = 3;
         obj.add(body, gl, model.signs.clone());
-        this.group.add(obj);
-        this.vehicles.push({ obj, route, half: BUS_LEN / 2, s0: (this.busPeriod(route) * i) / line.buses, speed: BUS_SPEED, bus: true, x: 0, z: 0, dx: 0, dz: 1 });
+        add(obj, busBrakeGeo, route, BUS_LEN / 2, 2.5, true, { v0: 9.5, a: 0.9, b: 1.6, T: 1.6, s0: 3 }, (route.length * (i + 0.3)) / line.buses);
       }
     }
     const stops = busStops(buses, city);
@@ -257,48 +316,131 @@ export class TrafficSystem {
     this.colliders.push(...stops.colliders);
   }
 
-  /** A bus's loop: four legs, each a run to the next stop then a dwell there. */
-  private busPeriod(route: Route): number {
-    return route.length / BUS_SPEED + 4 * (BUS_DWELL + BUS_EASE / BUS_SPEED);
-  }
-
-  private busDistance(route: Route, t: number): number {
-    const period = this.busPeriod(route);
-    t = ((t % period) + period) % period;
-    // Legs start at the first stop (edge 0's middle); each is a run with a slow-down and pull-away, then a dwell.
-    const stopsAt = route.edges.map((e) => e.mid);
-    for (let i = 0; i < 4; i++) {
-      const from = stopsAt[i];
-      const to = i < 3 ? stopsAt[i + 1] : stopsAt[0] + route.length;
-      const d = to - from;
-      const T = d / BUS_SPEED + BUS_EASE / BUS_SPEED;
-      if (t < BUS_DWELL) return from;
-      t -= BUS_DWELL;
-      if (t < T) {
-        // Smoothstep over the run: pulls away and pulls in gently.
-        const u = t / T;
-        return from + d * u * u * (3 - 2 * u);
-      }
-      t -= T;
-    }
-    return stopsAt[0];
+  /** The time the signals run on (seconds). */
+  get clock(): number {
+    return this.time;
   }
 
   update(dt: number, camera: THREE.Vector3): void {
     this.time += dt;
-    for (const v of this.vehicles) {
-      const s = v.bus ? this.busDistance(v.route, this.time + v.s0) : v.s0 + this.time * v.speed;
-      const p = along(v.route, s);
+    const V = this.vehicles;
+    for (const v of V) {
+      const p = along(v.route, v.s);
       v.x = p.x;
       v.z = p.z;
       v.dx = p.dx;
       v.dz = p.dz;
-      const near = Math.hypot(p.x - camera.x, p.z - camera.z) < DRAW;
+    }
+    for (const v of V) v.acc = this.accel(v, dt);
+    for (const v of V) {
+      const L = v.route.length;
+      v.v = Math.max(0, v.v + v.acc * dt);
+      v.s = (v.s + v.v * dt) % L;
+      const near = Math.hypot(v.x - camera.x, v.z - camera.z) < DRAW;
       v.obj.visible = near;
       if (!near) continue;
+      const p = along(v.route, v.s);
       v.obj.position.set(p.x, 0, p.z);
       v.obj.rotation.y = Math.atan2(p.dx, p.dz);
+      // Nose dips under braking, lifts pulling away (eased, like a suspension settling).
+      const target = THREE.MathUtils.clamp(-v.acc * 0.0045, -0.012, 0.022) * (v.bus ? 0.5 : 1);
+      v.pitch += (target - v.pitch) * Math.min(1, dt * 6);
+      v.obj.rotation.x = v.pitch;
+      v.brake.visible = v.acc < -0.6 || v.v < 0.4;
     }
+  }
+
+  /** The vehicle's acceleration this frame: the most cautious of free driving and every obstacle. */
+  private accel(v: Vehicle, dt: number): number {
+    const d = v.driver;
+    const L = v.route.length;
+    let v0 = d.v0;
+    // Corners: slow to a turning speed in time.
+    for (const j of v.route.junctions) {
+      if (!j.turn) continue;
+      const dist = ahead(v.s, j.s, L);
+      if (dist < 60) v0 = Math.min(v0, Math.sqrt((j.turn === 'left' ? 4.5 : 5.5) ** 2 + 2 * d.b * 0.6 * Math.max(0, dist - 3)));
+    }
+    let a = idm(d, v.v, v0, Infinity, 0);
+    const obstacle = (gap: number, speed: number): void => {
+      a = Math.min(a, idm(d, v.v, v0, gap, v.v - speed));
+    };
+    // The vehicle ahead in the lane, on any loop: in front, roughly the same heading, not off to the side.
+    let lead: Vehicle | null = null;
+    let leadGap = Infinity;
+    for (const o of this.vehicles) {
+      if (o === v) continue;
+      const rx = o.x - v.x;
+      const rz = o.z - v.z;
+      const fwd = rx * v.dx + rz * v.dz;
+      if (fwd <= 0 || fwd > 70) continue;
+      if (Math.abs(rx * v.dz - rz * v.dx) > (v.width + o.width) / 2 + 0.3) continue;
+      if (o.dx * v.dx + o.dz * v.dz < 0.35) continue;
+      const gap = fwd - v.half - o.half;
+      if (gap < leadGap) [lead, leadGap] = [o, gap];
+    }
+    if (lead) obstacle(leadGap, lead.v * (lead.dx * v.dx + lead.dz * v.dz));
+    // Signals.
+    const js = v.route.junctions;
+    let next = -1;
+    let nextStop = Infinity;
+    js.forEach((j, i) => {
+      const dist = ahead(v.s, j.stop, L);
+      if (dist < nextStop && dist < 90) [next, nextStop] = [i, dist];
+    });
+    if (v.committed >= 0 && ahead(v.s, js[v.committed].s + js[v.committed].cross / 2 + 3, L) > L / 2) v.committed = -1;
+    if (next >= 0 && next !== v.committed) {
+      const j = js[next];
+      const light = this.signals.state(j.gx, j.gy, j.ns, this.time);
+      const canStop = nextStop > (v.v * v.v) / (2 * d.b) + 0.5;
+      let hold = light === 'red' ? nextStop > (v.v * v.v) / (2 * 8) : light === 'amber' ? canStop : false;
+      // Don't block the box: hold at the line if the queue beyond hasn't room for us.
+      if (!hold && lead && !j.turn && lead.v < 3 && leadGap - nextStop < j.cross + 2 * v.half + 3 && nextStop < 30) hold = true;
+      // Right turns cross the oncoming lane: wait while oncoming traffic is coming through.
+      if (!hold && j.turn === 'right' && this.oncoming(v, j)) hold = true;
+      // Front bumper at the stop line (the line is a point to halt at: add back the standstill gap).
+      if (hold) obstacle(nextStop - v.half + d.s0 - 0.3, 0);
+      else if (nextStop < 1.5) v.committed = next;
+    }
+    // Committed right-turners still yield in the junction to oncoming traffic.
+    if (v.committed >= 0) {
+      const j = js[v.committed];
+      const toCentre = ahead(v.s, j.s - 1.5, L);
+      if (j.turn === 'right' && toCentre < 12 && this.oncoming(v, j)) obstacle(toCentre, 0);
+    }
+    // Buses pull in at each edge's stop and wait there.
+    if (v.bus) {
+      v.route.edges.forEach((e, i) => {
+        if (i === v.stopDone) return;
+        const dist = ahead(v.s, e.mid, L);
+        if (dist > 80) return;
+        // The stop is a point to halt at, not a car to keep a gap from: add back the standstill gap.
+        if (dist < 1.5 && v.v < 0.5) {
+          v.dwell += dt;
+          if (v.dwell > BUS_DWELL) {
+            v.stopDone = i;
+            v.dwell = 0;
+          }
+          obstacle(d.s0 * 0.2, 0);
+        } else obstacle(dist + d.s0 - 0.5, 0);
+      });
+    }
+    return THREE.MathUtils.clamp(a, -9, d.a * 1.2);
+  }
+
+  /** Oncoming traffic on its way through junction j (moving, heading the other way, near the box). */
+  private oncoming(v: Vehicle, j: Junction): boolean {
+    for (const o of this.vehicles) {
+      if (o === v || o.v < 1) continue;
+      if (o.dx * v.dx + o.dz * v.dz > -0.8) continue;
+      const rx = j.x - o.x;
+      const rz = j.z - o.z;
+      const toward = rx * o.dx + rz * o.dz;
+      if (toward < -4 || toward > 40) continue;
+      if (Math.abs(rx * o.dz - rz * o.dx) > 10) continue;
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -319,13 +461,13 @@ export class TrafficSystem {
     return near.length;
   }
 
-  /** The n moving vehicles nearest a point, as (x, z), nearest first. */
-  nearest(p: THREE.Vector3, n: number): [number, number][] {
+  /** The n vehicles nearest a point: position, velocity, acceleration, and whether it's a bus. */
+  nearest(p: THREE.Vector3, n: number): { x: number; z: number; vx: number; vz: number; speed: number; acc: number; bus: boolean }[] {
     return this.vehicles
       .map((v) => ({ v, d: (v.x - p.x) ** 2 + (v.z - p.z) ** 2 }))
       .sort((a, b) => a.d - b.d)
       .slice(0, n)
-      .map(({ v }) => [v.x, v.z]);
+      .map(({ v }) => ({ x: v.x, z: v.z, vx: v.dx * v.v, vz: v.dz * v.v, speed: v.v, acc: v.acc, bus: v.bus }));
   }
 
   /** Whether a walker at (x, z) of radius r touches a vehicle. */
@@ -336,12 +478,93 @@ export class TrafficSystem {
       if (Math.abs(ox) > 7 || Math.abs(oz) > 7) continue;
       const a = ox * v.dx + oz * v.dz;
       const c = ox * v.dz - oz * v.dx;
-      if (Math.abs(a) < v.half + r && Math.abs(c) < (v.bus ? 1.3 : 0.9) + r) return true;
+      if (Math.abs(a) < v.half + r && Math.abs(c) < v.width / 2 + r) return true;
     }
     return false;
   }
 
   get count(): number {
     return this.vehicles.length;
+  }
+
+  /** Diagnostics: the smallest bumper gap between any two vehicles in the same lane (negative = overlap). */
+  minGap(): number {
+    let m = Infinity;
+    for (const v of this.vehicles) {
+      for (const o of this.vehicles) {
+        if (o === v || o.dx * v.dx + o.dz * v.dz < 0.35) continue;
+        const rx = o.x - v.x;
+        const rz = o.z - v.z;
+        const fwd = rx * v.dx + rz * v.dz;
+        if (fwd <= 0 || Math.abs(rx * v.dz - rz * v.dx) > 1.5) continue;
+        m = Math.min(m, fwd - v.half - o.half);
+      }
+    }
+    return m;
+  }
+}
+
+/**
+ * The lit lamps on the signal poles near the camera, following the junctions' signals: one lens of three
+ * (green, amber, red) on each face of each head, drawn as instanced emissive quads over the dark lenses
+ * baked into the chunk meshes (props.ts signal()).
+ */
+export class SignalLamps {
+  readonly mesh: THREE.InstancedMesh;
+  private heads: { gx: number; gy: number; ns: boolean; base: number }[] = [];
+  private last = new THREE.Vector3(1e9, 0, 0);
+  private static readonly MAX = 900;
+  private readonly m = new THREE.Matrix4();
+  private readonly col = new THREE.Color();
+
+  constructor(
+    private readonly signals: Signals,
+    private readonly near: (x: number, z: number, r: number) => readonly Prop[],
+  ) {
+    this.mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.3, 0.32), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }), SignalLamps.MAX);
+    this.mesh.count = 0;
+    this.mesh.frustumCulled = false;
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SignalLamps.MAX * 3), 3);
+  }
+
+  update(camera: THREE.Vector3, time: number): void {
+    if (camera.distanceToSquared(this.last) > 400) {
+      this.last.copy(camera);
+      this.heads = [];
+      let n = 0;
+      for (const p of this.near(camera.x, camera.z, 220)) {
+        if (n + 6 > SignalLamps.MAX) break;
+        const arm = Math.max(1.5, p.arm ?? 3);
+        const nv = [p.nx, 0, p.nz];
+        const r = [p.nz, 0, -p.nx];
+        const base = n;
+        // The same lens positions as props.ts signal(): 3 lamps along the arm, on both faces.
+        for (const face of [-1, 1]) {
+          for (let i = 0; i < 3; i++) {
+            const a = arm - 1.1 + i * 0.37 + (face < 0 ? 0.15 : 0.15);
+            const du = face < 0 ? -0.265 : 0.015;
+            const x = p.x + r[0] * du + nv[0] * a;
+            const z = p.z + r[2] * du + nv[2] * a;
+            this.m.makeRotationY(Math.atan2(r[0] * face, r[2] * face)).setPosition(x, 5.22, z);
+            this.mesh.setMatrixAt(n++, this.m);
+          }
+        }
+        this.heads.push({ gx: Math.round(p.x / 128), gy: Math.round(p.z / 128), ns: Math.abs(p.nx) > 0.5, base });
+      }
+      this.mesh.count = n;
+      this.mesh.instanceMatrix.needsUpdate = true;
+    }
+    const LIT: [number, number, number][] = [[0.2, 2.2, 1.4], [2.6, 1.5, 0.1], [3.0, 0.15, 0.08]];
+    for (const h of this.heads) {
+      const st = this.signals.state(h.gx, h.gy, h.ns, time);
+      const on = st === 'green' ? 0 : st === 'amber' ? 1 : 2;
+      for (let k = 0; k < 6; k++) {
+        const i = k % 3;
+        if (i === on) this.col.setRGB(...LIT[i]);
+        else this.col.setRGB(0.02, 0.02, 0.02);
+        this.mesh.setColorAt(h.base + k, this.col);
+      }
+    }
+    this.mesh.instanceColor!.needsUpdate = true;
   }
 }

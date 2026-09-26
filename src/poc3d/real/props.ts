@@ -6,6 +6,9 @@ import type { Light } from './lightmap';
 import { addCar } from './cars';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
 
+/** Cell size (district/plan.ts CELL): signals stand where cell-edge roads cross. */
+const CELL3 = 128;
+
 /**
  * Street furniture derived from a cell plan (pure: same plan, same props): street lamps along roads with
  * pavements, concrete utility poles with overhead wires along the narrow streets, and vending machines
@@ -90,13 +93,17 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
               if (mine(x2, z2)) props.push({ kind: 'tree', x: x2, z: z2, nx: nx2, nz: nz2, radius: 0.3, variant: hash(Math.round(x2), Math.round(z2)) % 8 });
             }
           }
-          // Traffic signals where the road meets a junction (one per approach; traffic keeps left).
+          // Traffic signals where two cell-edge roads cross (one per approach; traffic keeps left). Their lamps
+          // are driven live (real/traffic.ts SignalLamps) from the junction's signal (district/traffic.ts).
           const q0 = r.vertical ? q.y : q.x;
           const q1 = r.vertical ? q.y + q.h : q.x + q.w;
-          if (width >= 8) {
+          const centre = r.vertical ? q.x + q.w / 2 : q.y + q.h / 2;
+          const signalRoad = Math.abs(centre - Math.round(centre / CELL3) * CELL3) < 0.01;
+          if (width >= 8 && signalRoad) {
             const ends: [number, number][] = [[e - 1.5, -1], [s + 1.5, 1]];
             for (const [t, sd] of ends) {
               if (sd !== side || Math.abs(t - q0) < 2 || Math.abs(t - q1) < 2) continue;
+              if (Math.abs(t - Math.round(t / CELL3) * CELL3) > 13) continue;
               const [x, z, nx, nz] = along(t, side, r.sidewalk - 0.35);
               if (mine(x, z)) props.push({ kind: 'signal', x, z, nx, nz, radius: 0.2, variant: hash(Math.round(x), Math.round(z)) % 3, arm: (width - 2 * r.sidewalk) / 2 - 0.5 });
             }
@@ -335,14 +342,13 @@ function signal(mb: MeshBuilder, p: Prop): void {
   mb.frameBox(o, r, n, -0.05, 0.05, 5.3, 5.4, 0, arm);
   mb.color = lin(0x5a5e62);
   mb.frameBox(o, r, n, -0.25, 0.0, 5.0, 5.45, arm - 1.2, arm);
-  const lamps: C3[] = [[0.1, 0.8, 0.55], [1.0, 0.65, 0.05], [1.0, 0.08, 0.04]];
   for (const face of [-1, 1]) {
     for (let i = 0; i < 3; i++) {
       const a = arm - 1.1 + i * 0.37;
-      const on = i === p.variant;
-      mb.kind = on ? KIND.emit : KIND.plain;
-      mb.style = [on ? EMIT.always : 0, 0, 0, 0];
-      mb.color = on ? lamps[i] : [0.03, 0.03, 0.03];
+      // Dark lenses: the lit one is drawn over them live.
+      mb.kind = KIND.plain;
+      mb.style = [0, 0, 0, 0];
+      mb.color = [0.03, 0.03, 0.03];
       // A lamp disc on each broad face of the head (facing -r and +r).
       const du = face < 0 ? -0.255 : 0.005;
       const c: C3 = [o[0] + r[0] * du + n[0] * (face < 0 ? a : a + 0.3), 5.06, o[2] + r[2] * du + n[2] * (face < 0 ? a : a + 0.3)];

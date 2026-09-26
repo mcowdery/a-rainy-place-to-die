@@ -74,6 +74,59 @@ export interface Route {
   readonly length: number;
   /** Per edge: the left kerb offset from the lane (for bus shelters) and the edge's mid distance. */
   readonly edges: readonly { readonly mid: number; readonly kerb: readonly [number, number]; readonly dir: readonly [number, number]; readonly side: Side }[];
+  /** The signal-controlled junctions along the route (every grid corner it passes), in route order. */
+  readonly junctions: readonly Junction[];
+}
+
+/** A junction on a route: a grid corner where two cell-edge roads cross. */
+export interface Junction {
+  /** Grid corner (L0 column and row of the crossing lines). */
+  readonly gx: number;
+  readonly gy: number;
+  /** Distance along the route of the junction centre, and of the stop line before it. */
+  readonly s: number;
+  readonly stop: number;
+  /** The route approaches along the north-south road (travel in z). */
+  readonly ns: boolean;
+  /** Whether the route turns here (at the rectangle's corners). Right turns cross the oncoming lane. */
+  readonly turn: 'left' | 'right' | null;
+  /** Width of the road it crosses (the junction box's depth). */
+  readonly cross: number;
+  readonly x: number;
+  readonly z: number;
+}
+
+/**
+ * The traffic signal at every grid-corner junction: north-south green, amber, all red; then east-west
+ * green, amber, all red (and at scramble crossings an all-red pedestrian phase). Each junction runs on its
+ * own offset. A pure function of the junction and the time, so the cars and the lamps always agree.
+ */
+export class Signals {
+  static readonly GREEN = 20;
+  static readonly AMBER = 3;
+  static readonly CLEAR = 3;
+  static readonly SCRAMBLE = 14;
+
+  constructor(private readonly scrambles: ReadonlySet<string> = new Set()) {}
+
+  cycle(gx: number, gy: number): number {
+    const leg = Signals.GREEN + Signals.AMBER + Signals.CLEAR;
+    return 2 * leg + (this.scrambles.has(`${gx},${gy}`) ? Signals.SCRAMBLE : 0);
+  }
+
+  /** The light facing traffic on the north-south (ns) or east-west road at a junction, at time t. */
+  state(gx: number, gy: number, ns: boolean, t: number): 'green' | 'amber' | 'red' {
+    const cycle = this.cycle(gx, gy);
+    const offset = (((gx * 7919 + gy * 104729) % cycle) + cycle) % cycle;
+    const leg = Signals.GREEN + Signals.AMBER + Signals.CLEAR;
+    const u = (((t + offset) % cycle) + cycle) % cycle - (ns ? 0 : leg);
+    if (u < 0 || u >= leg) return 'red';
+    return u < Signals.GREEN ? 'green' : u < Signals.GREEN + Signals.AMBER ? 'amber' : 'red';
+  }
+
+  isScramble(gx: number, gy: number): boolean {
+    return this.scrambles.has(`${gx},${gy}`);
+  }
 }
 
 /**
@@ -144,7 +197,29 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
     const side: Side = l.d[0] === 0 ? (l.p[0] === X0 ? 'west' : 'east') : l.p[1] === Z0 ? 'north' : 'south';
     return { mid: (dist[i] + dist[i + 1]) / 2, kerb: [left[0] * (l.kerb - l.o), left[1] * (l.kerb - l.o)] as [number, number], dir: l.d, side };
   });
-  return { pts, dist, length: dist[4], edges };
+  // Junctions: every grid corner along each edge (including the corner it turns at, not the one it
+  // started from), projected onto the lane; the stop line sits before the crossing road's zebra.
+  const junctions: Junction[] = [];
+  for (let i = 0; i < 4; i++) {
+    const a = corners[i];
+    const b = corners[(i + 1) % 4];
+    const l = lanes[i];
+    const vertical = l.d[0] === 0;
+    const n = Math.round(Math.abs(vertical ? b[1] - a[1] : b[0] - a[0]) / CELL);
+    for (let k = 1; k <= n; k++) {
+      const G: [number, number] = vertical ? [a[0], a[1] + l.d[1] * k * CELL] : [a[0] + l.d[0] * k * CELL, a[1]];
+      const proj = (G[0] - pts[i][0]) * l.d[0] + (G[1] - pts[i][1]) * l.d[1];
+      const s = dist[i] + proj;
+      const cross = half(!vertical, vertical ? G[1] : G[0], (vertical ? G[0] : G[1]) - CELL / 2, (vertical ? G[0] : G[1]) + CELL / 2).w;
+      let turn: Junction['turn'] = null;
+      if (k === n) {
+        const nd = lanes[(i + 1) % 4].d;
+        turn = l.d[0] * nd[1] - l.d[1] * nd[0] > 0 ? 'right' : 'left';
+      }
+      junctions.push({ gx: Math.round(G[0] / CELL), gy: Math.round(G[1] / CELL), s, stop: s - cross / 2 - 5, ns: vertical, turn, cross, x: G[0], z: G[1] });
+    }
+  }
+  return { pts, dist, length: dist[4], edges, junctions };
 }
 
 /** Position and heading at distance s along a route (headings ease round the corners). */

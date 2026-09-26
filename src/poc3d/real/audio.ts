@@ -8,7 +8,8 @@
  *   hollow drumming and drips join in; fully indoors (a shop, a basement) it's heavily muffled.
  * - Wind: band-passed noise following the gusts; a resonant howl on top in a gale.
  * - Thunder: a crack for close strikes, a long low roll for far ones, delayed by distance (340 m/s).
- * - Tyres: a hiss for each of the nearest moving cars on wet roads, louder and panned as they pass.
+ * - Tyres and engines: for the nearest cars, a tyre hiss (loud on wet roads) and an engine whose pitch
+ *   follows speed, gears and throttle, idling at the lights, with Doppler as they pass.
  * The context starts on the first click (browsers need a gesture).
  */
 
@@ -36,8 +37,8 @@ export interface AudioFrame {
   readonly x: number;
   readonly z: number;
   readonly yaw: number;
-  /** Nearest moving vehicles (x, z), nearest first, and how wet the road is 0-1. */
-  readonly cars: readonly (readonly [number, number])[];
+  /** Nearest vehicles (position, velocity, speed, acceleration, bus), nearest first; how wet the road is 0-1. */
+  readonly cars: readonly { readonly x: number; readonly z: number; readonly vx: number; readonly vz: number; readonly speed: number; readonly acc: number; readonly bus: boolean }[];
   readonly wet: number;
 }
 
@@ -67,7 +68,7 @@ export class CityAudio {
   // Train rumble.
   private trainGain!: GainNode;
   // Tyres.
-  private tyres: { gain: GainNode; pan: StereoPannerNode; band: BiquadFilterNode }[] = [];
+  private tyres: { gain: GainNode; pan: StereoPannerNode; band: BiquadFilterNode; engine: GainNode; osc: OscillatorNode[]; lp: BiquadFilterNode }[] = [];
   private patterDebt = 0;
   private roofDebt = 0;
   private dripDebt = 0;
@@ -166,7 +167,24 @@ export class CityAudio {
       gain.gain.value = 0;
       const pan = ctx.createStereoPanner();
       this.loop(this.noise, 0.4 + i).connect(band).connect(gain).connect(pan).connect(this.cover);
-      this.tyres.push({ gain, pan, band });
+      // The engine: a low sawtooth and a detuned square an octave down (the firing rumble), filtered
+      // brighter under load; pitch follows the revs, Doppler as it passes.
+      const engine = ctx.createGain();
+      engine.gain.value = 0;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 300;
+      lp.Q.value = 2;
+      const osc = [ctx.createOscillator(), ctx.createOscillator()];
+      osc[0].type = 'sawtooth';
+      osc[1].type = 'square';
+      for (const o of osc) {
+        o.frequency.value = 40;
+        o.connect(lp);
+        o.start();
+      }
+      lp.connect(engine).connect(pan);
+      this.tyres.push({ gain, pan, band, engine, osc, lp });
     }
     void this.loadRecordings();
   }
@@ -370,12 +388,26 @@ export class CityAudio {
       const c = f.cars[i];
       if (!c) {
         set(v.gain.gain, 0);
+        set(v.engine.gain, 0);
         return;
       }
-      const dx = c[0] - f.x;
-      const dz = c[1] - f.z;
+      const dx = c.x - f.x;
+      const dz = c.z - f.z;
       const d = Math.hypot(dx, dz);
-      const level = (0.03 + 0.4 * f.wet) * Math.min(1, 6 / Math.max(d, 1)) * (d < 60 ? 1 : 0);
+      const near = Math.min(1, 6 / Math.max(d, 1)) * (d < 70 ? 1 : 0);
+      // Tyre noise grows with speed, and a lot on a wet road.
+      const level = (0.03 + 0.4 * f.wet) * near * Math.min(1, c.speed / 8);
+      // Engine: revs from speed (a gear change every ~4 m/s) plus throttle; idle when standing.
+      const gearSpeed = c.speed % 4.5;
+      const revs = (c.bus ? 22 : 30) + gearSpeed * (c.bus ? 5 : 8) + Math.min(c.speed, 14) * 1.5;
+      const throttle = THREE_clamp(0.25 + c.acc * 0.45, 0.12, 1);
+      // Doppler: closing speed along the line to the listener.
+      const closing = d > 0.1 ? -(c.vx * dx + c.vz * dz) / d : 0;
+      const doppler = 343 / (343 - THREE_clamp(closing, -30, 30));
+      set(v.osc[0].frequency, revs * doppler, 0.08);
+      set(v.osc[1].frequency, revs * 0.5 * doppler * 1.01, 0.08);
+      set(v.lp.frequency, 180 + 900 * throttle + c.speed * 20, 0.1);
+      set(v.engine.gain, (c.bus ? 0.16 : 0.1) * near * (0.35 + 0.65 * throttle) * (f.cover === 'enclosed' ? 0.3 : 1), 0.1);
       tyreSum += level;
       set(v.gain.gain, level, 0.1);
       // Pan: how far right of the view the car is (yaw 0 looks toward -z; the right is then +x).
@@ -385,4 +417,8 @@ export class CityAudio {
     });
     this.levels.tyres = tyreSum;
   }
+}
+
+function THREE_clamp(x: number, a: number, b: number): number {
+  return Math.min(b, Math.max(a, x));
 }
