@@ -29,7 +29,8 @@ const NO_TEXT = 'no text, no lettering, no logos, no watermark';
 /** Composition hints and default sizes per use (all crops happen after approval). */
 const USES = {
   taxi: { size: [1024, 1024], hint: 'vertical composition' },
-  poster: { size: [832, 1216], hint: 'vertical poster composition' },
+  // (The word "poster" makes the model paint garbled lettering.)
+  poster: { size: [832, 1216], hint: 'vertical composition, photograph only' },
   // (Avoid the word "billboard": the model then draws a photo *of* a billboard with an empty panel.)
   // ("Leave space for text" gave blank white halves: ask for an off-centre subject in a full-frame scene.)
   billboard: { size: [1536, 768], hint: 'wide horizontal composition, subject off-centre to one side, the background scene continues across the whole frame' },
