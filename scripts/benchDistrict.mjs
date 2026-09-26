@@ -2,10 +2,13 @@
 // frame times while streaming up and down a street through the district at 30 m/s, then standing still with the ASCII overlay on and off.
 //   node scripts/benchDistrict.mjs            headless (GPU flags on; check the reported GPU)
 //   node scripts/benchDistrict.mjs --headed   visible window
+//   node scripts/benchDistrict.mjs --query "dark=1&shadows=4"   extra settings for both runs
 import { chromium } from 'playwright-core';
 import { createServer } from 'vite';
 
 const headed = process.argv.includes('--headed');
+const qi = process.argv.indexOf('--query');
+const extra = qi > 0 ? `&${process.argv[qi + 1]}` : '';
 const server = await createServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
@@ -17,7 +20,7 @@ const browser = await chromium.launch({
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   for (const q of ['time=night&weather=clear', 'time=night&weather=rain']) {
-    await page.goto(`${base}district.html?bench=1&${q}`);
+    await page.goto(`${base}district.html?bench=1&${q}${extra}`);
     const r = await page.waitForFunction(() => window.__bench, null, { timeout: 180_000, polling: 500 }).then((h) => h.jsonValue());
     console.log(`\n## Kaburo (${q})  viewport ${r.viewport}, GPU: ${r.gpu}`);
     console.log(`district: ${r.districtCells} chunks of 128 m · warm start ${r.warmStart.chunks} chunks in ${r.warmStart.ms} ms`);

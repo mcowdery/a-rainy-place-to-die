@@ -23,8 +23,9 @@ import { buildStation } from '../real/station';
 import { ASAGIRI_KINDS, buildAsagiri, type AsagiriKind } from '../real/asagiri';
 import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { TrafficSystem } from '../real/traffic';
-import { GRADE_NAMES, GradePass, type GradeName } from '../real/grade';
-import { LampCones, RainSystem } from '../real/weather';
+import { GRADE_NAMES, GradePass } from '../real/grade';
+import { LampCones, LampShadows, Lightning, RainSystem } from '../real/weather';
+import { moodFromUrl, MoodPanel } from './moodPanel';
 import { routeFor } from './traffic';
 import { destinations, TravelMap, type Destination } from './travel';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
@@ -126,8 +127,9 @@ async function run(): Promise<void> {
   composer.addPass(new OutputPass());
   // The colour grade, last, on the display image: C cycles the looks, ?grade= picks one.
   const grade = new GradePass();
-  const gradeParam = params.get('grade') as GradeName | null;
-  if (gradeParam && GRADE_NAMES.includes(gradeParam)) grade.grade = gradeParam;
+  // Weather and light settings on top of the atmosphere (K opens the panel; also from the URL).
+  const mood = moodFromUrl(params);
+  grade.grade = mood.grade;
   composer.addPass(grade);
 
   // Stamp dressing (door, noren, lanterns) and NPCs as ghosts (visibility follows their conditions).
@@ -180,7 +182,13 @@ async function run(): Promise<void> {
   // Weather near the camera: rain streaks and splashes lit by the street, light cones under the lamps.
   const rain = new RainSystem(cityU);
   const cones = new LampCones();
-  scene.add(rain.group, cones.mesh);
+  const lampShadows = new LampShadows();
+  const lightning = new Lightning();
+  scene.add(rain.group, cones.mesh, lampShadows.group);
+  const windVec = new THREE.Vector2();
+  let skyTime = 0;
+  // The viaduct keeps the rain off the street under it.
+  if (rail) district.shelters.push({ rect: { x: rail.x - 5, y: rail.z0, w: 10, h: rail.z1 - rail.z0 }, y0: -1, y1: 7.8 });
   district.addColliders(traffic.colliders);
   for (const placed of content.placed) {
     const lm = placed.stamp.landmark;
@@ -308,9 +316,43 @@ async function run(): Promise<void> {
     cityU.uFlicker.value = atm.neon === 'flicker' ? 1 : 0;
     cityU.uWet.value = atm.rain > 0 ? 1 : 0;
     renderer.toneMappingExposure = atm.exposure;
-    overlay.setFog(atm.fogNear, atm.fogFar, fog.color);
-    fogScale = 1;
+    applyMood();
   };
+  // The mood settings layered on the atmosphere: rain strength, fog density, darkness, lamp shadows.
+  const base = { zenith: new THREE.Color(), horizon: new THREE.Color(), cloudLit: new THREE.Color(), hemi: 0, fogNear: 60, fogFar: 620 };
+  let rainAmount = 0;
+  const applyMood = (): void => {
+    const fog = scene.fog as THREE.Fog;
+    rainAmount = mood.rain ?? (atm.rain > 0 ? 0.45 : 0);
+    const d = mood.darkness;
+    const keep = 1 - 0.9 * d;
+    // Heavy rain and wind-blown spray close the view in; the fog setting scales the density.
+    const vis = (1 - rainAmount * 0.45) * (1 - mood.wind * rainAmount * 0.3) / mood.fog;
+    base.fogNear = atm.fogNear * vis;
+    base.fogFar = atm.fogFar * vis;
+    fog.color.setHex(atm.fog).multiplyScalar(1 - 0.8 * d);
+    base.hemi = atm.hemi * keep;
+    sun.intensity = atm.sun * keep;
+    base.zenith.setHex(atm.sky).multiplyScalar(1 - 0.85 * d);
+    base.horizon.setHex(atm.horizon).multiplyScalar(1 - 0.85 * d);
+    base.cloudLit.setHex(atm.cloudLit).multiplyScalar(1 - 0.7 * d);
+    sky.uniforms.uCloudDark.value.setHex(atm.cloudDark).multiplyScalar(1 - 0.7 * d);
+    sky.uniforms.uCover.value = rainAmount > 0 ? Math.max(atm.clouds, 0.75 + rainAmount * 0.25) : atm.clouds;
+    sky.uniforms.uStars.value = time() === 'night' && rainAmount === 0 && weather() === 'clear' ? 1 - d * 0.5 : 0;
+    cityU.uZenith.value.copy(base.zenith);
+    cityU.uHorizon.value.copy(base.horizon);
+    cityU.uRoomAmbient.value.setHex(atm.hemiSky).multiplyScalar(atm.hemi * 0.12 * keep);
+    cityU.uWindowLit.value = atm.windowLit * (1 - 0.85 * d);
+    cityU.uWet.value = rainAmount > 0 || atm.rain > 0 ? 1 : 0;
+    // With shadow-casting lamps, the lamps' share of the baked street light is handed to the real lights.
+    lampShadows.setCount(mood.shadows);
+    cityU.uLightGain.value = 1.4 * atm.lamps * (mood.shadows > 0 ? 0.6 : 1);
+    cityU.uDark.value = d;
+    renderer.toneMappingExposure = atm.exposure * (1 - 0.3 * d);
+    grade.grade = mood.grade;
+    fogScale = 0;
+  };
+  const panel = new MoodPanel(mood, applyMood);
   // Up high (the observatory, flying) the air clears: the fog and the overlay's dissolve move out.
   let fogScale = 1;
   const fitFog = (): void => {
@@ -318,8 +360,8 @@ async function run(): Promise<void> {
     if (k === fogScale) return;
     fogScale = k;
     const fog = scene.fog as THREE.Fog;
-    fog.near = atm.fogNear * k;
-    fog.far = atm.fogFar * k;
+    fog.near = base.fogNear * k;
+    fog.far = base.fogFar * k;
     overlay.setFog(fog.near, fog.far, fog.color);
   };
   applyAtmosphere();
@@ -446,7 +488,15 @@ async function run(): Promise<void> {
     if (e.code === 'KeyT') flags.set(FLAG_TIME, TIMES[(TIMES.indexOf(time()) + 1) % TIMES.length]);
     if (e.code === 'KeyR') flags.set(FLAG_WEATHER, WEATHERS[(WEATHERS.indexOf(weather()) + 1) % WEATHERS.length]);
     if (e.code === 'KeyF') controls.fly = !controls.fly;
-    if (e.code === 'KeyC') grade.grade = GRADE_NAMES[(GRADE_NAMES.indexOf(grade.grade) + 1) % GRADE_NAMES.length];
+    if (e.code === 'KeyC') {
+      mood.grade = GRADE_NAMES[(GRADE_NAMES.indexOf(mood.grade) + 1) % GRADE_NAMES.length];
+      grade.grade = mood.grade;
+      panel.refresh();
+    }
+    if (e.code === 'KeyK') {
+      panel.toggle();
+      if (panel.open) document.exitPointerLock();
+    }
     if (e.code === 'KeyV') overlay.preset = OVERLAY_PRESETS[(OVERLAY_PRESETS.indexOf(overlay.preset) + 1) % OVERLAY_PRESETS.length];
     if (direct[e.code]) overlay.preset = direct[e.code];
     if (e.code === 'KeyG') overlay.dither = !overlay.dither;
@@ -457,7 +507,7 @@ async function run(): Promise<void> {
     if (e.code === 'Quote') bloom.threshold = Math.min(5, +(bloom.threshold + 0.1).toFixed(2));
     if (e.code === 'KeyP') controls.setShearMode(!controls.shearMode);
   });
-  document.body.addEventListener('click', () => !bench && !inVn && !travel.open && controls.look.lock());
+  document.body.addEventListener('click', () => !bench && !inVn && !travel.open && !panel.open && controls.look.lock());
   controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
   controls.look.addEventListener('unlock', () => ($('overlay').hidden = bench));
   window.addEventListener('resize', () => {
@@ -522,11 +572,31 @@ async function run(): Promise<void> {
     for (const update of landmarkUpdates) update(camera.position, dt);
     trains?.update(dt, camera);
     traffic.update(dt, camera.position);
-    const wet = atm.rain > 0 && !trains?.riding && !district.sheltered(camera.position.x, camera.position.z, camera.position.y - 1.7) ? 1 : 0;
-    rain.update(now / 1000, camera.position, wet * 0.8);
-    cones.update(camera.position, (x, z, r) => district.lampsNear(x, z, r), atm.haze * atm.lamps * 0.05);
-    sky.uniforms.uTime.value = now / 1000;
-    grade.tick(now / 1000, wet * 0.8);
+    // Wind: a direction and strength with gusts; the rain slants by up to ~3 m sideways per metre of fall.
+    const tt = now / 1000;
+    const gust = 0.72 + 0.2 * Math.sin(tt * 0.83) + 0.12 * Math.sin(tt * 2.31 + 1.3) + 0.06 * Math.sin(tt * 5.7);
+    const blow = mood.wind * gust;
+    const wa = (mood.windDir * Math.PI) / 180;
+    windVec.set(Math.sin(wa), -Math.cos(wa)).multiplyScalar(blow * 3.2);
+    const cp = camera.position;
+    const lamps = (x: number, z: number, r: number) => district.lampsNear(x, z, r);
+    // Riding the train, the car is the shelter.
+    const shelters = district.sheltersNear(cp.x, cp.z, 45, 11);
+    if (trains?.riding) shelters.unshift({ rect: { x: cp.x - 1.6, y: cp.z - 30, w: 3.2, h: 60 }, y0: 0, y1: 20 });
+    rain.update(tt, dt, cp, rainAmount, windVec, shelters);
+    const inside = trains?.riding || district.sheltered(cp.x, cp.z, cp.y);
+    cones.update(cp, lamps, Math.max(atm.haze, rainAmount * 1.2) * atm.lamps * 0.05 * (1 - 0.3 * mood.darkness));
+    lampShadows.update(cp, lamps, atm.lamps * 55);
+    skyTime += dt * (1 + mood.wind * 30);
+    sky.uniforms.uTime.value = skyTime;
+    grade.tick(tt, inside ? 0 : rainAmount * (1 + mood.wind));
+    // Lightning in a storm (or on demand): the sky, the clouds and the ambient light flash.
+    const storm = mood.lightning === 'on' ? 1 : mood.lightning === 'auto' && rainAmount > 0.6 && mood.wind > 0.35 ? rainAmount * mood.wind : 0;
+    const flash = lightning.update(dt, storm);
+    hemi.intensity = base.hemi + flash * 2.4;
+    sky.uniforms.uZenith.value.copy(base.zenith).addScalar(flash * 0.35);
+    sky.uniforms.uHorizon.value.copy(base.horizon).addScalar(flash * 0.25);
+    sky.uniforms.uCloudLit.value.copy(base.cloudLit).addScalar(flash * 0.6);
     fitFog();
 
     const t0 = performance.now();
@@ -548,7 +618,7 @@ async function run(): Promise<void> {
     sun.target.position.set(tx, 0, tz);
     sun.position.set(tx + sd.x * 400, sd.y * 400, tz + sd.z * 400);
     cityU.uTime.value = now / 1000;
-    overlay.setRain(atm.rain, now / 1000);
+    overlay.setRain(rainAmount * 0.11 * (inside ? 0 : 1), now / 1000);
     renderer.info.reset();
     composer.render(dt);
     if (bench) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
@@ -573,7 +643,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        trains?.status ?? `${(district.districtAt(p.x, p.z) ?? style.name).toUpperCase()} · ${district.zoneAt(p.x, p.z) ?? ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}`,
+        trains?.status ?? `${(district.districtAt(p.x, p.z) ?? style.name).toUpperCase()} · ${district.zoneAt(p.x, p.z) ?? ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
@@ -581,7 +651,7 @@ async function run(): Promise<void> {
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t ? `[E] ${t.kind === 'door' ? 'Enter' : t.kind === 'station' ? (isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : ' ',
-        'click to look · WASD · Shift run · E interact · M map / fast travel · T time · R weather · C grade · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
+        'click to look · WASD · Shift run · E interact · M map / fast travel · T time · R weather · K weather & light panel · C grade · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
       ].join('\n');
       builtThisWindow = 0;
     }

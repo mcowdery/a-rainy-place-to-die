@@ -7,7 +7,8 @@ import { yokochoColliders, yokochoLights } from '../real/yokocho';
 import { ryujinColliders, ryujinLights } from '../real/ryujin';
 import { discountColliders, discountLights } from '../real/discount';
 import { stationColliders, stationFloor, stationLights } from '../real/station';
-import { ASAGIRI_KINDS, asagiriColliders, asagiriFloor, asagiriLights, type AsagiriKind } from '../real/asagiri';
+import { ASAGIRI_KINDS, asagiriColliders, asagiriFloor, asagiriLights, asagiriShelters, type AsagiriKind } from '../real/asagiri';
+import { localFrame, localRect } from '../real/localFrame';
 
 const asagiri = (p: Placed3): AsagiriKind | null => ((ASAGIRI_KINDS as readonly string[]).includes(p.stamp.landmark ?? '') ? (p.stamp.landmark as AsagiriKind) : null);
 import { liveHouseColliders, liveHouseFloor, liveHouseHoles, liveHouseLights } from '../real/liveHouse';
@@ -71,6 +72,35 @@ export function landmarkLights(p: Placed3): Light[] {
       return discountLights(p.building);
     case 'station':
       return stationLights(p.building);
+    default:
+      return [];
+  }
+}
+
+/** A covered volume: no rain falls inside it (a roof over your head, or walls round you). */
+export interface Shelter {
+  readonly rect: Rect;
+  readonly y0: number;
+  readonly y1: number;
+}
+
+/** A landmark's covered volumes: walk-in interiors, canopies, the station, the observatory. */
+export function landmarkShelters(p: Placed3): Shelter[] {
+  const a = asagiri(p);
+  if (a) return asagiriShelters(a, p.building);
+  const b = p.building;
+  const whole = { rect: { x: b.x - b.w / 2, y: b.z - b.d / 2, w: b.w, h: b.d }, y0: -10, y1: b.h };
+  const f = localFrame(b);
+  switch (p.stamp.landmark) {
+    case 'konbini':
+      return [whole];
+    case 'live_house':
+      return [{ rect: localRect(f, 0, 3.4, 0, 22), y0: -6, y1: 3.0 }, { rect: localRect(f, 0, 10, 6, 22), y0: -6, y1: 0 }];
+    case 'station':
+      // The station building and the platforms under their canopy, out over the tracks.
+      return [{ rect: localRect(f, 0, 60, -17.8, 24), y0: -1, y1: 16.6 }];
+    case 'love_hotel':
+      return [{ rect: localRect(f, 9, 15, 1.6, 4), y0: 0, y1: 3.3 }];
     default:
       return [];
   }

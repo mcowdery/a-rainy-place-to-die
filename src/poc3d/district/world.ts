@@ -10,7 +10,7 @@ import { DistrictModel } from './model';
 import { CELL, cellKey, DISTRICTS3, STYLES3, type Building3, type CellPlan3 } from './plan';
 import type { Node3, Placed3 } from './stamps';
 import type { ZoneMap } from './zones';
-import { landmarkColliders, landmarkFloor, landmarkRaisedColliders } from './landmarks';
+import { landmarkColliders, landmarkFloor, landmarkRaisedColliders, landmarkShelters, type Shelter } from './landmarks';
 import type { Rect } from '../../core/coords';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
@@ -111,6 +111,7 @@ export class District {
     const solid = (p: Placed3): Rect[] => [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }];
     this.stampColliders = placed.map((p) => landmarkColliders(p, 0) ?? solid(p));
     this.basementColliders = placed.map((p) => landmarkColliders(p, -4) ?? []);
+    this.shelters.push(...placed.flatMap(landmarkShelters));
   }
 
   private readonly stampColliders: (readonly Rect[])[];
@@ -142,14 +143,17 @@ export class District {
    * Whether the walker is under a roof (no rain, no drops on the lens): below or above street level
    * (basements, platforms, the observatory), or inside a walk-in building on the ground.
    */
-  sheltered(x: number, z: number, floor: number): boolean {
-    if (floor < -1 || floor > 1) return true;
-    for (const p of this.model.placed) {
-      if (p.stamp.landmark !== 'konbini') continue;
-      const b = p.building;
-      if (Math.abs(x - b.x) < b.w / 2 - 0.3 && Math.abs(z - b.z) < b.d / 2 - 0.3) return true;
-    }
-    return false;
+  sheltered(x: number, z: number, y: number): boolean {
+    return this.shelters.some((s) => y > s.y0 && y < s.y1 && x > s.rect.x && x < s.rect.x + s.rect.w && z > s.rect.y && z < s.rect.y + s.rect.h);
+  }
+
+  /** Every covered volume (landmarks, plus any added: the viaduct). */
+  readonly shelters: Shelter[] = [];
+
+  /** The covered volumes within r metres of (x, z), nearest first (for the rain shader). */
+  sheltersNear(x: number, z: number, r: number, max: number): Shelter[] {
+    const d = (s: Shelter): number => Math.hypot(Math.max(s.rect.x - x, 0, x - s.rect.x - s.rect.w), Math.max(s.rect.y - z, 0, z - s.rect.y - s.rect.h));
+    return this.shelters.filter((s) => d(s) < r).sort((a, b) => d(a) - d(b)).slice(0, max);
   }
 
   /** Street lamp heads within r metres (for the light cones in wet air), nearest first. */

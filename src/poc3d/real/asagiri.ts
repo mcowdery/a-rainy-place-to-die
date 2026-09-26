@@ -81,6 +81,24 @@ export function asagiriColliders(kind: AsagiriKind, b: Building3, floor: number)
   }
 }
 
+/** Covered volumes (no rain inside): the observatory tower, and the canopies you can stand under. */
+export function asagiriShelters(kind: AsagiriKind, b: Building3): { rect: Rect; y0: number; y1: number }[] {
+  const f = localFrame(b);
+  const R = (u0: number, u1: number, t0: number, t1: number, y0: number, y1: number): { rect: Rect; y0: number; y1: number } => ({ rect: localRect(f, u0, u1, t0, t1), y0, y1 });
+  switch (kind) {
+    case 'city_hall':
+      return [R(TA.u0, TA.u1, TA.t0, TA.t1, 0, 200), R(55, 63, 10, 14, 0, 3.8)];
+    case 'idol_agency':
+      return [R(20, 34, 3, 8, 0, 4.6)];
+    case 'residence':
+      return [R(9, 25, 3, 10, 0, 5.2)];
+    case 'police_hq':
+      return [R(18, 32, 7, 10, 0, 8)];
+    default:
+      return [];
+  }
+}
+
 export function asagiriLights(kind: AsagiriKind, b: Building3): Light[] {
   const f = localFrame(b);
   const L = (u: number, t: number, r: number, color: [number, number, number], i: number): Light => {

@@ -24,6 +24,8 @@ export interface CityUniforms {
   uNeon: { value: number };
   uFlicker: { value: number };
   uWet: { value: number };
+  /** 0-1: street light pools under its sources and falls off to black between them. */
+  uDark: { value: number };
   uZenith: { value: THREE.Color };
   uHorizon: { value: THREE.Color };
   /** Daylight reaching room interiors (unlit rooms read as dim by day, black by night). */
@@ -42,6 +44,7 @@ export function cityUniforms(): CityUniforms {
     uNeon: { value: 1 },
     uFlicker: { value: 0 },
     uWet: { value: 0 },
+    uDark: { value: 0 },
     uZenith: { value: new THREE.Color(0x0a0e18) },
     uHorizon: { value: new THREE.Color(0x2a2230) },
     uRoomAmbient: { value: new THREE.Color(0x000000) },
@@ -58,6 +61,7 @@ const common = /* glsl */ `
   uniform float uNeon;
   uniform float uFlicker;
   uniform float uWet;
+  uniform float uDark;
   uniform vec3 uZenith;
   uniform vec3 uHorizon;
   uniform vec3 uRoomAmbient;
@@ -81,7 +85,9 @@ const common = /* glsl */ `
     return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
   }
   vec3 lightAt(vec2 p) {
-    return texture2D(tLight, (p - uLightRect.xy) * uLightRect.zw).rgb * uLightGain;
+    vec3 L = texture2D(tLight, (p - uLightRect.xy) * uLightRect.zw).rgb * uLightGain;
+    // Darkness: square the falloff, so light pools under its source and the gaps between go black.
+    return mix(L, L * L * 1.5, uDark);
   }
   vec3 skyRefl(vec3 r) {
     return r.y > 0.0 ? mix(uHorizon, uZenith, sqrt(r.y)) : uHorizon * 0.3;
