@@ -14,6 +14,7 @@ import { Lightmap } from '../real/lightmap';
 import { buildMegaSign } from '../real/megaSign';
 import { buildKonbini } from '../real/konbini';
 import { buildShrine } from '../real/shrine';
+import { buildLoveHotel } from '../real/loveHotel';
 import { destinations, TravelMap, type Destination } from './travel';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
@@ -119,7 +120,8 @@ async function run(): Promise<void> {
   const dressing = new MeshBuilder();
   for (const placed of content.placed) {
     const f = frontFrame(placed.building);
-    for (const n of placed.nodes) if (n.kind === 'door') dressDoor(dressing, n, f.r, f.n);
+    // Landmarks dress their own doors.
+    if (placed.stamp.landmark === null) for (const n of placed.nodes) if (n.kind === 'door') dressDoor(dressing, n, f.r, f.n);
     for (const n of placed.nodes) {
       if (n.kind !== 'npc') continue;
       const gb = new GhostBuilder();
@@ -146,6 +148,10 @@ async function run(): Promise<void> {
       landmarkUpdates.push(k.update);
     } else if (lm === 'shrine') {
       scene.add(buildShrine(placed.building, city));
+    } else if (lm === 'love_hotel') {
+      const h = buildLoveHotel(placed.building, city, ghost, cityU);
+      scene.add(h.group);
+      landmarkUpdates.push(h.update);
     }
   }
   const visibleNode = (n: Node3): boolean => n.condition === null || n.condition(flags.get);

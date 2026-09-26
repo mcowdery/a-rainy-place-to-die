@@ -171,9 +171,9 @@ describe('Kaburo zones', () => {
     expect(alleys.n).toBeGreaterThan(crossing.n * 1.5);
   });
 
-  it('fills love hotel hill with love hotel and adult ads only', () => {
+  it('fills the Love District with love hotel and adult ads only', () => {
     const out: AdPlacement[] = [];
-    for (const [mx, my] of inZone('hotel_hill')) addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), model.plan(mx, my)!.signs, model.detail(mx, my)!.props, out);
+    for (const [mx, my] of inZone('love_district')) addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), model.plan(mx, my)!.signs, model.detail(mx, my)!.props, out);
     expect(out.length).toBeGreaterThan(20);
     for (const a of out) expect(['lovehotel', 'adult']).toContain(DISTRICT_ADS[a.ad].cat);
   });

@@ -2,6 +2,7 @@ import type { Rect } from '../../core/coords';
 import { konbiniColliders, konbiniLights } from '../real/konbini';
 import type { Light } from '../real/lightmap';
 import { shrineColliders, shrineLights } from '../real/shrine';
+import { loveHotelColliders, loveHotelLights } from '../real/loveHotel';
 import type { Building3 } from './plan';
 import type { Placed3 } from './stamps';
 
@@ -17,6 +18,8 @@ export function landmarkColliders(p: Placed3): Rect[] | null {
       return konbiniColliders(p.building);
     case 'shrine':
       return shrineColliders(p.building);
+    case 'love_hotel':
+      return loveHotelColliders(p.building);
     default:
       return null;
   }
@@ -31,6 +34,8 @@ export function landmarkLights(p: Placed3): Light[] {
       return konbiniLights(p.building);
     case 'shrine':
       return shrineLights(p.building);
+    case 'love_hotel':
+      return loveHotelLights(p.building);
     default:
       return [];
   }

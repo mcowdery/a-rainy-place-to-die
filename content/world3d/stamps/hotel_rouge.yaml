@@ -1,0 +1,34 @@
+# Hotel Rouge (ホテル ルージュ): the Love District's flagship, a castle love hotel. A landmark built by
+# real/loveHotel.ts (24 m front, 21 m deep): pastel keep, corner towers with red cones, a donjon, pink neon,
+# and a discreet entrance behind a screen wall. The front doors and the hidden side door hand off to VN.
+id: hotel_rouge
+name: Hotel Rouge ルージュ
+footprint: [24, 21]
+height: 30
+front: south
+landmark: love_hotel
+nodes:
+  front:
+    kind: spawn
+    name: Hotel Rouge
+    at: [16, 11.5]
+    facing: north
+    view: [14, 20]
+  entrance:
+    kind: door
+    name: Hotel Rouge
+    at: [12, -3.2]
+    returnSpawn: front
+    handoff: {}
+  side_door:
+    kind: door
+    name: Side entrance
+    at: [2.6, -12]
+    returnSpawn: side
+    handoff: {}
+  side:
+    kind: spawn
+    name: Hotel Rouge (side entrance)
+    at: [-1.2, -7.5]
+    facing: north
+    view: [-50, 6]

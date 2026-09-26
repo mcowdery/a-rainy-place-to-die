@@ -1,6 +1,6 @@
 # Kaburo's zones (format: src/poc3d/district/zones.ts). One letter per 128 m L0 cell, from origin [26, 9],
 # the district's north-west cell. Loosely after Kabukicho: the crossing and the mega-sign at the south
-# centre facing the station side, love hotels up the hill to the north-east, host clubs between them,
+# centre facing the station side, the love hotels of the Love District to the north-east, host clubs between them,
 # the old back alleys to the north-west, and a lane of food and music west of the crossing.
 district: neon
 origin: [26, 9]
@@ -53,8 +53,8 @@ zones:
       open: 0.85
 
   L:
-    id: hotel_hill
-    name: Love Hotel Hill
+    id: love_district
+    name: Love District
     plan:
       floors: [[3, 6, 55], [7, 10, 45]]
       lotW: [10, 18]

@@ -16,3 +16,7 @@
   stamp: shrine
   cell: [27, 10]
   offset: [50, 94]
+- id: hotel_rouge
+  stamp: hotel_rouge
+  cell: [30, 10]
+  offset: [44, 97]

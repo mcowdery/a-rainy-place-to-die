@@ -11,7 +11,7 @@ The district stays procedurally generated, but zones steer what each block gets:
 | Zone | Feel | Businesses / signage | Ad pool |
 |---|---|---|---|
 | **Central crossing** (primary area) | Kaburo's front door: widest boulevard, scramble crossing, crowds | Mega-sign building, big chains, konbini on corners, pachinko, arcade | Mega-sign screens, soft drinks, cosmetics, idols, whisky |
-| **Love hotel hill** | Quieter, sloped side streets, discreet entrances, rate boards | Love hotels (Rouge, Venus, Aqua, Orient Express, Sakura, Mirage), 無料案内所 | Explicit love-hotel ads, information-centre lightboxes |
+| **Love District** | Quieter, sloped side streets, discreet entrances, rate boards | Love hotels (Rouge, Venus, Aqua, Orient Express, Sakura, Mirage), 無料案内所 | Explicit love-hotel ads, information-centre lightboxes |
 | **Host & hostess street** | Glitzy, gold and pink, touts outside | Host clubs (Adonis, Prince), kyabakura (Moonlight), snack bars | Host boards, hostess glamour, champagne |
 | **Back alleys** (noir) | Narrow, wet, dim, wires overhead, a lot of story | Pawn shop (Maruyoshi), quick cash (Cash One), mahjong, esthe, the Ryujin Kogyo front office | Loan and pawn posters, wanted notices, missing-person flyers |
 | **Music & food lane** | Warm, busy, smells good | Live house (地下室, basement stairs), izakaya, ramen, yakitori, karaoke, maid café, record shop | Gig posters, food, maid café, album posters |
@@ -26,7 +26,7 @@ These are hand-authored stamps with interiors or VN hooks, placed on L0 cells li
 - **Kaburo Crossing / mega-sign building**: the landmark, see below.
 - **Live house 地下室**: basement venue with a lit stairwell and gig posters; a natural event location.
 - **Maid café ♡ぴゅあ♡**: upstairs café with a street tout.
-- **Hotel Rouge**: the flagship love hotel on the hill, with a hidden side entrance.
+- **Hotel Rouge**: the flagship love hotel in the Love District, with a hidden side entrance. **Built (2026-09-26)** as a castle love hotel.
 - **Maruyoshi pawn shop**: the noir hub (items, information).
 - **Ryujin Kogyo office**: the yakuza front company, a story antagonist hook.
 - **Koban (police box)**: wanted notices; story source.
