@@ -24,7 +24,7 @@ export interface MoodSettings {
   grade: GradeName;
 }
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, darkness: 0, shadows: 0, grade: 'nocturne' };
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, darkness: 0, shadows: 0, grade: 'neutral' };
 const SHADOW_COUNTS = [0, 2, 4, 8];
 
 export function moodFromUrl(params: URLSearchParams): MoodSettings {

@@ -101,7 +101,7 @@ export class AsciiOverlayPass extends Pass {
   private readonly quad: FullScreenQuad;
   private readonly material: THREE.ShaderMaterial;
   private atlas: AtlasLayout;
-  private presetName: OverlayPreset = 'vibe';
+  private presetName: OverlayPreset = 'off';
   private fog: [number, number] = [60, 620];
 
   constructor(

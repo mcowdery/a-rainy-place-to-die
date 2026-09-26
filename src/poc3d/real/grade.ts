@@ -169,7 +169,7 @@ export class GradePass extends Pass {
       depthWrite: false,
     });
     this.quad = new FullScreenQuad(this.material);
-    this.grade = 'nocturne';
+    this.grade = 'neutral';
   }
 
   get grade(): GradeName {

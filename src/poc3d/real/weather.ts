@@ -269,7 +269,9 @@ export class LampCones {
           varying float vEdge;
           void main() {
             // Brightest near the lamp, soft at the silhouette, gone before it reaches the ground.
-            float a = uStrength * pow(1.0 - vH, 1.6) * smoothstep(0.0, 0.08, vH) * smoothstep(0.0, 0.7, vEdge);
+            // Clamp before pow: at the rim 1 - vH can dip below 0, and pow of a negative is NaN (bright specks).
+            float h = clamp(vH, 0.0, 1.0);
+            float a = uStrength * pow(1.0 - h, 1.6) * smoothstep(0.0, 0.08, h) * smoothstep(0.0, 0.7, vEdge);
             gl_FragColor = vec4(uColor * a, 1.0);
           }`,
       }),
