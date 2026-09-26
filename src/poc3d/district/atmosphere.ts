@@ -30,11 +30,17 @@ export interface Atmosphere3 {
   readonly lamps: number;
   /** Camera exposure for tone mapping. */
   readonly exposure: number;
+  /** Cloud cover 0-1; the clouds' lit underside and their dark parts (sRGB). */
+  readonly clouds: number;
+  readonly cloudLit: number;
+  readonly cloudDark: number;
+  /** Wet air 0-1: how much the street lamps' light cones show (rain, fog, mist). */
+  readonly haze: number;
 }
 
 type Key = keyof Atmosphere3;
-const COLOR_KEYS: readonly Key[] = ['sky', 'horizon', 'fog', 'hemiSky', 'hemiGround', 'sunColor'];
-const NUMBER_KEYS: readonly Key[] = ['fogNear', 'fogFar', 'hemi', 'sun', 'windowLit', 'rain', 'lamps', 'exposure'];
+const COLOR_KEYS: readonly Key[] = ['sky', 'horizon', 'fog', 'hemiSky', 'hemiGround', 'sunColor', 'cloudLit', 'cloudDark'];
+const NUMBER_KEYS: readonly Key[] = ['fogNear', 'fogFar', 'hemi', 'sun', 'windowLit', 'rain', 'lamps', 'exposure', 'clouds', 'haze'];
 const ALL_KEYS: readonly Key[] = [...COLOR_KEYS, ...NUMBER_KEYS, 'neon'];
 
 interface Rule3 {

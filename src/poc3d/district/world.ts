@@ -138,6 +138,42 @@ export class District {
     return this.model.placed;
   }
 
+  /**
+   * Whether the walker is under a roof (no rain, no drops on the lens): below or above street level
+   * (basements, platforms, the observatory), or inside a walk-in building on the ground.
+   */
+  sheltered(x: number, z: number, floor: number): boolean {
+    if (floor < -1 || floor > 1) return true;
+    for (const p of this.model.placed) {
+      if (p.stamp.landmark !== 'konbini') continue;
+      const b = p.building;
+      if (Math.abs(x - b.x) < b.w / 2 - 0.3 && Math.abs(z - b.z) < b.d / 2 - 0.3) return true;
+    }
+    return false;
+  }
+
+  /** Street lamp heads within r metres (for the light cones in wet air), nearest first. */
+  lampsNear(x: number, z: number, r: number): { x: number; y: number; z: number }[] {
+    const out: { x: number; y: number; z: number; d: number }[] = [];
+    const c0 = Math.floor((x - r) / CELL);
+    const c1 = Math.floor((x + r) / CELL);
+    const r0 = Math.floor((z - r) / CELL);
+    const r1 = Math.floor((z + r) / CELL);
+    for (let my = r0; my <= r1; my++) {
+      for (let mx = c0; mx <= c1; mx++) {
+        for (const p of this.model.detail(mx, my)?.props ?? []) {
+          if (p.kind !== 'lamp') continue;
+          // The head hangs 1.5 m out over the road on its arm, 6.35 m up.
+          const hx = p.x + p.nx * 1.5;
+          const hz = p.z + p.nz * 1.5;
+          const d = Math.hypot(hx - x, hz - z);
+          if (d < r) out.push({ x: hx, y: 6.35, z: hz, d });
+        }
+      }
+    }
+    return out.sort((a, b) => a.d - b.d);
+  }
+
   /** A cell's plan (roads, buildings) for maps and fast travel. */
   plan(mx: number, my: number): CellPlan3 | null {
     return this.model.plan(mx, my);

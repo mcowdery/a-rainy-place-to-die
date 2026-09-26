@@ -21,12 +21,16 @@ rules:
       rain: 0
       lamps: 0
       exposure: 0.85
+      clouds: 0.35
+      cloudLit: '#f4f0ec'
+      cloudDark: '#a8b4c4'
+      haze: 0
 
   - match: { time: dawn }
-    set: { sky: '#3a4a78', horizon: '#f0a080', fog: '#a08890', hemiSky: '#a0a8d0', sunColor: '#ffb890', sun: 1.6, hemi: 0.7, windowLit: 0.15, lamps: 0.5, exposure: 1.15, fogFar: 750 }
+    set: { sky: '#3a4a78', horizon: '#f0a080', fog: '#a08890', hemiSky: '#a0a8d0', sunColor: '#ffb890', sun: 1.6, hemi: 0.7, windowLit: 0.15, lamps: 0.5, exposure: 1.15, fogFar: 750, cloudLit: '#f0a888', cloudDark: '#4a4a6a', haze: 0.2 }
 
   - match: { time: dusk }
-    set: { sky: '#1c2448', horizon: '#d86848', fog: '#58384a', hemiSky: '#8a90c0', hemiGround: '#40302a', sunColor: '#ff8a50', sun: 1.1, hemi: 0.45, windowLit: 0.35, neon: 'on', lamps: 1, exposure: 1.15, fogNear: 80, fogFar: 650 }
+    set: { sky: '#1c2448', horizon: '#d86848', fog: '#58384a', hemiSky: '#8a90c0', hemiGround: '#40302a', sunColor: '#ff8a50', sun: 1.1, hemi: 0.45, windowLit: 0.35, neon: 'on', lamps: 1, exposure: 1.15, fogNear: 80, fogFar: 650, clouds: 0.45, cloudLit: '#e07858', cloudDark: '#2a2440', haze: 0.25 }
 
   - match: { time: night }
     set:
@@ -44,24 +48,28 @@ rules:
       neon: 'on'
       lamps: 1
       exposure: 1.1
+      clouds: 0.4
+      cloudLit: '#3a2a3a'
+      cloudDark: '#07070c'
+      haze: 0.3
 
   - match: { weather: rain }
-    set: { rain: 0.05, fogFar: 380, sky: '#5a6068', horizon: '#80868c', fog: '#70767c', sun: 0.5, hemi: 1.1, exposure: 1.0 }
+    set: { rain: 0.05, fogFar: 380, sky: '#5a6068', horizon: '#80868c', fog: '#70767c', sun: 0.5, hemi: 1.1, exposure: 1.0, clouds: 0.95, cloudLit: '#8a9098', cloudDark: '#4a5058', haze: 0.5 }
 
   - match: { time: night, weather: rain }
-    set: { sky: '#05070c', horizon: '#34283a', fog: '#1c1a22', sun: 0.08, hemi: 0.18, exposure: 1.1 }
+    set: { sky: '#05070c', horizon: '#34283a', fog: '#1c1a22', sun: 0.08, hemi: 0.18, exposure: 1.1, cloudLit: '#4a3040', cloudDark: '#0c0a10', haze: 1 }
 
   - match: { time: dusk, weather: rain }
-    set: { sky: '#1a1e2c', horizon: '#5a3a40', fog: '#3a3038', sun: 0.35, hemi: 0.35, exposure: 1.35 }
+    set: { sky: '#1a1e2c', horizon: '#5a3a40', fog: '#3a3038', sun: 0.35, hemi: 0.35, exposure: 1.35, cloudLit: '#6a4048', cloudDark: '#1e1a26', haze: 0.8 }
 
   - match: { time: dawn, weather: rain }
-    set: { sky: '#3a4050', horizon: '#8a7a80', fog: '#6a6470', sun: 0.4, hemi: 0.5, exposure: 1.15 }
+    set: { sky: '#3a4050', horizon: '#8a7a80', fog: '#6a6470', sun: 0.4, hemi: 0.5, exposure: 1.15, cloudLit: '#8a7a80', cloudDark: '#3a3a48', haze: 0.6 }
 
   - match: { weather: fog }
-    set: { fogNear: 10, fogFar: 200, sky: '#8a9098', horizon: '#9aa0a8', fog: '#8a9098', sun: 1.2 }
+    set: { fogNear: 10, fogFar: 200, sky: '#8a9098', horizon: '#9aa0a8', fog: '#8a9098', sun: 1.2, clouds: 0.8, haze: 0.8 }
 
   - match: { time: night, weather: fog }
-    set: { sky: '#101018', horizon: '#2a2430', fog: '#1e1c24', sun: 0.1 }
+    set: { sky: '#101018', horizon: '#2a2430', fog: '#1e1c24', sun: 0.1, cloudLit: '#3a2c38', cloudDark: '#101018', haze: 1.2 }
 
   - match: { time: dusk, weather: fog }
     set: { sky: '#3a3040', horizon: '#6a4a50', fog: '#4a3a44', sun: 0.4 }

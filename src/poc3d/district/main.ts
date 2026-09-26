@@ -23,6 +23,8 @@ import { buildStation } from '../real/station';
 import { ASAGIRI_KINDS, buildAsagiri, type AsagiriKind } from '../real/asagiri';
 import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { TrafficSystem } from '../real/traffic';
+import { GRADE_NAMES, GradePass, type GradeName } from '../real/grade';
+import { LampCones, RainSystem } from '../real/weather';
 import { routeFor } from './traffic';
 import { destinations, TravelMap, type Destination } from './travel';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
@@ -41,7 +43,7 @@ import { District } from './world';
 /**
  * Kaburo (Neon Core), generated at full scale from the L0 map and streamed in chunks, rendered
  * realistically with an ASCII overlay for mood (see real/overlay.ts).
- * URL: ?time=night|day|dusk|dawn &weather=clear|rain|fog &cam=x,y,z,yaw,pitch &spawn=<node id> &ascii=vibe|heavy|ascii|off &bench=1
+ * URL: ?time=night|day|dusk|dawn &weather=clear|rain|fog &cam=x,y,z,yaw,pitch &spawn=<node id> &ascii=vibe|heavy|ascii|off &grade=neutral|nocturne|noir|citypop &bench=1
  * Keys: WASD/mouse, Shift run, E interact, M map / fast travel, T time, R weather, F fly, V overlay (1-4 direct), G dither,
  * B bloom, P look mode.
  */
@@ -122,6 +124,11 @@ async function run(): Promise<void> {
   composer.addPass(overlay);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
+  // The colour grade, last, on the display image: C cycles the looks, ?grade= picks one.
+  const grade = new GradePass();
+  const gradeParam = params.get('grade') as GradeName | null;
+  if (gradeParam && GRADE_NAMES.includes(gradeParam)) grade.grade = gradeParam;
+  composer.addPass(grade);
 
   // Stamp dressing (door, noren, lanterns) and NPCs as ghosts (visibility follows their conditions).
   const nodes = district.nodes;
@@ -170,6 +177,10 @@ async function run(): Promise<void> {
     city,
   );
   scene.add(traffic.group);
+  // Weather near the camera: rain streaks and splashes lit by the street, light cones under the lamps.
+  const rain = new RainSystem(cityU);
+  const cones = new LampCones();
+  scene.add(rain.group, cones.mesh);
   district.addColliders(traffic.colliders);
   for (const placed of content.placed) {
     const lm = placed.stamp.landmark;
@@ -284,6 +295,9 @@ async function run(): Promise<void> {
     sky.uniforms.uSunColor.value.setHex(atm.sunColor).multiplyScalar(time() === 'night' ? 0.25 : 1);
     sky.uniforms.uDisc.value = clear ? 1 : 0;
     sky.uniforms.uStars.value = time() === 'night' && clear ? 1 : 0;
+    sky.uniforms.uCover.value = atm.clouds;
+    sky.uniforms.uCloudLit.value.setHex(atm.cloudLit);
+    sky.uniforms.uCloudDark.value.setHex(atm.cloudDark);
     cityU.uZenith.value.setHex(atm.sky);
     cityU.uHorizon.value.setHex(atm.horizon);
     cityU.uRoomAmbient.value.setHex(atm.hemiSky).multiplyScalar(atm.hemi * 0.12);
@@ -432,6 +446,7 @@ async function run(): Promise<void> {
     if (e.code === 'KeyT') flags.set(FLAG_TIME, TIMES[(TIMES.indexOf(time()) + 1) % TIMES.length]);
     if (e.code === 'KeyR') flags.set(FLAG_WEATHER, WEATHERS[(WEATHERS.indexOf(weather()) + 1) % WEATHERS.length]);
     if (e.code === 'KeyF') controls.fly = !controls.fly;
+    if (e.code === 'KeyC') grade.grade = GRADE_NAMES[(GRADE_NAMES.indexOf(grade.grade) + 1) % GRADE_NAMES.length];
     if (e.code === 'KeyV') overlay.preset = OVERLAY_PRESETS[(OVERLAY_PRESETS.indexOf(overlay.preset) + 1) % OVERLAY_PRESETS.length];
     if (direct[e.code]) overlay.preset = direct[e.code];
     if (e.code === 'KeyG') overlay.dither = !overlay.dither;
@@ -507,6 +522,11 @@ async function run(): Promise<void> {
     for (const update of landmarkUpdates) update(camera.position, dt);
     trains?.update(dt, camera);
     traffic.update(dt, camera.position);
+    const wet = atm.rain > 0 && !trains?.riding && !district.sheltered(camera.position.x, camera.position.z, camera.position.y - 1.7) ? 1 : 0;
+    rain.update(now / 1000, camera.position, wet * 0.8);
+    cones.update(camera.position, (x, z, r) => district.lampsNear(x, z, r), atm.haze * atm.lamps * 0.05);
+    sky.uniforms.uTime.value = now / 1000;
+    grade.tick(now / 1000, wet * 0.8);
     fitFog();
 
     const t0 = performance.now();
@@ -553,7 +573,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        trains?.status ?? `${(district.districtAt(p.x, p.z) ?? style.name).toUpperCase()} · ${district.zoneAt(p.x, p.z) ?? ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}`,
+        trains?.status ?? `${(district.districtAt(p.x, p.z) ?? style.name).toUpperCase()} · ${district.zoneAt(p.x, p.z) ?? ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
@@ -561,7 +581,7 @@ async function run(): Promise<void> {
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t ? `[E] ${t.kind === 'door' ? 'Enter' : t.kind === 'station' ? (isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : ' ',
-        'click to look · WASD · Shift run · E interact · M map / fast travel · T time · R weather · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
+        'click to look · WASD · Shift run · E interact · M map / fast travel · T time · R weather · C grade · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
       ].join('\n');
       builtThisWindow = 0;
     }
