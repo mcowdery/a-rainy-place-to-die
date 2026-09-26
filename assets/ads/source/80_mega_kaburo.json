@@ -1,0 +1,25 @@
+{
+  "file": "mega_kaburo_v1.png",
+  "item": "mega_kaburo",
+  "brand": "WELCOME TO KABURO 歌舞路",
+  "copy": "眠らない街へ、ようこそ。",
+  "notes": "Redo: Japanese models, attire that fits a nightlife district, a close-up.",
+  "prompt": "photorealistic advertising photography, professional studio lighting, commercial print ad, 80s/90s Japanese magazine ad aesthetic, shot on film, glossy poster finish, close-up of a stylish young adult Japanese couple laughing together on a rain-soaked neon street at night, she in a glossy black mini dress and leather jacket, he in an open-collar shirt and loose blazer, faces lit pink and cyan by the signs, bokeh of countless neon signs behind them, cinematic nightlife commercial, wide horizontal composition, subject off-centre to one side, the background scene continues across the whole frame, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    864
+  ],
+  "steps": 12,
+  "seed": 1353791336,
+  "studioJob": "2261e3f4-b931-4198-b12e-ac5f618dab9f-u1",
+  "generated": "2026-09-26T01:32:52.972Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/80_mega_kaburo.png",
+  "decided": "2026-09-26T01:35:45.379Z",
+  "batch": "kaburo_redos_04",
+  "purpose": "Round 4 redo from review notes: the mega-sign district ident.",
+  "use": "billboard",
+  "district": "neon"
+}
