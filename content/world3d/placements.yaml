@@ -36,3 +36,11 @@
   stamp: yasuichi
   cell: [29, 11]
   offset: [96, 96]
+- id: kaburo_station
+  stamp: station_kaburo
+  cell: [26, 12]
+  offset: [10, 30]
+- id: asagiri_station
+  stamp: station_asagiri
+  cell: [25, 9]
+  offset: [94, 30]

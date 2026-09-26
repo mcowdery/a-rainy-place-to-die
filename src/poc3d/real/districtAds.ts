@@ -83,7 +83,7 @@ export interface AdPlacement {
 type Entry = (typeof BILLBOARDS)[number];
 
 /**
- * An ad for a building: by its zone's category weights (content/world3d/zones.yaml), among the categories
+ * An ad for a building: by its zone's category weights (content/world3d/zones/*.yaml), among the categories
  * that have ads in this format; any ad, uniformly, outside zones.
  */
 function pickAd(list: readonly Entry[], b: Building3, salt: number): Entry | undefined {

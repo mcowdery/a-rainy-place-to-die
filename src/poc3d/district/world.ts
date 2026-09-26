@@ -7,10 +7,10 @@ import type { SignAtlas } from '../real/signs';
 import type { ChunkBuilt, Stage } from './chunkBuild';
 import type { WorkerIn } from './chunkWorker';
 import { DistrictModel } from './model';
-import { CELL, cellKey, type Building3, type CellPlan3 } from './plan';
+import { CELL, cellKey, DISTRICTS3, STYLES3, type Building3, type CellPlan3 } from './plan';
 import type { Node3, Placed3 } from './stamps';
 import type { ZoneMap } from './zones';
-import { landmarkColliders, landmarkFloor } from './landmarks';
+import { landmarkColliders, landmarkFloor, landmarkRaisedColliders } from './landmarks';
 import type { Rect } from '../../core/coords';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
@@ -98,13 +98,14 @@ export class District {
   lastBytes = 0;
 
   constructor(
-    macro: MacroMap,
-    readonly kind: DistrictId,
+    private readonly macro: MacroMap,
+    /** The districts to generate (every district with a 3D style by default). */
+    readonly kinds: DistrictId | readonly DistrictId[] = DISTRICTS3,
     placed: readonly Placed3[],
     private readonly seed: number,
     zones?: ZoneMap,
   ) {
-    this.model = new DistrictModel(macro, kind, placed, seed, zones);
+    this.model = new DistrictModel(macro, kinds, placed, seed, zones);
     this.nodes = placed.flatMap((p) => p.nodes);
     // Stamps collide as their footprint, or (landmarks you can walk into) as their walls and fixtures.
     const solid = (p: Placed3): Rect[] => [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }];
@@ -112,14 +113,22 @@ export class District {
     this.basementColliders = placed.map((p) => landmarkColliders(p, -4) ?? []);
   }
 
-  private readonly stampColliders: readonly (readonly Rect[])[];
+  private readonly stampColliders: (readonly Rect[])[];
+
+  /** More street-level colliders (the viaduct's piers). */
+  addColliders(rects: readonly Rect[]): void {
+    this.stampColliders.push(rects);
+  }
   /** Below street level only basements collide (their walls keep you inside). */
   private readonly basementColliders: readonly (readonly Rect[])[];
 
-  /** Floor height: 0 on the street, a ramp on stairs, negative in a basement. */
-  floorAt = (x: number, z: number): number => {
+  /**
+   * Floor height: 0 on the street, a ramp on stairs, negative in a basement, raised on a station platform.
+   * Where levels overlap (a platform over the pavement), the one nearest the walker's current floor wins.
+   */
+  floorAt = (x: number, z: number, current = 0): number => {
     for (const p of this.model.placed) {
-      const y = landmarkFloor(p, x, z);
+      const y = landmarkFloor(p, x, z, current);
       if (y !== null) return y;
     }
     return 0;
@@ -152,6 +161,12 @@ export class District {
     return this.model.zones.at(Math.floor(x / CELL), Math.floor(z / CELL))?.name ?? null;
   }
 
+  /** The district's name at a world position (for the HUD), if it's a generated one. */
+  districtAt(x: number, z: number): string | null {
+    const k = this.macro.kindAt(Math.floor(x / CELL), Math.floor(z / CELL));
+    return k in STYLES3 ? STYLES3[k as DistrictId]!.name : null;
+  }
+
   get bounds(): { minX: number; maxX: number; minZ: number; maxZ: number } {
     return this.model.bounds;
   }
@@ -170,7 +185,7 @@ export class District {
       );
       w.addEventListener('message', (e) => this.onMessage(i, e.data));
       w.addEventListener('error', (e) => console.error('chunk worker error', e.message));
-      w.postMessage({ type: 'init', kind: 'neon', seed: this.seed, words: kit.words } satisfies WorkerIn);
+      w.postMessage({ type: 'init', kinds: typeof this.kinds === 'string' ? [this.kinds] : [...this.kinds], seed: this.seed, words: kit.words } satisfies WorkerIn);
       this.workers.push(w);
       this.inFlight.push(0);
     }
@@ -188,6 +203,7 @@ export class District {
   blocked = (x: number, z: number, r: number, floor = 0): boolean => {
     const inRects = (rs: readonly Rect[]): boolean => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
     if (floor < -1) return this.basementColliders.some(inRects);
+    if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? []));
     if (!this.inDistrict(x, z)) return true;
     const mx = Math.floor(x / CELL);
     const my = Math.floor(z / CELL);

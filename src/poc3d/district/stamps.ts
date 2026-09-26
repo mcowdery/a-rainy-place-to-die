@@ -24,7 +24,10 @@ import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan'
  * built by the chunk workers: the main thread adds the landmark itself (see real/megaSign.ts). A node may
  * set view: [yaw, pitch] in degrees for the camera when spawning there (overrides facing). A named spawn is
  * a fast-travel destination. An npc may set figure: { body, pose, hair, long, color, turn } for its ghost
- * (turn: radians from facing the street). A stamp's name is shown in the HUD while you're inside it. A stamp may
+ * (turn: radians from facing the street). A stamp's name is shown in the HUD while you're inside it.
+ * A node's floor (metres, default 0) puts it on a raised level (a station platform). A station stamp gives
+ * its names, station: { jp, en }; a station node takes the train to its returnSpawn (the world rides it,
+ * it doesn't go to the VN). A stamp may
  * reserve an open plaza, plaza: { at: [x, z], size: [w, d] } in metres from the footprint's NW corner; it
  * may reach into neighbouring cells (e.g. the other corners of a junction), and no lot is built on it.
  * scramble: [x, z] (from the footprint's NW corner) marks a junction to paint as a scramble crossing.
@@ -35,7 +38,7 @@ import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan'
  */
 
 /** Landmarks built on the main thread instead of as a plain building mass. */
-export const LANDMARKS = ['mega_sign', 'konbini', 'shrine', 'love_hotel', 'live_house', 'yokocho', 'ryujin', 'discount'] as const;
+export const LANDMARKS = ['mega_sign', 'konbini', 'shrine', 'love_hotel', 'live_house', 'yokocho', 'ryujin', 'discount', 'station'] as const;
 export type Landmark = (typeof LANDMARKS)[number];
 
 /** How an npc's ghost looks (see real/people.ts); anything left out gets a default. */
@@ -67,6 +70,7 @@ export interface StampNode {
   readonly facing: Facing | null;
   readonly view: readonly [number, number] | null;
   readonly figure: NodeFigure | null;
+  readonly floor: number;
   readonly u: number;
   readonly out: number;
   readonly handoff: unknown;
@@ -83,6 +87,8 @@ export interface Stamp3 {
   readonly hue: number | null;
   readonly front: Side;
   readonly landmark: Landmark | null;
+  /** A station's names (landmark station). */
+  readonly station: { readonly jp: string; readonly en: string } | null;
   /** Open ground kept free of lots, relative to the footprint's NW corner. */
   readonly plaza: Rect | null;
   /** A junction (its centre, relative to the footprint's NW corner) painted as a scramble crossing. */
@@ -103,6 +109,8 @@ export interface Node3 {
   /** Spawn camera [yaw, pitch] in degrees, if the stamp sets one. */
   readonly view: readonly [number, number] | null;
   readonly figure: NodeFigure | null;
+  /** Height of the node's floor (0 on the street, raised on a platform). */
+  readonly floor: number;
   /** The facade normal of the stamp's street face (npcs face it by default). */
   readonly nx: number;
   readonly nz: number;
@@ -150,6 +158,10 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
   const landmark = doc.landmark === undefined ? null : (String(doc.landmark) as Landmark);
   if (landmark !== null && !LANDMARKS.includes(landmark)) err(`landmark must be one of ${LANDMARKS.join(', ')}`);
   if (doc.scramble !== undefined && !isPair(doc.scramble)) err('scramble must be [x, z] in metres from the footprint');
+  const st = doc.station;
+  const stationNames = isObj(st) && typeof st.jp === 'string' && typeof st.en === 'string' ? { jp: st.jp, en: st.en } : null;
+  if (st !== undefined && !stationNames) err('station must be { jp, en }');
+  if (landmark === 'station' && !stationNames) err('a station landmark needs station: { jp, en }');
   let plaza: Rect | null = null;
   if (doc.plaza !== undefined) {
     const q = doc.plaza;
@@ -224,13 +236,14 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
       facing: (raw.facing ?? null) as Facing | null,
       view: isPair(raw.view) ? raw.view : null,
       figure,
+      floor: typeof raw.floor === 'number' ? raw.floor : 0,
       u,
       out,
       handoff: raw.handoff ?? {},
     });
   }
   if (errors.length > before) return null;
-  return { id, file, name: typeof doc.name === 'string' ? doc.name : null, w, d, height: doc.height as number, hue: doc.hue === undefined ? null : parseInt(String(doc.hue).slice(1), 16), front, landmark, plaza, scramble: isPair(doc.scramble) ? doc.scramble : null, signs, nodes };
+  return { id, file, name: typeof doc.name === 'string' ? doc.name : null, w, d, height: doc.height as number, hue: doc.hue === undefined ? null : parseInt(String(doc.hue).slice(1), 16), front, landmark, station: stationNames, plaza, scramble: isPair(doc.scramble) ? doc.scramble : null, signs, nodes };
 }
 
 /** The planner's reserved area for a stamp: its footprint plus an open forecourt in front of the street face. */
@@ -312,6 +325,7 @@ export function placeStamps3(file: string, text: string, macro: MacroMap, stamps
         facing: n.facing,
         view: n.view,
         figure: n.figure,
+        floor: n.floor,
         nx: q.nx,
         nz: q.nz,
         x: q.x,

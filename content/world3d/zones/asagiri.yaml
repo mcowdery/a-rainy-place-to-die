@@ -1,0 +1,99 @@
+# Asagiri's zones (format: src/poc3d/district/zones.ts): the business district west of Kaburo, loosely
+# after West Shinjuku. Skyscraper rows fill the west, a plaza of the tallest towers sits in the middle,
+# department stores line the west exit along the Toto Line, and a narrow yakitori lane hugs the tracks.
+district: tower
+origin: [20, 9]
+map:
+  - KKKKEE
+  - KGGKEE
+  - KGGKEY
+  - KKKKEE
+  - KKKEEE
+
+zones:
+  K:
+    id: skyscraper_row
+    name: Skyscraper Row
+    plan:
+      floors: [[14, 24, 35], [26, 40, 45], [42, 55, 20]]
+      lotW: [18, 30]
+      localStreet: [8, 12]
+      block: [40, 70]
+      twoRowDepth: 40
+      lotGap: 0.4
+      signChance: 0.25
+      verticalSign: 0.1
+    signs:
+      words: [BANK, 銀行, 証券, 保険, OFFICE, CAFE, HOTEL, CLINIC, ビジネス, 郵便局]
+      colors: ['#ffffff', '#4fe3ff', '#ffe45f']
+    ads: { mainstream: 6, food: 1, lodging: 1 }
+    look:
+      windows: { curtain: 50, ribbon: 40, punched: 10 }
+      walls: ['#2e3b45', '#3a4550', '#8e8d88', '#c8c8c4', '#6f7c86', '#a3b3ba']
+      shops: { cool: 6, warm: 3, colourful: 1 }
+      open: 0.8
+
+  G:
+    id: tower_plaza
+    name: Tower Plaza
+    plan:
+      floors: [[44, 60, 70], [30, 40, 30]]
+      lotW: [26, 40]
+      localStreet: [10, 14]
+      block: [50, 80]
+      twoRowDepth: 50
+      lotGap: 0.5
+      signChance: 0.1
+      verticalSign: 0.05
+    signs:
+      words: [OFFICE, 展望台, TOWER, HOTEL]
+      colors: ['#ffffff', '#4fe3ff']
+    ads: { mainstream: 1 }
+    look:
+      windows: { curtain: 60, ribbon: 40 }
+      walls: ['#d8d5cc', '#b8b4ac', '#2e3b45', '#9aa4ac']
+      shops: { cool: 8, warm: 2 }
+      open: 0.7
+
+  E:
+    id: west_exit
+    name: West Exit
+    plan:
+      floors: [[6, 10, 45], [11, 18, 55]]
+      lotW: [14, 24]
+      localStreet: [6, 9]
+      lotGap: 0.08
+      signChance: 0.95
+      verticalSign: 0.45
+    signs:
+      words: [百貨店, 家電, カメラ, ドラッグ, 眼鏡, 書店, 牛丼, 喫茶, CAFE, 回転寿司, 薬, ヨルマート]
+      colors: ['#ffffff', '#ffe45f', '#ff4f4f', '#4fe3ff', '#6bff8a']
+    ads: { mainstream: 5, food: 3, lodging: 2, fun: 1 }
+    look:
+      windows: { ribbon: 40, blank: 20, punched: 25, curtain: 15 }
+      walls: ['#d8d5cc', '#c2b49a', '#8e8d88', '#e0ddd2', '#3a3a3e']
+      shops: { colourful: 4, cool: 4, warm: 2 }
+      open: 0.95
+
+  Y:
+    id: omoide_lane
+    name: Omoide Lane
+    plan:
+      floors: [[2, 3, 80], [4, 5, 20]]
+      lotW: [3, 5]
+      localStreet: [2.5, 3.5]
+      block: [14, 26]
+      twoRowDepth: 16
+      lotGap: 0.1
+      signChance: 1
+      verticalSign: 0.6
+    signs:
+      words: [焼鳥, もつ焼, 酒, ホルモン, 串焼, 煮込み, 立ち飲み, ラーメン, 定食, 餃子]
+      colors: ['#ffb040', '#ff4f4f', '#ffe45f']
+    ads: { food: 5, street: 2, loan: 1 }
+    look:
+      windows: { punched: 50, small: 50 }
+      walls: ['#6c5242', '#5a4a3a', '#7c604c', '#4a4644']
+      tiled: true
+      shops: { warm: 7, bar: 3 }
+      open: 0.95

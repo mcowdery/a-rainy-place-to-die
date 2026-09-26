@@ -6,6 +6,7 @@ import { loveHotelColliders, loveHotelLights } from '../real/loveHotel';
 import { yokochoColliders, yokochoLights } from '../real/yokocho';
 import { ryujinColliders, ryujinLights } from '../real/ryujin';
 import { discountColliders, discountLights } from '../real/discount';
+import { stationColliders, stationFloor, stationLights } from '../real/station';
 import { liveHouseColliders, liveHouseFloor, liveHouseHoles, liveHouseLights } from '../real/liveHouse';
 import type { Building3 } from './plan';
 import type { Placed3 } from './stamps';
@@ -35,6 +36,8 @@ export function landmarkColliders(p: Placed3, floor = 0): Rect[] | null {
       return ryujinColliders(p.building);
     case 'discount':
       return discountColliders(p.building);
+    case 'station':
+      return stationColliders(p.building, floor);
     default:
       return null;
   }
@@ -59,6 +62,8 @@ export function landmarkLights(p: Placed3): Light[] {
       return ryujinLights(p.building);
     case 'discount':
       return discountLights(p.building);
+    case 'station':
+      return stationLights(p.building);
     default:
       return [];
   }
@@ -69,9 +74,24 @@ export function landmarkHoles(p: Placed3): Rect[] {
   return p.stamp.landmark === 'live_house' ? liveHouseHoles(p.building) : [];
 }
 
-/** Floor height at a world point if it's on a landmark's stairs or in its basement, else null. */
-export function landmarkFloor(p: Placed3, x: number, z: number): number | null {
-  return p.stamp.landmark === 'live_house' ? liveHouseFloor(p.building, x, z) : null;
+/**
+ * Floor height at a world point if it's on a landmark's stairs, platform or in its basement, else null
+ * (street level). current: the walker's floor, to choose between levels that overlap.
+ */
+export function landmarkFloor(p: Placed3, x: number, z: number, current = 0): number | null {
+  switch (p.stamp.landmark) {
+    case 'live_house':
+      return liveHouseFloor(p.building, x, z);
+    case 'station':
+      return stationFloor(p.building, x, z, current);
+    default:
+      return null;
+  }
+}
+
+/** Collision above street level (station stairs, concourse and platforms); null if the landmark has none. */
+export function landmarkRaisedColliders(p: Placed3, floor: number): Rect[] | null {
+  return p.stamp.landmark === 'station' ? stationColliders(p.building, floor) : null;
 }
 
 /** Street glow from the mega-sign's screens: its west and south faces (the corner is at the south-west). */

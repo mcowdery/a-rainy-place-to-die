@@ -28,10 +28,15 @@ import { STYLES3, type DistrictStyle3, type Zone3, type ZoneLook } from './plan'
 export class ZoneMap {
   constructor(
     readonly zones: readonly Zone3[],
-    private readonly cells: ReadonlyMap<string, Zone3>,
+    readonly cells: ReadonlyMap<string, Zone3>,
   ) {}
 
   static readonly EMPTY = new ZoneMap([], new Map());
+
+  /** Several districts' zone maps as one. */
+  static merge(maps: readonly ZoneMap[]): ZoneMap {
+    return new ZoneMap(maps.flatMap((m) => m.zones), new Map(maps.flatMap((m) => [...m.cells])));
+  }
 
   at(mx: number, my: number): Zone3 | undefined {
     return this.cells.get(`${mx},${my}`);

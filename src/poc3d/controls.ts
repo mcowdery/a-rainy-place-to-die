@@ -13,8 +13,9 @@ const MAX_SHEAR = 1.6;
  * street level, negative in a basement), so a building can collide differently underground. */
 export type Blocker = (x: number, z: number, radius: number, floor?: number) => boolean;
 
-/** Floor height at (x, z): 0 on the street, a ramp on stairs, negative in a basement. */
-export type FloorAt = (x: number, z: number) => number;
+/** Floor height at (x, z): 0 on the street, a ramp on stairs, negative in a basement, raised on a
+ * platform. current is the walker's floor now, to pick between levels that overlap. */
+export type FloorAt = (x: number, z: number, current: number) => number;
 
 /** A Blocker over a fixed list of footprints inside a square bound. */
 export function boxBlocker(boxes: readonly Box[], bounds: number): Blocker {
@@ -42,6 +43,10 @@ export class FirstPerson {
   fly = false;
   /** Floor heights (stairs, basements); street level everywhere if unset. */
   floorAt: FloorAt | null = null;
+  /** Movement off (riding a train): the view still turns, the camera is placed by someone else. */
+  held = false;
+  /** The walker's floor height (y of the feet). */
+  private level = 0;
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
@@ -58,6 +63,11 @@ export class FirstPerson {
       if (!this.look.isLocked || !this.shearOn) return;
       this.shear = THREE.MathUtils.clamp(this.shear - e.movementY * 0.002 * this.look.pointerSpeed, -MAX_SHEAR, MAX_SHEAR);
     });
+  }
+
+  /** Put the walker on a floor (after a teleport). */
+  setLevel(y: number): void {
+    this.level = y;
   }
 
   get shearMode(): boolean {
@@ -90,9 +100,10 @@ export class FirstPerson {
     const f = Number(k.has('KeyW') || k.has('ArrowUp')) - Number(k.has('KeyS') || k.has('ArrowDown'));
     const r = Number(k.has('KeyD') || k.has('ArrowRight')) - Number(k.has('KeyA') || k.has('ArrowLeft'));
     const pos = this.camera.position;
-    const floor = (x: number, z: number): number => (this.floorAt ? this.floorAt(x, z) : 0);
+    if (this.held) return;
+    const floor = (x: number, z: number): number => (this.floorAt ? this.floorAt(x, z, this.level) : 0);
     if (f === 0 && r === 0) {
-      if (!this.fly) pos.y = floor(pos.x, pos.z) + EYE;
+      if (!this.fly) pos.y = (this.level = floor(pos.x, pos.z)) + EYE;
       return;
     }
     const fwd = new THREE.Vector3();
@@ -111,11 +122,14 @@ export class FirstPerson {
     const speed = this.fly ? FLY : k.has('ShiftLeft') || k.has('ShiftRight') ? RUN : WALK;
     const dx = move.x * speed * dt;
     const dz = move.z * speed * dt;
-    const level = floor(pos.x, pos.z);
+    const level = this.level;
     if (this.fly || !this.blocked(pos.x + dx, pos.z, RADIUS, level)) pos.x += dx;
     if (this.fly || !this.blocked(pos.x, pos.z + dz, RADIUS, level)) pos.z += dz;
     this.bob += dt * speed * 1.8;
-    if (!this.fly) pos.y = floor(pos.x, pos.z) + EYE + Math.sin(this.bob) * 0.04;
+    if (!this.fly) {
+      this.level = floor(pos.x, pos.z);
+      pos.y = this.level + EYE + Math.sin(this.bob) * 0.04;
+    }
   }
 
   /** Rebuild the projection with the vertical shift (an off-axis frustum; depth is unaffected). */

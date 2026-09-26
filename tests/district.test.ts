@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { overlaps, type Rect } from '../src/core/coords';
 import { TIMES, WEATHERS } from '../src/atmosphere/rules';
 import { loadDistrictContent } from '../src/poc3d/district/content';
-import { CELL, planCell3, STYLES3 } from '../src/poc3d/district/plan';
+import { CELL, DISTRICTS3, planCell3, STYLES3 } from '../src/poc3d/district/plan';
 import { DistrictModel } from '../src/poc3d/district/model';
 import { parseZones3 } from '../src/poc3d/district/zones';
 import { destinations } from '../src/poc3d/district/travel';
@@ -187,7 +187,7 @@ describe('Kaburo zones', () => {
 });
 
 describe('Places you can walk into, and fast travel', () => {
-  const district = new District(content.macro, 'neon', content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
   const placed = (id: string) => content.placed.find((p) => p.id === id)!;
 
   it('lets you walk into Yoru Mart through its doors, but not through the glass or the shelves', () => {
@@ -220,12 +220,12 @@ describe('Places you can walk into, and fast travel', () => {
     const names = dests.map((d) => d.name);
     expect(names).toEqual(expect.arrayContaining(['Kaburo Crossing', 'Bar Kanpai', 'Yoru Mart', 'Yoru Mart (inside)', 'Kaburo Inari Shrine']));
     expect(dests.filter((d) => d.group === 'Zones')).toHaveLength(content.zones.zones.length);
-    for (const d of dests) expect(district.blocked(d.x, d.z, 0.3, district.floorAt(d.x, d.z)), d.name).toBe(false);
+    for (const d of dests) expect(district.blocked(d.x, d.z, 0.3, district.floorAt(d.x, d.z, d.floor)), d.name).toBe(false);
   });
 });
 
 describe('Live house 地下室', () => {
-  const district = new District(content.macro, 'neon', content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
   const f = localFrame(content.placed.find((p) => p.id === 'live_house')!.building);
   const at = (u: number, t: number) => toWorld(f, u, t);
 
@@ -255,7 +255,7 @@ describe('Live house 地下室', () => {
 });
 
 describe('Hoshikuzu Yokocho', () => {
-  const district = new District(content.macro, 'neon', content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
   const f = localFrame(content.placed.find((p) => p.id === 'yokocho')!.building);
   const at = (u: number, t: number) => toWorld(f, u, t);
 

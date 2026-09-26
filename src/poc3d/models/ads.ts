@@ -37,7 +37,7 @@ export interface DistrictAd {
   /** Text colour on the poster band / billboard text panel. */
   readonly ink: number;
   readonly text?: 'left' | 'right' | 'bottom';
-  /** What it advertises: zones pick their ads by category (content/world3d/zones.yaml). */
+  /** What it advertises: zones pick their ads by category (content/world3d/zones/*.yaml). */
   readonly cat: AdCategory;
 }
 

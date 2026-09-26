@@ -1,0 +1,29 @@
+# 朝霧駅 Asagiri Station on the Toto Line, at Asagiri's west exit. A landmark built by real/station.ts
+# (60 m along the line, 24 m deep): its street face is 10 m west of the line, under the viaduct.
+id: station_asagiri
+name: 朝霧駅 Asagiri Station
+footprint: [24, 60]
+height: 16.6
+front: east
+landmark: station
+station: { jp: 朝霧, en: ASAGIRI }
+nodes:
+  exit:
+    kind: spawn
+    name: Asagiri Station
+    at: [30, 8]
+    facing: west
+    view: [70, 16]
+  platform:
+    kind: spawn
+    name: Asagiri Station (platform)
+    at: [44, 3.2]
+    floor: 9.1
+    facing: east
+    view: [-90, 2]
+  board:
+    kind: station
+    name: Toto Line to Kaburo 歌舞路
+    at: [44, 5.4]
+    floor: 9.1
+    returnSpawn: kaburo_station.platform

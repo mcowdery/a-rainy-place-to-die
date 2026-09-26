@@ -1,0 +1,9 @@
+# The Toto Line (東都線): an elevated railway on a viaduct over the boulevard between Asagiri and Kaburo.
+# edge: the L0 column whose west edge it runs along (north-south); rows: [first, last] L0 rows it spans.
+# Stations are stamps with landmark: station, placed so their street face is 10 m from the line.
+id: toto
+name: 東都線
+nameEn: TOTO LINE
+color: '#10a060'
+edge: 26
+rows: [6, 16]

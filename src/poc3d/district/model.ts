@@ -23,13 +23,15 @@ export class DistrictModel {
 
   constructor(
     private readonly macro: MacroMap,
-    readonly kind: DistrictId,
+    /** The districts to generate (every district with a 3D style by default). */
+    kinds: DistrictId | readonly DistrictId[],
     readonly placed: readonly Placed3[],
     private readonly seed: number,
     readonly zones: ZoneMap = ZoneMap.EMPTY,
   ) {
     const cells: [number, number][] = [];
-    for (let my = 0; my < macro.rows; my++) for (let mx = 0; mx < macro.cols; mx++) if (macro.kindAt(mx, my) === kind) cells.push([mx, my]);
+    const wanted = new Set<string>(typeof kinds === 'string' ? [kinds] : kinds);
+    for (let my = 0; my < macro.rows; my++) for (let mx = 0; mx < macro.cols; mx++) if (wanted.has(macro.kindAt(mx, my))) cells.push([mx, my]);
     this.cells = cells;
     for (const [mx, my] of cells) this.cellSet.add(cellKey(mx, my));
     const xs = cells.map(([mx]) => mx);

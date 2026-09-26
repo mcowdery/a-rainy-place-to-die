@@ -14,6 +14,7 @@ import { addVehicle, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, type V
 import { Lightmap, paintLights, type Light } from '../real/lightmap';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { buildMegaSign } from '../real/megaSign';
+import { trainModel } from '../real/rail';
 import { TAXI_ADS } from '../models/ads';
 import { SignAtlas, SignBuilder, signBox, signMaterial } from '../real/signs';
 import { BILLBOARDS, DISTRICT_BLANK, districtAdUv, POSTERS } from '../real/districtAds';
@@ -213,6 +214,24 @@ cityU.uLightRect.value = showLightmap.uniformRect;
   frames.castShadow = true;
   genRoot.new.add(frames);
   genItems.new.push({ name: 'all district ads', group: 'Billboards', at: new THREE.Vector3(wallX, 3, -2), size: 30, view: new THREE.Vector3(1, 0.2, 0).normalize() });
+}
+// The Toto Line train (three cars) on a short length of track.
+{
+  const at = new THREE.Vector3(-40, 0, 60);
+  const track = new MeshBuilder();
+  track.kind = KIND.plain;
+  track.color = lin(0x3a3a3c);
+  track.box(at.x, at.z, 0, 0.08, 2.6, 70, KIND.plain);
+  track.color = lin(0xb0b0b4);
+  for (const s of [-0.53, 0.53]) track.box(at.x + s, at.z, 0.08, 0.2, 0.07, 70, KIND.plain);
+  genRoot.new.add(new THREE.Mesh(track.build()!, city));
+  const train = trainModel(0x10a060, city);
+  train.position.set(at.x, 0.2, at.z);
+  genRoot.new.add(train);
+  label('new', 'Toto Line train', at.x, 6, at.z);
+  genItems.new.push({ name: 'train', group: 'Transit', at: new THREE.Vector3(at.x, 2, at.z), size: 60, view: new THREE.Vector3(1, 0.3, 0.6).normalize() });
+  genItems.new.push({ name: 'train (cab)', group: 'Transit', at: new THREE.Vector3(at.x, 2, at.z + 28), size: 8, view: new THREE.Vector3(0.5, 0.15, 1).normalize() });
+  genItems.new.push({ name: 'train (inside)', group: 'Transit', at: new THREE.Vector3(at.x, 2.3, at.z + 3), size: 3, view: new THREE.Vector3(0.01, 0.05, 1).normalize() });
 }
 // Kaburo mega-sign (the corner tower with its screens and the neon dragon) on its own plaza.
 {
@@ -457,7 +476,7 @@ function renderPanel(): void {
   button('previous (in the district)', gen === 'previous', () => applyGen('previous'));
   section('Lighting');
   for (const m of ['studio', 'night', 'day'] as const) button(m, mode === m, () => applyMode(m));
-  for (const g of ['Mega-sign', 'Cars', 'Billboards', 'Posters', 'People']) {
+  for (const g of ['Transit', 'Mega-sign', 'Cars', 'Billboards', 'Posters', 'People']) {
     section(g);
     for (const it of genItems[gen].filter((i) => i.group === g)) button(it.name, false, () => focus(it));
   }

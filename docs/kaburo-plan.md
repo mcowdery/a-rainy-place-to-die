@@ -56,3 +56,7 @@ It should be visible from most of the district, and it's the natural spawn view.
 - Train overpass at the station edge (ads on the girders, a rumble overhead).
 - Missing-person flyers taped to poles, tied to taxi ad C.
 - A second mega-screen, smaller, on the host street.
+
+## Beyond Kaburo
+
+**Built (2026-09-26):** Asagiri 朝霧, the business district west of Kaburo (skyscraper row, tower plaza, the west exit's department stores and electronics shops, and Omoide Lane, a yakitori alley by the tracks), and the Toto Line 東都線: an elevated line between the two with Kaburo and Asagiri stations; trains run both ways and you can ride them. Next: Asagiri set pieces (a city hall-style twin tower, an observation deck), more stations and a second line, buses and taxis on the roads.

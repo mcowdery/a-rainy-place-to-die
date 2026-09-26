@@ -374,9 +374,16 @@ const surface = /* glsl */ `
     sEmit = refl * (isGlass ? vec3(mix(0.06, 1.0, F)) : isChrome ? vColor.rgb * mix(0.55, 1.0, F) : vec3(mix(0.02, 0.7, F)));
   } else if (kindF < 3.5) {
     float ch = vStyle.x;
-    float gain = ch < 0.5 ? 1.6 : ch < 1.5 ? uLamps * 6.0 : uNeon * 3.5 * flick(vBid);
-    sEmit = vColor.rgb * gain;
-    albedo = vColor.rgb * 0.3;
+    if (ch > 2.5) {
+      // Surfaces lit by their own fixtures (platforms, concourses, train interiors): full albedo, plus a
+      // share of their colour as light, at night only (lit) or always (interior).
+      albedo = vColor.rgb;
+      sEmit = vColor.rgb * (ch > 3.5 ? 0.42 : uLamps * 0.3);
+    } else {
+      float gain = ch < 0.5 ? 1.6 : ch < 1.5 ? uLamps * 6.0 : uNeon * 3.5 * flick(vBid);
+      sEmit = vColor.rgb * gain;
+      albedo = vColor.rgb * 0.3;
+    }
   } else {
     vec2 p = vWPos.xz;
     float gn = vnoise(p * 0.35);

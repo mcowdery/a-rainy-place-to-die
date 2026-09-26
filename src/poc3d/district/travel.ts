@@ -17,6 +17,8 @@ export interface Destination {
   /** Camera yaw / pitch in degrees. */
   readonly yaw: number;
   readonly pitch: number;
+  /** Floor height (a station platform is raised). */
+  readonly floor: number;
 }
 
 const YAW: Record<string, number> = { north: 0, south: 180, east: -90, west: 90 };
@@ -25,7 +27,7 @@ export function destinations(district: District, nodes: readonly Node3[], zones:
   const out: Destination[] = [];
   for (const n of nodes) {
     if (n.kind !== 'spawn' || !n.name) continue;
-    out.push({ id: n.id, name: n.name, group: 'Places', x: n.x, z: n.z, yaw: n.view?.[0] ?? YAW[n.facing ?? 'north'], pitch: n.view?.[1] ?? 4 });
+    out.push({ id: n.id, name: n.name, group: 'Places', x: n.x, z: n.z, yaw: n.view?.[0] ?? YAW[n.facing ?? 'north'], pitch: n.view?.[1] ?? 4, floor: n.floor });
   }
   // Zones: the free street spot nearest the middle of the zone's cells, looking along the street.
   for (const zone of zones.zones) {
@@ -49,7 +51,7 @@ export function destinations(district: District, nodes: readonly Node3[], zones:
           if (d >= bestD || district.blocked(x, z, 0.6)) continue;
           bestD = d;
           const yaw = r.vertical ? (z > cz ? 0 : 180) : x > cx ? 90 : -90;
-          best = { id: `zone.${zone.id}`, name: zone.name, group: 'Zones', x, z, yaw, pitch: 6 };
+          best = { id: `zone.${zone.id}`, name: zone.name, group: 'Zones', x, z, yaw, pitch: 6, floor: 0 };
         }
       }
     }

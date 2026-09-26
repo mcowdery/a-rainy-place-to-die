@@ -69,7 +69,7 @@ export interface ZoneLook {
 }
 
 /**
- * An area within a district with its own character (content/world3d/zones.yaml): planner parameters
+ * An area within a district with its own character (content/world3d/zones/*.yaml): planner parameters
  * (street and alley density, lot widths, heights, signs), the look of its buildings and its ad mix.
  */
 export interface Zone3 {
@@ -140,7 +140,28 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     signWords: [...STYLES.neon.signs.words, 'スナック 夜', 'ネオン', '麻雀', 'バー', '二次会', 'LIVE', 'PACHINKO', 'GAME CENTER', 'カラオケ館', '風俗案内所'],
     signColors: NEON_SIGN_COLORS,
   },
+  tower: {
+    name: 'Asagiri',
+    edgeRoads: [10, 12, 14],
+    localStreet: [6, 10],
+    block: [30, 60],
+    twoRowDepth: 30,
+    lotW: [14, 26],
+    lotGap: 0.3,
+    floors: [
+      [8, 15, 30],
+      [18, 32, 45],
+      [38, 52, 25],
+    ],
+    signChance: 0.35,
+    verticalSign: 0.2,
+    signWords: ['BANK', '銀行', 'HOTEL', 'CAFE', '郵便局', 'CLINIC', '証券', '保険', 'ビジネス', '書店', 'BAKERY', 'GYM'],
+    signColors: [0xffffff, 0x4fe3ff, 0xffe45f, 0x6bff8a],
+  },
 };
+
+/** Every district with a 3D style, i.e. every district the 3D city generates. */
+export const DISTRICTS3 = Object.keys(STYLES3) as DistrictId[];
 
 export const cellKey = (mx: number, my: number): number => my * 4096 + mx;
 

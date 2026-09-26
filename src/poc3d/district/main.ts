@@ -19,6 +19,8 @@ import { buildLiveHouse } from '../real/liveHouse';
 import { buildYokocho } from '../real/yokocho';
 import { buildRyujin } from '../real/ryujin';
 import { buildDiscount } from '../real/discount';
+import { buildStation } from '../real/station';
+import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { destinations, TravelMap, type Destination } from './travel';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
@@ -29,7 +31,7 @@ import { Sky } from '../real/sky';
 import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
 import { signTexts } from './model';
-import { CELL, STYLES3 } from './plan';
+import { CELL, DISTRICTS3, STYLES3 } from './plan';
 import type { Node3 } from './stamps';
 import { District } from './world';
 
@@ -88,8 +90,8 @@ async function run(): Promise<void> {
   const style = STYLES3.neon!;
   const cityU = cityUniforms();
   const city = cityMaterial(cityU);
-  const district = new District(content.macro, 'neon', content.placed, SEED, content.zones);
-  const words = content.zones.words(style.signWords);
+  const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones);
+  const words = content.zones.words([...new Set(DISTRICTS3.flatMap((k) => STYLES3[k]!.signWords))]);
   const atlas = new SignAtlas(signTexts(words, content.placed));
   const M = 16;
   const b = district.bounds;
@@ -140,9 +142,28 @@ async function run(): Promise<void> {
   if (dressingGeo) scene.add(new THREE.Mesh(dressingGeo, city));
   // Landmarks: built here rather than by the chunk workers (their own shaders and animation), always shown.
   const landmarkUpdates: ((camera: THREE.Vector3, dt: number) => void)[] = [];
+  // The Toto Line: its stations (station stamps) and the viaduct and trains between them.
+  const rail = content.rail;
+  const stationPlaced = content.placed.filter((p) => p.stamp.landmark === 'station');
+  const railStations: RailStation[] = stationPlaced.map((p) => ({
+    id: p.id,
+    names: p.stamp.station!,
+    z: p.building.z,
+    side: Math.sign(p.building.x - (rail?.x ?? 0)),
+    z0: p.building.z - p.building.d / 2,
+    z1: p.building.z + p.building.d / 2,
+  }));
+  const trains = rail ? new TrainSystem(rail, railStations, city) : null;
+  if (trains && rail) {
+    scene.add(trains.group);
+    district.addColliders(viaductPiers(rail, railStations));
+  }
   for (const placed of content.placed) {
     const lm = placed.stamp.landmark;
-    if (lm === 'mega_sign') {
+    if (lm === 'station' && rail) {
+      const other = railStations.find((s) => s.id !== placed.id)?.names ?? null;
+      scene.add(buildStation(placed.building, city, placed.stamp.station!, other, rail));
+    } else if (lm === 'mega_sign') {
       const mega = buildMegaSign(cityU, city);
       mega.group.position.set(placed.building.x, 0, placed.building.z);
       scene.add(mega.group);
@@ -182,7 +203,9 @@ async function run(): Promise<void> {
   const YAW: Record<string, number> = { north: 0, south: 180, east: -90, west: 90 };
   const teleport = (id: string): void => {
     const n = nodeById.get(id)!;
-    camera.position.set(n.x, district.floorAt(n.x, n.z) + 1.7, n.z);
+    const level = district.floorAt(n.x, n.z, n.floor);
+    camera.position.set(n.x, level + 1.7, n.z);
+    controls.setLevel(level);
     if (n.view) controls.setView(n.view[0], n.view[1]);
     else controls.setView(YAW[n.facing ?? 'north'], 4);
   };
@@ -192,11 +215,16 @@ async function run(): Promise<void> {
     return (Math.atan2(-d.x, -d.z) * 180) / Math.PI;
   };
   const travel = new TravelMap(district, content.zones, destinations(district, nodes, content.zones), (d: Destination) => {
-    camera.position.set(d.x, controls.fly ? Math.max(camera.position.y, 1.7) : district.floorAt(d.x, d.z) + 1.7, d.z);
+    const level = district.floorAt(d.x, d.z, d.floor);
+    camera.position.set(d.x, controls.fly ? Math.max(camera.position.y, 1.7) : level + 1.7, d.z);
+    controls.setLevel(level);
     controls.setView(d.yaw, d.pitch);
     travel.hide();
     controls.look.lock();
   });
+  if (params.get('diag') === '1') (window as unknown as { __renderer: THREE.WebGLRenderer }).__renderer = renderer;
+  // Review hook for screenshot scripts: point the view (yaw, pitch in degrees).
+  (window as unknown as { __look: (y: number, p: number) => void }).__look = (y, p) => controls.setView(y, p);
   const spawnParam = params.get('spawn');
   teleport(spawnParam && nodeById.get(spawnParam)?.kind === 'spawn' ? spawnParam : START_SPAWN);
   const cam = params.get('cam')?.split(',').map(Number);
@@ -253,8 +281,34 @@ async function run(): Promise<void> {
   };
   applyAtmosphere();
   // Compile every shader variant and upload the warm-start geometry now, rather than in the first frames.
+  // Compile for the composer's HDR target (the scene is drawn into it, not the canvas): programs are keyed
+  // by the target's colour space, so compiling for the canvas left every material to compile again later.
+  renderer.setRenderTarget(rt);
   await renderer.compileAsync(scene, camera);
+  renderer.setRenderTarget(null);
+  // Upload every texture now too (sign canvases, posters): otherwise each uploads the first time its object
+  // comes into view, a hitch of tens of milliseconds for the big ones.
+  const textures = new Set<THREE.Texture>();
+  scene.traverse((o) => {
+    const mats = (o as THREE.Mesh).material;
+    for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) {
+      for (const v of Object.values(m)) if (v instanceof THREE.Texture) textures.add(v);
+      const uniforms = (m as THREE.ShaderMaterial).uniforms;
+      if (uniforms) for (const u of Object.values(uniforms)) if (u?.value instanceof THREE.Texture) textures.add(u.value);
+    }
+  });
+  for (const t of textures) renderer.initTexture(t);
+  // And every mesh's geometry: draw the whole scene once without culling, so the landmarks, the viaduct
+  // and the trains upload now rather than the first time each comes into view.
+  const culled: THREE.Object3D[] = [];
+  scene.traverse((o) => {
+    if (o.frustumCulled) {
+      o.frustumCulled = false;
+      culled.push(o);
+    }
+  });
   composer.render(0);
+  for (const o of culled) o.frustumCulled = true;
   $('overlay').textContent = 'click to walk';
 
   // Interaction: nearest visible interactable within reach, roughly in front of you.
@@ -265,8 +319,9 @@ async function run(): Promise<void> {
     camera.getWorldDirection(forward);
     let best: Node3 | null = null;
     let bestD = 3.2;
+    const level = camera.position.y - 1.7;
     for (const n of nodes) {
-      if (n.trigger !== 'interact' || !visibleNode(n)) continue;
+      if (n.trigger !== 'interact' || !visibleNode(n) || Math.abs(n.floor - level) > 2) continue;
       const dx = n.x - camera.position.x;
       const dz = n.z - camera.position.z;
       const d = Math.hypot(dx, dz);
@@ -280,6 +335,7 @@ async function run(): Promise<void> {
   const interact = async (): Promise<void> => {
     const n = target();
     if (!n || inVn) return;
+    if (n.kind === 'station' && trains && n.returnSpawn) return rideTrain(n.placementId, n.returnSpawn);
     inVn = true;
     document.exitPointerLock();
     const result = await bridge.enter(n);
@@ -288,9 +344,39 @@ async function run(): Promise<void> {
     inVn = false;
   };
 
+  // Riding the train: fade, stand in the car for the trip, fade, step out onto the other platform.
+  const fade = document.createElement('div');
+  Object.assign(fade.style, { position: 'fixed', inset: '0', background: '#000', opacity: '0', pointerEvents: 'none', transition: 'opacity 0.35s', zIndex: '15' });
+  document.body.append(fade);
+  const fadeTo = (o: number): Promise<void> => new Promise((r) => {
+    fade.style.opacity = String(o);
+    setTimeout(r, 380);
+  });
+  async function rideTrain(fromId: string, spawn: string): Promise<void> {
+    const from = railStations.find((s) => s.id === fromId);
+    const to = railStations.find((s) => s.id === nodeById.get(spawn)?.placementId);
+    if (!from || !to || !trains) return;
+    inVn = true;
+    controls.held = true;
+    await fadeTo(1);
+    const arrived = trains.startRide(from, to, camera);
+    controls.setView(trains.rideYaw, 0);
+    await fadeTo(0);
+    inVn = false;
+    await arrived;
+    await fadeTo(1);
+    controls.held = false;
+    teleport(spawn);
+    await fadeTo(0);
+  }
+
   const direct: Record<string, OverlayPreset> = { Digit1: 'off', Digit2: 'vibe', Digit3: 'heavy', Digit4: 'ascii' };
   window.addEventListener('keydown', (e) => {
     if (bench || inVn) return;
+    if (trains?.riding) {
+      if (e.code === 'KeyE') trains.skip();
+      return;
+    }
     if (e.code === 'KeyM' || (e.code === 'Escape' && travel.open)) {
       if (travel.open) travel.hide();
       else {
@@ -377,6 +463,7 @@ async function run(): Promise<void> {
     }
     if (bench) controls.update(0);
     for (const update of landmarkUpdates) update(camera.position, dt);
+    trains?.update(dt, camera);
 
     const t0 = performance.now();
     // Turning worker results into meshes is the only streaming work on the main thread: ~2 ms a frame.
@@ -422,14 +509,14 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        `KABURO · ${district.zoneAt(p.x, p.z) ?? style.name}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''} (Neon Core)  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}`,
+        trains?.status ?? `${(district.districtAt(p.x, p.z) ?? style.name).toUpperCase()} · ${district.zoneAt(p.x, p.z) ?? ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
-        t ? `[E] ${t.kind === 'door' ? 'Enter' : 'Talk'}: ${t.name ?? t.id}` : ' ',
+        t ? `[E] ${t.kind === 'door' ? 'Enter' : t.kind === 'station' ? 'Take the train' : 'Talk'}: ${t.name ?? t.id}` : ' ',
         'click to look · WASD · Shift run · E interact · M map / fast travel · T time · R weather · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
       ].join('\n');
       builtThisWindow = 0;

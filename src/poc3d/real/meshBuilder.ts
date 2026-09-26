@@ -25,7 +25,9 @@ export const KIND = {
 } as const;
 
 /** Emission channels for KIND.emit: always on, street lamps (atmosphere 'lamps'), neon (flickers, off by day). */
-export const EMIT = { always: 0, lamp: 1, neon: 2 } as const;
+/** Emissive channels: always on, street lamps (night), neon; lit / interior: normal surfaces lit by their
+ * own fixtures, at night only or always (their colour is albedo, and part of it light). */
+export const EMIT = { always: 0, lamp: 1, neon: 2, lit: 3, interior: 4 } as const;
 
 export const FRONT = 16;
 
