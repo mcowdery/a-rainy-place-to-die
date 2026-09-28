@@ -1,0 +1,32 @@
+{
+  "batch": "vn-proto-01",
+  "purpose": "Stills for the prototype VN scene (Bar Kanpai's Mama-san, and the knock at Hotel Rouge's Room 303). 16:9 frames; dialogue is drawn in-engine, so no lettering.",
+  "use": "sign",
+  "defaults": { "lora": null, "variants": 2, "width": 1536, "height": 864 },
+  "items": [
+    {
+      "id": "mama_street",
+      "style": "photorealistic cinematic film still, neo-noir, 1980s Tokyo city pop mood, neon light and rain, 35mm film grain, shallow depth of field",
+      "subject": "an elegant Japanese snack bar mama-san in her fifties in a dark kimono, hair in a neat bun, holding a clear umbrella, standing under the small lit awning of her tiny bar in a narrow rain-soaked Kabukicho alley at night, pink and amber neon reflected on the wet street, she looks at the viewer with a knowing half smile, medium shot",
+      "composition": "wide horizontal composition, subject left of centre, the lower third of the frame darker and uncluttered"
+    },
+    {
+      "id": "bar_interior",
+      "style": "photorealistic cinematic film still, neo-noir, 1980s Tokyo city pop mood, warm amber light, 35mm film grain",
+      "subject": "inside a tiny Japanese snack bar at night, a short wooden counter with a few stools in the foreground, the mama-san in a kimono behind the counter in the centre, a wall of backlit shelves of whisky keep bottles with little hanging tags on the left, a small framed old black and white photograph on the wall, a frosted glass door on the right edge, cosy and intimate",
+      "composition": "wide horizontal composition, straight-on view of the counter, every element clearly separated"
+    },
+    {
+      "id": "room303_door",
+      "style": "photorealistic cinematic film still, neo-noir, moody purple and red light, 35mm film grain",
+      "subject": "a closed hotel room door at the end of a dim love hotel corridor at night, dark red carpet, damask wallpaper, a small red lamp glowing above the door, a brass room number plate, warm light and the flicker of a television spilling from the gap under the door, suspenseful",
+      "composition": "wide horizontal composition, the door in the centre"
+    },
+    {
+      "id": "matchbook",
+      "style": "photorealistic cinematic film still, neo-noir, 35mm film grain, shallow depth of field",
+      "subject": "close-up of a small pink matchbook lying on dark red hotel carpet, half slid out from the thin line of light under a closed door",
+      "composition": "wide horizontal composition, the matchbook just right of centre, low angle close to the floor"
+    }
+  ]
+}

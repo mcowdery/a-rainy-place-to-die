@@ -7,6 +7,8 @@ import { FlagStore } from '../../core/flags';
 import { ContentError } from '../../content/load';
 import { FLAG_TIME, FLAG_WEATHER, TIMES, WEATHERS, type TimeOfDay, type Weather } from '../../atmosphere/rules';
 import { PlaceholderVnBridge } from '../../game/bridge';
+import { loadVnLibrary } from '../../vn/content';
+import { VnPlayer } from '../../vn/player';
 import { FirstPerson } from '../controls';
 import { frontFrame } from '../real/buildings';
 import { cityMaterial, cityUniforms } from '../real/city';
@@ -598,7 +600,18 @@ async function run(): Promise<void> {
   $('overlay').textContent = 'click to walk';
 
   // Interaction: nearest visible interactable within reach, roughly in front of you.
-  const bridge = new PlaceholderVnBridge($('vn'));
+  // VN mode: the stories exported from the VN generator (content/vn/); a node no story knows shows the placeholder.
+  const vnLibrary = loadVnLibrary();
+  if (vnLibrary.errors.length) console.error(`VN content:\n${vnLibrary.errors.join('\n')}`);
+  const bridge = new VnPlayer(vnLibrary, { get: flags.get, set: (k, v) => flags.set(k, v) }, new PlaceholderVnBridge($('vn')), (id) => nodeById.get(id)?.kind === 'spawn', debug);
+  // ?debug=1: window.__vn('bar_kanpai.mama') plays a node's scene (for screenshots and checks).
+  if (debug) {
+    (window as unknown as { __vn: (id: string) => void }).__vn = (id) => {
+      const n = nodeById.get(id)!;
+      controls.setView((Math.atan2(-(n.x - camera.position.x), -(n.z - camera.position.z)) * 180) / Math.PI, 0);
+      void bridge.enter(n);
+    };
+  }
   let inVn = false;
   const forward = new THREE.Vector3();
   const target = (): Node3 | null => {
@@ -647,6 +660,8 @@ async function run(): Promise<void> {
     }
     inVn = true;
     document.exitPointerLock();
+    // Turn to face whoever you're talking to (the scene plays over the paused city).
+    if (n.kind === 'npc') controls.setView((Math.atan2(-(n.x - camera.position.x), -(n.z - camera.position.z)) * 180) / Math.PI, 0);
     const result = await bridge.enter(n);
     const spawn = result.returnSpawn ?? n.returnSpawn;
     if (spawn) teleport(spawn);

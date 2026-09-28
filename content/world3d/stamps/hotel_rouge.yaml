@@ -68,6 +68,8 @@ nodes:
     name: Room 303 · Rouge Suite
     at: [17.75, -10.9]
     floor: 10
+    # Only once someone has told you about it (Mama-san, in the VN scene at Bar Kanpai).
+    condition: heard_room_303
     returnSpawn: floor3
     handoff: {}
   side:
