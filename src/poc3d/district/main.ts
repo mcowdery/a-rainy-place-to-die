@@ -25,6 +25,7 @@ import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { SubwaySystem } from '../real/subway';
 import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../real/subwayStation';
 import { buildRotary, type RotaryBuilt } from '../real/rotary';
+import { sentoInterior, type Interior } from '../real/interiors';
 import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem } from '../real/traffic';
 import { ScreenGlows, ScreenLights } from '../real/screenLight';
@@ -204,6 +205,8 @@ async function run(): Promise<void> {
   // Landmarks with a part below ground (the terminal's underground mall): their plaza stays shown (you see
   // it up the stairs), the part below only below ground or nearby.
   const rotaries: { r: RotaryBuilt; x: number; z: number }[] = [];
+  // Landmark exteriors by placement (an interior hides its building's exterior while you're inside).
+  const exteriors = new Map<string, THREE.Object3D>();
   // Everything on the surface, hidden below ground (the stations' own groups stay: they reach up to the street).
   const surface: THREE.Object3D[] = [];
   // Traffic: cars and taxis clockwise round their loops, buses anticlockwise round theirs.
@@ -249,6 +252,7 @@ async function run(): Promise<void> {
     if (lm && (ASAGIRI_KINDS as readonly string[]).includes(lm)) {
       const a = buildAsagiri(lm as AsagiriKind, placed.building, placed.id, city, ghost, cityU);
       scene.add(a.group);
+      exteriors.set(placed.id, a.group);
       screens.add(...a.lights);
       glows.add(...a.lights);
       landmarkUpdates.push(a.update);
@@ -301,6 +305,28 @@ async function run(): Promise<void> {
   }
   // The surface: the city, traffic, weather and the other landmarks (everything but the subway's own).
   for (const o of scene.children) if (o !== subway.group && !subwayViews.some((v) => v.view.group === o) && !rotaries.some((v) => v.r.group === o) && !(o instanceof THREE.Light) && o !== sky.mesh) surface.push(o);
+  // Door-entered interiors (real/interiors.ts), at their buildings' true positions: built as you approach,
+  // shown (with the exterior hidden and the collision swapped) while you're inside the footprint.
+  const interiors = content.placed
+    .filter((p) => p.stamp.landmark === 'sento')
+    .map((p) => ({ id: p.id, b: p.building, make: () => sentoInterior(p.building, city, ghost), built: null as Interior | null, active: false }));
+  const inInterior = (): boolean => interiors.some((i) => i.active);
+  const updateInteriors = (): void => {
+    const cp = camera.position;
+    for (const it of interiors) {
+      if (!it.built && Math.hypot(it.b.x - cp.x, it.b.z - cp.z) < 70) {
+        it.built = it.make();
+        scene.add(it.built.group);
+      }
+      const inside = !!it.built && cp.y > -1 && cp.y < it.b.h + 2 && it.built.contains(cp.x, cp.z);
+      if (inside === it.active) continue;
+      it.active = inside;
+      it.built!.group.visible = inside;
+      const ext = exteriors.get(it.id);
+      if (ext) ext.visible = !inside;
+      district.setInteriorColliders(it.id, inside ? it.built!.colliders : null);
+    }
+  };
   const visibleNode = (n: Node3): boolean => n.condition === null || n.condition(flags.get);
   const npcBlocked = (x: number, z: number, r: number): boolean =>
     nodes.some((n) => n.kind === 'npc' && visibleNode(n) && Math.hypot(n.x - x, n.z - z) < r + 0.35);
@@ -572,6 +598,17 @@ async function run(): Promise<void> {
       }
       return ride(n.returnSpawn);
     }
+    // A door into (or out of) an interior: a fade, and you're through (the interior switches on by where you are).
+    if (n.kind === 'door' && n.returnSpawn && interiors.some((i) => i.id === n.placementId)) {
+      inVn = true;
+      await fadeTo(1);
+      teleport(n.returnSpawn);
+      updateInteriors();
+      await new Promise((r) => setTimeout(r, 150));
+      await fadeTo(0);
+      inVn = false;
+      return;
+    }
     inVn = true;
     document.exitPointerLock();
     const result = await bridge.enter(n);
@@ -762,6 +799,7 @@ async function run(): Promise<void> {
     for (const update of landmarkUpdates) update(camera.position, dt);
     trains?.update(dt, camera);
     subway.update(dt, camera);
+    updateInteriors();
     traffic.update(dt, camera.position);
     signalLamps.update(camera.position, traffic.clock);
     screens.update(camera.position, now / 1000, cityU.uNeon.value);
@@ -918,7 +956,7 @@ async function run(): Promise<void> {
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
-        t ? `[E] ${t.kind === 'door' ? 'Enter' : t.kind === 'station' ? (content.subway.stops.has(t.placementId) ? 'Take the subway' : isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : ' ',
+        t ? `[E] ${t.kind === 'door' ? (inInterior() && interiors.some((i) => i.id === t.placementId) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (content.subway.stops.has(t.placementId) ? 'Take the subway' : isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : ' ',
         `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look`,
       ].join('\n');
       builtThisWindow = 0;

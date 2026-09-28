@@ -83,7 +83,8 @@ export function asagiriColliders(kind: AsagiriKind, b: Building3, floor: number)
     case 'dept_store':
       return [R(0, DEPT.w, 1.2, DEPT.d)];
     case 'sento':
-      return [R(0, 16, 0.6, 22), R(13.1, 14.9, 18.1, 19.9)];
+      // Solid, but for a shallow pocket at the doorway (so stepping out of the interior never lands you in the wall).
+      return [R(0, 16, 1.25, 22), R(0, 5.4, 0.6, 1.25), R(10.6, 16, 0.6, 1.25)];
   }
 }
 
@@ -100,6 +101,8 @@ export function asagiriShelters(kind: AsagiriKind, b: Building3): { rect: Rect; 
       return [R(9, 25, 3, 10, 0, 5.2)];
     case 'police_hq':
       return [R(18, 32, 7, 10, 0, 8)];
+    case 'sento':
+      return [R(0.5, 15.5, 0.9, 22, 0, 9, true)];
     default:
       return [];
   }
@@ -235,7 +238,7 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
     k.mb.poly4(P(0.2, 0.95, 4.8), P(15.8, 0.95, 4.8), P(8, 0.95, 7.2), P(8, 0.95, 7.2));
     k.mb.poly4(P(15.8, 0.95, 4.8), P(0.2, 0.95, 4.8), P(8, 0.95, 7.2), P(8, 0.95, 7.2));
     // The doorway: a lit genkan behind sliding glass, the noren over it, the sign above.
-    k.glow([1.2, 0.9, 0.6], 5.4, 10.6, 1.04, 1.07, 0.1, 3.2, EMIT.lamp);
+    k.glow([0.2, 0.15, 0.1], 5.4, 10.6, 1.04, 1.07, 0.1, 3.2, EMIT.lamp);
     k.pane(5.4, 10.6, 0.1, 3.2, 1.0);
     k.plane(k.canvas(512, 256, (g) => {
       g.fillStyle = '#1a3a6a';

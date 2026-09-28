@@ -600,3 +600,43 @@ describe('Sakuragaoka (residential)', () => {
     expect(route.some((l) => l.kind === 'transfer' && l.to === 's01_station')).toBe(true);
   });
 });
+
+describe('Interiors: Sakura-yu, the public bath', () => {
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const bath = content.placed.find((p) => p.id === 'sakura_yu')!;
+
+  it('keeps the bath solid from the street, but for the doorway pocket', async () => {
+    const f = localFrame(bath.building);
+    expect(district.blocked(...toWorld(f, 8, 5), 0.4)).toBe(true);
+    expect(district.blocked(...toWorld(f, 3, 0.9), 0.4)).toBe(true);
+    expect(district.blocked(...toWorld(f, 8, 0.3), 0.3)).toBe(false);
+  });
+
+  it('lets you walk through it once inside: genkan, lobby, the men’s side, into the bath hall', async () => {
+    const { sentoLayout } = await import('../src/poc3d/real/interiors');
+    const layout = sentoLayout(bath.building);
+    const f = localFrame(bath.building);
+    district.setInteriorColliders('sakura_yu', layout.colliders);
+    try {
+      const path: [number, number][] = [[8, 2.4], [8, 4.5], [5, 4.5], [3.5, 7], [3.5, 9], [4.5, 12], [4.5, 14], [4.5, 17], [3, 17]];
+      for (let i = 0; i + 1 < path.length; i++) {
+        const [u0, t0] = path[i];
+        const [u1, t1] = path[i + 1];
+        const n = Math.ceil(Math.hypot(u1 - u0, t1 - t0) / 0.1);
+        for (let k = 1; k <= n; k++) {
+          const [x, z] = toWorld(f, u0 + ((u1 - u0) * k) / n, t0 + ((t1 - t0) * k) / n);
+          expect(layout.contains(x, z)).toBe(true);
+          expect(district.blocked(x, z, 0.4), `at ${(u0 + ((u1 - u0) * k) / n).toFixed(1)}, ${(t0 + ((t1 - t0) * k) / n).toFixed(1)}`).toBe(false);
+        }
+      }
+      // Not into the tub, not through to the women's side.
+      expect(district.blocked(...toWorld(f, 4, 19.5), 0.4)).toBe(true);
+      expect(district.blocked(...toWorld(f, 8.15, 16), 0.4)).toBe(true);
+      // Out of the doorway is outside.
+      expect(layout.contains(...toWorld(f, 8, 0.5))).toBe(false);
+    } finally {
+      district.setInteriorColliders('sakura_yu', null);
+    }
+    expect(district.blocked(...toWorld(f, 8, 5), 0.4)).toBe(true);
+  });
+});

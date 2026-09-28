@@ -121,6 +121,23 @@ export class District {
   }
 
   private readonly stampColliders: (readonly Rect[])[];
+  private readonly stampOutside = new Map<number, readonly Rect[]>();
+
+  /**
+   * Swap a placement's street-level collision (an interior you're inside: its walls and fixtures instead of
+   * the solid footprint); null puts the outside back.
+   */
+  setInteriorColliders(placementId: string, rects: readonly Rect[] | null): void {
+    const i = this.model.placed.findIndex((p) => p.id === placementId);
+    if (i < 0) return;
+    if (rects) {
+      if (!this.stampOutside.has(i)) this.stampOutside.set(i, this.stampColliders[i]);
+      this.stampColliders[i] = rects;
+    } else if (this.stampOutside.has(i)) {
+      this.stampColliders[i] = this.stampOutside.get(i)!;
+      this.stampOutside.delete(i);
+    }
+  }
 
   /** More street-level colliders (the viaduct's piers). */
   addColliders(rects: readonly Rect[]): void {

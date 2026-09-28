@@ -6,5 +6,10 @@ footprint: [16, 22]
 height: 8
 front: north
 landmark: sento
+# You can go in (real/interiors.ts): the door takes you to the genkan; inside, the door back out (or just walk
+# out of the doorway).
 nodes:
   front: { kind: spawn, name: Sakura-yu (public bath), at: [8, 7], facing: south, view: [180, 14] }
+  door: { kind: door, name: Sakura-yu 桜湯, at: [8, 0.4], returnSpawn: inside }
+  inside: { kind: spawn, at: [8, -2.4], facing: south }
+  leave: { kind: door, name: the street, at: [8, -1.4], returnSpawn: front }
