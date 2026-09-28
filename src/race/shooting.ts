@@ -6,8 +6,8 @@ import { splat, type TargetHit, type Targets } from './targets';
  * Shooting from the car (the practice lot's test): a pistol and a paintball marker, fired by the driver.
  * Japanese cars are right-hand drive, so the driver's window is on the right: the arm goes out of it, a wide
  * arc from just ahead round to behind. The passenger's window is across the car: the driver stays in the
- * seat and shoots through it, so only the slot that window makes (seen from the driver's seat) will do, and
- * the shots are worse (spread, rate). The windscreen and the back are no line of fire.
+ * seat and shoots through it (the camera goes to the driver's eye: cabin.ts), so only what that window frames
+ * will do, and the shots are worse (spread, rate). The windscreen and the back are no line of fire.
  *
  * The pistol (黒星, the Type 54 the yakuza made famous) hits at once, with a flash and a tracer, and has a
  * little aim assist. Paintballs fly: they leave at 88 m/s plus the car's own velocity, drop, and slow, so you
@@ -34,29 +34,60 @@ export const WEAPONS: readonly Weapon[] = [
 ];
 
 const DEG = Math.PI / 180;
+
+/** The driver's eye in the car's frame (+x its left, +z forward, metres from its centre on the ground). */
+export const EYE = { x: -0.35, y: 1.13, z: -0.02 } as const;
 /**
- * Where you can shoot, relative to the car's heading from the driver's seat (rad, positive to the left): out
- * of the driver's window from just ahead (`ahead`) round to behind (`right`); through the passenger window
- * between its pillars (`window`), and only as high or low as the window (`windowPitch`).
+ * The passenger window's opening, in the car's frame: the plane x = `x` (the door's inside), between z0 and z1
+ * along the car and y0 and y1 up. Shots across the car go through it, and the cabin (cabin.ts) frames it.
  */
-export const ARC = { right: -165 * DEG, ahead: 8 * DEG, window: [58 * DEG, 100 * DEG] as const, windowPitch: [-0.24, 0.14] as const };
+export const WINDOW = { x: 0.82, z0: -0.26, z1: 0.68, y0: 0.8, y1: 1.2 } as const;
+/**
+ * Where you can shoot, relative to the car's heading (rad, positive to the left): out of the driver's window
+ * from just ahead (`ahead`) round to behind (`right`); across the car only through the passenger window.
+ */
+export const ARC = { right: -165 * DEG, ahead: 8 * DEG };
 export type Side = 'driver' | 'across';
 
 export const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
-/** Which window a shot at `rel` (and `pitch`) goes out of, or null (the windscreen, the back, the roof). */
+
+/** Where a look from the driver's eye at (rel, pitch) meets the passenger window's plane (car frame), or null. */
+function onWindowPlane(rel: number, pitch: number): { y: number; z: number } | null {
+  const dx = Math.sin(rel) * Math.cos(pitch);
+  if (dx < 0.05) return null;
+  const t = (WINDOW.x - EYE.x) / dx;
+  return { y: EYE.y + t * Math.sin(pitch), z: EYE.z + t * Math.cos(rel) * Math.cos(pitch) };
+}
+
+/** The passenger window as seen from the driver's eye: its span of angles (rel) and heights (pitch) at its middle. */
+export const WINDOW_ARC = (() => {
+  const dx = WINDOW.x - EYE.x;
+  const zm = (WINDOW.z0 + WINDOW.z1) / 2 - EYE.z;
+  const d = Math.hypot(dx, zm);
+  return {
+    from: Math.atan2(dx, WINDOW.z1 - EYE.z),
+    to: Math.atan2(dx, WINDOW.z0 - EYE.z),
+    pitch: [Math.atan2(WINDOW.y0 - EYE.y, d), Math.atan2(WINDOW.y1 - EYE.y, d)] as const,
+  };
+})();
+
+/** Which window a shot at `rel` and `pitch` (from the driver's eye) goes out of, or null (the windscreen, the back, the roof). */
 export function sideFor(rel: number, pitch = 0): Side | null {
   const r = wrap(rel);
   if (r >= ARC.right && r <= ARC.ahead) return 'driver';
-  if (r >= ARC.window[0] && r <= ARC.window[1] && pitch >= ARC.windowPitch[0] && pitch <= ARC.windowPitch[1]) return 'across';
+  const p = onWindowPlane(r, pitch);
+  const m = 0.02;
+  if (p && p.z > WINDOW.z0 + m && p.z < WINDOW.z1 - m && p.y > WINDOW.y0 + m && p.y < WINDOW.y1 - m) return 'across';
   return null;
 }
 
-/** The nearest aim (rel, pitch) you could shoot at: where the arm points while the aim is off every window. */
+/** The nearest aim (rel, pitch) you could shoot at: where the weapon points while the aim is off every window. */
 export function nearestShot(rel: number, pitch: number): { rel: number; pitch: number; side: Side } {
   const r = wrap(rel);
-  if (sideFor(r, pitch)) return { rel: r, pitch, side: sideFor(r, pitch)! };
-  const [w0, w1] = ARC.window;
-  const inWindow = { rel: Math.max(w0, Math.min(w1, r)), pitch: Math.max(ARC.windowPitch[0], Math.min(ARC.windowPitch[1], pitch)), side: 'across' as const };
+  const side = sideFor(r, pitch);
+  if (side) return { rel: r, pitch, side };
+  const W = WINDOW_ARC;
+  const inWindow = { rel: Math.max(W.from + 0.03, Math.min(W.to - 0.03, r)), pitch: Math.max(W.pitch[0] + 0.03, Math.min(W.pitch[1] - 0.03, pitch)), side: 'across' as const };
   // The driver's arc's nearer end, the short way round (behind the car wraps through 180 degrees).
   const toAhead = Math.abs(wrap(r - ARC.ahead));
   const toRight = Math.abs(wrap(r - ARC.right));
@@ -282,7 +313,15 @@ export class Shooting {
       const w = this.v.set(-0.95, 1.02, 0.1);
       const d = car.worldToLocal(this.v2.copy(aimPoint)).sub(w).normalize();
       this.arm.position.copy(w).addScaledVector(d, 0.32);
-    } else this.arm.position.set(-0.05, 1.1, 0.12);
+    } else {
+      // Across the car the view is the driver's own: the weapon held out low and to the right of the eye,
+      // pointing at the crosshair, as in a first-person view.
+      const eye = car.localToWorld(this.v.set(EYE.x, EYE.y, EYE.z));
+      const d = this.v2.copy(aimPoint).sub(eye).normalize();
+      const right = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize();
+      eye.addScaledVector(d, 0.6).addScaledVector(right, 0.2).add(new THREE.Vector3(0, -0.24, 0));
+      this.arm.position.copy(car.worldToLocal(eye));
+    }
     this.arm.lookAt(aimPoint);
   }
 

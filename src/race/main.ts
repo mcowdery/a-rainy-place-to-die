@@ -9,7 +9,8 @@ import { addVehicle, addWheel, wheelLayout } from '../poc3d/models/vehicles';
 import { loadCourses } from './courses';
 import { buildVenue } from './scene';
 import { GunSound } from './gunSound';
-import { nearestShot, Shooting, sideFor, spreadOf, WEAPONS, wrap, type Side } from './shooting';
+import { buildCabin } from './cabin';
+import { EYE, nearestShot, Shooting, sideFor, spreadOf, WEAPONS, wrap, type Side } from './shooting';
 import { CarSound } from './sound';
 import { Targets } from './targets';
 import { Car, COUPE, DRIFT_ASSISTS, type Assists, type Controls } from './vehicle';
@@ -61,7 +62,8 @@ const skyTex = new THREE.CanvasTexture(sky);
 skyTex.colorSpace = THREE.SRGBColorSpace;
 scene.background = skyTex;
 scene.fog = new THREE.FogExp2(0x0c1020, 0.0042);
-const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
+// Near enough for the driver's-eye view (the wheel and the gun a few tens of centimetres away).
+const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.04, 2000);
 
 const venue = buildVenue(course);
 scene.add(venue.group);
@@ -101,6 +103,15 @@ const shooting = new Shooting(course, targets);
 shooting.pointScale = window.innerHeight;
 scene.add(shooting.group);
 carObj.add(shooting.arm);
+// The cabin, for the driver's-eye view when shooting across the car, and the gauges' faint glow on it (the
+// light is always there, only dark outside the view: adding and removing lights recompiles the shaders).
+const cabin = buildCabin();
+carObj.add(cabin);
+const cabinLight = new THREE.PointLight(0x9aa8c8, 0, 2.4, 1.5);
+cabinLight.position.set(0.1, 1.15, 0.1);
+carObj.add(cabinLight);
+/** 0 over the shoulder, 1 at the driver's eye (shooting across the car through the passenger window). */
+let pov = 0;
 const gunSound = new GunSound();
 /** Aiming, the car holds its line a little better (more countersteer), so one hand on the wheel will do. */
 const AIM_ASSISTS: Assists = { ...DRIFT_ASSISTS, countersteer: 0.7 };
@@ -411,7 +422,7 @@ const placeCamera = (dt: number, snap = false): void => {
     lookPitch -= lookPitch * ease;
   }
   // Aiming: over the driver's (right) shoulder, looking along the aim; the crosshair is the view's centre.
-  const fov = aiming ? 50 : 62;
+  const fov = aiming ? 50 + pov * 16 : 62;
   if (Math.abs(camera.fov - fov) > 0.05) {
     camera.fov += (fov - camera.fov) * Math.min(1, dt * 10);
     camera.updateProjectionMatrix();
@@ -423,15 +434,26 @@ const placeCamera = (dt: number, snap = false): void => {
       aimPitch = Math.atan2(aimTrack.y - p.y, Math.hypot(aimTrack.x - p.x, aimTrack.z - p.z));
     }
     const d = new THREE.Vector3(Math.sin(aimYaw) * Math.cos(aimPitch), Math.sin(aimPitch), Math.cos(aimYaw) * Math.cos(aimPitch));
-    // Behind the aim and up over the roof, a little to the right of it.
+    // Behind the aim and up over the roof, a little to the right of it; or, aiming to the left (across the
+    // car), the driver's own eye, looking out through the passenger window.
     const head = carObj.localToWorld(new THREE.Vector3(-0.35, 1.25, 0));
     const target = head.addScaledVector(d, -2.6).add(new THREE.Vector3(-Math.cos(aimYaw) * 0.55, 0.95, Math.sin(aimYaw) * 0.55));
     target.y = Math.max(target.y, course.height(target.x, target.z) + 0.5);
     camPos.lerp(target, 1 - Math.exp(-dt * 18));
-    camera.position.copy(camPos);
-    camera.lookAt(camPos.clone().add(d));
+    const rel = wrap(aimYaw - car.h);
+    const left = rel > 32 * (Math.PI / 180) && rel < 165 * (Math.PI / 180);
+    pov += ((left ? 1 : 0) - pov) * Math.min(1, dt * 10);
+    const k = pov * pov * (3 - 2 * pov);
+    const eye = carObj.localToWorld(new THREE.Vector3(EYE.x, EYE.y, EYE.z));
+    camera.position.copy(camPos).lerp(eye, k);
+    camera.lookAt(camera.position.clone().add(d));
+    cabin.visible = pov > 0.5;
+    cabinLight.intensity = cabin.visible ? 0.3 : 0;
     return;
   }
+  pov = 0;
+  cabin.visible = false;
+  cabinLight.intensity = 0;
   if (view === 'bumper') {
     const p = new THREE.Vector3(car.x + Math.sin(car.h) * 2.1, car.y + 0.85, car.z + Math.cos(car.h) * 2.1);
     const a = car.h + orbitYaw;
@@ -557,7 +579,7 @@ function frame(now: number): void {
     const look = camera.getWorldDirection(new THREE.Vector3());
     const aimPoint = shooting.pick(camera.position, look).point;
     carObj.updateMatrixWorld();
-    const head = carObj.localToWorld(new THREE.Vector3(-0.35, 1.15, 0));
+    const head = carObj.localToWorld(new THREE.Vector3(EYE.x, EYE.y, EYE.z));
     const rel = wrap(Math.atan2(aimPoint.x - head.x, aimPoint.z - head.z) - car.h);
     const pitch = Math.atan2(aimPoint.y - head.y, Math.hypot(aimPoint.x - head.x, aimPoint.z - head.z));
     side = sideFor(rel, pitch);
@@ -622,6 +644,7 @@ window.addEventListener('resize', () => {
   scene,
   shooting,
   targets,
+  cabin,
   // Keep the crosshair on (x, y, z) (re-aimed each frame from where the camera is).
   aimAt: (x: number, y: number, z: number): void => {
     startAiming();

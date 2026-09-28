@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadCourses } from '../src/race/courses';
 import { parseCourse } from '../src/race/course';
-import { ARC, nearestShot, sideFor, spreadOf, WEAPONS } from '../src/race/shooting';
+import { ARC, nearestShot, sideFor, spreadOf, WEAPONS, WINDOW_ARC } from '../src/race/shooting';
 import { ringPoints } from '../src/race/targets';
 
 const DEG = Math.PI / 180;
@@ -27,7 +27,12 @@ describe('shooting practice', () => {
     // The passenger window: a slot, and only as high or low as the window.
     expect(sideFor(80 * DEG)).toBe('across');
     expect(sideFor(80 * DEG, 0.5)).toBe(null);
-    expect(ARC.window[1] - ARC.window[0]).toBeLessThan((ARC.ahead - ARC.right) / 3);
+    expect(WINDOW_ARC.to - WINDOW_ARC.from).toBeLessThan((ARC.ahead - ARC.right) / 3);
+    // Just inside the window's frame goes through; just past its pillars doesn't.
+    expect(sideFor(WINDOW_ARC.from + 0.05)).toBe('across');
+    expect(sideFor(WINDOW_ARC.to - 0.05)).toBe('across');
+    expect(sideFor(WINDOW_ARC.from - 0.05)).toBe(null);
+    expect(sideFor(WINDOW_ARC.to + 0.05)).toBe(null);
     // Off every window, the weapon waits at the nearest shot.
     expect(nearestShot(30 * DEG, 0).rel).toBeCloseTo(ARC.ahead);
     expect(nearestShot(50 * DEG, 0).side).toBe('across');
