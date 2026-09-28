@@ -137,6 +137,22 @@ describe('district ads', async () => {
     expect([...kinds].sort()).toEqual(['poster', 'rooftop', 'wall']);
   });
 
+  it('hangs billboards on side walls that face a car park, playground or vacant lot', () => {
+    const sides: { p: import('../src/poc3d/real/districtAds').AdPlacement; open: Rect[] }[] = [];
+    for (const [mx, my] of neonCells) {
+      const plan = model.plan(mx, my)!;
+      const out: import('../src/poc3d/real/districtAds').AdPlacement[] = [];
+      addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), plan.signs, model.detail(mx, my)!.props, out, undefined, plan.open);
+      for (const p of out) if (p.kind === 'side') sides.push({ p, open: plan.open.filter((o) => o.kind !== 'plaza' && o.kind !== 'park').map((o) => o.rect) });
+    }
+    expect(sides.length).toBeGreaterThan(5);
+    // Each faces into a lot: a few metres out along its normal is open ground.
+    for (const { p, open } of sides) {
+      const [x, z] = [p.x + p.nx * 3, p.z + p.nz * 3];
+      expect(open.some((r) => x > r.x - 0.5 && x < r.x + r.w + 0.5 && z > r.y - 0.5 && z < r.y + r.h + 0.5)).toBe(true);
+    }
+  });
+
   it('keeps facade billboards off balcony fronts and posters clear of vending machines', () => {
     for (const [mx, my] of neonCells.slice(0, 20)) {
       const buildings = model.buildings(mx, my);
@@ -289,8 +305,10 @@ describe('Places you can walk into, and fast travel', () => {
 
   it('lets you walk the shrine path up to the hall', () => {
     const f = localFrame(placed('kaburo_inari').building);
-    for (const t of [0.5, 3.7, 8, 12, 15]) expect(district.blocked(...toWorld(f, 5, t), 0.3), `path at ${t}`).toBe(false);
-    expect(district.blocked(...toWorld(f, 5, 20), 0.3)).toBe(true);
+    // The path runs up the middle of the precinct (u = 12); the grove either side is walled off from the street.
+    for (const t of [0.5, 3.7, 8, 12, 15]) expect(district.blocked(...toWorld(f, 12, t), 0.3), `path at ${t}`).toBe(false);
+    expect(district.blocked(...toWorld(f, 12, 20), 0.3)).toBe(true);
+    expect(district.blocked(...toWorld(f, 3, 0.1), 0.3)).toBe(true);
   });
 
   it('widens the roads into the scramble crossing', () => {

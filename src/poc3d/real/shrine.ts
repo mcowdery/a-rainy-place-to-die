@@ -2,16 +2,41 @@ import * as THREE from 'three';
 import type { Rect } from '../../core/coords';
 import type { Building3 } from '../district/plan';
 import type { Light } from './lightmap';
-import { localBox, localFrame, localRect, toWorld } from './localFrame';
+import { addTree, type TreeSpecies } from '../models/trees';
+import { localBox, localFrame, localRect, toWorld, type LocalFrame } from './localFrame';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 
 /**
- * Kaburo Inari (歌舞路稲荷神社): a small Inari shrine squeezed between buildings in the back alleys. From the
- * street: a big front torii, a tunnel of small vermilion torii over a stone path, two fox guardians on
+ * Kaburo Inari (歌舞路稲荷神社): an Inari shrine in its own grove (chinju no mori) in the back alleys. From
+ * the street: a big front torii, a tunnel of small vermilion torii over a stone path, two fox guardians on
  * pedestals, stone lanterns, and a raised hall with a copper-green roof, a straw rope, a bell and an
- * offering box. Local frame (localFrame.ts): u across the 10 m front, t inward over the 24 m depth.
+ * offering box; camphor, zelkova, ginkgo and pine round it inside a low stone wall. Local frame
+ * (localFrame.ts): u across the 24 m front, t inward over the 30 m depth; the path and hall are an inner
+ * 10 x 24 m layout in the middle (inner(), u offset by INNER_U).
  */
-export const SHRINE = { fw: 10, depth: 24 } as const;
+export const SHRINE = { fw: 24, depth: 30 } as const;
+/** The inner layout (path, torii, foxes, lanterns, hall), offset to the middle of the front. */
+const INNER = { fw: 10, depth: 24 } as const;
+const INNER_U = (SHRINE.fw - INNER.fw) / 2;
+const inner = (f: LocalFrame): LocalFrame => ({ ...f, p: [f.p[0] + f.r[0] * INNER_U, f.p[1], f.p[2] + f.r[2] * INNER_U], fw: INNER.fw, depth: INNER.depth });
+
+/** The grove, in the outer frame: [u, t, species, size]. */
+const GROVE: readonly (readonly [number, number, TreeSpecies, number])[] = [
+  [3.2, 26.5, 'camphor', 0.8],
+  [20.6, 27.0, 'camphor', 0.75],
+  [12.0, 28.0, 'zelkova', 0.6],
+  [3.0, 17.5, 'zelkova', 0.6],
+  [21.2, 18.5, 'ginkgo', 0.85],
+  [3.4, 9.0, 'ginkgo', 0.75],
+  [20.8, 9.5, 'zelkova', 0.55],
+  [2.6, 2.6, 'pine', 0.7],
+  [21.4, 2.8, 'pine', 0.65],
+];
+const SHRUBS: readonly (readonly [number, number, TreeSpecies])[] = [
+  [5.6, 1.4, 'azalea'], [18.4, 1.4, 'azalea'], [5.8, 13.5, 'box'], [18.2, 13.5, 'box'], [1.2, 12.5, 'azalea'], [22.8, 13.0, 'azalea'],
+];
+/** Precinct wall: height and thickness; low at the front (tamagaki), higher round the sides and back. */
+const WALL = { front: 0.9, back: 1.8, t: 0.3 } as const;
 
 const MID = 5;
 const TUNNEL = [2.8, 4.6, 6.4, 8.2, 10.0, 11.8];
@@ -22,11 +47,19 @@ const TREES: readonly (readonly [number, number, number])[] = [
   [8.8, 4.0, 0.7],
 ];
 
-/** Collision rects: fences, torii pillars, pedestals, lanterns, trees and the hall. */
+/** Collision rects: the precinct wall, the grove, fences, torii pillars, pedestals, lanterns, trees and the hall. */
 export function shrineColliders(b: Building3): Rect[] {
-  const f = localFrame(b);
+  const F = localFrame(b);
+  const O = (u0: number, u1: number, t0: number, t1: number): Rect => localRect(F, u0, u1, t0, t1);
+  const { fw, depth } = SHRINE;
+  const grove: Rect[] = [
+    O(0, WALL.t, 0, depth), O(fw - WALL.t, fw, 0, depth), O(0, fw, depth - WALL.t, depth),
+    O(0, INNER_U, 0, WALL.t), O(fw - INNER_U, fw, 0, WALL.t),
+    ...GROVE.map(([u, t, , k]) => O(u - 0.35 - 0.2 * k, u + 0.35 + 0.2 * k, t - 0.35 - 0.2 * k, t + 0.35 + 0.2 * k)),
+  ];
+  const f = inner(F);
   const R = (u0: number, u1: number, t0: number, t1: number): Rect => localRect(f, u0, u1, t0, t1);
-  const out: Rect[] = [R(0, 0.35, 0, SHRINE.depth), R(SHRINE.fw - 0.35, SHRINE.fw, 0, SHRINE.depth), R(1.5, 8.5, 16.9, SHRINE.depth)];
+  const out: Rect[] = [...grove, R(0, 0.35, 0, INNER.depth), R(INNER.fw - 0.35, INNER.fw, 0, INNER.depth), R(1.5, 8.5, 16.9, INNER.depth)];
   for (const s of [-1, 1]) out.push(R(MID + s * 1.9 - 0.25, MID + s * 1.9 + 0.25, 0.6 - 0.25, 0.6 + 0.25));
   for (const t of TUNNEL) for (const s of [-1, 1]) out.push(R(MID + s * 1.45 - 0.15, MID + s * 1.45 + 0.15, t - 0.15, t + 0.15));
   for (const u of FOXES) out.push(R(u - 0.45, u + 0.45, 13.35, 14.25));
@@ -37,7 +70,7 @@ export function shrineColliders(b: Building3): Rect[] {
 
 /** Lightmap lights: lanterns, the lamps along the torii tunnel, the hall's paper lanterns. */
 export function shrineLights(b: Building3): Light[] {
-  const f = localFrame(b);
+  const f = inner(localFrame(b));
   const L = (u: number, t: number, r: number, color: [number, number, number], i: number): Light => {
     const [x, z] = toWorld(f, u, t);
     return { x, z, r, color, i };
@@ -56,12 +89,47 @@ const STONE = 0x9a968c;
 const FOX = 0xd8d4c8;
 
 export function buildShrine(b: Building3, city: THREE.Material): THREE.Group {
-  const f = localFrame(b);
+  const F = localFrame(b);
+  const f = inner(F);
   const group = new THREE.Group();
   const mb = new MeshBuilder();
   mb.id = b.id;
   mb.flags = 0;
   mb.style = [0, 0, 0, 0];
+  // The grove (outer frame): mossy earth, the precinct wall (low at the front either side of the way in,
+  // plaster on stone round the sides and back), the trees and shrubs.
+  {
+    const P = SHRINE;
+    const ob = (hex: number, u0: number, u1: number, t0: number, t1: number, y0: number, y1: number, kind: number = KIND.plain): void => {
+      mb.kind = kind;
+      mb.color = lin(hex);
+      localBox(mb, F, u0, u1, t0, t1, y0, y1, kind);
+    };
+    ob(0x3a4a2e, 0, P.fw, 0, P.depth, -0.02, 0.02, KIND.grass);
+    const wall = (u0: number, u1: number, t0: number, t1: number, h: number): void => {
+      ob(STONE, u0, u1, t0, t1, 0, Math.min(h, 0.6));
+      if (h > 0.6) ob(0xd8d0c0, u0 + 0.03, u1 - 0.03, t0 + 0.03, t1 - 0.03, 0.6, h - 0.12);
+      ob(0x5a5650, u0 - 0.05, u1 + 0.05, t0 - 0.05, t1 + 0.05, h - 0.12, h);
+    };
+    wall(0, WALL.t, 0, P.depth, WALL.back);
+    wall(P.fw - WALL.t, P.fw, 0, P.depth, WALL.back);
+    wall(0, P.fw, P.depth - WALL.t, P.depth, WALL.back);
+    wall(0, INNER_U, 0, WALL.t, WALL.front);
+    wall(P.fw - INNER_U, P.fw, 0, WALL.t, WALL.front);
+    for (const [u, t, species, size] of GROVE) {
+      const [x, z] = toWorld(F, u, t);
+      addTree(mb, { x, z, species, size, seed: Math.round(u * 10 + t) });
+    }
+    for (const [u, t, species] of SHRUBS) {
+      const [x, z] = toWorld(F, u, t);
+      addTree(mb, { x, z, species, size: 1.1, seed: Math.round(u * 10 + t) });
+    }
+    // The sacred camphor's straw rope (shimenawa).
+    const [sx, sz] = toWorld(F, GROVE[0][0], GROVE[0][1]);
+    mb.kind = KIND.plain;
+    mb.color = lin(0xd8c890);
+    mb.lathe(sx, sz, [[1.5, 0.44], [1.62, 0.46], [1.74, 0.44]], 10);
+  }
   const box = (hex: number, u0: number, u1: number, t0: number, t1: number, y0: number, y1: number): void => {
     mb.kind = KIND.plain;
     mb.color = lin(hex);
@@ -81,7 +149,7 @@ export function buildShrine(b: Building3, city: THREE.Material): THREE.Group {
     const [x, z] = W(u, t);
     mb.cylinder(x, z, y0, y1, r, n);
   };
-  const { fw, depth } = SHRINE;
+  const { fw, depth } = INNER;
 
   // Ground: raked gravel, a stone path of slabs, fences down both sides.
   box(0xb8b0a0, 0, fw, 0, depth, -0.02, 0.03);

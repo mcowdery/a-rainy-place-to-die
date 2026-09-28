@@ -15,7 +15,7 @@
 - id: kaburo_inari
   stamp: shrine
   cell: [27, 10]
-  offset: [50, 94]
+  offset: [43, 88]
 - id: hotel_rouge
   stamp: hotel_rouge
   cell: [30, 10]

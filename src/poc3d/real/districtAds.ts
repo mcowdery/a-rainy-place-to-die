@@ -1,5 +1,5 @@
 import { hash, rng } from '../../core/hash';
-import { frontSpan, type Building3, type Sign3 } from '../district/plan';
+import { frontSpan, type Building3, type OpenLot3, type Side, type Sign3 } from '../district/plan';
 import { DISTRICT_ADS } from '../models/ads';
 import { FH, frontFrame, GF, styleFor, tierFront, tiers, WIN } from './buildings';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
@@ -80,7 +80,8 @@ function floodlights(mb: MeshBuilder, p: C3, r: C3, n: C3, u0: number, u1: numbe
 
 /** Where an ad went (for tests and camera placement). */
 export interface AdPlacement {
-  readonly kind: 'rooftop' | 'wall' | 'poster';
+  /** side: on a side wall facing a car park, playground or vacant lot next door. */
+  readonly kind: 'rooftop' | 'wall' | 'poster' | 'side';
   readonly ad: number;
   readonly x: number;
   readonly y: number;
@@ -120,8 +121,11 @@ export function addDistrictAds(
   props: readonly Prop[],
   out?: AdPlacement[],
   seen: Sightline = ALWAYS_SEEN,
+  /** The cell's open ground: side walls facing a gap next door get billboards. */
+  open: readonly OpenLot3[] = [],
 ): void {
   if (BILLBOARDS.length === 0 && POSTERS.length === 0) return;
+  sideWallAds(sb, mb, buildings, open, out);
   for (const b of buildings) {
     if (b.hue !== undefined) continue; // stamps are hand-dressed
     const rnd = rng(hash(b.id, 0xad5));
@@ -206,6 +210,59 @@ export function addDistrictAds(
         signBox(sb, centre, f.r, f.n, -pw / 2, pw / 2, 0.5, 0.5 + pw * 1.5, 0.08, 0.1, DISTRICT_BLANK, { n: districtAdUv(poster.i) });
         out?.push({ kind: 'poster', ad: poster.i, x: centre[0], y: 1.2, z: centre[2], nx: f.n[0], nz: f.n[2] });
       }
+    }
+  }
+}
+
+const OPPOSITE: Record<Side, Side> = { north: 'south', south: 'north', east: 'west', west: 'east' };
+
+/**
+ * A car park, playground or vacant lot opens up the side walls of its neighbours: the kind of blank wall
+ * that carries a big billboard in Tokyo. One per wall, on a steel frame standing 0.4 m off it (clear of
+ * wall-hung AC units and pipes), above the lot and below any step-back, floodlit at night.
+ */
+function sideWallAds(sb: SignBuilder, mb: MeshBuilder, buildings: readonly Building3[], open: readonly OpenLot3[], out?: AdPlacement[]): void {
+  const used = new Set<number>();
+  for (const o of open) {
+    if (o.kind === 'plaza' || o.kind === 'park') continue;
+    const q = o.rect;
+    const ns = o.front === 'north' || o.front === 'south';
+    for (const side of (ns ? ['west', 'east'] : ['north', 'south']) as Side[]) {
+      // The neighbour whose face on this side of the lot looks into it (across a service alley at most).
+      const b = buildings.find((c) => {
+        if (c.hue !== undefined || c.h < 12 || used.has(c.id)) return false;
+        const gap = side === 'west' ? q.x - (c.x + c.w / 2) : side === 'east' ? c.x - c.w / 2 - (q.x + q.w) : side === 'north' ? q.y - (c.z + c.d / 2) : c.z - c.d / 2 - (q.y + q.h);
+        const overlap = ns ? Math.min(q.y + q.h, c.z + c.d / 2) - Math.max(q.y, c.z - c.d / 2) : Math.min(q.x + q.w, c.x + c.w / 2) - Math.max(q.x, c.x - c.w / 2);
+        return gap > -0.1 && gap < 2.2 && overlap > 5;
+      });
+      if (!b) continue;
+      const billboard = pickAd(BILLBOARDS, b, 5);
+      if (!billboard) continue;
+      const f = frontFrame({ ...b, front: OPPOSITE[side], cut: undefined });
+      const lotDepth = ns ? q.h : q.w;
+      const W = Math.min(12, f.fw * 0.8, lotDepth * 0.9);
+      const H = W / 2;
+      const y0 = GF + FH;
+      const mainTop = tiers(b)[0][3];
+      if (W < 4 || y0 + H > mainTop - 1) continue;
+      used.add(b.id);
+      // Centred on the lot's middle, kept on the wall.
+      const [lx, lz] = [q.x + q.w / 2, q.y + q.h / 2];
+      const u = Math.max(W / 2 + 0.3, Math.min(f.fw - W / 2 - 0.3, (lx - f.p[0]) * f.r[0] + (lz - f.p[2]) * f.r[2]));
+      const centre: C3 = [f.p[0] + f.r[0] * u, 0, f.p[2] + f.r[2] * u];
+      const off = 0.4;
+      mb.kind = KIND.plain;
+      mb.color = STEEL;
+      mb.style = [0, 0, 0, 0];
+      mb.frameBox(centre, f.r, f.n, -W / 2 - 0.1, W / 2 + 0.1, y0 - 0.1, y0 + H + 0.1, off, off + 0.18);
+      // Brackets back to the wall.
+      for (const bu of [-W / 2 + 0.4, 0, W / 2 - 0.4]) for (const by of [y0 + 0.3, y0 + H - 0.3]) mb.frameBox(centre, f.r, f.n, bu - 0.06, bu + 0.06, by - 0.06, by + 0.06, 0, off);
+      sb.ink = [1, 1, 1];
+      sb.plate = [0, 0, 0];
+      sb.sign = [b.id % 100000, floodlit(W)];
+      signBox(sb, centre, f.r, f.n, -W / 2, W / 2, y0, y0 + H, off + 0.18, off + 0.26, DISTRICT_BLANK, { n: districtAdUv(billboard.i) });
+      floodlights(mb, centre, f.r, f.n, -W / 2, W / 2, y0 + H + 0.4, off + 0.26);
+      out?.push({ kind: 'side', ad: billboard.i, x: centre[0], y: y0 + H / 2, z: centre[2], nx: f.n[0], nz: f.n[2] });
     }
   }
 }

@@ -1,9 +1,10 @@
-# Kaburo Inari (歌舞路稲荷神社): a small Inari shrine squeezed between buildings in the back alleys, with a
-# tunnel of red torii, fox guardians, stone lanterns and a hall. A landmark built by real/shrine.ts, which
-# needs a 10 m front and 24 m of depth. You can walk the path up to the hall.
+# Kaburo Inari (歌舞路稲荷神社): an Inari shrine in its own grove in the back alleys, with a tunnel of red
+# torii, fox guardians, stone lanterns and a hall, and camphor, zelkova, ginkgo and pine round it. A
+# landmark built by real/shrine.ts, which needs a 24 m front and 30 m of depth (the path runs up the
+# middle 10 m). You can walk the path up to the hall.
 id: shrine
 name: Kaburo Inari 歌舞路稲荷
-footprint: [10, 24]
+footprint: [24, 30]
 height: 6
 front: south
 landmark: shrine
@@ -11,17 +12,17 @@ nodes:
   gate:
     kind: spawn
     name: Kaburo Inari Shrine
-    at: [5, 5]
+    at: [12, 5]
     facing: north
     view: [0, 6]
   hall:
     kind: spawn
     name: Kaburo Inari (hall)
-    at: [5, -12.5]
+    at: [12, -12.5]
     facing: north
     view: [0, 8]
   offering:
     kind: hotspot
     name: Offering box
-    at: [5, -16.4]
+    at: [12, -16.4]
     handoff: {}
