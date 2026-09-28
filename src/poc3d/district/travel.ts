@@ -90,14 +90,19 @@ export class TravelMap {
   private fit = 1;
   private dpr = 1;
   private drag: { x: number; y: number; cx: number; cz: number; moved: boolean } | null = null;
+  /** The GPS destination and its route, drawn on the map. */
+  private gps: { x: number; z: number; label: string; route: readonly (readonly [number, number])[] | null } | null = null;
 
   constructor(
     private readonly district: District,
     private readonly zones: ZoneMap,
     private readonly dests: readonly Destination[],
     private readonly go: (d: Destination) => void,
-    /** Whether clicking a place travels there (debug only: getting around is by train), and the lines drawn. */
-    private readonly opts: { readonly travel: boolean; readonly lines: readonly MapLine[] } = { travel: true, lines: [] },
+    /**
+     * Whether clicking a place's dot travels there (debug only), the lines drawn, and the GPS: a click anywhere
+     * else (or a place in the list) marks a destination, a right click clears it (mark(null)).
+     */
+    private readonly opts: { readonly travel: boolean; readonly lines: readonly MapLine[]; readonly mark?: (m: { x: number; z: number; label: string } | null) => void } = { travel: true, lines: [] },
   ) {
     this.root = document.createElement('div');
     this.root.id = 'travel';
@@ -140,7 +145,7 @@ export class TravelMap {
       const d = this.drag;
       this.drag = null;
       this.canvas.style.cursor = 'grab';
-      if (!d || d.moved || !this.opts.travel) return;
+      if (!d || d.moved || e.button !== 0) return;
       let best: Destination | null = null;
       let bestD = 16;
       for (const t of this.dests) {
@@ -148,15 +153,25 @@ export class TravelMap {
         const dd = Math.hypot(sx - e.offsetX, sy - e.offsetY);
         if (dd < bestD) [best, bestD] = [t, dd];
       }
-      if (best) this.go(best);
+      // Debug: a place's dot travels there. Otherwise the click marks a GPS destination (named if on a place).
+      if (best && this.opts.travel) return this.go(best);
+      const [wx, wz] = best ? [best.x, best.z] : this.toWorld(e.offsetX, e.offsetY);
+      this.opts.mark?.({ x: wx, z: wz, label: best?.name ?? this.district.zoneAt(wx, wz) ?? 'Marked spot' });
+    });
+    // A right click clears the destination.
+    this.canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.opts.mark?.(null);
     });
     this.list = document.createElement('div');
     Object.assign(this.list.style, { flex: '0 0 260px', overflowY: 'auto', background: '#0c0c14', border: '1px solid #3a3850', padding: '10px 12px' });
     const title = document.createElement('div');
-    title.textContent = opts.travel ? 'FAST TRAVEL (debug)  ·  M / Esc to close' : 'MAP  ·  M / Esc to close';
+    title.textContent = opts.travel ? 'MAP + FAST TRAVEL (debug)  ·  M / Esc to close' : 'MAP  ·  M / Esc to close';
     Object.assign(title.style, { color: '#ff8ad8', marginBottom: '4px', letterSpacing: '1px' });
     const hint = document.createElement('div');
-    hint.textContent = opts.travel ? 'wheel zoom · drag pan · click a dot to go' : 'wheel zoom · drag pan · get around by train: E on a platform';
+    hint.textContent = opts.travel
+      ? 'wheel zoom · drag pan · click a dot to go · click elsewhere to set the GPS · right click clears it'
+      : 'wheel zoom · drag pan · click to set the GPS (or pick a place below) · right click clears it';
     Object.assign(hint.style, { color: '#8a88a0', marginBottom: '8px' });
     this.list.append(title, hint);
     // The lines: a legend with their stations.
@@ -172,7 +187,12 @@ export class TravelMap {
         this.list.append(row);
       }
     }
-    for (const group of opts.travel ? (['Places', 'Zones'] as const) : []) {
+    const clear = document.createElement('button');
+    clear.textContent = 'Clear GPS destination';
+    Object.assign(clear.style, { display: 'block', width: '100%', textAlign: 'left', margin: '2px 0 6px', padding: '5px 8px', background: '#12202a', color: '#8adcff', border: '1px solid #2a4a5a', cursor: 'pointer', font: 'inherit' });
+    clear.addEventListener('click', () => opts.mark?.(null));
+    this.list.append(clear);
+    for (const group of ['Places', 'Zones'] as const) {
       const h = document.createElement('div');
       h.textContent = group.toUpperCase();
       Object.assign(h.style, { color: '#8a88a0', margin: '10px 0 4px' });
@@ -183,7 +203,8 @@ export class TravelMap {
         Object.assign(btn.style, { display: 'block', width: '100%', textAlign: 'left', margin: '2px 0', padding: '5px 8px', background: '#1a1a28', color: '#e8e6f0', border: '1px solid #2e2c44', cursor: 'pointer', font: 'inherit' });
         btn.addEventListener('mouseenter', () => (btn.style.borderColor = '#ff8ad8'));
         btn.addEventListener('mouseleave', () => (btn.style.borderColor = '#2e2c44'));
-        btn.addEventListener('click', () => this.go(d));
+        // Debug: go there. Otherwise: the GPS takes you there.
+        btn.addEventListener('click', () => (opts.travel ? this.go(d) : opts.mark?.({ x: d.x, z: d.z, label: d.name })));
         this.list.append(btn);
       }
     }
@@ -212,6 +233,12 @@ export class TravelMap {
     this.cz = (b.minZ + b.maxZ) / 2;
     this.zoom = this.fit;
     this.draw();
+  }
+
+  /** The GPS destination and route to draw (null: none). */
+  setGps(g: { x: number; z: number; label: string; route: readonly (readonly [number, number])[] | null } | null): void {
+    this.gps = g;
+    if (this.open) this.draw();
   }
 
   hide(): void {
@@ -351,6 +378,38 @@ export class TravelMap {
         g.fillStyle = '#ffffff';
         g.fillText(d.name, x + 8, y + 4);
       }
+    }
+    // The GPS: the route in cyan, the destination pin.
+    if (this.gps) {
+      const G = this.gps;
+      if (G.route && G.route.length > 1) {
+        g.strokeStyle = 'rgba(90, 220, 255, 0.9)';
+        g.lineWidth = 4;
+        g.lineJoin = 'round';
+        g.lineCap = 'round';
+        g.beginPath();
+        G.route.forEach(([rx, rz], i) => {
+          const [sx, sy] = this.toScreen(rx, rz);
+          if (i) g.lineTo(sx, sy);
+          else g.moveTo(sx, sy);
+        });
+        g.stroke();
+      }
+      const [px, py] = this.toScreen(G.x, G.z);
+      g.fillStyle = '#5adcff';
+      g.beginPath();
+      g.moveTo(px, py);
+      g.arc(px, py - 16, 8, Math.PI * 0.8, Math.PI * 0.2);
+      g.closePath();
+      g.fill();
+      g.fillStyle = '#0c0c14';
+      g.beginPath();
+      g.arc(px, py - 16, 3.2, 0, Math.PI * 2);
+      g.fill();
+      g.font = "bold 12px 'Consolas', monospace";
+      g.textAlign = 'center';
+      g.fillStyle = '#8adcff';
+      g.fillText(G.label, px, py - 30);
     }
     const { x, z, yaw } = this.player;
     const a = (yaw * Math.PI) / 180;
