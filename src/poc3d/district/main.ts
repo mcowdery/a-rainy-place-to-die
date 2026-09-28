@@ -34,7 +34,9 @@ import { INTERIORS, type Interior } from '../real/interiors';
 import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem, type DrivenVehicle } from '../real/traffic';
 import { Driving } from './driving';
-import { NavGrid, onRoute, pointsAhead } from './gps';
+import { NavGrid, pointsAhead, type NavMode } from './gps';
+import { Guide, type GuideDest, type GuideFrom } from './guide';
+import { PhoneMaps } from './phoneMaps';
 import { GpsMarks } from '../real/gpsMarks';
 import { ScreenGlows, ScreenLights } from '../real/screenLight';
 import { GRADE_NAMES, GradePass } from '../real/grade';
@@ -716,32 +718,25 @@ async function run(): Promise<void> {
     const url = params.get('invertY');
     setInvertY((url ?? saved) === '1', url !== null);
   }
-  // The GPS: mark a destination on the map (M); the route follows the streets (gps.ts), chevrons light the next
+  // The GPS: mark a destination on the map (M) or in the phone's Maps app; the route follows the streets for
+  // how you're getting about (gps.ts: on foot, or by car on the carriageways only), chevrons light the next
   // stretch of it on the ground, a beacon stands on the destination, and the compass at the top points the way.
-  let nav: NavGrid | null = null;
-  const navGrid = (): NavGrid =>
-    (nav ??= new NavGrid({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL }));
-  let gps: { x: number; z: number; label: string; route: [number, number][] | null; routedAt: number } | null = null;
+  const grids = new Map<NavMode, NavGrid>();
+  const navGrid = (mode: NavMode): NavGrid => {
+    let g = grids.get(mode);
+    if (!g) grids.set(mode, (g = new NavGrid({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL }, mode)));
+    return g;
+  };
+  const guide = new Guide(navGrid);
+  guide.subscribe(() => travel.setGps(guide.dest ? { ...guide.dest, route: guide.route } : null));
   const gpsMarks = new GpsMarks();
   scene.add(gpsMarks.group);
-  /** Where the GPS takes you from: the car you're driving, or you. */
-  const gpsFrom = (): [number, number] => (driving.car ? [driving.car.x, driving.car.z] : [camera.position.x, camera.position.z]);
-  const reroute = (): void => {
-    if (!gps) return;
-    const [x, z] = gpsFrom();
-    gps.route = navGrid().route(x, z, gps.x, gps.z);
-    gps.routedAt = performance.now();
-    travel.setGps(gps);
-  };
-  const setGps = (m: { x: number; z: number; label: string } | null): void => {
-    gps = m ? { ...m, route: null, routedAt: 0 } : null;
-    if (gps) {
-      reroute();
-      toast(gps.route ? `GPS: ${gps.label}` : `GPS: ${gps.label} (no way there on foot: heading straight for it)`);
-    } else {
-      travel.setGps(null);
-      toast('GPS cleared');
-    }
+  /** Where the GPS routes from: the car you're driving (by road), or you (on foot). */
+  const gpsFrom = (): GuideFrom => (driving.car ? { x: driving.car.x, z: driving.car.z, mode: 'drive' } : { x: camera.position.x, z: camera.position.z, mode: 'walk' });
+  const setGps = (m: GuideDest | null): void => {
+    guide.set(m, gpsFrom());
+    if (guide.dest) toast(guide.route ? `GPS: ${guide.dest.label}` : `GPS: ${guide.dest.label} (no way through: heading straight for it)`);
+    else toast('GPS cleared');
   };
   const compass = document.createElement('div');
   Object.assign(compass.style, { position: 'fixed', top: '14px', left: '50%', transform: 'translateX(-50%)', zIndex: '16', display: 'none', alignItems: 'center', gap: '10px', padding: '6px 14px 6px 8px', background: 'rgba(8,10,16,0.78)', border: '1px solid #2a4a5a', borderRadius: '18px', color: '#bfefff', font: "13px 'Consolas', monospace", pointerEvents: 'none' });
@@ -751,54 +746,52 @@ async function run(): Promise<void> {
   const compassText = document.createElement('div');
   compass.append(compassArrow, compassText);
   document.body.append(compass);
-  /** Per frame: reroute if you've strayed, arrival, the chevrons, the beacon and the compass. */
+  /** Per frame: reroute if you've strayed (or got in or out of a car), arrival, chevrons, beacon, compass. */
   const updateGps = (dt: number): void => {
-    if (!gps) {
+    const from = gpsFrom();
+    const g = guide.update(from);
+    if (g?.arrived) toast(`Arrived: ${g.arrived.label}`);
+    const dest = guide.dest;
+    if (!g || !dest) {
       gpsMarks.update(dt, [], null);
       compass.style.display = 'none';
       return;
     }
-    const [x, z] = gpsFrom();
-    const direct = Math.hypot(gps.x - x, gps.z - z);
-    if (direct < 12) {
-      toast(`Arrived: ${gps.label}`);
-      gps = null;
-      travel.setGps(null);
-      return;
-    }
-    let at = gps.route ? onRoute(gps.route, x, z) : null;
-    if (at && at.off > 15 && performance.now() - gps.routedAt > 1500) {
-      reroute();
-      at = gps.route ? onRoute(gps.route, x, z) : null;
-    }
+    const { at } = g;
+    const route = guide.route;
     // Chevrons on the street ahead (not below ground or up in a building).
-    const street = Math.abs(camera.position.y - (driving.car ? camera.position.y : 1.7)) < 1.2 && camera.position.y > -2 && !subway.riding;
-    const ahead = at && gps.route && street ? pointsAhead(gps.route, at.seg, at.t, driving.car ? 90 : 60, driving.car ? 7 : 4.5, driving.car ? 6 : 3) : [];
-    gpsMarks.update(dt, ahead, { x: gps.x, z: gps.z });
+    const street = (driving.car || Math.abs(camera.position.y - 1.7) < 1.2) && !subway.riding;
+    const car = from.mode === 'drive';
+    const ahead = at && route && street ? pointsAhead(route, at.seg, at.t, car ? 90 : 60, car ? 7 : 4.5, car ? 6 : 3) : [];
+    gpsMarks.update(dt, ahead, dest);
     gpsMarks.group.visible = camera.position.y > -2 && !subway.riding;
     // The compass: toward the route a little way ahead (or the destination itself), from where you're looking.
-    const next = at && gps.route ? (pointsAhead(gps.route, at.seg, at.t, 14, 14, 14)[0] ?? { x: gps.x, z: gps.z }) : { x: gps.x, z: gps.z };
+    const next = at && route ? (pointsAhead(route, at.seg, at.t, 14, 14, 14)[0] ?? dest) : dest;
     camera.getWorldDirection(forward);
-    const tx = next.x - x;
-    const tz = next.z - z;
+    const tx = next.x - from.x;
+    const tz = next.z - from.z;
     const ang = Math.atan2(forward.x * tz - forward.z * tx, forward.x * tx + forward.z * tz);
     compassArrow.style.transform = `rotate(${(ang * 180) / Math.PI}deg)`;
-    const left = at ? at.left : direct;
-    compassText.textContent = `${left >= 1000 ? `${(left / 1000).toFixed(1)} km` : `${Math.round(left / 5) * 5} m`} · ${gps.label}`;
+    compassText.textContent = `${car ? '🚗' : '🚶'} ${metres(at ? at.left : g.direct)} · ${dest.label}`;
     compass.style.display = 'flex';
   };
+  // The phone's Maps app: the same GPS, in your hand.
+  phoneUi.register(
+    new PhoneMaps(
+      () => travel.baseImage(),
+      district.bounds,
+      destinations(district, nodes, content.zones),
+      guide,
+      () => ({ ...gpsFrom(), yaw: driving.car ? (Math.atan2(-driving.car.dx, -driving.car.dz) * 180) / Math.PI : lookYaw() }),
+      (d) => setGps(d),
+      (x, z) => district.zoneAt(x, z),
+    ),
+  );
   // ?debug=1: window.__gps('<spawn id>') marks it as the GPS destination (for checks).
   if (debug) (window as unknown as { __gps: (id: string) => boolean }).__gps = (id) => {
     const n = nodeById.get(id);
     if (n) setGps({ x: n.x, z: n.z, label: n.name ?? id });
-    // Face along the route (so a screenshot shows it), looking down at the street a little.
-    if (gps?.route && !driving.car) {
-      const [x, z] = gpsFrom();
-      const at = onRoute(gps.route, x, z);
-      const p = pointsAhead(gps.route, at.seg, at.t, 20, 20, 20)[0];
-      if (p) controls.setView((Math.atan2(-(p.x - x), -(p.z - z)) * 180) / Math.PI, -14);
-    }
-    return !!gps?.route;
+    return !!guide.route;
   };
   // The dashboard: speed and gear, while driving.
   const dash = document.createElement('div');
@@ -1044,7 +1037,10 @@ async function run(): Promise<void> {
     trains?.update(dt, camera);
     subway.update(dt, camera);
     updateInteriors(inVn ? 0 : dt);
-    if (!bench) phoneUi.update(phone.update(dt));
+    if (!bench) {
+      phoneUi.update(phone.update(dt));
+      phoneUi.tick(dt);
+    }
     // The walker, when on foot at street level, is someone the traffic has to stop for.
     const cp0 = camera.position;
     if (!inVn) driving.update(dt);
@@ -1356,3 +1352,8 @@ run().catch((e: unknown) => {
   pre.textContent = e instanceof ContentError ? e.message : String((e as Error).stack ?? e);
   throw e;
 });
+
+/** A distance for the GPS: "85 m", "1.2 km". */
+function metres(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.max(5, Math.round(m / 5) * 5)} m`;
+}

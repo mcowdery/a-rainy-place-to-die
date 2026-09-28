@@ -4,10 +4,13 @@ import type { CellPlan3 } from './plan';
 /**
  * The GPS: routes on foot or by car from where you are to a marked destination, along the streets.
  *
- * A navigation grid over the district (NAV metres a square): roads and plazas are the cheapest, open ground
- * (parks, car parks) a little dearer, the gaps between buildings (yards, setbacks) dearest, and buildings and
- * set pieces blocked. An A* search over it (8 neighbours, no cutting corners past a blocked square) gives the
- * route, kept as a polyline of its turns. Pure: tests build it from the district's plans.
+ * A navigation grid over the district (NAV metres a square), one per way of getting about:
+ * - walk: roads and plazas are the cheapest, open ground (parks, car parks) a little dearer, the gaps between
+ *   buildings (yards, setbacks) dearest; buildings and set pieces blocked.
+ * - drive: only the carriageways of streets and boulevards (kerb to kerb): no alleys, pavements, plazas, parks.
+ * An A* search over it (8 neighbours, no cutting corners past a blocked square) gives the route, straightened
+ * (a leg runs straight while the ground under it stays as cheap) so its corners are real turns. Pure: tests
+ * build it from the district's plans.
  */
 
 export const NAV = 3;
@@ -24,6 +27,8 @@ export interface NavSource {
   readonly cell: number;
 }
 
+export type NavMode = 'walk' | 'drive';
+
 export class NavGrid {
   readonly w: number;
   readonly h: number;
@@ -32,7 +37,10 @@ export class NavGrid {
   /** Cost to enter each square (0 = can't). */
   readonly cost: Float32Array;
 
-  constructor(src: NavSource) {
+  constructor(
+    src: NavSource,
+    readonly mode: NavMode = 'walk',
+  ) {
     const b = src.bounds;
     this.x0 = b.minX;
     this.z0 = b.minZ;
@@ -46,6 +54,24 @@ export class NavGrid {
       const j1 = Math.min(this.h - 1, Math.floor((z + d + grow - this.z0) / NAV - 0.5));
       for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) this.cost[j * this.w + i] = c;
     };
+    if (mode === 'drive') {
+      // Carriageways only: each street's and boulevard's rect less its pavements, run on a few metres past its
+      // ends to meet the crossing road's carriageway through the junction (not stop at its pavement)...
+      const ON = 5;
+      for (const [mx, my] of src.cells) {
+        for (const r of src.plan(mx, my)?.roads ?? []) {
+          if (r.kind === 'alley' || r.kind === 'coast') continue;
+          const q = r.rect;
+          const sw = r.sidewalk;
+          if (r.vertical) fill(q.x + sw, q.y - ON, q.w - 2 * sw, q.h + 2 * ON, ROAD);
+          else fill(q.x - ON, q.y + sw, q.w + 2 * ON, q.h - 2 * sw, ROAD);
+        }
+      }
+      // ...but never into a building or a set piece (a street ending at one).
+      for (const [mx, my] of src.cells) for (const q of src.plan(mx, my)?.buildings ?? []) fill(q.x - q.w / 2, q.z - q.d / 2, q.w, q.d, 0, 0.4);
+      for (const r of src.blocked) fill(r.x, r.y, r.w, r.h, 0, 0.2);
+      return;
+    }
     // Everything in the district is walkable (dear), then buildings and set pieces out, then streets and open
     // ground in (cheap: a street can't overlap a building).
     for (const [mx, my] of src.cells) fill(mx * src.cell, my * src.cell, src.cell, src.cell, YARD);
@@ -147,16 +173,45 @@ export class NavGrid {
     const cells: number[] = [];
     for (let k = t; k >= 0; k = from[k]) cells.push(k);
     cells.reverse();
-    // Keep the turns only.
-    const pts: [number, number][] = [[ax, az]];
-    for (let q = 1; q < cells.length - 1; q++) {
-      const [p0, p1, p2] = [cells[q - 1], cells[q], cells[q + 1]];
-      const d1 = [(p1 % W) - (p0 % W), Math.floor(p1 / W) - Math.floor(p0 / W)];
-      const d2 = [(p2 % W) - (p1 % W), Math.floor(p2 / W) - Math.floor(p1 / W)];
-      if (d1[0] !== d2[0] || d1[1] !== d2[1]) pts.push(this.centre(p1));
+    // Straighten: from each kept square, run on to the farthest one in a straight line over ground no dearer
+    // than the dearer of the two ends (so a leg never cuts through a yard to skip a street corner).
+    const keep: number[] = [cells[0]];
+    let at = 0;
+    while (at < cells.length - 1) {
+      let next = at + 1;
+      // (Up to 90 squares on: long straights come out as a few legs, which is fine.)
+      for (let q = Math.min(cells.length - 1, at + 90); q > at + 1; q--) {
+        if (this.clearLine(cells[at], cells[q])) {
+          next = q;
+          break;
+        }
+      }
+      keep.push(cells[next]);
+      at = next;
     }
+    const pts: [number, number][] = [[ax, az]];
+    for (let q = 1; q < keep.length - 1; q++) pts.push(this.centre(keep[q]));
     pts.push([bx, bz]);
     return pts;
+  }
+
+  /** Whether the straight line between two squares' centres stays on ground no dearer than its ends. */
+  private clearLine(a: number, b: number): boolean {
+    const [ax, az] = this.centre(a);
+    const [bx, bz] = this.centre(b);
+    const limit = Math.max(this.cost[a], this.cost[b]);
+    const L = Math.hypot(bx - ax, bz - az);
+    const n = Math.ceil(L / (NAV * 0.4));
+    for (let i = 1; i < n; i++) {
+      const x = ax + ((bx - ax) * i) / n;
+      const z = az + ((bz - az) * i) / n;
+      // The walker's width: both sides of the line too.
+      for (const [ox, oz] of [[0, 0], [(-(bz - az) / L) * 0.8, ((bx - ax) / L) * 0.8], [((bz - az) / L) * 0.8, (-(bx - ax) / L) * 0.8]] as const) {
+        const k = this.idx(x + ox, z + oz);
+        if (k < 0 || this.cost[k] <= 0 || this.cost[k] > limit) return false;
+      }
+    }
+    return true;
   }
 }
 
@@ -243,4 +298,32 @@ export function pointsAhead(route: readonly (readonly [number, number])[], seg: 
     out.push({ x: ax + (bx - ax) * f, z: az + (bz - az) * f, dx: (bx - ax) / (L || 1), dz: (bz - az) / (L || 1) });
   }
   return out;
+}
+
+/**
+ * The next turn along the route from where you are (seg, t): how far to it and which way (a bend of more
+ * than 30 degrees), or the destination if there's no turn before it.
+ */
+export function nextTurn(route: readonly (readonly [number, number])[], seg: number, t: number): { dist: number; dir: 'left' | 'right' | 'sharp-left' | 'sharp-right' | 'arrive' } {
+  const len = (i: number): number => Math.hypot(route[i + 1][0] - route[i][0], route[i + 1][1] - route[i][1]);
+  let dist = len(seg) * (1 - t);
+  for (let i = seg + 1; i + 1 < route.length; i++) {
+    const [ax, az] = route[i - 1];
+    const [bx, bz] = route[i];
+    const [cx, cz] = route[i + 1];
+    const d1 = [bx - ax, bz - az];
+    const d2 = [cx - bx, cz - bz];
+    const n1 = Math.hypot(d1[0], d1[1]) || 1;
+    const n2 = Math.hypot(d2[0], d2[1]) || 1;
+    const cross = (d1[0] * d2[1] - d1[1] * d2[0]) / (n1 * n2);
+    const dot = (d1[0] * d2[0] + d1[1] * d2[1]) / (n1 * n2);
+    const ang = Math.atan2(cross, dot);
+    // x east, z south: a positive cross product turns clockwise seen from above, to the right.
+    if (Math.abs(ang) > Math.PI / 6) {
+      const sharp = Math.abs(ang) > (Math.PI * 2) / 3;
+      return { dist, dir: ang > 0 ? (sharp ? 'sharp-right' : 'right') : sharp ? 'sharp-left' : 'left' };
+    }
+    dist += len(i);
+  }
+  return { dist, dir: 'arrive' };
 }

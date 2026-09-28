@@ -72,7 +72,7 @@ export interface MapLine {
 }
 
 /** Pixels per metre of the pre-drawn district image (zoomed views sample it). */
-const BASE_RES = 2;
+export const BASE_RES = 2;
 /** Zoom limits: the whole district fitted, down to this many screen pixels per metre. */
 const MAX_ZOOM = 8;
 
@@ -233,6 +233,11 @@ export class TravelMap {
     this.cz = (b.minZ + b.maxZ) / 2;
     this.zoom = this.fit;
     this.draw();
+  }
+
+  /** The district drawn once (at BASE_RES px/m from bounds.min): the phone's Maps app draws from it too. */
+  baseImage(): HTMLCanvasElement {
+    return (this.base ??= this.drawBase());
   }
 
   /** The GPS destination and route to draw (null: none). */

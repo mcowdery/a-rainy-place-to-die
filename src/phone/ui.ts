@@ -8,6 +8,24 @@ import { type Msg, Phone, type PhoneEvent } from './engine';
  * replies as buttons at the bottom (or 1-4). A banner and a ping announce messages that arrive while you're
  * elsewhere; the corner chip shows the unread count.
  */
+/**
+ * An app on the phone besides KAIWA (the Maps app is one): it draws itself into the screen when opened, runs
+ * per frame while showing, and handles Esc itself if it has somewhere to go back to.
+ */
+export interface PhoneApp {
+  readonly id: string;
+  readonly name: string;
+  /** The icon: a glyph on a colour. */
+  readonly icon: string;
+  readonly color: string;
+  show(screen: HTMLElement): void;
+  hide?(): void;
+  tick?(dt: number): void;
+  /** Esc inside the app: true if it went back within itself, false to go to the home screen. */
+  back?(): boolean;
+  badge?(): number;
+}
+
 export class PhoneUI {
   private readonly root: HTMLDivElement;
   private readonly device: HTMLDivElement;
@@ -18,6 +36,9 @@ export class PhoneUI {
   private readonly lightbox: HTMLDivElement;
   private open = false;
   private thread: string | null = null;
+  /** What's on the screen: the home screen, KAIWA, or another app (its id). */
+  private mode = 'home';
+  private readonly apps: PhoneApp[] = [];
   private bannerTimer = 0;
   private lastMinute = -1;
 
@@ -33,7 +54,10 @@ export class PhoneUI {
     this.clock = el('span', 'ph-clock');
     bar.append(this.clock, span('ph-icons', '▂▄▆ 4G ▮'));
     this.screen = el('div', 'ph-screen');
-    this.device.append(bar, this.screen, el('div', 'ph-home'));
+    const home = el('div', 'ph-home');
+    home.title = 'Home';
+    home.addEventListener('click', () => this.showHome());
+    this.device.append(bar, this.screen, home);
     this.root.append(this.device);
     this.root.hidden = true;
     this.chip = el('div', 'ph-chip');
@@ -61,9 +85,12 @@ export class PhoneUI {
         if (!this.open) return;
         if (e.code === 'Escape') {
           if (!this.lightbox.hidden) this.closeLightbox();
-          else if (this.thread) this.showList();
-          else this.toggle();
-        } else if (/^Digit[1-4]$/.test(e.code) && this.thread) {
+          else if (this.mode === 'kaiwa' && this.thread) this.showList();
+          else if (this.mode === 'kaiwa') this.showHome();
+          else if (this.mode !== 'home') {
+            if (!this.app()?.back?.()) this.showHome();
+          } else this.toggle();
+        } else if (/^Digit[1-4]$/.test(e.code) && this.mode === 'kaiwa' && this.thread) {
           this.pick(Number(e.code.slice(5)) - 1);
         } else return;
         e.preventDefault();
@@ -77,6 +104,69 @@ export class PhoneUI {
     return this.open;
   }
 
+  /** Put an app on the home screen. */
+  register(app: PhoneApp): void {
+    this.apps.push(app);
+  }
+
+  /** Open the phone on an app ('kaiwa' or a registered app's id). */
+  openApp(id: string): void {
+    if (!this.open) this.toggle();
+    this.go(id);
+  }
+
+  private app(): PhoneApp | undefined {
+    return this.apps.find((a) => a.id === this.mode);
+  }
+
+  /** Switch what's on the screen, letting the app that was showing go. */
+  private go(mode: string): void {
+    if (mode !== this.mode) this.app()?.hide?.();
+    this.mode = mode;
+    if (mode === 'home') this.renderHome();
+    else if (mode === 'kaiwa') {
+      if (this.thread) this.showThread(this.thread);
+      else this.showList();
+    } else {
+      this.screen.innerHTML = '';
+      this.app()?.show(this.screen);
+    }
+    this.updateChip();
+  }
+
+  private showHome(): void {
+    this.go('home');
+  }
+
+  /** Per frame (with the game's time step): the app on screen, if it runs. */
+  tick(dt: number): void {
+    if (this.open && this.mode !== 'home' && this.mode !== 'kaiwa') this.app()?.tick?.(dt);
+  }
+
+  /** The home screen: the time, then the apps with their badges. */
+  private renderHome(): void {
+    this.screen.innerHTML = '';
+    const home = el('div', 'ph-homescreen');
+    const now = Phone.time(this.phone.clock);
+    home.append(wrap('div', 'ph-bigclock', [span('ph-bigtime', now), span('ph-bigdate', '東都 · TOTO')]));
+    const grid = el('div', 'ph-apps');
+    const tiles: { id: string; name: string; icon: string; color: string; badge: number }[] = [
+      { id: 'kaiwa', name: 'KAIWA', icon: '💬', color: '#2fbf71', badge: this.phone.totalUnread + this.phone.awaiting },
+      ...this.apps.map((a) => ({ id: a.id, name: a.name, icon: a.icon, color: a.color, badge: a.badge?.() ?? 0 })),
+    ];
+    for (const t of tiles) {
+      const b = el('button', 'ph-app');
+      const ic = span('ph-app-icon', t.icon);
+      ic.style.background = t.color;
+      b.append(ic, span('ph-app-name', t.name));
+      if (t.badge > 0) b.append(span('ph-badge ph-app-badge', String(t.badge)));
+      b.addEventListener('click', () => this.go(t.id));
+      grid.append(b);
+    }
+    home.append(grid);
+    this.screen.append(home);
+  }
+
   toggle(): void {
     this.open = !this.open;
     this.root.hidden = !this.open;
@@ -84,10 +174,10 @@ export class PhoneUI {
       this.hooks.onOpen();
       this.banner.hidden = true;
       clearTimeout(this.bannerTimer);
-      if (this.thread) this.showThread(this.thread);
-      else this.showList();
+      this.go(this.mode);
     } else {
       this.closeLightbox();
+      this.app()?.hide?.();
       this.hooks.onClose();
     }
     this.updateChip();
@@ -107,18 +197,19 @@ export class PhoneUI {
     }
     for (const ev of events) {
       if (ev.kind !== 'message' || ev.msg.from !== 'them') continue;
-      const here = this.open && this.thread === ev.contact.id;
+      const here = this.open && this.mode === 'kaiwa' && this.thread === ev.contact.id;
+      const onList = this.open && this.mode === 'kaiwa' && !this.thread;
       if (here) this.phone.markRead(ev.contact.id);
-      else if (!this.open || this.thread) {
+      else if (!onList) {
         // Closed, or reading someone else: a banner. (Open on the chat list, the list shows it.)
         this.hooks.onMessage();
         this.notify(ev.contact, ev.msg);
       }
     }
-    if (this.open) {
+    if (this.open && this.mode === 'kaiwa') {
       if (this.thread) this.showThread(this.thread);
       else this.showList();
-    }
+    } else if (this.open && this.mode === 'home') this.renderHome();
     this.updateChip();
   }
 
@@ -145,10 +236,14 @@ export class PhoneUI {
   }
 
   private showList(): void {
+    this.mode = 'kaiwa';
     this.thread = null;
     this.screen.innerHTML = '';
     const head = el('div', 'ph-head');
-    head.append(span('ph-title', 'KAIWA'), span('ph-sub', 'トーク'));
+    const home = el('button', 'ph-back');
+    home.textContent = '‹';
+    home.addEventListener('click', () => this.showHome());
+    head.append(home, span('ph-title', 'KAIWA'), span('ph-sub', 'トーク'));
     const list = el('div', 'ph-list');
     const contacts = this.phone.contacts();
     if (contacts.length === 0) list.append(span('ph-empty', 'No messages yet.'));
@@ -172,6 +267,7 @@ export class PhoneUI {
   private showThread(id: string): void {
     const c = this.phone.contacts().find((x) => x.id === id);
     if (!c) return this.showList();
+    this.mode = 'kaiwa';
     const fresh = this.thread !== id;
     const old = this.screen.querySelector('.ph-msgs') as HTMLDivElement | null;
     const atBottom = !old || old.scrollTop + old.clientHeight >= old.scrollHeight - 30;
@@ -355,7 +451,18 @@ function injectStyle(): void {
   .ph-status { display: flex; justify-content: space-between; padding: 4px 16px 6px; color: #f0eef4; font-size: 12px; font-weight: 600; }
   .ph-icons { letter-spacing: 1px; opacity: 0.85; font-size: 10px; }
   .ph-screen { flex: 1; background: #1a1c24; border-radius: 22px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
-  .ph-home { width: 36%; height: 4px; border-radius: 2px; background: #5a5862; margin: 8px auto 2px; }
+  .ph-home { width: 36%; height: 5px; border-radius: 3px; background: #5a5862; margin: 7px auto 1px; cursor: pointer; }
+  .ph-home:hover { background: #8a8892; }
+  .ph-homescreen { flex: 1; display: flex; flex-direction: column; background: radial-gradient(ellipse at 30% 0%, #5a2a6a, transparent 60%), radial-gradient(ellipse at 80% 100%, #1a4a6a, transparent 60%), #14121e; padding: 28px 22px; gap: 34px; }
+  .ph-bigclock { display: flex; flex-direction: column; align-items: center; color: #fff; }
+  .ph-bigtime { font-size: 58px; font-weight: 200; letter-spacing: 2px; line-height: 1; }
+  .ph-bigdate { font-size: 12px; color: #d8c8e8; letter-spacing: 3px; margin-top: 6px; }
+  .ph-apps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 10px; }
+  .ph-app { position: relative; background: none; border: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; font: inherit; padding: 0; }
+  .ph-app-icon { width: 54px; height: 54px; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 28px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+  .ph-app:hover .ph-app-icon { filter: brightness(1.15); }
+  .ph-app-name { color: #f0eef6; font-size: 11px; }
+  .ph-app-badge { position: absolute; top: -5px; right: 4px; }
   .ph-head { display: flex; align-items: baseline; gap: 10px; padding: 14px 16px 10px; background: #111218; color: #fff; border-bottom: 1px solid #262833; }
   .ph-title { font-weight: 800; font-size: 20px; letter-spacing: 0.08em; color: #7ef0b0; }
   .ph-sub { font-size: 11px; color: #9a98a8; }
