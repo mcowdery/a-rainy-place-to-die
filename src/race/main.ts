@@ -9,7 +9,7 @@ import { addVehicle, addWheel, wheelLayout } from '../poc3d/models/vehicles';
 import { loadCourses } from './courses';
 import { buildVenue } from './scene';
 import { GunSound } from './gunSound';
-import { acrossCar, clampAim, Shooting, WEAPONS, wrap } from './shooting';
+import { nearestShot, Shooting, sideFor, spreadOf, WEAPONS, wrap, type Side } from './shooting';
 import { CarSound } from './sound';
 import { Targets } from './targets';
 import { Car, COUPE, DRIFT_ASSISTS, type Assists, type Controls } from './vehicle';
@@ -180,7 +180,7 @@ const puff = (x: number, y: number, z: number, vx: number, vz: number): void => 
 // ---- Post: bloom for the lamps, reflectors and the car's lights.
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.45, 0.6, 0.85);
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.5, 1.4);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
@@ -195,6 +195,12 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyF') shooting.pickWeapon(shooting.weaponIndex + 1);
   if (e.code === 'KeyE') shooting.reload();
   if (e.code === 'KeyT') shooting.reset();
+  if (e.code === 'KeyG') {
+    slowAuto = !slowAuto;
+    if (!slowAuto) slowOn = false;
+    toastText = slowAuto ? 'Slow motion when you aim: on · G to turn it off' : 'Slow motion when you aim: off · G to turn it on';
+    toastT = 2.5;
+  }
   keys.add(e.code);
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'KeyQ') view = view === 'chase' ? 'bumper' : 'chase';
@@ -218,6 +224,7 @@ window.addEventListener('keydown', (e) => {
     } catch {
       /* this session only */
     }
+    toastText = invertY ? 'Mouse Y inverted (mouse up looks down) · I to switch back' : 'Mouse Y normal (mouse up looks up) · I to invert';
     toastT = 2.5;
   }
 });
@@ -228,8 +235,20 @@ window.addEventListener('pointerdown', () => {
   gunSound.start();
 });
 // Aim with the right mouse button (the camera over the driver's shoulder, the crosshair in the middle), fire
-// with the left: once per click with the pistol, held for the paintball marker.
+// with the left: once per click with the pistol, held for the paintball marker. The left button alone fires
+// from the hip, where the camera looks, far less accurately (and never in slow motion).
+// Raising the gun slows the world (to 30%) while the focus lasts (2.5 s of it, refilling while the gun is
+// down); the camera and the mouse keep full speed. G turns it off.
 let aiming = false;
+let slowAuto = true;
+let slowOn = false;
+let focus = 1;
+let slow = 0;
+/** Seconds the hip-fire crosshair and arm stay up after a shot; seconds of the 'no line of fire' note. */
+let hipT = 0;
+let blockedT = 0;
+const FOCUS_SECS = 2.5;
+const FOCUS_REFILL = 6;
 /** Checks only (__race.aimAt): a point the aim follows. */
 let aimTrack: THREE.Vector3 | null = null;
 let aimYaw = 0;
@@ -239,20 +258,24 @@ let pulled = false;
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('mousedown', (e) => {
   if (!document.pointerLockElement) return;
-  if (e.button === 2 && !aiming) {
-    aiming = true;
-    const d = camera.getWorldDirection(new THREE.Vector3());
-    aimYaw = Math.atan2(d.x, d.z);
-    aimPitch = Math.max(-0.1, Math.min(0.2, Math.asin(d.y) + 0.12));
-  }
-  if (e.button === 0 && aiming) {
+  if (e.button === 2) startAiming();
+  if (e.button === 0) {
     trigger = true;
     pulled = true;
   }
 });
+function startAiming(): void {
+  if (aiming) return;
+  aiming = true;
+  const d = camera.getWorldDirection(new THREE.Vector3());
+  aimYaw = Math.atan2(d.x, d.z);
+  aimPitch = Math.max(-0.1, Math.min(0.2, Math.asin(d.y) + 0.12));
+  if (slowAuto && focus > 0.25) slowOn = true;
+}
 const stopAiming = (): void => {
   if (!aiming) return;
   aiming = false;
+  slowOn = false;
   trigger = false;
   // The chase camera carries on looking where you were aiming, then eases back behind the car.
   orbitYaw = wrap(aimYaw - camDir);
@@ -284,6 +307,7 @@ let orbitYaw = 0;
 let lookPitch = 0;
 let mouseIdle = 9;
 let toastT = 0;
+let toastText = '';
 document.addEventListener('click', () => {
   if (document.pointerLockElement) return;
   const el = renderer.domElement as HTMLCanvasElement & { requestPointerLock(o?: object): Promise<void> | void };
@@ -336,22 +360,29 @@ const reticle = document.getElementById('reticle')!;
 const gunEl = document.getElementById('gun')!;
 const shootEl = document.getElementById('shoot')!;
 const popsEl = document.getElementById('pops')!;
+const focusEl = document.getElementById('focus')!;
 const pops: { text: string; t: number }[] = [];
-const drawShootingHud = (dt: number, across: boolean): void => {
-  for (const e of shooting.scored) pops.push({ text: `+${e.points}${e.why ? ` ${e.why}` : ''}${e.points !== e.base ? ` ×${(e.points / e.base).toFixed(1)}` : ''}`, t: 1.4 });
+const slowEl = document.getElementById('slowmo')!;
+const drawShootingHud = (dt: number, side: Side | null, hip: boolean): void => {
+  for (const e of shooting.scored) pops.push({ text: `+${e.points}${e.why ? ` ${e.why}` : ''}${e.mult !== 1 ? ` ×${e.mult}` : ''}`, t: 1.4 });
   shooting.scored.length = 0;
   for (let i = pops.length - 1; i >= 0; i--) if ((pops[i].t -= dt) <= 0) pops.splice(i, 1);
   while (pops.length > 5) pops.shift();
   popsEl.innerHTML = pops.map((p) => `<div style="opacity:${Math.min(1, p.t * 2).toFixed(2)}">${p.text}</div>`).join('');
   const W = shooting.weapon;
-  reticle.style.display = aiming ? 'block' : 'none';
-  if (aiming) {
-    const spread = W.spread * (1 + Math.abs(car.slide) * 2.5 + Math.hypot(car.u, car.w) / 30) * (across ? 2.5 : 1);
+  const shown = aiming || hipT > 0;
+  reticle.style.display = shown ? 'block' : 'none';
+  if (shown) {
+    const across = side === 'across';
+    const spread = spreadOf(W, { slide: car.slide, speed: Math.hypot(car.u, car.w), across, hip });
     const px = Math.max(6, (Math.tan(spread) / Math.tan((camera.fov * Math.PI) / 360)) * (window.innerHeight / 2));
     reticle.style.setProperty('--r', `${px.toFixed(1)}px`);
-    reticle.className = `${across ? 'across' : ''} ${shooting.hitMark > 0 ? 'hit' : ''} ${shooting.reloading > 0 ? 'reload' : ''}`;
-    reticle.dataset.note = shooting.reloading > 0 ? 'RELOADING' : across ? 'ACROSS THE CAR' : '';
+    reticle.className = [hip ? 'hip' : '', across ? 'across' : '', side ? '' : 'blocked', shooting.hitMark > 0 ? 'hit' : '', shooting.reloading > 0 ? 'reload' : ''].join(' ');
+    reticle.dataset.note = shooting.reloading > 0 ? 'RELOADING' : !side ? 'NO LINE OF FIRE' : across ? 'THROUGH THE PASSENGER WINDOW' : '';
   }
+  const bars = Math.round(focus * 10);
+  focusEl.innerHTML = slowAuto ? `FOCUS <span>${'▮'.repeat(bars)}${'▯'.repeat(10 - bars)}</span>` : '';
+  focusEl.style.opacity = aiming || focus < 1 ? '1' : '0.35';
   const n = shooting.ammo[shooting.weaponIndex];
   const pips = W.mag <= 12 ? '▮'.repeat(n) + '▯'.repeat(W.mag - n) : `${n} / ${W.mag}`;
   gunEl.innerHTML = `<div class="name">${W.label}</div><div class="ammo">${shooting.reloading > 0 ? 'reloading…' : pips}</div><small>F ${WEAPONS[(shooting.weaponIndex + 1) % WEAPONS.length].label} · E reload · T clean targets</small>`;
@@ -391,7 +422,6 @@ const placeCamera = (dt: number, snap = false): void => {
       aimYaw = Math.atan2(aimTrack.x - p.x, aimTrack.z - p.z);
       aimPitch = Math.atan2(aimTrack.y - p.y, Math.hypot(aimTrack.x - p.x, aimTrack.z - p.z));
     }
-    aimYaw = car.h + clampAim(aimYaw - car.h);
     const d = new THREE.Vector3(Math.sin(aimYaw) * Math.cos(aimPitch), Math.sin(aimPitch), Math.cos(aimYaw) * Math.cos(aimPitch));
     // Behind the aim and up over the roof, a little to the right of it.
     const head = carObj.localToWorld(new THREE.Vector3(-0.35, 1.25, 0));
@@ -431,9 +461,17 @@ function frame(now: number): void {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   clock.t += dt;
+  // Slow motion: drains the focus while aiming; lowering the gun ends it and the focus refills.
+  if (aiming && slowOn) {
+    focus = Math.max(0, focus - dt / FOCUS_SECS);
+    if (focus <= 0) slowOn = false;
+  } else if (!aiming) focus = Math.min(1, focus + dt / FOCUS_REFILL);
+  slow += ((slowOn ? 1 : 0) - slow) * Math.min(1, dt * 7);
+  /** The world's time step (the car, targets, shots, smoke); dt stays real for the camera and the clock. */
+  const gdt = dt * (1 - 0.7 * slow);
   const c = controls();
   car.assists = aiming ? AIM_ASSISTS : DRIFT_ASSISTS;
-  car.update(dt, c, ground);
+  car.update(gdt, c, ground);
   // Where you are: the lot, the top, or on the pass (for the timed runs).
   const here: 'lot' | 'top' | 'road' = course.inLot(car.x, car.z) ? 'lot' : course.inSummit(car.x, car.z) ? 'top' : 'road';
   if (here !== wasIn) {
@@ -451,11 +489,11 @@ function frame(now: number): void {
   const ang = Math.abs(car.slide);
   const drifting = ang > 0.2 && car.u > 7;
   if (drifting) {
-    chainT += dt;
+    chainT += gdt;
     chainIdle = 0;
-    chain += ((ang * 180) / Math.PI) * car.u * dt * 0.6 * Math.min(4, 1 + chainT * 0.3);
+    chain += ((ang * 180) / Math.PI) * car.u * gdt * 0.6 * Math.min(4, 1 + chainT * 0.3);
   } else if (chain > 0) {
-    chainIdle += dt;
+    chainIdle += gdt;
     if (chainIdle > 1.2) {
       total += Math.round(chain);
       best = Math.max(best, Math.round(chain));
@@ -477,17 +515,17 @@ function frame(now: number): void {
   const slopeRoll = Math.atan2(nx * Math.cos(car.h) - nz * Math.sin(car.h), ny);
   carObj.position.set(car.x, car.y, car.z);
   carObj.rotation.set(slopePitch - car.ax * 0.006, car.h, -slopeRoll + car.ay * 0.007);
-  body.visible = view === 'chase' || aiming;
+  body.visible = view === 'chase' || aiming || hipT > 0;
   for (const wh of wheels) {
     const rate = wh.front ? car.u / WL.r : car.handbrake ? 0 : (car.u / WL.r) * (1 + car.spin * 2.5) + car.spin * 25;
-    wh.roll = (wh.roll + rate * dt) % (Math.PI * 2);
+    wh.roll = (wh.roll + rate * gdt) % (Math.PI * 2);
     wh.m.rotation.set(wh.roll, wh.front ? car.steer : 0, 0);
   }
   // Smoke from the rear wheels.
   const slideSmoke = Math.max(0, ang - 0.18) * 3 * Math.min(1, car.u / 8) + car.spin;
   if (slideSmoke > 0.15) {
     for (const s of [-0.7, 0.7]) {
-      if (Math.random() < Math.min(0.7, slideSmoke * 0.6)) {
+      if (Math.random() < Math.min(0.7, slideSmoke * 0.6) * (gdt / dt)) {
         const x = car.x - fx * 1.25 + Math.cos(car.h) * s;
         const z = car.z - fz * 1.25 - Math.sin(car.h) * s;
         puff(x, car.y + 0.25, z, fx * car.u, fz * car.u);
@@ -496,10 +534,10 @@ function frame(now: number): void {
   }
   for (let k = 0; k < SMOKE; k++) {
     if (sLife[k] <= 0) continue;
-    sLife[k] -= dt / 1.8;
-    sPos[k * 3] += sVel[k * 3] * dt;
-    sPos[k * 3 + 1] += sVel[k * 3 + 1] * dt;
-    sPos[k * 3 + 2] += sVel[k * 3 + 2] * dt;
+    sLife[k] -= gdt / 1.8;
+    sPos[k * 3] += sVel[k * 3] * gdt;
+    sPos[k * 3 + 1] += sVel[k * 3 + 1] * gdt;
+    sPos[k * 3 + 2] += sVel[k * 3 + 2] * gdt;
   }
   smokeGeo.attributes.position.needsUpdate = true;
   smokeGeo.attributes.life.needsUpdate = true;
@@ -507,29 +545,48 @@ function frame(now: number): void {
   placeCamera(dt, snapCam);
   snapCam = false;
   venue.stars.position.copy(camera.position);
-  // Shooting: the crosshair's point in the world, the arm out of the window at it, the trigger.
-  targets.update(dt);
-  let across = false;
-  if (aiming) {
+  // Shooting: the crosshair's point in the world (aimed, or where the camera looks from the hip), which window
+  // it's through as seen from the driver's seat, the weapon held toward it, the trigger.
+  targets.update(gdt);
+  hipT = Math.max(0, hipT - dt);
+  blockedT = Math.max(0, blockedT - dt);
+  let side: Side | null = null;
+  const hip = !aiming;
+  if (aiming || trigger || hipT > 0) {
     camera.updateMatrixWorld();
     const look = camera.getWorldDirection(new THREE.Vector3());
     const aimPoint = shooting.pick(camera.position, look).point;
-    across = acrossCar(aimYaw - car.h);
     carObj.updateMatrixWorld();
-    shooting.pose(carObj, aimPoint, across);
-    if (trigger) {
-      const drift = drifting;
-      const mult = (drift ? 2 : 1) * (across ? 1.5 : 1);
-      const why = [drift ? 'DRIFT' : '', across ? 'ACROSS' : ''].filter(Boolean).join(' ');
+    const head = carObj.localToWorld(new THREE.Vector3(-0.35, 1.15, 0));
+    const rel = wrap(Math.atan2(aimPoint.x - head.x, aimPoint.z - head.z) - car.h);
+    const pitch = Math.atan2(aimPoint.y - head.y, Math.hypot(aimPoint.x - head.x, aimPoint.z - head.z));
+    side = sideFor(rel, pitch);
+    // Off every window (the windscreen, behind on the left), the weapon waits at the nearest shot it has.
+    const n = nearestShot(rel, pitch);
+    const a = car.h + n.rel;
+    const armAt = side ? aimPoint : head.clone().add(new THREE.Vector3(Math.sin(a) * Math.cos(n.pitch), Math.sin(n.pitch), Math.cos(a) * Math.cos(n.pitch)).multiplyScalar(20));
+    shooting.pose(carObj, armAt, side ?? n.side);
+    if (trigger && side) {
+      if (hip) hipT = 1.2;
+      const across = side === 'across';
+      const mult = (drifting ? 2 : 1) * (across ? 1.5 : 1);
+      const why = [drifting ? 'DRIFT' : '', across ? 'ACROSS' : '', hip ? 'HIP' : ''].filter(Boolean).join(' ');
       const carVel = new THREE.Vector3(Math.sin(car.h) * car.u + Math.cos(car.h) * car.w, 0, Math.cos(car.h) * car.u - Math.sin(car.h) * car.w);
-      aimPitch += shooting.fire({ aimPoint, carVel, across, slide: car.slide, speed: Math.hypot(car.u, car.w), mult, why }, !pulled);
-      pulled = false;
+      const kick = shooting.fire({ aimPoint, carVel, across, hip, slide: car.slide, speed: Math.hypot(car.u, car.w), mult, why }, !pulled);
+      if (aiming) aimPitch += kick;
+    } else if (trigger && pulled) {
+      blockedT = 0.9;
+      if (hip) hipT = 1.2;
     }
+    pulled = false;
   } else shooting.arm.visible = false;
-  shooting.update(dt);
+  shooting.update(gdt);
+  sound.slow = slow;
+  gunSound.setSlow(slow);
   gunSound.play(shooting.events, camera.position);
   shooting.events.length = 0;
-  drawShootingHud(dt, across);
+  drawShootingHud(dt, side, hip);
+  slowEl.style.opacity = (slow * 0.9).toFixed(3);
   sound.update(dt, { rev: car.rev, gear: car.gear, throttle: c.throttle, speed: Math.hypot(car.u, car.w), slide: car.slide, spin: car.spin, bump: car.bump });
   // HUD.
   const kmh = Math.round(Math.abs(car.u) * 3.6);
@@ -540,7 +597,7 @@ function frame(now: number): void {
   timerEl.textContent = run ? `${run.dir === 'up' ? '▲ UPHILL' : '▼ DOWNHILL'}  ${fmt(run.t)}` : lastRun;
   toastT = Math.max(0, toastT - dt);
   helpEl.style.display = help || toastT > 0 ? 'block' : 'none';
-  if (toastT > 0) helpEl.textContent = invertY ? 'Mouse Y inverted (mouse up looks down) · I to switch back' : 'Mouse Y normal (mouse up looks up) · I to invert';
+  if (toastT > 0) helpEl.textContent = toastText;
   else if (helpEl.textContent !== HELP) helpEl.textContent = HELP;
   hud.textContent = `${course.def.name} · ${here === 'lot' ? 'practice lot' : here === 'top' ? 'the viewpoint' : 'the pass'}${bestRun.up < Infinity ? ` · best up ${fmt(bestRun.up)}` : ''}${bestRun.down < Infinity ? ` · best down ${fmt(bestRun.down)}` : ''}`;
   composer.render(dt);
@@ -567,15 +624,17 @@ window.addEventListener('resize', () => {
   targets,
   // Keep the crosshair on (x, y, z) (re-aimed each frame from where the camera is).
   aimAt: (x: number, y: number, z: number): void => {
-    aiming = true;
+    startAiming();
     aimTrack = new THREE.Vector3(x, y, z);
   },
   aim: (on: boolean, yaw?: number, pitch?: number): void => {
-    aiming = on;
+    if (on) startAiming();
+    else stopAiming();
     aimTrack = null;
     if (yaw !== undefined) aimYaw = car.h + yaw;
     if (pitch !== undefined) aimPitch = pitch;
   },
+  state: () => ({ aiming, slow, focus, hipT }),
   trigger: (on: boolean): void => {
     trigger = on;
     pulled = on;

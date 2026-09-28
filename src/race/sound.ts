@@ -14,6 +14,9 @@ export class CarSound {
   private windGain!: GainNode;
   private master!: GainNode;
   private lastGear = 1;
+  private lp!: BiquadFilterNode;
+  /** Slow motion (0-1): the engine drops in pitch and everything goes muffled. */
+  slow = 0;
   private dip = 0;
 
   start(): void {
@@ -25,7 +28,10 @@ export class CarSound {
     this.ctx = ctx;
     this.master = ctx.createGain();
     this.master.gain.value = 0.7;
-    this.master.connect(ctx.destination);
+    this.lp = ctx.createBiquadFilter();
+    this.lp.type = 'lowpass';
+    this.lp.frequency.value = 20000;
+    this.master.connect(this.lp).connect(ctx.destination);
     this.engineFilter = ctx.createBiquadFilter();
     this.engineFilter.type = 'lowpass';
     this.engineGain = ctx.createGain();
@@ -74,7 +80,8 @@ export class CarSound {
     this.lastGear = s.gear;
     this.dip = Math.max(0, this.dip - dt);
     const rpm = 900 + s.rev * 6400 - this.dip * 9000;
-    const f = Math.max(28, rpm / 30);
+    const f = Math.max(28, rpm / 30) * (1 - this.slow * 0.35);
+    this.lp.frequency.setTargetAtTime(20000 * Math.pow(0.045, this.slow), t, 0.05);
     for (const o of this.engine) o.frequency.setTargetAtTime(f, t, 0.03);
     this.engineFilter.frequency.setTargetAtTime(500 + s.throttle * 2200 + s.rev * 900, t, 0.05);
     this.engineGain.gain.setTargetAtTime(0.07 + s.throttle * 0.1, t, 0.05);

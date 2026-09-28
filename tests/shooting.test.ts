@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadCourses } from '../src/race/courses';
 import { parseCourse } from '../src/race/course';
-import { acrossCar, ARC, clampAim, WEAPONS } from '../src/race/shooting';
+import { ARC, nearestShot, sideFor, spreadOf, WEAPONS } from '../src/race/shooting';
 import { ringPoints } from '../src/race/targets';
 
 const DEG = Math.PI / 180;
@@ -15,14 +15,32 @@ describe('shooting practice', () => {
     expect(ringPoints(0.45, 0.2)).toBe(1);
   });
 
-  it('keeps the aim in the arc: wide on the driver side (right), shorter across the car', () => {
-    expect(clampAim(-90 * DEG)).toBeCloseTo(-90 * DEG);
-    expect(clampAim(-179 * DEG)).toBeCloseTo(ARC.right);
-    expect(clampAim(150 * DEG)).toBeCloseTo(ARC.left);
-    expect(ARC.right).toBeLessThan(-ARC.left);
-    expect(acrossCar(-60 * DEG)).toBe(false);
-    expect(acrossCar(5 * DEG)).toBe(false);
-    expect(acrossCar(60 * DEG)).toBe(true);
+  it('shoots out of the driver window wide, through the passenger window narrow, never the windscreen', () => {
+    // Right-hand drive: the driver's window (right, negative) from just ahead round to behind.
+    expect(sideFor(0)).toBe('driver');
+    expect(sideFor(-90 * DEG)).toBe('driver');
+    expect(sideFor(-160 * DEG)).toBe('driver');
+    expect(sideFor(-175 * DEG)).toBe(null);
+    // The windscreen, and behind on the left.
+    expect(sideFor(30 * DEG)).toBe(null);
+    expect(sideFor(150 * DEG)).toBe(null);
+    // The passenger window: a slot, and only as high or low as the window.
+    expect(sideFor(80 * DEG)).toBe('across');
+    expect(sideFor(80 * DEG, 0.5)).toBe(null);
+    expect(ARC.window[1] - ARC.window[0]).toBeLessThan((ARC.ahead - ARC.right) / 3);
+    // Off every window, the weapon waits at the nearest shot.
+    expect(nearestShot(30 * DEG, 0).rel).toBeCloseTo(ARC.ahead);
+    expect(nearestShot(50 * DEG, 0).side).toBe('across');
+    expect(nearestShot(170 * DEG, 0).side).toBe('driver');
+  });
+
+  it('spreads wider across the car and far wider from the hip', () => {
+    const [pistol] = WEAPONS;
+    const at = { slide: 0, speed: 0, across: false, hip: false };
+    const base = spreadOf(pistol, at);
+    expect(spreadOf(pistol, { ...at, across: true })).toBeGreaterThan(base * 2);
+    expect(spreadOf(pistol, { ...at, hip: true })).toBeGreaterThan(base * 5);
+    expect(spreadOf(pistol, { ...at, slide: 0.5, speed: 20 })).toBeGreaterThan(base);
   });
 
   it('has a pistol and a paintball marker', () => {

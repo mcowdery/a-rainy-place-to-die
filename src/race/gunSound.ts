@@ -12,6 +12,7 @@ export class GunSound {
   private out!: GainNode;
   private echo!: DelayNode;
   private noiseBuf!: AudioBuffer;
+  private lp!: BiquadFilterNode;
 
   start(): void {
     if (this.ctx) {
@@ -22,7 +23,10 @@ export class GunSound {
     this.ctx = ctx;
     this.out = ctx.createGain();
     this.out.gain.value = 0.8;
-    this.out.connect(ctx.destination);
+    this.lp = ctx.createBiquadFilter();
+    this.lp.type = 'lowpass';
+    this.lp.frequency.value = 20000;
+    this.out.connect(this.lp).connect(ctx.destination);
     // The slap-back: a delayed, darker copy (the pistol feeds it).
     this.echo = ctx.createDelay(1);
     this.echo.delayTime.value = 0.23;
@@ -36,6 +40,14 @@ export class GunSound {
     this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+
+  /** Slow motion (0-1): muffled, and the echo drawn out. */
+  setSlow(k: number): void {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.lp.frequency.setTargetAtTime(20000 * Math.pow(0.2, k), t, 0.05);
+    this.echo.delayTime.setTargetAtTime(0.23 + k * 0.25, t, 0.1);
   }
 
   play(events: readonly ShotEvent[], listener: THREE.Vector3): void {

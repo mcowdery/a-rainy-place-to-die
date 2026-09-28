@@ -3,10 +3,11 @@ import type { Course } from './course';
 import { splat, type TargetHit, type Targets } from './targets';
 
 /**
- * Shooting from the car (the practice lot's test): a pistol and a paintball marker, fired by the driver out
- * of a window. Japanese cars are right-hand drive, so the driver's window is on the right: the easy side, a
- * wide arc from dead ahead round to behind. Across the car, out of the passenger window, the arc is shorter
- * and the shots are worse (spread, rate).
+ * Shooting from the car (the practice lot's test): a pistol and a paintball marker, fired by the driver.
+ * Japanese cars are right-hand drive, so the driver's window is on the right: the arm goes out of it, a wide
+ * arc from just ahead round to behind. The passenger's window is across the car: the driver stays in the
+ * seat and shoots through it, so only the slot that window makes (seen from the driver's seat) will do, and
+ * the shots are worse (spread, rate). The windscreen and the back are no line of fire.
  *
  * The pistol (黒星, the Type 54 the yakuza made famous) hits at once, with a flash and a tracer, and has a
  * little aim assist. Paintballs fly: they leave at 88 m/s plus the car's own velocity, drop, and slow, so you
@@ -33,14 +34,36 @@ export const WEAPONS: readonly Weapon[] = [
 ];
 
 const DEG = Math.PI / 180;
-/** The arc you can shoot in, relative to the car's heading (rad, positive to the left): right to behind, across to the left. */
-export const ARC = { right: -165 * DEG, left: 110 * DEG, across: 15 * DEG };
+/**
+ * Where you can shoot, relative to the car's heading from the driver's seat (rad, positive to the left): out
+ * of the driver's window from just ahead (`ahead`) round to behind (`right`); through the passenger window
+ * between its pillars (`window`), and only as high or low as the window (`windowPitch`).
+ */
+export const ARC = { right: -165 * DEG, ahead: 8 * DEG, window: [58 * DEG, 100 * DEG] as const, windowPitch: [-0.24, 0.14] as const };
+export type Side = 'driver' | 'across';
 
 export const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
-/** Keep an aim (relative to the car) inside the arc. */
-export const clampAim = (rel: number): number => Math.max(ARC.right, Math.min(ARC.left, wrap(rel)));
-/** Aiming across the car, out of the passenger window: the hard side. */
-export const acrossCar = (rel: number): boolean => wrap(rel) > ARC.across;
+/** Which window a shot at `rel` (and `pitch`) goes out of, or null (the windscreen, the back, the roof). */
+export function sideFor(rel: number, pitch = 0): Side | null {
+  const r = wrap(rel);
+  if (r >= ARC.right && r <= ARC.ahead) return 'driver';
+  if (r >= ARC.window[0] && r <= ARC.window[1] && pitch >= ARC.windowPitch[0] && pitch <= ARC.windowPitch[1]) return 'across';
+  return null;
+}
+
+/** The nearest aim (rel, pitch) you could shoot at: where the arm points while the aim is off every window. */
+export function nearestShot(rel: number, pitch: number): { rel: number; pitch: number; side: Side } {
+  const r = wrap(rel);
+  if (sideFor(r, pitch)) return { rel: r, pitch, side: sideFor(r, pitch)! };
+  const [w0, w1] = ARC.window;
+  const inWindow = { rel: Math.max(w0, Math.min(w1, r)), pitch: Math.max(ARC.windowPitch[0], Math.min(ARC.windowPitch[1], pitch)), side: 'across' as const };
+  // The driver's arc's nearer end, the short way round (behind the car wraps through 180 degrees).
+  const toAhead = Math.abs(wrap(r - ARC.ahead));
+  const toRight = Math.abs(wrap(r - ARC.right));
+  const toWindow = Math.abs(r - inWindow.rel) + Math.abs(pitch - inWindow.pitch);
+  if (toWindow < Math.min(toAhead, toRight)) return inWindow;
+  return { rel: toAhead < toRight ? ARC.ahead : ARC.right, pitch, side: 'driver' };
+}
 
 const PAINTS = [0xff3fa4, 0x3ff0ff, 0xffe03f, 0x7dff4a, 0xff8a2a].map((h) => new THREE.Color(h));
 
@@ -54,6 +77,7 @@ export interface ShotEvent {
 export interface ScoreEvent {
   readonly points: number;
   readonly base: number;
+  readonly mult: number;
   readonly why: string;
 }
 
@@ -71,8 +95,10 @@ export interface FireContext {
   readonly aimPoint: THREE.Vector3;
   /** The car's velocity (m/s, world), for paintballs. */
   readonly carVel: THREE.Vector3;
-  /** Aiming across the car; the car's slide (rad) and speed, which open the spread. */
+  /** Shooting through the passenger window from the driver's seat; the car's slide (rad) and speed, which open the spread. */
   readonly across: boolean;
+  /** From the hip (not aiming): far wider spread, no assist. */
+  readonly hip: boolean;
   readonly slide: number;
   readonly speed: number;
   /** Score multiplier for hits from this shot, and why (drifting...). */
@@ -246,15 +272,17 @@ export class Shooting {
   }
 
   /**
-   * Hold the arm out of a window toward the aim point: the driver's (right) window, or across the car to the
-   * passenger's. `car` is the car's object (+z forward, +x its left).
+   * Hold the weapon toward the aim point: the arm out of the driver's (right) window, or, across the car, held
+   * inside from the driver's seat toward the passenger window (the muzzle stays in the car). `car` is the car's
+   * object (+z forward, +x its left).
    */
-  pose(car: THREE.Object3D, aimPoint: THREE.Vector3, across: boolean): void {
+  pose(car: THREE.Object3D, aimPoint: THREE.Vector3, side: Side): void {
     this.arm.visible = true;
-    const w = this.v.set(across ? 0.95 : -0.95, 1.02, 0.1);
-    const aimLocal = car.worldToLocal(this.v2.copy(aimPoint));
-    const d = aimLocal.sub(w).normalize();
-    this.arm.position.copy(w).addScaledVector(d, 0.32);
+    if (side === 'driver') {
+      const w = this.v.set(-0.95, 1.02, 0.1);
+      const d = car.worldToLocal(this.v2.copy(aimPoint)).sub(w).normalize();
+      this.arm.position.copy(w).addScaledVector(d, 0.32);
+    } else this.arm.position.set(-0.05, 1.1, 0.12);
     this.arm.lookAt(aimPoint);
   }
 
@@ -308,8 +336,8 @@ export class Shooting {
     this.cooldown = W.interval * (ctx.across ? 1.6 : 1);
     this.shots++;
     const dir = ctx.aimPoint.clone().sub(muzzle).normalize();
-    // The pistol's assist: a target within a couple of degrees pulls the shot most of the way to its centre.
-    if (W.id === 'pistol') {
+    // The pistol's assist (aiming only): a target within a couple of degrees pulls the shot most of the way to its centre.
+    if (W.id === 'pistol' && !ctx.hip) {
       let best = 0.035;
       let pull: THREE.Vector3 | null = null;
       for (const t of this.targets.list) {
@@ -323,9 +351,7 @@ export class Shooting {
       }
       if (pull) dir.lerp(pull, 0.6).normalize();
     }
-    // Spread: opens with the slide, the speed, and across the car.
-    const spread = W.spread * (1 + Math.abs(ctx.slide) * 2.5 + ctx.speed / 30) * (ctx.across ? 2.5 : 1);
-    jitter(dir, spread);
+    jitter(dir, spreadOf(W, ctx));
     this.events.push({ kind: W.id, at: muzzle });
     if (W.id === 'pistol') {
       const p = this.pick(muzzle, dir, 400);
@@ -358,7 +384,7 @@ export class Shooting {
     this.streak++;
     this.bestStreak = Math.max(this.bestStreak, this.streak);
     this.hitMark = 0.25;
-    this.scored.push({ points, base, why });
+    this.scored.push({ points, base, mult, why });
     const plate = h.target.kind === 'plate';
     if (kind === 'paint') {
       this.burst(h.point, [color!.r, color!.g, color!.b], 14, 2.2, h.normal);
@@ -507,6 +533,11 @@ export class Shooting {
       this.pLife[k] = 0.6 + Math.random() * 0.4;
     }
   }
+}
+
+/** A shot's spread (rad, the cone's half-angle): it opens with the slide and the speed, across the car and from the hip. */
+export function spreadOf(W: Weapon, c: { slide: number; speed: number; across: boolean; hip: boolean }): number {
+  return W.spread * (1 + Math.abs(c.slide) * 2.5 + c.speed / 30) * (c.across ? 2.5 : 1) * (c.hip ? 6 : 1);
 }
 
 /** Turn a unit vector by a random angle within a cone of half-angle a. */

@@ -215,12 +215,12 @@ export function buildVenue(course: Course): VenueScene {
     light.position.set(x, y0 + h - 0.4, z);
     group.add(pole, head, light);
   };
-  lamp(lot.x + 8, lot.z + 8, 0, 12, 900);
-  lamp(lot.x + lot.w - 8, lot.z + lot.h - 8, 0, 12, 900);
-  lamp(lot.x + lot.w - 8, lot.z + 8, 0, 12, 700);
-  lamp(lot.x + 8, lot.z + lot.h / 2, 0, 12, 700);
-  lamp(lot.x + lot.w - 8, lot.z + lot.h / 2 - 10, 0, 12, 700);
-  lamp(lot.x + lot.w / 2 - 25, lot.z + 8, 0, 12, 600);
+  lamp(lot.x + 8, lot.z + 8, 0, 12, 560);
+  lamp(lot.x + lot.w - 8, lot.z + lot.h - 8, 0, 12, 560);
+  lamp(lot.x + lot.w - 8, lot.z + 8, 0, 12, 430);
+  lamp(lot.x + 8, lot.z + lot.h / 2, 0, 12, 430);
+  lamp(lot.x + lot.w - 8, lot.z + lot.h / 2 - 10, 0, 12, 430);
+  lamp(lot.x + lot.w / 2 - 25, lot.z + 8, 0, 12, 370);
 
   // ---- The viewpoint: a disc of tarmac, a rim rail, a vending machine, a lamp.
   const sm = course.summit;
