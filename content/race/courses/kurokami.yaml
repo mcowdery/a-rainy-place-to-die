@@ -2,6 +2,21 @@
 # A floodlit practice lot at the foot of the mountain, then the pass: up a hillside that rises to the north,
 # two hairpins, sweepers and an S-section, to a viewpoint at the summit. World x east, z south, metres.
 name: 黒神峠 Kurokami Pass
+blurb: A black cedar pass above the city, two hairpins and an S to the summit viewpoint. Floodlit practice lot at the foot, with a shooting range.
+# Night: a cold moon, the city's glow low on the horizon, stars.
+atmosphere:
+  label: Night
+  sky: ['#04050c', '#0a0e1e', '#1a1a30', '#3a2438']
+  fog: { color: '#0c1020', density: 0.0042 }
+  light: { color: '#8a9ad0', intensity: 0.35, from: [-300, 400, 200] }
+  hemi: { sky: '#243052', ground: '#0a0a0c', intensity: 0.45 }
+  stars: 1
+  sun: false
+  exposure: 1.1
+# Time trial medals (seconds): [bronze, silver, gold].
+trial:
+  up: [75, 66, 58]
+  down: [70, 61, 53]
 # The practice lot (flat, at height 0): its rect; the road leaves from the middle of its north edge.
 lot: { x: -90, z: -60, w: 180, h: 130 }
 road:

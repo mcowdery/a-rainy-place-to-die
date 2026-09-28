@@ -4,7 +4,6 @@ import { loadCourses } from '../src/race/courses';
 import { Car } from '../src/race/vehicle';
 
 const { courses, errors } = loadCourses();
-const course = courses.get('kurokami')!;
 
 /** An autopilot: aims at the centre line ahead, slows for the bends ahead (a comfortable pull). */
 function autopilot(car: Car, c: Course, from: number, to: number, dir: 1 | -1, limit = 240): { time: number; maxBump: number; outside: number; done: boolean } {
@@ -38,10 +37,19 @@ function autopilot(car: Car, c: Course, from: number, to: number, dir: 1 | -1, l
   return { time: limit, maxBump, outside, done: false };
 }
 
-describe('Kurokami Pass', () => {
+it('loads the venues', () => {
+  expect(errors).toEqual([]);
+  expect(courses.size).toBeGreaterThanOrEqual(2);
+});
+
+describe.each([...courses.keys()])('course %s', (name) => {
+  const course = courses.get(name)!;
   it('loads, and the road climbs from the lot to the summit on an even grade', () => {
     expect(errors).toEqual([]);
     expect(course.length).toBeGreaterThan(800);
+    expect(course.def.atmosphere.sky).toHaveLength(4);
+    // The medal times are within reach of a careful driver (the autopilot) but gold needs more.
+    expect(course.def.trial.up[2]).toBeLessThan(course.def.trial.up[0]);
     const top = course.summit;
     expect(top.y).toBeGreaterThan(40);
     expect(course.y[0]).toBeCloseTo(0, 5);
@@ -63,12 +71,17 @@ describe('Kurokami Pass', () => {
   it('can be driven up and back down on the handling model without hitting the rails hard', () => {
     const up = autopilot(new Car(), course, 5, course.x.length - 1, 1);
     expect(up.done).toBe(true);
-    expect(up.time).toBeLessThan(110);
+    expect(up.time).toBeLessThan(course.length / 9);
+    // Gold is faster than the careful autopilot; bronze is slower.
+    expect(course.def.trial.up[2]).toBeLessThan(up.time);
+    expect(course.def.trial.up[0]).toBeGreaterThan(up.time);
     expect(up.maxBump).toBeLessThan(4);
     expect(up.outside).toBe(0);
     const down = autopilot(new Car(), course, course.x.length - 25, 5, -1);
     expect(down.done).toBe(true);
     expect(down.maxBump).toBeLessThan(4);
+    expect(course.def.trial.down[2]).toBeLessThan(down.time);
+    expect(course.def.trial.down[0]).toBeGreaterThan(down.time);
   });
 
   it('keeps the car in: a car driven at the rail is stopped at it', () => {

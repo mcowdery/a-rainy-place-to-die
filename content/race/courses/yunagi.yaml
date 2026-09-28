@@ -1,0 +1,74 @@
+# 夕凪峠 Yūnagi Pass (format: src/race/course.ts). A coastal pass at dusk: the practice lot on the shore, the sea
+# to the south, and the road switching back and forth up the seaward face of the hill, five hairpins, to a
+# viewpoint over the water. World x east, z south, metres.
+name: 夕凪峠 Yūnagi Pass
+blurb: Five hairpins up the seaward face of the hill at sunset, the sea below you all the way to the top. Longer and more technical than Kurokami.
+# Dusk: the sun going down over the sea to the south-south-west, a violet sky, warm haze, the first stars.
+atmosphere:
+  label: Dusk
+  sky: ['#1c1840', '#5a3a78', '#d0607a', '#ffb070']
+  fog: { color: '#b87478', density: 0.0021 }
+  light: { color: '#ffb07a', intensity: 1.7, from: [-500, 120, 800] }
+  hemi: { sky: '#8a70b0', ground: '#3a2228', intensity: 0.9 }
+  stars: 0.25
+  sun: true
+  exposure: 1.0
+# The sea: its level, and the shoreline south of the lot where the land falls away under it.
+sea: { level: -6, shore: 74 }
+lot: { x: -80, z: -50, w: 160, h: 110 }
+road:
+  width: 7.0
+  shoulder: 1.2
+  slope: 0.12
+  rough: 7
+  points:
+    - [0, -50]
+    - [0, -95]
+    - [15, -130]
+    # First leg east, along the hillside.
+    - [70, -150]
+    - [140, -165]
+    # Hairpin 1: left, back to the west.
+    - [175, -178]
+    - [188, -200]
+    - [178, -222]
+    - [150, -232]
+    - [80, -240]
+    - [0, -252]
+    - [-80, -262]
+    # Hairpin 2: right, back to the east.
+    - [-125, -272]
+    - [-140, -294]
+    - [-130, -316]
+    - [-104, -326]
+    - [-30, -334]
+    - [50, -342]
+    - [110, -350]
+    # Hairpin 3: left.
+    - [145, -362]
+    - [158, -384]
+    - [148, -406]
+    - [122, -416]
+    - [50, -424]
+    - [-20, -432]
+    - [-70, -440]
+    # Hairpin 4: right.
+    - [-105, -452]
+    - [-118, -474]
+    - [-108, -496]
+    - [-82, -506]
+    - [-20, -514]
+    - [60, -522]
+    # Hairpin 5: left, then the last climb to the top.
+    - [100, -534]
+    - [112, -556]
+    - [100, -578]
+    - [72, -586]
+    - [20, -596]
+    - [-10, -620]
+    - [-5, -655]
+summit: { r: 22 }
+# Time trial medals (seconds): [bronze, silver, gold].
+trial:
+  up: [112, 99, 88]
+  down: [102, 90, 80]

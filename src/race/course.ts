@@ -14,6 +14,13 @@ import type { Ground } from './vehicle';
 
 export interface CourseDef {
   readonly name: string;
+  /** A line or two for the venue select screen. */
+  readonly blurb: string;
+  readonly atmosphere: Atmosphere;
+  /** The sea, if the venue is on the coast: its level (m) and the shoreline (z; the land beyond it, to the south, falls away under it). */
+  readonly sea?: { readonly level: number; readonly shore: number };
+  /** Time trial medal times (seconds): [bronze, silver, gold], up the pass and down it. */
+  readonly trial: { readonly up: readonly [number, number, number]; readonly down: readonly [number, number, number] };
   readonly lot: { readonly x: number; readonly z: number; readonly w: number; readonly h: number };
   readonly road: {
     readonly width: number;
@@ -25,6 +32,22 @@ export interface CourseDef {
   readonly summit: { readonly r: number };
   /** Shooting practice (race/shooting.ts): what stands where, facing which way. */
   readonly targets?: readonly TargetDef[];
+}
+
+/**
+ * The venue's time of day and weather, as the scene draws it: the sky gradient (top to horizon, four colours),
+ * the fog, the one light in the sky (the moon, or the sun at dusk: colour, strength, where it comes from),
+ * the sky's fill light, the stars (0-1), whether the sun's disc sits on the horizon, the exposure.
+ */
+export interface Atmosphere {
+  readonly label: string;
+  readonly sky: readonly [string, string, string, string];
+  readonly fog: { readonly color: string; readonly density: number };
+  readonly light: { readonly color: string; readonly intensity: number; readonly from: readonly [number, number, number] };
+  readonly hemi: { readonly sky: string; readonly ground: string; readonly intensity: number };
+  readonly stars: number;
+  readonly sun: boolean;
+  readonly exposure: number;
 }
 
 /**
@@ -64,6 +87,28 @@ export function parseCourse(file: string, text: string, errors: string[]): Cours
   }
   const summit = d?.summit as Record<string, unknown> | undefined;
   if (!summit || !num(summit.r)) err('summit: { r }');
+  if (typeof d?.blurb !== 'string') err('blurb: a line for the venue select screen');
+  const col = (v: unknown): boolean => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
+  const at = d?.atmosphere as Record<string, unknown> | undefined;
+  if (!at) err('atmosphere: missing');
+  else {
+    if (typeof at.label !== 'string') err('atmosphere.label: e.g. "Night"');
+    if (!Array.isArray(at.sky) || at.sky.length !== 4 || !at.sky.every(col)) err('atmosphere.sky: four "#rrggbb" colours, top to horizon');
+    const fog = at.fog as Record<string, unknown> | undefined;
+    if (!fog || !col(fog.color) || !num(fog.density)) err('atmosphere.fog: { color, density }');
+    const light = at.light as Record<string, unknown> | undefined;
+    if (!light || !col(light.color) || !num(light.intensity) || !Array.isArray(light.from) || light.from.length !== 3 || !light.from.every(num)) err('atmosphere.light: { color, intensity, from: [x, y, z] }');
+    const hemi = at.hemi as Record<string, unknown> | undefined;
+    if (!hemi || !col(hemi.sky) || !col(hemi.ground) || !num(hemi.intensity)) err('atmosphere.hemi: { sky, ground, intensity }');
+    if (!num(at.stars)) err('atmosphere.stars: 0-1');
+    if (typeof at.sun !== 'boolean') err('atmosphere.sun: true or false');
+    if (!num(at.exposure)) err('atmosphere.exposure: a number');
+  }
+  const sea = d?.sea as Record<string, unknown> | undefined;
+  if (sea !== undefined && (!num(sea?.level) || !num(sea?.shore))) err('sea: { level, shore }');
+  const trial = d?.trial as Record<string, unknown> | undefined;
+  const medals = (v: unknown): boolean => Array.isArray(v) && v.length === 3 && v.every(num) && v[0] > v[1] && v[1] > v[2];
+  if (!trial || !medals(trial.up) || !medals(trial.down)) err('trial: { up: [bronze, silver, gold], down: [...] } in seconds, slowest first');
   const xz = (v: unknown): boolean => Array.isArray(v) && v.length === 2 && v.every(num);
   if (d?.targets !== undefined) {
     if (!Array.isArray(d.targets)) err('targets: a list');
@@ -117,6 +162,8 @@ export class Course {
   readonly half: number;
   private readonly grid = new Map<number, number[]>();
   readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** The first road sample inside the viewpoint (where an uphill run finishes and a downhill one starts). */
+  readonly summitStart: number;
 
   constructor(def: CourseDef) {
     this.def = def;
@@ -199,6 +246,7 @@ export class Course {
     // enters, then stays at that height across it, so the disc, the ground and the car all agree.
     let e = n - 1;
     while (e > 0 && Math.hypot(xs[e - 1] - xs[n - 1], zs[e - 1] - zs[n - 1]) < def.summit.r) e--;
+    this.summitStart = e;
     const s0 = Math.max(1, e - 20);
     const g = y[s0] - y[s0 - 1];
     const L = e - s0;
@@ -284,6 +332,9 @@ export class Course {
     const l = this.def.lot;
     const toLot = Math.hypot(Math.max(l.x - x, 0, x - (l.x + l.w)), Math.max(l.z - z, 0, z - (l.z + l.h)));
     let g = hill * smooth(0, 25, toLot);
+    // On the coast, the land beyond the shoreline falls away under the sea.
+    const sea = this.def.sea;
+    if (sea && z > sea.shore) g -= (z - sea.shore) * 0.35;
     if (ds < s.r + 25) g = lerp(s.y, g, smooth(s.r, s.r + 25, ds));
     if (n.i < 0) return g;
     const road = this.y[n.i];

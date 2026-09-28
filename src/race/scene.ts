@@ -5,7 +5,8 @@ import type { Course } from './course';
  * The venue's scenery from its course: the hillside (coloured by slope: forest floor, rock, the gravel
  * shoulders), the road (tarmac, white edge lines, the yellow centre line of a Japanese pass), guardrails on
  * posts with reflectors, a cedar forest, the practice lot (floodlit, cones, a painted drift circle, tyre
- * walls), the viewpoint at the top (a vending machine glowing), and the night: moon, stars, fog.
+ * walls), the viewpoint at the top (a vending machine glowing), the sea on a coastal venue, and the venue's
+ * time of day from its atmosphere (the moon or a low sun, the sky's fill, stars, the sun's disc at dusk).
  */
 export interface VenueScene {
   readonly group: THREE.Group;
@@ -248,7 +249,7 @@ export function buildVenue(course: Course): VenueScene {
   for (const t of [0.34, 0.52]) {
     const i = Math.floor(n * t);
     const v = L(i, -(rail + 1.5));
-    lamp(v.x, v.z, course.height(v.x, v.z), 8, 380);
+    lamp(v.x, v.z, course.height(v.x, v.z), 8, 150);
   }
 
   // ---- The forest: cedars on the hillside, clear of the road, the lot and the viewpoint.
@@ -263,6 +264,13 @@ export function buildVenue(course: Course): VenueScene {
     const x = b.minX + tr() * (b.maxX - b.minX);
     const z = b.minZ + tr() * (b.maxZ - b.minZ);
     if (course.inLot(x, z, -6) || course.inSummit(x, z, -8)) continue;
+    // On the coast: the shore below the lot and the viewpoint's seaward side kept clear for the view, and
+    // the seaward face of the hill wooded more thinly.
+    if (course.def.sea) {
+      const l = course.def.lot;
+      const top = course.summit;
+      if (z > l.z + l.h - 4 || (z > top.z - 10 && Math.hypot(x - top.x, z - top.z) < 110) || tr() < 0.5) continue;
+    }
     const near = course.nearest(x, z);
     if (near.i >= 0 && Math.abs(near.d) < rail + 3.5) continue;
     const y = course.height(x, z);
@@ -277,10 +285,12 @@ export function buildVenue(course: Course): VenueScene {
   crowns.castShadow = true;
   group.add(trunks, crowns);
 
-  // ---- The night: moon, a little sky light, stars.
-  const moon = new THREE.DirectionalLight(0x8a9ad0, 0.35);
-  moon.position.set(-300, 400, 200);
-  group.add(moon, new THREE.HemisphereLight(0x243052, 0x0a0a0c, 0.45));
+  // ---- The sky's light (the moon, or the low sun at dusk), the sky's fill, the stars (dim at dusk), and at
+  // dusk the sun's disc on the horizon; the stars and the sun ride with the camera (main.ts moves them).
+  const at = course.def.atmosphere;
+  const sky = new THREE.DirectionalLight(new THREE.Color(at.light.color), at.light.intensity);
+  sky.position.set(...at.light.from);
+  group.add(sky, new THREE.HemisphereLight(new THREE.Color(at.hemi.sky), new THREE.Color(at.hemi.ground), at.hemi.intensity));
   const sp: number[] = [];
   const sr = rng(3);
   for (let k = 0; k < 1500; k++) {
@@ -290,7 +300,36 @@ export function buildVenue(course: Course): VenueScene {
   }
   const sg = new THREE.BufferGeometry();
   sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
-  const stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xdfe6ff, size: 1.6, sizeAttenuation: false, fog: false }));
+  const stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: new THREE.Color(0xdfe6ff).multiplyScalar(at.stars), size: 1.6, sizeAttenuation: false, fog: false, transparent: true, opacity: Math.min(1, at.stars * 1.5) }));
+  stars.visible = at.stars > 0;
   group.add(stars);
+  if (at.sun) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d')!;
+    const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,240,210,1)');
+    gr.addColorStop(0.28, 'rgba(255,200,140,1)');
+    gr.addColorStop(0.36, 'rgba(255,150,90,0.35)');
+    gr.addColorStop(1, 'rgba(255,120,80,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 128, 128);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: new THREE.Color(2.2, 1.6, 1.1), fog: false, depthWrite: false, transparent: true }));
+    const d = new THREE.Vector3(...at.light.from).normalize();
+    d.y = Math.max(0.02, d.y * 0.35);
+    sun.position.copy(d.normalize().multiplyScalar(880));
+    sun.scale.setScalar(150);
+    stars.add(sun);
+  }
+  // ---- The sea: a sheet at its level out to the horizon, glossy enough to catch the low sun.
+  const sea = course.def.sea;
+  if (sea) {
+    const water = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x1c2c48, roughness: 0.16, metalness: 0.55 }));
+    const b = course.bounds;
+    water.position.set((b.minX + b.maxX) / 2, sea.level, sea.shore + 3900);
+    group.add(water);
+  }
   return { group, stars };
 }

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kurokami Pass · handling test</title>
+    <title>Mountain Passes</title>
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #05060c; color: #e8e6f0; }
       body { font: 13px/1.4 Consolas, 'Cascadia Mono', 'Yu Gothic', monospace; }
@@ -44,6 +44,37 @@
       #shoot .score { font: bold 26px Consolas, monospace; color: #ff8ad0; text-shadow: 0 0 10px rgba(255, 90, 180, 0.4); }
       #shoot small { color: #8a90a8; font-size: 12px; }
       #pops { position: fixed; left: calc(50% + 40px); top: calc(50% - 60px); font: bold 16px Consolas, monospace; color: #7ef0b0; text-shadow: 0 1px 3px #000; pointer-events: none; }
+      #count { position: fixed; left: 50%; top: 32%; transform: translate(-50%, -50%); font: bold 120px/1 Consolas, monospace; color: #fff; text-shadow: 0 0 30px rgba(255, 200, 120, 0.6); pointer-events: none; }
+      #count.go { color: #7ef0b0; text-shadow: 0 0 30px rgba(120, 255, 180, 0.6); }
+      #split { position: fixed; left: 50%; top: 24%; transform: translateX(-50%); font: bold 17px Consolas, monospace; color: #e8e6f0; text-shadow: 0 1px 3px #000; white-space: pre; opacity: 0; }
+      #split b.ahead { color: #7ef0b0; }
+      #split b.behind { color: #ff6a78; }
+      #results { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); min-width: 320px; padding: 22px 28px; background: rgba(8, 8, 18, 0.86); border: 1px solid rgba(255, 138, 208, 0.35); border-radius: 6px; text-align: center; display: none; box-shadow: 0 0 40px rgba(255, 90, 180, 0.15); }
+      #results .head { color: #a8b0c8; letter-spacing: 1px; }
+      #results .time { font: bold 52px Consolas, monospace; color: #fff; margin: 6px 0; }
+      #results .best { color: #7ef0b0; font-weight: bold; margin-top: 6px; }
+      #results .prev { color: #a8b0c8; margin-top: 6px; }
+      #results .splits { margin: 14px 0 8px; text-align: left; color: #c8d0e8; }
+      #results .splits div { display: flex; justify-content: space-between; gap: 30px; }
+      #results .medals, #results small { color: #8a90a8; font-size: 12px; display: block; margin-top: 6px; }
+      .medal { display: inline-block; padding: 2px 10px; border-radius: 3px; font-weight: bold; letter-spacing: 1px; font-size: 13px; }
+      .medal.gold { background: #e8b830; color: #1a1408; }
+      .medal.silver { background: #c8ccd4; color: #14161a; }
+      .medal.bronze { background: #b87840; color: #1a1008; }
+      .medal.none { color: #8a90a8; }
+      #menu { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: radial-gradient(ellipse at center, rgba(10, 8, 24, 0.72), rgba(4, 4, 10, 0.94)); z-index: 5; }
+      #menu h1 { margin: 0; font: bold 44px 'Yu Gothic', Consolas, sans-serif; color: #ff8ad0; text-shadow: 0 0 20px rgba(255, 90, 180, 0.5); letter-spacing: 4px; }
+      #menu h1 span { font: 16px Consolas, monospace; color: #a8b0c8; letter-spacing: 2px; }
+      #menu .cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+      #menu .card { width: 330px; padding: 18px 20px; background: rgba(16, 16, 30, 0.9); border: 1px solid rgba(160, 170, 210, 0.2); border-radius: 6px; }
+      #menu .card.here { border-color: rgba(255, 138, 208, 0.5); }
+      #menu .name { font-size: 21px; color: #fff; }
+      #menu .meta { color: #ffcf6a; font-size: 12px; margin: 3px 0 8px; letter-spacing: 1px; }
+      #menu p { color: #a8b0c8; font-size: 12.5px; margin: 0 0 12px; line-height: 1.5; }
+      #menu a.mode { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; margin-top: 6px; color: #e8e6f0; text-decoration: none; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 4px; }
+      #menu a.mode:hover { background: rgba(255, 138, 208, 0.14); border-color: rgba(255, 138, 208, 0.5); }
+      #menu a.mode span { color: #8a90a8; font-size: 12px; }
+      #menu small { color: #6a7088; }
       #help { position: fixed; top: 34px; left: 12px; color: #8a90a8; font-size: 12px; white-space: pre; }
     </style>
   </head>
@@ -53,6 +84,10 @@
     <div id="speedo"></div>
     <div id="drift"></div>
     <div id="slowmo"></div>
+    <div id="count"></div>
+    <div id="split"></div>
+    <div id="results"></div>
+    <div id="menu"></div>
     <div id="reticle"><i></i></div>
     <div id="focus"></div>
     <div id="gun"></div>
@@ -62,8 +97,7 @@
 Right mouse  aim (slow motion while your focus lasts; G turns it off)     Left mouse  fire (without aiming: from the hip, wild)
 Driver's window (right): wide · passenger window: a narrow slot across the car     F  pistol / paintball     E  reload     T  clean targets
 Click  mouse look (Esc lets go)     I  invert mouse Y     Q  chase / bumper camera
-R  back on the road     1  practice lot     2  the top     H  hide this
-Leave the lot up the road for a timed uphill run; from the top, down.</div>
+R  back on the road     M  venues and time trials     Enter  restart a trial     free drive: 1  the lot, 2  the top     H  hide this</div>
     <script type="module" src="/src/race/main.ts"></script>
   </body>
 </html>

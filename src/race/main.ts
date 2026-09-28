@@ -12,18 +12,22 @@ import { GunSound } from './gunSound';
 import { buildCabin } from './cabin';
 import { EYE, nearestShot, Shooting, sideFor, spreadOf, WEAPONS, wrap, type Side } from './shooting';
 import { CarSound } from './sound';
+import { clock, GhostTrack, loadBest, medalFor, saveBest, Trial, trialPlan, type BestRun, type Dir, type Medal } from './trial';
 import { Targets } from './targets';
 import { Car, COUPE, DRIFT_ASSISTS, type Assists, type Controls } from './vehicle';
 
 /**
- * The handling test venue (race.html): Kurokami Pass at night. The coupe on the handling model (vehicle.ts),
- * the practice lot and the pass (course.ts, scene.ts). A chase camera that trails the way the car is going
- * (so a drift shows it sideways) or a bumper camera; the dashboard; drift scoring (angle x speed, a chain
- * that banks when you straighten up and is lost if you hit something); timed runs up and down the pass.
+ * The racing venues (race.html): a venue (course.ts, scene.ts) in its own time of day, the coupe on the
+ * handling model (vehicle.ts), and a mode: free drive (the practice lot, drifting, shooting) or a time trial up
+ * or down the pass (trial.ts: countdown, checkpoint splits against your best, medals, a ghost of your best run,
+ * kept in the browser). A chase camera that trails the way the car is going (so a drift shows it sideways) or
+ * a bumper camera; the dashboard; drift scoring (angle x speed, a chain that banks when you straighten up and
+ * is lost if you hit something). The venue menu (M) lists the venues, their bests and modes.
  *
- * Keys: W/S (brake, then reverse), A/D, Space handbrake, Q camera, R back on the road, 1 the lot, 2 the top,
- * H hides the help, I inverts mouse Y. A click captures the mouse for looking round. URL: ?at=lot|top|road,
- * ?cam=bumper, ?invertY=1|0.
+ * Keys: W/S (brake, then reverse), A/D, Space handbrake, Q camera, R back on the road, Enter restarts a trial,
+ * M the venues, free drive: 1 the lot, 2 the top; H hides the help, I inverts mouse Y. A click captures the
+ * mouse for looking round. URL: ?venue=kurokami|yunagi &mode=free|up|down &at=lot|top|road (free drive)
+ * &cam=bumper &invertY=1|0; no venue shows the menu.
  */
 
 const params = new URLSearchParams(location.search);
@@ -32,36 +36,37 @@ if (errors.length) {
   document.body.textContent = errors.join('\n');
   throw new Error(errors.join('\n'));
 }
-const course = courses.get('kurokami')!;
+const venueId = courses.has(params.get('venue') ?? '') ? params.get('venue')! : [...courses.keys()][0];
+const course = courses.get(venueId)!;
 const ground = course.ground;
+const modeParam = params.get('mode');
+const mode: 'free' | Dir = modeParam === 'up' || modeParam === 'down' ? modeParam : 'free';
+const atmosphere = course.def.atmosphere;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = atmosphere.exposure;
 renderer.shadowMap.enabled = false;
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
+// The venue's sky: its gradient, top to horizon, and its fog.
 const sky = document.createElement('canvas');
 sky.width = 4;
 sky.height = 256;
 {
   const g = sky.getContext('2d')!;
   const gr = g.createLinearGradient(0, 0, 0, 256);
-  gr.addColorStop(0, '#04050c');
-  gr.addColorStop(0.55, '#0a0e1e');
-  gr.addColorStop(0.8, '#1a1a30');
-  // The glow of the city down in the valley, low on the horizon.
-  gr.addColorStop(1, '#3a2438');
+  atmosphere.sky.forEach((c, i) => gr.addColorStop([0, 0.55, 0.8, 1][i], c));
   g.fillStyle = gr;
   g.fillRect(0, 0, 4, 256);
 }
 const skyTex = new THREE.CanvasTexture(sky);
 skyTex.colorSpace = THREE.SRGBColorSpace;
 scene.background = skyTex;
-scene.fog = new THREE.FogExp2(0x0c1020, 0.0042);
+scene.fog = new THREE.FogExp2(new THREE.Color(atmosphere.fog.color), atmosphere.fog.density);
 // Near enough for the driver's-eye view (the wheel and the gun a few tens of centimetres away).
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.04, 2000);
 
@@ -125,9 +130,14 @@ for (const s of [-0.62, 0.62]) {
 }
 
 const car = new Car(COUPE, DRIFT_ASSISTS);
-const at = params.get('at') ?? 'lot';
+const at = mode === 'free' ? (params.get('at') ?? 'lot') : 'grid';
 const placeAt = (where: string): void => {
-  if (where === 'top') {
+  if (where === 'grid' && trial) {
+    // The trial's grid: on the road behind the line, facing the way the run goes.
+    const i = trial.plan.grid;
+    const s = trial.plan.dir === 'up' ? 1 : -1;
+    car.place(course.x[i], course.z[i], Math.atan2(course.tx[i] * s, course.tz[i] * s), ground);
+  } else if (where === 'top') {
     const n = course.x.length - 1;
     const s = course.summit;
     car.place(s.x - course.tx[n] * 6, s.z - course.tz[n] * 6, Math.atan2(-course.tx[n], -course.tz[n]), ground);
@@ -140,8 +150,26 @@ const placeAt = (where: string): void => {
   }
   chain = 0;
   chainT = 0;
-  run = null;
   snapCam = true;
+};
+
+// ---- Time trial: the run, your best (its splits and ghost), the ghost car, the recording of this run.
+let trial: Trial | null = null;
+let best: BestRun | null = mode === 'free' ? null : loadBest(venueId, mode);
+let track = new GhostTrack();
+let ghostTrack: GhostTrack | null = best ? new GhostTrack([...best.ghost]) : null;
+let driftAtStart = 0;
+/** What the last finish said (for the results card), and when it came. */
+let result: { time: number; medal: Medal | null; newBest: boolean; prev: number | null; splits: number[]; drift: number } | null = null;
+const ghost = new THREE.Mesh(body.geometry, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.45, 0.85, 1.4), transparent: true, opacity: 0.22, depthWrite: false }));
+ghost.visible = false;
+scene.add(ghost);
+const startTrial = (): void => {
+  if (mode === 'free') return;
+  trial = new Trial(trialPlan(course, mode));
+  track = new GhostTrack();
+  result = null;
+  placeAt('grid');
 };
 
 // ---- Tyre smoke: puffs from the rear wheels while sliding or spinning, rising and fading.
@@ -225,8 +253,11 @@ window.addEventListener('keydown', (e) => {
     }
     chain = 0;
   }
-  if (e.code === 'Digit1') placeAt('lot');
-  if (e.code === 'Digit2') placeAt('top');
+  // Free drive: jump to the lot or the top. In a trial: Enter starts it again; the jumps are off.
+  if (mode === 'free' && e.code === 'Digit1') placeAt('lot');
+  if (mode === 'free' && e.code === 'Digit2') placeAt('top');
+  if (mode !== 'free' && e.code === 'Enter') startTrial();
+  if (e.code === 'KeyM') showMenu(!menuOpen);
   if (e.code === 'KeyH') help = !help;
   if (e.code === 'KeyI') {
     invertY = !invertY;
@@ -267,8 +298,10 @@ let aimPitch = 0;
 let trigger = false;
 let pulled = false;
 document.addEventListener('contextmenu', (e) => e.preventDefault());
+/** Trials are about the clock: no shooting. Free drive shoots anywhere (targets where the venue has them). */
+const armed = mode === 'free';
 document.addEventListener('mousedown', (e) => {
-  if (!document.pointerLockElement) return;
+  if (!document.pointerLockElement || !armed) return;
   if (e.button === 2) startAiming();
   if (e.button === 0) {
     trigger = true;
@@ -320,7 +353,7 @@ let mouseIdle = 9;
 let toastT = 0;
 let toastText = '';
 document.addEventListener('click', () => {
-  if (document.pointerLockElement) return;
+  if (document.pointerLockElement || menuOpen) return;
   const el = renderer.domElement as HTMLCanvasElement & { requestPointerLock(o?: object): Promise<void> | void };
   const p = el.requestPointerLock({ unadjustedMovement: true }) as Promise<void> | undefined;
   // Some systems refuse raw input: fall back to the plain lock.
@@ -352,19 +385,68 @@ const speedo = document.getElementById('speedo')!;
 const driftEl = document.getElementById('drift')!;
 const timerEl = document.getElementById('timer')!;
 const helpEl = document.getElementById('help')!;
+// A trial's help is only the driving (no shooting in trials).
+if (mode !== 'free') helpEl.textContent = 'W / S  drive · brake     A / D  steer     Space  handbrake     Q  camera     R  back on the road\nEnter  start again     M  venues     H  hide this     The blue car is your best run.';
 const HELP = helpEl.textContent ?? '';
 let chain = 0;
 let chainT = 0;
 let chainIdle = 0;
 let total = 0;
-let best = 0;
+let bestChain = 0;
 let lostFlash = 0;
-let run: { dir: 'up' | 'down'; t: number } | null = null;
-const bestRun: Record<'up' | 'down', number> = { up: Infinity, down: Infinity };
-let lastRun = '';
 let snapCam = true;
-let wasIn: 'lot' | 'top' | 'road' = 'lot';
-const fmt = (t: number): string => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
+const countEl = document.getElementById('count')!;
+const splitEl = document.getElementById('split')!;
+const resultsEl = document.getElementById('results')!;
+let splitT = 0;
+const MEDAL: Record<Medal, string> = { gold: '金 GOLD', silver: '銀 SILVER', bronze: '銅 BRONZE' };
+const medalHtml = (m: Medal | null): string => (m ? `<span class="medal ${m}">${MEDAL[m]}</span>` : '<span class="medal none">no medal</span>');
+const signed = (d: number): string => `${d < 0 ? '−' : '+'}${Math.abs(d).toFixed(2)}`;
+
+// ---- The venue menu: every venue, its time of day, your bests with their medals, and its modes.
+const menuEl = document.getElementById('menu')!;
+let menuOpen = false;
+const showMenu = (open: boolean): void => {
+  menuOpen = open;
+  menuEl.style.display = open ? 'flex' : 'none';
+  if (open) {
+    if (document.pointerLockElement) document.exitPointerLock();
+    keys.clear();
+    menuEl.innerHTML = `<h1>峠 <span>the passes</span></h1><div class="cards">${[...courses.entries()]
+      .map(([id, c]) => {
+        const row = (d: Dir, label: string): string => {
+          const b = loadBest(id, d);
+          const m = b ? medalFor(b.time, c.def.trial[d]) : null;
+          return `<a class="mode" href="?venue=${id}&mode=${d}">${label}<span>${b ? `${clock(b.time)} ${medalHtml(m)}` : `gold ${clock(c.def.trial[d][2])}`}</span></a>`;
+        };
+        return `<div class="card${id === venueId ? ' here' : ''}"><div class="name">${c.def.name}</div><div class="meta">${c.def.atmosphere.label} · ${(c.length / 1000).toFixed(1)} km · ${Math.round(c.summit.y)} m climb</div><p>${c.def.blurb}</p>${row('up', '▲ Time trial, uphill')}${row('down', '▼ Time trial, downhill')}<a class="mode" href="?venue=${id}&mode=free">Free drive<span>the lot, drifting${c.def.targets?.length ? ', shooting' : ''}</span></a></div>`;
+      })
+      .join('')}</div><small>${params.has('venue') ? 'M closes this · ' : ''}Times are kept in this browser.</small>`;
+  }
+};
+
+// Trial HUD: the countdown, the clock (and the gap to your best at the last checkpoint), split flashes, results.
+const drawTrialHud = (dt: number): void => {
+  splitT = Math.max(0, splitT - dt);
+  splitEl.style.opacity = Math.min(1, splitT * 2).toFixed(2);
+  if (!trial) {
+    timerEl.textContent = '';
+    countEl.textContent = '';
+    resultsEl.style.display = 'none';
+    return;
+  }
+  const cd = trial.phase === 'countdown' ? Math.ceil(trial.count) : 0;
+  countEl.textContent = cd > 0 ? String(cd) : trial.phase === 'running' && trial.t < 0.8 ? 'GO' : '';
+  countEl.className = cd > 0 ? 'n' : 'go';
+  const label = mode === 'up' ? '▲ UPHILL' : '▼ DOWNHILL';
+  timerEl.textContent = trial.phase === 'finished' && result ? `${label}  ${clock(result.time)}` : `${label}  ${clock(trial.t)}`;
+  resultsEl.style.display = result ? 'block' : 'none';
+  if (result) {
+    const r = result;
+    const splits = r.splits.map((t, i) => `<div>Checkpoint ${i + 1}<span>${clock(t)}</span></div>`).join('');
+    resultsEl.innerHTML = `<div class="head">${course.def.name}  ${label}</div><div class="time">${clock(r.time)}</div>${medalHtml(r.medal)}${r.newBest ? `<div class="best">NEW BEST${r.prev !== null ? `  ${signed(r.time - r.prev)}` : ''}</div>` : `<div class="prev">best ${clock(r.prev!)}  (${signed(r.time - r.prev!)})</div>`}<div class="splits">${splits}<div>Drift<span>${r.drift.toLocaleString()}</span></div></div><div class="medals">gold ${clock(course.def.trial[mode as Dir][2])} · silver ${clock(course.def.trial[mode as Dir][1])} · bronze ${clock(course.def.trial[mode as Dir][0])}</div><small>Enter  again · M  venues</small>`;
+  }
+};
 
 // Shooting HUD: the crosshair (its circle the spread), the weapon and rounds, the score, and points popping up.
 const reticle = document.getElementById('reticle')!;
@@ -396,6 +478,9 @@ const drawShootingHud = (dt: number, side: Side | null, hip: boolean): void => {
   focusEl.style.opacity = aiming || focus < 1 ? '1' : '0.35';
   const n = shooting.ammo[shooting.weaponIndex];
   const pips = W.mag <= 12 ? '▮'.repeat(n) + '▯'.repeat(W.mag - n) : `${n} / ${W.mag}`;
+  gunEl.style.display = armed ? 'block' : 'none';
+  shootEl.style.display = armed && targets.list.length > 0 ? 'block' : 'none';
+  focusEl.style.display = armed ? 'block' : 'none';
   gunEl.innerHTML = `<div class="name">${W.label}</div><div class="ammo">${shooting.reloading > 0 ? 'reloading…' : pips}</div><small>F ${WEAPONS[(shooting.weaponIndex + 1) % WEAPONS.length].label} · E reload · T clean targets</small>`;
   const acc = shooting.shots ? Math.round((shooting.hits / shooting.shots) * 100) : 0;
   shootEl.innerHTML = `<div class="score">${shooting.score.toLocaleString()}</div><small>${shooting.hits}/${shooting.shots} hits · ${acc}% · streak ${shooting.streak} (best ${shooting.bestStreak})</small>`;
@@ -475,14 +560,16 @@ const placeCamera = (dt: number, snap = false): void => {
   camera.lookAt(camLook);
 };
 
-placeAt(at);
+if (mode !== 'free') startTrial();
+else placeAt(at);
+if (!params.has('venue')) showMenu(true);
 
 let last = performance.now();
-const clock = { t: 0 };
+const elapsed = { t: 0 };
 function frame(now: number): void {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  clock.t += dt;
+  elapsed.t += dt;
   // Slow motion: drains the focus while aiming; lowering the gun ends it and the focus refills.
   if (aiming && slowOn) {
     focus = Math.max(0, focus - dt / FOCUS_SECS);
@@ -491,22 +578,42 @@ function frame(now: number): void {
   slow += ((slowOn ? 1 : 0) - slow) * Math.min(1, dt * 7);
   /** The world's time step (the car, targets, shots, smoke); dt stays real for the camera and the clock. */
   const gdt = dt * (1 - 0.7 * slow);
-  const c = controls();
+  const c = menuOpen ? { throttle: 0, brake: 1, steer: 0, handbrake: false } : controls();
   car.assists = aiming ? AIM_ASSISTS : DRIFT_ASSISTS;
-  car.update(gdt, c, ground);
-  // Where you are: the lot, the top, or on the pass (for the timed runs).
+  // Held on the grid through the countdown (the engine still revs).
+  if (!trial || trial.phase !== 'countdown') car.update(gdt, c, ground);
   const here: 'lot' | 'top' | 'road' = course.inLot(car.x, car.z) ? 'lot' : course.inSummit(car.x, car.z) ? 'top' : 'road';
-  if (here !== wasIn) {
-    if (wasIn === 'lot' && here === 'road') run = { dir: 'up', t: 0 };
-    else if (wasIn === 'top' && here === 'road') run = { dir: 'down', t: 0 };
-    else if (run && ((run.dir === 'up' && here === 'top') || (run.dir === 'down' && here === 'lot'))) {
-      lastRun = `${run.dir === 'up' ? 'Uphill' : 'Downhill'} ${fmt(run.t)}${run.t < bestRun[run.dir] ? '  NEW BEST' : ''}`;
-      bestRun[run.dir] = Math.min(bestRun[run.dir], run.t);
-      run = null;
-    } else run = null;
-    wasIn = here;
+  // The trial runs on real time (slow motion is no help against the clock).
+  if (trial) {
+    const ni = course.nearest(car.x, car.z).i;
+    for (const e of trial.update(dt, ni)) {
+      if (e.kind === 'go') driftAtStart = total + chain;
+      if (e.kind === 'split') {
+        const prev = best?.splits[e.n - 1];
+        splitEl.innerHTML = `CHECKPOINT ${e.n}  ${clock(e.t)}${prev !== undefined ? `  <b class="${e.t <= prev ? 'ahead' : 'behind'}">${signed(e.t - prev)}</b>` : ''}`;
+        splitT = 3;
+      }
+      if (e.kind === 'finish') {
+        const prev = best?.time ?? null;
+        const newBest = prev === null || e.t < prev;
+        result = { time: e.t, medal: medalFor(e.t, course.def.trial[mode as Dir]), newBest, prev, splits: [...trial.splits], drift: Math.round(total + chain - driftAtStart) };
+        if (newBest) {
+          track.record(e.t, car.x, car.y, car.z, car.h);
+          best = { time: e.t, splits: [...trial.splits], ghost: track.data };
+          saveBest(venueId, mode as Dir, best);
+          ghostTrack = new GhostTrack([...track.data]);
+        }
+      }
+    }
+    if (trial.phase === 'running') track.record(trial.t, car.x, car.y, car.z, car.h);
+    // The ghost of your best run, alongside from the start (waiting on the grid through the countdown).
+    const g = ghostTrack?.at(trial.phase === 'countdown' ? 0 : trial.t);
+    ghost.visible = !!g && trial.phase !== 'finished';
+    if (g) {
+      ghost.position.set(g.x, g.y, g.z);
+      ghost.rotation.set(0, g.h, 0);
+    }
   }
-  if (run) run.t += dt;
   // Drift scoring: angle x speed while sideways, a multiplier that builds; banked when you straighten up.
   const ang = Math.abs(car.slide);
   const drifting = ang > 0.2 && car.u > 7;
@@ -518,7 +625,7 @@ function frame(now: number): void {
     chainIdle += gdt;
     if (chainIdle > 1.2) {
       total += Math.round(chain);
-      best = Math.max(best, Math.round(chain));
+      bestChain = Math.max(bestChain, Math.round(chain));
       chain = 0;
       chainT = 0;
     }
@@ -621,13 +728,13 @@ function frame(now: number): void {
   speedo.innerHTML = `<div class="kmh">${kmh}<span>km/h</span></div><div class="gear">${car.gear === 0 ? 'R' : car.gear}</div><div class="rev"><i style="width:${Math.round(car.rev * 100)}%"></i></div>`;
   driftEl.innerHTML = chain > 0 || lostFlash > 0
     ? `<div class="angle">${Math.round((ang * 180) / Math.PI)}°</div><div class="chain ${lostFlash > 0 ? 'lost' : ''}">${lostFlash > 0 ? 'CHAIN LOST' : `+${Math.round(chain).toLocaleString()}`}</div><div class="mult">×${Math.min(4, 1 + chainT * 0.3).toFixed(1)}</div>`
-    : `<div class="total">DRIFT ${total.toLocaleString()}<br><small>best chain ${best.toLocaleString()}</small></div>`;
-  timerEl.textContent = run ? `${run.dir === 'up' ? '▲ UPHILL' : '▼ DOWNHILL'}  ${fmt(run.t)}` : lastRun;
+    : `<div class="total">DRIFT ${total.toLocaleString()}<br><small>best chain ${bestChain.toLocaleString()}</small></div>`;
+  drawTrialHud(dt);
   toastT = Math.max(0, toastT - dt);
   helpEl.style.display = help || toastT > 0 ? 'block' : 'none';
   if (toastT > 0) helpEl.textContent = toastText;
   else if (helpEl.textContent !== HELP) helpEl.textContent = HELP;
-  hud.textContent = `${course.def.name} · ${here === 'lot' ? 'practice lot' : here === 'top' ? 'the viewpoint' : 'the pass'}${bestRun.up < Infinity ? ` · best up ${fmt(bestRun.up)}` : ''}${bestRun.down < Infinity ? ` · best down ${fmt(bestRun.down)}` : ''}`;
+  hud.textContent = `${course.def.name} · ${course.def.atmosphere.label} · ${mode === 'free' ? `free drive · ${here === 'lot' ? 'practice lot' : here === 'top' ? 'the viewpoint' : 'the pass'}` : `time trial ${mode === 'up' ? '▲ uphill' : '▼ downhill'}${best ? ` · best ${clock(best.time)}` : ''}`} · M venues`;
   composer.render(dt);
   requestAnimationFrame(frame);
 }
@@ -664,6 +771,7 @@ window.addEventListener('resize', () => {
     if (pitch !== undefined) aimPitch = pitch;
   },
   state: () => ({ aiming, slow, focus, hipT }),
+  trial: () => trial,
   trigger: (on: boolean): void => {
     trigger = on;
     pulled = on;
