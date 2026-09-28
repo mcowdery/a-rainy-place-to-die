@@ -18,7 +18,8 @@ import { Car, COUPE, DRIFT_ASSISTS, type Controls } from './vehicle';
  * that banks when you straighten up and is lost if you hit something); timed runs up and down the pass.
  *
  * Keys: W/S (brake, then reverse), A/D, Space handbrake, Q camera, R back on the road, 1 the lot, 2 the top,
- * H hides the help. URL: ?at=lot|top|road, ?cam=bumper.
+ * H hides the help, I inverts mouse Y. A click captures the mouse for looking round. URL: ?at=lot|top|road,
+ * ?cam=bumper, ?invertY=1|0.
  */
 
 const params = new URLSearchParams(location.search);
@@ -176,10 +177,52 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit1') placeAt('lot');
   if (e.code === 'Digit2') placeAt('top');
   if (e.code === 'KeyH') help = !help;
+  if (e.code === 'KeyI') {
+    invertY = !invertY;
+    try {
+      localStorage.setItem(INVERT_KEY, invertY ? '1' : '0');
+    } catch {
+      /* this session only */
+    }
+    toastT = 2.5;
+  }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
 window.addEventListener('pointerdown', () => sound.start());
+// Mouse look: a click captures the mouse (Esc lets it go); moving it swings the camera round the car and up
+// or down, and it eases back behind the car a moment after you stop. Mouse Y follows the district's choice
+// (the same 'citypop.invertY' in localStorage; I toggles it here too; ?invertY=1 / 0).
+const INVERT_KEY = 'citypop.invertY';
+let invertY = false;
+{
+  let saved: string | null = null;
+  try {
+    saved = localStorage.getItem(INVERT_KEY);
+  } catch {
+    /* storage blocked */
+  }
+  invertY = (params.get('invertY') ?? saved) === '1';
+}
+let orbitYaw = 0;
+let lookPitch = 0;
+let mouseIdle = 9;
+let toastT = 0;
+document.addEventListener('click', () => {
+  if (document.pointerLockElement) return;
+  const el = renderer.domElement as HTMLCanvasElement & { requestPointerLock(o?: object): Promise<void> | void };
+  const p = el.requestPointerLock({ unadjustedMovement: true }) as Promise<void> | undefined;
+  // Some systems refuse raw input: fall back to the plain lock.
+  p?.catch?.(() => (el.requestPointerLock() as Promise<void> | undefined)?.catch?.(() => undefined));
+});
+document.addEventListener('mousemove', (e) => {
+  if (!document.pointerLockElement) return;
+  if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
+  orbitYaw -= e.movementX * 0.003;
+  const my = invertY ? -e.movementY : e.movementY;
+  lookPitch = THREE.MathUtils.clamp(lookPitch - my * 0.003, -0.6, 0.5);
+  mouseIdle = 0;
+});
 const controls = (): Controls => ({
   throttle: keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0,
   brake: keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0,
@@ -193,6 +236,7 @@ const speedo = document.getElementById('speedo')!;
 const driftEl = document.getElementById('drift')!;
 const timerEl = document.getElementById('timer')!;
 const helpEl = document.getElementById('help')!;
+const HELP = helpEl.textContent ?? '';
 let chain = 0;
 let chainT = 0;
 let chainIdle = 0;
@@ -218,19 +262,32 @@ const placeCamera = (dt: number, snap = false): void => {
   const want = car.h + Math.atan2(Math.sin(travel - car.h), Math.cos(travel - car.h)) * 0.55;
   const k = snap ? 1 : 1 - Math.exp(-dt * 4);
   camDir += Math.atan2(Math.sin(want - camDir), Math.cos(want - camDir)) * k;
+  // Let go of the mouse and the view swings back to straight ahead.
+  mouseIdle += dt;
+  if (snap) orbitYaw = lookPitch = 0;
+  else if (mouseIdle > 1.2) {
+    const ease = 1 - Math.exp(-dt * 2.5);
+    orbitYaw -= orbitYaw * ease;
+    lookPitch -= lookPitch * ease;
+  }
   if (view === 'bumper') {
     const p = new THREE.Vector3(car.x + Math.sin(car.h) * 2.1, car.y + 0.85, car.z + Math.cos(car.h) * 2.1);
+    const a = car.h + orbitYaw;
     camera.position.copy(p);
-    camera.lookAt(p.x + Math.sin(car.h) * 10, p.y - 0.25, p.z + Math.cos(car.h) * 10);
+    camera.lookAt(p.x + Math.sin(a) * 10, p.y + Math.tan(lookPitch - 0.025) * 10, p.z + Math.cos(a) * 10);
     camPos.copy(camera.position);
     return;
   }
-  const back = 5.8 + Math.min(1.5, speed / 25);
-  const target = new THREE.Vector3(car.x - Math.sin(camDir) * back, car.y + 2.0, car.z - Math.cos(camDir) * back);
-  target.y = Math.max(target.y, course.height(target.x, target.z) + 0.9);
-  camPos.lerp(target, snap ? 1 : 1 - Math.exp(-dt * 7));
+  // Orbit about the car: looking up swings the camera down behind it (and looking down lifts it).
+  const a = camDir + orbitYaw;
+  const elev = -lookPitch;
+  const back = (5.8 + Math.min(1.5, speed / 25)) * Math.cos(elev);
+  const target = new THREE.Vector3(car.x - Math.sin(a) * back, car.y + 2.0 + Math.sin(elev) * 6, car.z - Math.cos(a) * back);
+  target.y = Math.max(target.y, course.height(target.x, target.z) + 0.6);
+  camPos.lerp(target, snap || mouseIdle < 0.2 ? 1 - Math.exp(-dt * 25) : 1 - Math.exp(-dt * 7));
+  if (snap) camPos.copy(target);
   camera.position.copy(camPos);
-  camLook.set(car.x + Math.sin(camDir) * 6, car.y + 1.25, car.z + Math.cos(camDir) * 6);
+  camLook.set(car.x + Math.sin(a) * 6, car.y + 1.25 + Math.max(0, lookPitch) * 6, car.z + Math.cos(a) * 6);
   camera.lookAt(camLook);
 };
 
@@ -320,7 +377,10 @@ function frame(now: number): void {
     ? `<div class="angle">${Math.round((ang * 180) / Math.PI)}°</div><div class="chain ${lostFlash > 0 ? 'lost' : ''}">${lostFlash > 0 ? 'CHAIN LOST' : `+${Math.round(chain).toLocaleString()}`}</div><div class="mult">×${Math.min(4, 1 + chainT * 0.3).toFixed(1)}</div>`
     : `<div class="total">DRIFT ${total.toLocaleString()}<br><small>best chain ${best.toLocaleString()}</small></div>`;
   timerEl.textContent = run ? `${run.dir === 'up' ? '▲ UPHILL' : '▼ DOWNHILL'}  ${fmt(run.t)}` : lastRun;
-  helpEl.style.display = help ? 'block' : 'none';
+  toastT = Math.max(0, toastT - dt);
+  helpEl.style.display = help || toastT > 0 ? 'block' : 'none';
+  if (toastT > 0) helpEl.textContent = invertY ? 'Mouse Y inverted (mouse up looks down) · I to switch back' : 'Mouse Y normal (mouse up looks up) · I to invert';
+  else if (helpEl.textContent !== HELP) helpEl.textContent = HELP;
   hud.textContent = `${course.def.name} · ${here === 'lot' ? 'practice lot' : here === 'top' ? 'the viewpoint' : 'the pass'}${bestRun.up < Infinity ? ` · best up ${fmt(bestRun.up)}` : ''}${bestRun.down < Infinity ? ` · best down ${fmt(bestRun.down)}` : ''}`;
   composer.render(dt);
   requestAnimationFrame(frame);
