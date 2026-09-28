@@ -13,6 +13,7 @@ import type { Node3, Placed3 } from './stamps';
 import type { ZoneMap } from './zones';
 import { landmarkColliders, landmarkFloor, landmarkRaisedColliders, landmarkShelters, type Shelter } from './landmarks';
 import type { Rect } from '../../core/coords';
+import type { Interior } from '../real/interiors';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
 export const LOAD_RADIUS = 620;
@@ -123,19 +124,26 @@ export class District {
   private readonly stampColliders: (readonly Rect[])[];
   private readonly stampOutside = new Map<number, readonly Rect[]>();
 
+  /** Interiors you're inside (real/interiors.ts): their floors and collision per level. */
+  private readonly interiors = new Map<string, Pick<Interior, 'colliders' | 'floorAt'>>();
+
   /**
-   * Swap a placement's street-level collision (an interior you're inside: its walls and fixtures instead of
-   * the solid footprint); null puts the outside back.
+   * Step inside a placement's interior: its storeys' floors, and its walls and fixtures on each level instead of
+   * the solid footprint on the street; null puts the outside back.
    */
-  setInteriorColliders(placementId: string, rects: readonly Rect[] | null): void {
+  setInterior(placementId: string, interior: Pick<Interior, 'colliders' | 'floorAt'> | null): void {
     const i = this.model.placed.findIndex((p) => p.id === placementId);
     if (i < 0) return;
-    if (rects) {
+    if (interior) {
+      this.interiors.set(placementId, interior);
       if (!this.stampOutside.has(i)) this.stampOutside.set(i, this.stampColliders[i]);
-      this.stampColliders[i] = rects;
-    } else if (this.stampOutside.has(i)) {
-      this.stampColliders[i] = this.stampOutside.get(i)!;
-      this.stampOutside.delete(i);
+      this.stampColliders[i] = interior.colliders(0);
+    } else {
+      this.interiors.delete(placementId);
+      if (this.stampOutside.has(i)) {
+        this.stampColliders[i] = this.stampOutside.get(i)!;
+        this.stampOutside.delete(i);
+      }
     }
   }
 
@@ -152,6 +160,10 @@ export class District {
    * Where levels overlap (a platform over the pavement), the one nearest the walker's current floor wins.
    */
   floorAt = (x: number, z: number, current = 0): number => {
+    for (const it of this.interiors.values()) {
+      const y = it.floorAt(x, z, current);
+      if (y !== null) return y;
+    }
     for (const p of this.model.placed) {
       const y = landmarkFloor(p, x, z, current);
       if (y !== null) return y;
@@ -314,8 +326,12 @@ export class District {
   /** Collision: outside the district, inside a building footprint (this cell or a neighbour), a stamp or a prop. */
   blocked = (x: number, z: number, r: number, floor = 0): boolean => {
     const inRects = (rs: readonly Rect[]): boolean => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
-    if (floor < -1) return (floor > -8 ? this.basementColliders : this.deepColliders).some(inRects);
-    if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? []));
+    const inside = (): boolean => {
+      for (const it of this.interiors.values()) if (inRects(it.colliders(floor))) return true;
+      return false;
+    };
+    if (floor < -1) return (floor > -8 ? this.basementColliders : this.deepColliders).some(inRects) || inside();
+    if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? [])) || inside();
     if (!this.inDistrict(x, z)) return true;
     const mx = Math.floor(x / CELL);
     const my = Math.floor(z / CELL);

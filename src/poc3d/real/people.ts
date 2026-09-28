@@ -37,6 +37,8 @@ export interface FigureSpec {
   readonly side: number;
   /** Head turn, radians. */
   readonly look: number;
+  /** Height of the floor stood on (default 0, the street). */
+  readonly y?: number;
 }
 
 export const GHOST_COLORS: readonly V3[] = [
@@ -340,7 +342,7 @@ export function addFigure(gb: GhostBuilder, s: FigureSpec): void {
   const headK = child ? 1.25 : 1;
   const fwd: V3 = [Math.sin(s.yaw), 0, Math.cos(s.yaw)];
   const right: V3 = [fwd[2], 0, -fwd[0]];
-  const o: V3 = [s.x, 0.15, s.z];
+  const o: V3 = [s.x, 0.15 + (s.y ?? 0), s.z];
   const sk = skeleton(s);
   // Local (x right, y up, z forward) -> world.
   const W = (x: number, y: number, z: number): V3 => add(o, add(add(scale(right, x), [0, y, 0]), scale(fwd, z)));
@@ -383,7 +385,7 @@ export function addFigure(gb: GhostBuilder, s: FigureSpec): void {
     const wy = W(...waist)[1];
     const hem = woman ? pelvisY * 0.4 : pelvisY * 0.45;
     const c = W(0, 0, 0);
-    gb.lathe(c, right, fwd, [[wy, 0.15 * k, 0.11 * k], [(wy + hem + 0.15) / 2, 0.2 * k, 0.15 * k], [hem + 0.15, 0.25 * k, 0.2 * k]]);
+    gb.lathe(c, right, fwd, [[wy, 0.15 * k, 0.11 * k], [(wy + hem + o[1]) / 2, 0.2 * k, 0.15 * k], [hem + o[1], 0.25 * k, 0.2 * k]]);
   }
   // Arms.
   for (const [sgn, arm] of [[-1, sk.armL], [1, sk.armR]] as const) {

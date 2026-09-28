@@ -14,6 +14,7 @@ import { addDistrictAds, type AdPlacement } from '../src/poc3d/real/districtAds'
 import { MeshBuilder } from '../src/poc3d/real/meshBuilder';
 import { tiers } from '../src/poc3d/real/buildings';
 import { SignBuilder } from '../src/poc3d/real/signs';
+import { INTERIORS } from '../src/poc3d/real/interiors';
 import { parseStamp3, plazaRect, reservedRect } from '../src/poc3d/district/stamps';
 import { departsAt, lineSchedule, nextDepartures, parseSubway3, subwayRoute, trainAt } from '../src/poc3d/district/subway';
 
@@ -325,7 +326,14 @@ describe('Places you can walk into, and fast travel', () => {
     const names = dests.map((d) => d.name);
     expect(names).toEqual(expect.arrayContaining(['Kaburo Crossing', 'Bar Kanpai', 'Yoru Mart', 'Yoru Mart (inside)', 'Kaburo Inari Shrine']));
     expect(dests.filter((d) => d.group === 'Zones')).toHaveLength(content.zones.zones.length);
-    for (const d of dests) expect(district.blocked(d.x, d.z, 0.3, district.floorAt(d.x, d.z, d.floor)), d.name).toBe(false);
+    // Spots inside an interior are clear once you're inside it.
+    const inner = content.placed.filter((p) => p.stamp.landmark && INTERIORS[p.stamp.landmark]).map((p) => ({ id: p.id, l: INTERIORS[p.stamp.landmark!].layout(p.building) }));
+    for (const d of dests) {
+      const it = inner.find((i) => i.l.contains(d.x, d.z, d.floor + 1.7));
+      if (it) district.setInterior(it.id, it.l);
+      expect(district.blocked(d.x, d.z, 0.3, district.floorAt(d.x, d.z, d.floor)), d.name).toBe(false);
+      if (it) district.setInterior(it.id, null);
+    }
   });
 });
 
@@ -616,7 +624,7 @@ describe('Interiors: Sakura-yu, the public bath', () => {
     const { sentoLayout } = await import('../src/poc3d/real/interiors');
     const layout = sentoLayout(bath.building);
     const f = localFrame(bath.building);
-    district.setInteriorColliders('sakura_yu', layout.colliders);
+    district.setInterior('sakura_yu', layout);
     try {
       const path: [number, number][] = [[8, 2.4], [8, 4.5], [5, 4.5], [3.5, 7], [3.5, 9], [4.5, 12], [4.5, 14], [4.5, 17], [3, 17]];
       for (let i = 0; i + 1 < path.length; i++) {
@@ -625,7 +633,7 @@ describe('Interiors: Sakura-yu, the public bath', () => {
         const n = Math.ceil(Math.hypot(u1 - u0, t1 - t0) / 0.1);
         for (let k = 1; k <= n; k++) {
           const [x, z] = toWorld(f, u0 + ((u1 - u0) * k) / n, t0 + ((t1 - t0) * k) / n);
-          expect(layout.contains(x, z)).toBe(true);
+          expect(layout.contains(x, z, 1.7)).toBe(true);
           expect(district.blocked(x, z, 0.4), `at ${(u0 + ((u1 - u0) * k) / n).toFixed(1)}, ${(t0 + ((t1 - t0) * k) / n).toFixed(1)}`).toBe(false);
         }
       }
@@ -633,10 +641,92 @@ describe('Interiors: Sakura-yu, the public bath', () => {
       expect(district.blocked(...toWorld(f, 4, 19.5), 0.4)).toBe(true);
       expect(district.blocked(...toWorld(f, 8.15, 16), 0.4)).toBe(true);
       // Out of the doorway is outside.
-      expect(layout.contains(...toWorld(f, 8, 0.5))).toBe(false);
+      expect(layout.contains(...toWorld(f, 8, 0.5), 1.7)).toBe(false);
     } finally {
-      district.setInteriorColliders('sakura_yu', null);
+      district.setInterior('sakura_yu', null);
     }
     expect(district.blocked(...toWorld(f, 8, 5), 0.4)).toBe(true);
+  });
+});
+
+describe('Interiors: the Toto department store', () => {
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const store = content.placed.find((p) => p.id === 'totochuo_dept')!;
+  const f = localFrame(store.building);
+  const layout = INTERIORS.dept_store.layout(store.building);
+
+  /**
+   * Walk local waypoints like the controls do: the level follows the floor under you, the interior switches on
+   * and off by where the camera is, and nothing may block a step. Returns the level at the end.
+   */
+  const walk = (path: [number, number][], level: number): number => {
+    let inside = layout.contains(...toWorld(f, path[0][0], path[0][1]), level + 1.7);
+    district.setInterior('totochuo_dept', inside ? layout : null);
+    for (let i = 0; i + 1 < path.length; i++) {
+      const [u0, t0] = path[i];
+      const [u1, t1] = path[i + 1];
+      const n = Math.ceil(Math.hypot(u1 - u0, t1 - t0) / 0.1);
+      for (let k = 1; k <= n; k++) {
+        const u = u0 + ((u1 - u0) * k) / n;
+        const t = t0 + ((t1 - t0) * k) / n;
+        const [x, z] = toWorld(f, u, t);
+        expect(district.blocked(x, z, 0.4, level), `at ${u.toFixed(1)}, ${t.toFixed(1)} on ${level.toFixed(2)}`).toBe(false);
+        level = district.floorAt(x, z, level);
+        const now = layout.contains(x, z, level + 1.7);
+        if (now !== inside) district.setInterior('totochuo_dept', now ? layout : null);
+        inside = now;
+      }
+    }
+    district.setInterior('totochuo_dept', null);
+    return level;
+  };
+
+  it('lets you walk in from the street and out again', () => {
+    expect(walk([[22.5, -3], [22.5, 6], [22.5, 22]], 0)).toBe(0);
+    expect(walk([[22.5, 22], [22.5, 3], [22.5, -3]], 0)).toBe(0);
+    // Only through the doors: the show windows either side stay solid.
+    expect(district.blocked(...toWorld(f, 10, 1.6), 0.4, 0)).toBe(true);
+  });
+
+  it('walks the ground floor round the brands to the elevators', () => {
+    expect(walk([[22.5, -3], [22.5, 8], [10, 8], [10, 22.5], [30, 22.5], [30, 50], [22.5, 55]], 0)).toBe(0);
+  });
+
+  it('rides the escalators: up to 2F, down to the food hall and back up', () => {
+    const up = walk([[22.5, -3], [22.5, 23], [16.9, 24.5], [16.9, 38.5], [22.5, 40]], 0);
+    expect(up).toBe(6);
+    const down = walk([[22.5, -3], [22.5, 36.5], [27.3, 36.2], [27.3, 24.5], [22.5, 22]], 0);
+    expect(down).toBe(-5);
+    // And the food hall's aisles, then back up the other lane.
+    const x = walk([[22.5, 22], [22.5, 4], [7, 4], [7, 48], [22.5, 48], [22.5, 55], [22.5, 24.5], [25.7, 24.5], [25.7, 36.2], [22.5, 37]], -5);
+    expect(x).toBe(0);
+  });
+
+  it('carries you on the escalators, and keeps you out of the wells', () => {
+    const [x, z] = toWorld(f, 16.9, 30);
+    const up = layout.carry!(x, z, layout.floorAt(x, z, 2)!);
+    expect(up).not.toBeNull();
+    // Up the up lane is inward (+t).
+    const [ux, uz] = toWorld(f, 16.9, 31);
+    expect(up![0] * (ux - x) + up![1] * (uz - z)).toBeGreaterThan(0);
+    district.setInterior('totochuo_dept', layout);
+    try {
+      // From the ground floor into the food hall's well, or from 2F into the escalator's.
+      expect(district.blocked(...toWorld(f, 24.5, 30), 0.4, 0)).toBe(true);
+      expect(district.blocked(...toWorld(f, 15.7, 30), 0.4, 6)).toBe(true);
+      expect(district.blocked(...toWorld(f, 17.7, 30), 0.4, 6)).toBe(true);
+    } finally {
+      district.setInterior('totochuo_dept', null);
+    }
+  });
+
+  it('has elevators on every floor to the rooftop garden, fenced in', () => {
+    const ids = ['elevator_b1', 'elevator_1f', 'elevator_2f'].map((n) => `totochuo_dept.${n}`);
+    for (const id of ids) expect(district.nodes.find((n) => n.id === id)?.returnSpawn).toBe('totochuo_dept.rooftop');
+    const roof = district.nodes.find((n) => n.id === 'totochuo_dept.rooftop')!;
+    expect(district.floorAt(roof.x, roof.z, roof.floor)).toBeCloseTo(63.2);
+    expect(district.blocked(roof.x, roof.z, 0.4, 63.2)).toBe(false);
+    expect(district.blocked(...toWorld(f, 22.5, 1.6), 0.4, 63.2)).toBe(true);
+    expect(district.blocked(...toWorld(f, 0.5, 30), 0.4, 63.2)).toBe(true);
   });
 });

@@ -14,6 +14,7 @@ import { localFrame, localRect } from '../real/localFrame';
 
 const asagiri = (p: Placed3): AsagiriKind | null => ((ASAGIRI_KINDS as readonly string[]).includes(p.stamp.landmark ?? '') ? (p.stamp.landmark as AsagiriKind) : null);
 import { liveHouseColliders, liveHouseFloor, liveHouseHoles, liveHouseLights } from '../real/liveHouse';
+import { deptHoles } from '../real/deptStore';
 import type { Building3 } from './plan';
 import type { Placed3 } from './stamps';
 
@@ -124,7 +125,18 @@ export function landmarkShelters(p: Placed3): Shelter[] {
 
 /** Openings in the pavement (a stairwell down to a basement). */
 export function landmarkHoles(p: Placed3): Rect[] {
-  return p.stamp.landmark === 'live_house' ? liveHouseHoles(p.building) : p.stamp.landmark === 'subway' ? subwayHoles(p.building) : p.stamp.landmark === 'rotary' ? rotaryHoles(p.building) : [];
+  switch (p.stamp.landmark) {
+    case 'live_house':
+      return liveHouseHoles(p.building);
+    case 'subway':
+      return subwayHoles(p.building);
+    case 'rotary':
+      return rotaryHoles(p.building);
+    case 'dept_store':
+      return deptHoles(p.building);
+    default:
+      return [];
+  }
 }
 
 /**

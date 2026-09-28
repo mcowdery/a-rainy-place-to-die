@@ -8,6 +8,7 @@ import { Kit, neonText, text } from './kit';
 import type { Light } from './lightmap';
 import { localFrame, localRect, toLocal, toWorld } from './localFrame';
 import { EMIT, KIND, lin } from './meshBuilder';
+import { DEPT, DEPT_DOOR, deptRoof, deptRoofColliders, deptRoofFloor } from './deptStore';
 import { averageColour } from './screenLight';
 import type { ScreenLight } from './screenLight';
 
@@ -41,6 +42,7 @@ const CORE = { u0: 56, u1: 62, t0: 29, t1: 35 } as const;
 
 /** Floor at a world point: the observatory floor inside tower A, for a walker already up there. */
 export function asagiriFloor(kind: AsagiriKind, b: Building3, x: number, z: number, current: number): number | null {
+  if (kind === 'dept_store') return deptRoofFloor(b, x, z, current);
   if (kind !== 'city_hall' || current < DECK_Y / 2) return null;
   const [u, t] = toLocal(localFrame(b), x, z);
   return u > TA.u0 && u < TA.u1 && t > TA.t0 && t < TA.t1 ? DECK_Y : null;
@@ -51,6 +53,7 @@ export function asagiriColliders(kind: AsagiriKind, b: Building3, floor: number)
   const f = localFrame(b);
   const R = (u0: number, u1: number, t0: number, t1: number): Rect => localRect(f, u0, u1, t0, t1);
   if (floor > 1) {
+    if (kind === 'dept_store') return floor > DEPT.h / 2 ? deptRoofColliders(b) : [];
     if (kind !== 'city_hall' || floor < DECK_Y / 2) return [];
     return [
       R(TA.u0, TA.u1, TA.t0, TA.t0 + 0.4),
@@ -81,7 +84,8 @@ export function asagiriColliders(kind: AsagiriKind, b: Building3, floor: number)
     case 'city_hall':
       return [R(4, 76, 14, 56), ...[8, 20, 56, 68].map((u) => R(u - 1, u + 1, 6, 8))];
     case 'dept_store':
-      return [R(0, DEPT.w, 1.2, DEPT.d)];
+      // Solid, but for a pocket at the doors (you walk in: the interior takes over past the threshold).
+      return [R(0, 20, 1.2, DEPT.d), R(25, DEPT.w, 1.2, DEPT.d), R(20, 25, 2.0, DEPT.d)];
     case 'sento':
       // Solid, but for a shallow pocket at the doorway (so stepping out of the interior never lands you in the wall).
       return [R(0, 16, 1.25, 22), R(0, 5.4, 0.6, 1.25), R(10.6, 16, 0.6, 1.25)];
@@ -103,6 +107,8 @@ export function asagiriShelters(kind: AsagiriKind, b: Building3): { rect: Rect; 
       return [R(18, 32, 7, 10, 0, 8)];
     case 'sento':
       return [R(0.5, 15.5, 0.9, 22, 0, 9, true)];
+    case 'dept_store':
+      return [R(0, DEPT.w, 1.2, DEPT.d, -6.5, DEPT.h, true), R(0, DEPT.w, -0.2, 1.2, 0, 6.5)];
     default:
       return [];
   }
@@ -200,8 +206,6 @@ function screen(k: Kit, urls: readonly string[], w: number, h: number, u: number
   };
 }
 
-/** The department store at the terminal (Toto-Chuo): its footprint and height. */
-const DEPT = { w: 44, d: 58, h: 62 } as const;
 
 const BUILDERS: Record<AsagiriKind, Builder> = {
   // ---- SAKURA-YU (桜湯): the neighbourhood's public bath. A gabled entrance (plaster and dark wood, a tiled
@@ -286,9 +290,26 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
   // above (blank, as department stores are), a glass bay and a screen on the front, a blade sign, a neon crown ----
   dept_store(k) {
     const { w: W, d: D, h: H } = DEPT;
-    k.box(0x2a2a2e, 0, W, 1.2, D, 0, 6.5);
-    for (let u = 1; u < W - 1.5; u += 5.4) k.lit([0xf8f0e0, 0xf0e4f0, 0xe8f0f8][Math.round(u) % 3], u, u + 4.6, 1.15, 1.2, 0.4, 5.6, true);
-    k.pane(1, W - 1, 0.3, 5.8, 1.1);
+    const { u0: d0, u1: d1 } = DEPT_DOOR;
+    // The ground floor either side of the entrance, the vestibule recessed behind its glass doors (lit: the store
+    // beyond; walking in switches to the interior, deptStore.ts).
+    k.box(0x2a2a2e, 0, d0, 1.2, D, 0, 6.5);
+    k.box(0x2a2a2e, d1, W, 1.2, D, 0, 6.5);
+    k.box(0x2a2a2e, d0, d1, 4.3, D, 0, 6.5);
+    k.box(0x2a2a2e, d0, d1, 1.2, 4.3, 5.0, 6.5, true);
+    k.lit(0x3a3a3e, d0, d1, 1.2, 4.3, -0.01, 0.012, true);
+    k.lit(0xd8d0c0, d0, d0 + 0.2, 1.2, 4.3, 0, 5.0, true);
+    k.lit(0xd8d0c0, d1 - 0.2, d1, 1.2, 4.3, 0, 5.0, true);
+    k.lit(0xf4ecdc, d0 + 0.2, d1 - 0.2, 4.25, 4.3, 0, 5.0, true);
+    k.glow([0.95, 0.92, 0.85], d0 + 1, d1 - 1, 2.2, 2.6, 4.97, 5.0);
+    for (const t of [1.35, 4.2]) {
+      k.pane(d0 + 0.2, 20, 0, 4.2, t);
+      k.pane(25, d1 - 0.2, 0, 4.2, t);
+      k.box(0x9a9ca0, d0, d1, t - 0.04, t + 0.04, 4.2, 5.0, true);
+    }
+    for (let u = 1; u < W - 1.5; u += 5.4) if (u + 4.6 < d0 - 0.3 || u > d1 + 0.3) k.lit([0xf8f0e0, 0xf0e4f0, 0xe8f0f8][Math.round(u) % 3], u, u + 4.6, 1.15, 1.2, 0.4, 5.6, true);
+    k.pane(1, d0, 0.3, 5.8, 1.1);
+    k.pane(d1, W - 1, 0.3, 5.8, 1.1);
     k.box(0x3a3a3e, 0, W, -0.2, 1.4, 6.5, 7.0);
     k.glow([1.3, 1.2, 1.0], 1, W - 1, -0.1, 0.1, 6.42, 6.5);
     k.facade(0xd8ccb4, [3.0, 0.2, 2.0, WIN.blank], 3 * 16, 0, W, 1.2, D, 7, H);
@@ -319,6 +340,7 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
       g.fillRect(0, 0, 1200, 140);
       text(g, '東都百貨店  TOTO DEPARTMENT STORE', 600, 74, "bold 64px 'Yu Mincho', 'Times New Roman', serif", '#e8d8b0');
     }), 24, 2.8, W / 2, 1.08, H - 2.2, 'out', 1.1);
+    deptRoof(k);
     return tick;
   },
 

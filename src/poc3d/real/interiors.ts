@@ -4,6 +4,7 @@ import type { Building3 } from '../district/plan';
 import { Kit, text } from './kit';
 import { localFrame, localRect, toLocal } from './localFrame';
 import { KIND } from './meshBuilder';
+import { deptInterior, deptLayout } from './deptStore';
 
 /**
  * Door-entered interiors, built at the building's true position (the hybrid approach): while you're inside
@@ -18,10 +19,14 @@ import { KIND } from './meshBuilder';
 export interface Interior {
   /** The interior's geometry (hidden until you're inside). */
   readonly group: THREE.Group;
-  /** Collision while inside (world rects). */
-  readonly colliders: Rect[];
-  /** Whether a world point is inside (the footprint, less the walls' thickness). */
-  contains(x: number, z: number): boolean;
+  /** Collision on the walker's level while inside (world rects): replaces the building's own. */
+  colliders(floor: number): readonly Rect[];
+  /** Floor height at a world point inside (other storeys, escalators), or null to leave it to the street. */
+  floorAt(x: number, z: number, current: number): number | null;
+  /** Whether a point (the camera) is inside: the footprint less the walls, and the storeys' heights. */
+  contains(x: number, z: number, y: number): boolean;
+  /** Escalators: the horizontal velocity (world x, z) carrying a walker at a point on a level, or null. */
+  carry?(x: number, z: number, level: number): [number, number] | null;
 }
 
 type R4 = readonly [number, number, number, number];
@@ -61,13 +66,15 @@ const SENTO_COLLIDERS: readonly R4[] = [
 const SENTO_INSIDE = { u0: 0.8, u1: 15.2, t0: 1.0, t1: 21.4 } as const;
 
 /** The bath's interior layout alone (collision, and what counts as inside), without its geometry. */
-export function sentoLayout(b: Building3): Pick<Interior, 'colliders' | 'contains'> {
+export function sentoLayout(b: Building3): Omit<Interior, 'group'> {
   const f = localFrame(b);
+  const rects = SENTO_COLLIDERS.map((r) => localRect(f, r[0], r[1], r[2], r[3]));
   return {
-    colliders: SENTO_COLLIDERS.map((r) => localRect(f, r[0], r[1], r[2], r[3])),
-    contains(x, z) {
+    colliders: (floor) => (Math.abs(floor) <= 1 ? rects : []),
+    floorAt: () => null,
+    contains(x, z, y) {
       const [u, t] = toLocal(f, x, z);
-      return u > SENTO_INSIDE.u0 && u < SENTO_INSIDE.u1 && t > SENTO_INSIDE.t0 && t < SENTO_INSIDE.t1;
+      return y > -1 && y < b.h + 2 && u > SENTO_INSIDE.u0 && u < SENTO_INSIDE.u1 && t > SENTO_INSIDE.t0 && t < SENTO_INSIDE.t1;
     },
   };
 }
@@ -249,3 +256,18 @@ export function sentoInterior(b: Building3, city: THREE.Material, ghost: THREE.M
   group.visible = false;
   return { group, ...sentoLayout(b) };
 }
+
+/**
+ * Interiors by landmark kind: the builder (a generator, so a big interior can be built a slice per frame), the
+ * layout alone (collision and floors, also for tests), and how near to start building it (m from the centre).
+ */
+export const INTERIORS: Readonly<Record<string, { build: (b: Building3, city: THREE.Material, ghost: THREE.Material) => Generator<void, Interior>; layout: (b: Building3) => Omit<Interior, 'group'>; range: number }>> = {
+  sento: {
+    *build(b, city, ghost) {
+      return sentoInterior(b, city, ghost);
+    },
+    layout: sentoLayout,
+    range: 70,
+  },
+  dept_store: { build: deptInterior, layout: deptLayout, range: 120 },
+};

@@ -1,5 +1,7 @@
 # 東都百貨店 Toto Department Store: the terminal's store beside Tōto-Chūō station (built by real/asagiri.ts:
-# lit show windows, blank stone, a screen, a blade sign and a neon crown).
+# lit show windows, blank stone, a screen, a blade sign and a neon crown). You walk in through the doors: the
+# interior (real/deptStore.ts) is B1 food hall, 1F cosmetics, 2F fashion, joined by escalators; the elevators
+# on each floor go up to the rooftop garden.
 id: totochuo_dept
 name: 東都百貨店 Toto Department Store
 footprint: [44, 58]
@@ -8,3 +10,12 @@ front: south
 landmark: dept_store
 nodes:
   front: { kind: spawn, name: Toto Department Store, at: [22, 8], facing: north, view: [0, 22] }
+  inside: { kind: spawn, name: Toto Department Store 1F, at: [22.5, -7], facing: north, view: [0, 2] }
+  food_hall: { kind: spawn, name: Toto Food Hall (B1), at: [22.5, -23], floor: -5, facing: south, view: [180, 0] }
+  fashion: { kind: spawn, name: Toto 2F fashion, at: [22.5, -22], floor: 6, facing: south, view: [180, 2] }
+  elevator_b1: { kind: station, name: 屋上 Rooftop garden, at: [22.5, -56.8], floor: -5, returnSpawn: rooftop }
+  elevator_1f: { kind: station, name: 屋上 Rooftop garden, at: [22.5, -56.8], returnSpawn: rooftop }
+  elevator_2f: { kind: station, name: 屋上 Rooftop garden, at: [22.5, -56.8], floor: 6, returnSpawn: rooftop }
+  rooftop: { kind: spawn, name: Toto rooftop garden, at: [22.5, -47.5], floor: 63.2, facing: south, view: [180, -3] }
+  elevator_down: { kind: station, name: Down to 1F, at: [22.5, -49.2], floor: 63.2, returnSpawn: lift_hall }
+  lift_hall: { kind: spawn, at: [22.5, -54.5], facing: south, view: [180, 0] }

@@ -25,7 +25,7 @@ import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { SubwaySystem } from '../real/subway';
 import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../real/subwayStation';
 import { buildRotary, type RotaryBuilt } from '../real/rotary';
-import { sentoInterior, type Interior } from '../real/interiors';
+import { INTERIORS, type Interior } from '../real/interiors';
 import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem } from '../real/traffic';
 import { ScreenGlows, ScreenLights } from '../real/screenLight';
@@ -307,24 +307,52 @@ async function run(): Promise<void> {
   for (const o of scene.children) if (o !== subway.group && !subwayViews.some((v) => v.view.group === o) && !rotaries.some((v) => v.r.group === o) && !(o instanceof THREE.Light) && o !== sky.mesh) surface.push(o);
   // Door-entered interiors (real/interiors.ts), at their buildings' true positions: built as you approach,
   // shown (with the exterior hidden and the collision swapped) while you're inside the footprint.
+  // Built a slice at a time as you approach (a few ms a frame), all at once if you step in first. Escalators
+  // carry a walker standing on them (dt > 0: the frame's time).
   const interiors = content.placed
-    .filter((p) => p.stamp.landmark === 'sento')
-    .map((p) => ({ id: p.id, b: p.building, make: () => sentoInterior(p.building, city, ghost), built: null as Interior | null, active: false }));
+    .filter((p) => p.stamp.landmark && INTERIORS[p.stamp.landmark])
+    .map((p) => {
+      const def = INTERIORS[p.stamp.landmark!];
+      return { id: p.id, b: p.building, range: def.range, layout: def.layout(p.building), start: () => def.build(p.building, city, ghost), job: null as Generator<void, Interior> | null, built: null as Interior | null, active: false };
+    });
   const inInterior = (): boolean => interiors.some((i) => i.active);
-  const updateInteriors = (): void => {
+  const updateInteriors = (dt = 0): void => {
     const cp = camera.position;
     for (const it of interiors) {
-      if (!it.built && Math.hypot(it.b.x - cp.x, it.b.z - cp.z) < 70) {
-        it.built = it.make();
+      if (!it.built) {
+        const near = Math.hypot(it.b.x - cp.x, it.b.z - cp.z) < it.range;
+        if (!near && !it.job) continue;
+        it.job ??= it.start();
+        const rush = it.layout.contains(cp.x, cp.z, cp.y);
+        const until = performance.now() + 3;
+        let r = it.job.next();
+        while (!r.done && (rush || performance.now() < until)) r = it.job.next();
+        if (!r.done) continue;
+        it.job = null;
+        it.built = r.value;
         scene.add(it.built.group);
+        // Upload its signs now, not on the first step inside.
+        it.built.group.traverse((o) => {
+          const map = ((o as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined)?.map;
+          if (map) renderer.initTexture(map);
+        });
       }
-      const inside = !!it.built && cp.y > -1 && cp.y < it.b.h + 2 && it.built.contains(cp.x, cp.z);
-      if (inside === it.active) continue;
-      it.active = inside;
-      it.built!.group.visible = inside;
-      const ext = exteriors.get(it.id);
-      if (ext) ext.visible = !inside;
-      district.setInteriorColliders(it.id, inside ? it.built!.colliders : null);
+      const inside = !!it.built && it.built.contains(cp.x, cp.z, cp.y);
+      if (inside !== it.active) {
+        it.active = inside;
+        it.built!.group.visible = inside;
+        const ext = exteriors.get(it.id);
+        if (ext) ext.visible = !inside;
+        district.setInterior(it.id, inside ? it.built : null);
+      }
+      if (it.active && dt > 0 && !controls.fly && it.built!.carry) {
+        const level = district.floorAt(cp.x, cp.z, cp.y - 1.7);
+        const v = it.built!.carry(cp.x, cp.z, level);
+        if (v && !district.blocked(cp.x + v[0] * dt, cp.z + v[1] * dt, 0.4, level)) {
+          cp.x += v[0] * dt;
+          cp.z += v[1] * dt;
+        }
+      }
     }
   };
   const visibleNode = (n: Node3): boolean => n.condition === null || n.condition(flags.get);
@@ -357,6 +385,9 @@ async function run(): Promise<void> {
   const YAW: Record<string, number> = { north: 0, south: 180, east: -90, west: 90 };
   const teleport = (id: string): void => {
     const n = nodeById.get(id)!;
+    // Inside first (an interior's storeys decide the floor), then the level.
+    camera.position.set(n.x, n.floor + 1.7, n.z);
+    updateInteriors();
     const level = district.floorAt(n.x, n.z, n.floor);
     camera.position.set(n.x, level + 1.7, n.z);
     controls.setLevel(level);
@@ -373,6 +404,8 @@ async function run(): Promise<void> {
     ...(rail && railStations.length >= 2 ? [{ name: `${rail.name} ${rail.nameEn}`, color: rail.color, letter: 'T', stops: [...railStations].sort((a, b) => a.z - b.z).map((s, i) => ({ x: rail.x, z: s.z, code: `T${String(i + 1).padStart(2, '0')}`, name: `${s.names.jp} ${s.names.en}` })) }] : []),
   ];
   const travel = new TravelMap(district, content.zones, destinations(district, nodes, content.zones), (d: Destination) => {
+    camera.position.set(d.x, d.floor + 1.7, d.z);
+    updateInteriors();
     const level = district.floorAt(d.x, d.z, d.floor);
     camera.position.set(d.x, controls.fly ? Math.max(camera.position.y, 1.7) : level + 1.7, d.z);
     controls.setLevel(level);
@@ -416,6 +449,7 @@ async function run(): Promise<void> {
   if (cam && cam.length === 5 && cam.every(Number.isFinite)) {
     camera.position.set(cam[0], cam[1], cam[2]);
     // Underground (or on a platform), the walker stands on the level nearest the camera's feet.
+    updateInteriors();
     controls.setLevel(district.floorAt(cam[0], cam[2], cam[1] - 1.7));
     controls.setView(cam[3], cam[4]);
   }
@@ -799,7 +833,7 @@ async function run(): Promise<void> {
     for (const update of landmarkUpdates) update(camera.position, dt);
     trains?.update(dt, camera);
     subway.update(dt, camera);
-    updateInteriors();
+    updateInteriors(inVn ? 0 : dt);
     traffic.update(dt, camera.position);
     signalLamps.update(camera.position, traffic.clock);
     screens.update(camera.position, now / 1000, cityU.uNeon.value);
