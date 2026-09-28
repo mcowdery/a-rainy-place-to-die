@@ -39,7 +39,7 @@ import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan'
  */
 
 /** Landmarks built on the main thread instead of as a plain building mass. */
-export const LANDMARKS = ['mega_sign', 'konbini', 'shrine', 'love_hotel', 'live_house', 'yokocho', 'ryujin', 'discount', 'station', 'subway', ...ASAGIRI_KINDS] as const;
+export const LANDMARKS = ['mega_sign', 'konbini', 'shrine', 'love_hotel', 'live_house', 'yokocho', 'ryujin', 'discount', 'station', 'subway', 'rotary', ...ASAGIRI_KINDS] as const;
 export type Landmark = (typeof LANDMARKS)[number];
 
 /** How an npc's ghost looks (see real/people.ts); anything left out gets a default. */
@@ -90,6 +90,8 @@ export interface Stamp3 {
   readonly landmark: Landmark | null;
   /** A station's names (landmark station). */
   readonly station: { readonly jp: string; readonly en: string } | null;
+  /** A subway station's concourse opens at this end (u0 / u1) onto an underground passage (real/rotary.ts). */
+  readonly passage: 'u0' | 'u1' | null;
   /** Open ground kept free of lots, relative to the footprint's NW corner. */
   readonly plaza: Rect | null;
   /** A junction (its centre, relative to the footprint's NW corner) painted as a scramble crossing. */
@@ -163,6 +165,7 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
   const stationNames = isObj(st) && typeof st.jp === 'string' && typeof st.en === 'string' ? { jp: st.jp, en: st.en } : null;
   if (st !== undefined && !stationNames) err('station must be { jp, en }');
   if ((landmark === 'station' || landmark === 'subway') && !stationNames) err(`a ${landmark} landmark needs station: { jp, en }`);
+  if (doc.passage !== undefined && doc.passage !== 'u0' && doc.passage !== 'u1') err('passage must be u0 or u1 (the end of the concourse that opens onto a passage)');
   let plaza: Rect | null = null;
   if (doc.plaza !== undefined) {
     const q = doc.plaza;
@@ -244,7 +247,7 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
     });
   }
   if (errors.length > before) return null;
-  return { id, file, name: typeof doc.name === 'string' ? doc.name : null, w, d, height: doc.height as number, hue: doc.hue === undefined ? null : parseInt(String(doc.hue).slice(1), 16), front, landmark, station: stationNames, plaza, scramble: isPair(doc.scramble) ? doc.scramble : null, signs, nodes };
+  return { id, file, name: typeof doc.name === 'string' ? doc.name : null, w, d, height: doc.height as number, hue: doc.hue === undefined ? null : parseInt(String(doc.hue).slice(1), 16), front, landmark, station: stationNames, passage: doc.passage === 'u0' || doc.passage === 'u1' ? doc.passage : null, plaza, scramble: isPair(doc.scramble) ? doc.scramble : null, signs, nodes };
 }
 
 /** The planner's reserved area for a stamp: its footprint plus an open forecourt in front of the street face. */

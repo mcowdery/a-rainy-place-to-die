@@ -60,12 +60,12 @@ export class Kit {
     this.mb.style = [0, 0, 0, 0];
   }
 
-  /** A surface under its own lights (lobbies, canopies): lit at night, or always (interior). */
-  lit(hex: number, u0: number, u1: number, t0: number, t1: number, y0: number, y1: number, always = false): void {
+  /** A surface under its own lights (lobbies, canopies): lit at night, or always (interior). bottom: a ceiling seen from below. */
+  lit(hex: number, u0: number, u1: number, t0: number, t1: number, y0: number, y1: number, always = false, bottom = y0 > 0.3): void {
     this.mb.kind = KIND.emit;
     this.mb.style = [always ? EMIT.interior : EMIT.lit, 0, 0, 0];
     this.mb.color = lin(hex);
-    this.put(KIND.emit, u0, u1, t0, t1, y0, y1, y0 > 0.3);
+    this.put(KIND.emit, u0, u1, t0, t1, y0, y1, bottom);
     this.mb.style = [0, 0, 0, 0];
   }
 

@@ -117,3 +117,16 @@
   stamp: subway_w03
   cell: [28, 12]
   offset: [10, 80]
+# The terminal (Tōto-Chūō): the Toto Line station, the department store beside it, the west exit rotary.
+- id: totochuo_station
+  stamp: station_totochuo
+  cell: [25, 10]
+  offset: [94, 58]
+- id: totochuo_dept
+  stamp: totochuo_dept
+  cell: [25, 10]
+  offset: [46, 60]
+- id: west_exit
+  stamp: west_exit
+  cell: [25, 11]
+  offset: [22, 10]

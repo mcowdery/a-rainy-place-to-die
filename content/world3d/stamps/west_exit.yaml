@@ -1,0 +1,22 @@
+# 東都中央駅 西口 Tōto-Chūō west exit: the bus and taxi rotary in front of the terminal, and the underground
+# mall below it (real/rotary.ts). It faces north across the road the Yakō Line runs under; the mall runs
+# east under the Toto Line into Kaburo-nishiguchi's concourse (subway_y03 has passage: u1).
+id: west_exit
+name: 東都中央 西口 Tōto-Chūō West Exit
+footprint: [80, 50]
+height: 3
+front: north
+landmark: rotary
+nodes:
+  plaza:
+    kind: spawn
+    name: Tōto-Chūō West Exit (bus rotary)
+    at: [33, -44]
+    facing: north
+    view: [0, 6]
+  mall:
+    kind: spawn
+    name: Tōto-Chūō Underground Mall
+    at: [30, -0.1]
+    floor: -5
+    facing: east

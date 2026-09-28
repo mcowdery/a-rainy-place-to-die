@@ -8,6 +8,7 @@ footprint: [14, 12]
 height: 4.5
 front: north
 landmark: subway
+passage: u1
 station: { jp: 歌舞路西口, en: KABURO-NISHIGUCHI }
 nodes:
   exit:

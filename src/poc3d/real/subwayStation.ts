@@ -24,6 +24,8 @@ const S1 = { u0: 5.5, u1: 8.5, t0: 2, t1: 10.5 } as const;
 /** The concourse. */
 const B1 = { u0: -16, u1: 30, t0: -20, t1: 4, ceil: -1 } as const;
 const GATE_T = -4;
+/** Where a passage meets the concourse (t range, on the unpaid side of the gates), at its u0 or u1 end. */
+export const PASSAGE_T = [-3.4, 3.6] as const;
 const GATES = Array.from({ length: 13 }, (_, k) => -2 + k * 1.5);
 /** Stairs from B1 (u0) down to the platform (u1), down the middle of it. */
 const S2 = { u0: 8, u1: 20, t0: -11.5, t1: -8.5 } as const;
@@ -63,7 +65,7 @@ export function subwayFloor(b: Building3, x: number, z: number, current: number)
 type R4 = readonly [number, number, number, number];
 
 /** Collision at each level, as local rects [u0, u1, t0, t1]. */
-function collidersLocal(level: SubwayLevel): R4[] {
+function collidersLocal(level: SubwayLevel, passage: 'u0' | 'u1' | null): R4[] {
   const out: R4[] = [];
   if (level === 'street') {
     // The pavilion's side and back walls (the street face is open), the rails round the stairwell (its
@@ -75,7 +77,12 @@ function collidersLocal(level: SubwayLevel): R4[] {
   }
   if (level === 'b1') {
     // The concourse walls (open where the stairs come down from the street), the stairwells' sides.
-    out.push([B1.u0 - 0.3, B1.u0, B1.t0, B1.t1], [B1.u1, B1.u1 + 0.3, B1.t0, B1.t1], [B1.u0, B1.u1, B1.t0 - 0.3, B1.t0]);
+    // The end walls, one of them opened where a passage comes in.
+    for (const [end, u0, u1] of [['u0', B1.u0 - 0.3, B1.u0], ['u1', B1.u1, B1.u1 + 0.3]] as const) {
+      if (passage === end) out.push([u0, u1, B1.t0, PASSAGE_T[0]], [u0, u1, PASSAGE_T[1], B1.t1]);
+      else out.push([u0, u1, B1.t0, B1.t1]);
+    }
+    out.push([B1.u0, B1.u1, B1.t0 - 0.3, B1.t0]);
     out.push([B1.u0, S1.u0, B1.t1, B1.t1 + 0.3], [S1.u1, B1.u1, B1.t1, B1.t1 + 0.3]);
     out.push([S1.u0 - 0.3, S1.u0, S1.t0, S1.t1], [S1.u1, S1.u1 + 0.3, S1.t0, S1.t1]);
     // The gate line: fences either side, the gate cabinets (the lanes between them are open).
@@ -99,13 +106,13 @@ function collidersLocal(level: SubwayLevel): R4[] {
 const colliderCache = new Map<string, Rect[]>();
 
 /** Collision rects at a walker's floor (world). */
-export function subwayColliders(b: Building3, floor: number): Rect[] {
+export function subwayColliders(b: Building3, floor: number, passage: 'u0' | 'u1' | null = null): Rect[] {
   const level = subwayLevel(floor);
-  const key = `${b.id}:${level}`;
+  const key = `${b.id}:${level}:${passage}`;
   let out = colliderCache.get(key);
   if (!out) {
     const f = localFrame(b);
-    out = collidersLocal(level).map(([u0, u1, t0, t1]) => localRect(f, u0, u1, t0, t1));
+    out = collidersLocal(level, passage).map(([u0, u1, t0, t1]) => localRect(f, u0, u1, t0, t1));
     colliderCache.set(key, out);
   }
   return out;
@@ -154,6 +161,8 @@ export interface SubwayStationInfo {
   readonly lines: readonly SubwayLine3[];
   /** Next departures in each direction (toward the line's first / last station), seconds. */
   readonly departures: (clock: number) => { toFirst: number[]; toLast: number[] };
+  /** The end of the concourse that opens onto a passage. */
+  readonly passage?: 'u0' | 'u1' | null;
 }
 
 const hex = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
@@ -309,12 +318,19 @@ export function buildSubwayStation(b: Building3, info: SubwayStationInfo, city: 
   for (let t = B1.t0 + 2; t < B1.t1; t += 4) glow(LIGHT, B1.u0 + 1, B1.u1 - 1, t - 0.1, t + 0.1, B1.ceil - 0.03, B1.ceil);
   // Walls: tiled, with a band in the line's colour; open where the street stairs come down.
   const wallB1 = (u0: number, u1: number, t0: number, t1: number): void => lit(0xd8d2c4, u0, u1, t0, t1, Y1, B1.ceil);
-  wallB1(B1.u0 - 0.3, B1.u0, B1.t0, B1.t1);
-  wallB1(B1.u1, B1.u1 + 0.3, B1.t0, B1.t1);
+  for (const [end, u0, u1] of [['u0', B1.u0 - 0.3, B1.u0], ['u1', B1.u1, B1.u1 + 0.3]] as const) {
+    if (info.passage === end) {
+      wallB1(u0, u1, B1.t0, PASSAGE_T[0]);
+      wallB1(u0, u1, PASSAGE_T[1], B1.t1);
+    } else wallB1(u0, u1, B1.t0, B1.t1);
+  }
   wallB1(B1.u0, B1.u1, B1.t0 - 0.3, B1.t0);
   wallB1(B1.u0, S1.u0 - 0.3, B1.t1, B1.t1 + 0.3);
   wallB1(S1.u1 + 0.3, B1.u1, B1.t1, B1.t1 + 0.3);
-  for (const [u0, u1, t0, t1] of [[B1.u0 + 0.01, B1.u0 + 0.02, B1.t0, B1.t1], [B1.u1 - 0.02, B1.u1 - 0.01, B1.t0, B1.t1], [B1.u0, B1.u1, B1.t0 + 0.01, B1.t0 + 0.02]] as const) lit(LC, u0, u1, t0, t1, Y1 + 1.4, Y1 + 1.6);
+  const bandT = (end: 'u0' | 'u1'): (readonly [number, number])[] => (info.passage === end ? [[B1.t0, PASSAGE_T[0]], [PASSAGE_T[1], B1.t1]] : [[B1.t0, B1.t1]]);
+  for (const [t0, t1] of bandT('u0')) lit(LC, B1.u0 + 0.01, B1.u0 + 0.02, t0, t1, Y1 + 1.4, Y1 + 1.6);
+  for (const [t0, t1] of bandT('u1')) lit(LC, B1.u1 - 0.02, B1.u1 - 0.01, t0, t1, Y1 + 1.4, Y1 + 1.6);
+  lit(LC, B1.u0, B1.u1, B1.t0 + 0.01, B1.t0 + 0.02, Y1 + 1.4, Y1 + 1.6);
   // Pillars.
   for (const u of PILLARS_B1) lit(0xe0dacc, u - 0.4, u + 0.4, -16.4, -15.6, Y1, B1.ceil);
   // The gate line: fences either side, gate cabinets with their card readers lit.

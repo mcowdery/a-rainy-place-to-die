@@ -8,6 +8,7 @@ import { ryujinColliders, ryujinLights } from '../real/ryujin';
 import { discountColliders, discountLights } from '../real/discount';
 import { stationColliders, stationFloor, stationLights } from '../real/station';
 import { subwayColliders, subwayFloor, subwayHoles, subwayLights, subwayShelters } from '../real/subwayStation';
+import { rotaryColliders, rotaryFloor, rotaryHoles, rotaryLights, rotaryShelters } from '../real/rotary';
 import { ASAGIRI_KINDS, asagiriColliders, asagiriFloor, asagiriLights, asagiriShelters, type AsagiriKind } from '../real/asagiri';
 import { localFrame, localRect } from '../real/localFrame';
 
@@ -46,7 +47,9 @@ export function landmarkColliders(p: Placed3, floor = 0): Rect[] | null {
     case 'station':
       return stationColliders(p.building, floor);
     case 'subway':
-      return subwayColliders(p.building, floor);
+      return subwayColliders(p.building, floor, p.stamp.passage);
+    case 'rotary':
+      return rotaryColliders(p.building, floor);
     default:
       return null;
   }
@@ -77,6 +80,8 @@ export function landmarkLights(p: Placed3): Light[] {
       return stationLights(p.building);
     case 'subway':
       return subwayLights(p.building);
+    case 'rotary':
+      return rotaryLights(p.building);
     default:
       return [];
   }
@@ -110,6 +115,8 @@ export function landmarkShelters(p: Placed3): Shelter[] {
       return [{ rect: localRect(f, 9, 15, 1.6, 4), y0: 0, y1: 3.3 }];
     case 'subway':
       return subwayShelters(b);
+    case 'rotary':
+      return rotaryShelters(b);
     default:
       return [];
   }
@@ -117,7 +124,7 @@ export function landmarkShelters(p: Placed3): Shelter[] {
 
 /** Openings in the pavement (a stairwell down to a basement). */
 export function landmarkHoles(p: Placed3): Rect[] {
-  return p.stamp.landmark === 'live_house' ? liveHouseHoles(p.building) : p.stamp.landmark === 'subway' ? subwayHoles(p.building) : [];
+  return p.stamp.landmark === 'live_house' ? liveHouseHoles(p.building) : p.stamp.landmark === 'subway' ? subwayHoles(p.building) : p.stamp.landmark === 'rotary' ? rotaryHoles(p.building) : [];
 }
 
 /**
@@ -134,6 +141,8 @@ export function landmarkFloor(p: Placed3, x: number, z: number, current = 0): nu
       return stationFloor(p.building, x, z, current);
     case 'subway':
       return subwayFloor(p.building, x, z, current);
+    case 'rotary':
+      return rotaryFloor(p.building, x, z, current);
     default:
       return null;
   }

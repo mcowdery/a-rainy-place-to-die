@@ -1,0 +1,10 @@
+# 東都百貨店 Toto Department Store: the terminal's store beside Tōto-Chūō station (built by real/asagiri.ts:
+# lit show windows, blank stone, a screen, a blade sign and a neon crown).
+id: totochuo_dept
+name: 東都百貨店 Toto Department Store
+footprint: [44, 58]
+height: 62
+front: south
+landmark: dept_store
+nodes:
+  front: { kind: spawn, name: Toto Department Store, at: [22, 8], facing: north, view: [0, 22] }

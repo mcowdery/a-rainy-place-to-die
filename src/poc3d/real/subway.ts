@@ -82,6 +82,7 @@ export class SubwaySystem {
     city: THREE.Material,
   ) {
     for (const line of net.lines) {
+      if (line.kind !== 'subway') continue;
       this.group.add(this.buildTunnels(line, city));
       const make = trainFactory(line.color, city);
       const order = Math.sign(line.stops[line.stops.length - 1].s - line.stops[0].s) || 1;

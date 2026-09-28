@@ -19,7 +19,7 @@ import type { ScreenLight } from './screenLight';
  * members' club, and Toto City Hall (twin towers; an elevator to the observatory on tower A).
  * Each kind has a builder, collision rects and lightmap lights; city hall also has a raised floor.
  */
-export const ASAGIRI_KINDS = ['idol_agency', 'police_hq', 'residence', 'bank', 'law_firm', 'ad_agency', 'biz_hotel', 'members_club', 'city_hall'] as const;
+export const ASAGIRI_KINDS = ['idol_agency', 'police_hq', 'residence', 'bank', 'law_firm', 'ad_agency', 'biz_hotel', 'members_club', 'city_hall', 'dept_store'] as const;
 export type AsagiriKind = (typeof ASAGIRI_KINDS)[number];
 
 const art = import.meta.glob(
@@ -80,6 +80,8 @@ export function asagiriColliders(kind: AsagiriKind, b: Building3, floor: number)
       return [R(0, 12, 0, 0.6), R(18, 30, 0, 0.6), R(0, 0.6, 0, 26), R(29.4, 30, 0, 26), R(3, 27, 9, 25), R(3.5, 8.8, 3.5, 5.7), R(21, 22, 3, 4), R(8, 9, 3, 4)];
     case 'city_hall':
       return [R(4, 76, 14, 56), ...[8, 20, 56, 68].map((u) => R(u - 1, u + 1, 6, 8))];
+    case 'dept_store':
+      return [R(0, DEPT.w, 1.2, DEPT.d)];
   }
 }
 
@@ -128,6 +130,8 @@ export function asagiriLights(kind: AsagiriKind, b: Building3): Light[] {
       return [L(15, 2, 6, [1.0, 0.7, 0.4], 0.6), L(6, 4.6, 3, [1.0, 0.7, 0.4], 0.4), L(24, 4.6, 3, [1.0, 0.7, 0.4], 0.4)];
     case 'city_hall':
       return [L(40, 8, 12, cool, 0.6), L(59, 11, 5, warm, 0.6), L(21, 11, 5, warm, 0.6)];
+    case 'dept_store':
+      return [L(11, -1.5, 10, warm, 0.9), L(33, -1.5, 10, warm, 0.9), L(22, -2, 12, [1.0, 0.9, 0.8], 0.5)];
   }
 }
 
@@ -189,7 +193,50 @@ function screen(k: Kit, urls: readonly string[], w: number, h: number, u: number
   };
 }
 
+/** The department store at the terminal (Toto-Chuo): its footprint and height. */
+const DEPT = { w: 44, d: 58, h: 62 } as const;
+
 const BUILDERS: Record<AsagiriKind, Builder> = {
+  // ---- TOTO DEPARTMENT STORE (東都百貨店): the terminal's store. Lit show windows under a canopy, warm stone
+  // above (blank, as department stores are), a glass bay and a screen on the front, a blade sign, a neon crown ----
+  dept_store(k) {
+    const { w: W, d: D, h: H } = DEPT;
+    k.box(0x2a2a2e, 0, W, 1.2, D, 0, 6.5);
+    for (let u = 1; u < W - 1.5; u += 5.4) k.lit([0xf8f0e0, 0xf0e4f0, 0xe8f0f8][Math.round(u) % 3], u, u + 4.6, 1.15, 1.2, 0.4, 5.6, true);
+    k.pane(1, W - 1, 0.3, 5.8, 1.1);
+    k.box(0x3a3a3e, 0, W, -0.2, 1.4, 6.5, 7.0);
+    k.glow([1.3, 1.2, 1.0], 1, W - 1, -0.1, 0.1, 6.42, 6.5);
+    k.facade(0xd8ccb4, [3.0, 0.2, 2.0, WIN.blank], 3 * 16, 0, W, 1.2, D, 7, H);
+    k.facade(0x2e3b45, [1.5, 0.85, 2.4, WIN.curtain], 8 + 3 * 16, 15, 29, 0.9, 1.2, 24, H - 6);
+    k.box(0x2a2a2e, 0, W, 1.2, D, H, H + 1.2);
+    const tick = screen(k, [artUrl('49_mega_cosmetics'), artUrl('64_mega_soda'), artUrl('80_mega_kaburo'), artUrl('51_mega_whisky')], 15, 8.4, W / 2, 1.08, 15.5, 8);
+    k.box(0x0c0c0e, W / 2 - 7.8, W / 2 + 7.8, 1.1, 1.2, 11, 20);
+    // The blade sign at the corner, readable both ways along the street.
+    const blade = k.canvas(160, 960, (g) => {
+      g.fillStyle = '#7a1420';
+      g.fillRect(0, 0, 160, 960);
+      g.strokeStyle = '#e8c860';
+      g.lineWidth = 8;
+      g.strokeRect(8, 8, 144, 944);
+      ['東', '都', '百', '貨', '店'].forEach((ch, i) => text(g, ch, 80, 110 + i * 180, "bold 128px 'Yu Mincho', 'MS Mincho', serif", '#ffffff'));
+    });
+    k.box(0x3a3a3e, 2.4, 2.6, -1.8, 1.2, 12, 40);
+    k.plane(blade, 3.2, 19, 2.62, -0.5, 26, '+u', 1.25);
+    k.plane(blade, 3.2, 19, 2.38, -0.5, 26, '-u', 1.25);
+    // The crown: TOTO in neon on the roof edge, the name under it.
+    k.plane(k.canvas(1400, 220, (g) => {
+      g.clearRect(0, 0, 1400, 220);
+      neonText(g, 'TOTO', 700, 100, "900 170px 'Arial Black', 'Arial', sans-serif", '#ff5f6a');
+    }), 26, 4, W / 2, 1.1, H + 3.2, 'out', 1.5, true);
+    k.box(0x2a2a2e, W / 2 - 13, W / 2 + 13, 1.2, 1.6, H + 1.2, H + 1.4);
+    k.plane(k.canvas(1200, 140, (g) => {
+      g.fillStyle = '#16181c';
+      g.fillRect(0, 0, 1200, 140);
+      text(g, '東都百貨店  TOTO DEPARTMENT STORE', 600, 74, "bold 64px 'Yu Mincho', 'Times New Roman', serif", '#e8d8b0');
+    }), 24, 2.8, W / 2, 1.08, H - 2.2, 'out', 1.1);
+    return tick;
+  },
+
   // ---- STELLA PRODUCTION: glossy tower, idol banners, red carpet; round the side, the staff entrance ----
   idol_agency(k) {
     const PINK: [number, number, number] = [1.3, 0.35, 0.8];

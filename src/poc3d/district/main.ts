@@ -24,6 +24,7 @@ import { ASAGIRI_KINDS, buildAsagiri, type AsagiriKind } from '../real/asagiri';
 import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { SubwaySystem } from '../real/subway';
 import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../real/subwayStation';
+import { buildRotary, type RotaryBuilt } from '../real/rotary';
 import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem } from '../real/traffic';
 import { ScreenGlows, ScreenLights } from '../real/screenLight';
@@ -200,6 +201,9 @@ async function run(): Promise<void> {
   subway.group.visible = false;
   scene.add(subway.group);
   const subwayViews: { view: SubwayStationView; x: number; z: number }[] = [];
+  // Landmarks with a part below ground (the terminal's underground mall): their plaza stays shown (you see
+  // it up the stairs), the part below only below ground or nearby.
+  const rotaries: { r: RotaryBuilt; x: number; z: number }[] = [];
   // Everything on the surface, hidden below ground (the stations' own groups stay: they reach up to the street).
   const surface: THREE.Object3D[] = [];
   // Traffic: cars and taxis clockwise round their loops, buses anticlockwise round theirs.
@@ -252,10 +256,15 @@ async function run(): Promise<void> {
       const stop = content.subway.stops.get(placed.id);
       const line = stop && content.subway.lines.find((l) => l.id === stop.line);
       if (stop && line) {
-        const view = buildSubwayStation(placed.building, { stop, line, lines: content.subway.lines, departures: () => subway.departures(stop) }, city);
+        const view = buildSubwayStation(placed.building, { stop, line, lines: content.subway.lines.filter((l) => l.kind === 'subway'), departures: () => subway.departures(stop), passage: placed.stamp.passage }, city);
         scene.add(view.group);
         subwayViews.push({ view, x: stop.x, z: stop.z });
       }
+    } else if (lm === 'rotary') {
+      const r = buildRotary(placed.building, city, ghost);
+      scene.add(r.group);
+      rotaries.push({ r, x: placed.building.x, z: placed.building.z });
+      landmarkUpdates.push(() => r.update(cityU));
     } else if (lm === 'station' && rail) {
       const other = railStations.find((s) => s.id !== placed.id)?.names ?? null;
       scene.add(buildStation(placed.building, city, placed.stamp.station!, other, rail));
@@ -291,7 +300,7 @@ async function run(): Promise<void> {
     }
   }
   // The surface: the city, traffic, weather and the other landmarks (everything but the subway's own).
-  for (const o of scene.children) if (o !== subway.group && !subwayViews.some((v) => v.view.group === o) && !(o instanceof THREE.Light) && o !== sky.mesh) surface.push(o);
+  for (const o of scene.children) if (o !== subway.group && !subwayViews.some((v) => v.view.group === o) && !rotaries.some((v) => v.r.group === o) && !(o instanceof THREE.Light) && o !== sky.mesh) surface.push(o);
   const visibleNode = (n: Node3): boolean => n.condition === null || n.condition(flags.get);
   const npcBlocked = (x: number, z: number, r: number): boolean =>
     nodes.some((n) => n.kind === 'npc' && visibleNode(n) && Math.hypot(n.x - x, n.z - z) < r + 0.35);
@@ -561,8 +570,6 @@ async function run(): Promise<void> {
         });
         return;
       }
-      if (isRailStation(n.placementId) && late()) return toast(LAST_TRAIN);
-      if (isRailStation(n.placementId)) return trains ? rideTrain(n.placementId, n.returnSpawn) : undefined;
       return ride(n.returnSpawn);
     }
     inVn = true;
@@ -591,24 +598,6 @@ async function run(): Promise<void> {
     await fadeTo(0);
     inVn = false;
   }
-  async function rideTrain(fromId: string, spawn: string): Promise<void> {
-    const from = railStations.find((s) => s.id === fromId);
-    const to = railStations.find((s) => s.id === nodeById.get(spawn)?.placementId);
-    if (!from || !to || !trains) return;
-    inVn = true;
-    controls.held = true;
-    await fadeTo(1);
-    const arrived = trains.startRide(from, to, camera);
-    controls.setView(trains.rideYaw, 0);
-    await fadeTo(0);
-    inVn = false;
-    await arrived;
-    await fadeTo(1);
-    controls.held = false;
-    teleport(spawn);
-    await fadeTo(0);
-  }
-
   // Riding the subway: each leg in real time (E skips it); a change of line is a short walk (a fade).
   async function rideSubway(from: string, to: string): Promise<void> {
     const legs = subwayRoute(content.subway, from, to);
@@ -623,8 +612,19 @@ async function run(): Promise<void> {
         continue;
       }
       await fadeTo(1);
-      const done = subway.startRide(leg.line, leg.from, leg.to, camera);
-      controls.setView(subway.rideYaw, -3);
+      const line = content.subway.lines.find((l) => l.id === leg.line)!;
+      let done: Promise<void>;
+      if (line.kind === 'elevated') {
+        // The Toto Line: its own trains along the viaduct (real/rail.ts).
+        const a = railStations.find((s) => s.id === line.stops[leg.from].key);
+        const b = railStations.find((s) => s.id === line.stops[leg.to].key);
+        if (!trains || !a || !b) break;
+        done = trains.startRide(a, b, camera);
+        controls.setView(trains.rideYaw, 0);
+      } else {
+        done = subway.startRide(leg.line, leg.from, leg.to, camera);
+        controls.setView(subway.rideYaw, -3);
+      }
       await fadeTo(0);
       inVn = false;
       await done;
@@ -835,6 +835,7 @@ async function run(): Promise<void> {
       cityU.uLightGain.value = lightGainBase;
     }
     subway.group.visible = under;
+    for (const v of rotaries) v.r.below.visible = under || Math.hypot(v.x - cp.x, v.z - cp.z) < 70;
     for (const v of subwayViews) {
       const d = Math.hypot(v.x - cp.x, v.z - cp.z);
       // A station's underground half only below ground (or by its entrance, looking down the stairs).

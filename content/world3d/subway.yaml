@@ -17,3 +17,4 @@ lines:
     stations: [w01_station, w02_station, w03_station]
 transfers:
   - [y04_station, w02_station]
+  - [totochuo_station, y03_station]

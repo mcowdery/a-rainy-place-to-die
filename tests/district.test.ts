@@ -455,9 +455,10 @@ describe('Subway', () => {
   const placed = (id: string) => content.placed.find((p) => p.id === id)!;
 
   it('numbers the stations along two straight lines under the roads', () => {
-    expect(net.lines.map((l) => l.id)).toEqual(['yako', 'wakaba']);
-    expect(net.lines[0].stops.map((s) => s.code)).toEqual(['Y01', 'Y02', 'Y03', 'Y04', 'Y05']);
-    expect(net.lines[1].stops.map((s) => s.code)).toEqual(['W01', 'W02', 'W03']);
+    expect(net.lines.map((l) => l.id)).toEqual(['toto', 'yako', 'wakaba']);
+    expect(net.lines[0].stops.map((s) => `${s.code} ${s.en}`)).toEqual(['T01 ASAGIRI', 'T02 TŌTO-CHŪŌ', 'T03 KABURO']);
+    expect(net.lines[1].stops.map((s) => s.code)).toEqual(['Y01', 'Y02', 'Y03', 'Y04', 'Y05']);
+    expect(net.lines[2].stops.map((s) => s.code)).toEqual(['W01', 'W02', 'W03']);
     for (const l of net.lines) {
       // Each line runs along a cell edge (a road), its platforms on it.
       expect(l.at % CELL).toBe(0);
@@ -473,6 +474,39 @@ describe('Subway', () => {
       { kind: 'ride', line: 'wakaba', from: 1, to: 2 },
     ]);
     expect(subwayRoute(net, 'y03_station', 'y03_station')).toBeNull();
+    // The Toto Line joins at the terminal: from the Wakaba Line to Asagiri on the Toto Line.
+    expect(subwayRoute(net, 'w03_station', 'asagiri_station')).toEqual([
+      { kind: 'ride', line: 'wakaba', from: 2, to: 1 },
+      { kind: 'transfer', from: 'w02_station', to: 'y04_station' },
+      { kind: 'ride', line: 'yako', from: 3, to: 2 },
+      { kind: 'transfer', from: 'y03_station', to: 'totochuo_station' },
+      { kind: 'ride', line: 'toto', from: 1, to: 0 },
+    ]);
+  });
+
+  it('walks the underground mall from Kaburo-nishiguchi to the west exit and up to the rotary', () => {
+    const y03 = localFrame(placed('y03_station').building);
+    const rot = localFrame(placed('west_exit').building);
+    // From the concourse (unpaid side) west through the opening, along the mall, up the far stairs.
+    const pts: [number, number][] = [
+      toWorld(y03, 20, 0), toWorld(y03, 29, 0), toWorld(rot, -20, 0), toWorld(rot, 40, 0), toWorld(rot, 77, 0), toWorld(rot, 77, 4), toWorld(rot, 77, 13.4), toWorld(rot, 77, 15),
+    ];
+    let floor = -5;
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const [x0, z0] = pts[i];
+      const [x1, z1] = pts[i + 1];
+      const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.1);
+      for (let k = 1; k <= n; k++) {
+        const x = x0 + ((x1 - x0) * k) / n;
+        const z = z0 + ((z1 - z0) * k) / n;
+        floor = district.floorAt(x, z, floor);
+        expect(district.blocked(x, z, 0.4, floor), `at ${x.toFixed(1)}, ${z.toFixed(1)} floor ${floor.toFixed(2)}`).toBe(false);
+      }
+    }
+    expect(floor).toBe(0);
+    // The mall is walled: its north side is shops, not a way through.
+    const [wx, wz] = toWorld(rot, 40, -3.6);
+    expect(district.blocked(wx, wz, 0.4, -5)).toBe(true);
   });
 
   it('rejects stations off the line, unknown ones and bad transfers', () => {

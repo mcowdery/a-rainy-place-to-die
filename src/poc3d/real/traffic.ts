@@ -123,6 +123,17 @@ function busModel(line: BusLine): { body: THREE.BufferGeometry; glass: THREE.Buf
   return { body: mb.build()!, glass: gb.build()!, signs };
 }
 
+/** A parked bus (scenery: a terminal's bays), pointing +z, its destination on the board. */
+export function parkedBus(destination: string, city: THREE.Material): THREE.Group {
+  const m = busModel({ name: destination } as BusLine);
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(m.body, city));
+  const glass = new THREE.Mesh(m.glass, new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.25, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide }));
+  glass.renderOrder = 3;
+  g.add(glass, m.signs);
+  return g;
+}
+
 /** Bus stops: a shelter with a bench and a lit ad panel, and a pole with the round stop sign, on the kerb. */
 function busStops(lines: readonly { line: BusLine; route: Route }[], city: THREE.Material): { mesh: THREE.Group; colliders: Rect[] } {
   const mb = new MeshBuilder();

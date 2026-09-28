@@ -1,0 +1,32 @@
+# 東都中央駅 Tōto-Chūō Station on the Toto Line: the terminal between Kaburo and Asagiri (after Shinjuku).
+# A landmark built by real/station.ts (60 m along the line, 24 m deep): its street face is 10 m west of
+# the line, under the viaduct. The department store (totochuo_dept) stands beside it; the bus and taxi
+# rotary (west_exit) is across the road to the south, with the underground mall below it running east to
+# the Yakō Line's Kaburo-nishiguchi station.
+id: station_totochuo
+name: 東都中央駅 Tōto-Chūō Station
+footprint: [24, 60]
+height: 16.6
+front: east
+landmark: station
+station: { jp: 東都中央, en: TŌTO-CHŪŌ }
+nodes:
+  exit:
+    kind: spawn
+    name: Tōto-Chūō Station
+    at: [30, 8]
+    facing: west
+    view: [70, 16]
+  platform:
+    kind: spawn
+    name: Tōto-Chūō Station (platform)
+    at: [44, 3.2]
+    floor: 9.1
+    facing: east
+    view: [-90, 2]
+  board:
+    kind: station
+    name: Toto Line 東都線
+    at: [44, 5.4]
+    floor: 9.1
+    returnSpawn: platform

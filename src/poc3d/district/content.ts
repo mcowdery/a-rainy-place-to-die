@@ -39,7 +39,7 @@ export function loadDistrictContent(): DistrictContent {
   const zones = macro ? ZoneMap.merge(Object.entries(zoneFiles).map(([path, text]) => parseZones3(path.replace(/^(\.\.\/)+/, ''), text, macro, errors))) : ZoneMap.EMPTY;
   const rail = macro ? parseRail3('content/world3d/rail.yaml', railText, macro, errors) : null;
   const traffic = macro ? parseTraffic3('content/world3d/traffic.yaml', trafficText, macro, errors) : { cars: [], buses: [] };
-  const subway = parseSubway3('content/world3d/subway.yaml', subwayText, placed, errors);
+  const subway = parseSubway3('content/world3d/subway.yaml', subwayText, placed, errors, rail ? { id: rail.id, name: rail.name, nameEn: rail.nameEn, color: rail.color, x: rail.x } : null);
   const ids = zones.zones.map((z) => z.id);
   if (new Set(ids).size !== ids.length) errors.push('content/world3d/zones: zone ids must be unique across districts');
   if (errors.length > 0 || !macro || !atmosphere) throw new ContentError(errors);

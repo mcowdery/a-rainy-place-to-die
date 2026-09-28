@@ -4,7 +4,8 @@ import { frontPoint } from './plan';
 import type { Placed3 } from './stamps';
 
 /**
- * The subway network (content/world3d/subway.yaml), in world metres. A line runs straight under a road;
+ * The rail network (content/world3d/subway.yaml, plus the elevated Toto Line from rail.yaml), in world
+ * metres. A subway line runs straight under a road;
  * its stations are placements of subway stamps (landmark: subway) whose street face is SUBWAY_AXIS m from
  * the line, listed in order along it. Pure: parsing, routes between stations, and the timetable the
  * trains, departure boards and rides all share.
@@ -17,7 +18,10 @@ import type { Placed3 } from './stamps';
  *       color: '#9b6cff'
  *       stations: [y01_station, y02_station, ...]
  *   transfers:
- *     - [y04_station, w02_station]   # change lines here
+ *     - [y04_station, w02_station]   # change lines here (Toto Line stations too)
+ *
+ * The Toto Line joins the network as a line of kind 'elevated' (its stations are the station landmarks
+ * along the viaduct, T01... in order), so routes and the route picker cover both.
  */
 
 /** The line runs this far out from a subway station's street face. */
@@ -44,6 +48,8 @@ export interface SubwayStop3 {
 
 export interface SubwayLine3 {
   readonly id: string;
+  /** subway: tunnels, trains and rides here (real/subway.ts); elevated: the Toto Line (real/rail.ts). */
+  readonly kind: 'subway' | 'elevated';
   readonly name: string;
   readonly nameEn: string;
   readonly letter: string;
@@ -76,7 +82,16 @@ export function stationAxis(p: Placed3): { along: 'x' | 'z'; at: number } {
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-export function parseSubway3(file: string, text: string, placed: readonly Placed3[], errors: string[]): SubwayNet3 {
+/** The elevated line (rail.yaml) as a network line: its station landmarks in order along it. */
+export interface ElevatedLine {
+  readonly id: string;
+  readonly name: string;
+  readonly nameEn: string;
+  readonly color: number;
+  readonly x: number;
+}
+
+export function parseSubway3(file: string, text: string, placed: readonly Placed3[], errors: string[], elevated: ElevatedLine | null = null): SubwayNet3 {
   const err = (m: string): void => void errors.push(`${file}: ${m}`);
   let doc: unknown;
   try {
@@ -89,6 +104,17 @@ export function parseSubway3(file: string, text: string, placed: readonly Placed
   const byId = new Map(placed.map((p) => [p.id, p]));
   const lines: SubwayLine3[] = [];
   const stops = new Map<string, SubwayStop3>();
+  if (elevated) {
+    const st = placed.filter((p) => p.stamp.landmark === 'station').sort((a, b) => a.building.z - b.building.z);
+    if (st.length >= 2) {
+      const ls = st.map((p, k): SubwayStop3 => ({
+        key: p.id, line: elevated.id, index: k, code: `T${String(k + 1).padStart(2, '0')}`,
+        jp: p.stamp.station?.jp ?? p.id, en: p.stamp.station?.en ?? p.id, x: elevated.x, z: p.building.z, s: p.building.z,
+      }));
+      for (const s of ls) stops.set(s.key, s);
+      lines.push({ id: elevated.id, kind: 'elevated', name: elevated.name, nameEn: elevated.nameEn, letter: 'T', color: elevated.color, along: 'z', at: elevated.x, stops: ls });
+    }
+  }
   doc.lines.forEach((raw: unknown, i: number) => {
     const at = `line ${i}`;
     if (!isObj(raw)) return err(`${at} must be a mapping`);
@@ -133,7 +159,7 @@ export function parseSubway3(file: string, text: string, placed: readonly Placed
       s: ss[k],
     }));
     for (const s of lineStops) stops.set(s.key, s);
-    lines.push({ id, name: String(raw.name), nameEn: String(raw.nameEn), letter, color: parseInt(String(raw.color).slice(1), 16), along: a0.along, at: a0.at, stops: lineStops });
+    lines.push({ id, kind: 'subway', name: String(raw.name), nameEn: String(raw.nameEn), letter, color: parseInt(String(raw.color).slice(1), 16), along: a0.along, at: a0.at, stops: lineStops });
   });
   const transfers: [string, string][] = [];
   for (const [i, t] of (Array.isArray(doc.transfers) ? doc.transfers : []).entries()) {
