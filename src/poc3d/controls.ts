@@ -8,6 +8,18 @@ const WALK = 4.5; // m/s: brisk game-walk, not realistic 1.4 m/s
 const RUN = 9;
 const FLY = 36;
 const MAX_SHEAR = 1.6;
+/** Jump: take-off speed (m/s) and gravity (m/s^2): about 0.8 m high, 0.7 s in the air. */
+const JUMP_V = 4.4;
+const GRAVITY = 12;
+/** Longest frame step: after a hitch the walker doesn't leap (or tunnel through a wall). */
+const MAX_DT = 0.05;
+/**
+ * Mouse look: radians per pixel (three's PointerLockControls default), and the largest believable move in
+ * one event. Chromium on Windows sometimes reports a huge bogus movement under pointer lock (right after
+ * locking, or at random), which snapped the view round; those events are dropped.
+ */
+const MOUSE = 0.002;
+const SPIKE = 300;
 
 /** Collision query: is a circle of this radius at (x, z) blocked? floor: the walker's floor height (0 at
  * street level, negative in a basement), so a building can collide differently underground. */
@@ -47,6 +59,14 @@ export class FirstPerson {
   held = false;
   /** The walker's floor height (y of the feet). */
   private level = 0;
+  /** Height above the floor while jumping, and the vertical speed. */
+  private air = 0;
+  private vy = 0;
+  /** Footsteps: called on each step (running or walking), and on landing (with the fall speed, m/s). */
+  onStep: ((run: boolean) => void) | null = null;
+  onLand: ((speed: number) => void) | null = null;
+  /** Ignore the first mouse event after locking (often a jump from where the cursor was). */
+  private settle = true;
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
@@ -54,15 +74,54 @@ export class FirstPerson {
     private readonly blocked: Blocker,
   ) {
     this.look = new PointerLockControls(camera, dom);
+    // Mouse look is handled here (filtered); PointerLockControls only does the locking.
+    this.look.enabled = false;
     camera.position.set(0, EYE, 38);
     this.setShearMode(true);
-    window.addEventListener('keydown', (e) => this.keys.add(e.code));
+    window.addEventListener('keydown', (e) => {
+      this.keys.add(e.code);
+      if (e.code === 'Space' && this.look.isLocked) {
+        e.preventDefault();
+        if (!this.fly && !this.held && this.air === 0) this.vy = JUMP_V;
+      }
+    });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
-    document.addEventListener('mousemove', (e) => {
-      if (!this.look.isLocked || !this.shearOn) return;
-      this.shear = THREE.MathUtils.clamp(this.shear - e.movementY * 0.002 * this.look.pointerSpeed, -MAX_SHEAR, MAX_SHEAR);
-    });
+    this.look.addEventListener('lock', () => (this.settle = true));
+    document.addEventListener('mousemove', (e) => this.mouse(e));
+  }
+
+  /** Locks the pointer, with raw mouse input where the browser offers it (it avoids the bogus jumps). */
+  lock(): void {
+    const el = this.look.domElement as HTMLElement;
+    try {
+      const p = el.requestPointerLock({ unadjustedMovement: true }) as unknown as Promise<void> | undefined;
+      p?.catch?.(() => el.requestPointerLock());
+    } catch {
+      el.requestPointerLock();
+    }
+  }
+
+  private mouse(e: MouseEvent): void {
+    if (!this.look.isLocked) return;
+    if (this.settle) {
+      this.settle = false;
+      return;
+    }
+    const mx = e.movementX;
+    const my = e.movementY;
+    if (Math.abs(mx) > SPIKE || Math.abs(my) > SPIKE) return;
+    const k = MOUSE * this.look.pointerSpeed;
+    const eu = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
+    eu.y -= mx * k;
+    if (this.shearOn) {
+      this.shear = THREE.MathUtils.clamp(this.shear - my * k, -MAX_SHEAR, MAX_SHEAR);
+      eu.x = 0;
+    } else {
+      eu.x = THREE.MathUtils.clamp(eu.x - my * k, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
+    }
+    eu.z = 0;
+    this.camera.quaternion.setFromEuler(eu);
   }
 
   /** Put the walker on a floor (after a teleport). */
@@ -96,14 +155,32 @@ export class FirstPerson {
 
   update(dt: number): void {
     this.applyProjection();
+    dt = Math.min(dt, MAX_DT);
     const k = this.keys;
     const f = Number(k.has('KeyW') || k.has('ArrowUp')) - Number(k.has('KeyS') || k.has('ArrowDown'));
     const r = Number(k.has('KeyD') || k.has('ArrowRight')) - Number(k.has('KeyA') || k.has('ArrowLeft'));
     const pos = this.camera.position;
-    if (this.held) return;
+    if (this.held) {
+      this.air = this.vy = 0;
+      return;
+    }
     const floor = (x: number, z: number): number => (this.floorAt ? this.floorAt(x, z, this.level) : 0);
+    if (this.fly) {
+      // Space rises, Ctrl sinks.
+      const up = Number(k.has('Space')) - Number(k.has('ControlLeft') || k.has('ControlRight'));
+      pos.y = Math.max(EYE, pos.y + up * FLY * 0.5 * dt);
+      this.air = this.vy = 0;
+    } else if (this.vy !== 0 || this.air > 0) {
+      // In the air: a ballistic hop over the floor below (it doesn't get you onto things).
+      this.vy -= GRAVITY * dt;
+      this.air += this.vy * dt;
+      if (this.air <= 0) {
+        this.onLand?.(-this.vy);
+        this.air = this.vy = 0;
+      }
+    }
     if (f === 0 && r === 0) {
-      if (!this.fly) pos.y = (this.level = floor(pos.x, pos.z)) + EYE;
+      if (!this.fly) pos.y = (this.level = floor(pos.x, pos.z)) + EYE + this.air;
       return;
     }
     const fwd = new THREE.Vector3();
@@ -119,16 +196,20 @@ export class FirstPerson {
     fwd.normalize();
     const right = new THREE.Vector3().crossVectors(fwd, this.camera.up).normalize();
     const move = fwd.multiplyScalar(f).add(right.multiplyScalar(r)).normalize();
-    const speed = this.fly ? FLY : k.has('ShiftLeft') || k.has('ShiftRight') ? RUN : WALK;
+    const running = k.has('ShiftLeft') || k.has('ShiftRight');
+    const speed = this.fly ? FLY : running ? RUN : WALK;
     const dx = move.x * speed * dt;
     const dz = move.z * speed * dt;
     const level = this.level;
     if (this.fly || !this.blocked(pos.x + dx, pos.z, RADIUS, level)) pos.x += dx;
     if (this.fly || !this.blocked(pos.x, pos.z + dz, RADIUS, level)) pos.z += dz;
-    this.bob += dt * speed * 1.8;
     if (!this.fly) {
+      // A step at each low point of the bob (two per cycle); none in the air.
+      const before = Math.floor(this.bob / Math.PI + 0.5);
+      if (this.air === 0) this.bob += dt * speed * 1.8;
+      if (Math.floor(this.bob / Math.PI + 0.5) !== before) this.onStep?.(running);
       this.level = floor(pos.x, pos.z);
-      pos.y = this.level + EYE + Math.sin(this.bob) * 0.04;
+      pos.y = this.level + EYE + this.air + (this.air === 0 ? Math.sin(this.bob) * 0.04 : 0);
     }
   }
 

@@ -6,7 +6,8 @@ import type { ZoneMap } from './zones';
 /**
  * Fast travel: a map of the district (zones, streets, buildings, named places) with destinations you
  * click to jump to. Destinations are every named spawn node (stamps: the crossing, Bar Kanpai, Yoru Mart,
- * the shrine...) plus one street spot per zone. M opens it, Esc or M closes it.
+ * the shrine...) plus one street spot per zone. M opens it, Esc or M closes it. The map fills the screen;
+ * the wheel zooms about the cursor and dragging pans.
  */
 export interface Destination {
   readonly id: string;
@@ -62,14 +63,25 @@ export function destinations(district: District, nodes: readonly Node3[], zones:
 
 const ZONE_COLORS = ['#ff5fc8', '#4fe3ff', '#ffe45f', '#6bff8a', '#ff9a40', '#b48cff', '#ff4f4f', '#ffffff'];
 
+/** Pixels per metre of the pre-drawn district image (zoomed views sample it). */
+const BASE_RES = 2;
+/** Zoom limits: the whole district fitted, down to this many screen pixels per metre. */
+const MAX_ZOOM = 8;
+
 export class TravelMap {
   readonly root: HTMLDivElement;
   private readonly canvas: HTMLCanvasElement;
-  private readonly scale: number;
-  private readonly ox: number;
-  private readonly oz: number;
+  private readonly list: HTMLDivElement;
   private player: { x: number; z: number; yaw: number } = { x: 0, z: 0, yaw: 0 };
-  private base: ImageData | null = null;
+  /** The district pre-drawn once (roads, open ground, buildings, stamps) at BASE_RES px/m. */
+  private base: HTMLCanvasElement | null = null;
+  /** The view: world point at the canvas centre, and screen pixels (CSS) per metre. */
+  private cx = 0;
+  private cz = 0;
+  private zoom = 1;
+  private fit = 1;
+  private dpr = 1;
+  private drag: { x: number; y: number; cx: number; cz: number; moved: boolean } | null = null;
 
   constructor(
     private readonly district: District,
@@ -77,47 +89,71 @@ export class TravelMap {
     private readonly dests: readonly Destination[],
     private readonly go: (d: Destination) => void,
   ) {
-    const b = district.bounds;
-    const W = 640;
-    const H = 460;
-    const M = 24;
-    this.scale = Math.min((W - 2 * M) / (b.maxX - b.minX), (H - 2 * M) / (b.maxZ - b.minZ));
-    this.ox = M + (W - 2 * M - (b.maxX - b.minX) * this.scale) / 2 - b.minX * this.scale;
-    this.oz = M + (H - 2 * M - (b.maxZ - b.minZ) * this.scale) / 2 - b.minZ * this.scale;
-
     this.root = document.createElement('div');
     this.root.id = 'travel';
     Object.assign(this.root.style, {
-      position: 'fixed', inset: '0', display: 'none', alignItems: 'center', justifyContent: 'center', gap: '16px',
-      background: 'rgba(4, 4, 10, 0.72)', zIndex: '20', font: "13px 'Consolas', monospace", color: '#e8e6f0',
+      position: 'fixed', inset: '0', display: 'none', alignItems: 'stretch', justifyContent: 'center', gap: '12px', padding: '20px',
+      boxSizing: 'border-box', background: 'rgba(4, 4, 10, 0.8)', zIndex: '20', font: "13px 'Consolas', monospace", color: '#e8e6f0',
     } satisfies Partial<CSSStyleDeclaration>);
     this.canvas = document.createElement('canvas');
-    this.canvas.width = W;
-    this.canvas.height = H;
-    Object.assign(this.canvas.style, { border: '1px solid #3a3850', background: '#0c0c14', cursor: 'pointer', maxWidth: '62vw' });
-    this.canvas.addEventListener('click', (e) => {
+    Object.assign(this.canvas.style, { flex: '1 1 auto', minWidth: '0', border: '1px solid #3a3850', background: '#0c0c14', cursor: 'grab' });
+    // Wheel zooms about the cursor; drag pans; a click (without dragging) travels to the nearest destination.
+    this.canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const [wx, wz] = this.toWorld(e.offsetX, e.offsetY);
+      this.zoom = Math.max(this.fit, Math.min(MAX_ZOOM, this.zoom * Math.exp(-e.deltaY * 0.0015)));
+      // Keep the point under the cursor fixed.
       const r = this.canvas.getBoundingClientRect();
-      const px = ((e.clientX - r.left) / r.width) * W;
-      const py = ((e.clientY - r.top) / r.height) * H;
+      this.cx = wx - (e.offsetX - r.width / 2) / this.zoom;
+      this.cz = wz - (e.offsetY - r.height / 2) / this.zoom;
+      this.clamp();
+      this.draw();
+    }, { passive: false });
+    this.canvas.addEventListener('pointerdown', (e) => {
+      this.drag = { x: e.clientX, y: e.clientY, cx: this.cx, cz: this.cz, moved: false };
+      this.canvas.setPointerCapture(e.pointerId);
+      this.canvas.style.cursor = 'grabbing';
+    });
+    this.canvas.addEventListener('pointermove', (e) => {
+      const d = this.drag;
+      if (!d) return;
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      if (Math.hypot(dx, dy) > 4) d.moved = true;
+      if (!d.moved) return;
+      this.cx = d.cx - dx / this.zoom;
+      this.cz = d.cz - dy / this.zoom;
+      this.clamp();
+      this.draw();
+    });
+    this.canvas.addEventListener('pointerup', (e) => {
+      const d = this.drag;
+      this.drag = null;
+      this.canvas.style.cursor = 'grab';
+      if (!d || d.moved) return;
       let best: Destination | null = null;
-      let bestD = 18;
-      for (const d of this.dests) {
-        const dd = Math.hypot(this.sx(d.x) - px, this.sz(d.z) - py);
-        if (dd < bestD) [best, bestD] = [d, dd];
+      let bestD = 16;
+      for (const t of this.dests) {
+        const [sx, sy] = this.toScreen(t.x, t.z);
+        const dd = Math.hypot(sx - e.offsetX, sy - e.offsetY);
+        if (dd < bestD) [best, bestD] = [t, dd];
       }
       if (best) this.go(best);
     });
-    const list = document.createElement('div');
-    Object.assign(list.style, { width: '260px', maxHeight: '460px', overflowY: 'auto', background: '#0c0c14', border: '1px solid #3a3850', padding: '10px 12px' });
+    this.list = document.createElement('div');
+    Object.assign(this.list.style, { flex: '0 0 260px', overflowY: 'auto', background: '#0c0c14', border: '1px solid #3a3850', padding: '10px 12px' });
     const title = document.createElement('div');
     title.textContent = 'FAST TRAVEL  ·  M / Esc to close';
-    Object.assign(title.style, { color: '#ff8ad8', marginBottom: '8px', letterSpacing: '1px' });
-    list.append(title);
+    Object.assign(title.style, { color: '#ff8ad8', marginBottom: '4px', letterSpacing: '1px' });
+    const hint = document.createElement('div');
+    hint.textContent = 'wheel zoom · drag pan · click a dot to go';
+    Object.assign(hint.style, { color: '#8a88a0', marginBottom: '8px' });
+    this.list.append(title, hint);
     for (const group of ['Places', 'Zones'] as const) {
       const h = document.createElement('div');
       h.textContent = group.toUpperCase();
       Object.assign(h.style, { color: '#8a88a0', margin: '10px 0 4px' });
-      list.append(h);
+      this.list.append(h);
       for (const d of this.dests.filter((x) => x.group === group)) {
         const btn = document.createElement('button');
         btn.textContent = d.name;
@@ -125,12 +161,17 @@ export class TravelMap {
         btn.addEventListener('mouseenter', () => (btn.style.borderColor = '#ff8ad8'));
         btn.addEventListener('mouseleave', () => (btn.style.borderColor = '#2e2c44'));
         btn.addEventListener('click', () => this.go(d));
-        list.append(btn);
+        this.list.append(btn);
       }
     }
-    this.root.append(this.canvas, list);
+    this.root.append(this.canvas, this.list);
     // Clicks inside the map must not reach the page (which would grab the mouse for walking).
     this.root.addEventListener('click', (e) => e.stopPropagation());
+    window.addEventListener('resize', () => {
+      if (!this.open) return;
+      this.resize();
+      this.draw();
+    });
     document.body.append(this.root);
   }
 
@@ -138,73 +179,114 @@ export class TravelMap {
     return this.root.style.display !== 'none';
   }
 
+  /** Opens fitted to the whole district. */
   show(x: number, z: number, yaw: number): void {
     this.player = { x, z, yaw };
     this.root.style.display = 'flex';
+    this.resize();
+    const b = this.district.bounds;
+    this.cx = (b.minX + b.maxX) / 2;
+    this.cz = (b.minZ + b.maxZ) / 2;
+    this.zoom = this.fit;
     this.draw();
   }
 
   hide(): void {
     this.root.style.display = 'none';
+    this.drag = null;
   }
 
-  private sx(x: number): number {
-    return this.ox + x * this.scale;
+  /** Canvas backing size from its laid-out size (and the device pixel ratio); the fitted zoom. */
+  private resize(): void {
+    const r = this.canvas.getBoundingClientRect();
+    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.canvas.width = Math.max(1, Math.round(r.width * this.dpr));
+    this.canvas.height = Math.max(1, Math.round(r.height * this.dpr));
+    const b = this.district.bounds;
+    const M = 28;
+    this.fit = Math.min((r.width - 2 * M) / (b.maxX - b.minX), (r.height - 2 * M) / (b.maxZ - b.minZ));
+    this.zoom = Math.max(this.fit, this.zoom);
+    this.clamp();
   }
 
-  private sz(z: number): number {
-    return this.oz + z * this.scale;
+  /** Keeps the district in view. */
+  private clamp(): void {
+    const b = this.district.bounds;
+    this.cx = Math.max(b.minX, Math.min(b.maxX, this.cx));
+    this.cz = Math.max(b.minZ, Math.min(b.maxZ, this.cz));
+  }
+
+  /** CSS pixels on the canvas from world metres, and back. */
+  private toScreen(x: number, z: number): [number, number] {
+    const r = this.canvas.getBoundingClientRect();
+    return [r.width / 2 + (x - this.cx) * this.zoom, r.height / 2 + (z - this.cz) * this.zoom];
+  }
+
+  private toWorld(sx: number, sy: number): [number, number] {
+    const r = this.canvas.getBoundingClientRect();
+    return [this.cx + (sx - r.width / 2) / this.zoom, this.cz + (sy - r.height / 2) / this.zoom];
+  }
+
+  /** The district drawn once at BASE_RES px/m: zone tints, roads, open ground, buildings, stamps. */
+  private drawBase(): HTMLCanvasElement {
+    const b = this.district.bounds;
+    const c = document.createElement('canvas');
+    c.width = Math.ceil((b.maxX - b.minX) * BASE_RES);
+    c.height = Math.ceil((b.maxZ - b.minZ) * BASE_RES);
+    const g = c.getContext('2d')!;
+    g.setTransform(BASE_RES, 0, 0, BASE_RES, -b.minX * BASE_RES, -b.minZ * BASE_RES);
+    const zoneColor = new Map(this.zones.zones.map((z, i) => [z, ZONE_COLORS[i % ZONE_COLORS.length]]));
+    for (const [mx, my] of this.district.cells) {
+      const z = this.zones.at(mx, my);
+      g.fillStyle = z ? `${zoneColor.get(z)}22` : '#ffffff10';
+      g.fillRect(mx * CELL, my * CELL, CELL, CELL);
+    }
+    for (const [mx, my] of this.district.cells) {
+      const p = this.district.plan(mx, my);
+      if (!p) continue;
+      g.fillStyle = '#2c2c3a';
+      for (const r of p.roads) g.fillRect(r.rect.x, r.rect.y, r.rect.w, r.rect.h);
+      // Open ground: parks and playgrounds green, plazas paved, car parks and vacant lots dark.
+      for (const o of p.open) {
+        g.fillStyle = o.kind === 'park' || o.kind === 'playground' ? '#1f4a2c' : o.kind === 'plaza' ? '#3a3a48' : '#1a1a24';
+        g.fillRect(o.rect.x, o.rect.y, o.rect.w, o.rect.h);
+      }
+      g.fillStyle = '#4a4860';
+      for (const q of p.buildings) g.fillRect(q.x - q.w / 2, q.z - q.d / 2, q.w, q.d);
+    }
+    g.fillStyle = '#ffd070';
+    for (const p of this.district.placed) g.fillRect(p.rect.x, p.rect.y, p.rect.w, p.rect.h);
+    return c;
   }
 
   private draw(): void {
     const g = this.canvas.getContext('2d')!;
-    const k = this.scale;
-    if (!this.base) {
-      g.fillStyle = '#0c0c14';
-      g.fillRect(0, 0, this.canvas.width, this.canvas.height);
-      const zoneColor = new Map(this.zones.zones.map((z, i) => [z, ZONE_COLORS[i % ZONE_COLORS.length]]));
-      for (const [mx, my] of this.district.cells) {
-        const z = this.zones.at(mx, my);
-        g.fillStyle = z ? `${zoneColor.get(z)}22` : '#ffffff10';
-        g.fillRect(this.sx(mx * CELL), this.sz(my * CELL), CELL * k, CELL * k);
-      }
-      for (const [mx, my] of this.district.cells) {
-        const p = this.district.plan(mx, my);
-        if (!p) continue;
-        g.fillStyle = '#2c2c3a';
-        for (const r of p.roads) g.fillRect(this.sx(r.rect.x), this.sz(r.rect.y), r.rect.w * k, r.rect.h * k);
-        // Open ground: parks and playgrounds green, plazas paved, car parks and vacant lots dark.
-        for (const o of p.open) {
-          g.fillStyle = o.kind === 'park' || o.kind === 'playground' ? '#1f4a2c' : o.kind === 'plaza' ? '#3a3a48' : '#1a1a24';
-          g.fillRect(this.sx(o.rect.x), this.sz(o.rect.y), o.rect.w * k, o.rect.h * k);
-        }
-        g.fillStyle = '#4a4860';
-        for (const b of p.buildings) g.fillRect(this.sx(b.x - b.w / 2), this.sz(b.z - b.d / 2), b.w * k, b.d * k);
-      }
-      for (const p of this.district.placed) {
-        g.fillStyle = '#ffd070';
-        g.fillRect(this.sx(p.rect.x), this.sz(p.rect.y), p.rect.w * k, p.rect.h * k);
-      }
-      // Zone names at the middle of their cells.
-      g.font = "bold 12px 'Consolas', monospace";
-      g.textAlign = 'center';
-      for (const [z, color] of zoneColor) {
-        const cells = this.district.cells.filter(([mx, my]) => this.zones.at(mx, my) === z);
-        const cx = (cells.reduce((t, [mx]) => t + mx, 0) / cells.length + 0.5) * CELL;
-        const cz = (cells.reduce((t, [, my]) => t + my, 0) / cells.length + 0.5) * CELL;
-        g.fillStyle = color;
-        g.fillText(z.name.toUpperCase(), this.sx(cx), this.sz(cz) - 14);
-      }
-      this.base = g.getImageData(0, 0, this.canvas.width, this.canvas.height);
-    } else {
-      g.putImageData(this.base, 0, 0);
+    const r = this.canvas.getBoundingClientRect();
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    g.fillStyle = '#0c0c14';
+    g.fillRect(0, 0, r.width, r.height);
+    this.base ??= this.drawBase();
+    const b = this.district.bounds;
+    const [x0, y0] = this.toScreen(b.minX, b.minZ);
+    g.imageSmoothingEnabled = this.zoom < BASE_RES * 1.5;
+    g.drawImage(this.base, x0, y0, (b.maxX - b.minX) * this.zoom, (b.maxZ - b.minZ) * this.zoom);
+    // Zone names at the middle of their cells, then destinations and the player, at screen size.
+    const zoneColor = new Map(this.zones.zones.map((z, i) => [z, ZONE_COLORS[i % ZONE_COLORS.length]]));
+    g.font = "bold 13px 'Consolas', monospace";
+    g.textAlign = 'center';
+    for (const [z, color] of zoneColor) {
+      const cells = this.district.cells.filter(([mx, my]) => this.zones.at(mx, my) === z);
+      if (!cells.length) continue;
+      const cx = (cells.reduce((t, [mx]) => t + mx, 0) / cells.length + 0.5) * CELL;
+      const cz = (cells.reduce((t, [, my]) => t + my, 0) / cells.length + 0.5) * CELL;
+      const [sx, sy] = this.toScreen(cx, cz);
+      g.fillStyle = color;
+      g.fillText(z.name.toUpperCase(), sx, sy - 16);
     }
-    // Destinations and the player.
     g.font = "12px 'Consolas', monospace";
     g.textAlign = 'left';
     for (const d of this.dests) {
-      const x = this.sx(d.x);
-      const y = this.sz(d.z);
+      const [x, y] = this.toScreen(d.x, d.z);
       g.fillStyle = d.group === 'Places' ? '#ff8ad8' : '#4fe3ff';
       g.beginPath();
       g.arc(x, y, 5, 0, Math.PI * 2);
@@ -220,13 +302,12 @@ export class TravelMap {
     // Camera yaw: 0 looks north (-z), positive turns to the west.
     const fx = -Math.sin(a);
     const fz = -Math.cos(a);
-    const px = this.sx(x);
-    const pz = this.sz(z);
+    const [px, pz] = this.toScreen(x, z);
     g.fillStyle = '#ffffff';
     g.beginPath();
-    g.moveTo(px + fx * 10, pz + fz * 10);
-    g.lineTo(px - fz * 5 - fx * 4, pz + fx * 5 - fz * 4);
-    g.lineTo(px + fz * 5 - fx * 4, pz - fx * 5 - fz * 4);
+    g.moveTo(px + fx * 11, pz + fz * 11);
+    g.lineTo(px - fz * 6 - fx * 5, pz + fx * 6 - fz * 5);
+    g.lineTo(px + fz * 6 - fx * 5, pz - fx * 6 - fz * 5);
     g.closePath();
     g.fill();
   }

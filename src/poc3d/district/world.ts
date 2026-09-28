@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import type { Lightmap } from '../real/lightmap';
+import { KIND } from '../real/meshBuilder';
 import { propBlocked, type Prop } from '../real/props';
 import { rawBytes, rawTriangles, toGeometry } from '../real/rawGeometry';
 import type { SignAtlas } from '../real/signs';
@@ -216,6 +217,31 @@ export class District {
       if (p.stamp.name && x >= r.x && x <= r.x + r.w && z >= r.y && z <= r.y + r.h) return p.stamp.name;
     }
     return null;
+  }
+
+  /**
+   * What's underfoot at a world position (for footsteps): lawn, earth and gravel (parks, playgrounds,
+   * vacant lots, the shrine precinct), or hard ground (roads, pavements, paving, floors).
+   */
+  surfaceAt(x: number, z: number, floor = 0): 'hard' | 'grass' | 'gravel' {
+    if (Math.abs(floor) > 0.5) return 'hard';
+    for (const p of this.model.placed) {
+      const r = p.rect;
+      if (p.stamp.landmark === 'shrine' && x >= r.x && x <= r.x + r.w && z >= r.y && z <= r.y + r.h) return 'gravel';
+    }
+    const d = this.model.detail(Math.floor(x / CELL), Math.floor(z / CELL));
+    let top = -1;
+    let kind: number = KIND.asphalt;
+    for (const o of d?.open ?? []) {
+      for (const g of o.ground) {
+        const r = g.rect;
+        if (g.top > top && x >= r.x && x <= r.x + r.w && z >= r.y && z <= r.y + r.h) {
+          top = g.top;
+          kind = g.kind;
+        }
+      }
+    }
+    return kind === KIND.grass ? 'grass' : kind === KIND.gravel ? 'gravel' : 'hard';
   }
 
   get cells(): readonly (readonly [number, number])[] {

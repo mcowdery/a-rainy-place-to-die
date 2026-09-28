@@ -1,7 +1,8 @@
 /**
  * The city's sound, in WebAudio: rain, wind, thunder and wet tyres. Everything is synthesized from noise
  * so it works with no files, but a recording dropped into assets/audio/ replaces its synthesized part
- * (see assets/audio/README.md): rain_loop, rain_roof_loop, wind_loop, tyre_hiss (loops) and thunder_1..n.
+ * (see assets/audio/README.md): rain_loop, rain_roof_loop, wind_loop, tyre_hiss (loops), thunder_1..n and
+ * step_<hard|grass|gravel>_1..n (footsteps; a splash joins in on wet ground).
  *
  * - Rain: a bed of filtered noise (a distant hiss and a nearer body) whose level and brightness follow
  *   the rain, plus close patter (short random clicks, panned). Under a roof the bed is low-passed and a
@@ -51,6 +52,7 @@ export class CityAudio {
   private clicks: AudioBuffer[] = [];
   private buffers = new Map<string, AudioBuffer>();
   private thunderBuffers: AudioBuffer[] = [];
+  private stepBuffers = new Map<string, AudioBuffer[]>();
   // Rain bed.
   private bedGain!: GainNode;
   private bedHiss!: BiquadFilterNode;
@@ -217,6 +219,15 @@ export class CityAudio {
       const b = await load(url);
       if (b) this.thunderBuffers.push(b);
     }
+    for (const surface of ['hard', 'grass', 'gravel']) {
+      const list: AudioBuffer[] = [];
+      for (const [k, url] of Object.entries(recordings)) {
+        if (!new RegExp(`/step_${surface}_\\d+\\.\\w+$`).test(k)) continue;
+        const b = await load(url);
+        if (b) list.push(b);
+      }
+      if (list.length) this.stepBuffers.set(surface, list);
+    }
     // Swap in: a recorded rain bed replaces both noise layers; wind and tyres replace their noise sources.
     const rain = this.buffers.get('rain_loop');
     if (rain) {
@@ -271,6 +282,89 @@ export class CityAudio {
     o.connect(g).connect(p).connect(this.master);
     o.start(t);
     o.stop(t + 0.14);
+  }
+
+  /**
+   * A footstep (or a landing, land > 0: the fall speed in m/s). Hard ground is a heel-toe scuff with a
+   * soft thump; grass a dull brush; gravel a crunch of small grains; on wet ground a splash joins in.
+   * Indoors (enclosed) it's closer and duller. Recordings step_<surface>_1..n replace the synthesis.
+   */
+  step(surface: 'hard' | 'grass' | 'gravel', o: { run: boolean; wet: number; cover: 'open' | 'roof' | 'enclosed'; volume: number; land?: number }): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const land = o.land ?? 0;
+    const level = o.volume * (o.run ? 0.42 : 0.3) * (land > 0 ? 1.4 + Math.min(1, land / 6) : 1) * (0.85 + Math.random() * 0.3);
+    const out = ctx.createGain();
+    out.gain.value = level;
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = (Math.random() - 0.5) * 0.25;
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = o.cover === 'enclosed' ? 3200 : 9000;
+    out.connect(tone).connect(pan).connect(this.master);
+    const files = this.stepBuffers.get(surface);
+    if (files?.length) {
+      const s = ctx.createBufferSource();
+      s.buffer = files[Math.floor(Math.random() * files.length)];
+      s.playbackRate.value = 0.92 + Math.random() * 0.16;
+      s.connect(out);
+      s.start(t);
+    } else {
+      // Noise through a band, with an envelope: a grain of the step.
+      const burst = (at: number, f: number, q: number, peak: number, len: number, type: BiquadFilterType = 'bandpass'): void => {
+        const s = ctx.createBufferSource();
+        s.buffer = this.noise;
+        const b = ctx.createBiquadFilter();
+        b.type = type;
+        b.frequency.value = f;
+        b.Q.value = q;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, at);
+        g.gain.linearRampToValueAtTime(peak, at + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+        s.connect(b).connect(g).connect(out);
+        s.start(at, Math.random() * 3);
+        s.stop(at + len + 0.02);
+      };
+      // The body of the step: a short low thump.
+      const o1 = ctx.createOscillator();
+      o1.frequency.setValueAtTime(land > 0 ? 70 : 95, t);
+      o1.frequency.exponentialRampToValueAtTime(40, t + 0.08);
+      const g1 = ctx.createGain();
+      g1.gain.setValueAtTime(0, t);
+      g1.gain.linearRampToValueAtTime(surface === 'hard' ? 0.5 : 0.35, t + 0.005);
+      g1.gain.exponentialRampToValueAtTime(0.0001, t + (land > 0 ? 0.16 : 0.09));
+      o1.connect(g1).connect(out);
+      o1.start(t);
+      o1.stop(t + 0.2);
+      if (surface === 'hard') {
+        // Heel, then toe.
+        burst(t, 2400 + Math.random() * 900, 1.2, 0.9, 0.045);
+        burst(t + (o.run ? 0.03 : 0.05), 3200 + Math.random() * 900, 1.4, 0.5, 0.035);
+      } else if (surface === 'grass') {
+        burst(t, 700 + Math.random() * 300, 0.6, 0.6, 0.12, 'lowpass');
+        burst(t + 0.03, 1800, 0.8, 0.25, 0.08);
+      } else {
+        for (let i = 0; i < 7; i++) burst(t + Math.random() * 0.08, 3000 + Math.random() * 3000, 3, 0.35 + Math.random() * 0.3, 0.012 + Math.random() * 0.012);
+        burst(t, 900, 0.7, 0.3, 0.09);
+      }
+    }
+    if (o.wet > 0.3 && o.cover === 'open' && surface !== 'grass') {
+      // A splash: bright noise with a little tail.
+      const s = ctx.createBufferSource();
+      s.buffer = this.noise;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 1600;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t + 0.01);
+      g.gain.linearRampToValueAtTime(0.5 * Math.min(1, o.wet), t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      s.connect(hp).connect(g).connect(out);
+      s.start(t + 0.01, Math.random() * 3);
+      s.stop(t + 0.2);
+    }
   }
 
   /** Thunder for a strike `distance` metres away; pan -1 (left) to 1 (right) from where the listener looks. */

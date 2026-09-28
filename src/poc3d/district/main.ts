@@ -49,7 +49,7 @@ import { District } from './world';
  * Kaburo (Neon Core), generated at full scale from the L0 map and streamed in chunks, rendered
  * realistically with an ASCII overlay for mood (see real/overlay.ts).
  * URL: ?time=night|day|dusk|dawn &weather=clear|rain|fog &cam=x,y,z,yaw,pitch &spawn=<node id> &ascii=vibe|heavy|ascii|off &grade=neutral|nocturne|noir|citypop &bench=1
- * Keys: WASD/mouse, Shift run, E interact, M map / fast travel, T time, R weather, F fly, V overlay (1-4 direct), G dither,
+ * Keys: WASD/mouse, Shift run, Space jump (up in fly, Ctrl down), E interact, M map / fast travel, T time, R weather, F fly, V overlay (1-4 direct), G dither,
  * B bloom, P look mode.
  */
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -272,6 +272,14 @@ async function run(): Promise<void> {
   controls.setShearMode(false);
   controls.fly = params.get('fly') === '1';
   controls.floorAt = district.floorAt;
+  // Footsteps and landings, by what's underfoot, wet or not, and under cover (set each frame below).
+  let stepCover: 'open' | 'roof' | 'enclosed' = 'open';
+  const stepSound = (run: boolean, land?: number): void => {
+    const p = camera.position;
+    audio.step(district.surfaceAt(p.x, p.z, p.y - 1.7), { run, wet: cityU.uWet.value, cover: stepCover, volume: mood.volume, land });
+  };
+  controls.onStep = (run) => stepSound(run);
+  controls.onLand = (speed) => stepSound(false, speed);
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
   const YAW: Record<string, number> = { north: 0, south: 180, east: -90, west: 90 };
   const teleport = (id: string): void => {
@@ -293,7 +301,7 @@ async function run(): Promise<void> {
     controls.setLevel(level);
     controls.setView(d.yaw, d.pitch);
     travel.hide();
-    controls.look.lock();
+    controls.lock();
   });
   if (params.get('diag') === '1') Object.assign(window, { __renderer: renderer, __dof: dof, __audio: audio, __city: cityU, __traffic: traffic, __strike: () => {
     const d = camera.getWorldDirection(new THREE.Vector3());
@@ -557,7 +565,7 @@ async function run(): Promise<void> {
   });
   document.body.addEventListener('click', () => {
     audio.start();
-    if (!bench && !inVn && !travel.open && !panel.open) controls.look.lock();
+    if (!bench && !inVn && !travel.open && !panel.open) controls.lock();
   });
   controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
   controls.look.addEventListener('unlock', () => ($('overlay').hidden = bench));
@@ -686,6 +694,7 @@ async function run(): Promise<void> {
     fitFog();
     // Sound follows the same weather: what's overhead, the wind, the nearest cars.
     const cover = trains?.riding ? 'enclosed' : district.shelterAt(cp.x, cp.z, cp.y)?.enclosed ? 'enclosed' : inside ? 'roof' : 'open';
+    stepCover = cover;
     audio.update({
       dt,
       rain: rainAmount,
@@ -753,7 +762,7 @@ async function run(): Promise<void> {
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t ? `[E] ${t.kind === 'door' ? 'Enter' : t.kind === 'station' ? (isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : ' ',
-        'click to look · WASD · Shift run · E interact · M map / fast travel · T time · R weather · K weather & light panel · C grade · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
+        'click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · M map / fast travel · T time · R weather · K weather & light panel · C grade · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
       ].join('\n');
       builtThisWindow = 0;
     }

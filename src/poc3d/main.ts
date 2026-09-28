@@ -107,7 +107,7 @@ window.addEventListener('keydown', (e) => {
     shader.setCell(cellW, Math.round(cellW * 1.75));
   }
 });
-document.body.addEventListener('click', () => !bench && controls.look.lock());
+document.body.addEventListener('click', () => !bench && controls.lock());
 controls.look.addEventListener('lock', () => (overlay.hidden = true));
 controls.look.addEventListener('unlock', () => (overlay.hidden = bench));
 
