@@ -505,14 +505,31 @@ const surface = /* glsl */ `
     } else if (kindF < 9.5) {
       albedo = vColor.rgb * (0.65 + 0.35 * smoothstep(0.15, 0.7, mix(0.5, gn2, fine)));
       sRough = 0.7;
-    } else {
+    } else if (kindF < 10.5) {
       albedo = vColor.rgb * (0.78 + 0.4 * gn);
       sRough = 0.9;
+    } else if (kindF < 11.5) {
+      // Grass: patchy lawn, blades up close.
+      float blades = mix(0.5, h2(floor(p * 9.0)), fine);
+      albedo = vColor.rgb * (0.7 + 0.45 * gn) * (0.8 + 0.4 * blades) * mix(vec3(1.0), vec3(1.15, 1.05, 0.7), smoothstep(0.55, 0.8, vnoise(p * 0.12)));
+      sRough = 0.97;
+    } else if (kindF < 12.5) {
+      // Earth and gravel: speckled stones on packed ground.
+      float stones = step(0.72, h2(floor(p * 14.0))) * fine;
+      albedo = vColor.rgb * (0.8 + 0.3 * gn) * (1.0 + 0.35 * stones);
+      sRough = 0.95;
+    } else {
+      // Water: near black, reflecting the sky by Fresnel.
+      float F = fresnel(clamp(-Vw.y, 0.0, 1.0));
+      albedo = vColor.rgb * 0.3;
+      sRough = 0.06;
+      sEmit += skyRefl(reflect(Vw, vec3(0.0, 1.0, 0.0))) * mix(0.04, 0.9, F);
     }
-    if (uWet > 0.0) {
-      // Puddles form once the ground is wet through (the same noise as ssr.ts, which reflects in them).
+    if (uWet > 0.0 && kindF < 12.5) {
+      // Puddles form once the ground is wet through (the same noise as ssr.ts, which reflects in them);
+      // lawns soak most of it up.
       float pn = vnoise(p * 0.22) + 0.12 * vnoise(p * 1.9);
-      float puddle = smoothstep(0.62, 0.68, pn) * smoothstep(0.35, 0.9, uWet);
+      float puddle = smoothstep(0.62, 0.68, pn) * smoothstep(0.35, 0.9, uWet) * (kindF > 10.5 && kindF < 11.5 ? 0.25 : 1.0);
       float wet = uWet * mix(0.6, 1.0, puddle);
       albedo *= mix(1.0, 0.4, wet) * mix(1.0, 0.25, puddle);
       sRough = mix(mix(sRough, 0.14, wet), 0.02, puddle);

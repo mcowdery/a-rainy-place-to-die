@@ -1,12 +1,13 @@
 # Kaburo's zones (format: src/poc3d/district/zones.ts). One letter per 128 m L0 cell, from origin [26, 9],
 # the district's north-west cell. Loosely after Kabukicho: the crossing and the mega-sign at the south
 # centre facing the station side, the love hotels of the Love District to the north-east, host clubs between them,
-# the old back alleys to the north-west, and a lane of food and music west of the crossing.
+# the old back alleys to the north-west, and a lane of food and music west of the crossing. Kaburo Park
+# (after Okubo Park) takes half a cell north of the crossing, between the back alleys and host street.
 district: neon
 origin: [26, 9]
 map:
   - AAHHLL
-  - AAMHLL
+  - AAPHLL
   - MMCCCH
   - SSSCCS
 
@@ -15,6 +16,11 @@ zones:
     id: crossing
     name: Kaburo Crossing
     plan:
+      open: { parking: 0.03 }
+      setback: [0.5, 2]
+      streetTrees: 0.6
+      hedges: 0.5
+      pots: 0.05
       floors: [[5, 10, 50], [12, 22, 42], [25, 32, 8]]
       lotW: [9, 16]
       localStreet: [6, 9]
@@ -36,6 +42,9 @@ zones:
     id: host_street
     name: Host Street
     plan:
+      open: { parking: 0.04, vacant: 0.02 }
+      streetTrees: 0.3
+      pots: 0.1
       floors: [[5, 9, 55], [10, 16, 45]]
       lotW: [6, 10]
       localStreet: [5, 7]
@@ -56,6 +65,9 @@ zones:
     id: love_district
     name: Love District
     plan:
+      open: { parking: 0.08, vacant: 0.02 }
+      streetTrees: 0.3
+      pots: 0.2
       floors: [[3, 6, 55], [7, 10, 45]]
       lotW: [10, 18]
       localStreet: [4, 6]
@@ -78,6 +90,11 @@ zones:
     id: back_alleys
     name: Back Alleys
     plan:
+      open: { parking: 0.07, vacant: 0.04, playground: 0.02 }
+      rear: [0.3, 1.5]
+      setback: [0.2, 0.8]
+      streetTrees: 0.2
+      pots: 0.45
       floors: [[2, 4, 70], [5, 7, 30]]
       lotW: [4, 7]
       localStreet: [2.5, 4]
@@ -101,6 +118,9 @@ zones:
     id: food_lane
     name: Music & Food Lane
     plan:
+      open: { parking: 0.05, vacant: 0.02 }
+      streetTrees: 0.4
+      pots: 0.35
       floors: [[3, 7, 80], [8, 12, 20]]
       lotW: [5, 9]
       localStreet: [4, 6]
@@ -122,6 +142,10 @@ zones:
     id: station_edge
     name: Station Edge
     plan:
+      open: { parking: 0.08 }
+      streetTrees: 0.5
+      hedges: 0.4
+      pots: 0.08
       floors: [[6, 12, 60], [14, 24, 40]]
       lotW: [10, 18]
       localStreet: [5, 8]
@@ -136,4 +160,29 @@ zones:
       windows: { ribbon: 40, curtain: 25, punched: 25, balcony: 10 }
       walls: ['#8e8d88', '#7c7b77', '#d8d5cc', '#a3b3ba', '#2e3b45']
       shops: { cool: 6, warm: 3, colourful: 1 }
+      open: 0.9
+
+  P:
+    id: kaburo_park
+    name: Kaburo Park
+    plan:
+      park: 0.5
+      floors: [[3, 7, 70], [8, 12, 30]]
+      lotW: [5, 10]
+      localStreet: [4, 6]
+      lotGap: 0.12
+      signChance: 0.9
+      verticalSign: 0.6
+      open: { parking: 0.05, playground: 0.02 }
+      streetTrees: 0.7
+      pots: 0.3
+    signs:
+      words: [喫茶, ラーメン, 居酒屋, BAR, 公園前, カラオケ, 定食, 酒場, スナック, LIVE]
+      colors: ['#ffe45f', '#ff4f4f', '#ffb040', '#4fe3ff', '#ffffff']
+    ads: { food: 3, fun: 3, street: 2, mainstream: 1 }
+    look:
+      windows: { punched: 45, small: 25, ribbon: 20, balcony: 10 }
+      walls: ['#b8a88c', '#c2b49a', '#a89878', '#7c604c', '#d8d5cc']
+      tiled: true
+      shops: { warm: 6, colourful: 2, bar: 2 }
       open: 0.9

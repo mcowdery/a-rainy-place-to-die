@@ -57,7 +57,7 @@ export class ChunkBuilder {
     // Landmarks keep their footprint (collision, prop clearance) but are built on the main thread.
     const buildings = m.massed(mx, my);
     if (stage === 'base') {
-      addGround(this.mb.reset(), plan, m.plazas(mx, my), m.scrambles(mx, my), m.holes(mx, my));
+      addGround(this.mb.reset(), plan, m.plazas(mx, my), m.scrambles(mx, my), m.holes(mx, my), m.detail(mx, my)!.open);
       const base = this.mb.raw(cx, cz);
       const mb = this.mb.reset();
       for (const b of buildings) addBuilding(mb, b, false);

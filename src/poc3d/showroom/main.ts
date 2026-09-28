@@ -15,6 +15,8 @@ import { Lightmap, paintLights, type Light } from '../real/lightmap';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { buildMegaSign } from '../real/megaSign';
 import { trainModel } from '../real/rail';
+import { addProps, type Prop } from '../real/props';
+import { addTree, type TreeSpecies } from '../models/trees';
 import { TAXI_ADS } from '../models/ads';
 import { SignAtlas, SignBuilder, signBox, signMaterial } from '../real/signs';
 import { BILLBOARDS, DISTRICT_BLANK, districtAdUv, POSTERS } from '../real/districtAds';
@@ -263,6 +265,73 @@ cityU.uLightRect.value = showLightmap.uniformRect;
   genItems.new.push({ name: 'dragon head', group: 'Mega-sign', at: head, size: 14, view: new THREE.Vector3(-0.35, 0.1, 1).normalize() });
   genItems.new.push({ name: 'from the crossing', group: 'Mega-sign', at: new THREE.Vector3(at.x - 4, 34, at.z + 4), size: 70, view: new THREE.Vector3(-1, -0.62, 1.1).normalize() });
 }
+// Trees (models/trees.ts, under review) on a lawn, and the street and park furniture the district uses
+// (real/dressing.ts) on paving beside them.
+const TREE_NAMES: Record<TreeSpecies, string> = {
+  zelkova: 'zelkova 欅', ginkgo: 'ginkgo 銀杏', ginkgoGold: 'ginkgo (autumn)', sakura: 'sakura 桜', sakuraBloom: 'sakura (in bloom)',
+  pine: 'black pine 黒松', camphor: 'camphor 楠', dogwood: 'dogwood 花水木', dogwoodBloom: 'dogwood (in flower)', azalea: 'azalea 躑躅', box: 'clipped box',
+};
+const TREE_ROWS: [number, TreeSpecies[], number][] = [
+  [70, ['zelkova', 'ginkgo', 'ginkgoGold', 'sakura', 'sakuraBloom', 'camphor'], 11],
+  [86, ['pine', 'dogwood', 'dogwoodBloom', 'azalea', 'box'], 8],
+];
+const GARDEN_X = -8;
+{
+  const pad = new MeshBuilder();
+  pad.kind = KIND.grass;
+  pad.color = lin(0x3e5a30);
+  pad.box(GARDEN_X + 30, 80, -0.2, 0.1, 76, 30, KIND.grass);
+  pad.kind = KIND.plain;
+  pad.color = lin(0x8a867e);
+  pad.box(GARDEN_X + 30, 102, -0.2, 0.15, 76, 14, KIND.sidewalk);
+  genRoot.new.add(new THREE.Mesh(pad.build()!, city));
+  const trees = new MeshBuilder(1 << 16);
+  for (const [z, species, dx] of TREE_ROWS) {
+    species.forEach((sp, i) => {
+      const x = GARDEN_X + i * dx;
+      addTree(trees, { x, z, species: sp, seed: i });
+      const big = sp !== 'azalea' && sp !== 'box';
+      label('new', TREE_NAMES[sp], x, big ? (sp === 'camphor' ? 11.5 : 10) : 1.8, z);
+      genItems.new.push({ name: TREE_NAMES[sp], group: 'Trees', at: new THREE.Vector3(x, big ? 4.5 : 0.6, z), size: big ? 11 : 2.5, view: new THREE.Vector3(0.2, 0.25, 1).normalize() });
+    });
+  }
+  genItems.new.push({ name: 'all trees', group: 'Trees', at: new THREE.Vector3(GARDEN_X + 26, 4, 78), size: 60, view: new THREE.Vector3(0.1, 0.35, 1).normalize() });
+  const treeMesh = new THREE.Mesh(trees.build()!, city);
+  treeMesh.castShadow = treeMesh.receiveShadow = true;
+  genRoot.new.add(treeMesh);
+  // Furniture, left to right along the paving (facing +z, toward the camera).
+  const furn = new MeshBuilder(1 << 15);
+  const P = (kind: Prop['kind'], x: number, extra: Partial<Prop> = {}): Prop => ({ kind, x, z: 102, nx: 0, nz: 1, radius: 0.3, variant: 0, ...extra });
+  const sample: [string, Prop][] = [
+    ['kerb hedge', P('hedge', GARDEN_X, { half: 2.5 })],
+    ['park hedge', P('hedge', GARDEN_X + 6, { half: 2, variant: 1 })],
+    ['potted plants', P('pots', GARDEN_X + 10, { half: 1.1, variant: 7 })],
+    ['planter', P('planter', GARDEN_X + 14, { size: 2.4, variant: 2 })],
+    ['bench', P('bench', GARDEN_X + 18, { half: 0.8 })],
+    ['park lamp', P('postlamp', GARDEN_X + 21)],
+    ['car park lamp', P('postlamp', GARDEN_X + 23, { variant: 1 })],
+    ['playground fence', P('fence', GARDEN_X + 27, { half: 1.8, variant: 1 })],
+    ['post & chain', P('fence', GARDEN_X + 32, { half: 1.8, variant: 2 })],
+    ['pay machine', P('paymachine', GARDEN_X + 35.5)],
+    ['P sign', P('psign', GARDEN_X + 37.5)],
+    ['wheel stop', P('wheelstop', GARDEN_X + 39.5, { half: 0.6 })],
+    ['swing', P('swing', GARDEN_X + 43, { half: 1.6 })],
+    ['slide', P('slide', GARDEN_X + 48, { variant: 1 })],
+    ['sandbox', P('sandbox', GARDEN_X + 52, { radius: 1.5 })],
+    ['toilet block', P('toilet', GARDEN_X + 58)],
+    ['weeds', P('weeds', GARDEN_X + 62, { size: 1.2, variant: 4 })],
+    ['for-sale board', P('board', GARDEN_X + 64.5, { half: 0.6 })],
+    ['cones', P('cones', GARDEN_X + 67, { variant: 2 })],
+  ];
+  addProps(furn, { props: sample.map(([, p]) => p), wires: [], lights: [], open: [], solids: [] });
+  for (const [name, p] of sample) {
+    label('new', name, p.x, 3.2, p.z);
+    genItems.new.push({ name, group: 'Street & park', at: new THREE.Vector3(p.x, 1, p.z), size: 4, view: new THREE.Vector3(0.3, 0.3, 1).normalize() });
+  }
+  const furnMesh = new THREE.Mesh(furn.build()!, city);
+  furnMesh.castShadow = furnMesh.receiveShadow = true;
+  genRoot.new.add(furnMesh);
+}
 const tCars = performance.now() - t0;
 
 const ghostCache = new Map<number, ReturnType<typeof ghostMaterials2>>();
@@ -360,6 +429,25 @@ for (const [ri, row] of carRows.entries()) {
 const cars = new THREE.Mesh(carMb.build()!, city);
 cars.castShadow = cars.receiveShadow = true;
 genRoot.previous.add(cars);
+// The district's one street tree (real/props.ts), where the new species stand.
+{
+  const pad = new MeshBuilder();
+  pad.kind = KIND.grass;
+  pad.color = lin(0x3e5a30);
+  pad.box(GARDEN_X + 30, 80, -0.2, 0.1, 76, 30, KIND.grass);
+  genRoot.previous.add(new THREE.Mesh(pad.build()!, city));
+  const mb = new MeshBuilder();
+  const props: Prop[] = [0, 1, 2, 3].map((i) => ({ kind: 'tree', x: GARDEN_X + i * 11, z: 70, nx: 0, nz: 1, radius: 0.3, variant: i * 3, size: [1, 1.3, 0.8, 1][i], grate: i !== 1 }));
+  addProps(mb, { props, wires: [], lights: [], open: [], solids: [] });
+  const m = new THREE.Mesh(mb.build()!, city);
+  m.castShadow = m.receiveShadow = true;
+  genRoot.previous.add(m);
+  props.forEach((p, i) => {
+    const name = ['street tree', 'park tree (1.3x)', 'narrow-pavement tree (0.8x)', 'street tree (variant)'][i];
+    label('previous', name, p.x, 9, p.z);
+    genItems.previous.push({ name, group: 'Trees', at: new THREE.Vector3(p.x, 4, p.z), size: 11, view: new THREE.Vector3(0.2, 0.25, 1).normalize() });
+  });
+}
 const BODIES: Body[] = ['man', 'woman', 'child', 'elder'];
 const POSES: Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold'];
 const px0 = -((POSES.length - 1) * DX) / 2;

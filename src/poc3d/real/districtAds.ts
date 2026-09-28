@@ -1,9 +1,9 @@
 import { hash, rng } from '../../core/hash';
-import type { Building3, Sign3 } from '../district/plan';
+import { frontSpan, type Building3, type Sign3 } from '../district/plan';
 import { DISTRICT_ADS } from '../models/ads';
-import { FH, frontFrame, GF, styleFor, tiers, WIN } from './buildings';
+import { FH, frontFrame, GF, styleFor, tierFront, tiers, WIN } from './buildings';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
-import type { Prop } from './props';
+import { propDist, type Prop } from './props';
 import { ALWAYS_SEEN, type Sightline } from './sightline';
 import { hasRooftopLetters, signBox, type SignBuilder } from './signs';
 
@@ -126,6 +126,8 @@ export function addDistrictAds(
     if (b.hue !== undefined) continue; // stamps are hand-dressed
     const rnd = rng(hash(b.id, 0xad5));
     const f = frontFrame(b);
+    // The part of the street face clear of a corner cut.
+    const [s0, s1] = frontSpan(b);
     const billboard = pickAd(BILLBOARDS, b, 1);
     const poster = pickAd(POSTERS, b, 2);
     // Billboards only where they can be seen from the street (a junction, a square, a street running away
@@ -137,14 +139,16 @@ export function addDistrictAds(
 
     if (rooftop && billboard) {
       const ts = tiers(b);
-      const [tw, td, , topY] = ts[ts.length - 1];
-      const top = topY + styleFor(b).parapet;
-      const fwTop = b.front === 'north' || b.front === 'south' ? tw : td;
-      const inset = (b.front === 'north' || b.front === 'south' ? b.d - td : b.w - tw) / 2 + 1.0;
-      const W = Math.min(14, fwTop * 0.85);
+      const tt = ts[ts.length - 1];
+      const top = tt[3] + styleFor(b).parapet;
+      const tf = tierFront(b, tt);
+      const inset = tf.inset + 1.0;
+      // Centred on the face, clear of a corner cut when the top is the cut tier.
+      const mid = ts.length === 1 ? (s0 + s1) / 2 : f.fw / 2;
+      const W = Math.min(14, (ts.length === 1 ? s1 - s0 : tf.fw) * 0.85);
       const H = W / 2;
       if (W > 3) {
-        const centre: C3 = [f.p[0] + f.r[0] * (f.fw / 2) - f.n[0] * inset, 0, f.p[2] + f.r[2] * (f.fw / 2) - f.n[2] * inset];
+        const centre: C3 = [f.p[0] + f.r[0] * mid - f.n[0] * inset, 0, f.p[2] + f.r[2] * mid - f.n[2] * inset];
         const base = top + 1.2;
         mb.kind = KIND.plain;
         mb.color = STEEL;
@@ -163,13 +167,13 @@ export function addDistrictAds(
     } else if (wall && billboard) {
       // Upper front, clear of blade signs on this facade and below the parapet.
       const hasBlade = signs.some((s) => s.vertical && Math.abs(s.x - (f.p[0] + f.r[0] * (f.fw / 2))) < f.fw / 2 + 1 && Math.abs(s.z - (f.p[2] + f.r[2] * (f.fw / 2))) < f.fw / 2 + 1);
-      const W = Math.min(12, f.fw * 0.8);
+      const W = Math.min(12, (s1 - s0) * 0.8);
       const H = W / 2;
       const y0 = GF + FH * 1.2;
       // Stand clear of curtain-wall fins (0.3 m) and ribbon-window lips.
       const off = styleFor(b).type === WIN.curtain ? 0.34 : 0.02;
       if (!hasBlade && W > 3 && y0 + H < b.h - 1) {
-        const centre: C3 = [f.p[0] + f.r[0] * (f.fw / 2), 0, f.p[2] + f.r[2] * (f.fw / 2)];
+        const centre: C3 = [f.p[0] + f.r[0] * ((s0 + s1) / 2), 0, f.p[2] + f.r[2] * ((s0 + s1) / 2)];
         mb.kind = KIND.plain;
         mb.color = STEEL;
         mb.style = [0, 0, 0, 0];
@@ -183,12 +187,12 @@ export function addDistrictAds(
       }
     }
 
-    if (street && poster && f.fw > 3.5) {
-      // Just inside one of the storefront's pillars, on the side away from any vending machines.
+    if (street && poster && s1 - s0 > 3.5) {
+      // Just inside one of the storefront's pillars, on the side away from any vending machines or pots.
       const pw = 0.92;
       const at = (u: number): [number, number] => [f.p[0] + f.r[0] * u, f.p[2] + f.r[2] * u];
-      const blocked = (u: number): boolean => props.some((q) => q.kind === 'vending' && Math.hypot(q.x - at(u)[0], q.z - at(u)[1]) < 1.3);
-      const options = rnd.chance(0.5) ? [f.fw - 0.4 - pw / 2, 0.4 + pw / 2] : [0.4 + pw / 2, f.fw - 0.4 - pw / 2];
+      const blocked = (u: number): boolean => props.some((q) => (q.kind === 'vending' || q.kind === 'pots') && propDist(q, at(u)[0], at(u)[1]) < 1.3);
+      const options = rnd.chance(0.5) ? [s1 - 0.4 - pw / 2, s0 + 0.4 + pw / 2] : [s0 + 0.4 + pw / 2, s1 - 0.4 - pw / 2];
       const u = options.find((x) => !blocked(x));
       if (u !== undefined) {
         const centre: C3 = [at(u)[0], 0, at(u)[1]];

@@ -22,6 +22,12 @@ export const KIND = {
   sidewalk: 8,
   paint: 9,
   lot: 10,
+  /** Lawn and planted beds (ground: lit by the lightmap, soaks up rain rather than pooling). */
+  grass: 11,
+  /** Bare earth and gravel (playgrounds, vacant lots, park paths); the colour tints it. */
+  gravel: 12,
+  /** Still water (ponds): dark, and a mirror for the sky. */
+  water: 13,
 } as const;
 
 /** Emission channels for KIND.emit: always on, street lamps (atmosphere 'lamps'), neon (flickers, off by day). */

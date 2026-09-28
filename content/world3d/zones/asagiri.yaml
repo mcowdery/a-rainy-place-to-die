@@ -1,12 +1,14 @@
 # Asagiri's zones (format: src/poc3d/district/zones.ts): the business district west of Kaburo, loosely
 # after West Shinjuku. Skyscraper rows fill the west, a plaza of the tallest towers sits in the middle,
 # department stores line the west exit along the Toto Line, and a narrow yakitori lane hugs the tracks.
+# The towers stand in public plazas on big blocks (towerCover), and Asagiri Central Park fills two cells
+# on the west edge, next to City Hall (after Shinjuku Central Park beside the Metropolitan Government).
 district: tower
 origin: [20, 9]
 map:
   - KKKKEE
-  - KGGKEE
-  - KGGKEY
+  - PGGKEE
+  - PGGKEY
   - KKKKEE
   - KKKEEE
 
@@ -18,9 +20,12 @@ zones:
       floors: [[14, 24, 35], [26, 40, 45], [42, 55, 20]]
       lotW: [18, 30]
       localStreet: [8, 12]
-      block: [40, 70]
+      block: [50, 90]
       twoRowDepth: 40
       lotGap: 0.4
+      towerCover: [0.3, 0.45]
+      streetTrees: 1
+      hedges: 0.7
       signChance: 0.25
       verticalSign: 0.1
     signs:
@@ -40,9 +45,12 @@ zones:
       floors: [[44, 60, 70], [30, 40, 30]]
       lotW: [26, 40]
       localStreet: [10, 14]
-      block: [50, 80]
+      block: [70, 130]
       twoRowDepth: 50
       lotGap: 0.5
+      towerCover: [0.28, 0.4]
+      streetTrees: 1
+      hedges: 0.8
       signChance: 0.1
       verticalSign: 0.05
     signs:
@@ -63,6 +71,8 @@ zones:
       lotW: [14, 24]
       localStreet: [6, 9]
       lotGap: 0.08
+      open: { parking: 0.04 }
+      setback: [0.3, 1.5]
       signChance: 0.95
       verticalSign: 0.45
     signs:
@@ -85,6 +95,11 @@ zones:
       block: [14, 26]
       twoRowDepth: 16
       lotGap: 0.1
+      open: {}
+      rear: [0, 0.6]
+      setback: [0, 0]
+      streetTrees: 0
+      pots: 0.4
       signChance: 1
       verticalSign: 0.6
     signs:
@@ -97,3 +112,16 @@ zones:
       tiled: true
       shops: { warm: 7, bar: 3 }
       open: 0.95
+
+  P:
+    id: central_park
+    name: Asagiri Central Park
+    plan:
+      park: 1
+    signs:
+      words: [公園, PARK, CAFE]
+      colors: ['#ffffff', '#6bff8a']
+    ads: { mainstream: 1 }
+    look:
+      windows: { curtain: 60, ribbon: 40 }
+      shops: { cool: 8, warm: 2 }

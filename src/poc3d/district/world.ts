@@ -279,7 +279,7 @@ export class District {
         const p = this.model.plan(mx + dx, my + dy);
         if (p?.buildings.some(hit)) return true;
         const d = this.model.detail(mx + dx, my + dy);
-        if (d && propBlocked(d.props, x, z, r)) return true;
+        if (d && (propBlocked(d.props, x, z, r) || inRects(d.solids))) return true;
       }
     }
     return this.stampColliders.some(inRects);

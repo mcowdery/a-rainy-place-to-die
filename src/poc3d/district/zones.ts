@@ -3,7 +3,7 @@ import { ID_PATTERN } from '../../content/stamps';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import { AD_CATEGORIES, type AdCategory } from '../models/ads';
 import { WIN } from '../real/buildings';
-import { STYLES3, type DistrictStyle3, type Zone3, type ZoneLook } from './plan';
+import { LOT_OPEN, STYLES3, type DistrictStyle3, type Zone3, type ZoneLook } from './plan';
 
 /**
  * Zones: areas within a district with their own character, painted onto its L0 cells.
@@ -23,7 +23,15 @@ import { STYLES3, type DistrictStyle3, type Zone3, type ZoneLook } from './plan'
  *
  * plan overrides any DistrictStyle3 field (localStreet, block, twoRowDepth, lotW, lotGap, floors,
  * signChance, verticalSign); anything not given comes from the district's style. Zones are part of the
- * generator's input, like L0 and the placements.
+ * generator's input, like L0 and the placements. Open ground and greenery are plan keys too:
+ *
+ *   open: { parking: 0.06, vacant: 0.02, playground: 0.01 }   # share of lots left open, by kind
+ *   rear: [0.5, 2.5]        # metres left behind a building (back yards); setback: the same in front
+ *   stepBack: 0.35          # chance a mid-rise steps its top floors back from the street
+ *   streetTrees: 0.4        # street trees per slot on streets with pavements; hedges: kerb planting
+ *   pots: 0.15              # chance of potted plants outside a building
+ *   towerCover: [0.3, 0.45] # towers standing in plazas, covering this share of their block
+ *   park: 0.5               # share of each cell given to a park (1: the whole cell)
  */
 export class ZoneMap {
   constructor(
@@ -51,9 +59,14 @@ export class ZoneMap {
 const HEX = /^#[0-9a-f]{6}$/i;
 /** Storefront interior kinds, in the order of the city shader's shop palettes. */
 const SHOPS = ['warm', 'cool', 'colourful', 'bar'] as const;
-const PLAN_KEYS = ['localStreet', 'block', 'twoRowDepth', 'lotW', 'lotGap', 'floors', 'signChance', 'verticalSign'] as const;
+const PLAN_KEYS = [
+  'localStreet', 'block', 'twoRowDepth', 'lotW', 'lotGap', 'floors', 'signChance', 'verticalSign',
+  'open', 'rear', 'setback', 'stepBack', 'streetTrees', 'hedges', 'pots', 'towerCover', 'park',
+] as const;
+/** Plan keys that are chances or shares, 0 to 1. */
+const SHARES = ['stepBack', 'streetTrees', 'hedges', 'pots', 'park'];
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const isRange = (v: unknown): v is [number, number] => Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === 'number' && n > 0) && v[0] <= v[1];
+const isRange = (v: unknown, min = 1e-9): v is [number, number] => Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === 'number' && n >= min) && v[0] <= v[1];
 const hex = (s: string): number => parseInt(s.slice(1), 16);
 
 export function parseZones3(file: string, text: string, macro: MacroMap, errors: string[]): ZoneMap {
@@ -94,7 +107,26 @@ export function parseZones3(file: string, text: string, macro: MacroMap, errors:
       } else if (k === 'localStreet' || k === 'block' || k === 'lotW') {
         if (!isRange(v)) err(`${at}: ${k} must be [min, max] in metres`);
         else style[k] = v;
+      } else if (k === 'rear' || k === 'setback') {
+        if (!isRange(v, 0)) err(`${at}: ${k} must be [min, max] in metres`);
+        else style[k] = v;
+      } else if (k === 'towerCover') {
+        if (!isRange(v) || v[1] > 0.9) err(`${at}: towerCover must be [min, max], shares of the block up to 0.9`);
+        else style[k] = v;
+      } else if (k === 'open') {
+        const shares: Record<string, number> = {};
+        if (!isObj(v)) err(`${at}: open must map open-lot kinds to shares of lots`);
+        else {
+          for (const [kind, s] of Object.entries(v)) {
+            if (!(LOT_OPEN as readonly string[]).includes(kind)) err(`${at}: unknown open-lot kind '${kind}' (${LOT_OPEN.join(', ')})`);
+            else if (typeof s !== 'number' || s < 0 || s > 1) err(`${at}: open.${kind} must be a share of lots, 0 to 1`);
+            else shares[kind] = s;
+          }
+          if (Object.values(shares).reduce((a, b) => a + b, 0) > 0.5) err(`${at}: open lots can't be more than half the lots`);
+          style.open = shares;
+        }
       } else if (typeof v !== 'number' || v < 0) err(`${at}: ${k} must be a number`);
+      else if (SHARES.includes(k) && v > 1) err(`${at}: ${k} must be between 0 and 1`);
       else style[k] = v;
     }
     const signs = isObj(raw.signs) ? raw.signs : {};

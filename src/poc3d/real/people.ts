@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Rect } from '../../core/coords';
 import { hash, rng, type Rng } from '../../core/hash';
 import type { CellPlan3, Road3 } from '../district/plan';
-import type { CellDetail } from './props';
+import { propDist, type CellDetail } from './props';
 import { sphereOf, toGeometry, type RawGeometry } from './rawGeometry';
 
 /**
@@ -489,7 +489,11 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
   const out: FigureSpec[] = [];
   const cell = plan.rect;
   const mine = (x: number, z: number): boolean => x >= cell.x && z >= cell.y && x < cell.x + cell.w && z < cell.y + cell.h;
-  const clear = (x: number, z: number): boolean => !detail.props.some((p) => Math.hypot(p.x - x, p.z - z) < (p.half ? 2.6 : 1.1));
+  const inRect = (q: Rect, x: number, z: number, m: number): boolean => x > q.x - m && x < q.x + q.w + m && z > q.y - m && z < q.y + q.h + m;
+  const clear = (x: number, z: number): boolean =>
+    !detail.props.some((p) => propDist(p, x, z) < p.radius + (p.kind === 'car' ? 1.6 : 0.8)) &&
+    !detail.solids.some((q) => inRect(q, x, z, 0.8)) &&
+    !plan.buildings.some((b) => Math.abs(x - b.x) < b.w / 2 + 0.8 && Math.abs(z - b.z) < b.d / 2 + 0.8);
   const onRoad = (r: Road3, side: number, t: number, across: number): [number, number, number, number] => {
     const q = r.rect;
     // (x, z) on the pavement, plus the direction along the road.
@@ -552,15 +556,17 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
       }
     }
   }
-  // Plazas: a busy square of people crossing, waiting to meet someone, and standing in groups.
-  for (const q of plazas) {
+  // Plazas (a busy square of people crossing, waiting to meet someone, and standing in groups), and more
+  // thinly the open ground: tower plazas, park paths, playgrounds.
+  const areas = [...plazas.map((rect) => ({ rect, density: 0.5 })), ...detail.open.flatMap((o) => o.crowd)];
+  for (const { rect: q, density } of areas) {
     const rnd = rng(hash(Math.round(q.x), Math.round(q.y), 0x9e1));
     for (let x = q.x + 2.5; x < q.x + q.w - 2; x += 4.2) {
       for (let z = q.y + 2.5; z < q.y + q.h - 2; z += 4.2) {
-        if (!rnd.chance(0.5)) continue;
+        if (!rnd.chance(density)) continue;
         const px = x + (rnd.float() - 0.5) * 2.4;
         const pz = z + (rnd.float() - 0.5) * 2.4;
-        if (!clear(px, pz)) continue;
+        if (!mine(px, pz) || !clear(px, pz)) continue;
         const yaw = rnd.float() * Math.PI * 2;
         const roll = rnd.float();
         if (roll < 0.45) {

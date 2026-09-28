@@ -1,13 +1,14 @@
 import { intersect, overlaps, type Rect } from '../../core/coords';
 import type { CellPlan3, Road3 } from '../district/plan';
 import { KIND, lin, type MeshBuilder } from './meshBuilder';
+import type { OpenLayout } from './openLots';
 
 /**
  * Ground for one cell: lot concrete, asphalt for its share of each road, raised pavements with kerbs (cut
  * at crossings), and road paint: centre and lane lines, edge lines, zebra crossings and stop lines at
  * junctions. Paint belongs to the cell containing its centre so shared edge roads aren't painted twice.
  */
-export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rect[] = [], scrambles: readonly Rect[] = [], holes: readonly Rect[] = []): void {
+export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rect[] = [], scrambles: readonly Rect[] = [], holes: readonly Rect[] = [], open: readonly OpenLayout[] = []): void {
   mb.id = 0;
   mb.flags = 0;
   mb.style = [0, 0, 0, 0];
@@ -30,6 +31,15 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rec
   }
   // Stamp plazas: paving raised to pavement height, in a lighter stone.
   for (const q of plazas) slab(q, 0, 0.15, KIND.plain, KIND.sidewalk, 0xa09a90);
+  // Open ground (openLots.ts): car park asphalt and bay lines, earth, lawns, paths, ponds, plaza paving.
+  for (const o of open) {
+    for (const g of o.ground) slab(g.rect, 0, g.top, g.kind === KIND.sidewalk ? KIND.plain : g.kind, g.kind, g.hex);
+    mb.kind = KIND.paint;
+    for (const l of o.paint) {
+      mb.color = lin(l.hex);
+      mb.quad([l.rect.x, l.y, l.rect.y + l.rect.h], [l.rect.w, 0, 0], [0, 0, -l.rect.h]);
+    }
+  }
   paint(mb, plan);
   for (const s of scrambles) scramble(mb, plan, s);
 }
@@ -65,7 +75,7 @@ function scramble(mb: MeshBuilder, plan: CellPlan3, box: Rect): void {
 }
 
 /** A rect minus some holes, as a list of rects (each hole splits a piece into up to four). */
-function subtract(r: Rect, holes: readonly Rect[]): Rect[] {
+export function subtract(r: Rect, holes: readonly Rect[]): Rect[] {
   let pieces = [r];
   for (const h of holes) {
     const next: Rect[] = [];

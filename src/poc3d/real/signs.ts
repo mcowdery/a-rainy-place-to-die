@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { hash, rng } from '../../core/hash';
 import { cellWidth, isWide } from '../../core/wide';
-import type { Building3, Sign3 } from '../district/plan';
-import { styleFor, frontFrame, tiers } from './buildings';
+import { frontSpan, type Building3, type Sign3 } from '../district/plan';
+import { styleFor, frontFrame, tierFront, tiers } from './buildings';
 import type { CityUniforms } from './city';
 import { EM, glyph, textAdvance } from './letters';
 import type { Light } from './lightmap';
@@ -476,14 +476,19 @@ function rooftopBillboard(mb: MeshBuilder, b: Building3, seen: Sightline): void 
   const rnd = rng(hash(b.id, 0xb111));
   rnd.chance(0.3);
   const ts = tiers(b);
-  const top = ts[ts.length - 1][3] + styleFor(b).parapet;
+  const tt = ts[ts.length - 1];
+  const top = tt[3] + styleFor(b).parapet;
   const f = frontFrame(b);
-  const inset = (b.front === 'north' || b.front === 'south' ? b.d - ts[ts.length - 1][1] : b.w - ts[ts.length - 1][0]) / 2 + 1.2;
+  const tf = tierFront(b, tt);
+  const inset = tf.inset + 1.2;
   const word = rnd.pick(ROOF_WORDS);
   const color = lin(rnd.pick(NEON));
-  const fwTop = f.fw * (ts.length > 1 ? ts[ts.length - 1][0] / b.w : 1);
+  // On the top tier's face, clear of a corner cut when the top is the cut tier.
+  const [s0, s1] = ts.length === 1 ? frontSpan(b) : [0, f.fw];
+  const fwTop = ts.length === 1 ? s1 - s0 : tf.fw;
+  const mid = ts.length === 1 ? (s0 + s1) / 2 : f.fw / 2;
   const hgt = Math.min(4, Math.max(1.8, fwTop * 0.2));
-  const centre: C3 = [f.p[0] + f.r[0] * (f.fw / 2) - f.n[0] * inset, 0, f.p[2] + f.r[2] * (f.fw / 2) - f.n[2] * inset];
+  const centre: C3 = [f.p[0] + f.r[0] * mid - f.n[0] * inset, 0, f.p[2] + f.r[2] * mid - f.n[2] * inset];
   const base = top + 0.9;
   const s = Math.min(hgt / EM, (fwTop * 0.9) / textAdvance(word));
   const width = textAdvance(word) * s;

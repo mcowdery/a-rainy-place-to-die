@@ -50,6 +50,8 @@ export interface Building3 {
   readonly h: number;
   /** Which face fronts the street. */
   readonly front: Side;
+  /** A corner lot's corner cut at the junction (sumikiri): which footprint corner, and the cut's leg in metres. */
+  readonly cut?: { readonly corner: Corner; readonly size: number };
   readonly hue?: number;
   /** The zone it was generated in (look and ads); absent for stamps and zone-less districts. */
   readonly zone?: Zone3;
@@ -83,15 +85,38 @@ export interface Zone3 {
   readonly ads: Readonly<Partial<Record<AdCategory, number>>>;
 }
 
+/**
+ * Open ground: lots a row leaves open between buildings (coin parking, a pocket playground, a vacant
+ * lot), the public plaza round towers, and parks.
+ */
+export type OpenKind = 'parking' | 'playground' | 'vacant' | 'plaza' | 'park';
+/** The kinds a row of lots can leave open (plazas come from towerCover, parks from park). */
+export const LOT_OPEN = ['parking', 'playground', 'vacant'] as const;
+export type LotOpenKind = (typeof LOT_OPEN)[number];
+
+export interface OpenLot3 {
+  readonly kind: OpenKind;
+  readonly rect: Rect;
+  /** The street it opens onto (its entrance). */
+  readonly front: Side;
+  /** Seeds its dressing. */
+  readonly seed: number;
+}
+
 export interface CellPlan3 {
   readonly mx: number;
   readonly my: number;
   readonly kind: DistrictId;
   readonly rect: Rect;
+  /** The style it was planned with (the zone's, or the district's). */
+  readonly style: DistrictStyle3;
   readonly roads: readonly Road3[];
   readonly buildings: readonly Building3[];
+  readonly open: readonly OpenLot3[];
   readonly signs: readonly Sign3[];
 }
+
+export type Corner = 'nw' | 'ne' | 'sw' | 'se';
 
 type Range = readonly [number, number];
 
@@ -112,6 +137,23 @@ export interface DistrictStyle3 {
   readonly verticalSign: number;
   readonly signWords: readonly string[];
   readonly signColors: readonly number[];
+  /** Share of lots left open, by kind (coin parking, a pocket playground, a vacant lot). */
+  readonly open: Readonly<Partial<Record<LotOpenKind, number>>>;
+  /** Metres left open behind a building (back yards, light wells) and in front of it (half of them). */
+  readonly rear: Range;
+  readonly setback: Range;
+  /** Chance a mid-rise steps its top floors back from the street (the road slant-plane limit). */
+  readonly stepBack: number;
+  /** Chance of a street tree at each slot along streets with pavements (boulevards always get them). */
+  readonly streetTrees: number;
+  /** Chance of a planted strip along the kerb between the trees. */
+  readonly hedges: number;
+  /** Chance a building keeps potted plants out front. */
+  readonly pots: number;
+  /** Towers standing in plazas: the share of a block each tower covers (null: rows of lots). */
+  readonly towerCover: Range | null;
+  /** Share of the cell given to a park (0 none, 1 the whole cell). */
+  readonly park: number;
 }
 
 const BOUNDARY_ROAD = 16;
@@ -139,6 +181,15 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     verticalSign: 0.55,
     signWords: [...STYLES.neon.signs.words, 'スナック 夜', 'ネオン', '麻雀', 'バー', '二次会', 'LIVE', 'PACHINKO', 'GAME CENTER', 'カラオケ館', '風俗案内所'],
     signColors: NEON_SIGN_COLORS,
+    open: { parking: 0.06, vacant: 0.02, playground: 0.01 },
+    rear: [0.5, 2.5],
+    setback: [0.3, 1.2],
+    stepBack: 0.35,
+    streetTrees: 0.4,
+    hedges: 0.3,
+    pots: 0.15,
+    towerCover: null,
+    park: 0,
   },
   tower: {
     name: 'Asagiri',
@@ -157,6 +208,15 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     verticalSign: 0.2,
     signWords: ['BANK', '銀行', 'HOTEL', 'CAFE', '郵便局', 'CLINIC', '証券', '保険', 'ビジネス', '書店', 'BAKERY', 'GYM'],
     signColors: [0xffffff, 0x4fe3ff, 0xffe45f, 0x6bff8a],
+    open: { parking: 0.04 },
+    rear: [1, 4],
+    setback: [0.5, 3],
+    stepBack: 0.3,
+    streetTrees: 0.9,
+    hedges: 0.6,
+    pots: 0.05,
+    towerCover: null,
+    park: 0,
   },
 };
 
@@ -230,15 +290,125 @@ export function planCell3(
 
   const interior: Rect = { x: R.x + insets.w, y: R.y + insets.n, w: CELL - insets.w - insets.e, h: CELL - insets.n - insets.s };
   const rnd = rng(hash(seed, mx, my, 0x3d));
+  const open: OpenLot3[] = [];
+  const rest = style.park > 0 ? carvePark(interior, style, rnd, reserved, roads, open, road) : interior;
   const blocks: Rect[] = [];
-  subdivide(interior, style, rnd, roads, blocks, reserved, road);
+  if (rest) subdivide(rest, style, rnd, roads, blocks, reserved, road);
 
   const buildings: Building3[] = [];
   const signs: Sign3[] = [];
   // 256 ids per cell (dense zones have many small lots); stamps use 900000 and up.
   const idBase = 1 + (my * macro.cols + mx) * 256;
-  for (const b of blocks) fillBlock(b, style, rnd, reserved, buildings, signs, idBase, zone);
-  return { mx, my, kind, rect: R, roads, buildings, signs };
+  const fill: Fill = { style, rnd, reserved, buildings, signs, open, idBase, zone };
+  for (const b of blocks) {
+    if (style.towerCover && Math.min(b.w, b.h) >= 30 && !reserved.some((q) => overlaps(q, b))) towerBlock(b, fill);
+    else fillBlock(b, fill);
+  }
+  return { mx, my, kind, rect: R, style, roads, buildings, open, signs };
+}
+
+/** What filling a block writes to, and with. */
+interface Fill {
+  readonly style: DistrictStyle3;
+  readonly rnd: Rng;
+  readonly reserved: readonly Rect[];
+  readonly buildings: Building3[];
+  readonly signs: Sign3[];
+  readonly open: OpenLot3[];
+  readonly idBase: number;
+  readonly zone?: Zone3;
+}
+
+const between = (rnd: Rng, r: Range): number => r[0] + rnd.float() * (r[1] - r[0]);
+const openSeed = (r: Rect, k: number): number => hash(Math.round(r.x * 4), Math.round(r.y * 4), k, 0x0be7);
+
+/**
+ * A park: the whole cell, or a strip along one side with a local street between it and the rest (the
+ * first side, from a hashed start, that doesn't touch a stamp). Returns what's left to subdivide.
+ */
+function carvePark(
+  interior: Rect,
+  style: DistrictStyle3,
+  rnd: Rng,
+  reserved: readonly Rect[],
+  roads: Road3[],
+  open: OpenLot3[],
+  road: (rect: Rect, width: number, vertical: boolean) => Road3,
+): Rect | null {
+  const I = interior;
+  if (style.park >= 0.95) {
+    if (reserved.some((q) => overlaps(q, I))) return I;
+    open.push({ kind: 'park', rect: I, front: 'south', seed: openSeed(I, 5) });
+    return null;
+  }
+  const s = between(rnd, style.localStreet);
+  const start = rnd.int(0, 3);
+  const sides: Side[] = ['west', 'north', 'east', 'south'];
+  for (let k = 0; k < 4; k++) {
+    const side = sides[(start + k) % 4];
+    const vertical = side === 'west' || side === 'east';
+    const depth = Math.round((vertical ? I.w : I.h) * style.park);
+    let park: Rect;
+    let street: Rect;
+    let rest: Rect;
+    if (side === 'west') {
+      park = { x: I.x, y: I.y, w: depth, h: I.h };
+      street = { x: I.x + depth, y: I.y, w: s, h: I.h };
+      rest = { x: I.x + depth + s, y: I.y, w: I.w - depth - s, h: I.h };
+    } else if (side === 'east') {
+      park = { x: I.x + I.w - depth, y: I.y, w: depth, h: I.h };
+      street = { x: I.x + I.w - depth - s, y: I.y, w: s, h: I.h };
+      rest = { x: I.x, y: I.y, w: I.w - depth - s, h: I.h };
+    } else if (side === 'north') {
+      park = { x: I.x, y: I.y, w: I.w, h: depth };
+      street = { x: I.x, y: I.y + depth, w: I.w, h: s };
+      rest = { x: I.x, y: I.y + depth + s, w: I.w, h: I.h - depth - s };
+    } else {
+      park = { x: I.x, y: I.y + I.h - depth, w: I.w, h: depth };
+      street = { x: I.x, y: I.y + I.h - depth - s, w: I.w, h: s };
+      rest = { x: I.x, y: I.y, w: I.w, h: I.h - depth - s };
+    }
+    if (reserved.some((q) => overlaps(q, park) || overlaps(q, street))) continue;
+    roads.push(road(street, s, vertical));
+    // Its entrance faces the new street.
+    const front: Side = side === 'west' ? 'east' : side === 'east' ? 'west' : side === 'north' ? 'south' : 'north';
+    open.push({ kind: 'park', rect: park, front, seed: openSeed(park, 5) });
+    return rest;
+  }
+  return I;
+}
+
+/**
+ * Towers standing in a public plaza (the open space West Shinjuku-style towers trade for their height):
+ * the block is paved as one plaza with one tower, or two along a long block, each covering towerCover of
+ * its site, pushed to the back so the forecourt opens onto its street.
+ */
+function towerBlock(block: Rect, f: Fill): void {
+  const { style, rnd } = f;
+  const alongX = block.w >= block.h;
+  const long = alongX ? block.w : block.h;
+  const n = long >= 90 ? 2 : 1;
+  f.open.push({ kind: 'plaza', rect: block, front: alongX ? 'south' : 'east', seed: openSeed(block, 4) });
+  for (let i = 0; i < n; i++) {
+    const site: Rect = alongX
+      ? { x: block.x + (block.w / n) * i, y: block.y, w: block.w / n, h: block.h }
+      : { x: block.x, y: block.y + (block.h / n) * i, w: block.w, h: block.h / n };
+    const area = site.w * site.h * between(rnd, style.towerCover!);
+    const aspect = 0.75 + rnd.float() * 0.5;
+    const w = Math.min(Math.sqrt(area * aspect), site.w - 10);
+    const d = Math.min(area / Math.sqrt(area * aspect), site.h - 10);
+    const front = rnd.pick(['north', 'south', 'east', 'west'] as const);
+    if (w < 14 || d < 14 || f.buildings.length >= 255) continue;
+    // Back margin 5-8 m; the rest of the depth is the forecourt; centred across, with a little jitter.
+    const back = 5 + rnd.float() * 3;
+    const jx = (rnd.float() - 0.5) * Math.max(0, site.w - w - 10);
+    const jz = (rnd.float() - 0.5) * Math.max(0, site.h - d - 10);
+    const cx = front === 'east' ? site.x + back + w / 2 : front === 'west' ? site.x + site.w - back - w / 2 : site.x + site.w / 2 + jx;
+    const cz = front === 'south' ? site.y + back + d / 2 : front === 'north' ? site.y + site.h - back - d / 2 : site.y + site.h / 2 + jz;
+    const b: Building3 = { id: f.idBase + f.buildings.length, x: cx, z: cz, w, d, h: pickFloors(style, rnd) * FLOOR_H, front, ...(f.zone ? { zone: f.zone } : {}) };
+    f.buildings.push(b);
+    if (rnd.chance(style.signChance)) f.signs.push(makeSign(b, style, rnd));
+  }
 }
 
 function subdivide(
@@ -281,7 +451,8 @@ function subdivide(
  * A block becomes one or two rows of lots along x, each fronting the block's north or south street; the
  * corner lots at either end of a row front the side street instead, so every street is lined with fronts.
  */
-function fillBlock(block: Rect, style: DistrictStyle3, rnd: Rng, reserved: readonly Rect[], buildings: Building3[], signs: Sign3[], idBase: number, zone?: Zone3): void {
+function fillBlock(block: Rect, f: Fill): void {
+  const { style, rnd, reserved, buildings, signs, idBase, zone } = f;
   const rows: { r: Rect; front: Side }[] = [];
   if (block.h > style.twoRowDepth) {
     const split = block.h * (0.4 + rnd.float() * 0.2);
@@ -293,22 +464,70 @@ function fillBlock(block: Rect, style: DistrictStyle3, rnd: Rng, reserved: reado
   for (const { r, front } of rows) {
     let x = r.x;
     const end = r.x + r.w;
+    // Open lots are gaps in the street wall: never two side by side.
+    let lastOpen = false;
     while (end - x > 0.5) {
-      let w = style.lotW[0] + rnd.float() * (style.lotW[1] - style.lotW[0]);
+      const rolled = pickOpen(style, rnd);
+      const openKind = lastOpen ? null : rolled;
+      lastOpen = false;
+      let w = between(rnd, openKind ? OPEN_LOT[openKind].w : style.lotW);
       if (end - x - w < style.lotW[0]) w = end - x;
       const lot: Rect = { x, y: r.y, w, h: r.h };
       const lotFront: Side = x === r.x && end - x - w > 0.5 ? 'west' : end - x - w <= 0.5 && x > r.x ? 'east' : front;
       x += w;
       if (end - x > style.lotW[0] + 2 && rnd.chance(style.lotGap)) x += 1.5; // service alley
       const height = pickFloors(style, rnd) * FLOOR_H;
+      const rear = between(rnd, style.rear) * (rows.length === 2 ? 1 : 0.5);
+      const setback = rnd.chance(0.5) ? between(rnd, style.setback) : 0;
+      const cutSize = rnd.chance(0.45) ? 1.8 + rnd.float() * 0.8 : 0;
       if (reserved.some((q) => overlaps(q, lot))) continue;
+      if (openKind) {
+        const [along, depth] = lotFront === 'north' || lotFront === 'south' ? [lot.w, lot.h] : [lot.h, lot.w];
+        const [minAlong, minDepth] = OPEN_LOT[openKind].min;
+        if (along >= minAlong && depth >= minDepth) {
+          f.open.push({ kind: openKind, rect: lot, front: lotFront, seed: openSeed(lot, LOT_OPEN.indexOf(openKind)) });
+          lastOpen = true;
+          continue;
+        }
+      }
       if (buildings.length >= 255) continue;
-      // Small gaps between neighbours so each building reads as its own mass (edges in the ASCII pass).
-      const b: Building3 = { id: idBase + buildings.length, x: lot.x + lot.w / 2, z: lot.y + lot.h / 2, w: lot.w - 0.4, d: lot.h - 0.4, h: height, front: lotFront, ...(zone ? { zone } : {}) };
+      // The footprint: small gaps between neighbours so each reads as its own mass, a yard at the back
+      // (away from the row's street), and sometimes a setback from its own street.
+      let [x0, x1, z0, z1] = [lot.x + 0.2, lot.x + lot.w - 0.2, lot.y + 0.2, lot.y + lot.h - 0.2];
+      const back = Math.min(rear, Math.max(0, z1 - z0 - Math.max(4, lot.h * 0.55)));
+      if (front === 'north') z1 -= back;
+      else z0 += back;
+      const room = lotFront === 'north' || lotFront === 'south' ? z1 - z0 - 4 : x1 - x0 - 3;
+      const fs = Math.min(setback, Math.max(0, room));
+      if (lotFront === 'north') z0 += fs;
+      else if (lotFront === 'south') z1 -= fs;
+      else if (lotFront === 'west') x0 += fs;
+      else x1 -= fs;
+      // A corner lot's corner at the junction is often cut (sumikiri), on low and mid-rise buildings.
+      const corner: Corner | null = lotFront === 'west' ? (front === 'north' ? 'nw' : 'sw') : lotFront === 'east' ? (front === 'north' ? 'ne' : 'se') : null;
+      const cut = corner && cutSize > 0 && height <= 45 && Math.min(x1 - x0, z1 - z0) >= 6 ? { cut: { corner, size: cutSize } } : {};
+      const b: Building3 = { id: idBase + buildings.length, x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, h: height, front: lotFront, ...cut, ...(zone ? { zone } : {}) };
       buildings.push(b);
       if (rnd.chance(style.signChance)) signs.push(makeSign(b, style, rnd));
     }
   }
+}
+
+/** Open-lot widths along the street, and the smallest [along, depth] each needs. */
+const OPEN_LOT: Record<LotOpenKind, { w: Range; min: readonly [number, number] }> = {
+  parking: { w: [7.5, 16], min: [5.5, 5.5] },
+  playground: { w: [12, 20], min: [10, 10] },
+  vacant: { w: [6, 14], min: [4, 4] },
+};
+
+/** Whether the next lot is left open, and as what (one roll against the style's shares). */
+function pickOpen(style: DistrictStyle3, rnd: Rng): LotOpenKind | null {
+  let roll = rnd.float();
+  for (const k of LOT_OPEN) {
+    roll -= style.open[k] ?? 0;
+    if (roll < 0) return k;
+  }
+  return null;
 }
 
 function pickFloors(style: DistrictStyle3, rnd: Rng): number {
@@ -336,17 +555,29 @@ export function frontPoint(b: Pick<Building3, 'x' | 'z' | 'w' | 'd' | 'front'>, 
 
 export const frontWidth = (b: Pick<Building3, 'w' | 'd' | 'front'>): number => (b.front === 'north' || b.front === 'south' ? b.w : b.d);
 
+/** The footprint corner at each end of a street face (u = 0 and u = face width). */
+const FACE_ENDS: Record<Side, readonly [Corner, Corner]> = { south: ['sw', 'se'], north: ['ne', 'nw'], east: ['se', 'ne'], west: ['nw', 'sw'] };
+
+/** The part [u0, u1] of the street face clear of a corner cut (the whole face without one). */
+export function frontSpan(b: Pick<Building3, 'w' | 'd' | 'front' | 'cut'>): [number, number] {
+  const fw = frontWidth(b);
+  const c = b.cut;
+  if (!c) return [0, fw];
+  const [a, e] = FACE_ENDS[b.front];
+  return c.corner === a ? [c.size, fw] : c.corner === e ? [0, fw - c.size] : [0, fw];
+}
+
 function makeSign(b: Building3, style: DistrictStyle3, rnd: Rng): Sign3 {
   const text = rnd.pick(style.signWords);
   const color = rnd.pick(style.signColors);
   const allWide = [...text].every((c) => isWide(c.codePointAt(0)!) || c === ' ');
   const vertical = allWide && b.h >= 9 && rnd.chance(style.verticalSign);
-  const fw = frontWidth(b);
+  const [s0, s1] = frontSpan(b);
   if (vertical) {
-    const p = frontPoint(b, rnd.chance(0.5) ? 1.2 : fw - 1.2, 0.4);
+    const p = frontPoint(b, rnd.chance(0.5) ? s0 + 1.2 : s1 - 1.2, 0.4);
     return { text, vertical, color, x: p.x, y: Math.min(b.h - 1, 7 + rnd.float() * 6), z: p.z, nx: p.nx, nz: p.nz };
   }
   // Horizontal signs sit on the fascia over the shopfront.
-  const p = frontPoint(b, fw / 2, 0.4);
+  const p = frontPoint(b, (s0 + s1) / 2, 0.4);
   return { text, vertical, color, x: p.x, y: 3.6, z: p.z, nx: p.nx, nz: p.nz };
 }

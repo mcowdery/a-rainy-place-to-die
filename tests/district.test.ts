@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { overlaps, type Rect } from '../src/core/coords';
+import { overlaps, pad, type Rect } from '../src/core/coords';
 import { TIMES, WEATHERS } from '../src/atmosphere/rules';
 import { loadDistrictContent } from '../src/poc3d/district/content';
 import { CELL, DISTRICTS3, planCell3, STYLES3 } from '../src/poc3d/district/plan';
@@ -12,6 +12,7 @@ import { localFrame, toWorld } from '../src/poc3d/real/localFrame';
 import { DISTRICT_ADS } from '../src/poc3d/models/ads';
 import { addDistrictAds, type AdPlacement } from '../src/poc3d/real/districtAds';
 import { MeshBuilder } from '../src/poc3d/real/meshBuilder';
+import { tiers } from '../src/poc3d/real/buildings';
 import { SignBuilder } from '../src/poc3d/real/signs';
 import { parseStamp3, plazaRect, reservedRect } from '../src/poc3d/district/stamps';
 
@@ -158,7 +159,7 @@ describe('Kaburo zones', () => {
   it('gives every Kaburo cell a zone, and Kaburo a real district size', () => {
     expect(model.cells.length).toBeLessThanOrEqual(30);
     for (const [mx, my] of model.cells) expect(content.zones.at(mx, my), `cell ${mx},${my}`).toBeDefined();
-    expect(new Set(model.cells.map(([mx, my]) => content.zones.at(mx, my)!.id)).size).toBe(6);
+    expect(new Set(model.cells.map(([mx, my]) => content.zones.at(mx, my)!.id)).size).toBe(7);
   });
 
   it('plans the back alleys lower and finer-grained than the crossing', () => {
@@ -181,9 +182,93 @@ describe('Kaburo zones', () => {
 
   it('rejects malformed zones', () => {
     const errors: string[] = [];
-    parseZones3('z.yaml', 'district: neon\norigin: [26, 9]\nmap: [XQ]\nzones:\n  Q: { id: q, name: Q, plan: { lotW: [9, 3], wat: 1 }, ads: { nope: 1 }, look: { windows: { round: 1 } } }', content.macro, errors);
+    parseZones3('z.yaml', 'district: neon\norigin: [26, 9]\nmap: [XQ]\nzones:\n  Q: { id: q, name: Q, plan: { lotW: [9, 3], wat: 1, open: { garden: 0.1, parking: 2 }, pots: 3 }, ads: { nope: 1 }, look: { windows: { round: 1 } } }', content.macro, errors);
     const all = errors.join('\n');
-    for (const m of [/no zone 'X'/, /lotW must be/, /unknown plan key 'wat'/, /unknown ad category 'nope'/, /unknown window type 'round'/]) expect(all).toMatch(m);
+    for (const m of [/no zone 'X'/, /lotW must be/, /unknown plan key 'wat'/, /unknown ad category 'nope'/, /unknown window type 'round'/, /unknown open-lot kind 'garden'/, /open.parking must be a share/, /pots must be between 0 and 1/]) expect(all).toMatch(m);
+  });
+});
+
+describe('Open ground and greenery', () => {
+  const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const inZone = (id: string) => model.cells.filter(([mx, my]) => content.zones.at(mx, my)?.id === id);
+  const area = (rs: readonly Rect[]) => rs.reduce((t, r) => t + r.w * r.h, 0);
+
+  it('leaves open lots, plazas and parks clear of buildings and streets, inside their cell', () => {
+    for (const [mx, my] of model.cells) {
+      const p = model.plan(mx, my)!;
+      const cell: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
+      const streets = p.roads.filter((r) => r.kind !== 'alley').map((r) => r.rect);
+      for (const o of p.open) {
+        const r = o.rect;
+        expect(r.x >= cell.x - 0.01 && r.y >= cell.y - 0.01 && r.x + r.w <= cell.x + CELL + 0.01 && r.y + r.h <= cell.y + CELL + 0.01, `${o.kind} in ${mx},${my}`).toBe(true);
+        expect(streets.some((s) => overlaps(s, pad(r, -0.01))), `${o.kind} on a street in ${mx},${my}`).toBe(false);
+        // Only a plaza has buildings standing in it (its towers).
+        if (o.kind !== 'plaza') expect(p.buildings.some((b) => overlaps(footprint(b), r)), `${o.kind} built on in ${mx},${my}`).toBe(false);
+      }
+    }
+  });
+
+  it('opens gaps in the back alleys, and never two open lots side by side', () => {
+    const cells = inZone('back_alleys');
+    const open = cells.flatMap(([mx, my]) => model.plan(mx, my)!.open);
+    expect(area(open.map((o) => o.rect)) / (cells.length * CELL * CELL)).toBeGreaterThan(0.05);
+    for (const kind of ['parking', 'vacant'] as const) expect(open.some((o) => o.kind === kind), kind).toBe(true);
+    for (const [mx, my] of cells) {
+      const lots = model.plan(mx, my)!.open;
+      lots.forEach((a, i) => lots.slice(i + 1).forEach((b) => expect(Math.abs(a.rect.y - b.rect.y) < 0.01 && Math.abs(a.rect.x + a.rect.w - b.rect.x) < 0.01).toBe(false)));
+    }
+  });
+
+  it('stands Asagiri towers in plazas, well under half the ground built on', () => {
+    const cells = inZone('skyscraper_row');
+    const built = area(cells.flatMap(([mx, my]) => model.plan(mx, my)!.buildings.map(footprint)));
+    const plazas = cells.flatMap(([mx, my]) => model.plan(mx, my)!.open.filter((o) => o.kind === 'plaza'));
+    expect(built / (cells.length * CELL * CELL)).toBeLessThan(0.45);
+    expect(plazas.length).toBeGreaterThan(cells.length);
+    for (const [mx, my] of cells) {
+      const p = model.plan(mx, my)!;
+      for (const b of p.buildings) {
+        const plaza = p.open.find((o) => o.kind === 'plaza' && overlaps(o.rect, footprint(b)));
+        if (plaza) expect(area([footprint(b)])).toBeLessThan(plaza.rect.w * plaza.rect.h * 0.9);
+      }
+    }
+  });
+
+  it('gives Asagiri a central park and Kaburo a park, with trees and paths', () => {
+    for (const [id, share] of [['central_park', 0.75], ['kaburo_park', 0.35]] as const) {
+      const cells = inZone(id);
+      expect(cells.length).toBeGreaterThan(0);
+      const parks = cells.flatMap(([mx, my]) => model.plan(mx, my)!.open.filter((o) => o.kind === 'park'));
+      expect(area(parks.map((o) => o.rect)) / (cells.length * CELL * CELL), id).toBeGreaterThan(share);
+      const trees = cells.flatMap(([mx, my]) => model.detail(mx, my)!.props.filter((q) => q.kind === 'tree'));
+      expect(trees.length / cells.length).toBeGreaterThan(40);
+    }
+  });
+
+  it('plants street trees and hedges on pavements, clear of blade signs', () => {
+    const cells = inZone('crossing');
+    const props = cells.flatMap(([mx, my]) => model.detail(mx, my)!.props);
+    expect(props.filter((q) => q.kind === 'tree').length / cells.length).toBeGreaterThan(8);
+    expect(props.some((q) => q.kind === 'hedge')).toBe(true);
+    for (const [mx, my] of cells) {
+      const blades = model.plan(mx, my)!.signs.filter((s) => s.vertical);
+      for (const t of model.detail(mx, my)!.props.filter((q) => q.kind === 'tree' && q.grate !== false)) {
+        expect(blades.some((s) => Math.hypot(s.x - t.x, s.z - t.z) < 3.2)).toBe(false);
+      }
+    }
+  });
+
+  it('cuts some corners and steps some mid-rises back, keeping blade signs on the facade', () => {
+    const bs = model.cells.flatMap(([mx, my]) => model.plan(mx, my)!.buildings);
+    const cut = bs.filter((b) => b.cut);
+    expect(cut.length).toBeGreaterThan(50);
+    expect(cut.length).toBeLessThan(bs.length * 0.35);
+    expect(bs.filter((b) => b.h <= 45 && tiers(b).length > 1).length).toBeGreaterThan(50);
+    for (const b of bs.filter((q) => q.h <= 45)) {
+      const ts = tiers(b);
+      // A step-back starts at 15 m or higher, above the blade signs (their tops are at 13 m or lower).
+      if (ts.length > 1) expect(ts[1][2]).toBeGreaterThanOrEqual(15);
+    }
   });
 });
 
