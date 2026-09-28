@@ -10,6 +10,6 @@ landmark: sento
 # out of the doorway).
 nodes:
   front: { kind: spawn, name: Sakura-yu (public bath), at: [8, 7], facing: south, view: [180, 14] }
-  door: { kind: door, name: Sakura-yu 桜湯, at: [8, 0.4], returnSpawn: inside }
+  door: { kind: door, name: Sakura-yu 桜湯, at: [8, 0.4], returnSpawn: inside, through: true }
   inside: { kind: spawn, at: [8, -2.4], facing: south }
-  leave: { kind: door, name: the street, at: [8, -1.4], returnSpawn: front }
+  leave: { kind: door, name: the street, at: [8, -1.4], returnSpawn: front, through: true }

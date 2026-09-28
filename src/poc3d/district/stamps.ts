@@ -19,6 +19,7 @@ import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan'
  *     - { text: かんぱい, vertical: true, at: [1.5, 8.5], color: '#ff5fc8' }   # at: [u along front, height]
  *   nodes:
  *     door: { kind: door, name: Bar Kanpai, at: [6, 0], returnSpawn: out }    # at: [u along front, metres out]
+ *     (a door with `through: true` is a plain doorway: E fades you to its returnSpawn instead of the VN)
  *     out:  { kind: spawn, at: [6, 3], facing: south }
  *
  * A landmark stamp (landmark: mega_sign) keeps its footprint, collision and forecourt, but its mass is not
@@ -74,6 +75,8 @@ export interface StampNode {
   readonly floor: number;
   readonly u: number;
   readonly out: number;
+  /** A plain doorway (door nodes, `through: true`): E fades you through to its returnSpawn, no VN handoff. */
+  readonly through: boolean;
   readonly handoff: unknown;
 }
 
@@ -119,6 +122,8 @@ export interface Node3 {
   readonly nz: number;
   readonly x: number;
   readonly z: number;
+  /** A plain doorway: E fades you through to its returnSpawn instead of handing off to the VN. */
+  readonly through: boolean;
   readonly handoff: unknown;
   readonly placementId: string;
 }
@@ -207,6 +212,7 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
     }
     const returnSpawn = raw.returnSpawn === undefined ? null : String(raw.returnSpawn);
     if ((kind === 'door' || kind === 'station') && returnSpawn === null) err(`node '${nid}': ${kind} needs returnSpawn`);
+    if (raw.through !== undefined && (kind !== 'door' || typeof raw.through !== 'boolean')) err(`node '${nid}': through is true/false, on doors`);
     if (raw.view !== undefined && !isPair(raw.view)) err(`node '${nid}': view must be [yaw, pitch] in degrees`);
     let figure: NodeFigure | null = null;
     if (raw.figure !== undefined) {
@@ -243,6 +249,7 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
       floor: typeof raw.floor === 'number' ? raw.floor : 0,
       u,
       out,
+      through: raw.through === true,
       handoff: raw.handoff ?? {},
     });
   }
@@ -334,6 +341,7 @@ export function placeStamps3(file: string, text: string, macro: MacroMap, stamps
         nz: q.nz,
         x: q.x,
         z: q.z,
+        through: n.through,
         handoff: n.handoff,
         placementId: id,
       };

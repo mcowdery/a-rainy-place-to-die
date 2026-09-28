@@ -1,6 +1,8 @@
 # Hotel Rouge (ホテル ルージュ): the Love District's flagship, a castle love hotel. A landmark built by
 # real/loveHotel.ts (24 m front, 21 m deep): pastel keep, corner towers with red cones, a donjon, pink neon,
-# and a discreet entrance behind a screen wall. The front doors and the hidden side door hand off to VN.
+# and a discreet entrance behind a screen wall. Inside (real/rougeInterior.ts): the lobby with its room panel,
+# two floors of themed rooms up a switchback stair; you walk in through the front doors (or E there, or at the
+# hidden side door into the back hall). Room 303, the Rouge Suite, is taken: its door hands off to the VN.
 id: hotel_rouge
 name: Hotel Rouge ルージュ
 footprint: [24, 21]
@@ -18,13 +20,55 @@ nodes:
     kind: door
     name: Hotel Rouge
     at: [12, -3.2]
+    returnSpawn: lobby
+    through: true
+  exit:
+    kind: door
+    name: the street
+    at: [12, -4.9]
     returnSpawn: front
-    handoff: {}
+    through: true
   side_door:
     kind: door
     name: Side entrance
     at: [2.6, -12]
+    returnSpawn: back_hall
+    through: true
+  side_out:
+    kind: door
+    name: the side street
+    at: [3.8, -12]
     returnSpawn: side
+    through: true
+  lobby:
+    kind: spawn
+    name: Hotel Rouge lobby
+    at: [12, -5.4]
+    facing: north
+    view: [0, 2]
+  back_hall:
+    kind: spawn
+    name: Hotel Rouge (back hall)
+    at: [4.6, -12]
+    facing: east
+  floor2:
+    kind: spawn
+    name: Hotel Rouge 2F
+    at: [11, -11.3]
+    floor: 5
+    facing: east
+  floor3:
+    kind: spawn
+    name: Hotel Rouge 3F
+    at: [11, -11.3]
+    floor: 10
+    facing: east
+  room_303:
+    kind: door
+    name: Room 303 · Rouge Suite
+    at: [17.75, -10.9]
+    floor: 10
+    returnSpawn: floor3
     handoff: {}
   side:
     kind: spawn

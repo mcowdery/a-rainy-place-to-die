@@ -6,6 +6,7 @@ import { localFrame, localRect, toLocal } from './localFrame';
 import { KIND } from './meshBuilder';
 import { deptInterior, deptLayout } from './deptStore';
 import { penthouseInterior, penthouseLayout } from './penthouse';
+import { rougeInterior, rougeLayout } from './rougeInterior';
 
 /**
  * Door-entered interiors, built at the building's true position (the hybrid approach): while you're inside
@@ -273,4 +274,5 @@ export const INTERIORS: Readonly<Record<string, { build: (b: Building3, city: TH
   },
   dept_store: { build: deptInterior, layout: deptLayout, range: 120 },
   residence: { build: penthouseInterior, layout: penthouseLayout, range: 60, hides: 'crown' },
+  love_hotel: { build: rougeInterior, layout: rougeLayout, range: 60 },
 };

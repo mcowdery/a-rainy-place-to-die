@@ -15,7 +15,7 @@ import { addFigure, GhostBuilder } from './people';
  * canopy over tinted doors hidden behind a screen wall, a lit rate board with the vacancy light, and a
  * car entrance behind a strip curtain. A plain side door on the west wall is the hidden way in.
  * Local frame (localFrame.ts): u along the 24 m front, t inward over 21 m. You can walk into the front
- * court up to the doors (and round to the side door); the building itself is solid.
+ * court and on through the doors (the interior, rougeInterior.ts); E at the side door lets you into the back.
  */
 export const LOVE_HOTEL = { fw: 24, depth: 21 } as const;
 
@@ -31,7 +31,10 @@ export function loveHotelColliders(b: Building3): Rect[] {
   const f = localFrame(b);
   const R = (u0: number, u1: number, t0: number, t1: number): Rect => localRect(f, u0, u1, t0, t1);
   return [
-    R(KEEP.u0, KEEP.u1, KEEP.t0, KEEP.t1),
+    // The keep, but for a pocket at the front doors: you walk in (the interior takes over, rougeInterior.ts).
+    R(KEEP.u0, 10.5, KEEP.t0, KEEP.t1),
+    R(13.5, KEEP.u1, KEEP.t0, KEEP.t1),
+    R(10.5, 13.5, KEEP.t0 + 1.0, KEEP.t1),
     ...TOWERS.map(([u, t]) => R(u - TOWER_R, u + TOWER_R, t - TOWER_R, t + TOWER_R)),
     R(9.0, 15.0, 0.9, 1.4),
     R(9.05, 9.35, 1.65, 1.95),

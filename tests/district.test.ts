@@ -789,3 +789,58 @@ describe('Interiors: the penthouse at The Peak', () => {
     }
   });
 });
+
+describe('Interiors: Hotel Rouge', () => {
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const hotel = content.placed.find((p) => p.id === 'hotel_rouge')!;
+  const f = localFrame(hotel.building);
+  const layout = INTERIORS.love_hotel.layout(hotel.building);
+
+  /** Walk local waypoints (the interior on while inside), never blocked; returns the end level. */
+  const walk = (path: [number, number][], level: number): number => {
+    let inside = layout.contains(...toWorld(f, path[0][0], path[0][1]), level + 1.7);
+    district.setInterior('hotel_rouge', inside ? layout : null);
+    for (let i = 0; i + 1 < path.length; i++) {
+      const [u0, t0] = path[i];
+      const [u1, t1] = path[i + 1];
+      const n = Math.ceil(Math.hypot(u1 - u0, t1 - t0) / 0.1);
+      for (let k = 1; k <= n; k++) {
+        const u = u0 + ((u1 - u0) * k) / n;
+        const t = t0 + ((t1 - t0) * k) / n;
+        const [x, z] = toWorld(f, u, t);
+        expect(district.blocked(x, z, 0.4, level), `at ${u.toFixed(1)}, ${t.toFixed(1)} on ${level.toFixed(2)}`).toBe(false);
+        level = district.floorAt(x, z, level);
+        const now = layout.contains(x, z, level + 1.7);
+        if (now !== inside) district.setInterior('hotel_rouge', now ? layout : null);
+        inside = now;
+      }
+    }
+    district.setInterior('hotel_rouge', null);
+    return level;
+  };
+
+  it('lets you walk in past the screen wall, to the room panel and into the back hall', () => {
+    expect(walk([[12, -2], [16, -1], [16, 2.6], [12, 2.6], [12, 6.5], [14.5, 8.5], [14.5, 10.6], [14.5, 12], [6, 12], [5, 12.2]], 0)).toBe(0);
+  });
+
+  it('climbs the switchback to both floors and into a themed room on each', () => {
+    const up2 = walk([[12, 6.5], [14.5, 8.5], [14.5, 10.6], [14.4, 17], [19, 17], [20.1, 17], [20.1, 15.5], [19, 15.55], [15, 15.55], [14.4, 13], [14.4, 11.3], [6.15, 11.3], [6.15, 9.6], [6.15, 7.6]], 0);
+    expect(up2).toBe(5);
+    const up3 = walk([[6.15, 7.6], [6.15, 11.3], [14.4, 11.3], [14.4, 17], [19, 17], [20.1, 17], [20.1, 15.5], [19, 15.55], [15, 15.55], [14.4, 13], [14.4, 11.3], [11.9, 11.3], [11.9, 7.6]], 5);
+    expect(up3).toBe(10);
+  });
+
+  it('fences the well on the top floor, and keeps the taken rooms shut', () => {
+    district.setInterior('hotel_rouge', layout);
+    try {
+      expect(district.blocked(...toWorld(f, 16.5, 17), 0.4, 10)).toBe(true);
+      expect(district.blocked(...toWorld(f, 17.75, 9.6), 0.4, 10)).toBe(true);
+      expect(district.blocked(...toWorld(f, 11.9, 9.6), 0.4, 5)).toBe(true);
+    } finally {
+      district.setInterior('hotel_rouge', null);
+    }
+    const suite = district.nodes.find((n) => n.id === 'hotel_rouge.room_303')!;
+    expect(suite.through).toBe(false);
+    expect(district.nodes.find((n) => n.id === 'hotel_rouge.entrance')!.through).toBe(true);
+  });
+});
