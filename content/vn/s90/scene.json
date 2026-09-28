@@ -20,9 +20,12 @@
   "frames": {
     "s90.fr01": {
       "entry_point": "bar_kanpai.mama",
-      "image": null,
+      "image": "assets/s90.fr01.jpg",
       "video": null,
-      "size": null,
+      "size": [
+        1536,
+        864
+      ],
       "title": "Bar Kanpai",
       "bubbles": [
         {
@@ -30,7 +33,7 @@
           "text": "Ara, a new face. You'll catch your death standing out here, dear.",
           "kind": "speech",
           "x": 0.5,
-          "y": 0.78,
+          "y": 0.87,
           "show": "enter",
           "duration": 3.0
         }
@@ -46,16 +49,19 @@
     },
     "s90.fr02": {
       "entry_point": null,
-      "image": null,
+      "image": "assets/s90.fr01.jpg",
       "video": null,
-      "size": null,
+      "size": [
+        1536,
+        864
+      ],
       "title": "Bar Kanpai",
       "bubbles": [
         {
           "id": "b01",
           "text": "So. What'll it be?",
           "kind": "speech",
-          "x": 0.5,
+          "x": 0.8,
           "y": 0.3,
           "show": "enter",
           "duration": 2.0
@@ -107,9 +113,12 @@
     },
     "s90.fr03": {
       "entry_point": null,
-      "image": null,
+      "image": "assets/s90.fr01.jpg",
       "video": null,
-      "size": null,
+      "size": [
+        1536,
+        864
+      ],
       "title": "",
       "bubbles": [
         {
@@ -117,7 +126,7 @@
           "text": "Him? Kirishima. A private eye, or so he says. Drinks alone, tips well, asks too many questions.",
           "kind": "speech",
           "x": 0.5,
-          "y": 0.78,
+          "y": 0.87,
           "show": "enter",
           "duration": 4.0
         }
@@ -131,9 +140,12 @@
     },
     "s90.fr04": {
       "entry_point": null,
-      "image": null,
+      "image": "assets/s90.fr01.jpg",
       "video": null,
-      "size": null,
+      "size": [
+        1536,
+        864
+      ],
       "title": "",
       "bubbles": [
         {
@@ -141,7 +153,7 @@
           "text": "Want to know something in Kaburo? He's the one to ask. After dark.",
           "kind": "speech",
           "x": 0.5,
-          "y": 0.78,
+          "y": 0.87,
           "show": "enter",
           "duration": 3.0
         }
@@ -155,9 +167,12 @@
     },
     "s90.fr05": {
       "entry_point": null,
-      "image": null,
+      "image": "assets/s90.fr01.jpg",
       "video": null,
-      "size": null,
+      "size": [
+        1536,
+        864
+      ],
       "title": "",
       "bubbles": [
         {
@@ -165,7 +180,7 @@
           "text": "She glances down the street, toward the castle's pink neon.",
           "kind": "caption",
           "x": 0.5,
-          "y": 0.2,
+          "y": 0.07,
           "show": "enter",
           "duration": 3.0
         },
@@ -173,8 +188,8 @@
           "id": "b02",
           "text": "Rouge...",
           "kind": "thought",
-          "x": 0.5,
-          "y": 0.78,
+          "x": 0.82,
+          "y": 0.5,
           "show": "enter",
           "duration": 2.0
         }
@@ -188,9 +203,12 @@
     },
     "s90.fr06": {
       "entry_point": null,
-      "image": null,
+      "image": "assets/s90.fr01.jpg",
       "video": null,
-      "size": null,
+      "size": [
+        1536,
+        864
+      ],
       "title": "",
       "bubbles": [
         {
@@ -198,7 +216,7 @@
           "text": "Room 303's been 'occupied' three weeks now. Nobody's seen who's in it. Nobody's seen them leave.",
           "kind": "speech",
           "x": 0.5,
-          "y": 0.78,
+          "y": 0.87,
           "show": "enter",
           "duration": 4.0
         }
@@ -212,9 +230,12 @@
     },
     "s90.fr07": {
       "entry_point": null,
-      "image": null,
+      "image": "assets/s90.fr01.jpg",
       "video": null,
-      "size": null,
+      "size": [
+        1536,
+        864
+      ],
       "title": "",
       "bubbles": [
         {
@@ -222,7 +243,7 @@
           "text": "If you go knocking, you didn't hear it from me.",
           "kind": "speech",
           "x": 0.5,
-          "y": 0.78,
+          "y": 0.87,
           "show": "enter",
           "duration": 3.0
         }

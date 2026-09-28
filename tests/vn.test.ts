@@ -16,7 +16,8 @@ describe('VN library (the exports in content/vn)', () => {
     expect(lib.errors).toEqual([]);
     expect(lib.stories.get('s90')).toBeTruthy();
     expect(lib.imageOf('s90.fr10')).toBeTruthy();
-    expect(lib.imageOf('s90.fr01')).toBeNull();
+    expect(lib.imageOf('s90.fr01')).toBeTruthy();
+    expect(lib.imageOf('s90.fr04')).toBe(lib.imageOf('s90.fr01'));
     expect(lib.imageOf('s90.fr20')).toBeTruthy();
   });
 

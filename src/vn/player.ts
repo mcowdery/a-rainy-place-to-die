@@ -280,6 +280,7 @@ function injectStyle(): void {
   .vn-caption { background: rgba(12,6,18,0.82); color: #f4dcea; border-radius: 4px; font-style: italic; border-left: 3px solid #ff5fa8; }
   .vn-menu { position: absolute; left: 50%; bottom: 12vh; transform: translateX(-50%); display: flex; flex-direction: column; gap: 10px; min-width: min(560px, 80vw); }
   .vn-menu[hidden] { display: none; }
+  .vn-still .vn-menu { left: auto; right: 4vw; transform: none; min-width: 0; width: min(440px, 34vw); bottom: 14vh; }
   .vn-choice { font: inherit; font-size: clamp(15px, 1.5vw, 20px); text-align: left; padding: 12px 20px; color: #fbe8f2; background: rgba(20,8,24,0.86);
     border: 1px solid rgba(255,95,168,0.55); border-radius: 6px; cursor: pointer; transition: background 0.12s, transform 0.12s; }
   .vn-choice:hover { background: rgba(120,20,70,0.9); transform: translateX(6px); }

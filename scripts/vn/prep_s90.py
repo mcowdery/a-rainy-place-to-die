@@ -1,6 +1,7 @@
 """Stills for the prototype VN story s90 from approved Studio art (assets/ads/source/, see its .json provenance).
 
 Writes content/vn/s90/assets/<frame key>.jpg, as a Studio export names them:
+  s90.fr01  Mama-san, face to face (her talk, fr01-fr07 share it) <- 85_mama_frontal.png
   s90.fr10  the bar inside             <- 84_bar_interior.png
   s90.fr20  Room 303's door (the knock) <- 83_room303_door.png, its plate repainted to read 303
   s90.fr21  the same door (the voice)
@@ -48,6 +49,7 @@ def door_303(im: Image.Image) -> Image.Image:
 def main() -> None:
     os.makedirs(OUT, exist_ok=True)
     save = lambda im, key: im.convert('RGB').save(os.path.join(OUT, f'{key}.jpg'), quality=88)
+    save(Image.open(os.path.join(SRC, '85_mama_frontal.png')), 's90.fr01')
     save(Image.open(os.path.join(SRC, '84_bar_interior.png')), 's90.fr10')
     door = door_303(Image.open(os.path.join(SRC, '83_room303_door.png')))
     save(door, 's90.fr20')

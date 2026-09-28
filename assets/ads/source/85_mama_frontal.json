@@ -1,0 +1,25 @@
+{
+  "file": "mama_frontal_v1.png",
+  "item": "mama_frontal",
+  "brand": null,
+  "copy": null,
+  "notes": "Review notes on vn_proto_02: there is another person in the screen and it's not a direct face to face closeup. So: no conversation wording (it adds a listener's shoulder), frontal, solo, centred.",
+  "prompt": "photorealistic cinematic film still, neo-noir, 1980s Tokyo city pop mood, neon light and rain, 35mm film grain, shallow depth of field, solo frontal close-up portrait of an elegant Japanese snack bar mama-san in her fifties, her face and shoulders square to the camera, looking directly into the lens with a knowing half smile, dark kimono, hair in a neat bun, a clear umbrella above her head beaded with rain, soft pink and amber neon on her face, the only person in the frame, the rainy alley behind her melted into neon bokeh, wide horizontal composition, her face centred at eye level, symmetrical frontal framing, nothing in the foreground, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    864
+  ],
+  "steps": 12,
+  "seed": 629139360,
+  "studioJob": "7575d614-6e55-4c78-9fd3-94d15d8ed068-u1",
+  "generated": "2026-09-28T07:56:14.825Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/85_mama_frontal.png",
+  "decided": "2026-09-28T07:58:53.223Z",
+  "batch": "vn_proto_03",
+  "purpose": "Second redo of Mama-san's first frame: a direct, frontal face-to-face close-up with only her in frame.",
+  "use": "sign",
+  "district": null
+}
