@@ -23,6 +23,23 @@ export interface CourseDef {
     readonly points: readonly (readonly [number, number])[];
   };
   readonly summit: { readonly r: number };
+  /** Shooting practice (race/shooting.ts): what stands where, facing which way. */
+  readonly targets?: readonly TargetDef[];
+}
+
+/**
+ * A shooting target. `board`: a paper bullseye on a frame (points by ring; shot, it falls back and stands up
+ * again). `plate`: a steel plate on a post (it swings and rings). `mover`: a board sliding back and forth
+ * between `at` and `to` at `speed` m/s. `at` is [x, z] on the ground; `face` the way its face points (degrees:
+ * 0 south (+z), 90 east (+x), 180 north, -90 west); `h` its centre's height (m, default 1.4 boards, 1.2 plates).
+ */
+export interface TargetDef {
+  readonly kind: 'board' | 'plate' | 'mover';
+  readonly at: readonly [number, number];
+  readonly face: number;
+  readonly h?: number;
+  readonly to?: readonly [number, number];
+  readonly speed?: number;
 }
 
 export function parseCourse(file: string, text: string, errors: string[]): CourseDef | null {
@@ -47,6 +64,20 @@ export function parseCourse(file: string, text: string, errors: string[]): Cours
   }
   const summit = d?.summit as Record<string, unknown> | undefined;
   if (!summit || !num(summit.r)) err('summit: { r }');
+  const xz = (v: unknown): boolean => Array.isArray(v) && v.length === 2 && v.every(num);
+  if (d?.targets !== undefined) {
+    if (!Array.isArray(d.targets)) err('targets: a list');
+    else {
+      d.targets.forEach((t: Record<string, unknown>, i: number) => {
+        const at = `targets[${i}]`;
+        if (!['board', 'plate', 'mover'].includes(t?.kind as string)) err(`${at}.kind: board, plate or mover`);
+        if (!xz(t?.at)) err(`${at}.at: [x, z]`);
+        if (!num(t?.face)) err(`${at}.face: degrees`);
+        if (t?.h !== undefined && !(num(t.h) && t.h > 0.3 && t.h < 4)) err(`${at}.h: a height in metres (0.3-4)`);
+        if (t?.kind === 'mover' && (!xz(t.to) || !(num(t.speed) && t.speed > 0))) err(`${at}: a mover needs to: [x, z] and speed`);
+      });
+    }
+  }
   if (errors.length > before) return null;
   return d as unknown as CourseDef;
 }

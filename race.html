@@ -23,6 +23,21 @@
       #drift .mult { color: #ffe07a; font-size: 16px; }
       #drift .total { color: #c8d0e8; font-size: 16px; }
       #drift small { color: #8a90a8; font-size: 12px; }
+      #reticle { position: fixed; left: 50%; top: 50%; width: 0; height: 0; display: none; --r: 10px; }
+      #reticle::before { content: ''; position: absolute; left: calc(-1 * var(--r)); top: calc(-1 * var(--r)); width: calc(2 * var(--r)); height: calc(2 * var(--r)); border: 1.5px solid rgba(255, 255, 255, 0.85); border-radius: 50%; box-shadow: 0 0 4px #000; }
+      #reticle::after { content: attr(data-note); position: absolute; left: -80px; top: calc(var(--r) + 10px); width: 160px; text-align: center; font-size: 11px; color: #ffcf6a; letter-spacing: 1px; text-shadow: 0 1px 2px #000; }
+      #reticle i { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: #fff; box-shadow: 0 0 3px #000; }
+      #reticle.across::before { border-color: rgba(255, 190, 80, 0.9); border-style: dashed; }
+      #reticle.hit::before { border-color: #ff4f6a; border-width: 3px; }
+      #reticle.reload::before { border-color: rgba(160, 160, 170, 0.5); }
+      #gun { position: fixed; right: 26px; bottom: 150px; text-align: right; }
+      #gun .name { color: #c8d0e8; font-size: 15px; }
+      #gun .ammo { font: bold 20px Consolas, monospace; color: #ffe07a; letter-spacing: 1px; }
+      #gun small { color: #8a90a8; font-size: 11px; }
+      #shoot { position: fixed; right: 26px; top: 14px; text-align: right; }
+      #shoot .score { font: bold 26px Consolas, monospace; color: #ff8ad0; text-shadow: 0 0 10px rgba(255, 90, 180, 0.4); }
+      #shoot small { color: #8a90a8; font-size: 12px; }
+      #pops { position: fixed; left: calc(50% + 40px); top: calc(50% - 60px); font: bold 16px Consolas, monospace; color: #7ef0b0; text-shadow: 0 1px 3px #000; pointer-events: none; }
       #help { position: fixed; top: 34px; left: 12px; color: #8a90a8; font-size: 12px; white-space: pre; }
     </style>
   </head>
@@ -31,7 +46,12 @@
     <div id="timer"></div>
     <div id="speedo"></div>
     <div id="drift"></div>
+    <div id="reticle"><i></i></div>
+    <div id="gun"></div>
+    <div id="shoot"></div>
+    <div id="pops"></div>
     <div id="help">W / S  drive · brake, then reverse     A / D  steer     Space  handbrake (start a drift)
+Right mouse  aim out of the window (the driver's side is best)     Left mouse  fire     F  pistol / paintball     E  reload     T  clean targets
 Click  mouse look (Esc lets go)     I  invert mouse Y     Q  chase / bumper camera
 R  back on the road     1  practice lot     2  the top     H  hide this
 Leave the lot up the road for a timed uphill run; from the top, down.</div>

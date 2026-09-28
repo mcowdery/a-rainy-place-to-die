@@ -43,3 +43,39 @@ road:
     - [110, -610]
 # The viewpoint at the top: a round lot at the road's end.
 summit: { r: 20 }
+
+# Shooting practice in the lot (format: TargetDef in src/race/course.ts). Paper boards down the west side and
+# across the north end, steel plates along the east side, six round the drift circle (centre about 32, 11.5)
+# facing in, for shooting while you drift round it, and two boards sliding along the south end.
+targets:
+  # West line, facing east.
+  - { kind: board, at: [-84, -35], face: 90 }
+  - { kind: board, at: [-84, -20], face: 90 }
+  - { kind: board, at: [-84, -5], face: 90, h: 1.8 }
+  - { kind: board, at: [-84, 10], face: 90 }
+  - { kind: board, at: [-84, 25], face: 90, h: 1.1 }
+  - { kind: board, at: [-84, 40], face: 90 }
+  - { kind: board, at: [-84, 52], face: 90 }
+  # North end, facing south (clear of the road out in the middle).
+  - { kind: board, at: [-60, -54], face: 0 }
+  - { kind: board, at: [-35, -54], face: 0 }
+  - { kind: board, at: [35, -54], face: 0 }
+  - { kind: board, at: [60, -54], face: 0 }
+  # East rack of steel plates, facing west.
+  - { kind: plate, at: [84, -40], face: -90 }
+  - { kind: plate, at: [84, -25], face: -90, h: 1.7 }
+  - { kind: plate, at: [84, -10], face: -90 }
+  - { kind: plate, at: [84, 5], face: -90, h: 0.9 }
+  - { kind: plate, at: [84, 20], face: -90 }
+  - { kind: plate, at: [84, 35], face: -90, h: 1.6 }
+  - { kind: plate, at: [84, 50], face: -90 }
+  # Round the drift circle, 27 m out from its centre, facing in.
+  - { kind: plate, at: [59.4, 11.5], face: -90 }
+  - { kind: board, at: [45.9, 34.9], face: -150 }
+  - { kind: plate, at: [18.9, 34.9], face: 150 }
+  - { kind: board, at: [5.4, 11.5], face: 90 }
+  - { kind: plate, at: [18.9, -11.9], face: 30 }
+  - { kind: board, at: [45.9, -11.9], face: -30 }
+  # South end: two boards on rails, facing north.
+  - { kind: mover, at: [-20, 63], to: [75, 63], speed: 4, face: 180 }
+  - { kind: mover, at: [75, 56], to: [-20, 56], speed: 6, face: 180, h: 1.2 }

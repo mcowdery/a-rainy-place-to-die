@@ -8,8 +8,11 @@ import { MeshBuilder } from '../poc3d/real/meshBuilder';
 import { addVehicle, addWheel, wheelLayout } from '../poc3d/models/vehicles';
 import { loadCourses } from './courses';
 import { buildVenue } from './scene';
+import { GunSound } from './gunSound';
+import { acrossCar, clampAim, Shooting, WEAPONS, wrap } from './shooting';
 import { CarSound } from './sound';
-import { Car, COUPE, DRIFT_ASSISTS, type Controls } from './vehicle';
+import { Targets } from './targets';
+import { Car, COUPE, DRIFT_ASSISTS, type Assists, type Controls } from './vehicle';
 
 /**
  * The handling test venue (race.html): Kurokami Pass at night. The coupe on the handling model (vehicle.ts),
@@ -91,6 +94,16 @@ const wheels = WL.spots.map((w) => {
   return { m, front: w.front, roll: 0 };
 });
 scene.add(carObj);
+// Shooting practice: the lot's targets, and the driver's pistol and paintball marker (shooting.ts).
+const targets = new Targets(course);
+scene.add(targets.group);
+const shooting = new Shooting(course, targets);
+shooting.pointScale = window.innerHeight;
+scene.add(shooting.group);
+carObj.add(shooting.arm);
+const gunSound = new GunSound();
+/** Aiming, the car holds its line a little better (more countersteer), so one hand on the wheel will do. */
+const AIM_ASSISTS: Assists = { ...DRIFT_ASSISTS, countersteer: 0.7 };
 const beams: THREE.SpotLight[] = [];
 for (const s of [-0.62, 0.62]) {
   const l = new THREE.SpotLight(0xfff2dc, 140, 140, 0.3, 0.6, 1);
@@ -178,6 +191,10 @@ let view: 'chase' | 'bumper' = params.get('cam') === 'bumper' ? 'bumper' : 'chas
 let help = true;
 window.addEventListener('keydown', (e) => {
   sound.start();
+  gunSound.start();
+  if (e.code === 'KeyF') shooting.pickWeapon(shooting.weaponIndex + 1);
+  if (e.code === 'KeyE') shooting.reload();
+  if (e.code === 'KeyT') shooting.reset();
   keys.add(e.code);
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'KeyQ') view = view === 'chase' ? 'bumper' : 'chase';
@@ -206,7 +223,49 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
-window.addEventListener('pointerdown', () => sound.start());
+window.addEventListener('pointerdown', () => {
+  sound.start();
+  gunSound.start();
+});
+// Aim with the right mouse button (the camera over the driver's shoulder, the crosshair in the middle), fire
+// with the left: once per click with the pistol, held for the paintball marker.
+let aiming = false;
+/** Checks only (__race.aimAt): a point the aim follows. */
+let aimTrack: THREE.Vector3 | null = null;
+let aimYaw = 0;
+let aimPitch = 0;
+let trigger = false;
+let pulled = false;
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('mousedown', (e) => {
+  if (!document.pointerLockElement) return;
+  if (e.button === 2 && !aiming) {
+    aiming = true;
+    const d = camera.getWorldDirection(new THREE.Vector3());
+    aimYaw = Math.atan2(d.x, d.z);
+    aimPitch = Math.max(-0.1, Math.min(0.2, Math.asin(d.y) + 0.12));
+  }
+  if (e.button === 0 && aiming) {
+    trigger = true;
+    pulled = true;
+  }
+});
+const stopAiming = (): void => {
+  if (!aiming) return;
+  aiming = false;
+  trigger = false;
+  // The chase camera carries on looking where you were aiming, then eases back behind the car.
+  orbitYaw = wrap(aimYaw - camDir);
+  lookPitch = 0;
+  mouseIdle = 0;
+};
+document.addEventListener('mouseup', (e) => {
+  if (e.button === 2) stopAiming();
+  if (e.button === 0) trigger = false;
+});
+document.addEventListener('pointerlockchange', () => {
+  if (!document.pointerLockElement) stopAiming();
+});
 // Mouse look: a click captures the mouse (Esc lets it go); moving it swings the camera round the car and up
 // or down, and it eases back behind the car a moment after you stop. Mouse Y follows the district's choice
 // (the same 'citypop.invertY' in localStorage; I toggles it here too; ?invertY=1 / 0).
@@ -235,8 +294,13 @@ document.addEventListener('click', () => {
 document.addEventListener('mousemove', (e) => {
   if (!document.pointerLockElement) return;
   if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
-  orbitYaw -= e.movementX * 0.003;
   const my = invertY ? -e.movementY : e.movementY;
+  if (aiming) {
+    aimYaw -= e.movementX * 0.0018;
+    aimPitch = THREE.MathUtils.clamp(aimPitch - my * 0.0018, -0.45, 0.4);
+    return;
+  }
+  orbitYaw -= e.movementX * 0.003;
   lookPitch = THREE.MathUtils.clamp(lookPitch - my * 0.003, -0.6, 0.5);
   mouseIdle = 0;
 });
@@ -267,6 +331,34 @@ let snapCam = true;
 let wasIn: 'lot' | 'top' | 'road' = 'lot';
 const fmt = (t: number): string => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
 
+// Shooting HUD: the crosshair (its circle the spread), the weapon and rounds, the score, and points popping up.
+const reticle = document.getElementById('reticle')!;
+const gunEl = document.getElementById('gun')!;
+const shootEl = document.getElementById('shoot')!;
+const popsEl = document.getElementById('pops')!;
+const pops: { text: string; t: number }[] = [];
+const drawShootingHud = (dt: number, across: boolean): void => {
+  for (const e of shooting.scored) pops.push({ text: `+${e.points}${e.why ? ` ${e.why}` : ''}${e.points !== e.base ? ` ×${(e.points / e.base).toFixed(1)}` : ''}`, t: 1.4 });
+  shooting.scored.length = 0;
+  for (let i = pops.length - 1; i >= 0; i--) if ((pops[i].t -= dt) <= 0) pops.splice(i, 1);
+  while (pops.length > 5) pops.shift();
+  popsEl.innerHTML = pops.map((p) => `<div style="opacity:${Math.min(1, p.t * 2).toFixed(2)}">${p.text}</div>`).join('');
+  const W = shooting.weapon;
+  reticle.style.display = aiming ? 'block' : 'none';
+  if (aiming) {
+    const spread = W.spread * (1 + Math.abs(car.slide) * 2.5 + Math.hypot(car.u, car.w) / 30) * (across ? 2.5 : 1);
+    const px = Math.max(6, (Math.tan(spread) / Math.tan((camera.fov * Math.PI) / 360)) * (window.innerHeight / 2));
+    reticle.style.setProperty('--r', `${px.toFixed(1)}px`);
+    reticle.className = `${across ? 'across' : ''} ${shooting.hitMark > 0 ? 'hit' : ''} ${shooting.reloading > 0 ? 'reload' : ''}`;
+    reticle.dataset.note = shooting.reloading > 0 ? 'RELOADING' : across ? 'ACROSS THE CAR' : '';
+  }
+  const n = shooting.ammo[shooting.weaponIndex];
+  const pips = W.mag <= 12 ? '▮'.repeat(n) + '▯'.repeat(W.mag - n) : `${n} / ${W.mag}`;
+  gunEl.innerHTML = `<div class="name">${W.label}</div><div class="ammo">${shooting.reloading > 0 ? 'reloading…' : pips}</div><small>F ${WEAPONS[(shooting.weaponIndex + 1) % WEAPONS.length].label} · E reload · T clean targets</small>`;
+  const acc = shooting.shots ? Math.round((shooting.hits / shooting.shots) * 100) : 0;
+  shootEl.innerHTML = `<div class="score">${shooting.score.toLocaleString()}</div><small>${shooting.hits}/${shooting.shots} hits · ${acc}% · streak ${shooting.streak} (best ${shooting.bestStreak})</small>`;
+};
+
 // ---- The camera: behind the way the car is going (so drifts show), eased; a bumper view.
 const camPos = new THREE.Vector3();
 const camLook = new THREE.Vector3();
@@ -286,6 +378,29 @@ const placeCamera = (dt: number, snap = false): void => {
     const ease = 1 - Math.exp(-dt * 2.5);
     orbitYaw -= orbitYaw * ease;
     lookPitch -= lookPitch * ease;
+  }
+  // Aiming: over the driver's (right) shoulder, looking along the aim; the crosshair is the view's centre.
+  const fov = aiming ? 50 : 62;
+  if (Math.abs(camera.fov - fov) > 0.05) {
+    camera.fov += (fov - camera.fov) * Math.min(1, dt * 10);
+    camera.updateProjectionMatrix();
+  }
+  if (aiming) {
+    if (aimTrack) {
+      const p = camera.position;
+      aimYaw = Math.atan2(aimTrack.x - p.x, aimTrack.z - p.z);
+      aimPitch = Math.atan2(aimTrack.y - p.y, Math.hypot(aimTrack.x - p.x, aimTrack.z - p.z));
+    }
+    aimYaw = car.h + clampAim(aimYaw - car.h);
+    const d = new THREE.Vector3(Math.sin(aimYaw) * Math.cos(aimPitch), Math.sin(aimPitch), Math.cos(aimYaw) * Math.cos(aimPitch));
+    // Behind the aim and up over the roof, a little to the right of it.
+    const head = carObj.localToWorld(new THREE.Vector3(-0.35, 1.25, 0));
+    const target = head.addScaledVector(d, -2.6).add(new THREE.Vector3(-Math.cos(aimYaw) * 0.55, 0.95, Math.sin(aimYaw) * 0.55));
+    target.y = Math.max(target.y, course.height(target.x, target.z) + 0.5);
+    camPos.lerp(target, 1 - Math.exp(-dt * 18));
+    camera.position.copy(camPos);
+    camera.lookAt(camPos.clone().add(d));
+    return;
   }
   if (view === 'bumper') {
     const p = new THREE.Vector3(car.x + Math.sin(car.h) * 2.1, car.y + 0.85, car.z + Math.cos(car.h) * 2.1);
@@ -317,6 +432,7 @@ function frame(now: number): void {
   last = now;
   clock.t += dt;
   const c = controls();
+  car.assists = aiming ? AIM_ASSISTS : DRIFT_ASSISTS;
   car.update(dt, c, ground);
   // Where you are: the lot, the top, or on the pass (for the timed runs).
   const here: 'lot' | 'top' | 'road' = course.inLot(car.x, car.z) ? 'lot' : course.inSummit(car.x, car.z) ? 'top' : 'road';
@@ -361,7 +477,7 @@ function frame(now: number): void {
   const slopeRoll = Math.atan2(nx * Math.cos(car.h) - nz * Math.sin(car.h), ny);
   carObj.position.set(car.x, car.y, car.z);
   carObj.rotation.set(slopePitch - car.ax * 0.006, car.h, -slopeRoll + car.ay * 0.007);
-  body.visible = view === 'chase';
+  body.visible = view === 'chase' || aiming;
   for (const wh of wheels) {
     const rate = wh.front ? car.u / WL.r : car.handbrake ? 0 : (car.u / WL.r) * (1 + car.spin * 2.5) + car.spin * 25;
     wh.roll = (wh.roll + rate * dt) % (Math.PI * 2);
@@ -391,6 +507,29 @@ function frame(now: number): void {
   placeCamera(dt, snapCam);
   snapCam = false;
   venue.stars.position.copy(camera.position);
+  // Shooting: the crosshair's point in the world, the arm out of the window at it, the trigger.
+  targets.update(dt);
+  let across = false;
+  if (aiming) {
+    camera.updateMatrixWorld();
+    const look = camera.getWorldDirection(new THREE.Vector3());
+    const aimPoint = shooting.pick(camera.position, look).point;
+    across = acrossCar(aimYaw - car.h);
+    carObj.updateMatrixWorld();
+    shooting.pose(carObj, aimPoint, across);
+    if (trigger) {
+      const drift = drifting;
+      const mult = (drift ? 2 : 1) * (across ? 1.5 : 1);
+      const why = [drift ? 'DRIFT' : '', across ? 'ACROSS' : ''].filter(Boolean).join(' ');
+      const carVel = new THREE.Vector3(Math.sin(car.h) * car.u + Math.cos(car.h) * car.w, 0, Math.cos(car.h) * car.u - Math.sin(car.h) * car.w);
+      aimPitch += shooting.fire({ aimPoint, carVel, across, slide: car.slide, speed: Math.hypot(car.u, car.w), mult, why }, !pulled);
+      pulled = false;
+    }
+  } else shooting.arm.visible = false;
+  shooting.update(dt);
+  gunSound.play(shooting.events, camera.position);
+  shooting.events.length = 0;
+  drawShootingHud(dt, across);
   sound.update(dt, { rev: car.rev, gear: car.gear, throttle: c.throttle, speed: Math.hypot(car.u, car.w), slide: car.slide, spin: car.spin, bump: car.bump });
   // HUD.
   const kmh = Math.round(Math.abs(car.u) * 3.6);
@@ -415,6 +554,30 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
   (smoke.material as THREE.ShaderMaterial).uniforms.uScale.value = window.innerHeight;
+  shooting.pointScale = window.innerHeight;
 });
 // For checks: the car and a way to drive it from a script.
-(window as unknown as { __race: unknown }).__race = { car, course, keys, camera, scene };
+(window as unknown as { __race: unknown }).__race = {
+  car,
+  course,
+  keys,
+  camera,
+  scene,
+  shooting,
+  targets,
+  // Keep the crosshair on (x, y, z) (re-aimed each frame from where the camera is).
+  aimAt: (x: number, y: number, z: number): void => {
+    aiming = true;
+    aimTrack = new THREE.Vector3(x, y, z);
+  },
+  aim: (on: boolean, yaw?: number, pitch?: number): void => {
+    aiming = on;
+    aimTrack = null;
+    if (yaw !== undefined) aimYaw = car.h + yaw;
+    if (pitch !== undefined) aimPitch = pitch;
+  },
+  trigger: (on: boolean): void => {
+    trigger = on;
+    pulled = on;
+  },
+};
