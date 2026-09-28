@@ -114,7 +114,9 @@ export class District {
     // Stamps collide as their footprint, or (landmarks you can walk into) as their walls and fixtures.
     const solid = (p: Placed3): Rect[] => [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }];
     this.stampColliders = placed.map((p) => landmarkColliders(p, 0) ?? solid(p));
-    this.basementColliders = placed.map((p) => landmarkColliders(p, -4) ?? []);
+    // Below ground, by level: the concourse and basements (-5), and the subway platforms (-11).
+    this.basementColliders = placed.map((p) => landmarkColliders(p, -5) ?? []);
+    this.deepColliders = placed.map((p) => landmarkColliders(p, -11) ?? []);
     this.shelters.push(...placed.flatMap(landmarkShelters));
   }
 
@@ -126,6 +128,7 @@ export class District {
   }
   /** Below street level only basements collide (their walls keep you inside). */
   private readonly basementColliders: readonly (readonly Rect[])[];
+  private readonly deepColliders: readonly (readonly Rect[])[];
 
   /**
    * Floor height: 0 on the street, a ramp on stairs, negative in a basement, raised on a station platform.
@@ -294,7 +297,7 @@ export class District {
   /** Collision: outside the district, inside a building footprint (this cell or a neighbour), a stamp or a prop. */
   blocked = (x: number, z: number, r: number, floor = 0): boolean => {
     const inRects = (rs: readonly Rect[]): boolean => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
-    if (floor < -1) return this.basementColliders.some(inRects);
+    if (floor < -1) return (floor > -8 ? this.basementColliders : this.deepColliders).some(inRects);
     if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? []));
     if (!this.inDistrict(x, z)) return true;
     const mx = Math.floor(x / CELL);

@@ -367,6 +367,66 @@ export class CityAudio {
     }
   }
 
+  /** A bell-like note through the station's speakers (band-limited), at time t. */
+  private bell(t: number, f: number, len: number, level: number, out: AudioNode): void {
+    const ctx = this.ctx!;
+    for (const [mul, type, amp] of [[1, 'triangle', 1], [2, 'sine', 0.35], [3.01, 'sine', 0.12]] as const) {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = f * mul;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(level * amp, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + len + 0.05);
+    }
+  }
+
+  /** The station's speakers: a band-pass (small speakers), panned to the middle. */
+  private speaker(): AudioNode {
+    const ctx = this.ctx!;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1400;
+    bp.Q.value = 0.5;
+    bp.connect(this.master);
+    return bp;
+  }
+
+  /** The door chime as a train arrives: two falling notes. */
+  chime(): void {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime + 0.05;
+    const out = this.speaker();
+    this.bell(t, 1318.5, 0.6, 0.22, out);
+    this.bell(t + 0.32, 1046.5, 0.9, 0.22, out);
+  }
+
+  /**
+   * A departure melody (発車メロディ): a short phrase of a few seconds, different for every station (seed),
+   * on a pentatonic scale so any seed sounds like one.
+   */
+  melody(seed: number): void {
+    if (!this.ctx) return;
+    const out = this.speaker();
+    let s = seed >>> 0 || 1;
+    const rnd = (): number => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+    const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19];
+    const root = 523.25 * 2 ** (Math.floor(rnd() * 5) / 12);
+    const beat = 0.2 + rnd() * 0.08;
+    let t = this.ctx.currentTime + 0.1;
+    let step = Math.floor(rnd() * 4);
+    const notes = 10 + Math.floor(rnd() * 5);
+    for (let i = 0; i < notes; i++) {
+      step = Math.max(0, Math.min(scale.length - 1, step + Math.floor(rnd() * 5) - 2));
+      const long = i === notes - 1 || rnd() < 0.2;
+      this.bell(t, root * 2 ** (scale[step] / 12), long ? 1.1 : 0.45, 0.16, out);
+      t += beat * (long ? 2 : 1);
+    }
+  }
+
   /** Thunder for a strike `distance` metres away; pan -1 (left) to 1 (right) from where the listener looks. */
   thunder(distance: number, panTo: number): void {
     if (!this.ctx) return;

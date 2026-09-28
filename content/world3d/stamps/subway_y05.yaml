@@ -1,0 +1,41 @@
+# 歌舞路東駅 Kaburo-higashi Station, 夜光線 Yakō Line (Y05): a subway station (see content/world3d/subway.yaml for the
+# line). A landmark built by real/subwayStation.ts: an entrance pavilion on the street (14 m wide, 12 m deep)
+# with stairs down to the concourse (B1, gates, ticket machines) and an island platform (B2) under the
+# street. The line runs 10 m out from the pavilion's street face.
+id: subway_y05
+name: 歌舞路東駅 Kaburo-higashi Station
+footprint: [14, 12]
+height: 4.5
+front: north
+landmark: subway
+station: { jp: 歌舞路東, en: KABURO-HIGASHI }
+nodes:
+  exit:
+    kind: spawn
+    name: Kaburo-higashi Station (Yakō Line Y05)
+    at: [7, 4]
+    facing: south
+  platform:
+    kind: spawn
+    name: Kaburo-higashi Station (Yakō Line platform)
+    at: [23, 10]
+    floor: -11
+    facing: east
+  board_a:
+    kind: station
+    name: Yakō Line 夜光線
+    at: [-16, 10]
+    floor: -11
+    returnSpawn: platform
+  board_b:
+    kind: station
+    name: Yakō Line 夜光線
+    at: [-6, 10]
+    floor: -11
+    returnSpawn: platform
+  board_c:
+    kind: station
+    name: Yakō Line 夜光線
+    at: [29.5, 10]
+    floor: -11
+    returnSpawn: platform

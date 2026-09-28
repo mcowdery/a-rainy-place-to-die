@@ -231,6 +231,32 @@ export function trainModel(color: number, city: THREE.Material): THREE.Group {
   return g;
 }
 
+/**
+ * Makes three-car sets in a line's colour (the car geometry built once and shared): cars along +z, rail
+ * top at y 0, the lead cab at +z.
+ */
+export function trainFactory(color: number, city: THREE.Material): () => THREE.Group {
+  const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.18, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
+  const lead = buildCar(color, [1.6, 1.55, 1.3]);
+  const mid = buildCar(color, null);
+  const tail = buildCar(color, [1.4, 0.1, 0.08]);
+  return () => {
+    const g = new THREE.Group();
+    [tail, mid, lead].forEach((c, i) => {
+      const car = new THREE.Group();
+      const body = new THREE.Mesh(c.body, city);
+      body.castShadow = true;
+      const gl = new THREE.Mesh(c.glass, glass);
+      gl.renderOrder = 3;
+      car.add(body, gl);
+      car.position.z = (i - 1) * (CAR + GAP);
+      if (i === 0) car.rotation.y = Math.PI;
+      g.add(car);
+    });
+    return g;
+  };
+}
+
 export class TrainSystem {
   readonly group = new THREE.Group();
   private readonly trains: { obj: THREE.Group; dir: number; x: number; legs: Leg[]; period: number; offset: number }[] = [];
@@ -244,23 +270,9 @@ export class TrainSystem {
     city: THREE.Material,
   ) {
     this.group.add(this.buildViaduct(city));
-    const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.18, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
-    const lead = buildCar(line.color, [1.6, 1.55, 1.3]);
-    const mid = buildCar(line.color, null);
-    const tail = buildCar(line.color, [1.4, 0.1, 0.08]);
+    const set = trainFactory(line.color, city);
     const make = (): THREE.Group => {
-      const g = new THREE.Group();
-      [tail, mid, lead].forEach((c, i) => {
-        const car = new THREE.Group();
-        const body = new THREE.Mesh(c.body, city);
-        body.castShadow = true;
-        const gl = new THREE.Mesh(c.glass, glass);
-        gl.renderOrder = 3;
-        car.add(body, gl);
-        car.position.z = (i - 1) * (CAR + GAP);
-        if (i === 0) car.rotation.y = Math.PI;
-        g.add(car);
-      });
+      const g = set();
       g.position.y = RAIL_Y;
       return g;
     };
@@ -280,6 +292,9 @@ export class TrainSystem {
     this.rideTrain.visible = false;
     this.group.add(this.rideTrain);
   }
+
+  /** Trains run (false after the last train: the line is empty). */
+  running = true;
 
   get riding(): boolean {
     return this.ride !== null;
@@ -320,7 +335,7 @@ export class TrainSystem {
       const p = where(tr.legs, (this.time + tr.offset) % tr.period);
       tr.obj.position.x = tr.x;
       tr.obj.position.z = p.z;
-      tr.obj.visible = !p.hidden && !(this.ride && tr.dir === rideDir);
+      tr.obj.visible = this.running && !p.hidden && !(this.ride && tr.dir === rideDir);
     }
     if (this.ride) {
       this.ride.t += dt;

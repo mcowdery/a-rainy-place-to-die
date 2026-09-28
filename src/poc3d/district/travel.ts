@@ -63,6 +63,14 @@ export function destinations(district: District, nodes: readonly Node3[], zones:
 
 const ZONE_COLORS = ['#ff5fc8', '#4fe3ff', '#ffe45f', '#6bff8a', '#ff9a40', '#b48cff', '#ff4f4f', '#ffffff'];
 
+/** A railway line on the map: its colour, letter and stations (in order). */
+export interface MapLine {
+  readonly name: string;
+  readonly color: number;
+  readonly letter: string;
+  readonly stops: readonly { readonly x: number; readonly z: number; readonly code: string; readonly name: string }[];
+}
+
 /** Pixels per metre of the pre-drawn district image (zoomed views sample it). */
 const BASE_RES = 2;
 /** Zoom limits: the whole district fitted, down to this many screen pixels per metre. */
@@ -88,6 +96,8 @@ export class TravelMap {
     private readonly zones: ZoneMap,
     private readonly dests: readonly Destination[],
     private readonly go: (d: Destination) => void,
+    /** Whether clicking a place travels there (debug only: getting around is by train), and the lines drawn. */
+    private readonly opts: { readonly travel: boolean; readonly lines: readonly MapLine[] } = { travel: true, lines: [] },
   ) {
     this.root = document.createElement('div');
     this.root.id = 'travel';
@@ -130,7 +140,7 @@ export class TravelMap {
       const d = this.drag;
       this.drag = null;
       this.canvas.style.cursor = 'grab';
-      if (!d || d.moved) return;
+      if (!d || d.moved || !this.opts.travel) return;
       let best: Destination | null = null;
       let bestD = 16;
       for (const t of this.dests) {
@@ -143,13 +153,26 @@ export class TravelMap {
     this.list = document.createElement('div');
     Object.assign(this.list.style, { flex: '0 0 260px', overflowY: 'auto', background: '#0c0c14', border: '1px solid #3a3850', padding: '10px 12px' });
     const title = document.createElement('div');
-    title.textContent = 'FAST TRAVEL  ·  M / Esc to close';
+    title.textContent = opts.travel ? 'FAST TRAVEL (debug)  ·  M / Esc to close' : 'MAP  ·  M / Esc to close';
     Object.assign(title.style, { color: '#ff8ad8', marginBottom: '4px', letterSpacing: '1px' });
     const hint = document.createElement('div');
-    hint.textContent = 'wheel zoom · drag pan · click a dot to go';
+    hint.textContent = opts.travel ? 'wheel zoom · drag pan · click a dot to go' : 'wheel zoom · drag pan · get around by train: E on a platform';
     Object.assign(hint.style, { color: '#8a88a0', marginBottom: '8px' });
     this.list.append(title, hint);
-    for (const group of ['Places', 'Zones'] as const) {
+    // The lines: a legend with their stations.
+    for (const l of opts.lines) {
+      const h = document.createElement('div');
+      h.textContent = `${l.letter}  ${l.name}`;
+      Object.assign(h.style, { color: `#${l.color.toString(16).padStart(6, '0')}`, margin: '10px 0 4px', fontWeight: 'bold' });
+      this.list.append(h);
+      for (const st of l.stops) {
+        const row = document.createElement('div');
+        row.textContent = `${st.code}  ${st.name}`;
+        Object.assign(row.style, { color: '#c8c6d8', padding: '1px 8px' });
+        this.list.append(row);
+      }
+    }
+    for (const group of opts.travel ? (['Places', 'Zones'] as const) : []) {
       const h = document.createElement('div');
       h.textContent = group.toUpperCase();
       Object.assign(h.style, { color: '#8a88a0', margin: '10px 0 4px' });
@@ -256,6 +279,24 @@ export class TravelMap {
     }
     g.fillStyle = '#ffd070';
     for (const p of this.district.placed) g.fillRect(p.rect.x, p.rect.y, p.rect.w, p.rect.h);
+    // Railway lines: a band in each line's colour through its stations, a ring at each.
+    for (const l of this.opts.lines) {
+      const col = `#${l.color.toString(16).padStart(6, '0')}`;
+      g.strokeStyle = col;
+      g.lineWidth = 7;
+      g.lineCap = 'round';
+      g.beginPath();
+      l.stops.forEach((st, i) => (i ? g.lineTo(st.x, st.z) : g.moveTo(st.x, st.z)));
+      g.stroke();
+      for (const st of l.stops) {
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.arc(st.x, st.z, 9, 0, Math.PI * 2);
+        g.fill();
+        g.lineWidth = 4;
+        g.stroke();
+      }
+    }
     return c;
   }
 
@@ -283,9 +324,23 @@ export class TravelMap {
       g.fillStyle = color;
       g.fillText(z.name.toUpperCase(), sx, sy - 16);
     }
+    // Station labels (code and name).
+    g.font = "bold 12px 'Consolas', monospace";
+    g.textAlign = 'left';
+    for (const l of this.opts.lines) {
+      for (const st of l.stops) {
+        const [sx, sy] = this.toScreen(st.x, st.z);
+        g.fillStyle = `#${l.color.toString(16).padStart(6, '0')}`;
+        g.fillText(st.code, sx + 9, sy - 6);
+        g.fillStyle = '#e8e6f0';
+        g.font = "11px 'Consolas', monospace";
+        g.fillText(st.name, sx + 9, sy + 8);
+        g.font = "bold 12px 'Consolas', monospace";
+      }
+    }
     g.font = "12px 'Consolas', monospace";
     g.textAlign = 'left';
-    for (const d of this.dests) {
+    for (const d of this.opts.travel ? this.dests : []) {
       const [x, y] = this.toScreen(d.x, d.z);
       g.fillStyle = d.group === 'Places' ? '#ff8ad8' : '#4fe3ff';
       g.beginPath();

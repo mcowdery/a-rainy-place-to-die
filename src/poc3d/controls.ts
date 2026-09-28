@@ -94,11 +94,19 @@ export class FirstPerson {
   /** Locks the pointer, with raw mouse input where the browser offers it (it avoids the bogus jumps). */
   lock(): void {
     const el = this.look.domElement as HTMLElement;
+    // Without a user gesture (or raw input) the request is refused; that's fine, a click locks it later.
+    const plain = (): void => {
+      try {
+        (el.requestPointerLock() as unknown as Promise<void> | undefined)?.catch?.(() => undefined);
+      } catch {
+        /* not now */
+      }
+    };
     try {
       const p = el.requestPointerLock({ unadjustedMovement: true }) as unknown as Promise<void> | undefined;
-      p?.catch?.(() => el.requestPointerLock());
+      p?.catch?.(plain);
     } catch {
-      el.requestPointerLock();
+      plain();
     }
   }
 

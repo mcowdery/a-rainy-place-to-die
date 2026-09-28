@@ -7,6 +7,7 @@ import { yokochoColliders, yokochoLights } from '../real/yokocho';
 import { ryujinColliders, ryujinLights } from '../real/ryujin';
 import { discountColliders, discountLights } from '../real/discount';
 import { stationColliders, stationFloor, stationLights } from '../real/station';
+import { subwayColliders, subwayFloor, subwayHoles, subwayLights, subwayShelters } from '../real/subwayStation';
 import { ASAGIRI_KINDS, asagiriColliders, asagiriFloor, asagiriLights, asagiriShelters, type AsagiriKind } from '../real/asagiri';
 import { localFrame, localRect } from '../real/localFrame';
 
@@ -44,6 +45,8 @@ export function landmarkColliders(p: Placed3, floor = 0): Rect[] | null {
       return discountColliders(p.building);
     case 'station':
       return stationColliders(p.building, floor);
+    case 'subway':
+      return subwayColliders(p.building, floor);
     default:
       return null;
   }
@@ -72,6 +75,8 @@ export function landmarkLights(p: Placed3): Light[] {
       return discountLights(p.building);
     case 'station':
       return stationLights(p.building);
+    case 'subway':
+      return subwayLights(p.building);
     default:
       return [];
   }
@@ -103,6 +108,8 @@ export function landmarkShelters(p: Placed3): Shelter[] {
       return [{ rect: localRect(f, 0, 60, -17.8, 24), y0: -1, y1: 16.6 }];
     case 'love_hotel':
       return [{ rect: localRect(f, 9, 15, 1.6, 4), y0: 0, y1: 3.3 }];
+    case 'subway':
+      return subwayShelters(b);
     default:
       return [];
   }
@@ -110,7 +117,7 @@ export function landmarkShelters(p: Placed3): Shelter[] {
 
 /** Openings in the pavement (a stairwell down to a basement). */
 export function landmarkHoles(p: Placed3): Rect[] {
-  return p.stamp.landmark === 'live_house' ? liveHouseHoles(p.building) : [];
+  return p.stamp.landmark === 'live_house' ? liveHouseHoles(p.building) : p.stamp.landmark === 'subway' ? subwayHoles(p.building) : [];
 }
 
 /**
@@ -125,6 +132,8 @@ export function landmarkFloor(p: Placed3, x: number, z: number, current = 0): nu
       return liveHouseFloor(p.building, x, z);
     case 'station':
       return stationFloor(p.building, x, z, current);
+    case 'subway':
+      return subwayFloor(p.building, x, z, current);
     default:
       return null;
   }

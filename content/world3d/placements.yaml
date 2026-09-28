@@ -84,3 +84,36 @@
   stamp: club_shirasagi
   cell: [21, 12]
   offset: [48, 92]
+# Subway stations (content/world3d/subway.yaml): each entrance faces the road its line runs under, 10 m out.
+- id: y01_station
+  stamp: subway_y01
+  cell: [21, 11]
+  offset: [20, 10]
+- id: y02_station
+  stamp: subway_y02
+  cell: [23, 11]
+  offset: [60, 10]
+- id: y03_station
+  stamp: subway_y03
+  cell: [26, 11]
+  offset: [20, 10]
+- id: y04_station
+  stamp: subway_y04
+  cell: [28, 11]
+  offset: [40, 10]
+- id: y05_station
+  stamp: subway_y05
+  cell: [30, 11]
+  offset: [60, 10]
+- id: w01_station
+  stamp: subway_w01
+  cell: [28, 9]
+  offset: [10, 40]
+- id: w02_station
+  stamp: subway_w02
+  cell: [28, 11]
+  offset: [10, 60]
+- id: w03_station
+  stamp: subway_w03
+  cell: [28, 12]
+  offset: [10, 80]

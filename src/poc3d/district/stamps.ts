@@ -39,7 +39,7 @@ import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan'
  */
 
 /** Landmarks built on the main thread instead of as a plain building mass. */
-export const LANDMARKS = ['mega_sign', 'konbini', 'shrine', 'love_hotel', 'live_house', 'yokocho', 'ryujin', 'discount', 'station', ...ASAGIRI_KINDS] as const;
+export const LANDMARKS = ['mega_sign', 'konbini', 'shrine', 'love_hotel', 'live_house', 'yokocho', 'ryujin', 'discount', 'station', 'subway', ...ASAGIRI_KINDS] as const;
 export type Landmark = (typeof LANDMARKS)[number];
 
 /** How an npc's ghost looks (see real/people.ts); anything left out gets a default. */
@@ -162,7 +162,7 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
   const st = doc.station;
   const stationNames = isObj(st) && typeof st.jp === 'string' && typeof st.en === 'string' ? { jp: st.jp, en: st.en } : null;
   if (st !== undefined && !stationNames) err('station must be { jp, en }');
-  if (landmark === 'station' && !stationNames) err('a station landmark needs station: { jp, en }');
+  if ((landmark === 'station' || landmark === 'subway') && !stationNames) err(`a ${landmark} landmark needs station: { jp, en }`);
   let plaza: Rect | null = null;
   if (doc.plaza !== undefined) {
     const q = doc.plaza;

@@ -22,6 +22,9 @@ import { buildDiscount } from '../real/discount';
 import { buildStation } from '../real/station';
 import { ASAGIRI_KINDS, buildAsagiri, type AsagiriKind } from '../real/asagiri';
 import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
+import { SubwaySystem } from '../real/subway';
+import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../real/subwayStation';
+import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem } from '../real/traffic';
 import { ScreenGlows, ScreenLights } from '../real/screenLight';
 import { GRADE_NAMES, GradePass } from '../real/grade';
@@ -31,7 +34,9 @@ import { CityAudio } from '../real/audio';
 import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater } from '../real/weather';
 import { moodFromUrl, MoodPanel } from './moodPanel';
 import { routeFor, Signals } from './traffic';
-import { destinations, TravelMap, type Destination } from './travel';
+import { destinations, TravelMap, type Destination, type MapLine } from './travel';
+import { RoutePicker } from './routePicker';
+import { subwayRoute } from './subway';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
 import { addFigure, GhostBuilder, ghostMaterial, type FigureSpec } from '../real/people';
@@ -48,13 +53,18 @@ import { District } from './world';
 /**
  * Kaburo (Neon Core), generated at full scale from the L0 map and streamed in chunks, rendered
  * realistically with an ASCII overlay for mood (see real/overlay.ts).
- * URL: ?time=night|day|dusk|dawn &weather=clear|rain|fog &cam=x,y,z,yaw,pitch &spawn=<node id> &ascii=vibe|heavy|ascii|off &grade=neutral|nocturne|noir|citypop &bench=1
+ * URL: ?time=night|day|dusk|dawn &weather=clear|rain|fog &cam=x,y,z,yaw,pitch &spawn=<node id> &late=1 (after the last train)
+ * &debug=1 (the M map teleports; &ride=<from>,<to> starts on a subway ride) &ascii=vibe|heavy|ascii|off &grade=neutral|nocturne|noir|citypop &bench=1
  * Keys: WASD/mouse, Shift run, Space jump (up in fly, Ctrl down), E interact, M map / fast travel, T time, R weather, F fly, V overlay (1-4 direct), G dither,
  * B bloom, P look mode.
  */
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const params = new URLSearchParams(location.search);
 const bench = params.get('bench') === '1';
+/** Debug: the M map teleports (getting around is otherwise by train). */
+const debug = params.get('debug') === '1';
+/** After the last train (終電): stations shut, no trains. A story flag; ?late=1, or L to toggle. */
+const FLAG_LATE = 'world.late';
 const START_SPAWN = 'kaburo_crossing.view';
 const SEED = 0x0c179090;
 const CELL_W = 8;
@@ -64,7 +74,8 @@ type C3 = [number, number, number];
 
 async function run(): Promise<void> {
   const content = loadDistrictContent();
-  const flags = new FlagStore({ [FLAG_TIME]: params.get('time') ?? 'night', [FLAG_WEATHER]: params.get('weather') ?? 'clear' });
+  const flags = new FlagStore({ [FLAG_TIME]: params.get('time') ?? 'night', [FLAG_WEATHER]: params.get('weather') ?? 'clear', [FLAG_LATE]: params.get('late') === '1' });
+  const late = (): boolean => flags.get(FLAG_LATE) === true;
   const time = (): TimeOfDay => flags.get(FLAG_TIME) as TimeOfDay;
   const weather = (): Weather => flags.get(FLAG_WEATHER) as Weather;
 
@@ -184,6 +195,13 @@ async function run(): Promise<void> {
     scene.add(trains.group);
     district.addColliders(viaductPiers(rail, railStations));
   }
+  // The subway: tunnels and trains below ground (shown only there), and its stations (landmarks, below).
+  const subway = new SubwaySystem(content.subway, city);
+  subway.group.visible = false;
+  scene.add(subway.group);
+  const subwayViews: { view: SubwayStationView; x: number; z: number }[] = [];
+  // Everything on the surface, hidden below ground (the stations' own groups stay: they reach up to the street).
+  const surface: THREE.Object3D[] = [];
   // Traffic: cars and taxis clockwise round their loops, buses anticlockwise round theirs.
   const piers = rail ? [rail.x] : [];
   const plan = (mx: number, my: number) => district.plan(mx, my);
@@ -230,6 +248,14 @@ async function run(): Promise<void> {
       screens.add(...a.lights);
       glows.add(...a.lights);
       landmarkUpdates.push(a.update);
+    } else if (lm === 'subway') {
+      const stop = content.subway.stops.get(placed.id);
+      const line = stop && content.subway.lines.find((l) => l.id === stop.line);
+      if (stop && line) {
+        const view = buildSubwayStation(placed.building, { stop, line, lines: content.subway.lines, departures: () => subway.departures(stop) }, city);
+        scene.add(view.group);
+        subwayViews.push({ view, x: stop.x, z: stop.z });
+      }
     } else if (lm === 'station' && rail) {
       const other = railStations.find((s) => s.id !== placed.id)?.names ?? null;
       scene.add(buildStation(placed.building, city, placed.stamp.station!, other, rail));
@@ -264,11 +290,23 @@ async function run(): Promise<void> {
       landmarkUpdates.push(h.update);
     }
   }
+  // The surface: the city, traffic, weather and the other landmarks (everything but the subway's own).
+  for (const o of scene.children) if (o !== subway.group && !subwayViews.some((v) => v.view.group === o) && !(o instanceof THREE.Light) && o !== sky.mesh) surface.push(o);
   const visibleNode = (n: Node3): boolean => n.condition === null || n.condition(flags.get);
   const npcBlocked = (x: number, z: number, r: number): boolean =>
     nodes.some((n) => n.kind === 'npc' && visibleNode(n) && Math.hypot(n.x - x, n.z - z) < r + 0.35);
 
-  const controls = new FirstPerson(camera, document.body, (x, z, r, floor) => district.blocked(x, z, r, floor) || ((floor ?? 0) > -1 && (floor ?? 0) < 1 && (npcBlocked(x, z, r) || traffic.blocked(x, z, r))));
+  // After the last train the entrances' shutters are down (from outside: anyone still below can get out).
+  const shutters = content.placed.filter((p) => p.stamp.landmark === 'subway').map((p) => ({ shut: subwayShutter(p.building), inside: { x: p.rect.x, y: p.rect.y, w: p.rect.w, h: p.rect.h } }));
+  const shutterBlocked = (x: number, z: number, r: number): boolean => {
+    if (!late()) return false;
+    const cp = camera.position;
+    return shutters.some(({ shut, inside }) => {
+      const within = cp.x > inside.x && cp.x < inside.x + inside.w && cp.z > inside.y && cp.z < inside.y + inside.h;
+      return !within && cp.y > 0.5 && x > shut.x - r && x < shut.x + shut.w + r && z > shut.y - r && z < shut.y + shut.h + r;
+    });
+  };
+  const controls = new FirstPerson(camera, document.body, (x, z, r, floor) => district.blocked(x, z, r, floor) || ((floor ?? 0) > -1 && (floor ?? 0) < 1 && (npcBlocked(x, z, r) || traffic.blocked(x, z, r) || shutterBlocked(x, z, r))));
   controls.setShearMode(false);
   controls.fly = params.get('fly') === '1';
   controls.floorAt = district.floorAt;
@@ -295,6 +333,10 @@ async function run(): Promise<void> {
     const d = camera.getWorldDirection(new THREE.Vector3());
     return (Math.atan2(-d.x, -d.z) * 180) / Math.PI;
   };
+  const mapLines: MapLine[] = [
+    ...content.subway.lines.map((l) => ({ name: `${l.name} ${l.nameEn}`, color: l.color, letter: l.letter, stops: l.stops.map((s) => ({ x: s.x, z: s.z, code: s.code, name: `${s.jp} ${s.en}` })) })),
+    ...(rail && railStations.length >= 2 ? [{ name: `${rail.name} ${rail.nameEn}`, color: rail.color, letter: 'T', stops: [...railStations].sort((a, b) => a.z - b.z).map((s, i) => ({ x: rail.x, z: s.z, code: `T${String(i + 1).padStart(2, '0')}`, name: `${s.names.jp} ${s.names.en}` })) }] : []),
+  ];
   const travel = new TravelMap(district, content.zones, destinations(district, nodes, content.zones), (d: Destination) => {
     const level = district.floorAt(d.x, d.z, d.floor);
     camera.position.set(d.x, controls.fly ? Math.max(camera.position.y, 1.7) : level + 1.7, d.z);
@@ -302,7 +344,31 @@ async function run(): Promise<void> {
     controls.setView(d.yaw, d.pitch);
     travel.hide();
     controls.lock();
+  }, { travel: debug, lines: mapLines });
+  const picker = new RoutePicker(content.subway);
+  // Short messages at the top of the screen.
+  const toastEl = document.createElement('div');
+  Object.assign(toastEl.style, { position: 'fixed', top: '18%', left: '50%', transform: 'translateX(-50%)', padding: '10px 18px', background: 'rgba(8, 8, 14, 0.85)', border: '1px solid #3a3850', color: '#e8e6f0', font: "14px 'Consolas', monospace", zIndex: '16', display: 'none', pointerEvents: 'none' });
+  document.body.append(toastEl);
+  let toastTimer = 0;
+  const toast = (text: string, seconds = 4): void => {
+    toastEl.textContent = text;
+    toastEl.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => (toastEl.style.display = 'none'), seconds * 1000);
+  };
+  const LAST_TRAIN = '終電 · The last train has gone. Trains run again from 5:00.';
+  const applyLate = (): void => {
+    subway.running = !late();
+    if (trains) trains.running = !late();
+    for (const v of subwayViews) v.view.setClosed(late());
+  };
+  applyLate();
+  flags.subscribe((k) => {
+    if (k === FLAG_LATE) applyLate();
   });
+  // Station sounds on a ride: the departure melody (each station its own), the door chime on arrival.
+  subway.onEvent = (kind, stop) => (kind === 'depart' ? audio.melody(hash(stop.key.length, stop.s | 0, 0x5eed)) : audio.chime());
   if (params.get('diag') === '1') Object.assign(window, { __renderer: renderer, __dof: dof, __audio: audio, __city: cityU, __traffic: traffic, __strike: () => {
     const d = camera.getWorldDirection(new THREE.Vector3());
     lightning.strikeNow(camera.position, { x: d.x, z: d.z });
@@ -314,6 +380,8 @@ async function run(): Promise<void> {
   const cam = params.get('cam')?.split(',').map(Number);
   if (cam && cam.length === 5 && cam.every(Number.isFinite)) {
     camera.position.set(cam[0], cam[1], cam[2]);
+    // Underground (or on a platform), the walker stands on the level nearest the camera's feet.
+    controls.setLevel(district.floorAt(cam[0], cam[2], cam[1] - 1.7));
     controls.setView(cam[3], cam[4]);
   }
 
@@ -369,6 +437,10 @@ async function run(): Promise<void> {
   const base = { zenith: new THREE.Color(), horizon: new THREE.Color(), cloudLit: new THREE.Color(), hemi: 0, fogNear: 60, fogFar: 620 };
   let rainAmount = 0;
   let wetness = -1;
+  let sunBase = 0;
+  let lightGainBase = 1;
+  let wasUnder = false;
+  const surfaceShown = new Map<THREE.Object3D, boolean>();
   let cycleTick = 1;
   const applyMood = (): void => {
     const fog = scene.fog as THREE.Fog;
@@ -385,6 +457,7 @@ async function run(): Promise<void> {
     // evenly; the atmosphere keeps it faint. The slider overrides it: 1.0 is the old, brighter moon (0.22).
     const night = atm.lamps > 0.5;
     sun.intensity = (night && mood.moon !== null ? mood.moon * 0.22 : atm.sun) * keep;
+    sunBase = sun.intensity;
     base.zenith.setHex(atm.sky).multiplyScalar(1 - 0.85 * d);
     base.horizon.setHex(atm.horizon).multiplyScalar(1 - 0.85 * d);
     base.cloudLit.setHex(atm.cloudLit).multiplyScalar(1 - 0.7 * d);
@@ -401,6 +474,7 @@ async function run(): Promise<void> {
     // With shadow-casting lamps, the lamps' share of the baked street light is handed to the real lights.
     lampShadows.setCount(mood.shadows);
     cityU.uLightGain.value = 1.4 * atm.lamps * (mood.shadows > 0 ? 0.6 : 1);
+    lightGainBase = cityU.uLightGain.value;
     cityU.uDark.value = d;
     dof.strength = mood.dof;
     dof.focus = mood.focus;
@@ -477,6 +551,17 @@ async function run(): Promise<void> {
     const n = target();
     if (!n || inVn) return;
     if (n.kind === 'station' && n.returnSpawn) {
+      if (content.subway.stops.has(n.placementId)) {
+        if (late()) return toast(LAST_TRAIN);
+        document.exitPointerLock();
+        // The choice is a click: lock the mouse for the ride now, while the gesture counts.
+        picker.show(n.placementId, (to) => {
+          controls.lock();
+          void rideSubway(n.placementId, to);
+        });
+        return;
+      }
+      if (isRailStation(n.placementId) && late()) return toast(LAST_TRAIN);
       if (isRailStation(n.placementId)) return trains ? rideTrain(n.placementId, n.returnSpawn) : undefined;
       return ride(n.returnSpawn);
     }
@@ -524,12 +609,52 @@ async function run(): Promise<void> {
     await fadeTo(0);
   }
 
+  // Riding the subway: each leg in real time (E skips it); a change of line is a short walk (a fade).
+  async function rideSubway(from: string, to: string): Promise<void> {
+    const legs = subwayRoute(content.subway, from, to);
+    if (!legs) return;
+    inVn = true;
+    controls.held = true;
+    for (const leg of legs) {
+      if (leg.kind === 'transfer') {
+        const s = content.subway.stops.get(leg.to)!;
+        const l = content.subway.lines.find((x) => x.id === s.line)!;
+        toast(`Change here for the ${l.nameEn} (${l.name}): ${s.jp} ${s.en} ${s.code}`, 5);
+        continue;
+      }
+      await fadeTo(1);
+      const done = subway.startRide(leg.line, leg.from, leg.to, camera);
+      controls.setView(subway.rideYaw, -3);
+      await fadeTo(0);
+      inVn = false;
+      await done;
+      inVn = true;
+    }
+    await fadeTo(1);
+    controls.held = false;
+    teleport(`${to}.platform`);
+    await fadeTo(0);
+    inVn = false;
+  }
+
   const direct: Record<string, OverlayPreset> = { Digit1: 'off', Digit2: 'vibe', Digit3: 'heavy', Digit4: 'ascii' };
   window.addEventListener('keydown', (e) => {
     if (bench || inVn) return;
     if (trains?.riding) {
       if (e.code === 'KeyE') trains.skip();
       return;
+    }
+    if (subway.riding) {
+      if (e.code === 'KeyE') subway.skip();
+      return;
+    }
+    if (picker.open) {
+      if (e.code === 'Escape' || e.code === 'KeyE') picker.hide();
+      return;
+    }
+    if (e.code === 'KeyL') {
+      flags.set(FLAG_LATE, !late());
+      toast(late() ? LAST_TRAIN : 'Trains are running (始発 the first trains have started).');
     }
     if (e.code === 'KeyM' || (e.code === 'Escape' && travel.open)) {
       if (travel.open) travel.hide();
@@ -565,10 +690,16 @@ async function run(): Promise<void> {
   });
   document.body.addEventListener('click', () => {
     audio.start();
-    if (!bench && !inVn && !travel.open && !panel.open) controls.lock();
+    if (!bench && !inVn && !travel.open && !panel.open && !picker.open) controls.lock();
   });
   controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
   controls.look.addEventListener('unlock', () => ($('overlay').hidden = bench));
+  // Debug: start on a ride, ?debug=1&ride=<from station>,<to station> (placement ids, e.g. y01_station,w03_station).
+  const rideParam = debug ? params.get('ride')?.split(',') : undefined;
+  if (rideParam?.length === 2 && content.subway.stops.has(rideParam[0]) && content.subway.stops.has(rideParam[1])) {
+    teleport(`${rideParam[0]}.platform`);
+    void rideSubway(rideParam[0], rideParam[1]);
+  }
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -630,6 +761,7 @@ async function run(): Promise<void> {
     if (bench) controls.update(0);
     for (const update of landmarkUpdates) update(camera.position, dt);
     trains?.update(dt, camera);
+    subway.update(dt, camera);
     traffic.update(dt, camera.position);
     signalLamps.update(camera.position, traffic.clock);
     screens.update(camera.position, now / 1000, cityU.uNeon.value);
@@ -686,6 +818,30 @@ async function run(): Promise<void> {
     const perMinute = mood.lightning === 'storm' ? 6 : mood.lightning === 'occasional' ? 1.2 : mood.lightning === 'auto' && rainAmount > 0.55 && mood.wind > 0.3 ? 1.5 + 6 * rainAmount * mood.wind : 0;
     const flash = lightning.update(dt, perMinute, cp);
     hemi.intensity = base.hemi + flash * 0.5;
+    // Below ground: the surface is hidden (and costs nothing), the sky's light and the street's don't reach.
+    const under = subway.riding || (!controls.fly && camera.position.y < -2.6);
+    if (under !== wasUnder) {
+      if (under) for (const o of surface) surfaceShown.set(o, o.visible);
+      else for (const o of surface) o.visible = surfaceShown.get(o) ?? true;
+      wasUnder = under;
+    }
+    if (under) {
+      for (const o of surface) o.visible = false;
+      hemi.intensity *= 0.12;
+      sun.intensity = 0;
+      cityU.uLightGain.value = 0;
+    } else {
+      sun.intensity = sunBase;
+      cityU.uLightGain.value = lightGainBase;
+    }
+    subway.group.visible = under;
+    for (const v of subwayViews) {
+      const d = Math.hypot(v.x - cp.x, v.z - cp.z);
+      // A station's underground half only below ground (or by its entrance, looking down the stairs).
+      v.view.group.visible = d < 450;
+      v.view.below.visible = under || d < 40;
+      if (d < 120 && under) v.view.update(subway.clock);
+    }
     sky.uniforms.uFlash.value = flash;
     sky.uniforms.uFlashDir.value.copy(lightning.dir);
     sky.uniforms.uZenith.value.copy(base.zenith);
@@ -693,7 +849,7 @@ async function run(): Promise<void> {
     sky.uniforms.uCloudLit.value.copy(base.cloudLit);
     fitFog();
     // Sound follows the same weather: what's overhead, the wind, the nearest cars.
-    const cover = trains?.riding ? 'enclosed' : district.shelterAt(cp.x, cp.z, cp.y)?.enclosed ? 'enclosed' : inside ? 'roof' : 'open';
+    const cover = trains?.riding || subway.riding ? 'enclosed' : district.shelterAt(cp.x, cp.z, cp.y)?.enclosed ? 'enclosed' : inside ? 'roof' : 'open';
     stepCover = cover;
     audio.update({
       dt,
@@ -701,7 +857,7 @@ async function run(): Promise<void> {
       wind: mood.wind,
       gust,
       cover,
-      train: !!trains?.riding,
+      train: !!trains?.riding || subway.riding,
       volume: mood.volume,
       x: cp.x,
       z: cp.z,
@@ -754,14 +910,14 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        trains?.status ?? `${(district.districtAt(p.x, p.z) ?? style.name).toUpperCase()} · ${district.zoneAt(p.x, p.z) ?? ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
+        trains?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? style.name).toUpperCase()} · ${district.zoneAt(p.x, p.z) ?? ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
-        t ? `[E] ${t.kind === 'door' ? 'Enter' : t.kind === 'station' ? (isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : ' ',
+        t ? `[E] ${t.kind === 'door' ? 'Enter' : t.kind === 'station' ? (content.subway.stops.has(t.placementId) ? 'Take the subway' : isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : ' ',
         'click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · M map / fast travel · T time · R weather · K weather & light panel · C grade · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
       ].join('\n');
       builtThisWindow = 0;

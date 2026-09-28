@@ -1,0 +1,19 @@
+# Subway lines (format: src/poc3d/district/subway.ts). Each line runs straight under a road; its stations are
+# placements of subway stamps (landmark: subway) whose street face is 10 m from the line, listed in order.
+# Station numbers come from the letter and the order (Y01, Y02...). transfers: stations you can change
+# between (in phase 1, a short walk through the streets).
+lines:
+  - id: yako
+    name: 夜光線
+    nameEn: YAKŌ LINE
+    letter: Y
+    color: '#9b6cff'
+    stations: [y01_station, y02_station, y03_station, y04_station, y05_station]
+  - id: wakaba
+    name: 若葉線
+    nameEn: WAKABA LINE
+    letter: W
+    color: '#b5d62a'
+    stations: [w01_station, w02_station, w03_station]
+transfers:
+  - [y04_station, w02_station]

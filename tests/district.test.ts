@@ -15,6 +15,7 @@ import { MeshBuilder } from '../src/poc3d/real/meshBuilder';
 import { tiers } from '../src/poc3d/real/buildings';
 import { SignBuilder } from '../src/poc3d/real/signs';
 import { parseStamp3, plazaRect, reservedRect } from '../src/poc3d/district/stamps';
+import { departsAt, lineSchedule, nextDepartures, parseSubway3, subwayRoute, trainAt } from '../src/poc3d/district/subway';
 
 const content = loadDistrictContent();
 const neonCells: [number, number][] = [];
@@ -444,6 +445,89 @@ describe('Traffic signals and junctions', () => {
         expect(j.stop).toBeLessThan(j.s);
         expect(j.s - j.stop).toBeGreaterThan(j.cross / 2);
       }
+    }
+  });
+});
+
+describe('Subway', () => {
+  const net = content.subway;
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const placed = (id: string) => content.placed.find((p) => p.id === id)!;
+
+  it('numbers the stations along two straight lines under the roads', () => {
+    expect(net.lines.map((l) => l.id)).toEqual(['yako', 'wakaba']);
+    expect(net.lines[0].stops.map((s) => s.code)).toEqual(['Y01', 'Y02', 'Y03', 'Y04', 'Y05']);
+    expect(net.lines[1].stops.map((s) => s.code)).toEqual(['W01', 'W02', 'W03']);
+    for (const l of net.lines) {
+      // Each line runs along a cell edge (a road), its platforms on it.
+      expect(l.at % CELL).toBe(0);
+      for (const s of l.stops) expect(l.along === 'x' ? s.z : s.x).toBeCloseTo(l.at, 3);
+    }
+  });
+
+  it('finds routes, changing lines where they meet', () => {
+    expect(subwayRoute(net, 'y02_station', 'y05_station')).toEqual([{ kind: 'ride', line: 'yako', from: 1, to: 4 }]);
+    expect(subwayRoute(net, 'y01_station', 'w03_station')).toEqual([
+      { kind: 'ride', line: 'yako', from: 0, to: 3 },
+      { kind: 'transfer', from: 'y04_station', to: 'w02_station' },
+      { kind: 'ride', line: 'wakaba', from: 1, to: 2 },
+    ]);
+    expect(subwayRoute(net, 'y03_station', 'y03_station')).toBeNull();
+  });
+
+  it('rejects stations off the line, unknown ones and bad transfers', () => {
+    const errors: string[] = [];
+    parseSubway3('s.yaml', 'lines:\n  - { id: a, name: A, nameEn: A, letter: A, color: "#ff0000", stations: [y01_station, w01_station, nope] }\ntransfers:\n  - [y01_station, y01_station]', content.placed, errors);
+    const all = errors.join('\n');
+    for (const m of [/no placement 'nope'/, /is not a station on a line|same line/]) expect(all).toMatch(m);
+    const e2: string[] = [];
+    parseSubway3('s.yaml', 'lines:\n  - { id: a, name: A, nameEn: A, letter: A, color: "#ff0000", stations: [y01_station, w01_station] }', content.placed, e2);
+    expect(e2.join('\n')).toMatch(/is not on the line/);
+  });
+
+  it('runs a timetable: trains leave every station within a cycle, both ways', () => {
+    for (const l of net.lines) {
+      for (const dir of [1, -1] as const) {
+        const { legs, period } = lineSchedule(l, dir);
+        expect(period).toBeGreaterThan(60);
+        for (const s of l.stops) {
+          const d = nextDepartures(l, s.index, dir, 1234.5);
+          expect(d.length).toBe(2);
+          expect(d[0]).toBeGreaterThanOrEqual(0);
+          expect(d[0]).toBeLessThan(period);
+          // A train standing at the stop is at its platform.
+          const t = departsAt(legs, s.index)! - 1;
+          expect(trainAt(legs, t).stop).toBe(s.index);
+          expect(trainAt(legs, t).s).toBeCloseTo(s.s, 3);
+        }
+      }
+    }
+  });
+
+  it('walks from the street down the stairs, through the gates, down to the platform', () => {
+    for (const id of ['y04_station', 'w02_station']) {
+      const f = localFrame(placed(id).building);
+      // Street -> into the pavilion -> round to the stairs' head at the back -> down -> a gate lane ->
+      // the stairs to the platform -> the platform.
+      const path: [number, number][] = [[7, -4], [3, 1], [3, 11], [7, 11], [7, 10], [7, 2], [7, 0], [0.25, -2], [0.25, -6], [7.5, -10], [8.5, -10], [19.8, -10], [23, -10], [24, -12.5]];
+      let floor = 0;
+      for (let i = 0; i + 1 < path.length; i++) {
+        const [u0, t0] = path[i];
+        const [u1, t1] = path[i + 1];
+        const n = Math.ceil(Math.hypot(u1 - u0, t1 - t0) / 0.1);
+        for (let k = 1; k <= n; k++) {
+          const [x, z] = toWorld(f, u0 + ((u1 - u0) * k) / n, t0 + ((t1 - t0) * k) / n);
+          floor = district.floorAt(x, z, floor);
+          expect(district.blocked(x, z, 0.4, floor), `${id} at (${(u0 + ((u1 - u0) * k) / n).toFixed(1)}, ${(t0 + ((t1 - t0) * k) / n).toFixed(1)}) floor ${floor.toFixed(2)}`).toBe(false);
+        }
+      }
+      expect(floor).toBe(-11);
+      // And a street walker over the platform stairs stays on the street.
+      const [x, z] = toWorld(f, 14, -10);
+      expect(district.floorAt(x, z, 0)).toBe(0);
+      // You can't walk off the platform onto the tracks.
+      const [tx, tz] = toWorld(f, 0, -15.6);
+      expect(district.blocked(tx, tz, 0.4, -11) || district.floorAt(tx, tz, -11) !== -11).toBe(true);
     }
   });
 });

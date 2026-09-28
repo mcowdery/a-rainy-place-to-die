@@ -1,0 +1,41 @@
+# 歌舞路北駅 Kaburo-kita Station, 若葉線 Wakaba Line (W01): a subway station (see content/world3d/subway.yaml for the
+# line). A landmark built by real/subwayStation.ts: an entrance pavilion on the street (14 m wide, 12 m deep)
+# with stairs down to the concourse (B1, gates, ticket machines) and an island platform (B2) under the
+# street. The line runs 10 m out from the pavilion's street face.
+id: subway_w01
+name: 歌舞路北駅 Kaburo-kita Station
+footprint: [12, 14]
+height: 4.5
+front: west
+landmark: subway
+station: { jp: 歌舞路北, en: KABURO-KITA }
+nodes:
+  exit:
+    kind: spawn
+    name: Kaburo-kita Station (Wakaba Line W01)
+    at: [7, 4]
+    facing: east
+  platform:
+    kind: spawn
+    name: Kaburo-kita Station (Wakaba Line platform)
+    at: [23, 10]
+    floor: -11
+    facing: north
+  board_a:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [-16, 10]
+    floor: -11
+    returnSpawn: platform
+  board_b:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [-6, 10]
+    floor: -11
+    returnSpawn: platform
+  board_c:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [29.5, 10]
+    floor: -11
+    returnSpawn: platform
