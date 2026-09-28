@@ -606,8 +606,14 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
         vStyle = aStyle;
         vFlags = aFlags;
         vBid = aBuilding;
-        vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
-        vWNor = normalize(mat3(modelMatrix) * objectNormal);`);
+        // Instanced meshes (traffic wheels) place each copy with instanceMatrix before the model matrix.
+        #ifdef USE_INSTANCING
+          vWPos = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+          vWNor = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * objectNormal);
+        #else
+          vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+          vWNor = normalize(mat3(modelMatrix) * objectNormal);
+        #endif`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${common}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${surface}`)

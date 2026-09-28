@@ -4,7 +4,8 @@ import type { Rect } from '../../core/coords';
 import { hash } from '../../core/hash';
 import { along, SIDES, Signals, TURN, type BusLine, type Junction, type Route } from '../district/traffic';
 import type { Prop } from './props';
-import { addCar } from './cars';
+import { addWheel } from '../models/vehicles';
+import { addCar, carWheels } from './cars';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 
 /**
@@ -33,15 +34,23 @@ export interface Walker {
 }
 const BUS_DWELL = 12;
 const BUS_LEN = 10.5;
+/** A bus's wheels: big steel wheels, standing just proud of the body's side over dark wells. */
+const BUS_WHEELS: ReturnType<typeof carWheels> = {
+  r: 0.48,
+  tw: 0.3,
+  rims: 'steel',
+  spots: [-3.2, 3.6].flatMap((z) => ([-1, 1] as const).map((sd) => ({ x: sd * 1.12, y: 0.48, z, front: z > 0, sd }))),
+};
 
-type Model = { geo: THREE.BufferGeometry; half: number; brake: THREE.BufferGeometry; label: string };
+type WheelLayout = ReturnType<typeof carWheels>;
+type Model = { geo: THREE.BufferGeometry; half: number; brake: THREE.BufferGeometry; label: string; wheels: WheelLayout };
 
 const LABELS = { sedan: 'Car', kei: 'Kei car', minivan: 'Minivan', taxi: 'Taxi' } as const;
 
 /** A car model at the origin pointing +z, with headlight glows added (the district's cars are parked). */
 function carModel(type: 'sedan' | 'kei' | 'minivan' | 'taxi', paint: number | undefined, variant: number): Model {
   const mb = new MeshBuilder();
-  addCar(mb, { x: 0, z: 0, fx: 0, fz: 1, variant, type, ...(paint === undefined ? {} : { paint }) });
+  addCar(mb, { x: 0, z: 0, fx: 0, fz: 1, variant, type, wheels: false, ...(paint === undefined ? {} : { paint }) });
   const body = mb.build()!;
   body.computeBoundingBox();
   const bb = body.boundingBox!;
@@ -57,7 +66,7 @@ function carModel(type: 'sedan' | 'kei' | 'minivan' | 'taxi', paint: number | un
   brake.kind = KIND.plain;
   brake.color = [1, 1, 1];
   for (const s of [-1, 1]) brake.box(s * (bb.max.x - 0.25), bb.min.z - 0.025, 0.79, 0.91, 0.3, 0.02, KIND.plain, true);
-  return { geo: mergeGeometries([body, lamps.build()!])!, half: (bb.max.z - bb.min.z) / 2, brake: brake.build()!, label: LABELS[type] };
+  return { geo: mergeGeometries([body, lamps.build()!])!, half: (bb.max.z - bb.min.z) / 2, brake: brake.build()!, label: LABELS[type], wheels: carWheels(type) };
 }
 
 /** A city bus at the origin pointing +z (10.5 m): cream and green, glass sides, lit inside, a destination board. */
@@ -87,8 +96,9 @@ function busModel(line: BusLine): { body: THREE.BufferGeometry; glass: THREE.Buf
   };
   const CREAM = 0xf0ead8;
   const GREEN = 0x10a060;
-  // Wheels, skirt and lower body, the stripe, pillars between the windows, the roof and its gear.
-  for (const z of [-3.2, 3.6]) for (const s of [-1, 1]) box(0x1a1a1a, s * W - 0.2 * s - 0.15, s * W - 0.2 * s + 0.15, 0, 0.95, z - 0.48, z + 0.48);
+  // Dark wheel wells (the wheels turn, drawn apart: BUS_WHEELS), skirt and lower body, the stripe, pillars
+  // between the windows, the roof and its gear.
+  for (const w of BUS_WHEELS.spots) box(0x0a0a0b, w.sd * W - 0.02, w.sd * W + 0.006, 0, 1.08, w.z - 0.6, w.z + 0.6);
   box(CREAM, -W, W, 0.3, 1.25, -H, H, KIND.gloss);
   box(GREEN, -W - 0.01, W + 0.01, 0.85, 1.1, -H, H, KIND.gloss);
   box(CREAM, -W, W, 2.55, 3.05, -H, H, KIND.gloss);
@@ -145,6 +155,14 @@ export function parkedBus(destination: string, city: THREE.Material): THREE.Grou
   const glass = new THREE.Mesh(m.glass, new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.25, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide }));
   glass.renderOrder = 3;
   g.add(glass, m.signs);
+  // Its wheels (standing still, so plain meshes).
+  for (const w of BUS_WHEELS.spots) {
+    const mb = new MeshBuilder(4096);
+    addWheel(mb, BUS_WHEELS.r, BUS_WHEELS.tw, w.sd, BUS_WHEELS.rims);
+    const wheel = new THREE.Mesh(mb.build()!, city);
+    wheel.position.set(w.x, w.y, w.z);
+    g.add(wheel);
+  }
   return g;
 }
 
@@ -288,6 +306,67 @@ interface Vehicle extends DrivenVehicle {
   /** Seconds stopped for someone in the road, and until the horn can sound again. */
   waited: number;
   hornIn: number;
+  /** Its wheels (drawn by `Wheels`) and how far they've turned (rad). */
+  readonly wheels: WheelLayout;
+  turned: number;
+}
+
+/**
+ * Every vehicle's wheels, apart from the bodies so they turn: they roll with the vehicle's speed and the front
+ * ones steer with the curve it's on. One instanced mesh per rim style and side (four draw calls in all), each
+ * wheel scaled from one model wheel to its vehicle's size.
+ */
+class Wheels {
+  private static readonly R = 0.32;
+  private static readonly TW = 0.22;
+  private readonly meshes = new Map<string, { mesh: THREE.InstancedMesh; n: number }>();
+  private readonly local = new THREE.Matrix4();
+  private readonly q = new THREE.Quaternion();
+  private readonly e = new THREE.Euler(0, 0, 0, 'YXZ');
+  private readonly p = new THREE.Vector3();
+  private readonly sc = new THREE.Vector3();
+
+  constructor(group: THREE.Group, city: THREE.Material, max: number) {
+    for (const rims of ['alloy', 'steel'] as const) {
+      for (const sd of [1, -1] as const) {
+        const mb = new MeshBuilder(4096);
+        addWheel(mb, Wheels.R, Wheels.TW, sd, rims);
+        const mesh = new THREE.InstancedMesh(mb.build()!, city, max);
+        mesh.count = 0;
+        // The instances move every frame and span the whole district: no bounds to cull by.
+        mesh.frustumCulled = false;
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        group.add(mesh);
+        this.meshes.set(`${rims}${sd}`, { mesh, n: 0 });
+      }
+    }
+  }
+
+  begin(): void {
+    for (const m of this.meshes.values()) m.n = 0;
+  }
+
+  /** v's four wheels, after its body is placed; steer (rad, positive left) turns the front ones. */
+  add(v: Vehicle, steer: number): void {
+    v.obj.updateMatrix();
+    const W = v.wheels;
+    for (const w of W.spots) {
+      const m = this.meshes.get(`${W.rims}${w.sd}`)!;
+      if (m.n >= m.mesh.instanceMatrix.count) continue;
+      this.e.set(v.turned, w.front ? steer : 0, 0);
+      this.q.setFromEuler(this.e);
+      this.local.compose(this.p.set(w.x, w.y, w.z), this.q, this.sc.set(W.tw / Wheels.TW, W.r / Wheels.R, W.r / Wheels.R));
+      this.local.premultiply(v.obj.matrix);
+      m.mesh.setMatrixAt(m.n++, this.local);
+    }
+  }
+
+  end(): void {
+    for (const m of this.meshes.values()) {
+      m.mesh.count = m.n;
+      m.mesh.instanceMatrix.needsUpdate = true;
+    }
+  }
 }
 
 /** IDM acceleration toward an obstacle gap metres ahead closing at dv (own speed minus the obstacle's). */
@@ -305,6 +384,7 @@ export class TrafficSystem {
   readonly group = new THREE.Group();
   readonly colliders: Rect[] = [];
   private readonly vehicles: Vehicle[] = [];
+  private readonly wheels: Wheels;
   private time = 0;
 
   constructor(
@@ -320,7 +400,7 @@ export class TrafficSystem {
     const taxis = [carModel('taxi', undefined, 921), carModel('taxi', undefined, 922), carModel('taxi', undefined, 923)];
     const brakeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 0.12, 0.06) });
     let k = 0;
-    const add = (obj: THREE.Object3D, brakeGeo: THREE.BufferGeometry, route: Route, half: number, width: number, bus: boolean, driver: Driver, s: number, label: string): void => {
+    const add = (obj: THREE.Object3D, brakeGeo: THREE.BufferGeometry, route: Route, half: number, width: number, bus: boolean, driver: Driver, s: number, label: string, wheels: WheelLayout): void => {
       const brake = new THREE.Mesh(brakeGeo, brakeMat);
       brake.visible = false;
       obj.add(brake);
@@ -328,7 +408,7 @@ export class TrafficSystem {
       this.group.add(obj);
       // The rear axle sits about a fifth of the length in from the back (a car's overhang; a bus's longer).
       const axle = bus ? half - 2.6 : half - 0.95;
-      this.vehicles.push({ obj, brake, route, half, width, bus, driver, label, mode: 'traffic', s, v: driver.v0 * 0.6, acc: 0, curv: 0, hideBody: false, stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle, waited: 0, hornIn: 0, x: 0, z: 0, dx: 0, dz: 1 });
+      this.vehicles.push({ obj, brake, route, half, width, bus, driver, label, mode: 'traffic', s, v: driver.v0 * 0.6, acc: 0, curv: 0, hideBody: false, stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle, waited: 0, hornIn: 0, x: 0, z: 0, dx: 0, dz: 1, wheels, turned: 0 });
     };
     for (const { route, spacing } of cars) {
       const n = Math.max(2, Math.floor(route.length / spacing));
@@ -341,7 +421,7 @@ export class TrafficSystem {
         // Temperaments: taxis a little brisker; everyone a little different.
         const r = (b: number): number => ((h >>> b) % 1000) / 1000;
         const driver: Driver = { v0: (taxi ? 12.5 : 11) + r(8) * 3, a: 1.4 + r(12) * 1.2 + (taxi ? 0.4 : 0), b: 2.2 + r(16) * 1.2, T: 1.1 + r(20) * 0.6, s0: 2.2 + r(4) * 0.8 };
-        add(obj, m.brake, route, m.half, 1.8, false, driver, (route.length * i) / n + r(2) * 8, m.label);
+        add(obj, m.brake, route, m.half, 1.8, false, driver, (route.length * i) / n + r(2) * 8, m.label, m.wheels);
       }
     }
     const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.22, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
@@ -359,9 +439,10 @@ export class TrafficSystem {
         const gl = new THREE.Mesh(model.glass, glass);
         gl.renderOrder = 3;
         obj.add(body, gl, model.signs.clone());
-        add(obj, busBrakeGeo, route, BUS_LEN / 2, 2.5, true, { v0: 9.5, a: 0.9, b: 1.6, T: 1.6, s0: 3 }, (route.length * (i + 0.3)) / line.buses, 'Bus');
+        add(obj, busBrakeGeo, route, BUS_LEN / 2, 2.5, true, { v0: 9.5, a: 0.9, b: 1.6, T: 1.6, s0: 3 }, (route.length * (i + 0.3)) / line.buses, 'Bus', BUS_WHEELS);
       }
     }
+    this.wheels = new Wheels(this.group, city, this.vehicles.length * 4);
     const stops = busStops(buses, city);
     this.group.add(stops.mesh);
     this.colliders.push(...stops.colliders);
@@ -404,6 +485,7 @@ export class TrafficSystem {
       for (const f of [-0.6, 0, 0.6]) others.push({ x: o.x + o.dx * o.half * f, z: o.z + o.dz * o.half * f, vx: o.dx * o.v, vz: o.dz * o.v, r: o.width / 2 + 0.2 });
     }
     for (const v of V) if (v.mode === 'traffic') v.acc = this.accel(v, dt, others, camera);
+    this.wheels.begin();
     for (const v of V) {
       if (v.mode === 'traffic') {
         const L = v.route.length;
@@ -429,7 +511,15 @@ export class TrafficSystem {
       v.roll += (lean - v.roll) * Math.min(1, dt * 5);
       v.obj.rotation.z = v.roll;
       v.brake.visible = v.acc < -0.6 || v.v < 0.4;
+      // The wheels roll with the speed, and the front ones steer with the curve: tan(steer) = wheelbase * k
+      // (k > 0 turning right, the car's right is -x; reversing, the curve runs the other way).
+      v.turned = (v.turned + (v.v * dt) / v.wheels.r) % (Math.PI * 2);
+      if (v.hideBody) continue;
+      const k = v.mode === 'traffic' || v.v >= 0 ? p.k : -p.k;
+      const base = v.wheels.spots[v.wheels.spots.length - 1].z - v.wheels.spots[0].z;
+      this.wheels.add(v, -THREE.MathUtils.clamp(Math.atan(base * k), -0.62, 0.62));
     }
+    this.wheels.end();
   }
 
   /** The vehicle's acceleration this frame: the most cautious of free driving and every obstacle. */

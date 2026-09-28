@@ -112,16 +112,31 @@ export interface CarSpec {
   /** Force a type / paint (the model showroom); otherwise both are picked from the variant. */
   readonly type?: CarType['name'];
   readonly paint?: number;
+  /** false leaves the wheels off: moving traffic draws them apart so they can turn (`carWheels`). */
+  readonly wheels?: boolean;
 }
 
 export const CAR_TYPES: readonly CarType['name'][] = ['sedan', 'kei', 'minivan', 'taxi'];
+const BY_NAME = { sedan: SEDAN, kei: KEI, minivan: MINIVAN, taxi: TAXI };
+
+/**
+ * Where a car type's wheels are, for drawing them apart (to spin and steer): hubs in the car's frame (at the
+ * origin pointing +z, +x its left), their size, and the rims (hubcaps on kei cars and taxis).
+ */
+export function carWheels(type: CarType['name']): { r: number; tw: number; rims: 'alloy' | 'steel'; spots: { x: number; y: number; z: number; front: boolean; sd: 1 | -1 }[] } {
+  const t = BY_NAME[type];
+  // These bodies have no wheel arches (their sides come down to 0.3 m), so the wheels stand out from the side
+  // far enough for the rims to show on it.
+  const tw = 0.23;
+  const spots = t.wheelX.flatMap((wx) => ([-1, 1] as const).map((sd) => ({ x: sd * (t.halfW + 0.075 - tw / 2), y: t.wheelR, z: wx, front: wx > 0, sd })));
+  return { r: t.wheelR, tw, rims: type === 'kei' || type === 'taxi' ? 'steel' : 'alloy', spots };
+}
 
 /** Adds a parked car to the builder. */
 export function addCar(mb: MeshBuilder, c: CarSpec): void {
   const rnd = rng(hash(c.variant, 0xca5));
   const roll = rnd.float();
-  const byName = { sedan: SEDAN, kei: KEI, minivan: MINIVAN, taxi: TAXI };
-  const t = c.type ? byName[c.type] : roll < 0.4 ? SEDAN : roll < 0.65 ? KEI : roll < 0.85 ? MINIVAN : TAXI;
+  const t = c.type ? BY_NAME[c.type] : roll < 0.4 ? SEDAN : roll < 0.65 ? KEI : roll < 0.85 ? MINIVAN : TAXI;
   const picked = t === KEI ? rnd.pick(KEI_PAINTS) : t === TAXI ? rnd.pick(TAXI_PAINTS) : rnd.pick(PAINTS);
   const paintHex = c.paint ?? picked;
   const paint = lin(paintHex);
@@ -182,7 +197,7 @@ export function addCar(mb: MeshBuilder, c: CarSpec): void {
   }
 
   // Wheels: tyre tread and sidewall, and a hubcap.
-  for (const wx of t.wheelX) {
+  for (const wx of c.wheels === false ? [] : t.wheelX) {
     for (const side of [-1, 1]) {
       const z0 = side * (t.halfW - 0.22);
       const z1 = side * (t.halfW + 0.01);

@@ -5,7 +5,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { cityMaterial, cityUniforms } from '../poc3d/real/city';
 import { MeshBuilder } from '../poc3d/real/meshBuilder';
-import { addVehicle } from '../poc3d/models/vehicles';
+import { addVehicle, addWheel, wheelLayout } from '../poc3d/models/vehicles';
 import { loadCourses } from './courses';
 import { buildVenue } from './scene';
 import { CarSound } from './sound';
@@ -68,11 +68,28 @@ const cityU = cityUniforms();
 cityU.uLightGain.value = 0;
 cityU.uLamps.value = 1;
 const mb = new MeshBuilder(1 << 17);
-addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type: 'sports', paint: Number(params.get('paint') ?? 0xf0f0ec), detail: 0.05 });
-const body = new THREE.Mesh(mb.build()!, cityMaterial(cityU));
+addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type: 'sports', paint: Number(params.get('paint') ?? 0xf0f0ec), detail: 0.05, wheels: false });
+const carMat = cityMaterial(cityU);
+const body = new THREE.Mesh(mb.build()!, carMat);
 const carObj = new THREE.Group();
 carObj.rotation.order = 'YXZ';
 carObj.add(body);
+// The wheels, apart from the body so they turn: the fronts steer, all roll with the road, the rears spin up
+// with wheelspin and stop dead under the handbrake.
+const WL = wheelLayout('sports');
+const wheelGeo = new Map<1 | -1, THREE.BufferGeometry>();
+for (const sd of [1, -1] as const) {
+  const wb = new MeshBuilder(1 << 14);
+  addWheel(wb, WL.r, WL.tw, sd, WL.rims);
+  wheelGeo.set(sd, wb.build()!);
+}
+const wheels = WL.spots.map((w) => {
+  const m = new THREE.Mesh(wheelGeo.get(w.sd)!, carMat);
+  m.position.set(w.x, w.y, w.z);
+  m.rotation.order = 'YXZ';
+  body.add(m);
+  return { m, front: w.front, roll: 0 };
+});
 scene.add(carObj);
 const beams: THREE.SpotLight[] = [];
 for (const s of [-0.62, 0.62]) {
@@ -345,6 +362,11 @@ function frame(now: number): void {
   carObj.position.set(car.x, car.y, car.z);
   carObj.rotation.set(slopePitch - car.ax * 0.006, car.h, -slopeRoll + car.ay * 0.007);
   body.visible = view === 'chase';
+  for (const wh of wheels) {
+    const rate = wh.front ? car.u / WL.r : car.handbrake ? 0 : (car.u / WL.r) * (1 + car.spin * 2.5) + car.spin * 25;
+    wh.roll = (wh.roll + rate * dt) % (Math.PI * 2);
+    wh.m.rotation.set(wh.roll, wh.front ? car.steer : 0, 0);
+  }
   // Smoke from the rear wheels.
   const slideSmoke = Math.max(0, ang - 0.18) * 3 * Math.min(1, car.u / 8) + car.spin;
   if (slideSmoke > 0.15) {
@@ -395,4 +417,4 @@ window.addEventListener('resize', () => {
   (smoke.material as THREE.ShaderMaterial).uniforms.uScale.value = window.innerHeight;
 });
 // For checks: the car and a way to drive it from a script.
-(window as unknown as { __race: unknown }).__race = { car, course, keys, camera };
+(window as unknown as { __race: unknown }).__race = { car, course, keys, camera, scene };

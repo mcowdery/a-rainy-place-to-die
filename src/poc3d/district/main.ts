@@ -627,6 +627,7 @@ async function run(): Promise<void> {
     onMessage: () => audio.ping(),
     blocked: () => bench || document.body.classList.contains('vn-on') || travel.open,
   });
+  if (debug) (window as unknown as { __traffic: unknown }).__traffic = traffic;
   if (debug) (window as unknown as { __phone: unknown }).__phone = { phone, ui: phoneUi, skip: (s: number) => phoneUi.update(phone.update(s)) };
   // ?debug=1: window.__vn('bar_kanpai.mama') plays a node's scene (for screenshots and checks).
   if (debug) {

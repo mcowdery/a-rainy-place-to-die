@@ -252,6 +252,8 @@ export interface VehicleSpec {
   readonly detail?: number;
   /** Taxi advertising (needs `signs` passed to addVehicle for the text). */
   readonly ad?: TaxiAd;
+  /** false leaves the wheels off, for a car whose wheels are drawn apart so they can turn (`wheelLayout`, `addWheel`). */
+  readonly wheels?: boolean;
 }
 
 /** Text geometry for vehicles that carry lettering (taxi ads, delivery boxes). */
@@ -867,7 +869,36 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
   }
 
   // Wheels.
-  for (const wx of d.wheelX) for (const sd of [-1, 1]) wheel(mb, P, N, wx, d.wheelR, d.tyreW, sd * (d.W - 0.035), sd, d.rims);
+  if (spec.wheels !== false) for (const wx of d.wheelX) for (const sd of [-1, 1]) wheel(mb, P, N, wx, d.wheelR, d.tyreW, sd * (d.W - 0.035), sd, d.rims);
+}
+
+/** A wheel's hub in its car's frame (the car at the origin pointing +z; +x is the car's left), and its side. */
+export interface WheelSpot {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly front: boolean;
+  /** +1 on the left (+x) side, -1 on the right. */
+  readonly sd: 1 | -1;
+}
+
+/** Where a car's four wheels are, and their size and rims, for drawing them apart (to spin and steer). */
+export function wheelLayout(type: CarType): { r: number; tw: number; rims: 'alloy' | 'steel'; spots: WheelSpot[] } {
+  const d = DESIGNS[type];
+  const spots: WheelSpot[] = [];
+  for (const wx of d.wheelX) {
+    for (const sd of [-1, 1] as const) spots.push({ x: sd * (d.W - 0.035 - d.tyreW / 2), y: d.wheelR, z: wx - d.L / 2, front: wx > d.L / 2, sd });
+  }
+  return { r: d.wheelR, tw: d.tyreW, rims: d.rims, spots };
+}
+
+/**
+ * One wheel with its hub at the origin and its axle along x, the outer face toward +x (sd 1) or -x (sd -1):
+ * rolling forward (+z) is a positive turn about +x.
+ */
+export function addWheel(mb: MeshBuilder, r: number, tw: number, sd: 1 | -1, rims: 'alloy' | 'steel'): void {
+  // The same axes as a car built facing +z at the origin (its z across is our x), centred on the hub.
+  wheel(mb, (x, y, z) => [z, y - r, x], (n) => [n[2], n[1], n[0]], 0, r, tw, (sd * tw) / 2, sd, rims);
 }
 
 /** A turned wheel: rounded tyre, rim lip, and five alloy spokes (or a steel hubcap). */
@@ -906,10 +937,17 @@ export function wheel(mb: MeshBuilder, P: (x: number, y: number, z: number) => V
     mb.color = [0.7, 0.71, 0.73];
     disc(rimR * 0.9, rimR, 0.012, a0, a1);
     if (rims === 'steel') {
-      // Steel wheel with a domed hubcap.
+      // Steel wheel with a domed hubcap, and eight vent holes round it (so you can see it turn).
       mb.kind = KIND.gloss;
       mb.color = [0.42, 0.43, 0.45];
-      disc(rimR * 0.2, rimR * 0.9, 0.03, a0, a1);
+      disc(rimR * 0.2, rimR * 0.6, 0.03, a0, a1);
+      disc(rimR * 0.78, rimR * 0.9, 0.03, a0, a1);
+      const vent = Math.floor((((a0 + a1) / 2) / (Math.PI * 2)) * 16) % 2 === 0;
+      if (vent) {
+        mb.kind = KIND.plain;
+        mb.color = [0.03, 0.03, 0.032];
+      }
+      disc(rimR * 0.6, rimR * 0.78, vent ? 0.07 : 0.03, a0, a1);
       mb.kind = KIND.chrome;
       mb.color = [0.8, 0.81, 0.83];
       disc(0, rimR * 0.55, 0.018, a0, a1);
