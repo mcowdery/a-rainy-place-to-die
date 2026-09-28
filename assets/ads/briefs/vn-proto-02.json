@@ -1,0 +1,15 @@
+{
+  "batch": "vn-proto-02",
+  "purpose": "Redo from review: Mama-san as a close-up POV, as if you're talking to her face to face (the first frame of her VN scene). No lettering.",
+  "use": "sign",
+  "defaults": { "lora": null, "variants": 3, "width": 1536, "height": 864 },
+  "items": [
+    {
+      "id": "mama_closeup",
+      "notes": "Review note on vn_proto_01 mama_street: I want it to be a closeup pov like you're talking to her face to face.",
+      "style": "photorealistic cinematic film still, neo-noir, 1980s Tokyo city pop mood, neon light and rain, 35mm film grain, shallow depth of field",
+      "subject": "close-up point-of-view portrait at eye level, as if standing face to face with her in conversation: an elegant Japanese snack bar mama-san in her fifties in a dark kimono, hair in a neat bun, a clear umbrella over her head beaded with rain, soft pink and amber neon on her face, she looks straight into the camera with a knowing half smile, head and shoulders, the narrow rainy Kabukicho alley behind her dissolved into neon bokeh",
+      "composition": "wide horizontal composition, her face just left of centre at eye level, the background softly blurred"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import { loadDistrictContent } from '../src/poc3d/district/content';
 import { loadVnLibrary } from '../src/vn/content';
 import { hitHotspot, VnEngine, VnLibrary } from '../src/vn/engine';
 import { validateScene } from '../src/vn/format';
+import { vnKeys } from '../src/vn/keys';
 
 const lib = loadVnLibrary();
 const flagStore = (): { get(k: string): unknown; set(k: string, v: boolean): void; all: Map<string, boolean> } => {
@@ -16,6 +17,7 @@ describe('VN library (the exports in content/vn)', () => {
     expect(lib.stories.get('s90')).toBeTruthy();
     expect(lib.imageOf('s90.fr10')).toBeTruthy();
     expect(lib.imageOf('s90.fr01')).toBeNull();
+    expect(lib.imageOf('s90.fr20')).toBeTruthy();
   });
 
   it('enters from world nodes that exist, and exits to spawns that exist', () => {
@@ -91,10 +93,28 @@ describe('VN engine: Mama-san and Room 303', () => {
   it('hit-tests hotspots by shape', () => {
     const f = lib.frames.get('s90.fr10')!;
     const mama = f.hotspots.find((h) => h.id === 'h03')!;
-    expect(hitHotspot(mama, 0.62, 0.45)).toBe(true);
-    expect(hitHotspot(mama, 0.4, 0.45)).toBe(false);
+    expect(hitHotspot(mama, 0.5, 0.45)).toBe(true);
+    expect(hitHotspot(mama, 0.62, 0.45)).toBe(false);
     const round = { ...mama, shape: 'circle' as const, box: [0.4, 0.4, 0.2, 0.2] as const, points: [] };
     expect(hitHotspot(round, 0.5, 0.5)).toBe(true);
     expect(hitHotspot(round, 0.41, 0.41)).toBe(false);
+  });
+});
+
+describe('VN keys (npm run vn:keys)', () => {
+  const keys = vnKeys(loadDistrictContent().placed, lib);
+
+  it('lists npcs and story doors as entry keys, with their scenes, and spawns as exits', () => {
+    expect(keys.entries['bar_kanpai.mama']).toMatchObject({ kind: 'npc', scene: 's90.fr01' });
+    expect(keys.entries['hotel_rouge.room_303']).toMatchObject({ kind: 'door', floor: 10, scene: 's90.fr20' });
+    expect(keys.entries['yoru_mart.clerk']?.scene).toBeNull();
+    expect(keys.exits['bar_kanpai.out']).toBeTruthy();
+  });
+
+  it('leaves out plain doorways, rides and spawns from the entries', () => {
+    expect(keys.entries['hotel_rouge.entrance']).toBeUndefined();
+    expect(keys.entries['sakura_yu.door']).toBeUndefined();
+    expect(keys.entries['the_peak.penthouse']).toBeUndefined();
+    expect(keys.entries['bar_kanpai.out']).toBeUndefined();
   });
 });

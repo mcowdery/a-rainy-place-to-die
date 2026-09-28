@@ -1,0 +1,25 @@
+{
+  "file": "room303_door_v1.png",
+  "item": "room303_door",
+  "brand": null,
+  "copy": null,
+  "notes": null,
+  "prompt": "photorealistic cinematic film still, neo-noir, moody purple and red light, 35mm film grain, a closed hotel room door at the end of a dim love hotel corridor at night, dark red carpet, damask wallpaper, a small red lamp glowing above the door, a brass room number plate, warm light and the flicker of a television spilling from the gap under the door, suspenseful, wide horizontal composition, the door in the centre, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    864
+  ],
+  "steps": 12,
+  "seed": 903336551,
+  "studioJob": "3e05bb15-dce0-4cdb-a88c-d2b009daef06-u1",
+  "generated": "2026-09-28T07:45:01.183Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/83_room303_door.png",
+  "decided": "2026-09-28T07:46:50.698Z",
+  "batch": "vn_proto_01",
+  "purpose": "Stills for the prototype VN scene (Bar Kanpai's Mama-san, and the knock at Hotel Rouge's Room 303). 16:9 frames; dialogue is drawn in-engine, so no lettering.",
+  "use": "sign",
+  "district": null
+}

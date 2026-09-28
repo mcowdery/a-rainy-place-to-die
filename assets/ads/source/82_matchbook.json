@@ -1,0 +1,25 @@
+{
+  "file": "matchbook_v2.png",
+  "item": "matchbook",
+  "brand": null,
+  "copy": null,
+  "notes": null,
+  "prompt": "photorealistic cinematic film still, neo-noir, 35mm film grain, shallow depth of field, close-up of a small pink matchbook lying on dark red hotel carpet, half slid out from the thin line of light under a closed door, wide horizontal composition, the matchbook just right of centre, low angle close to the floor, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    864
+  ],
+  "steps": 12,
+  "seed": 841337215,
+  "studioJob": "4f28dcbb-3705-48da-a0f6-d67691389048-u2",
+  "generated": "2026-09-28T07:45:20.099Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/82_matchbook.png",
+  "decided": "2026-09-28T07:46:37.512Z",
+  "batch": "vn_proto_01",
+  "purpose": "Stills for the prototype VN scene (Bar Kanpai's Mama-san, and the knock at Hotel Rouge's Room 303). 16:9 frames; dialogue is drawn in-engine, so no lettering.",
+  "use": "sign",
+  "district": null
+}

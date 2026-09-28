@@ -17,7 +17,9 @@
     "ads:reject": "node scripts/krea/ads.mjs reject",
     "ads:serve": "node scripts/krea/review-server.mjs",
     "vn:pull": "node scripts/vn/vn.mjs pull",
-    "vn:import": "node scripts/vn/vn.mjs import"
+    "vn:import": "node scripts/vn/vn.mjs import",
+    "vn:keys": "node scripts/vn/keys.mjs",
+    "vn:try": "node scripts/vn/try.mjs"
   },
   "dependencies": {
     "three": "^0.186.1",

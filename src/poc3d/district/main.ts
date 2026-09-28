@@ -633,7 +633,10 @@ async function run(): Promise<void> {
   };
   const interact = async (): Promise<void> => {
     const n = target();
-    if (!n || inVn) return;
+    if (n) await use(n);
+  };
+  const use = async (n: Node3): Promise<void> => {
+    if (inVn) return;
     if (n.kind === 'station' && n.returnSpawn) {
       if (content.subway.stops.has(n.placementId)) {
         if (late()) return toast(LAST_TRAIN);
@@ -783,6 +786,23 @@ async function run(): Promise<void> {
   controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
   controls.look.addEventListener('unlock', () => ($('overlay').hidden = bench));
   // Debug: start on a ride, ?debug=1&ride=<from station>,<to station> (placement ids, e.g. y01_station,w03_station).
+  // ?debug=1&vn=<node id>: stand in front of the node (a step out from an npc), face it, play its scene.
+  const vnParam = debug ? params.get('vn') : null;
+  if (vnParam) {
+    const n = nodeById.get(vnParam);
+    if (!n) toast(`?vn=${vnParam}: no such node`);
+    else {
+      const step = n.kind === 'npc' ? 1.8 : 0;
+      const x = n.x + n.nx * step;
+      const z = n.z + n.nz * step;
+      camera.position.set(x, n.floor + 1.7, z);
+      updateInteriors();
+      const level = district.floorAt(x, z, n.floor);
+      camera.position.y = level + 1.7;
+      controls.setLevel(level);
+      void use(n);
+    }
+  }
   const rideParam = debug ? params.get('ride')?.split(',') : undefined;
   if (rideParam?.length === 2 && content.subway.stops.has(rideParam[0]) && content.subway.stops.has(rideParam[1])) {
     teleport(`${rideParam[0]}.platform`);

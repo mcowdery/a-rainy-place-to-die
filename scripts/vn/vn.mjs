@@ -14,7 +14,7 @@ import { ROOT, Studio, StudioError } from '../krea/studio.mjs';
 
 const CONTENT = path.join(ROOT, 'content', 'vn');
 
-function install(zip) {
+export function install(zip) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vn-'));
   try {
     // Windows: PowerShell's Expand-Archive (a Git Bash tar can't read zips); elsewhere unzip, then bsdtar.
@@ -47,7 +47,7 @@ function install(zip) {
   }
 }
 
-async function pull(storyId) {
+export async function pull(storyId) {
   if (!/^s\d+$/.test(storyId ?? '')) throw new StudioError('Usage: npm run vn:pull -- <story_id> (like s08)');
   const studio = new Studio();
   const zip = path.join(os.tmpdir(), `vn-${storyId}.zip`);
@@ -57,7 +57,7 @@ async function pull(storyId) {
 }
 
 const [cmd, arg] = process.argv.slice(2);
-try {
+if (process.argv[1]?.endsWith('vn.mjs')) try {
   if (cmd === 'pull') await pull(arg);
   else if (cmd === 'import' && arg) install(path.resolve(arg));
   else console.log('Usage: npm run vn:pull -- <story_id> | npm run vn:import -- <file.zip>');

@@ -1,0 +1,25 @@
+{
+  "file": "bar_interior_v2.png",
+  "item": "bar_interior",
+  "brand": null,
+  "copy": null,
+  "notes": null,
+  "prompt": "photorealistic cinematic film still, neo-noir, 1980s Tokyo city pop mood, warm amber light, 35mm film grain, inside a tiny Japanese snack bar at night, a short wooden counter with a few stools in the foreground, the mama-san in a kimono behind the counter in the centre, a wall of backlit shelves of whisky keep bottles with little hanging tags on the left, a small framed old black and white photograph on the wall, a frosted glass door on the right edge, cosy and intimate, wide horizontal composition, straight-on view of the counter, every element clearly separated, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1536,
+    864
+  ],
+  "steps": 12,
+  "seed": 1488767024,
+  "studioJob": "61099244-89aa-4919-908e-ca495a3d1970-u2",
+  "generated": "2026-09-28T07:44:42.270Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/84_bar_interior.png",
+  "decided": "2026-09-28T07:48:56.849Z",
+  "batch": "vn_proto_01",
+  "purpose": "Stills for the prototype VN scene (Bar Kanpai's Mama-san, and the knock at Hotel Rouge's Room 303). 16:9 frames; dialogue is drawn in-engine, so no lettering.",
+  "use": "sign",
+  "district": null
+}
