@@ -1,0 +1,118 @@
+# Sakuragaoka (桜ヶ丘), the residential district west of Asagiri (format: src/poc3d/district/zones.ts), after the
+# quiet neighbourhoods west of Shinjuku: two-storey houses on narrow lanes under the power lines, pots and
+# bicycles at every door, apartment blocks, a small park, and a shopping street along the Seikō Line's road
+# (the private railway from the terminal, under the road between rows 9 and 10). The residential style
+# is generated only where this map paints (onlyZoned): the R cells round the centre stay open ground.
+district: residential
+origin: [14, 9]
+map:
+  - HHMMHH
+  - SSSSSM
+  - HKHHMH
+  - MHHHHH
+
+zones:
+  H:
+    id: sakuragaoka_houses
+    name: Sakuragaoka (houses)
+    plan:
+      floors: [[2, 2, 70], [3, 3, 22], [4, 5, 8]]
+      lotW: [7, 11]
+      localStreet: [3, 4.5]
+      block: [16, 36]
+      lotGap: 0.45
+      signChance: 0.05
+      open: { parking: 0.07, vacant: 0.04, playground: 0.03 }
+      rear: [1.5, 3.5]
+      setback: [0.8, 2.4]
+      streetTrees: 0.15
+      hedges: 0.1
+      pots: 0.6
+    ads: { street: 2, food: 1, mainstream: 1 }
+    look:
+      windows: { punched: 45, small: 30, balcony: 25 }
+      walls: ['#d8d0c0', '#c8c0b0', '#e8e0d0', '#b8a890', '#a8b0b8', '#d0c8b8', '#8a7a6a']
+      tiled: true
+      shops: { warm: 3, cool: 1 }
+      open: 0.5
+      homes: 0.9
+      roofs: 0.7
+      bikes: 0.6
+
+  M:
+    id: sakuragaoka_mansions
+    name: Sakuragaoka (apartments)
+    plan:
+      floors: [[5, 8, 60], [9, 14, 40]]
+      lotW: [16, 28]
+      localStreet: [5, 7]
+      block: [30, 56]
+      twoRowDepth: 30
+      lotGap: 0.5
+      signChance: 0.1
+      open: { parking: 0.12, playground: 0.06 }
+      rear: [3, 6]
+      setback: [2, 4]
+      streetTrees: 0.5
+      hedges: 0.5
+      pots: 0.2
+    ads: { street: 1, mainstream: 2 }
+    look:
+      windows: { balcony: 70, punched: 30 }
+      walls: ['#e0dcd0', '#d0ccc0', '#c8c4b8', '#b8b4a8', '#d8c8b8']
+      tiled: true
+      shops: { cool: 2, warm: 2 }
+      open: 0.6
+      homes: 0.9
+      bikes: 0.8
+
+  S:
+    id: sakuragaoka_ginza
+    name: Sakuragaoka Ginza (shopping street)
+    plan:
+      floors: [[2, 3, 60], [4, 5, 40]]
+      lotW: [5, 9]
+      localStreet: [4, 6]
+      lotGap: 0.1
+      signChance: 0.9
+      verticalSign: 0.5
+      open: { parking: 0.03 }
+      rear: [0.5, 1.5]
+      setback: [0, 0.4]
+      streetTrees: 0.1
+      pots: 0.5
+    signs:
+      words: [八百屋, 魚屋, 肉屋, 豆腐, 惣菜, 花屋, 本屋, 喫茶, パン, 和菓子, 薬局, 布団, 金物, 酒店, ラーメン, 定食, 桜ヶ丘銀座]
+      colors: ['#ffe45f', '#ff4f4f', '#ffb040', '#ffffff', '#6bff8a']
+    ads: { food: 4, street: 3, mainstream: 1 }
+    look:
+      windows: { punched: 60, small: 40 }
+      walls: ['#b8a88c', '#c2b49a', '#a89878', '#7c604c', '#d8d5cc']
+      tiled: true
+      shops: { warm: 7, cool: 2, colourful: 1 }
+      open: 0.9
+      homes: 0.12
+      roofs: 0.3
+      bikes: 0.3
+
+  K:
+    id: sakuragaoka_park
+    name: Sakuragaoka Park
+    plan:
+      park: 0.55
+      floors: [[2, 2, 70], [3, 3, 30]]
+      lotW: [7, 11]
+      localStreet: [3, 4.5]
+      rear: [1.5, 3.5]
+      setback: [0.8, 2.4]
+      pots: 0.6
+    ads: { street: 2, food: 1 }
+    look:
+      windows: { punched: 50, small: 30, balcony: 20 }
+      walls: ['#d8d0c0', '#c8c0b0', '#e8e0d0', '#b8a890', '#a8b0b8']
+      tiled: true
+      shops: { warm: 3 }
+      open: 0.5
+      homes: 0.9
+      roofs: 0.7
+      bikes: 0.6

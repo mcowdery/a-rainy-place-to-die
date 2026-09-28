@@ -1,0 +1,40 @@
+# 東都中央駅 Tōto-chūō Station, 西光線 Seikō Line (S01): the private railway from the terminal out to the
+# Sakuragaoka suburb (see content/world3d/subway.yaml). A subway station built by real/subwayStation.ts: an
+# entrance pavilion on the street with stairs down to the concourse and an island platform under the road.
+id: subway_s01
+name: 東都中央駅 Tōto-chūō Station
+footprint: [14, 12]
+height: 4.5
+front: north
+landmark: subway
+station: { jp: 東都中央, en: TŌTO-CHŪŌ }
+nodes:
+  exit:
+    kind: spawn
+    name: Tōto-chūō Station (Seikō Line S01)
+    at: [7, 4]
+    facing: south
+  platform:
+    kind: spawn
+    name: Tōto-chūō Station (Seikō Line platform)
+    at: [23, 10]
+    floor: -11
+    facing: east
+  board_a:
+    kind: station
+    name: Seikō Line 西光線
+    at: [-16, 10]
+    floor: -11
+    returnSpawn: platform
+  board_b:
+    kind: station
+    name: Seikō Line 西光線
+    at: [-6, 10]
+    floor: -11
+    returnSpawn: platform
+  board_c:
+    kind: station
+    name: Seikō Line 西光線
+    at: [29.5, 10]
+    floor: -11
+    returnSpawn: platform

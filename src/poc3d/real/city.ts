@@ -197,8 +197,10 @@ const surface = /* glsl */ `
     bool darkFrame = mod(floor(vFlags / 8.0), 2.0) > 0.5;
     float litBias = mod(floor(vFlags / 16.0), 8.0) / 7.0;
     bool tiled = mod(floor(vFlags / 128.0), 2.0) > 0.5;
-    const float GF = 4.2;
+    // A home (buildings.ts HOME_FLAG): a door and a window on a lower ground floor instead of a shop.
+    bool home = mod(floor(vFlags / 256.0), 2.0) > 0.5;
     const float FH = 3.0;
+    float GF = home ? 3.0 : 4.2;
 
     // Weathering: broad blotches, vertical rain streaks, splash dirt at the base; tile grout close up.
     vec3 wallCol = vColor.rgb;
@@ -220,7 +222,32 @@ const surface = /* glsl */ `
     vec3 rd = vec3(dot(Vw, T), Vw.y, dot(Vw, Nw));
     vec3 refl = skyRefl(reflect(Vw, Nw));
 
-    if (isFront && v < GF) {
+    if (isFront && v < GF && home) {
+      // A house front: the door near one end under a little lamp, a window beside it, the wall.
+      float hs = h1(vBid + 5.0);
+      float dx = faceW * (hs < 0.5 ? 0.24 : 0.76);
+      float wx = faceW * (hs < 0.5 ? 0.66 : 0.34);
+      float inLit = step(h1(vBid + 11.0), clamp(uWindowLit * 1.2, 0.0, 1.0));
+      float du = abs(u - dx);
+      if (du < 0.5 && v < 2.15) {
+        bool frame = du > 0.44 || v > 2.09;
+        bool pane = du < 0.14 && v > 0.9 && v < 1.95;
+        albedo = frame ? vec3(0.06) : pane ? vec3(0.05) : mix(vec3(0.22, 0.15, 0.1), vec3(0.42, 0.43, 0.45), step(0.5, h1(vBid + 7.0)));
+        if (pane) sEmit = vec3(1.0, 0.8, 0.55) * 0.45 * inLit;
+        sRough = 0.5;
+      } else if (du < 0.12 && v > 2.3 && v < 2.45) {
+        albedo = vec3(0.1);
+        sEmit = vec3(1.0, 0.85, 0.6) * 2.0 * uLamps;
+      } else if (abs(u - wx) < 0.8 && v > 0.95 && v < 2.1 && faceW > 3.2) {
+        float dw = abs(u - wx);
+        bool frame = dw > 0.74 || v < 1.01 || v > 2.04 || dw < 0.03;
+        albedo = frame ? vec3(0.42, 0.44, 0.47) : vec3(0.02);
+        sMetal = frame ? 0.6 : 0.0;
+        sRough = frame ? 0.4 : 0.06;
+        // Glass: the sky by day; at night some are lit behind their curtains.
+        if (!frame) sEmit = mix(refl * fresnel(cosV), vec3(1.0, 0.82, 0.55) * 0.35, inLit);
+      }
+    } else if (isFront && v < GF) {
       // Storefront: pillars, fascia, then glass (open) or a shutter (closed).
       float pil = 0.35;
       float sw = faceW - 2.0 * pil;

@@ -26,7 +26,7 @@ export interface Prop {
     | 'lamp' | 'pole' | 'vending' | 'tree' | 'car' | 'signal'
     // Greenery and the furniture of open ground (openLots.ts).
     | 'hedge' | 'pots' | 'planter' | 'bench' | 'postlamp' | 'fence' | 'paymachine' | 'psign' | 'wheelstop'
-    | 'swing' | 'slide' | 'sandbox' | 'toilet' | 'weeds' | 'board' | 'cones';
+    | 'swing' | 'slide' | 'sandbox' | 'toilet' | 'weeds' | 'board' | 'cones' | 'bike';
   readonly x: number;
   readonly z: number;
   /**
@@ -251,13 +251,27 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
     }
     // Potted plants (植木鉢) along the wall at one end, away from any vending machines.
     const pots = rng(hash(b.id, 0x9075));
+    let potsAtStart: boolean | null = null;
     if (sw > 3.5 && b.hue === undefined && pots.chance(b.zone?.style.pots ?? plan.style.pots)) {
       const len = Math.min(sw * 0.4, 1.2 + pots.float() * 1.6);
       const atStart = vendAt === null ? pots.chance(0.5) : vendAt > s0 + sw / 2;
+      potsAtStart = atStart;
       const u = atStart ? s0 + 0.2 + len / 2 : s1 - 0.2 - len / 2;
       const x = f.p[0] + f.r[0] * u + f.n[0] * 0.35;
       const z = f.p[2] + f.r[2] * u + f.n[2] * 0.35;
       props.push({ kind: 'pots', x, z, nx: f.n[0], nz: f.n[2], radius: 0.3, half: len / 2, variant: pots.int(0, 99999) });
+    }
+    // Bicycles (mamachari) parked nose to the wall outside homes, at the other end from the pots.
+    const bikes = rng(hash(b.id, 0xb1c5));
+    if (s.home && sw > 4 && vendAt === null && bikes.chance(b.zone?.look.bikes ?? 0)) {
+      const n = bikes.int(1, 3);
+      const atStart = potsAtStart === null ? bikes.chance(0.5) : !potsAtStart;
+      for (let i = 0; i < n; i++) {
+        const u = atStart ? s0 + 0.5 + i * 0.7 : s1 - 0.5 - i * 0.7;
+        const x = f.p[0] + f.r[0] * u + f.n[0] * 0.95;
+        const z = f.p[2] + f.r[2] * u + f.n[2] * 0.95;
+        props.push({ kind: 'bike', x, z, nx: f.n[0], nz: f.n[2], radius: 0.35, variant: bikes.int(0, 99999) });
+      }
     }
   }
   // Open ground: its props and lights, and solids for collision.

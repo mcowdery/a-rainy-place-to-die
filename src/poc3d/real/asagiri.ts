@@ -7,7 +7,7 @@ import type { CityUniforms } from './city';
 import { Kit, neonText, text } from './kit';
 import type { Light } from './lightmap';
 import { localFrame, localRect, toLocal, toWorld } from './localFrame';
-import { EMIT } from './meshBuilder';
+import { EMIT, KIND, lin } from './meshBuilder';
 import { averageColour } from './screenLight';
 import type { ScreenLight } from './screenLight';
 
@@ -19,7 +19,7 @@ import type { ScreenLight } from './screenLight';
  * members' club, and Toto City Hall (twin towers; an elevator to the observatory on tower A).
  * Each kind has a builder, collision rects and lightmap lights; city hall also has a raised floor.
  */
-export const ASAGIRI_KINDS = ['idol_agency', 'police_hq', 'residence', 'bank', 'law_firm', 'ad_agency', 'biz_hotel', 'members_club', 'city_hall', 'dept_store'] as const;
+export const ASAGIRI_KINDS = ['idol_agency', 'police_hq', 'residence', 'bank', 'law_firm', 'ad_agency', 'biz_hotel', 'members_club', 'city_hall', 'dept_store', 'sento'] as const;
 export type AsagiriKind = (typeof ASAGIRI_KINDS)[number];
 
 const art = import.meta.glob(
@@ -82,6 +82,8 @@ export function asagiriColliders(kind: AsagiriKind, b: Building3, floor: number)
       return [R(4, 76, 14, 56), ...[8, 20, 56, 68].map((u) => R(u - 1, u + 1, 6, 8))];
     case 'dept_store':
       return [R(0, DEPT.w, 1.2, DEPT.d)];
+    case 'sento':
+      return [R(0, 16, 0.6, 22), R(13.1, 14.9, 18.1, 19.9)];
   }
 }
 
@@ -132,6 +134,8 @@ export function asagiriLights(kind: AsagiriKind, b: Building3): Light[] {
       return [L(40, 8, 12, cool, 0.6), L(59, 11, 5, warm, 0.6), L(21, 11, 5, warm, 0.6)];
     case 'dept_store':
       return [L(11, -1.5, 10, warm, 0.9), L(33, -1.5, 10, warm, 0.9), L(22, -2, 12, [1.0, 0.9, 0.8], 0.5)];
+    case 'sento':
+      return [L(8, -1.5, 7, warm, 0.8), L(3, -1, 3, [1.0, 0.6, 0.4], 0.4)];
   }
 }
 
@@ -197,6 +201,84 @@ function screen(k: Kit, urls: readonly string[], w: number, h: number, u: number
 const DEPT = { w: 44, d: 58, h: 62 } as const;
 
 const BUILDERS: Record<AsagiriKind, Builder> = {
+  // ---- SAKURA-YU (桜湯): the neighbourhood's public bath. A gabled entrance (plaster and dark wood, a tiled
+  // roof with its gable to the street), the noren and a lit sign at the door, the tiled bath hall behind
+  // with steamy high windows, and the tall chimney with the bath's name down it ----
+  sento(k) {
+    const P = (u: number, t: number, y: number): [number, number, number] => {
+      const [x, z] = toWorld(k.f, u, t);
+      return [x, y, z];
+    };
+    const gable = (hex: number, u0: number, u1: number, t0: number, t1: number, eave: number, ridge: number): void => {
+      // A roof with its ridge along t (the gable end facing the street), both windings.
+      const um = (u0 + u1) / 2;
+      k.mb.kind = KIND.roof;
+      k.mb.color = lin(hex);
+      for (const [ua, ub] of [[u0, um], [u1, um]] as const) {
+        const a = P(ua, t0, eave);
+        const b = P(ua, t1, eave);
+        const c = P(ub, t1, ridge);
+        const d = P(ub, t0, ridge);
+        k.mb.poly4(a, b, c, d);
+        k.mb.poly4(b, a, d, c);
+      }
+    };
+    // The entrance building: plaster walls on a stone base, dark timber posts and beams.
+    k.box(0x6a6660, 0.5, 15.5, 1, 8, 0, 0.5);
+    k.lit(0xe8e0d0, 0.6, 15.4, 1.1, 8, 0.5, 4.6);
+    for (const u of [0.6, 5.2, 10.8, 15.4]) k.box(0x3a2a1e, u - 0.15, u + 0.15, 0.9, 1.2, 0, 4.8);
+    k.box(0x3a2a1e, 0.4, 15.6, 0.9, 1.2, 4.4, 4.8);
+    gable(0x2a2c30, -0.4, 16.4, -0.8, 8.4, 4.8, 7.4);
+    // Gable end in dark timber, a small decorative ridge board.
+    k.mb.kind = KIND.plain;
+    k.mb.color = lin(0x3a2a1e);
+    k.mb.poly4(P(0.2, 0.95, 4.8), P(15.8, 0.95, 4.8), P(8, 0.95, 7.2), P(8, 0.95, 7.2));
+    k.mb.poly4(P(15.8, 0.95, 4.8), P(0.2, 0.95, 4.8), P(8, 0.95, 7.2), P(8, 0.95, 7.2));
+    // The doorway: a lit genkan behind sliding glass, the noren over it, the sign above.
+    k.glow([1.2, 0.9, 0.6], 5.4, 10.6, 1.04, 1.07, 0.1, 3.2, EMIT.lamp);
+    k.pane(5.4, 10.6, 0.1, 3.2, 1.0);
+    k.plane(k.canvas(512, 256, (g) => {
+      g.fillStyle = '#1a3a6a';
+      g.fillRect(0, 0, 512, 256);
+      for (const x of [170, 342]) {
+        g.fillStyle = '#0e2448';
+        g.fillRect(x - 3, 0, 6, 256);
+      }
+      text(g, 'ゆ', 256, 140, "bold 150px 'Yu Mincho', 'MS Mincho', serif", '#ffffff');
+    }), 5.0, 1.3, 8, 0.95, 2.6, 'out', 1.0);
+    k.plane(k.canvas(640, 160, (g) => {
+      g.fillStyle = '#2a1a0e';
+      g.fillRect(0, 0, 640, 160);
+      g.strokeStyle = '#c8a860';
+      g.lineWidth = 6;
+      g.strokeRect(8, 8, 624, 144);
+      text(g, '桜  湯', 320, 84, "bold 100px 'Yu Mincho', 'MS Mincho', serif", '#f4e8c8');
+    }), 3.6, 0.9, 8, 0.92, 4.0, 'out', 1.2);
+    // Lanterns either side of the door.
+    for (const u of [4.3, 11.7]) {
+      k.box(0x2a2a2a, u - 0.05, u + 0.05, 0.7, 0.9, 2.4, 2.6);
+      k.glow([1.3, 0.55, 0.3], u - 0.22, u + 0.22, 0.45, 0.85, 1.8, 2.4, EMIT.lamp);
+    }
+    // The bath hall: tiled walls, a roof, high windows lit (steam) on both sides.
+    k.facade(0xd8d0c0, [2.4, 0.6, 1.0, WIN.blank], 128 + 3 * 16, 0.5, 15.5, 8, 22, 0, 6.5);
+    gable(0x2a2c30, 0, 16, 7.6, 22.4, 6.5, 9.4);
+    for (const u of [0.48, 15.52]) {
+      for (let t = 9.5; t < 21; t += 2.4) k.glow([1.1, 1.0, 0.85], u - 0.02, u + 0.02, t, t + 1.6, 4.6, 5.8, EMIT.lit);
+    }
+    // The chimney: a tall tapering brick stack with its name down it and a cap.
+    k.lathe(0x8a6a58, 14, 19, [[0, 1.0], [6.5, 0.95], [22, 0.62], [22.4, 0.7], [22.8, 0.62]], 12);
+    const name = k.canvas(120, 720, (g) => {
+      g.clearRect(0, 0, 120, 720);
+      ['桜', '湯'].forEach((ch, i) => text(g, ch, 60, 170 + i * 330, "bold 100px 'Yu Mincho', 'MS Mincho', serif", '#f4f0e8'));
+    });
+    const nm = k.plane(name, 0.8, 4.8, 14, 18.12, 15, 'out', 1.0);
+    (nm.material as THREE.MeshBasicMaterial).transparent = true;
+    k.glow([2.0, 0.2, 0.1], 13.9, 14.1, 18.9, 19.1, 22.8, 23.0, EMIT.always);
+    // Bicycles and a potted pine by the door.
+    k.lathe(0x8a4a2a, 2.2, 0.3, [[0, 0.3], [0.5, 0.35]], 10);
+    k.lathe(0x2e4a26, 2.2, 0.3, [[0.5, 0.2], [0.9, 0.55], [1.3, 0.45], [1.6, 0.05]], 8);
+  },
+
   // ---- TOTO DEPARTMENT STORE (東都百貨店): the terminal's store. Lit show windows under a canopy, warm stone
   // above (blank, as department stores are), a glass bay and a screen on the front, a blade sign, a neon crown ----
   dept_store(k) {

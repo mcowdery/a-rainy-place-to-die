@@ -191,7 +191,7 @@ export function addDistrictAds(
       }
     }
 
-    if (street && poster && s1 - s0 > 3.5) {
+    if (street && poster && s1 - s0 > 3.5 && !styleFor(b).home) {
       // Just inside one of the storefront's pillars, on the side away from any vending machines or pots.
       const pw = 0.92;
       const at = (u: number): [number, number] => [f.p[0] + f.r[0] * u, f.p[2] + f.r[2] * u];

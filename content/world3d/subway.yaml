@@ -1,7 +1,7 @@
 # Subway lines (format: src/poc3d/district/subway.ts). Each line runs straight under a road; its stations are
 # placements of subway stamps (landmark: subway) whose street face is 10 m from the line, listed in order.
 # Station numbers come from the letter and the order (Y01, Y02...). transfers: stations you can change
-# between (in phase 1, a short walk through the streets).
+# between (a short walk through the streets, or the underground mall). The Toto Line joins from rail.yaml.
 lines:
   - id: yako
     name: 夜光線
@@ -15,6 +15,14 @@ lines:
     letter: W
     color: '#b5d62a'
     stations: [w01_station, w02_station, w03_station]
+  # The private railway from the terminal out to the Sakuragaoka suburb (underground all the way).
+  - id: seiko
+    name: 西光線
+    nameEn: SEIKŌ LINE
+    letter: S
+    color: '#2a6ad0'
+    stations: [s01_station, s02_station, s03_station, s04_station]
 transfers:
   - [y04_station, w02_station]
   - [totochuo_station, y03_station]
+  - [s01_station, totochuo_station]

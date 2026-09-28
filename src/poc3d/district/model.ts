@@ -1,7 +1,7 @@
 import { intersect, overlaps, type Rect } from '../../core/coords';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import { cellDetail, type CellDetail } from '../real/props';
-import { CELL, cellKey, edgeKey, planCell3, type Building3, type CellPlan3 } from './plan';
+import { CELL, cellKey, edgeKey, planCell3, STYLES3, type Building3, type CellPlan3 } from './plan';
 import { plazaRect, reservedRect, type Placed3 } from './stamps';
 import { ZoneMap } from './zones';
 import { landmarkHoles } from './landmarks';
@@ -31,7 +31,13 @@ export class DistrictModel {
   ) {
     const cells: [number, number][] = [];
     const wanted = new Set<string>(typeof kinds === 'string' ? [kinds] : kinds);
-    for (let my = 0; my < macro.rows; my++) for (let mx = 0; mx < macro.cols; mx++) if (wanted.has(macro.kindAt(mx, my))) cells.push([mx, my]);
+    for (let my = 0; my < macro.rows; my++) {
+      for (let mx = 0; mx < macro.cols; mx++) {
+        const k = macro.kindAt(mx, my);
+        // A district that's only generated where its zones are painted (the residential neighbourhood).
+        if (wanted.has(k) && (!STYLES3[k as DistrictId]?.onlyZoned || zones.at(mx, my))) cells.push([mx, my]);
+      }
+    }
     this.cells = cells;
     for (const [mx, my] of cells) this.cellSet.add(cellKey(mx, my));
     const xs = cells.map(([mx]) => mx);

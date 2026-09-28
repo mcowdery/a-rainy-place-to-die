@@ -16,6 +16,10 @@ export const WIN = { punched: 0, ribbon: 1, curtain: 2, balcony: 3, small: 4, bl
 /** Ground floor (storefront) height and storey height; must match city.ts. */
 export const GF = 4.2;
 export const FH = 3.0;
+/** A home's ground floor (no shop): lower, so a two-storey house has both floors; must match city.ts. */
+export const HOME_GF = 3.0;
+/** The flag bit marking a home (city.ts reads it). */
+export const HOME_FLAG = 256;
 
 export interface RealStyle {
   readonly wall: C3;
@@ -32,7 +36,13 @@ export interface RealStyle {
   readonly parapet: number;
   readonly cornice: boolean;
   readonly awning: boolean;
+  /** A home: a door and a window on the ground floor instead of a shop (HOME_GF high). */
+  readonly home: boolean;
+  /** A pitched roof's colour (low homes), or null for a flat roof with a parapet. */
+  readonly roof: C3 | null;
 }
+
+const ROOFS = [0x3a4450, 0x2a2c30, 0x5a3a2a, 0x4a5a6a, 0x6a2a22];
 
 // Kaburo palette: tiled mid-rises (beige, white, brown), bare concrete, dark bar buildings, and 80s pastels.
 const PALETTES: readonly (readonly [number, readonly number[], boolean])[] = [
@@ -94,11 +104,15 @@ export function styleFor(b: Building3): RealStyle {
     : 3.0;
   const ratio = 0.4 + rnd.float() * 0.25;
   const winH = type === WIN.ribbon ? 1.1 + rnd.float() * 0.4 : 1.2 + rnd.float() * 0.5;
-  const shopOpen = stamp || rnd.chance(look?.open ?? 0.8);
+  // Homes (from their own hash, so the rest of the style stays as it was).
+  const hr = rng(hash(b.id, 0x40e5));
+  const home = !stamp && hr.chance(look?.homes ?? 0);
+  const roof = home && b.h <= 9.5 && hr.chance(look?.roofs ?? 0) ? lin(hr.pick(ROOFS)) : null;
+  const shopOpen = !home && (stamp || rnd.chance(look?.open ?? 0.8));
   const shopPal = stamp ? 3 : weighted(rnd, look?.shops ?? [[40, 0], [30, 1], [15, 2], [15, 3]]);
   const darkFrame = rnd.chance(0.4) || type === WIN.curtain;
   const litBias = rnd.int(0, 7);
-  const flags = (shopOpen ? 1 : 0) + shopPal * 2 + (darkFrame ? 8 : 0) + litBias * 16 + (tiled ? 128 : 0);
+  const flags = (shopOpen ? 1 : 0) + shopPal * 2 + (darkFrame ? 8 : 0) + litBias * 16 + (tiled ? 128 : 0) + (home ? HOME_FLAG : 0);
   s = {
     wall: lin(wallHex),
     trim: lin(rnd.pick(TRIMS)),
@@ -111,8 +125,10 @@ export function styleFor(b: Building3): RealStyle {
     shopPal,
     flags,
     parapet: 0.6 + rnd.float() * 0.5,
-    cornice: rnd.chance(0.3),
+    cornice: rnd.chance(0.3) && !roof,
     awning: shopOpen && rnd.chance(0.35),
+    home,
+    roof,
   };
   cache.set(b.id, s);
   return s;
@@ -268,9 +284,12 @@ export function addBuilding(mb: MeshBuilder, b: Building3, near: boolean): void 
   mb.frontNormal = f.n;
 
   const ts = tiers(b);
+  // A home's ground floor is lower: its upper windows start at HOME_GF.
+  const gf = s.home ? HOME_GF : GF;
+  const floorsTo = (y1: number): number => Math.max(0, Math.floor((y1 - gf - (s.home ? -0.4 : 0.5)) / FH));
   ts.forEach((tier, i) => {
     const [w, d, y0, y1, ox, oz] = tier;
-    const floors = Math.max(0, Math.floor((y1 - GF - 0.5) / FH));
+    const floors = floorsTo(y1);
     mb.kind = KIND.wall;
     mb.color = s.wall;
     mb.style = [s.bay, s.ratio, s.winH, s.type + 8 * floors];
@@ -279,6 +298,7 @@ export function addBuilding(mb: MeshBuilder, b: Building3, near: boolean): void 
   });
   mb.frontNormal = null;
   mb.style = [0, 0, 0, 0];
+  if (s.roof) pitchedRoof(mb, b, s);
   if (!near) return;
 
   const topTier = ts[ts.length - 1];
@@ -288,15 +308,15 @@ export function addBuilding(mb: MeshBuilder, b: Building3, near: boolean): void 
   mb.color = s.trim;
   const ph = s.parapet;
   const t = 0.2;
-  ring(mb, footprint(b, topTier, ts.length === 1).pts, top, top + ph, t);
+  if (!s.roof) ring(mb, footprint(b, topTier, ts.length === 1).pts, top, top + ph, t);
   if (s.cornice && !(b.cut && ts.length === 1)) mb.box(b.x + tox, b.z + toz, top - 0.45, top - 0.1, tw + 0.3, td + 0.3);
   // Setback terraces get a low parapet too.
   for (let i = 0; i < ts.length - 1; i++) ring(mb, footprint(b, ts[i], i === 0).pts, ts[i][3], ts[i][3] + 0.9, t);
 
-  rooftop(mb, b, rnd, tw, td, top, tox, toz, ts.length === 1 ? b.cut : undefined);
+  if (!s.roof) rooftop(mb, b, rnd, tw, td, top, tox, toz, ts.length === 1 ? b.cut : undefined);
 
   const mainTop = ts[0][3];
-  const mainFloors = Math.max(0, Math.floor((mainTop - GF - 0.5) / FH));
+  const mainFloors = floorsTo(mainTop);
   const { p, r, n } = f;
   // The part of the street face clear of a corner cut.
   const [s0, s1] = frontSpan(b);
@@ -308,7 +328,7 @@ export function addBuilding(mb: MeshBuilder, b: Building3, near: boolean): void 
     const rail = rnd.chance(0.5) ? lin(0x9aa6ac) : scale3(s.trim, 0.8);
     const dividers = Math.max(1, Math.round(sw / (s.bay * 2)));
     for (let i = 0; i < mainFloors; i++) {
-      const y = GF + i * FH;
+      const y = gf + i * FH;
       mb.kind = KIND.plain;
       mb.color = scale3(s.wall, 1.05);
       mb.frameBox(p, r, n, s0 + 0.15, s1 - 0.15, y - 0.16, y, 0, 1.15);
@@ -344,7 +364,7 @@ export function addBuilding(mb: MeshBuilder, b: Building3, near: boolean): void 
     mb.kind = KIND.plain;
     mb.color = scale3(s.wall, 0.8);
     for (let i = 0; i < mainFloors; i++) {
-      const y = GF + i * FH + 0.85;
+      const y = gf + i * FH + 0.85;
       mb.frameBox(p, r, n, s0 + 0.2, s1 - 0.2, y, y + 0.1, 0, 0.14);
     }
   }
@@ -380,7 +400,7 @@ export function addBuilding(mb: MeshBuilder, b: Building3, near: boolean): void 
     const units = rnd.int(1, Math.min(6, 1 + mainFloors));
     for (let i = 0; i < units; i++) {
       const fl = rnd.int(0, Math.max(0, mainFloors - 1));
-      const y = GF + fl * FH + 0.3;
+      const y = gf + fl * FH + 0.3;
       const u = 0.6 + pad + rnd.float() * Math.max(0.1, depth - 1.8 - 2 * pad);
       mb.color = lin(rnd.pick([0xc8c4b8, 0xb8b8b4, 0xd0ccc0]));
       mb.frameBox(origin, sr, sn, u, u + 0.8, y, y + 0.6, 0.05, 0.35);
@@ -392,6 +412,45 @@ export function addBuilding(mb: MeshBuilder, b: Building3, near: boolean): void 
 }
 
 const SHRUBS = [0x2e4a26, 0x3e5a2e, 0x4a6a34, 0x36522a];
+
+/**
+ * A pitched roof on a low home: the ridge runs along the street face, eaves overhanging 0.4 m, gable
+ * ends in the wall's colour. Both windings of each slope are drawn (the eaves are seen from below).
+ */
+function pitchedRoof(mb: MeshBuilder, b: Building3, s: RealStyle): void {
+  const ns = b.front === 'north' || b.front === 'south';
+  const over = 0.4;
+  const half = (ns ? b.d : b.w) / 2 + over;
+  const len = (ns ? b.w : b.d) / 2 + over;
+  const rise = Math.min(2.4, half * 0.55);
+  const y0 = b.h;
+  const y1 = b.h + rise;
+  // P(a, c, y): a along the ridge, c across it (from the ridge), in world.
+  const P = (a: number, c: number, y: number): C3 => (ns ? [b.x + a, y, b.z + c] : [b.x + c, y, b.z + a]);
+  const slope = (side: number): void => {
+    const e0 = P(-len, side * half, y0 - over * 0.4);
+    const e1 = P(len, side * half, y0 - over * 0.4);
+    const r0 = P(-len, 0, y1);
+    const r1 = P(len, 0, y1);
+    mb.kind = KIND.roof;
+    mb.color = s.roof!;
+    mb.poly4(e0, e1, r1, r0);
+    mb.poly4(e1, e0, r0, r1);
+  };
+  slope(-1);
+  slope(1);
+  // Gables: the wall's colour, both windings.
+  mb.kind = KIND.plain;
+  mb.color = s.wall;
+  const g = (ns ? b.w : b.d) / 2;
+  for (const e of [-g, g]) {
+    const a = P(e, -half + over, y0);
+    const c = P(e, half - over, y0);
+    const r = P(e, 0, y1 - 0.05);
+    mb.poly4(a, c, r, r);
+    mb.poly4(c, a, r, r);
+  }
+}
 
 function rooftop(mb: MeshBuilder, b: Building3, rnd: Rng, w: number, d: number, top: number, ox = 0, oz = 0, cut?: Building3['cut']): void {
   const x0 = b.x + ox - w / 2 + 0.8;

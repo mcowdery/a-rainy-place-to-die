@@ -32,7 +32,7 @@ describe('3D district planner', () => {
 
   it('only generates districts with a 3D style', () => {
     expect(STYLES3.neon).toBeDefined();
-    expect(planCell3(content.macro, 18, 12, [], 7)).toBeNull(); // tower district: no 3D style yet
+    expect(planCell3(content.macro, 5, 10, [], 7)).toBeNull(); // old town: no 3D style yet
   });
 
   it('keeps buildings inside their cell, off streets and apart from each other', () => {
@@ -455,7 +455,8 @@ describe('Subway', () => {
   const placed = (id: string) => content.placed.find((p) => p.id === id)!;
 
   it('numbers the stations along two straight lines under the roads', () => {
-    expect(net.lines.map((l) => l.id)).toEqual(['toto', 'yako', 'wakaba']);
+    expect(net.lines.map((l) => l.id)).toEqual(['toto', 'yako', 'wakaba', 'seiko']);
+    expect(net.lines[3].stops.map((s) => s.code)).toEqual(['S01', 'S02', 'S03', 'S04']);
     expect(net.lines[0].stops.map((s) => `${s.code} ${s.en}`)).toEqual(['T01 ASAGIRI', 'T02 TŌTO-CHŪŌ', 'T03 KABURO']);
     expect(net.lines[1].stops.map((s) => s.code)).toEqual(['Y01', 'Y02', 'Y03', 'Y04', 'Y05']);
     expect(net.lines[2].stops.map((s) => s.code)).toEqual(['W01', 'W02', 'W03']);
@@ -563,5 +564,39 @@ describe('Subway', () => {
       const [tx, tz] = toWorld(f, 0, -15.6);
       expect(district.blocked(tx, tz, 0.4, -11) || district.floorAt(tx, tz, -11) !== -11).toBe(true);
     }
+  });
+});
+
+describe('Sakuragaoka (residential)', () => {
+  const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const cells = model.cells.filter(([mx, my]) => content.macro.kindAt(mx, my) === 'residential');
+
+  it('is generated only where its zones are painted, west of Asagiri', () => {
+    expect(cells.length).toBe(24);
+    for (const [mx, my] of cells) {
+      expect(mx >= 14 && mx <= 19 && my >= 9 && my <= 12, `${mx},${my}`).toBe(true);
+      expect(content.zones.at(mx, my)).toBeDefined();
+    }
+  });
+
+  it('is mostly low homes with pitched roofs, bicycles and pots at the doors', async () => {
+    const { styleFor } = await import('../src/poc3d/real/buildings');
+    const houses = cells.filter(([mx, my]) => content.zones.at(mx, my)!.id === 'sakuragaoka_houses');
+    const bs = houses.flatMap(([mx, my]) => model.plan(mx, my)!.buildings);
+    const homes = bs.filter((b) => styleFor(b).home);
+    expect(homes.length / bs.length).toBeGreaterThan(0.8);
+    expect(bs.filter((b) => styleFor(b).roof).length / bs.length).toBeGreaterThan(0.4);
+    expect(bs.reduce((t, b) => t + b.h, 0) / bs.length).toBeLessThan(10);
+    const props = houses.flatMap(([mx, my]) => model.detail(mx, my)!.props);
+    expect(props.filter((p) => p.kind === 'bike').length).toBeGreaterThan(20);
+    expect(props.filter((p) => p.kind === 'pots').length).toBeGreaterThan(20);
+    // Poles and wires over the narrow lanes.
+    expect(props.filter((p) => p.kind === 'pole').length).toBeGreaterThan(20);
+  });
+
+  it('is reached from Kaburo through the terminal on the Seikō Line', () => {
+    const route = subwayRoute(content.subway, 'y05_station', 's04_station')!;
+    expect(route[route.length - 1]).toEqual({ kind: 'ride', line: 'seiko', from: 0, to: 3 });
+    expect(route.some((l) => l.kind === 'transfer' && l.to === 's01_station')).toBe(true);
   });
 });

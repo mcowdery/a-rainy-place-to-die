@@ -68,6 +68,12 @@ export interface ZoneLook {
   readonly shops: readonly (readonly [number, number])[] | null;
   /** Share of storefronts open (the rest are shuttered). */
   readonly open: number | null;
+  /** Share of buildings that are homes: a front door and a window on the ground floor, no shop. */
+  readonly homes: number;
+  /** Share of low homes (up to three storeys) with a pitched roof. */
+  readonly roofs: number;
+  /** Share of homes with bicycles parked out front. */
+  readonly bikes: number;
 }
 
 /**
@@ -154,6 +160,11 @@ export interface DistrictStyle3 {
   readonly towerCover: Range | null;
   /** Share of the cell given to a park (0 none, 1 the whole cell). */
   readonly park: number;
+  /**
+   * Generate only the cells the district's zone file paints: a bounded neighbourhood in a district whose
+   * L0 cells spread far beyond it (the residential ring round the centre).
+   */
+  readonly onlyZoned?: boolean;
 }
 
 const BOUNDARY_ROAD = 16;
@@ -217,6 +228,36 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     pots: 0.05,
     towerCover: null,
     park: 0,
+  },
+  residential: {
+    // Sakuragaoka: houses and small apartment buildings on narrow lanes, only where its zones are painted.
+    name: 'Sakuragaoka',
+    edgeRoads: [6, 8, 10],
+    localStreet: [3, 5],
+    block: [16, 40],
+    twoRowDepth: 22,
+    lotW: [7, 12],
+    lotGap: 0.4,
+    floors: [
+      [2, 2, 60],
+      [3, 3, 22],
+      [4, 6, 12],
+      [8, 12, 6],
+    ],
+    signChance: 0.12,
+    verticalSign: 0.3,
+    signWords: ['クリーニング', '理容', 'コインランドリー', '薬局', '八百屋', '酒店', 'パン', 'たばこ', '歯科', '整骨院', '不動産', '牛乳'],
+    signColors: [0xffffff, 0x4fe3ff, 0xffe45f, 0x6bff8a],
+    open: { parking: 0.07, playground: 0.03, vacant: 0.03 },
+    rear: [1.5, 3.5],
+    setback: [0.8, 2.4],
+    stepBack: 0.1,
+    streetTrees: 0.3,
+    hedges: 0.2,
+    pots: 0.55,
+    towerCover: null,
+    park: 0,
+    onlyZoned: true,
   },
 };
 

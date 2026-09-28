@@ -130,3 +130,24 @@
   stamp: west_exit
   cell: [25, 11]
   offset: [22, 10]
+# Sakuragaoka (the residential district west of Asagiri) and the Seikō Line out to it from the terminal.
+- id: s01_station
+  stamp: subway_s01
+  cell: [25, 10]
+  offset: [60, 10]
+- id: s02_station
+  stamp: subway_s02
+  cell: [19, 10]
+  offset: [60, 10]
+- id: s03_station
+  stamp: subway_s03
+  cell: [17, 10]
+  offset: [60, 10]
+- id: s04_station
+  stamp: subway_s04
+  cell: [15, 10]
+  offset: [60, 10]
+- id: sakura_yu
+  stamp: sento
+  cell: [16, 11]
+  offset: [40, 30]

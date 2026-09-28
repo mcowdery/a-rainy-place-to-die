@@ -20,6 +20,8 @@ import { LOT_OPEN, STYLES3, type DistrictStyle3, type Zone3, type ZoneLook } fro
  *       signs: { words: [質, 金融], colors: ['#ff4f4f'] }
  *       ads: { loan: 4, street: 3 }
  *       look: { windows: { punched: 50, small: 40 }, walls: ['#6c5242'], tiled: true, shops: { warm: 2, bar: 3 }, open: 0.9 }
+ *       # look may also set homes (share of buildings that are homes: a door, not a shop), roofs (share of
+ *       # low homes with a pitched roof) and bikes (share of homes with bicycles out front).
  *
  * plan overrides any DistrictStyle3 field (localStreet, block, twoRowDepth, lotW, lotGap, floors,
  * signChance, verticalSign); anything not given comes from the district's style. Zones are part of the
@@ -179,7 +181,13 @@ export function parseZones3(file: string, text: string, macro: MacroMap, errors:
     }
     const open = lookRaw.open === undefined ? null : Number(lookRaw.open);
     if (open !== null && !(open >= 0 && open <= 1)) err(`${at}: look.open must be between 0 and 1`);
-    const look: ZoneLook = { windows, walls, tiled: lookRaw.tiled === true, shops, open };
+    const share = (key: 'homes' | 'roofs' | 'bikes'): number => {
+      if (lookRaw[key] === undefined) return 0;
+      const v = Number(lookRaw[key]);
+      if (!(v >= 0 && v <= 1)) err(`${at}: look.${key} must be between 0 and 1`);
+      return v;
+    };
+    const look: ZoneLook = { windows, walls, tiled: lookRaw.tiled === true, shops, open, homes: share('homes'), roofs: share('roofs'), bikes: share('bikes') };
     zones.set(key, { key, id, name: String(raw.name), style: style as unknown as DistrictStyle3, look, ads });
   }
   const ids = [...zones.values()].map((z) => z.id);

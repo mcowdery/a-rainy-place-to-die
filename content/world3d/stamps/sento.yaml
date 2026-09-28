@@ -1,0 +1,10 @@
+# 桜湯 Sakura-yu: the neighbourhood's public bath (銭湯) in Sakuragaoka, built by real/asagiri.ts (kind sento):
+# a gabled entrance with a noren curtain and a lit sign, a tiled bathhouse behind, and its tall chimney.
+id: sento
+name: 桜湯 Sakura-yu (public bath)
+footprint: [16, 22]
+height: 8
+front: north
+landmark: sento
+nodes:
+  front: { kind: spawn, name: Sakura-yu (public bath), at: [8, 7], facing: south, view: [180, 14] }
