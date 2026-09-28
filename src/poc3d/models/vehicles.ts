@@ -916,9 +916,10 @@ export function wheel(mb: MeshBuilder, P: (x: number, y: number, z: number) => V
     for (let k = 0; k + 1 < prof.length; k++) {
       const [ra, da] = prof[k];
       const [rb, db] = prof[k + 1];
-      // Profile normal in (radial, lateral-out) terms.
+      // Profile normal in (radial, lateral-out) terms: the profile runs from the outer face (depth 0) round the
+      // tread to the inner face, so outward is (d depth, -d radius) in (radial, depth), and lateral-out is -depth.
       const nr = db - da;
-      const nl = -(rb - ra);
+      const nl = rb - ra;
       const nlen = Math.hypot(nr, nl) || 1;
       const nOf = (a: number): V3 => N([(Math.cos(a) * nr) / nlen, (Math.sin(a) * nr) / nlen, (sd * nl) / nlen]);
       mb.quadN(at(a0, ra, da), at(a1, ra, da), at(a1, rb, db), at(a0, rb, db), nOf(a0), nOf(a1), nOf(a1), nOf(a0));
