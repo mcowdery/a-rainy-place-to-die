@@ -417,7 +417,7 @@ describe('Asagiri set pieces and traffic', () => {
 
   it('gives the story locations their doors and people', () => {
     const ids = content.placed.flatMap((p) => p.nodes.map((n) => `${n.id}:${n.kind}`));
-    for (const want of ['stella_production.lobby:door', 'stella_production.staff_door:door', 'police_hq.entrance:door', 'police_hq.officer:npc', 'the_peak.penthouse:door', 'the_peak.concierge:npc']) {
+    for (const want of ['stella_production.lobby:door', 'stella_production.staff_door:door', 'police_hq.entrance:door', 'police_hq.officer:npc', 'the_peak.penthouse:station', 'the_peak.concierge:npc', 'the_peak.ceo:npc']) {
       expect(ids).toContain(want);
     }
   });
@@ -728,5 +728,64 @@ describe('Interiors: the Toto department store', () => {
     expect(district.blocked(roof.x, roof.z, 0.4, 63.2)).toBe(false);
     expect(district.blocked(...toWorld(f, 22.5, 1.6), 0.4, 63.2)).toBe(true);
     expect(district.blocked(...toWorld(f, 0.5, 30), 0.4, 63.2)).toBe(true);
+  });
+});
+
+describe('Interiors: the penthouse at The Peak', () => {
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const tower = content.placed.find((p) => p.id === 'the_peak')!;
+  const f = localFrame(tower.building);
+  const layout = INTERIORS.residence.layout(tower.building);
+
+  /** Walk local waypoints on a level (the interior on while inside), never blocked; returns the end level. */
+  const walk = (path: [number, number][], level: number): number => {
+    let inside = layout.contains(...toWorld(f, path[0][0], path[0][1]), level + 1.7);
+    district.setInterior('the_peak', inside ? layout : null);
+    for (let i = 0; i + 1 < path.length; i++) {
+      const [u0, t0] = path[i];
+      const [u1, t1] = path[i + 1];
+      const n = Math.ceil(Math.hypot(u1 - u0, t1 - t0) / 0.1);
+      for (let k = 1; k <= n; k++) {
+        const u = u0 + ((u1 - u0) * k) / n;
+        const t = t0 + ((t1 - t0) * k) / n;
+        const [x, z] = toWorld(f, u, t);
+        expect(district.blocked(x, z, 0.4, level), `at ${u.toFixed(1)}, ${t.toFixed(1)} on ${level.toFixed(2)}`).toBe(false);
+        level = district.floorAt(x, z, level);
+        const now = layout.contains(x, z, level + 1.7);
+        if (now !== inside) district.setInterior('the_peak', now ? layout : null);
+        inside = now;
+      }
+    }
+    district.setInterior('the_peak', null);
+    return level;
+  };
+
+  it('lets you walk into the lobby, round the desk, to the private elevator', () => {
+    expect(walk([[13, 2], [13, 9.3], [16.9, 9.3], [17, 12.5], [14, 13.5], [14, 16.6], [16.5, 16.8]], 0)).toBe(0);
+    const lift = district.nodes.find((n) => n.id === 'the_peak.penthouse')!;
+    expect(lift.kind).toBe('station');
+    expect(lift.returnSpawn).toBe('the_peak.penthouse_hall');
+  });
+
+  it('walks the main floor: foyer, living room, dining, kitchen, the study', () => {
+    expect(walk([[15.5, 25.9], [15.5, 21.5], [18.5, 21.5], [20.5, 16.7], [25, 16.7], [25, 22], [25, 27], [22.5, 25.6], [21.3, 25.3], [20.6, 25.2], [20.6, 22.5], [18.5, 21.5], [18.5, 20.2], [11.9, 20.2], [11.9, 21.6], [11.3, 23], [11.3, 24.6], [7.5, 24.8]], 130)).toBe(130);
+  });
+
+  it('climbs the stair to the master suite and out onto the terrace', () => {
+    const top = walk([[15.5, 25.9], [15.5, 21.5], [18.5, 21.5], [20.5, 16.7], [26.95, 16.7], [26.95, 28.5], [24, 28.5], [23, 24], [21.2, 20], [21.2, 18], [12, 17.8], [11, 20], [8.8, 22], [8.8, 27.5]], 130);
+    expect(top).toBeCloseTo(136.6);
+    // Back down again.
+    expect(walk([[21.2, 18], [21.2, 22], [24.5, 25], [25, 28.5], [26.95, 28.5], [26.95, 16.7], [20, 16.7]], 136.6)).toBe(130);
+  });
+
+  it('keeps you out of the pool and inside the glass', () => {
+    district.setInterior('the_peak', layout);
+    try {
+      expect(district.blocked(...toWorld(f, 14, 14.5), 0.4, 136.6)).toBe(true);
+      expect(district.blocked(...toWorld(f, 6.2, 20), 0.4, 136.6)).toBe(true);
+      expect(district.blocked(...toWorld(f, 17, 12.2), 0.4, 130)).toBe(true);
+    } finally {
+      district.setInterior('the_peak', null);
+    }
   });
 });

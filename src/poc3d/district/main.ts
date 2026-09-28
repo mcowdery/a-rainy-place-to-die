@@ -20,7 +20,7 @@ import { buildYokocho } from '../real/yokocho';
 import { buildRyujin } from '../real/ryujin';
 import { buildDiscount } from '../real/discount';
 import { buildStation } from '../real/station';
-import { ASAGIRI_KINDS, buildAsagiri, type AsagiriKind } from '../real/asagiri';
+import { ASAGIRI_KINDS, buildAsagiri, type AsagiriBuilt, type AsagiriKind } from '../real/asagiri';
 import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { SubwaySystem } from '../real/subway';
 import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../real/subwayStation';
@@ -206,7 +206,7 @@ async function run(): Promise<void> {
   // it up the stairs), the part below only below ground or nearby.
   const rotaries: { r: RotaryBuilt; x: number; z: number }[] = [];
   // Landmark exteriors by placement (an interior hides its building's exterior while you're inside).
-  const exteriors = new Map<string, THREE.Object3D>();
+  const exteriors = new Map<string, AsagiriBuilt>();
   // Everything on the surface, hidden below ground (the stations' own groups stay: they reach up to the street).
   const surface: THREE.Object3D[] = [];
   // Traffic: cars and taxis clockwise round their loops, buses anticlockwise round theirs.
@@ -252,7 +252,7 @@ async function run(): Promise<void> {
     if (lm && (ASAGIRI_KINDS as readonly string[]).includes(lm)) {
       const a = buildAsagiri(lm as AsagiriKind, placed.building, placed.id, city, ghost, cityU);
       scene.add(a.group);
-      exteriors.set(placed.id, a.group);
+      exteriors.set(placed.id, a);
       screens.add(...a.lights);
       glows.add(...a.lights);
       landmarkUpdates.push(a.update);
@@ -313,7 +313,7 @@ async function run(): Promise<void> {
     .filter((p) => p.stamp.landmark && INTERIORS[p.stamp.landmark])
     .map((p) => {
       const def = INTERIORS[p.stamp.landmark!];
-      return { id: p.id, b: p.building, range: def.range, layout: def.layout(p.building), start: () => def.build(p.building, city, ghost), job: null as Generator<void, Interior> | null, built: null as Interior | null, active: false };
+      return { id: p.id, b: p.building, range: def.range, hides: def.hides, layout: def.layout(p.building), start: () => def.build(p.building, city, ghost), job: null as Generator<void, Interior> | null, built: null as Interior | null, active: false };
     });
   const inInterior = (): boolean => interiors.some((i) => i.active);
   const updateInteriors = (dt = 0): void => {
@@ -342,7 +342,8 @@ async function run(): Promise<void> {
         it.active = inside;
         it.built!.group.visible = inside;
         const ext = exteriors.get(it.id);
-        if (ext) ext.visible = !inside;
+        const shell = it.hides ? ext?.parts[it.hides] : ext?.group;
+        if (shell) shell.visible = !inside;
         district.setInterior(it.id, inside ? it.built : null);
       }
       if (it.active && dt > 0 && !controls.fly && it.built!.carry) {
@@ -1087,6 +1088,7 @@ function npcSpec(n: Node3, facing: C3): FigureSpec {
     return {
       x: n.x,
       z: n.z,
+      y: n.floor,
       yaw: yaw + (f.turn ?? 0),
       body: f.body ?? 'woman',
       pose: f.pose ?? 'stand',

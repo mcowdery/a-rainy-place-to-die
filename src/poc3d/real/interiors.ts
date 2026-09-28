@@ -5,6 +5,7 @@ import { Kit, text } from './kit';
 import { localFrame, localRect, toLocal } from './localFrame';
 import { KIND } from './meshBuilder';
 import { deptInterior, deptLayout } from './deptStore';
+import { penthouseInterior, penthouseLayout } from './penthouse';
 
 /**
  * Door-entered interiors, built at the building's true position (the hybrid approach): while you're inside
@@ -259,9 +260,10 @@ export function sentoInterior(b: Building3, city: THREE.Material, ghost: THREE.M
 
 /**
  * Interiors by landmark kind: the builder (a generator, so a big interior can be built a slice per frame), the
- * layout alone (collision and floors, also for tests), and how near to start building it (m from the centre).
+ * layout alone (collision and floors, also for tests), how near to start building it (m from the centre), and
+ * which named part of the exterior it replaces (the whole exterior if none).
  */
-export const INTERIORS: Readonly<Record<string, { build: (b: Building3, city: THREE.Material, ghost: THREE.Material) => Generator<void, Interior>; layout: (b: Building3) => Omit<Interior, 'group'>; range: number }>> = {
+export const INTERIORS: Readonly<Record<string, { build: (b: Building3, city: THREE.Material, ghost: THREE.Material) => Generator<void, Interior>; layout: (b: Building3) => Omit<Interior, 'group'>; range: number; hides?: string }>> = {
   sento: {
     *build(b, city, ghost) {
       return sentoInterior(b, city, ghost);
@@ -270,4 +272,5 @@ export const INTERIORS: Readonly<Record<string, { build: (b: Building3, city: TH
     range: 70,
   },
   dept_store: { build: deptInterior, layout: deptLayout, range: 120 },
+  residence: { build: penthouseInterior, layout: penthouseLayout, range: 60, hides: 'crown' },
 };

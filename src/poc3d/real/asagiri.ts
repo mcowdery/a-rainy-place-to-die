@@ -9,6 +9,7 @@ import type { Light } from './lightmap';
 import { localFrame, localRect, toLocal, toWorld } from './localFrame';
 import { EMIT, KIND, lin } from './meshBuilder';
 import { DEPT, DEPT_DOOR, deptRoof, deptRoofColliders, deptRoofFloor } from './deptStore';
+import { penthouseCrown, peakLiftSign, PH } from './penthouse';
 import { averageColour } from './screenLight';
 import type { ScreenLight } from './screenLight';
 
@@ -70,7 +71,20 @@ export function asagiriColliders(kind: AsagiriKind, b: Building3, floor: number)
     case 'police_hq':
       return [R(4, 46, 10, 42), R(36, 38.5, 1.5, 4.5), ...[12, 16, 20].map((u) => R(u - 0.2, u + 0.2, 2.8, 3.2)), R(24, 29, 4, 8.6), R(30, 35, 4, 8.6)];
     case 'residence':
-      return [R(4, 30, 10, 32), R(9, 9.4, 3, 3.4), R(24.6, 25, 3, 3.4), R(15, 20.6, 3.2, 8)];
+      // The lobby is walk-in: glass doors in the middle of its front, the concierge's desk, armchairs.
+      return [
+        R(4, 10, 10, 32),
+        R(24, 30, 10, 32),
+        R(10, 24, 17.6, 32),
+        R(10, 15.5, 9.9, 10.3),
+        R(18.5, 24, 9.9, 10.3),
+        R(15, 19, 14, 15),
+        R(10.6, 12.4, 11.2, 13),
+        R(21.6, 23.4, 11.2, 13),
+        R(9, 9.4, 3, 3.4),
+        R(24.6, 25, 3, 3.4),
+        R(15, 20.6, 3.2, 8),
+      ];
     case 'bank':
       return [R(2, 28, 5, 26), ...[4, 9, 14, 19, 24].map((u) => R(u - 0.5, u + 0.5, 2.5, 3.5))];
     case 'law_firm':
@@ -102,7 +116,7 @@ export function asagiriShelters(kind: AsagiriKind, b: Building3): { rect: Rect; 
     case 'idol_agency':
       return [R(20, 34, 3, 8, 0, 4.6)];
     case 'residence':
-      return [R(9, 25, 3, 10, 0, 5.2)];
+      return [R(9, 25, 3, 10, 0, 5.2), R(10, 24, 10, 18, 0, 5.2, true), R(6, 28, 12, 30, PH.floor - 1, PH.ceil, true), R(15, 28, 19, 30, PH.roof - 0.5, PH.pavCeil, true)];
     case 'police_hq':
       return [R(18, 32, 7, 10, 0, 8)];
     case 'sento':
@@ -150,6 +164,8 @@ export function asagiriLights(kind: AsagiriKind, b: Building3): Light[] {
 
 export interface AsagiriBuilt {
   readonly group: THREE.Group;
+  /** Named parts of the exterior (inside the group), which an interior can hide in place of the whole. */
+  readonly parts: Readonly<Record<string, THREE.Object3D>>;
   /** Screens that light their surroundings. */
   readonly lights: ScreenLight[];
   update(camera: THREE.Vector3, dt: number): void;
@@ -158,10 +174,14 @@ export interface AsagiriBuilt {
 /** Builds one set piece. id: the stamp id (business hotels come in two brands). */
 export function buildAsagiri(kind: AsagiriKind, b: Building3, id: string, city: THREE.Material, ghost: THREE.Material, u: CityUniforms): AsagiriBuilt {
   const k = new Kit(b);
-  const extra = BUILDERS[kind](k, id);
+  const kits: Record<string, Kit> = {};
+  const extra = BUILDERS[kind](k, id, (name) => (kits[name] ??= new Kit(b)));
   const group = k.finish(city, ghost);
+  const parts: Record<string, THREE.Object3D> = {};
+  for (const [name, pk] of Object.entries(kits)) group.add((parts[name] = pk.finish(city, ghost)));
   return {
     group,
+    parts,
     lights: k.lights,
     update(camera, dt) {
       k.update(u);
@@ -170,7 +190,8 @@ export function buildAsagiri(kind: AsagiriKind, b: Building3, id: string, city: 
   };
 }
 
-type Builder = (k: Kit, id: string) => ((camera: THREE.Vector3, dt: number) => void) | void;
+/** A set piece's builder; part(name) gives a Kit for a named part of the exterior (see AsagiriBuilt.parts). */
+type Builder = (k: Kit, id: string, part: (name: string) => Kit) => ((camera: THREE.Vector3, dt: number) => void) | void;
 
 /** A car parked in local coordinates, nose along local (du, dt). */
 function car(k: Kit, u: number, t: number, du: number, dt: number, type: 'sedan' | 'minivan' | 'kei' | 'taxi', paint: number, variant: number): void {
@@ -495,34 +516,39 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
   },
 
   // ---- THE PEAK: stone and glass residences, a lit penthouse crown with a roof terrace; the private drive ----
-  residence(k) {
+  residence(k, _id, part) {
     const STONE = 0xd8d0c0;
     k.box(0x8a8070, 4, 30, 18, 32, 0, 6);
     k.box(0x8a8070, 4, 10, 10, 18, 0, 6);
     k.box(0x8a8070, 24, 30, 10, 18, 0, 6);
     k.box(0x8a8070, 10, 24, 10, 18, 5.4, 6);
+    // The lobby (walk-in): stone floor, a lit ceiling, glass doors, the concierge's desk, armchairs, and the
+    // private elevator in brass on the warm back wall.
     k.lit(0xf0e4d0, 10, 24, 10.2, 18, -0.01, 0.02, true);
     k.lit(0xf6ecdc, 10, 24, 10.5, 18, 5.2, 5.4, true);
-    k.pane(10, 24, 0, 5.2, 10.1);
-    k.glow([1.3, 1.0, 0.6], 12, 22, 17.8, 18, 1.5, 4.5);
+    k.lit(0xe8dcc8, 10, 10.3, 10.2, 18, 0, 5.2, true);
+    k.lit(0xe8dcc8, 23.7, 24, 10.2, 18, 0, 5.2, true);
+    k.pane(10, 15.5, 0, 5.2, 10.1);
+    k.pane(18.5, 24, 0, 5.2, 10.1);
+    k.box(0x2a2a2e, 15.5, 18.5, 10.0, 10.2, 3.0, 5.2, true);
+    for (const u of [15.5, 18.5]) k.box(0x2a2a2e, u - 0.06, u + 0.06, 10.0, 10.2, 0, 3.0);
+    k.lit(0xe8dcc8, 10.3, 23.7, 17.97, 18, 0, 5.2, true);
+    k.glow([0.62, 0.48, 0.3], 11, 15, 17.8, 18, 1.5, 4.5);
+    k.glow([0.62, 0.48, 0.3], 19, 23, 17.8, 18, 1.5, 4.5);
+    k.lit(0x2a2826, 15, 19, 17.7, 18, 0, 5.2, true);
+    k.lit(0xb89a5a, 15.7, 18.3, 17.62, 17.7, 0, 2.7, true);
+    k.glow([1.2, 0.9, 0.5], 18.5, 18.6, 17.6, 17.66, 1.2, 1.4);
+    peakLiftSign(k, 17, 17.6, 3.3);
     k.lit(0x3a2a1e, 15, 19, 14, 15, 0, 1.1, true);
-    k.person(17, 15.6, 0, -1, { pose: 'stand', color: [0.9, 0.82, 0.62], long: true });
-    k.facade(STONE, [3.4, 0.62, 2.1, WIN.balcony], 8 + 5 * 16, 6, 28, 12, 30, 6, 136);
-    for (let y = 9; y < 136; y += 3) k.box(0xe8e2d8, 5.6, 28.4, 11.6, 12, y, y + 0.18);
-    // Penthouse: a double-height glass pavilion, lit warm, and the terrace round it.
-    k.box(STONE, 5, 29, 11, 31, 136, 136.6);
-    k.lit(0xe8dccc, 10, 24, 16, 26, 136.6, 136.7, true);
-    k.glow([0.34, 0.24, 0.13], 10.2, 23.8, 16, 16.1, 137, 142.6, EMIT.lamp);
-    k.glow([0.34, 0.24, 0.13], 10, 10.1, 16.2, 25.8, 137, 142.6, EMIT.lamp);
-    k.glow([0.34, 0.24, 0.13], 23.9, 24, 16.2, 25.8, 137, 142.6, EMIT.lamp);
-    k.box(0x2a2a2e, 9.6, 24.4, 15.6, 26.4, 142.6, 143.4);
-    for (let u = 10; u <= 24; u += 2) k.box(0x2a2a2e, u - 0.05, u + 0.05, 15.95, 16.05, 136.6, 142.6);
-    k.glow([0.1, 0.55, 0.7], 12, 22, 12, 15, 136.6, 136.72, EMIT.lamp);
-    for (const [pu, pt] of [[7, 13], [27, 13], [7, 28], [27, 28]]) {
-      k.box(0x5a4a3a, pu - 0.7, pu + 0.7, pt - 0.7, pt + 0.7, 136.6, 137.4);
-      k.lathe(0x2e5a34, pu, pt, [[137.4, 0.1], [138.4, 1.1], [139.8, 0.9], [140.6, 0.1]], 8);
+    k.lathe(0xe8e0d0, 17.8, 14.5, [[1.1, 0.1], [1.35, 0.16], [1.55, 0.08]], 10);
+    for (const [cu, face] of [[11.5, 1], [22.5, -1]] as const) {
+      k.lit(0x6a4a3a, cu - 0.9, cu + 0.9, 11.2, 13, 0, 0.45, true);
+      k.lit(0x6a4a3a, face > 0 ? cu - 0.9 : cu + 0.65, face > 0 ? cu - 0.65 : cu + 0.9, 11.2, 13, 0.45, 0.95, true);
     }
-    k.box(0x9ab0b8, 5, 29, 11, 11.1, 136.6, 137.8);
+    k.facade(STONE, [3.4, 0.62, 2.1, WIN.balcony], 8 + 5 * 16, 6, 28, 12, 30, 6, PH.floor);
+    for (let y = 9; y < PH.floor; y += 3) k.box(0xe8e2d8, 5.6, 28.4, 11.6, 12, y, y + 0.18);
+    // The crown: the penthouse floor, its roof pavilion and terrace (swapped for the interior, penthouse.ts).
+    penthouseCrown(part('crown'));
     // Porte-cochère over the drive, with the car waiting.
     k.box(0x2a2a2e, 9, 25, 3, 10, 5.2, 5.6);
     k.glow([1.2, 0.95, 0.65], 9.4, 24.6, 3.4, 9.6, 5.17, 5.2);

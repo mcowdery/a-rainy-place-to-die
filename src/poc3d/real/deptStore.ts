@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import type { Rect } from '../../core/coords';
 import type { Building3 } from '../district/plan';
 import type { Interior } from './interiors';
+import { Draw, type C3 } from './interiorDraw';
 import { Kit, text } from './kit';
-import { localFrame, localRect, toLocal, toWorld, type LocalFrame } from './localFrame';
+import { localFrame, localRect, toLocal } from './localFrame';
 import { EMIT, KIND, lin } from './meshBuilder';
 
 /**
@@ -363,70 +364,8 @@ export function deptRoofColliders(b: Building3): Rect[] {
 
 // ---- Geometry ----
 
-type C3 = [number, number, number];
-
-/** Drawing helpers over a Kit: surfaces under the store's own light (self-lit, so the food hall works below ground). */
-class Draw {
-  readonly f: LocalFrame;
-  /** The floor being furnished (people stand on it). */
-  level = 0;
-  private seed = 0x2f6e2b1;
-  constructor(readonly k: Kit) {
-    this.f = k.f;
-  }
-  rnd(): number {
-    this.seed = (Math.imul(this.seed, 1664525) + 1013904223) >>> 0;
-    return this.seed / 4294967296;
-  }
-  pick<T>(xs: readonly T[]): T {
-    return xs[Math.floor(this.rnd() * xs.length)];
-  }
-  W(hex: number, u0: number, u1: number, t0: number, t1: number, y0: number, y1: number, bottom = false): void {
-    this.k.lit(hex, u0, u1, t0, t1, y0, y1, true, bottom);
-  }
-  glow(rgb: C3, u0: number, u1: number, t0: number, t1: number, y0: number, y1: number, ch: number = EMIT.always): void {
-    this.k.glow(rgb, u0, u1, t0, t1, y0, y1, ch);
-  }
-  P(u: number, t: number, y: number): [number, number, number] {
-    const [x, z] = toWorld(this.f, u, t);
-    return [x, y, z];
-  }
-  /** A self-lit quad, both sides. */
-  quad(hex: number, a: [number, number, number], b: [number, number, number], c: [number, number, number], d: [number, number, number]): void {
-    const mb = this.k.mb;
-    mb.kind = KIND.emit;
-    mb.style = [EMIT.interior, 0, 0, 0];
-    mb.color = lin(hex);
-    mb.poly4(a, b, c, d);
-    mb.poly4(b, a, d, c);
-    mb.style = [0, 0, 0, 0];
-  }
-  /** A self-lit round form (rings of [y, radius]); ch EMIT.always makes it glow. */
-  lathe(hex: number, u: number, t: number, rings: readonly (readonly [number, number])[], n = 10, ch: number = EMIT.interior, rgb?: C3): void {
-    const mb = this.k.mb;
-    mb.kind = KIND.emit;
-    mb.style = [ch, 0, 0, 0];
-    mb.color = rgb ?? lin(hex);
-    const [x, z] = toWorld(this.f, u, t);
-    mb.lathe(x, z, rings, n);
-    mb.style = [0, 0, 0, 0];
-  }
-  ball(hex: number, u: number, t: number, y: number, r: number, n = 8): void {
-    this.lathe(hex, u, t, [[y, 0.001], [y + r * 0.3, r * 0.75], [y + r, r], [y + r * 1.7, r * 0.75], [y + r * 2, 0.001]], n);
-  }
-  /** A sign canvas: a main line and a smaller one under it. */
-  sign(main: string, sub: string, bg: string, fg: string, pw = 512, ph = 160, serif = true): THREE.Texture {
-    return this.k.canvas(pw, ph, (g) => {
-      g.fillStyle = bg;
-      g.fillRect(0, 0, pw, ph);
-      const fam = serif ? "'Yu Mincho', 'MS Mincho', 'Times New Roman', serif" : "'Yu Gothic', 'Meiryo', 'Segoe UI', sans-serif";
-      const big = Math.round(ph * (sub ? 0.44 : 0.56));
-      g.font = `bold ${big}px ${fam}`;
-      const scale = Math.min(1, (pw * 0.9) / Math.max(1, g.measureText(main).width));
-      text(g, main, pw / 2, sub ? ph * 0.4 : ph * 0.52, `bold ${Math.floor(big * scale)}px ${fam}`, fg);
-      if (sub) text(g, sub, pw / 2, ph * 0.8, `${Math.round(ph * 0.16)}px ${fam}`, fg);
-    });
-  }
+/** The store's own drawing: storeys with escalator wells, the outer walls, columns, the elevator halls, escalators. */
+class DeptDraw extends Draw {
   /** Floor and ceiling of a storey over the whole footprint, less a hole (an escalator well). */
   storey(floorHex: number, y: number, ceilHex: number, ceil: number, holes: { floor?: R4; ceil?: R4 }): void {
     const pieces = (hole: R4 | undefined): R4[] =>
@@ -519,14 +458,10 @@ class Draw {
       this.W(0xb8bcc0, u - 0.1, u + 0.1, e.t1 + 0.5, e.t1 + 0.9, e.y1, e.y1 + 0.95);
     }
   }
-  /** A ghost shopper (or staff) at local (u, t) facing (du, dt). */
-  person(u: number, t: number, du: number, dt: number, spec: Parameters<Kit['person']>[4] = {}): void {
-    this.k.person(u, t, du, dt, { y: this.level, ...spec });
-  }
 }
 
 /** Goods on a flat surface (a counter top or a shelf) from u0..u1 x t0..t1 at height y. */
-function goods(d: Draw, kind: Goods, u0: number, u1: number, t0: number, t1: number, y: number): void {
+function goods(d: DeptDraw, kind: Goods, u0: number, u1: number, t0: number, t1: number, y: number): void {
   const grid = (w: number, dd: number, gap: number, each: (u: number, t: number) => void): void => {
     for (let u = u0 + gap; u + w <= u1 - gap / 2; u += w + gap) for (let t = t0 + gap; t + dd <= t1 - gap / 2; t += dd + gap) each(u, t);
   };
@@ -586,7 +521,7 @@ function goods(d: Draw, kind: Goods, u0: number, u1: number, t0: number, t1: num
 
 // ---- B1: the food hall ----
 
-function* foodHall(d: Draw): Generator<void> {
+function* foodHall(d: DeptDraw): Generator<void> {
   const y = B1;
   d.level = y;
   d.storey(0xd8d8d4, y, 0xe8e6e0, CEIL_B1, { ceil: [ESC_DN.u0 - 0.2, ESC_DN.u1 + 0.2, ESC_DN.t0, ESC_DN.t1] });
@@ -633,7 +568,7 @@ function* foodHall(d: Draw): Generator<void> {
 }
 
 /** A counter along a side wall: back shelves, a staff aisle, a lit display case, the name over it. */
-function wallStallGeo(d: Draw, s: Stall): void {
+function wallStallGeo(d: DeptDraw, s: Stall): void {
   const y = B1;
   const L = s.side === 'L';
   const A = (a: number): number => (L ? IN.u0 + a : IN.u1 - a);
@@ -669,7 +604,7 @@ function wallStallGeo(d: Draw, s: Stall): void {
 }
 
 /** An island: cases on four sides round the staff, goods on a tiered centre, the name hanging over it both ways. */
-function islandStall(d: Draw, s: Stall): void {
+function islandStall(d: DeptDraw, s: Stall): void {
   const y = B1;
   const { u0, u1, t0, t1 } = s;
   const um = (u0 + u1) / 2;
@@ -702,7 +637,7 @@ function islandStall(d: Draw, s: Stall): void {
 
 // ---- 1F: the entrance, cosmetics and accessories ----
 
-function* groundFloor(d: Draw): Generator<void> {
+function* groundFloor(d: DeptDraw): Generator<void> {
   const y = F1;
   d.level = y;
   const MARBLE = 0xf0ebe2;
@@ -872,7 +807,7 @@ function* groundFloor(d: Draw): Generator<void> {
 }
 
 /** A cosmetics island: counters with lit tops and testers, a tower with the brand's name both ways, stools, staff. */
-function brandIsland(d: Draw, b: Island): void {
+function brandIsland(d: DeptDraw, b: Island): void {
   const y = F1;
   const { u0, u1, t0, t1 } = b;
   const um = (u0 + u1) / 2;
@@ -922,7 +857,7 @@ function brandIsland(d: Draw, b: Island): void {
 }
 
 /** A dress-form mannequin on a stand, in a dress of the given colour. */
-function mannequin(d: Draw, u: number, t: number, y: number, dress: number): void {
+function mannequin(d: DeptDraw, u: number, t: number, y: number, dress: number): void {
   d.lathe(0x9a9ca0, u, t, [[y, 0.2], [y + 0.03, 0.2], [y + 0.04, 0.02], [y + 0.5, 0.02]], 8);
   d.lathe(dress, u, t, [[y + 0.45, 0.36], [y + 0.5, 0.35], [y + 0.9, 0.22], [y + 1.12, 0.15], [y + 1.32, 0.18], [y + 1.46, 0.2], [y + 1.56, 0.12], [y + 1.6, 0.05]], 12);
   d.lathe(0xf4f0ea, u, t, [[y + 1.6, 0.045], [y + 1.68, 0.05], [y + 1.72, 0.07], [y + 1.8, 0.1], [y + 1.92, 0.09], [y + 1.98, 0.001]], 10);
@@ -930,7 +865,7 @@ function mannequin(d: Draw, u: number, t: number, y: number, dress: number): voi
 
 // ---- 2F: women's fashion ----
 
-function* fashionFloor(d: Draw): Generator<void> {
+function* fashionFloor(d: DeptDraw): Generator<void> {
   const y = F2;
   d.level = y;
   d.storey(0xb89a78, y, 0xf4f2ee, CEIL_2F, { floor: [ESC_UP.u0 - 0.2, ESC_UP.u1 + 0.2, ESC_UP.t0, ESC_UP.t1] });
@@ -1045,7 +980,7 @@ function* fashionFloor(d: Draw): Generator<void> {
 }
 
 /** A boutique along a side wall: its fascia over the aisle, racks, a table, fitting rooms, mannequins, staff. */
-function boutique(d: Draw, s: Shop): void {
+function boutique(d: DeptDraw, s: Shop): void {
   const y = F2;
   const t0 = s.t0;
   const t1 = s.t0 + SHOP_LEN;
@@ -1091,7 +1026,7 @@ function boutique(d: Draw, s: Shop): void {
 }
 
 /** The kimono shop: kimono spread on stands (衣桁) and on the wall, a tatami dais with a low table. */
-function kimonoShop(d: Draw, s: Shop): void {
+function kimonoShop(d: DeptDraw, s: Shop): void {
   const y = F2;
   const t0 = s.t0;
   const t1 = s.t0 + SHOP_LEN;
@@ -1168,7 +1103,7 @@ function kimonoShop(d: Draw, s: Shop): void {
  */
 export function* deptInterior(b: Building3, city: THREE.Material, ghost: THREE.Material): Generator<void, Interior> {
   const k = new Kit(b);
-  const d = new Draw(k);
+  const d = new DeptDraw(k);
   yield* foodHall(d);
   yield* groundFloor(d);
   yield* fashionFloor(d);
@@ -1180,7 +1115,7 @@ export function* deptInterior(b: Building3, city: THREE.Material, ghost: THREE.M
 /** The rooftop garden, built with the exterior: fence, lawn, shrine, carousel, rides, udon stand, telescopes. */
 export function deptRoof(k: Kit): void {
   const y = ROOF;
-  const d = new Draw(k);
+  const d = new DeptDraw(k);
   d.level = y;
   const lit = (hex: number, u0: number, u1: number, t0: number, t1: number, y0: number, y1: number, bottom = false): void => k.lit(hex, u0, u1, t0, t1, y0, y1, false, bottom);
   // Deck tiles, the lawn, paths.
