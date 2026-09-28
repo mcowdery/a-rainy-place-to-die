@@ -54,14 +54,14 @@ import { District } from './world';
  * Kaburo (Neon Core), generated at full scale from the L0 map and streamed in chunks, rendered
  * realistically with an ASCII overlay for mood (see real/overlay.ts).
  * URL: ?time=night|day|dusk|dawn &weather=clear|rain|fog &cam=x,y,z,yaw,pitch &spawn=<node id> &late=1 (after the last train)
- * &debug=1 (the M map teleports; &ride=<from>,<to> starts on a subway ride) &ascii=vibe|heavy|ascii|off &grade=neutral|nocturne|noir|citypop &bench=1
- * Keys: WASD/mouse, Shift run, Space jump (up in fly, Ctrl down), E interact, M map / fast travel, T time, R weather, F fly, V overlay (1-4 direct), G dither,
+ * &debug=1 (M opens the map, a fast-travel tool; &ride=<from>,<to> starts on a subway ride) &ascii=vibe|heavy|ascii|off &grade=neutral|nocturne|noir|citypop &bench=1
+ * Keys: WASD/mouse, Shift run, Space jump (up in fly, Ctrl down), E interact, M map / fast travel (debug), T time, R weather, F fly, V overlay (1-4 direct), G dither,
  * B bloom, P look mode.
  */
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const params = new URLSearchParams(location.search);
 const bench = params.get('bench') === '1';
-/** Debug: the M map teleports (getting around is otherwise by train). */
+/** Debug: M opens the map and teleports (players get around by train and on foot; they have no map). */
 const debug = params.get('debug') === '1';
 /** After the last train (終電): stations shut, no trains. A story flag; ?late=1, or L to toggle. */
 const FLAG_LATE = 'world.late';
@@ -344,7 +344,7 @@ async function run(): Promise<void> {
     controls.setView(d.yaw, d.pitch);
     travel.hide();
     controls.lock();
-  }, { travel: debug, lines: mapLines });
+  }, { travel: true, lines: mapLines });
   const picker = new RoutePicker(content.subway);
   // Short messages at the top of the screen.
   const toastEl = document.createElement('div');
@@ -656,7 +656,7 @@ async function run(): Promise<void> {
       flags.set(FLAG_LATE, !late());
       toast(late() ? LAST_TRAIN : 'Trains are running (始発 the first trains have started).');
     }
-    if (e.code === 'KeyM' || (e.code === 'Escape' && travel.open)) {
+    if ((debug && e.code === 'KeyM') || (e.code === 'Escape' && travel.open)) {
       if (travel.open) travel.hide();
       else {
         document.exitPointerLock();
@@ -918,7 +918,7 @@ async function run(): Promise<void> {
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t ? `[E] ${t.kind === 'door' ? 'Enter' : t.kind === 'station' ? (content.subway.stops.has(t.placementId) ? 'Take the subway' : isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : ' ',
-        'click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · M map / fast travel · T time · R weather · K weather & light panel · C grade · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look',
+        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look`,
       ].join('\n');
       builtThisWindow = 0;
     }
