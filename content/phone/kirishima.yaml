@@ -1,0 +1,23 @@
+# Kirishima, the man in the trench coat at Bar Kanpai. He gets your number from Mama once you ask about him.
+id: kirishima
+name: Kirishima 霧島
+status: 私立探偵 · private inquiries
+beats:
+  - id: tape
+    when: asked_detective
+    after: 30
+    messages:
+      - text: Mama tells me you've been asking about me.
+      - text: Here. Since you're curious.
+      - video: media/rouge_cam.webm
+        caption: The castle's front door. Every Thursday, 2:14 a.m., someone goes in. Nobody comes out.
+    replies:
+      - text: Who goes in?
+        then:
+          - text: If I knew, I wouldn't be sending videos to strangers.
+          - text: Buy me a drink at Kanpai. We'll talk.
+      - text: Why send this to me?
+        set: { kirishima_wary: true }
+        then:
+          - text: Because you went knocking. Same as me.
+    set: { saw_rouge_tape: true }

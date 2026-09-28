@@ -19,7 +19,8 @@
     "vn:pull": "node scripts/vn/vn.mjs pull",
     "vn:import": "node scripts/vn/vn.mjs import",
     "vn:keys": "node scripts/vn/keys.mjs",
-    "vn:try": "node scripts/vn/try.mjs"
+    "vn:try": "node scripts/vn/try.mjs",
+    "phone:clip": "node scripts/phone/record_clip.mjs"
   },
   "dependencies": {
     "three": "^0.186.1",

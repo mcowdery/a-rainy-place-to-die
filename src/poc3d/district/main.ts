@@ -9,6 +9,9 @@ import { FLAG_TIME, FLAG_WEATHER, TIMES, WEATHERS, type TimeOfDay, type Weather 
 import { PlaceholderVnBridge } from '../../game/bridge';
 import { loadVnLibrary } from '../../vn/content';
 import { VnPlayer } from '../../vn/player';
+import { loadPhoneContent } from '../../phone/content';
+import { Phone } from '../../phone/engine';
+import { PhoneUI } from '../../phone/ui';
 import { FirstPerson } from '../controls';
 import { frontFrame } from '../real/buildings';
 import { cityMaterial, cityUniforms } from '../real/city';
@@ -604,6 +607,19 @@ async function run(): Promise<void> {
   const vnLibrary = loadVnLibrary();
   if (vnLibrary.errors.length) console.error(`VN content:\n${vnLibrary.errors.join('\n')}`);
   const bridge = new VnPlayer(vnLibrary, { get: flags.get, set: (k, v) => flags.set(k, v) }, new PlaceholderVnBridge($('vn')), (id) => nodeById.get(id)?.kind === 'spawn', debug);
+  // The phone (Tab): the KAIWA messenger, conversations in content/phone/ that arrive as story flags come true.
+  const phoneContent = loadPhoneContent();
+  if (phoneContent.errors.length) console.error(`Phone content:\n${phoneContent.errors.join('\n')}`);
+  // ?debug=1&flags=met_mama,asked_detective: set story flags from the start (to try conversations).
+  if (debug) for (const f of (params.get('flags') ?? '').split(',').filter(Boolean)) flags.set(f, true);
+  const phone = new Phone(phoneContent.contacts, { get: flags.get, set: (k, v) => flags.set(k, v) });
+  const phoneUi = new PhoneUI(phone, phoneContent.url, {
+    onOpen: () => document.exitPointerLock(),
+    onClose: () => controls.lock(),
+    onMessage: () => audio.ping(),
+    blocked: () => bench || document.body.classList.contains('vn-on') || travel.open,
+  });
+  if (debug) (window as unknown as { __phone: unknown }).__phone = { phone, ui: phoneUi, skip: (s: number) => phoneUi.update(phone.update(s)) };
   // ?debug=1: window.__vn('bar_kanpai.mama') plays a node's scene (for screenshots and checks).
   if (debug) {
     (window as unknown as { __vn: (id: string) => void }).__vn = (id) => {
@@ -871,6 +887,7 @@ async function run(): Promise<void> {
     trains?.update(dt, camera);
     subway.update(dt, camera);
     updateInteriors(inVn ? 0 : dt);
+    if (!bench) phoneUi.update(phone.update(dt));
     traffic.update(dt, camera.position);
     signalLamps.update(camera.position, traffic.clock);
     screens.update(camera.position, now / 1000, cityU.uNeon.value);

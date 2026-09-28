@@ -1,0 +1,11 @@
+# The messenger's own account: its welcome, so the phone isn't empty on day one.
+id: kaiwa
+name: KAIWA
+status: 公式アカウント · Official
+beats:
+  - id: welcome
+    after: 6
+    messages:
+      - text: KAIWAへようこそ! Welcome to KAIWA.
+      - text: Messages from the people you meet in the city arrive here. Press Tab to open your phone.
+      - sticker: 📱

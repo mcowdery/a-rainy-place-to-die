@@ -395,6 +395,15 @@ export class CityAudio {
     return bp;
   }
 
+  /** A message on the phone: a soft rising two-note ping, close to the ear. */
+  ping(): void {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime + 0.02;
+    const out = this.speaker();
+    this.bell(t, 1567.98, 0.25, 0.1, out);
+    this.bell(t + 0.11, 2093.0, 0.4, 0.1, out);
+  }
+
   /** The door chime as a train arrives: two falling notes. */
   chime(): void {
     if (!this.ctx) return;
