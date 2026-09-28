@@ -4,8 +4,13 @@ import { GRADE_NAMES, type GradeName } from '../real/grade';
  * Weather and lighting settings to play with, on top of the (district, time, weather) atmosphere: rain
  * strength, wind (up to a hurricane) and its direction, lightning, fog density, darkness, shadow-casting
  * lamps and the colour grade. K opens the panel. Every setting also reads from the URL
- * (?rain=0.8&wind=0.6&windDir=90&lightning=on&fog=1.5&dark=0.7&shadows=4&grade=noir), and "copy link"
- * puts the current ones in the address bar and on the clipboard, to keep a look for a scene.
+ * (?rain=0.8&wind=0.6&windDir=90&lightning=on&fog=1.5&dark=0.7&shadows=4&grade=noir; `auto` for the
+ * settings that can follow the scene), and "copy link" puts the current ones in the address bar and on the
+ * clipboard, to keep a look for a scene. Links list what differs from the built-in MOOD_DEFAULTS, so they
+ * look the same in any browser.
+ *
+ * "save as default" keeps the current settings in this browser (localStorage): the page then starts from
+ * them instead of MOOD_DEFAULTS (URL settings still override), and "reset" goes back to them.
  */
 export interface MoodSettings {
   /** 0-1, drizzle to downpour; null follows the weather (rain 0.45, otherwise none). */
@@ -39,61 +44,87 @@ export interface MoodSettings {
   volume: number;
 }
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: null, darkness: 0, wetness: null, screenGlow: 0.45, dof: 0, focus: null, shadows: 0, grade: 'neutral', cycle: false, volume: 0.7 };
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7 };
 const SHADOW_COUNTS = [0, 2, 4, 8];
+const SAVED_KEY = 'city-popper.district.mood';
 
-export function moodFromUrl(params: URLSearchParams): MoodSettings {
+/** Settings from a parameter list over a base: each present key replaces the base's value. */
+function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettings {
   const num = (k: string, lo: number, hi: number): number | undefined => {
     const v = params.get(k);
     if (v === null || v === '') return undefined;
     const n = Number(v);
     return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : undefined;
   };
-  const m: MoodSettings = { ...MOOD_DEFAULTS };
-  const rain = num('rain', 0, 1);
-  if (rain !== undefined) m.rain = rain;
+  /** A setting that can be null (follow the scene): `auto` gives null. */
+  const opt = (k: string, lo: number, hi: number, cur: number | null): number | null => (params.get(k) === 'auto' ? null : num(k, lo, hi) ?? cur);
+  const m: MoodSettings = { ...base };
+  m.rain = opt('rain', 0, 1, m.rain);
   m.wind = num('wind', 0, 1) ?? m.wind;
   m.windDir = num('windDir', 0, 360) ?? m.windDir;
   const l = params.get('lightning');
   if (l === 'on') m.lightning = 'storm';
   else if (l === 'off' || l === 'auto' || l === 'occasional' || l === 'storm') m.lightning = l;
   m.fog = num('fog', 0.25, 4) ?? m.fog;
-  const moon = num('moon', 0, 1);
-  if (moon !== undefined) m.moon = moon;
+  m.moon = opt('moon', 0, 1, m.moon);
   m.darkness = num('dark', 0, 1) ?? m.darkness;
-  const wet = num('wet', 0, 1);
-  if (wet !== undefined) m.wetness = wet;
+  m.wetness = opt('wet', 0, 1, m.wetness);
   m.screenGlow = num('glow', 0, 1.5) ?? m.screenGlow;
   m.dof = num('dof', 0, 1) ?? m.dof;
-  const focus = num('focus', 1, 300);
-  if (focus !== undefined) m.focus = focus;
+  m.focus = opt('focus', 1, 300, m.focus);
   const s = num('shadows', 0, 8);
   if (s !== undefined) m.shadows = SHADOW_COUNTS.reduce((a, b) => (Math.abs(b - s) < Math.abs(a - s) ? b : a));
   m.volume = num('volume', 0, 1) ?? m.volume;
-  m.cycle = params.get('cycle') === '1';
+  const c = params.get('cycle');
+  if (c === '1' || c === '0') m.cycle = c === '1';
   const g = params.get('grade') as GradeName | null;
   if (g && GRADE_NAMES.includes(g)) m.grade = g;
   return m;
 }
 
+/** The settings as parameters, only those that differ from `base` (null ones as `auto`). */
+function moodParams(m: MoodSettings, base: MoodSettings, into = new URLSearchParams()): URLSearchParams {
+  const set = (k: string, v: string | null, b: string | null): void => void (v === b ? into.delete(k) : into.set(k, v ?? 'auto'));
+  const f = (v: number | null, d = 2): string | null => (v === null ? null : v.toFixed(d));
+  set('rain', f(m.rain), f(base.rain));
+  set('wind', f(m.wind), f(base.wind));
+  set('windDir', String(Math.round(m.windDir)), String(Math.round(base.windDir)));
+  set('lightning', m.lightning, base.lightning);
+  set('fog', f(m.fog), f(base.fog));
+  set('moon', f(m.moon), f(base.moon));
+  set('dark', f(m.darkness), f(base.darkness));
+  set('wet', f(m.wetness), f(base.wetness));
+  set('glow', f(m.screenGlow), f(base.screenGlow));
+  set('dof', f(m.dof), f(base.dof));
+  set('focus', f(m.focus, 1), f(base.focus, 1));
+  set('shadows', String(m.shadows), String(base.shadows));
+  set('grade', m.grade, base.grade);
+  set('volume', f(m.volume), f(base.volume));
+  set('cycle', m.cycle ? '1' : '0', base.cycle ? '1' : '0');
+  return into;
+}
+
+/** The defaults saved in this browser, or null. */
+function savedDefaults(): MoodSettings | null {
+  try {
+    const q = localStorage.getItem(SAVED_KEY);
+    return q === null ? null : moodFromParams(new URLSearchParams(q), MOOD_DEFAULTS);
+  } catch {
+    return null;
+  }
+}
+
+/** The page's starting settings: saved in this browser, otherwise MOOD_DEFAULTS. */
+export function moodDefaults(): MoodSettings {
+  return savedDefaults() ?? { ...MOOD_DEFAULTS };
+}
+
+export function moodFromUrl(params: URLSearchParams): MoodSettings {
+  return moodFromParams(params, moodDefaults());
+}
+
 function moodToUrl(m: MoodSettings): string {
-  const p = new URLSearchParams(location.search);
-  const set = (k: string, v: string | null): void => void (v === null ? p.delete(k) : p.set(k, v));
-  set('rain', m.rain === null ? null : m.rain.toFixed(2));
-  set('wind', m.wind ? m.wind.toFixed(2) : null);
-  set('windDir', m.wind ? String(Math.round(m.windDir)) : null);
-  set('lightning', m.lightning === 'auto' ? null : m.lightning);
-  set('fog', m.fog === 1 ? null : m.fog.toFixed(2));
-  set('moon', m.moon === null ? null : m.moon.toFixed(2));
-  set('dark', m.darkness ? m.darkness.toFixed(2) : null);
-  set('wet', m.wetness === null ? null : m.wetness.toFixed(2));
-  set('glow', m.screenGlow === MOOD_DEFAULTS.screenGlow ? null : m.screenGlow.toFixed(2));
-  set('dof', m.dof ? m.dof.toFixed(2) : null);
-  set('focus', m.dof && m.focus !== null ? m.focus.toFixed(1) : null);
-  set('shadows', m.shadows ? String(m.shadows) : null);
-  set('grade', m.grade === MOOD_DEFAULTS.grade ? null : m.grade);
-  set('volume', m.volume === MOOD_DEFAULTS.volume ? null : m.volume.toFixed(2));
-  set('cycle', m.cycle ? '1' : null);
+  const p = moodParams(m, MOOD_DEFAULTS, new URLSearchParams(location.search));
   const q = p.toString();
   return `${location.pathname}${q ? `?${q}` : ''}`;
 }
@@ -101,6 +132,7 @@ function moodToUrl(m: MoodSettings): string {
 export class MoodPanel {
   readonly root: HTMLDivElement;
   private readonly rows = new Map<string, () => void>();
+  private readonly savedLine: HTMLDivElement;
 
   constructor(
     readonly settings: MoodSettings,
@@ -149,9 +181,19 @@ export class MoodPanel {
       return b;
     };
     button('reset', () => {
-      Object.assign(this.settings, MOOD_DEFAULTS);
+      Object.assign(this.settings, moodDefaults());
       this.refresh();
       this.changed();
+    });
+    const save = button('save as default', () => {
+      try {
+        localStorage.setItem(SAVED_KEY, moodParams(this.settings, MOOD_DEFAULTS).toString());
+        save.textContent = 'saved ✓';
+      } catch {
+        save.textContent = 'not saved';
+      }
+      setTimeout(() => (save.textContent = 'save as default'), 1200);
+      this.showSaved();
     });
     const copy = button('copy link', () => {
       const url = moodToUrl(this.settings);
@@ -161,8 +203,29 @@ export class MoodPanel {
       setTimeout(() => (copy.textContent = 'copy link'), 1200);
     });
     this.root.append(buttons);
+    // Which defaults "reset" goes back to, and a way to forget the saved ones.
+    this.savedLine = document.createElement('div');
+    Object.assign(this.savedLine.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#8a88a0', marginTop: '8px' });
+    const savedText = document.createElement('span');
+    const forget = document.createElement('button');
+    forget.textContent = 'use built-in';
+    Object.assign(forget.style, { padding: '1px 6px', background: '#1a1a28', color: '#b8b6c8', border: '1px solid #2e2c44', cursor: 'pointer', font: 'inherit' });
+    forget.addEventListener('click', () => {
+      try {
+        localStorage.removeItem(SAVED_KEY);
+      } catch {
+        // Storage blocked: nothing was saved.
+      }
+      Object.assign(this.settings, MOOD_DEFAULTS);
+      this.refresh();
+      this.changed();
+      this.showSaved();
+    });
+    this.savedLine.append(savedText, forget);
+    this.root.append(this.savedLine);
+    this.showSaved();
     const note = document.createElement('div');
-    note.textContent = 'Lamp shadows render the nearby scene once per lamp: 4 costs ~2 ms a frame, 8 about 12 ms (heavy). Changing the count recompiles shaders (a short pause).';
+    note.textContent = 'Lamp shadows render the nearby scene once per lamp: 4 costs ~2 ms a frame, 8 (the default) about 12 ms. Changing the count recompiles shaders (a short pause).';
     Object.assign(note.style, { color: '#8a88a0', marginTop: '10px', lineHeight: '1.4' });
     this.root.append(note);
     document.body.append(this.root);
@@ -175,6 +238,13 @@ export class MoodPanel {
   toggle(): void {
     this.root.style.display = this.open ? 'none' : 'block';
     if (this.open) this.refresh();
+  }
+
+  /** Shows whether "reset" goes to defaults saved in this browser or the built-in ones. */
+  private showSaved(): void {
+    const saved = savedDefaults() !== null;
+    (this.savedLine.firstElementChild as HTMLElement).textContent = saved ? 'defaults: saved in this browser' : 'defaults: built-in';
+    (this.savedLine.lastElementChild as HTMLElement).style.display = saved ? '' : 'none';
   }
 
   refresh(): void {
