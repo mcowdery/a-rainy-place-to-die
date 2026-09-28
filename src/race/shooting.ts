@@ -36,12 +36,12 @@ export const WEAPONS: readonly Weapon[] = [
 const DEG = Math.PI / 180;
 
 /** The driver's eye in the car's frame (+x its left, +z forward, metres from its centre on the ground). */
-export const EYE = { x: -0.35, y: 1.13, z: -0.02 } as const;
+export const EYE = { x: -0.35, y: 1.07, z: -0.02 } as const;
 /**
  * The passenger window's opening, in the car's frame: the plane x = `x` (the door's inside), between z0 and z1
  * along the car and y0 and y1 up. Shots across the car go through it, and the cabin (cabin.ts) frames it.
  */
-export const WINDOW = { x: 0.82, z0: -0.26, z1: 0.68, y0: 0.8, y1: 1.2 } as const;
+export const WINDOW = { x: 0.82, z0: -0.26, z1: 0.68, y0: 0.78, y1: 1.23 } as const;
 /**
  * Where you can shoot, relative to the car's heading (rad, positive to the left): out of the driver's window
  * from just ahead (`ahead`) round to behind (`right`); across the car only through the passenger window.

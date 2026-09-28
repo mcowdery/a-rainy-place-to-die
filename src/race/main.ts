@@ -536,7 +536,10 @@ function frame(now: number): void {
   const slopePitch = Math.atan2(nx * fx + nz * fz, ny);
   const slopeRoll = Math.atan2(nx * Math.cos(car.h) - nz * Math.sin(car.h), ny);
   carObj.position.set(car.x, car.y, car.z);
-  carObj.rotation.set(slopePitch - car.ax * 0.006, car.h, -slopeRoll + car.ay * 0.007);
+  // In the driver's-eye view the lean is damped to a third (a driver holds their head level against it), so
+  // the passenger window doesn't tip into the ground mid-drift; the shoulder and chase views keep all of it.
+  const lean = 1 - 0.65 * pov;
+  carObj.rotation.set(slopePitch - car.ax * 0.006 * lean, car.h, -slopeRoll + car.ay * 0.007 * lean);
   body.visible = view === 'chase' || aiming || hipT > 0;
   for (const wh of wheels) {
     const rate = wh.front ? car.u / WL.r : car.handbrake ? 0 : (car.u / WL.r) * (1 + car.spin * 2.5) + car.spin * 25;
@@ -579,14 +582,17 @@ function frame(now: number): void {
     const look = camera.getWorldDirection(new THREE.Vector3());
     const aimPoint = shooting.pick(camera.position, look).point;
     carObj.updateMatrixWorld();
+    // In the car's own frame, lean and all, so the window's opening is exactly what it frames on screen.
     const head = carObj.localToWorld(new THREE.Vector3(EYE.x, EYE.y, EYE.z));
-    const rel = wrap(Math.atan2(aimPoint.x - head.x, aimPoint.z - head.z) - car.h);
-    const pitch = Math.atan2(aimPoint.y - head.y, Math.hypot(aimPoint.x - head.x, aimPoint.z - head.z));
+    const toCar = carObj.quaternion.clone().invert();
+    const dl = aimPoint.clone().sub(head).applyQuaternion(toCar).normalize();
+    const rel = Math.atan2(dl.x, dl.z);
+    const pitch = Math.asin(THREE.MathUtils.clamp(dl.y, -1, 1));
     side = sideFor(rel, pitch);
     // Off every window (the windscreen, behind on the left), the weapon waits at the nearest shot it has.
     const n = nearestShot(rel, pitch);
-    const a = car.h + n.rel;
-    const armAt = side ? aimPoint : head.clone().add(new THREE.Vector3(Math.sin(a) * Math.cos(n.pitch), Math.sin(n.pitch), Math.cos(a) * Math.cos(n.pitch)).multiplyScalar(20));
+    const nd = new THREE.Vector3(Math.sin(n.rel) * Math.cos(n.pitch), Math.sin(n.pitch), Math.cos(n.rel) * Math.cos(n.pitch)).applyQuaternion(carObj.quaternion);
+    const armAt = side ? aimPoint : head.clone().addScaledVector(nd, 20);
     shooting.pose(carObj, armAt, side ?? n.side);
     if (trigger && side) {
       if (hip) hipT = 1.2;

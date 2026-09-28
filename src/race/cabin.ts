@@ -39,7 +39,7 @@ export function buildCabin(): THREE.Group {
   box(metal, X - 0.02, X, 0.74, 0.76, 0.3, 0.42);
   // The driver's door (behind you to the right, glimpsed turning) and the roof lining.
   box(trim, -X - 0.06, -X, 0.28, 1.3, -0.85, 1.1);
-  box(liner, -0.9, 0.9, 1.22, 1.27, -0.9, 0.52);
+  box(liner, -0.8, 0.8, 1.24, 1.28, -0.9, 0.52);
   // A-pillars, raking down from the roof to the scuttle either side of the open windscreen.
   for (const s of [-1, 1]) box(trim, s * 0.8 - 0.05, s * 0.8 + 0.05, 1.06, 1.12, 0.47, 1.13, 0.43);
   // The dashboard, the gauge hood in front of the driver, the centre console, the floor.
