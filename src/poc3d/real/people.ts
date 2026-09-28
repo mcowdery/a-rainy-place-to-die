@@ -561,6 +561,12 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
   // Plazas (a busy square of people crossing, waiting to meet someone, and standing in groups), and more
   // thinly the open ground: tower plazas, park paths, playgrounds.
   const areas = [...plazas.map((rect) => ({ rect, density: 0.5 })), ...detail.open.flatMap((o) => o.crowd)];
+  // A plaza can reach across a road: nobody stands where the cars drive (the carriageways, kerb to kerb).
+  const lanes = plan.roads.filter((r) => r.kind !== 'alley' && r.kind !== 'coast' && r.sidewalk > 0);
+  const inTraffic = (x: number, z: number): boolean =>
+    lanes.some(({ rect: q, sidewalk: sw, vertical }) =>
+      vertical ? x > q.x + sw - 0.4 && x < q.x + q.w - sw + 0.4 && z > q.y && z < q.y + q.h : z > q.y + sw - 0.4 && z < q.y + q.h - sw + 0.4 && x > q.x && x < q.x + q.w,
+    );
   for (const { rect: q, density } of areas) {
     const rnd = rng(hash(Math.round(q.x), Math.round(q.y), 0x9e1));
     for (let x = q.x + 2.5; x < q.x + q.w - 2; x += 4.2) {
@@ -568,7 +574,7 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
         if (!rnd.chance(density)) continue;
         const px = x + (rnd.float() - 0.5) * 2.4;
         const pz = z + (rnd.float() - 0.5) * 2.4;
-        if (!mine(px, pz) || !clear(px, pz)) continue;
+        if (!mine(px, pz) || !clear(px, pz) || inTraffic(px, pz)) continue;
         const yaw = rnd.float() * Math.PI * 2;
         const roll = rnd.float();
         if (roll < 0.45) {

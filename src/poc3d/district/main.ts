@@ -517,6 +517,8 @@ async function run(): Promise<void> {
   let lightGainBase = 1;
   let wasUnder = false;
   const surfaceShown = new Map<THREE.Object3D, boolean>();
+  // The walker's last position (for their velocity: the traffic looks where they're heading).
+  const lastWalker = new THREE.Vector3().copy(camera.position);
   let cycleTick = 1;
   const applyMood = (): void => {
     const fog = scene.fog as THREE.Fog;
@@ -888,7 +890,25 @@ async function run(): Promise<void> {
     subway.update(dt, camera);
     updateInteriors(inVn ? 0 : dt);
     if (!bench) phoneUi.update(phone.update(dt));
-    traffic.update(dt, camera.position);
+    // The walker, when on foot at street level, is someone the traffic has to stop for.
+    const cp0 = camera.position;
+    const onFoot = !controls.fly && !inVn && Math.abs(cp0.y - 1.7) < 1.2;
+    let wvx = dt > 0 ? (cp0.x - lastWalker.x) / dt : 0;
+    let wvz = dt > 0 ? (cp0.z - lastWalker.z) / dt : 0;
+    // Faster than anyone runs: a teleport or a ride, not a step.
+    if (Math.hypot(wvx, wvz) > 12) wvx = wvz = 0;
+    const walkers = onFoot ? [{ x: cp0.x, z: cp0.z, vx: wvx, vz: wvz }] : [];
+    lastWalker.set(cp0.x, cp0.y, cp0.z);
+    traffic.update(dt, camera.position, walkers);
+    // Horns: from where the car is, panned by where it is from the view (yaw 0 looks toward -z; right is +x).
+    for (const h of traffic.honks) {
+      const yaw = (lookYaw() * Math.PI) / 180;
+      const dx = h.x - cp0.x;
+      const dz = h.z - cp0.z;
+      const d = Math.hypot(dx, dz);
+      audio.horn(d, d > 0.1 ? (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d : 0, h.bus);
+    }
+    traffic.honks.length = 0;
     signalLamps.update(camera.position, traffic.clock);
     screens.update(camera.position, now / 1000, cityU.uNeon.value);
     // Screen glow: dimmer by day, thicker in wet air.

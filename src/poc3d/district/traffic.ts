@@ -67,10 +67,10 @@ export type Side = 'north' | 'east' | 'south' | 'west';
 export const SIDES: readonly Side[] = ['north', 'east', 'south', 'west'];
 
 export interface Route {
-  /** Closed polyline of lane points (x, z); the last point joins the first. */
+  /** The lane lines' corners (x, z), where the lane lines cross; the driven path rounds them (`path`). */
   readonly pts: readonly (readonly [number, number])[];
-  /** Cumulative distance at each point (and the total at the end). */
-  readonly dist: readonly number[];
+  /** The driven path: straights joined by turns, sampled (see `along`). */
+  readonly path: Path;
   readonly length: number;
   /** Per edge: the left kerb offset from the lane (for bus shelters) and the edge's mid distance. */
   readonly edges: readonly { readonly mid: number; readonly kerb: readonly [number, number]; readonly dir: readonly [number, number]; readonly side: Side }[];
@@ -90,6 +90,8 @@ export interface Junction {
   readonly ns: boolean;
   /** Whether the route turns here (at the rectangle's corners). Right turns cross the oncoming lane. */
   readonly turn: 'left' | 'right' | null;
+  /** The turn's tightest radius (m), for the speed to take it at; 0 when going straight on. */
+  readonly radius: number;
   /** Width of the road it crosses (the junction box's depth). */
   readonly cross: number;
   readonly x: number;
@@ -186,16 +188,35 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
     const hz = A.d[0] !== 0 ? A.p[1] + la[1] * A.o : B.p[1] + lb[1] * B.o;
     pts.push([vx, hz]);
   }
-  const dist = [0];
-  for (let i = 0; i < 4; i++) {
-    const a = pts[i];
-    const b = pts[(i + 1) % 4];
-    dist.push(dist[i] + Math.hypot(b[0] - a[0], b[1] - a[1]));
-  }
+  // The driven path: each corner rounded by a turn (steering wound in, held, wound out: see TURN), tighter
+  // for left turns (round the near kerb) than right ones (across the junction). Corner i joins lane i-1 to i.
+  const turnAt = lanes.map((l, i) => {
+    const din = lanes[(i + 3) % 4].d;
+    const right = din[0] * l.d[1] - din[1] * l.d[0] > 0;
+    const R = right ? TURN_R.right : TURN_R.left;
+    return { right, R, leg: TURN.leg * R, len: TURN.len * R };
+  });
+  const edgeLen = pts.map((p, i) => Math.hypot(pts[(i + 1) % 4][0] - p[0], pts[(i + 1) % 4][1] - p[1]));
+  const straight = edgeLen.map((len, i) => len - turnAt[i].leg - turnAt[(i + 1) % 4].leg);
+  // s where each edge's straight starts: the path starts on edge 0's straight, then turn 1, straight 1...
+  const start: number[] = [0];
+  for (let i = 1; i < 4; i++) start.push(start[i - 1] + straight[i - 1] + turnAt[i].len);
+  const length = start[3] + straight[3] + turnAt[0].len;
+  /** Distance along the path of the point `proj` metres along edge i from its corner (turns share it out). */
+  const onEdge = (i: number, proj: number): number => {
+    const a = turnAt[i];
+    const b = turnAt[(i + 1) % 4];
+    let s: number;
+    if (proj < a.leg) s = start[i] - ((a.leg - proj) / a.leg) * (a.len / 2);
+    else if (proj > edgeLen[i] - b.leg) s = start[i] + straight[i] + ((proj - (edgeLen[i] - b.leg)) / b.leg) * (b.len / 2);
+    else s = start[i] + proj - a.leg;
+    return ((s % length) + length) % length;
+  };
+  const path = buildPath(pts, lanes.map((l) => l.d), turnAt, straight, start, length);
   const edges = lanes.map((l, i) => {
     const left: [number, number] = [l.d[1], -l.d[0]];
     const side: Side = l.d[0] === 0 ? (l.p[0] === X0 ? 'west' : 'east') : l.p[1] === Z0 ? 'north' : 'south';
-    return { mid: (dist[i] + dist[i + 1]) / 2, kerb: [left[0] * (l.kerb - l.o), left[1] * (l.kerb - l.o)] as [number, number], dir: l.d, side };
+    return { mid: onEdge(i, edgeLen[i] / 2), kerb: [left[0] * (l.kerb - l.o), left[1] * (l.kerb - l.o)] as [number, number], dir: l.d, side };
   });
   // Junctions: every grid corner along each edge (including the corner it turns at, not the one it
   // started from), projected onto the lane; the stop line sits before the crossing road's zebra.
@@ -209,46 +230,122 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
     for (let k = 1; k <= n; k++) {
       const G: [number, number] = vertical ? [a[0], a[1] + l.d[1] * k * CELL] : [a[0] + l.d[0] * k * CELL, a[1]];
       const proj = (G[0] - pts[i][0]) * l.d[0] + (G[1] - pts[i][1]) * l.d[1];
-      const s = dist[i] + proj;
       const cross = half(!vertical, vertical ? G[1] : G[0], (vertical ? G[0] : G[1]) - CELL / 2, (vertical ? G[0] : G[1]) + CELL / 2).w;
-      let turn: Junction['turn'] = null;
-      if (k === n) {
-        const nd = lanes[(i + 1) % 4].d;
-        turn = l.d[0] * nd[1] - l.d[1] * nd[0] > 0 ? 'right' : 'left';
-      }
-      junctions.push({ gx: Math.round(G[0] / CELL), gy: Math.round(G[1] / CELL), s, stop: s - cross / 2 - 5, ns: vertical, turn, cross, x: G[0], z: G[1] });
+      const t = k === n ? turnAt[(i + 1) % 4] : null;
+      const turn: Junction['turn'] = t ? (t.right ? 'right' : 'left') : null;
+      // The stop line: before the crossing road's zebra, and before the turn starts.
+      const stopProj = Math.min(proj - cross / 2 - 5, t ? edgeLen[i] - t.leg - 0.5 : Infinity);
+      junctions.push({ gx: Math.round(G[0] / CELL), gy: Math.round(G[1] / CELL), s: onEdge(i, proj), stop: onEdge(i, stopProj), ns: vertical, turn, radius: t?.R ?? 0, cross, x: G[0], z: G[1] });
     }
   }
-  return { pts, dist, length: dist[4], edges, junctions };
+  return { pts, path, length, edges, junctions };
 }
 
-/** Position and heading at distance s along a route (headings ease round the corners). */
-export function along(route: Route, s: number): { x: number; z: number; dx: number; dz: number } {
-  const L = route.length;
-  s = ((s % L) + L) % L;
-  let i = 0;
-  while (i < 3 && s >= route.dist[i + 1]) i++;
-  const a = route.pts[i];
-  const b = route.pts[(i + 1) % 4];
-  const len = route.dist[i + 1] - route.dist[i];
-  const t = s - route.dist[i];
-  const d: [number, number] = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
-  let [dx, dz] = d;
-  const R = 5;
-  if (t < R) {
-    const p = route.pts[(i + 3) % 4];
-    const dp: [number, number] = [(a[0] - p[0]) / Math.hypot(a[0] - p[0], a[1] - p[1]), (a[1] - p[1]) / Math.hypot(a[0] - p[0], a[1] - p[1])];
-    const k = 0.5 + (t / R) * 0.5;
-    dx = dp[0] * (1 - k) + d[0] * k;
-    dz = dp[1] * (1 - k) + d[1] * k;
-  } else if (len - t < R) {
-    const c = route.pts[(i + 2) % 4];
-    const dn: [number, number] = [(c[0] - b[0]) / Math.hypot(c[0] - b[0], c[1] - b[1]), (c[1] - b[1]) / Math.hypot(c[0] - b[0], c[1] - b[1])];
-    const k = 0.5 + ((len - t) / R) * 0.5;
-    dx = d[0] * k + dn[0] * (1 - k);
-    dz = d[1] * k + dn[1] * (1 - k);
+/** Tightest turn radius at a corner (m): left turns hug the near kerb, right turns sweep across the junction. */
+export const TURN_R = { left: 5.2, right: 8.5 } as const;
+
+/**
+ * The shape of a 90-degree turn for a tightest radius of 1, as a driver steers it: the wheel wound in
+ * (curvature rising linearly: a clothoid), held (an arc), wound out again, a third of the length each. `pts`
+ * run from the entry (0, 0) heading +x to the exit, turning toward +y; `leg` is how far before and after the
+ * corner (where the lane lines cross) the turn starts and ends.
+ */
+export const TURN = (() => {
+  const a = Math.PI / 4;
+  const len = 3 * a;
+  const N = 36;
+  const steps = N * 20;
+  const kappa = (u: number): number => (u < a ? u / a : u < 2 * a ? 1 : (len - u) / a);
+  const pts: { u: number; x: number; y: number; th: number; k: number }[] = [{ u: 0, x: 0, y: 0, th: 0, k: 0 }];
+  let x = 0;
+  let y = 0;
+  let th = 0;
+  const du = len / steps;
+  for (let s = 1; s <= steps; s++) {
+    const um = (s - 0.5) * du;
+    const thm = th + (kappa(um) * du) / 2;
+    x += Math.cos(thm) * du;
+    y += Math.sin(thm) * du;
+    th += kappa(um) * du;
+    if (s % (steps / N) === 0) pts.push({ u: s * du, x, y, th, k: kappa(s * du) });
   }
-  const n = Math.hypot(dx, dz) || 1;
-  return { x: a[0] + d[0] * t, z: a[1] + d[1] * t, dx: dx / n, dz: dz / n };
+  // Symmetric: the corner is where the entry line (y = 0) meets the exit line (x = end x).
+  return { len, leg: x, pts };
+})();
+
+export interface Path {
+  /** Samples: distance, position, heading (unit), signed curvature (1/m, positive turning right). */
+  readonly s: Float64Array;
+  readonly x: Float64Array;
+  readonly z: Float64Array;
+  readonly hx: Float64Array;
+  readonly hz: Float64Array;
+  readonly k: Float64Array;
+}
+
+function buildPath(
+  pts: readonly (readonly [number, number])[],
+  dirs: readonly (readonly [number, number])[],
+  turns: readonly { right: boolean; R: number; leg: number; len: number }[],
+  straight: readonly number[],
+  start: readonly number[],
+  length: number,
+): Path {
+  const S: number[] = [];
+  const X: number[] = [];
+  const Z: number[] = [];
+  const HX: number[] = [];
+  const HZ: number[] = [];
+  const K: number[] = [];
+  const push = (s: number, x: number, z: number, hx: number, hz: number, k: number): void => {
+    S.push(s);
+    X.push(x);
+    Z.push(z);
+    HX.push(hx);
+    HZ.push(hz);
+    K.push(k);
+  };
+  for (let i = 0; i < 4; i++) {
+    const d = dirs[i];
+    const t0 = turns[i];
+    const s0 = start[i];
+    // The straight along edge i.
+    push(s0, pts[i][0] + d[0] * t0.leg, pts[i][1] + d[1] * t0.leg, d[0], d[1], 0);
+    // The turn at corner i+1, from the unit shape: along the entry direction (x) and toward the exit (y).
+    const j = (i + 1) % 4;
+    const t = turns[j];
+    const out = dirs[j];
+    const C = pts[j];
+    const ox = C[0] - d[0] * t.leg;
+    const oz = C[1] - d[1] * t.leg;
+    const sgn = t.right ? 1 : -1;
+    for (const p of TURN.pts) {
+      const c = Math.cos(p.th);
+      const sn = Math.sin(p.th);
+      push(s0 + straight[i] + p.u * t.R, ox + (d[0] * p.x + out[0] * p.y) * t.R, oz + (d[1] * p.x + out[1] * p.y) * t.R, d[0] * c + out[0] * sn, d[1] * c + out[1] * sn, (sgn * p.k) / t.R);
+    }
+  }
+  push(length, X[0], Z[0], HX[0], HZ[0], 0);
+  return { s: Float64Array.from(S), x: Float64Array.from(X), z: Float64Array.from(Z), hx: Float64Array.from(HX), hz: Float64Array.from(HZ), k: Float64Array.from(K) };
+}
+
+/** Position, heading and curvature (1/m, positive turning right) at distance s along a route. */
+export function along(route: Route, s: number): { x: number; z: number; dx: number; dz: number; k: number } {
+  const L = route.length;
+  const P = route.path;
+  s = ((s % L) + L) % L;
+  let lo = 0;
+  let hi = P.s.length - 1;
+  while (hi - lo > 1) {
+    const m = (lo + hi) >> 1;
+    if (P.s[m] <= s) lo = m;
+    else hi = m;
+  }
+  const span = P.s[hi] - P.s[lo];
+  const f = span > 0 ? (s - P.s[lo]) / span : 0;
+  const hx = P.hx[lo] + (P.hx[hi] - P.hx[lo]) * f;
+  const hz = P.hz[lo] + (P.hz[hi] - P.hz[lo]) * f;
+  const n = Math.hypot(hx, hz) || 1;
+  return { x: P.x[lo] + (P.x[hi] - P.x[lo]) * f, z: P.z[lo] + (P.z[hi] - P.z[lo]) * f, dx: hx / n, dz: hz / n, k: P.k[lo] + (P.k[hi] - P.k[lo]) * f };
 }
 

@@ -6,7 +6,9 @@ import { CELL, DISTRICTS3, planCell3, STYLES3 } from '../src/poc3d/district/plan
 import { DistrictModel } from '../src/poc3d/district/model';
 import { parseZones3 } from '../src/poc3d/district/zones';
 import { destinations } from '../src/poc3d/district/travel';
-import { along, parseTraffic3, routeFor, Signals } from '../src/poc3d/district/traffic';
+import * as THREE from 'three';
+import { along, parseTraffic3, routeFor, Signals, TURN, TURN_R } from '../src/poc3d/district/traffic';
+import { TrafficSystem } from '../src/poc3d/real/traffic';
 import { District } from '../src/poc3d/district/world';
 import { localFrame, toWorld } from '../src/poc3d/real/localFrame';
 import { DISTRICT_ADS } from '../src/poc3d/models/ads';
@@ -452,8 +454,84 @@ describe('Traffic signals and junctions', () => {
       for (const j of route.junctions) {
         expect(j.stop).toBeLessThan(j.s);
         expect(j.s - j.stop).toBeGreaterThan(j.cross / 2);
+        // Stopped at the line, a turning car is still pointing straight: the turn starts after it.
+        if (j.turn) expect(along(route, j.stop).k).toBe(0);
       }
     }
+  });
+
+  it('drives round the corners on a smooth path, moving the way it faces (no sliding)', () => {
+    for (const [rect, cw] of [...content.traffic.cars.map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
+      const route = routeFor(rect, cw, plan, []);
+      const ds = 0.25;
+      let prev = along(route, 0);
+      for (let s = ds; s <= route.length + ds / 2; s += ds) {
+        const p = along(route, s);
+        const mx = (p.x - prev.x) / ds;
+        const mz = (p.z - prev.z) / ds;
+        // No jumps, and the step is along the heading (a slide would be sideways to it).
+        expect(Math.hypot(mx, mz), `${rect} at ${s}`).toBeGreaterThan(0.97);
+        expect(Math.hypot(mx, mz)).toBeLessThan(1.03);
+        expect(mx * p.dx + mz * p.dz, `${rect} at ${s}`).toBeGreaterThan(0.995);
+        // The heading turns no faster than the tightest radius allows.
+        const turned = Math.acos(Math.min(1, p.dx * prev.dx + p.dz * prev.dz));
+        expect(turned, `${rect} at ${s}`).toBeLessThan(ds / Math.min(TURN_R.left, TURN_R.right) + 0.01);
+        prev = p;
+      }
+    }
+  });
+
+  it('winds the steering in: a turn starts and ends straight, and never tighter than its radius', () => {
+    expect(TURN.pts[0].k).toBe(0);
+    expect(TURN.pts[TURN.pts.length - 1].k).toBeCloseTo(0, 5);
+    expect(TURN.pts[TURN.pts.length - 1].th).toBeCloseTo(Math.PI / 2, 2);
+    expect(TURN.pts[TURN.pts.length - 1].y).toBeCloseTo(TURN.leg, 2);
+    expect(Math.max(...TURN.pts.map((p) => p.k))).toBeLessThanOrEqual(1);
+  });
+
+  it('stops short of someone standing in the lane, and sounds the horn', () => {
+    const loop = content.traffic.cars[0];
+    const route = routeFor(loop.rect, true, plan, []);
+    const traffic = new TrafficSystem([{ route, spacing: route.length / 3 }], [], new THREE.MeshBasicMaterial(), new Signals());
+    const j = route.junctions[0];
+    const p = along(route, j.s + j.cross / 2 + 30);
+    const walker = { x: p.x, z: p.z, vx: 0, vz: 0 };
+    const cam = new THREE.Vector3(p.x, 1.7, p.z);
+    let closest = Infinity;
+    let honks = 0;
+    for (let t = 0; t < 240; t += 0.05) {
+      traffic.update(0.05, cam, [walker]);
+      honks += traffic.honks.length;
+      traffic.honks.length = 0;
+      for (const c of traffic.nearest(cam, 3)) closest = Math.min(closest, Math.hypot(c.x - p.x, c.z - p.z));
+    }
+    // A car came up, stopped a few metres short (never touching), and waited there with the horn.
+    const first = traffic.nearest(cam, 1)[0];
+    expect(first.speed).toBeLessThan(0.1);
+    expect(Math.hypot(first.x - p.x, first.z - p.z)).toBeLessThan(10);
+    expect(closest).toBeGreaterThan(3);
+    expect(honks).toBeGreaterThan(0);
+  });
+
+  it('drives on past someone waiting on the pavement', () => {
+    const loop = content.traffic.cars[0];
+    const route = routeFor(loop.rect, true, plan, []);
+    const traffic = new TrafficSystem([{ route, spacing: route.length / 3 }], [], new THREE.MeshBasicMaterial(), new Signals());
+    const j = route.junctions[0];
+    const p = along(route, j.s + j.cross / 2 + 30);
+    // Left of the lane (Japan keeps left, the kerb is on the left): 3.2 m over, on the pavement.
+    const walker = { x: p.x + p.dz * 3.2, z: p.z - p.dx * 3.2, vx: 0, vz: 0 };
+    const cam = new THREE.Vector3(walker.x, 1.7, walker.z);
+    let honks = 0;
+    let passed = 0;
+    for (let t = 0; t < 120; t += 0.05) {
+      traffic.update(0.05, cam, [walker]);
+      honks += traffic.honks.length;
+      traffic.honks.length = 0;
+      for (const c of traffic.nearest(cam, 3)) if (Math.hypot(c.x - p.x, c.z - p.z) < 2 && c.speed > 4) passed++;
+    }
+    expect(honks).toBe(0);
+    expect(passed).toBeGreaterThan(0);
   });
 });
 

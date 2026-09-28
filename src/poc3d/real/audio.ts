@@ -395,6 +395,40 @@ export class CityAudio {
     return bp;
   }
 
+  /**
+   * A car horn `distance` metres away, pan -1 (left) to 1 (right): two detuned reeds a third apart, a short
+   * double blast (a bus's lower and longer), quieter and duller with distance.
+   */
+  horn(distance: number, pan: number, bus = false): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.02;
+    const near = 1 / (1 + distance / 9);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900 + 2600 * near;
+    const p = ctx.createStereoPanner();
+    p.pan.value = Math.max(-1, Math.min(1, pan));
+    lp.connect(p).connect(this.master);
+    const [f1, f2] = bus ? [311, 392] : [415, 523];
+    const blasts: [number, number][] = bus ? [[0, 0.7]] : [[0, 0.28], [0.36, 0.42]];
+    for (const [at, len] of blasts) {
+      for (const f of [f1, f2]) {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.01);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t + at);
+        g.gain.linearRampToValueAtTime(0.09 * near, t + at + 0.015);
+        g.gain.setValueAtTime(0.09 * near, t + at + len);
+        g.gain.linearRampToValueAtTime(0, t + at + len + 0.04);
+        o.connect(g).connect(lp);
+        o.start(t + at);
+        o.stop(t + at + len + 0.06);
+      }
+    }
+  }
+
   /** A message on the phone: a soft rising two-note ping, close to the ear. */
   ping(): void {
     if (!this.ctx) return;

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Rect } from '../../core/coords';
 import { hash } from '../../core/hash';
-import { along, SIDES, Signals, type BusLine, type Junction, type Route } from '../district/traffic';
+import { along, SIDES, Signals, TURN, type BusLine, type Junction, type Route } from '../district/traffic';
 import type { Prop } from './props';
 import { addCar } from './cars';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
@@ -19,6 +19,16 @@ import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
  */
 
 const DRAW = 320;
+/** The sideways pull drivers take a turn at (m/s^2): turning speed = sqrt(pull * radius). */
+const TURN_PULL = 2.6;
+
+/** Someone who might step into the road: where they are and how they're moving (m/s). */
+export interface Walker {
+  readonly x: number;
+  readonly z: number;
+  readonly vx: number;
+  readonly vz: number;
+}
 const BUS_DWELL = 12;
 const BUS_LEN = 10.5;
 
@@ -212,9 +222,12 @@ function busStops(lines: readonly { line: BusLine; route: Route }[], city: THREE
       }
     });
   }
-  const mesh = new THREE.Mesh(mb.build()!, city);
-  mesh.receiveShadow = true;
-  group.add(mesh);
+  const geo = mb.build();
+  if (geo) {
+    const mesh = new THREE.Mesh(geo, city);
+    mesh.receiveShadow = true;
+    group.add(mesh);
+  }
   return { mesh: group, colliders };
 }
 
@@ -246,6 +259,12 @@ interface Vehicle {
   /** The junction (route index) the vehicle has committed to crossing, or -1. */
   committed: number;
   pitch: number;
+  roll: number;
+  /** From the rear axle (which follows the lane) forward to the body's centre. */
+  readonly axle: number;
+  /** Seconds stopped for someone in the road, and until the horn can sound again. */
+  waited: number;
+  hornIn: number;
   x: number;
   z: number;
   dx: number;
@@ -288,7 +307,9 @@ export class TrafficSystem {
       obj.add(brake);
       obj.rotation.order = 'YXZ';
       this.group.add(obj);
-      this.vehicles.push({ obj, brake, route, half, width, bus, driver, s, v: driver.v0 * 0.6, acc: 0, stopDone: -1, dwell: 0, committed: -1, pitch: 0, x: 0, z: 0, dx: 0, dz: 1 });
+      // The rear axle sits about a fifth of the length in from the back (a car's overhang; a bus's longer).
+      const axle = bus ? half - 2.6 : half - 0.95;
+      this.vehicles.push({ obj, brake, route, half, width, bus, driver, s, v: driver.v0 * 0.6, acc: 0, stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle, waited: 0, hornIn: 0, x: 0, z: 0, dx: 0, dz: 1 });
     };
     for (const { route, spacing } of cars) {
       const n = Math.max(2, Math.floor(route.length / spacing));
@@ -332,17 +353,31 @@ export class TrafficSystem {
     return this.time;
   }
 
-  update(dt: number, camera: THREE.Vector3): void {
+  /** Horns sounded this frame (read and cleared by the caller, for the sound). */
+  readonly honks: { x: number; z: number; bus: boolean }[] = [];
+
+  /**
+   * Where a vehicle is: its rear axle on the lane, the body pointing along the lane there (the rear wheels
+   * don't slide, so that's the way it faces), the centre ahead of the axle. Round a turn the front swings
+   * wide and the rear cuts in, as a car's does.
+   */
+  private pose(v: Vehicle): { x: number; z: number; dx: number; dz: number; k: number } {
+    const r = along(v.route, v.s - v.axle);
+    return { x: r.x + r.dx * v.axle, z: r.z + r.dz * v.axle, dx: r.dx, dz: r.dz, k: r.k };
+  }
+
+  /** people: whoever might step into the road (the walker; later, pedestrians), with their velocity. */
+  update(dt: number, camera: THREE.Vector3, people: readonly Walker[] = []): void {
     this.time += dt;
     const V = this.vehicles;
     for (const v of V) {
-      const p = along(v.route, v.s);
+      const p = this.pose(v);
       v.x = p.x;
       v.z = p.z;
       v.dx = p.dx;
       v.dz = p.dz;
     }
-    for (const v of V) v.acc = this.accel(v, dt);
+    for (const v of V) v.acc = this.accel(v, dt, people, camera);
     for (const v of V) {
       const L = v.route.length;
       v.v = Math.max(0, v.v + v.acc * dt);
@@ -350,32 +385,60 @@ export class TrafficSystem {
       const near = Math.hypot(v.x - camera.x, v.z - camera.z) < DRAW;
       v.obj.visible = near;
       if (!near) continue;
-      const p = along(v.route, v.s);
+      const p = this.pose(v);
       v.obj.position.set(p.x, 0, p.z);
       v.obj.rotation.y = Math.atan2(p.dx, p.dz);
       // Nose dips under braking, lifts pulling away (eased, like a suspension settling).
       const target = THREE.MathUtils.clamp(-v.acc * 0.0045, -0.012, 0.022) * (v.bus ? 0.5 : 1);
       v.pitch += (target - v.pitch) * Math.min(1, dt * 6);
       v.obj.rotation.x = v.pitch;
+      // The body leans out of a turn with the sideways pull (v^2 * curvature; k > 0 turning right). In the
+      // car's frame (+z forward, +x to its left) a positive roll tips the roof to the right: turning right, lean left.
+      const lean = THREE.MathUtils.clamp(-v.v * v.v * p.k * 0.011, -0.035, 0.035) * (v.bus ? 0.6 : 1);
+      v.roll += (lean - v.roll) * Math.min(1, dt * 5);
+      v.obj.rotation.z = v.roll;
       v.brake.visible = v.acc < -0.6 || v.v < 0.4;
     }
   }
 
   /** The vehicle's acceleration this frame: the most cautious of free driving and every obstacle. */
-  private accel(v: Vehicle, dt: number): number {
+  private accel(v: Vehicle, dt: number, people: readonly Walker[], camera: THREE.Vector3): number {
     const d = v.driver;
     const L = v.route.length;
     let v0 = d.v0;
-    // Corners: slow to a turning speed in time.
+    // Corners: slow in time to the speed the turn allows (a comfortable sideways pull at its tightest).
     for (const j of v.route.junctions) {
       if (!j.turn) continue;
-      const dist = ahead(v.s, j.s, L);
-      if (dist < 60) v0 = Math.min(v0, Math.sqrt((j.turn === 'left' ? 4.5 : 5.5) ** 2 + 2 * d.b * 0.6 * Math.max(0, dist - 3)));
+      const half = (TURN.len * j.radius) / 2;
+      if (ahead(j.s, v.s, L) < half) {
+        // Coming out of it: speed up as the wheel unwinds (the pull the curvature here allows).
+        v0 = Math.min(v0, Math.sqrt(TURN_PULL / Math.max(Math.abs(along(v.route, v.s).k), 1e-3)));
+        continue;
+      }
+      const dist = Math.max(0, ahead(v.s, j.s, L) - half - 1);
+      if (dist < 60) v0 = Math.min(v0, Math.sqrt(TURN_PULL * j.radius + 2 * d.b * 0.6 * dist));
     }
     let a = idm(d, v.v, v0, Infinity, 0);
     const obstacle = (gap: number, speed: number): void => {
       a = Math.min(a, idm(d, v.v, v0, gap, v.v - speed));
     };
+    // Someone in the road ahead, or about to be: stop short of them.
+    v.hornIn = Math.max(0, v.hornIn - dt);
+    const person = people.length && Math.hypot(v.x - camera.x, v.z - camera.z) < 320 ? this.personAhead(v, people) : Infinity;
+    if (person < Infinity) {
+      const gap = person - v.half;
+      if (gap < 0.4) v.v = 0;
+      const before = a;
+      obstacle(Math.max(0.05, gap - 0.6), 0);
+      const hard = a < -4.5 && v.v > 3 && a < before;
+      v.waited = v.v < 0.5 ? v.waited + dt : 0;
+      // The horn: a hard stop, or someone just standing there.
+      if (v.hornIn === 0 && (hard || v.waited > 2.5)) {
+        this.honks.push({ x: v.x + v.dx * v.half, z: v.z + v.dz * v.half, bus: v.bus });
+        v.hornIn = 5 + (hash(Math.floor(this.time), v.s | 0) % 40) / 10;
+        v.waited = 0;
+      }
+    } else v.waited = 0;
     // The vehicle ahead in the lane, on any loop: in front, roughly the same heading, not off to the side.
     let lead: Vehicle | null = null;
     let leadGap = Infinity;
@@ -437,6 +500,30 @@ export class TrafficSystem {
       });
     }
     return THREE.MathUtils.clamp(a, -9, d.a * 1.2);
+  }
+
+  /**
+   * How far along the lane (from the vehicle's centre) the nearest person in its way is, or Infinity: the lane
+   * ahead of the front bumper, sampled every metre, against where each person is now and where they'll be by
+   * the time the vehicle gets there (their current velocity, up to 2 s ahead). In the way: within the
+   * vehicle's half width plus a margin of the lane's centre line.
+   */
+  private personAhead(v: Vehicle, people: readonly Walker[]): number {
+    const look = Math.min(48, (v.v * v.v) / (2 * 3) + v.half + 12);
+    let best = Infinity;
+    for (const p of people) {
+      if ((p.x - v.x) ** 2 + (p.z - v.z) ** 2 > (look + 8) ** 2) continue;
+      for (let k = v.half - 0.3; k <= look && k < best; k += 1) {
+        const q = along(v.route, v.s + k);
+        const t = Math.min(2, Math.max(0, k - v.half) / Math.max(v.v, 1.5));
+        for (const [x, z] of [[p.x, p.z], [p.x + p.vx * t, p.z + p.vz * t]] as const) {
+          const ox = x - q.x;
+          const oz = z - q.z;
+          if (Math.abs(ox * q.dx + oz * q.dz) < 0.6 && Math.abs(ox * q.dz - oz * q.dx) < v.width / 2 + 0.55) best = k;
+        }
+      }
+    }
+    return best;
   }
 
   /** Oncoming traffic on its way through junction j (moving, heading the other way, near the box). */
