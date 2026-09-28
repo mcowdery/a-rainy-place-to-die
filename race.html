@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kurokami Pass · handling test</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #05060c; color: #e8e6f0; }
+      body { font: 13px/1.4 Consolas, 'Cascadia Mono', 'Yu Gothic', monospace; }
+      canvas { display: block; }
+      #hud { position: fixed; top: 10px; left: 12px; color: #a8b0c8; letter-spacing: 1px; text-shadow: 0 1px 3px #000; }
+      #timer { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); font: bold 22px Consolas, monospace; color: #ffe07a; text-shadow: 0 0 12px rgba(255, 200, 80, 0.5); }
+      #speedo { position: fixed; right: 26px; bottom: 22px; text-align: right; }
+      #speedo .kmh { font: bold 54px/1 Consolas, monospace; color: #fff; text-shadow: 0 0 14px rgba(120, 180, 255, 0.4); }
+      #speedo .kmh span { font-size: 15px; color: #9ab; margin-left: 6px; }
+      #speedo .gear { font: bold 30px Consolas, monospace; color: #ff5fa8; margin-top: 2px; }
+      #speedo .rev { width: 200px; height: 7px; background: #1c2030; margin: 6px 0 0 auto; border-radius: 4px; overflow: hidden; }
+      #speedo .rev i { display: block; height: 100%; background: linear-gradient(90deg, #4fe3ff, #ffe45f 70%, #ff4f4f); }
+      #drift { position: fixed; left: 26px; bottom: 22px; }
+      #drift .angle { font: bold 40px/1 Consolas, monospace; color: #fff; }
+      #drift .chain { font: bold 28px Consolas, monospace; color: #7ef0b0; text-shadow: 0 0 12px rgba(126, 240, 176, 0.5); }
+      #drift .chain.lost { color: #ff4f6a; }
+      #drift .mult { color: #ffe07a; font-size: 16px; }
+      #drift .total { color: #c8d0e8; font-size: 16px; }
+      #drift small { color: #8a90a8; font-size: 12px; }
+      #help { position: fixed; top: 34px; left: 12px; color: #8a90a8; font-size: 12px; white-space: pre; }
+    </style>
+  </head>
+  <body>
+    <div id="hud"></div>
+    <div id="timer"></div>
+    <div id="speedo"></div>
+    <div id="drift"></div>
+    <div id="help">W / S  drive · brake, then reverse     A / D  steer     Space  handbrake (start a drift)
+Q  chase / bumper camera     R  back on the road     1  practice lot     2  the top     H  hide this
+Leave the lot up the road for a timed uphill run; from the top, down.</div>
+    <script type="module" src="/src/race/main.ts"></script>
+  </body>
+</html>

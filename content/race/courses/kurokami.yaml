@@ -1,0 +1,45 @@
+# 黒神峠 Kurokami Pass (the handling test course). Format: src/race/course.ts.
+# A floodlit practice lot at the foot of the mountain, then the pass: up a hillside that rises to the north,
+# two hairpins, sweepers and an S-section, to a viewpoint at the summit. World x east, z south, metres.
+name: 黒神峠 Kurokami Pass
+# The practice lot (flat, at height 0): its rect; the road leaves from the middle of its north edge.
+lot: { x: -90, z: -60, w: 180, h: 130 }
+road:
+  width: 7.2
+  shoulder: 1.2
+  # How steeply the hillside rises to the north (m per m), and how rough it is (m).
+  slope: 0.115
+  rough: 5
+  # Control points [x, z] (the road runs through them, a smooth curve); heights come from the hillside.
+  points:
+    - [0, -60]
+    - [0, -110]
+    - [8, -160]
+    - [45, -200]
+    - [105, -222]
+    - [150, -232]
+    # First hairpin: right, back to the west.
+    - [178, -246]
+    - [188, -268]
+    - [176, -288]
+    - [150, -296]
+    - [95, -300]
+    - [20, -306]
+    - [-60, -318]
+    - [-112, -330]
+    # Second hairpin: left, back to the east.
+    - [-140, -348]
+    - [-146, -372]
+    - [-128, -392]
+    - [-96, -400]
+    - [-30, -410]
+    - [35, -418]
+    # S-section up to the summit.
+    - [80, -440]
+    - [92, -472]
+    - [70, -505]
+    - [62, -540]
+    - [88, -575]
+    - [110, -610]
+# The viewpoint at the top: a round lot at the road's end.
+summit: { r: 20 }
