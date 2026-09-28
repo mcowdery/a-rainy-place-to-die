@@ -28,11 +28,15 @@ export interface Walker {
   readonly z: number;
   readonly vx: number;
   readonly vz: number;
+  /** How far they reach sideways (m): a person 0.3 (the default), a car stopped across the lane more. */
+  readonly r?: number;
 }
 const BUS_DWELL = 12;
 const BUS_LEN = 10.5;
 
-type Model = { geo: THREE.BufferGeometry; half: number; brake: THREE.BufferGeometry };
+type Model = { geo: THREE.BufferGeometry; half: number; brake: THREE.BufferGeometry; label: string };
+
+const LABELS = { sedan: 'Car', kei: 'Kei car', minivan: 'Minivan', taxi: 'Taxi' } as const;
 
 /** A car model at the origin pointing +z, with headlight glows added (the district's cars are parked). */
 function carModel(type: 'sedan' | 'kei' | 'minivan' | 'taxi', paint: number | undefined, variant: number): Model {
@@ -53,7 +57,7 @@ function carModel(type: 'sedan' | 'kei' | 'minivan' | 'taxi', paint: number | un
   brake.kind = KIND.plain;
   brake.color = [1, 1, 1];
   for (const s of [-1, 1]) brake.box(s * (bb.max.x - 0.25), bb.min.z - 0.025, 0.79, 0.91, 0.3, 0.02, KIND.plain, true);
-  return { geo: mergeGeometries([body, lamps.build()!])!, half: (bb.max.z - bb.min.z) / 2, brake: brake.build()! };
+  return { geo: mergeGeometries([body, lamps.build()!])!, half: (bb.max.z - bb.min.z) / 2, brake: brake.build()!, label: LABELS[type] };
 }
 
 /** A city bus at the origin pointing +z (10.5 m): cream and green, glass sides, lit inside, a destination board. */
@@ -241,18 +245,39 @@ interface Driver {
   readonly s0: number;
 }
 
-interface Vehicle {
+/**
+ * A vehicle as the player drives it (district/driving.ts): the driving code moves it (centre, heading, speed,
+ * acceleration, curvature), the traffic system still draws it, lights it and treats it as an obstacle.
+ */
+export interface DrivenVehicle {
   readonly obj: THREE.Object3D;
-  readonly brake: THREE.Object3D;
-  readonly route: Route;
   readonly half: number;
   readonly width: number;
   readonly bus: boolean;
-  readonly driver: Driver;
-  /** Distance along the route, speed, acceleration. */
-  s: number;
+  /** From the rear axle forward to the body's centre. */
+  readonly axle: number;
+  /** What it is, for the prompt ('Taxi', 'Bus'...). */
+  readonly label: string;
+  x: number;
+  z: number;
+  dx: number;
+  dz: number;
+  /** Speed along the heading (negative reversing), acceleration, path curvature (1/m, positive turning right). */
   v: number;
   acc: number;
+  curv: number;
+  /** Hide the body (the camera's on the bumper, looking out). */
+  hideBody: boolean;
+}
+
+interface Vehicle extends DrivenVehicle {
+  readonly brake: THREE.Object3D;
+  readonly route: Route;
+  readonly driver: Driver;
+  /** In traffic (driving its loop), driven by the player, or parked where the player left it. */
+  mode: 'traffic' | 'driven' | 'parked';
+  /** Distance along the route (while in traffic). */
+  s: number;
   /** Buses: the stop being served (edge index) and how long they have stood there. */
   stopDone: number;
   dwell: number;
@@ -260,15 +285,9 @@ interface Vehicle {
   committed: number;
   pitch: number;
   roll: number;
-  /** From the rear axle (which follows the lane) forward to the body's centre. */
-  readonly axle: number;
   /** Seconds stopped for someone in the road, and until the horn can sound again. */
   waited: number;
   hornIn: number;
-  x: number;
-  z: number;
-  dx: number;
-  dz: number;
 }
 
 /** IDM acceleration toward an obstacle gap metres ahead closing at dv (own speed minus the obstacle's). */
@@ -301,7 +320,7 @@ export class TrafficSystem {
     const taxis = [carModel('taxi', undefined, 921), carModel('taxi', undefined, 922), carModel('taxi', undefined, 923)];
     const brakeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 0.12, 0.06) });
     let k = 0;
-    const add = (obj: THREE.Object3D, brakeGeo: THREE.BufferGeometry, route: Route, half: number, width: number, bus: boolean, driver: Driver, s: number): void => {
+    const add = (obj: THREE.Object3D, brakeGeo: THREE.BufferGeometry, route: Route, half: number, width: number, bus: boolean, driver: Driver, s: number, label: string): void => {
       const brake = new THREE.Mesh(brakeGeo, brakeMat);
       brake.visible = false;
       obj.add(brake);
@@ -309,7 +328,7 @@ export class TrafficSystem {
       this.group.add(obj);
       // The rear axle sits about a fifth of the length in from the back (a car's overhang; a bus's longer).
       const axle = bus ? half - 2.6 : half - 0.95;
-      this.vehicles.push({ obj, brake, route, half, width, bus, driver, s, v: driver.v0 * 0.6, acc: 0, stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle, waited: 0, hornIn: 0, x: 0, z: 0, dx: 0, dz: 1 });
+      this.vehicles.push({ obj, brake, route, half, width, bus, driver, label, mode: 'traffic', s, v: driver.v0 * 0.6, acc: 0, curv: 0, hideBody: false, stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle, waited: 0, hornIn: 0, x: 0, z: 0, dx: 0, dz: 1 });
     };
     for (const { route, spacing } of cars) {
       const n = Math.max(2, Math.floor(route.length / spacing));
@@ -322,7 +341,7 @@ export class TrafficSystem {
         // Temperaments: taxis a little brisker; everyone a little different.
         const r = (b: number): number => ((h >>> b) % 1000) / 1000;
         const driver: Driver = { v0: (taxi ? 12.5 : 11) + r(8) * 3, a: 1.4 + r(12) * 1.2 + (taxi ? 0.4 : 0), b: 2.2 + r(16) * 1.2, T: 1.1 + r(20) * 0.6, s0: 2.2 + r(4) * 0.8 };
-        add(obj, m.brake, route, m.half, 1.8, false, driver, (route.length * i) / n + r(2) * 8);
+        add(obj, m.brake, route, m.half, 1.8, false, driver, (route.length * i) / n + r(2) * 8, m.label);
       }
     }
     const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.22, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
@@ -340,7 +359,7 @@ export class TrafficSystem {
         const gl = new THREE.Mesh(model.glass, glass);
         gl.renderOrder = 3;
         obj.add(body, gl, model.signs.clone());
-        add(obj, busBrakeGeo, route, BUS_LEN / 2, 2.5, true, { v0: 9.5, a: 0.9, b: 1.6, T: 1.6, s0: 3 }, (route.length * (i + 0.3)) / line.buses);
+        add(obj, busBrakeGeo, route, BUS_LEN / 2, 2.5, true, { v0: 9.5, a: 0.9, b: 1.6, T: 1.6, s0: 3 }, (route.length * (i + 0.3)) / line.buses, 'Bus');
       }
     }
     const stops = busStops(buses, city);
@@ -371,21 +390,33 @@ export class TrafficSystem {
     this.time += dt;
     const V = this.vehicles;
     for (const v of V) {
+      if (v.mode !== 'traffic') continue;
       const p = this.pose(v);
       v.x = p.x;
       v.z = p.z;
       v.dx = p.dx;
       v.dz = p.dz;
     }
-    for (const v of V) v.acc = this.accel(v, dt, people, camera);
+    // In the way besides people: the cars the player is driving or has left, each as three points along it.
+    const others: Walker[] = [...people];
+    for (const o of V) {
+      if (o.mode === 'traffic') continue;
+      for (const f of [-0.6, 0, 0.6]) others.push({ x: o.x + o.dx * o.half * f, z: o.z + o.dz * o.half * f, vx: o.dx * o.v, vz: o.dz * o.v, r: o.width / 2 + 0.2 });
+    }
+    for (const v of V) if (v.mode === 'traffic') v.acc = this.accel(v, dt, others, camera);
     for (const v of V) {
-      const L = v.route.length;
-      v.v = Math.max(0, v.v + v.acc * dt);
-      v.s = (v.s + v.v * dt) % L;
-      const near = Math.hypot(v.x - camera.x, v.z - camera.z) < DRAW;
-      v.obj.visible = near;
+      if (v.mode === 'traffic') {
+        const L = v.route.length;
+        v.v = Math.max(0, v.v + v.acc * dt);
+        v.s = (v.s + v.v * dt) % L;
+      } else if (v.mode === 'parked') {
+        v.v = 0;
+        v.acc = 0;
+      }
+      const near = v.mode === 'driven' || Math.hypot(v.x - camera.x, v.z - camera.z) < DRAW;
+      v.obj.visible = near && !v.hideBody;
       if (!near) continue;
-      const p = this.pose(v);
+      const p = v.mode === 'traffic' ? this.pose(v) : { x: v.x, z: v.z, dx: v.dx, dz: v.dz, k: v.curv };
       v.obj.position.set(p.x, 0, p.z);
       v.obj.rotation.y = Math.atan2(p.dx, p.dz);
       // Nose dips under braking, lifts pulling away (eased, like a suspension settling).
@@ -424,12 +455,12 @@ export class TrafficSystem {
     };
     // Someone in the road ahead, or about to be: stop short of them.
     v.hornIn = Math.max(0, v.hornIn - dt);
-    const person = people.length && Math.hypot(v.x - camera.x, v.z - camera.z) < 320 ? this.personAhead(v, people) : Infinity;
-    if (person < Infinity) {
-      const gap = person - v.half;
+    const hit = people.length && Math.hypot(v.x - camera.x, v.z - camera.z) < 320 ? this.personAhead(v, people) : null;
+    if (hit) {
+      const gap = hit.k - v.half;
       if (gap < 0.4) v.v = 0;
       const before = a;
-      obstacle(Math.max(0.05, gap - 0.6), 0);
+      obstacle(Math.max(0.05, gap - 0.6), hit.speed);
       const hard = a < -4.5 && v.v > 3 && a < before;
       v.waited = v.v < 0.5 ? v.waited + dt : 0;
       // The horn: a hard stop, or someone just standing there.
@@ -508,18 +539,19 @@ export class TrafficSystem {
    * the time the vehicle gets there (their current velocity, up to 2 s ahead). In the way: within the
    * vehicle's half width plus a margin of the lane's centre line.
    */
-  private personAhead(v: Vehicle, people: readonly Walker[]): number {
+  private personAhead(v: Vehicle, people: readonly Walker[]): { k: number; speed: number } | null {
     const look = Math.min(48, (v.v * v.v) / (2 * 3) + v.half + 12);
-    let best = Infinity;
+    let best: { k: number; speed: number } | null = null;
     for (const p of people) {
       if ((p.x - v.x) ** 2 + (p.z - v.z) ** 2 > (look + 8) ** 2) continue;
-      for (let k = v.half - 0.3; k <= look && k < best; k += 1) {
+      for (let k = v.half - 0.3; k <= look && k < (best?.k ?? Infinity); k += 1) {
         const q = along(v.route, v.s + k);
         const t = Math.min(2, Math.max(0, k - v.half) / Math.max(v.v, 1.5));
         for (const [x, z] of [[p.x, p.z], [p.x + p.vx * t, p.z + p.vz * t]] as const) {
           const ox = x - q.x;
           const oz = z - q.z;
-          if (Math.abs(ox * q.dx + oz * q.dz) < 0.6 && Math.abs(ox * q.dz - oz * q.dx) < v.width / 2 + 0.55) best = k;
+          // Their speed along the lane: follow someone going our way, stop for anyone else.
+          if (Math.abs(ox * q.dx + oz * q.dz) < 0.6 && Math.abs(ox * q.dz - oz * q.dx) < v.width / 2 + (p.r ?? 0.3) + 0.25) best = { k, speed: Math.max(0, p.vx * q.dx + p.vz * q.dz) };
         }
       }
     }
@@ -568,9 +600,10 @@ export class TrafficSystem {
       .map(({ v }) => ({ x: v.x, z: v.z, vx: v.dx * v.v, vz: v.dz * v.v, speed: v.v, acc: v.acc, bus: v.bus }));
   }
 
-  /** Whether a walker at (x, z) of radius r touches a vehicle. */
-  blocked(x: number, z: number, r: number): boolean {
+  /** Whether a walker (or a driven car's piece) at (x, z) of radius r touches a vehicle (other than `except`). */
+  blocked(x: number, z: number, r: number, except: DrivenVehicle | null = null): boolean {
     for (const v of this.vehicles) {
+      if (v === except) continue;
       const ox = x - v.x;
       const oz = z - v.z;
       if (Math.abs(ox) > 7 || Math.abs(oz) > 7) continue;
@@ -579,6 +612,46 @@ export class TrafficSystem {
       if (Math.abs(a) < v.half + r && Math.abs(c) < v.width / 2 + r) return true;
     }
     return false;
+  }
+
+  /**
+   * A vehicle you could get into: stopped (or crawling: at a light, in a queue, or where you left it), its
+   * nearest side within reach of p, and roughly in front of the view (fx, fz).
+   */
+  takeable(p: THREE.Vector3, fx: number, fz: number, reach = 2.2, any = false): DrivenVehicle | null {
+    let best: Vehicle | null = null;
+    let bestD = reach;
+    for (const v of this.vehicles) {
+      if (v.mode === 'driven' || (!any && Math.abs(v.v) > 1.2)) continue;
+      const ox = p.x - v.x;
+      const oz = p.z - v.z;
+      if (ox * ox + oz * oz > (v.half + reach + 1) ** 2) continue;
+      // Distance from p to the vehicle's footprint.
+      const a = Math.abs(ox * v.dx + oz * v.dz) - v.half;
+      const c = Math.abs(ox * v.dz - oz * v.dx) - v.width / 2;
+      const d = Math.hypot(Math.max(0, a), Math.max(0, c));
+      const toward = -(ox * fx + oz * fz) / Math.max(Math.hypot(ox, oz), 1e-3);
+      if (d < bestD && (any || toward > 0.2)) [best, bestD] = [v, d];
+    }
+    return best;
+  }
+
+  /** Take the wheel: the vehicle leaves its loop; the driving code moves it from now on. */
+  take(d: DrivenVehicle): void {
+    const v = d as Vehicle;
+    v.mode = 'driven';
+    v.committed = -1;
+    v.curv = 0;
+  }
+
+  /** Get out: the vehicle stays where it is, parked (an obstacle; you can get back in). */
+  leave(d: DrivenVehicle): void {
+    const v = d as Vehicle;
+    v.mode = 'parked';
+    v.hideBody = false;
+    v.v = 0;
+    v.acc = 0;
+    v.curv = 0;
   }
 
   get count(): number {

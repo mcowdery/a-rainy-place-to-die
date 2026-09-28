@@ -32,7 +32,8 @@ import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../re
 import { buildRotary, type RotaryBuilt } from '../real/rotary';
 import { INTERIORS, type Interior } from '../real/interiors';
 import { hash } from '../../core/hash';
-import { SignalLamps, TrafficSystem } from '../real/traffic';
+import { SignalLamps, TrafficSystem, type DrivenVehicle } from '../real/traffic';
+import { Driving } from './driving';
 import { ScreenGlows, ScreenLights } from '../real/screenLight';
 import { GRADE_NAMES, GradePass } from '../real/grade';
 import { DofPass } from '../real/dof';
@@ -650,9 +651,48 @@ async function run(): Promise<void> {
     return best;
   };
   const interact = async (): Promise<void> => {
+    if (driving.car) return exitCar();
     const n = target();
-    if (n) await use(n);
+    if (n) return use(n);
+    const car = takeableCar();
+    if (car) enterCar(car);
   };
+  // Driving: E by a car stopped in traffic (or one you left) takes the wheel; E again gets out.
+  const driving = new Driving(camera, (x, z, r) => district.blocked(x, z, r, 0) || traffic.blocked(x, z, r, driving.car) || npcBlocked(x, z, r));
+  const takeableCar = (): DrivenVehicle | null => {
+    if (controls.fly || inVn || Math.abs(camera.position.y - 1.7) > 1.2) return null;
+    camera.getWorldDirection(forward);
+    return traffic.takeable(camera.position, forward.x, forward.z);
+  };
+  const enterCar = (car: DrivenVehicle): void => {
+    traffic.take(car);
+    driving.enter(car);
+    controls.held = true;
+    controls.mouseLook = false;
+    toast(`${car.label} · W/S drive · A/D steer · Space handbrake · Q camera · E get out`, 5);
+  };
+  const exitCar = (): void => {
+    const spot = driving.exitSpot((x, z) => !district.blocked(x, z, 0.4, 0) && !traffic.blocked(x, z, 0.4) && !npcBlocked(x, z, 0.4));
+    if (!spot) return toast('No room to get out here.');
+    traffic.leave(driving.car!);
+    driving.leave();
+    camera.position.set(spot.x, 1.7, spot.z);
+    lastWalker.copy(camera.position);
+    controls.setLevel(0);
+    controls.held = false;
+    controls.mouseLook = true;
+    controls.setView(spot.yawDeg, 0);
+  };
+  // ?debug=1: window.__drive() takes the wheel of the nearest vehicle, wherever it is (for checks).
+  if (debug) (window as unknown as { __drive: () => string }).__drive = () => {
+    const car = traffic.takeable(camera.position, 0, 0, 400, true);
+    if (car) enterCar(car);
+    return car?.label ?? 'none';
+  };
+  // The dashboard: speed and gear, while driving.
+  const dash = document.createElement('div');
+  Object.assign(dash.style, { position: 'fixed', left: '24px', bottom: '22px', zIndex: '16', padding: '8px 14px', background: 'rgba(8,8,14,0.72)', border: '1px solid #3a3850', color: '#e8e6f0', font: "bold 26px 'Consolas', monospace", display: 'none', pointerEvents: 'none' });
+  document.body.append(dash);
   const use = async (n: Node3): Promise<void> => {
     if (inVn) return;
     if (n.kind === 'station' && n.returnSpawn) {
@@ -777,7 +817,7 @@ async function run(): Promise<void> {
     if (e.code === 'KeyE') void interact();
     if (e.code === 'KeyT') flags.set(FLAG_TIME, TIMES[(TIMES.indexOf(time()) + 1) % TIMES.length]);
     if (e.code === 'KeyR') flags.set(FLAG_WEATHER, WEATHERS[(WEATHERS.indexOf(weather()) + 1) % WEATHERS.length]);
-    if (e.code === 'KeyF') controls.fly = !controls.fly;
+    if (e.code === 'KeyF' && !driving.car) controls.fly = !controls.fly;
     if (e.code === 'KeyC') {
       mood.grade = GRADE_NAMES[(GRADE_NAMES.indexOf(mood.grade) + 1) % GRADE_NAMES.length];
       grade.grade = mood.grade;
@@ -892,7 +932,11 @@ async function run(): Promise<void> {
     if (!bench) phoneUi.update(phone.update(dt));
     // The walker, when on foot at street level, is someone the traffic has to stop for.
     const cp0 = camera.position;
-    const onFoot = !controls.fly && !inVn && Math.abs(cp0.y - 1.7) < 1.2;
+    if (!inVn) driving.update(dt);
+    if (driving.bump > 2) audio.bump(driving.bump);
+    dash.style.display = driving.car ? 'block' : 'none';
+    if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}`;
+    const onFoot = !driving.car && !controls.fly && !inVn && Math.abs(cp0.y - 1.7) < 1.2;
     let wvx = dt > 0 ? (cp0.x - lastWalker.x) / dt : 0;
     let wvz = dt > 0 ? (cp0.z - lastWalker.z) / dt : 0;
     // Faster than anyone runs: a teleport or a ride, not a step.
@@ -1064,7 +1108,7 @@ async function run(): Promise<void> {
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
-        t ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (content.subway.stops.has(t.placementId) ? 'Take the subway' : isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : ' ',
+        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (content.subway.stops.has(t.placementId) ? 'Take the subway' : isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
         `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look`,
       ].join('\n');
       builtThisWindow = 0;

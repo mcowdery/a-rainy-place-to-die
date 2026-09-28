@@ -57,6 +57,8 @@ export class FirstPerson {
   floorAt: FloorAt | null = null;
   /** Movement off (riding a train): the view still turns, the camera is placed by someone else. */
   held = false;
+  /** Mouse look off (driving: the driving camera takes the mouse). */
+  mouseLook = true;
   /** The walker's floor height (y of the feet). */
   private level = 0;
   /** Height above the floor while jumping, and the vertical speed. */
@@ -111,7 +113,7 @@ export class FirstPerson {
   }
 
   private mouse(e: MouseEvent): void {
-    if (!this.look.isLocked) return;
+    if (!this.look.isLocked || !this.mouseLook) return;
     if (this.settle) {
       this.settle = false;
       return;

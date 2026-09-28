@@ -429,6 +429,36 @@ export class CityAudio {
     }
   }
 
+  /** A knock (the car you're driving hitting something): a dull thump and a rattle, louder the harder. */
+  bump(speed: number): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.01;
+    const k = Math.min(1, speed / 10);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(95, t);
+    o.frequency.exponentialRampToValueAtTime(38, t + 0.25);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.5 * k, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.4);
+    const n = ctx.createBufferSource();
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.25), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.05));
+    n.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1800;
+    const ng = ctx.createGain();
+    ng.gain.value = 0.35 * k;
+    n.connect(bp).connect(ng).connect(this.master);
+    n.start(t);
+  }
+
   /** A message on the phone: a soft rising two-note ping, close to the ear. */
   ping(): void {
     if (!this.ctx) return;
