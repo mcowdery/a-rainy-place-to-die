@@ -5,6 +5,7 @@ import { subtract } from './ground';
 import type { Light } from './lightmap';
 import { localFrame, localRect, toWorld, type LocalFrame } from './localFrame';
 import { KIND } from './meshBuilder';
+import type { TreeSpecies } from '../models/trees';
 import type { Prop } from './props';
 
 /**
@@ -127,6 +128,16 @@ class Layout {
   }
 }
 
+const PLAZA_TREES = { zelkova: 40, camphor: 25, ginkgo: 20, sakura: 15 } as const;
+const PARK_TREES = { zelkova: 22, camphor: 18, sakura: 24, ginkgo: 12, pine: 8, dogwood: 10, dogwoodBloom: 6 } as const;
+
+function pickWeighted<K extends string>(rnd: Rng, w: Readonly<Record<K, number>>): K {
+  const entries = Object.entries(w) as [K, number][];
+  let roll = rnd.float() * entries.reduce((t, [, v]) => t + v, 0);
+  for (const [k, v] of entries) if ((roll -= v) < 0) return k;
+  return entries[0][0];
+}
+
 /** The layout of an open lot; buildings: those standing in it (a plaza's towers) or around it. */
 export function openLayout(lot: OpenLot3, buildings: readonly Building3[]): OpenLayout {
   const L = new Layout(lot, rng(lot.seed), buildings.filter((b) => overlaps(pad(lot.rect, 3), { x: b.x - b.w / 2, y: b.z - b.d / 2, w: b.w, h: b.d })));
@@ -166,12 +177,15 @@ function parking(L: Layout): void {
   }
   // Yellow edge line across the entrance.
   line(0.3, W - 0.3, 0.15, 0.3, 0xd8a830);
+  // About half the bays taken, and at most ten cars (each is a lot of geometry).
+  let cars = 0;
   for (const b of bays) {
     // Wheel stop at the bay's inner end; a car in most bays, nose in or out.
     const stopU = b.u + b.du * 1.9;
     const stopT = b.t + b.dt * 1.9;
     L.prop('wheelstop', stopU, stopT, b.du, b.dt, { solid: false, radius: 0.1, half: 0.6 });
-    if (!rnd.chance(0.65)) continue;
+    if (!rnd.chance(0.5) || cars >= 10) continue;
+    cars++;
     const [x, z] = L.at(b.u, b.t);
     const [wx, wz] = L.dir(b.du, b.dt);
     L.propW('car', x, z, -wz, wx, { radius: 0.95, half: 1.4, variant: rnd.int(0, 99999) });
@@ -215,7 +229,8 @@ function playground(L: Layout, u0: number, t0: number, u1: number, t1: number, o
   for (let i = 0; i < trees; i++) {
     const [u, t] = spots[(i * 2 + (swingLeft ? 1 : 0)) % spots.length];
     const [x, z] = L.at(u, t);
-    L.propW('tree', x, z, 0, 1, { radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8, size: 0.8 + rnd.float() * 0.3 });
+    const species = rnd.pick(['sakura', 'dogwood', 'zelkova'] as const);
+    L.propW('tree', x, z, 0, 1, { radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8, species, size: (species === 'dogwood' ? 1 : 0.55) + rnd.float() * 0.15, grate: false });
   }
   L.lamp(u0 + w / 2 + gate / 2 + 0.6, t0 + 0.6, 8);
   L.crowd.push({ rect: L.rect(u0 + 1, u1 - 1, t0 + 1, t1 - 1), density: 0.35 });
@@ -227,7 +242,7 @@ function vacant(L: Layout): void {
   L.ground.push({ rect: L.lot.rect, top: 0.04, kind: KIND.gravel, hex: 0x7a7266 });
   L.run('fence', 0.2, 0.3, W - 0.2, 0.3, 2, 0.08);
   L.prop('board', 0.4 + rnd.float() * (W - 1.6), 0.55, 0, -1, { radius: 0.1, half: 0.6 });
-  const tufts = Math.floor((W * D) / 5);
+  const tufts = Math.floor((W * D) / 9);
   for (let i = 0; i < tufts; i++) {
     // Weeds thicker along the edges.
     const edge = rnd.chance(0.5);
@@ -280,7 +295,8 @@ function plaza(L: Layout): void {
       const roll = rnd.float();
       if (roll > 0.72 || !clear(px, pz, 3)) continue;
       if (roll < 0.52) {
-        L.propW('tree', px, pz, 0, 1, { radius: 0.3, variant: hash(Math.round(px), Math.round(pz)) % 8, size: 1.0 + rnd.float() * 0.3 });
+        const species = pickWeighted(rnd, PLAZA_TREES);
+        L.propW('tree', px, pz, 0, 1, { radius: 0.3, variant: hash(Math.round(px), Math.round(pz)) % 8, species, size: 0.75 + rnd.float() * 0.2 });
         if (rnd.chance(0.3)) L.propW('bench', px + 1.6, pz, 1, 0, { half: 0.8, radius: 0.35 });
       } else {
         const s = 2.2 + rnd.float() * 1.2;
@@ -442,6 +458,21 @@ function park(L: Layout): void {
   }
   L.lights.push({ x: cx, z: cz, r: hs * 0.8, color: PARK_LAMP, i: 0.5 });
 
+  // Flowering azaleas round the hub's corners, clipped box either side of each gate.
+  for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+    for (let i = 0; i < 3; i++) {
+      const bx = cx + dx * (hs / 2 + 1.4 + i * 1.5);
+      const bz = cz + dz * (hs / 2 + 1.4 + (i % 2) * 1.2);
+      L.propW('tree', bx, bz, 0, 1, { radius: 0.8, variant: rnd.int(0, 99), species: 'azalea', size: 0.9 + rnd.float() * 0.4, grate: false });
+    }
+  }
+  for (const [gx, gz, along] of [[cx, q.y + 1.2, 'x'], [cx, q.y + q.h - 1.2, 'x'], [q.x + 1.2, cz, 'z'], [q.x + q.w - 1.2, cz, 'z']] as const) {
+    for (const sgn of [-1, 1]) {
+      const o = sgn * (gate / 2 + 0.2);
+      L.propW('tree', along === 'x' ? gx + o : gx, along === 'z' ? gz + o : gz, 0, 1, { radius: 0.5, variant: rnd.int(0, 99), species: 'box', size: 0.9, grate: false });
+    }
+  }
+  const bloom = rnd.chance(0.35);
   // Trees on a jittered grid over the lawn, off the paths, hub, pond, playground and toilet.
   const keepOff = [...paths.map((p) => pad(p, 1.8)), pad(hub, 2.5), ...(pond ? [pad(pond, 2.5)] : []), ...(play ? [pad(play, 1)] : []), ...(toilet ? [pad(toilet, 2)] : [])];
   for (let x = q.x + 3; x < q.x + q.w - 2; x += 6.5) {
@@ -451,7 +482,11 @@ function park(L: Layout): void {
       if (!rnd.chance(0.72)) continue;
       if (px < q.x + 2 || pz < q.y + 2 || px > q.x + q.w - 2 || pz > q.y + q.h - 2) continue;
       if (keepOff.some((r) => px > r.x && px < r.x + r.w && pz > r.y && pz < r.y + r.h)) continue;
-      L.propW('tree', px, pz, 0, 1, { radius: 0.3, variant: hash(Math.round(px), Math.round(pz)) % 8, size: 1.0 + rnd.float() * 0.5, grate: false });
+      // Pines round the pond; the park's sakura are all in bloom or none are.
+      const nearPond = pond && overlaps(pad({ x: px, y: pz, w: 0, h: 0 }, 9), pond);
+      let species: TreeSpecies = nearPond && rnd.chance(0.6) ? 'pine' : pickWeighted(rnd, PARK_TREES);
+      if (species === 'sakura' && bloom) species = 'sakuraBloom';
+      L.propW('tree', px, pz, 0, 1, { radius: 0.3, variant: hash(Math.round(px), Math.round(pz)) % 8, species, size: 0.75 + rnd.float() * 0.35, grate: false });
     }
   }
   for (const p of paths) L.crowd.push({ rect: p, density: 0.2 });

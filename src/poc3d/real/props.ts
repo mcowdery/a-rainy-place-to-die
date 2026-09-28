@@ -5,6 +5,7 @@ import { frontFrame, styleFor } from './buildings';
 import type { Light } from './lightmap';
 import { addCar } from './cars';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
+import { addTree, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { addDressing } from './dressing';
 import { openLayout, type OpenLayout } from './openLots';
 
@@ -42,6 +43,8 @@ export interface Prop {
   readonly arm?: number;
   /** Scale (trees, weeds, planters: side in metres). */
   readonly size?: number;
+  /** Trees: the species (models/trees.ts); without one, the plain tree (the showroom's previous generation). */
+  readonly species?: TreeSpecies;
   /** Trees: canopy shifted this far toward n (out over the road, off a facade), and raised for traffic. */
   readonly lean?: number;
   readonly high?: boolean;
@@ -111,6 +114,10 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       const boulevard = width >= 14;
       const edgeRoad = q.x < cell.x || q.y < cell.y || q.x + q.w > cell.x + cell.w || q.y + q.h > cell.y + cell.h;
       // Keep the kerb clear where bus stops can stand (the middle of each cell edge) and of blade signs.
+      // One species along a whole street (keyed by its line, so both cells of an edge road agree): ginkgo
+      // and zelkova avenues, ginkgo and dogwood on narrower pavements.
+      const line = hash(Math.round(r.vertical ? q.x + q.w / 2 : q.y + q.h / 2), r.vertical ? 1 : 2, 0x5ee7) % 100;
+      const streetSpecies: TreeSpecies = boulevard ? (line < 55 ? 'ginkgo' : 'zelkova') : line < 40 ? 'ginkgo' : line < 85 ? 'dogwood' : 'dogwoodBloom';
       const stopClear = (t: number): boolean => !edgeRoad || Math.abs((((t % CELL3) + CELL3) % CELL3) - CELL3 / 2) > 7;
       const bladeClear = (x: number, z: number, m: number): boolean => !plan.signs.some((g) => g.vertical && Math.hypot(g.x - x, g.z - z) < m);
       for (const side of [-1, 1]) {
@@ -132,9 +139,11 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
             const [x2, z2, nx2, nz2] = along(tt, side, inset);
             const roll = u01(hash(Math.round(x2 * 4), Math.round(z2 * 4), 0x7ee));
             if (tt < e - 3 && (boulevard || roll < style.streetTrees) && mine(x2, z2) && stopClear(tt) && bladeClear(x2, z2, 3.2) && !beforeStamp(x2, z2)) {
-              const size = boulevard ? 1 : Math.max(0.6, Math.min(1, (inset + 1.2) / 2.4));
-              const lean = Math.max(0, 2.2 * size - (inset - 0.25));
-              props.push({ kind: 'tree', x: x2, z: z2, nx: nx2, nz: nz2, radius: 0.3, variant: hash(Math.round(x2), Math.round(z2)) % 8, size, lean, high: !boulevard });
+              // Sized to the pavement: the crown reaches no closer than 0.25 m to the building line.
+              const reach = TREE_REACH[streetSpecies];
+              const size = Math.max(0.5, Math.min(1, (inset + (boulevard ? 0.9 : 1.2)) / reach));
+              const lean = Math.max(0, reach * size - (inset - 0.25));
+              props.push({ kind: 'tree', species: streetSpecies, x: x2, z: z2, nx: nx2, nz: nz2, radius: 0.3, variant: hash(Math.round(x2), Math.round(z2)) % 8, size, lean, high: !boulevard });
             }
             if (r.sidewalk >= 2.4) {
               for (const [c, h] of [[t + 5.5, 3.6], [t + 16.5, 3.6]] as const) {
@@ -281,7 +290,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       for (let z = q.y + 7; z < q.y + q.h - 5; z += 9) {
         if (Math.abs(x - cx) < 5 && Math.abs(z - cz) < 5) continue; // keep the middle open
         if (!rnd.chance(0.55) || inBuilding(x, z, 2)) continue;
-        props.push({ kind: 'tree', x, z, nx: 0, nz: 1, radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8 });
+        props.push({ kind: 'tree', species: 'zelkova', size: 0.75, x, z, nx: 0, nz: 1, radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8 });
       }
     }
     lights.push({ x: cx, z: cz, r: Math.max(q.w, q.h) * 0.6, color: [0.9, 0.75, 0.85], i: 0.35 });
@@ -397,6 +406,11 @@ const LEAVES = [0x2e4a26, 0x36522a, 0x2a4222, 0x3e5a2e];
  * (street trees on narrow pavements) sits out over the road on a branch; high ones clear buses.
  */
 function tree(mb: MeshBuilder, p: Prop): void {
+  if (p.species) {
+    const lean = p.lean ?? 0;
+    addTree(mb, { x: p.x, z: p.z, species: p.species, size: p.size, seed: p.variant, lean: [p.nx * lean, p.nz * lean], lift: p.high ? 1.5 : 0, grate: p.grate !== false && p.species !== 'azalea' && p.species !== 'box' });
+    return;
+  }
   const k = p.size ?? 1;
   const lean = p.lean ?? 0;
   const lift = p.high ? 0.9 : 0;

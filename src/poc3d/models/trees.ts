@@ -22,10 +22,25 @@ export interface TreeSpec {
   readonly x: number;
   readonly z: number;
   readonly species: TreeSpecies;
-  /** Overall scale (1 = a mature street tree). */
+  /** Overall scale (1 = a mature tree). */
   readonly size?: number;
   readonly seed?: number;
+  /**
+   * Street trees: the crown shifted by (dx, dz) (out over the road, off a facade) and raised by lift
+   * (clear of buses), on a stem that leans from the foot to the crown's trunk; a grate at the foot.
+   */
+  readonly lean?: readonly [number, number];
+  readonly lift?: number;
+  readonly grate?: boolean;
 }
+
+/** How far each species' crown reaches from its trunk at size 1 (for fitting trees to pavements). */
+export const TREE_REACH: Record<TreeSpecies, number> = {
+  zelkova: 4.6, ginkgo: 2.3, ginkgoGold: 2.3, sakura: 5.4, sakuraBloom: 5.4, pine: 3.4, camphor: 5.6, dogwood: 1.7, dogwoodBloom: 1.7, azalea: 0.9, box: 0.6,
+};
+
+/** Height added to everything above the stem while one tree is built (see TreeSpec.lift). */
+let LIFT = 0;
 
 type C3 = [number, number, number];
 
@@ -44,33 +59,47 @@ const GREENS: Record<string, readonly number[]> = {
   box: [0x2e4a26, 0x3a5a2a],
 };
 
-/** A lumpy foliage mass: an ellipsoid-ish lathe, radius rx, half-height ry, centred at (x, y, z). */
-function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: number, hex: number, n = 7): void {
+/** A lumpy foliage mass: an ellipsoid-ish lathe, radius rx, half-height ry, centred at (x, y, z); 15 quads. */
+function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: number, hex: number, n = 5): void {
   mb.color = lin(hex);
-  mb.lathe(x, z, [[y - ry, rx * 0.15], [y - ry * 0.55, rx * 0.85], [y + ry * 0.1, rx], [y + ry * 0.65, rx * 0.72], [y + ry, rx * 0.12]], n);
+  y += LIFT;
+  mb.lathe(x, z, [[y - ry, rx * 0.15], [y - ry * 0.4, rx * 0.95], [y + ry * 0.35, rx * 0.88], [y + ry, rx * 0.12]], n);
 }
 
 /** A tapered trunk from y0 to y1. */
 function trunk(mb: MeshBuilder, x: number, z: number, y0: number, y1: number, r0: number, r1: number, hex: number): void {
   mb.color = lin(hex);
-  mb.lathe(x, z, [[y0, r0], [y0 + (y1 - y0) * 0.15, r0 * 0.85], [y1, r1]], 7);
+  mb.lathe(x, z, [[y0 + LIFT, r0], [y1 + LIFT, r1]], 5);
 }
 
 /** A branch as a beam from a to b. */
 function limb(mb: MeshBuilder, a: C3, b: C3, t: number, hex: number): void {
   mb.color = lin(hex);
-  mb.beam(a, b, t);
+  mb.beam([a[0], a[1] + LIFT, a[2]], [b[0], b[1] + LIFT, b[2]], t);
 }
 
 export function addTree(mb: MeshBuilder, t: TreeSpec): void {
   const k = t.size ?? 1;
   const rnd = rng(hash(t.seed ?? 0, Math.round(t.x * 8), Math.round(t.z * 8), 0x7ee5));
-  const { x, z } = t;
+  // The crown's trunk stands at (x, z), lifted; a stem leans to it from the foot.
+  const [lx, lz] = t.lean ?? [0, 0];
+  const x = t.x + lx;
+  const z = t.z + lz;
   const bark = rnd.pick(BARK);
   const greens = GREENS[t.species];
   const g = (): number => rnd.pick(greens);
   mb.kind = KIND.plain;
   mb.style = [0, 0, 0, 0];
+  if (t.grate) {
+    mb.color = lin(0x2a2a2a);
+    mb.box(t.x, t.z, 0.15, 0.17, 1.2, 1.2);
+  }
+  const lift = Math.max(t.lift ?? 0, Math.hypot(lx, lz) > 0.3 ? 1.2 : 0);
+  if (lift > 0) {
+    mb.color = lin(bark);
+    mb.beam([t.x, 0, t.z], [x, lift + 0.2, z], 0.22 * Math.max(0.6, k));
+  }
+  LIFT = lift;
   const around = (n: number, f: (a: number, i: number) => void): void => {
     const a0 = rnd.float() * Math.PI * 2;
     for (let i = 0; i < n; i++) f(a0 + (i / n) * Math.PI * 2 + (rnd.float() - 0.5) * 0.5, i);
@@ -84,31 +113,29 @@ export function addTree(mb: MeshBuilder, t: TreeSpec): void {
         const reach = (2.2 + rnd.float() * 0.8) * k;
         const top: C3 = [x + Math.cos(a) * reach, (6.2 + rnd.float() * 1.2) * k, z + Math.sin(a) * reach];
         limb(mb, [x, fork, z], top, 0.13 * k, bark);
-        mass(mb, top[0], top[1], top[2], (1.7 + rnd.float() * 0.5) * k, 1.3 * k, g());
-        const mid: C3 = [x + Math.cos(a) * reach * 0.6, top[1] * 0.78, z + Math.sin(a) * reach * 0.6];
-        mass(mb, mid[0], mid[1], mid[2], 1.3 * k, 1.0 * k, g());
+        mass(mb, top[0], top[1] - 0.4 * k, top[2], (2.0 + rnd.float() * 0.5) * k, 1.7 * k, g());
       });
-      mass(mb, x, 7.6 * k, z, 2.2 * k, 1.2 * k, g());
+      mass(mb, x, 7.6 * k, z, 2.3 * k, 1.3 * k, g());
       break;
     }
     case 'ginkgo':
     case 'ginkgoGold': {
       // Straight trunk through a tall narrowing cone of masses.
       trunk(mb, x, z, 0, 8.5 * k, 0.24 * k, 0.07 * k, bark);
-      const tiers = 6;
+      const tiers = 4;
       for (let i = 0; i < tiers; i++) {
         const f = i / (tiers - 1);
-        const y = (2.8 + f * 6.2) * k;
-        const r = (2.0 - f * 1.35) * k;
-        around(i === tiers - 1 ? 1 : 3, (a) => {
-          const off = i === tiers - 1 ? 0 : r * 0.45;
-          mass(mb, x + Math.cos(a) * off, y, z + Math.sin(a) * off, r * 0.8, 0.85 * k, g(), 6);
+        const y = (3.1 + f * 5.8) * k;
+        const r = (2.1 - f * 1.35) * k;
+        around(i === tiers - 1 ? 1 : 2, (a) => {
+          const off = i === tiers - 1 ? 0 : r * 0.4;
+          mass(mb, x + Math.cos(a) * off, y, z + Math.sin(a) * off, r * 0.85, 1.05 * k, g(), 5);
         });
       }
       if (t.species === 'ginkgoGold') {
         // Fallen leaves round the foot.
         mb.color = lin(0xe8c030);
-        mb.lathe(x, z, [[0.01, 0.2], [0.03, 2.2 * k]], 9);
+        mb.lathe(t.x, t.z, [[0.01, 0.2], [0.03, 2.2 * k]], 9);
       }
       break;
     }
@@ -121,15 +148,13 @@ export function addTree(mb: MeshBuilder, t: TreeSpec): void {
         const reach = (3.0 + rnd.float() * 0.8) * k;
         const end: C3 = [x + Math.cos(a) * reach, (3.4 + rnd.float() * 0.8) * k, z + Math.sin(a) * reach];
         limb(mb, [x, fork, z], end, 0.11 * k, 0x3a2e28);
-        mass(mb, end[0], end[1] + 0.3 * k, end[2], 1.8 * k, 0.95 * k, g());
-        const mid: C3 = [x + Math.cos(a + 0.4) * reach * 0.55, 4.4 * k, z + Math.sin(a + 0.4) * reach * 0.55];
-        mass(mb, mid[0], mid[1], mid[2], 1.6 * k, 0.9 * k, g());
+        mass(mb, end[0] - Math.cos(a) * 0.4 * k, end[1] + 0.4 * k, end[2] - Math.sin(a) * 0.4 * k, 2.1 * k, 1.05 * k, g());
       });
-      mass(mb, x, 4.9 * k, z, 2.0 * k, 0.8 * k, g());
+      mass(mb, x, 4.9 * k, z, 2.4 * k, 0.9 * k, g());
       if (t.species === 'sakuraBloom') {
         // Petals on the ground.
         mb.color = lin(0xf2d8e2);
-        mb.lathe(x, z, [[0.01, 0.2], [0.03, 3.2 * k]], 10);
+        mb.lathe(t.x, t.z, [[0.01, 0.2], [0.03, 3.2 * k]], 10);
       }
       break;
     }
@@ -160,12 +185,12 @@ export function addTree(mb: MeshBuilder, t: TreeSpec): void {
     case 'camphor': {
       // Thick trunk, big rounded dome of dense masses.
       trunk(mb, x, z, 0, 4 * k, 0.5 * k, 0.32 * k, bark);
-      around(6, (a) => {
+      around(5, (a) => {
         const reach = 3.2 * k;
         limb(mb, [x, 3.2 * k, z], [x + Math.cos(a) * reach * 0.7, 6 * k, z + Math.sin(a) * reach * 0.7], 0.16 * k, bark);
-        mass(mb, x + Math.cos(a) * reach, (5.6 + rnd.float()) * k, z + Math.sin(a) * reach, 2.4 * k, 1.8 * k, g());
+        mass(mb, x + Math.cos(a) * reach, (5.6 + rnd.float()) * k, z + Math.sin(a) * reach, 2.7 * k, 1.9 * k, g());
       });
-      around(3, (a) => mass(mb, x + Math.cos(a) * 1.6 * k, 8.2 * k, z + Math.sin(a) * 1.6 * k, 2.6 * k, 1.8 * k, g()));
+      around(2, (a) => mass(mb, x + Math.cos(a) * 1.4 * k, 8.2 * k, z + Math.sin(a) * 1.4 * k, 2.9 * k, 1.9 * k, g()));
       mass(mb, x, 9.4 * k, z, 2.2 * k, 1.4 * k, g());
       break;
     }
@@ -173,8 +198,8 @@ export function addTree(mb: MeshBuilder, t: TreeSpec): void {
     case 'dogwoodBloom': {
       // A small round crown on a slim trunk: fits a 2 m pavement.
       trunk(mb, x, z, 0, 2.6 * k, 0.1 * k, 0.07 * k, bark);
-      around(4, (a) => mass(mb, x + Math.cos(a) * 0.7 * k, (3.3 + rnd.float() * 0.5) * k, z + Math.sin(a) * 0.7 * k, 1.0 * k, 0.8 * k, g(), 6));
-      mass(mb, x, 4.1 * k, z, 1.0 * k, 0.7 * k, g(), 6);
+      around(3, (a) => mass(mb, x + Math.cos(a) * 0.6 * k, (3.4 + rnd.float() * 0.4) * k, z + Math.sin(a) * 0.6 * k, 1.1 * k, 0.85 * k, g(), 5));
+      mass(mb, x, 4.2 * k, z, 0.9 * k, 0.6 * k, g(), 5);
       break;
     }
     case 'azalea': {
@@ -185,20 +210,21 @@ export function addTree(mb: MeshBuilder, t: TreeSpec): void {
     }
     case 'box': {
       // A clipped ball on a short stem.
-      mass(mb, x, 0.6 * k, z, 0.6 * k, 0.55 * k, g(), 8);
+      mass(mb, x, 0.6 * k, z, 0.6 * k, 0.55 * k, g(), 6);
       break;
     }
   }
+  LIFT = 0;
   mb.kind = KIND.plain;
 }
 
 /** Small flower blobs over a mound of radius r, height h. */
 function flowers(mb: MeshBuilder, rnd: Rng, x: number, z: number, r: number, h: number, hex: number): void {
   mb.color = lin(hex);
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 12; i++) {
     const a = rnd.float() * Math.PI * 2;
     const d = Math.sqrt(rnd.float()) * r;
-    const y = h + Math.sqrt(Math.max(0, 1 - (d / r) ** 2)) * h * 0.9;
+    const y = LIFT + h + Math.sqrt(Math.max(0, 1 - (d / r) ** 2)) * h * 0.9;
     mb.box(x + Math.cos(a) * d, z + Math.sin(a) * d, y - 0.04, y + 0.05, 0.12, 0.12);
   }
 }

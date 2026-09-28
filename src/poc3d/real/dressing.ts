@@ -37,35 +37,35 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
       const top = base + (park ? 0.8 : 0.45);
       mb.frameBox(o, r, n, -half + 0.05, half - 0.05, base, top, -0.3, 0.3);
       // Lumps along the top so it doesn't read as a green box.
-      for (let u = -half + 0.5; u < half - 0.3; u += 0.9 + rnd.float() * 0.5) {
+      for (let u = -half + 0.6; u < half - 0.4; u += 1.5 + rnd.float() * 0.6) {
         const c = at(u, (rnd.float() - 0.5) * 0.2);
         mb.color = lin(rnd.pick(SHRUB));
-        mb.lathe(c[0], c[2], [[top - 0.05, 0.3], [top + 0.12, 0.28], [top + 0.2, 0.05]], 5);
+        mb.lathe(c[0], c[2], [[top - 0.05, 0.32], [top + 0.18, 0.05]], 5);
       }
       if (!park && rnd.chance(0.5)) {
-        // Azaleas in flower.
-        mb.color = lin(rnd.pick([0xd04a8a, 0xe06aa0, 0xe8e0e8]));
-        for (let u = -half + 0.4; u < half - 0.3; u += 0.7) {
-          if (!rnd.chance(0.6)) continue;
-          const c = at(u, (rnd.float() - 0.5) * 0.4);
-          mb.box(c[0], c[2], top - 0.02, top + 0.06, 0.12, 0.12);
+        // Azaleas in flower: a few blossom-coloured lumps along the top.
+        const bloom = rnd.pick([0xd04a8a, 0xe06aa0, 0xe8e0e8]);
+        for (let u = -half + 1.1; u < half - 0.5; u += 1.8 + rnd.float()) {
+          const c = at(u, (rnd.float() - 0.5) * 0.3);
+          mb.color = lin(bloom);
+          mb.lathe(c[0], c[2], [[top - 0.02, 0.26], [top + 0.14, 0.04]], 5);
         }
       }
       break;
     }
     case 'pots': {
       // A jumble of pots against the wall, plants of all sizes.
-      for (let u = -half + 0.2; u < half - 0.1; u += 0.3 + rnd.float() * 0.25) {
+      for (let u = -half + 0.2; u < half - 0.1; u += 0.35 + rnd.float() * 0.3) {
         const c = at(u, (rnd.float() - 0.5) * 0.3);
         const pr = 0.1 + rnd.float() * 0.1;
         const ph = 0.2 + rnd.float() * 0.25 + (rnd.chance(0.2) ? 0.3 : 0);
         mb.color = lin(rnd.pick(POTS));
-        mb.lathe(c[0], c[2], [[0, pr * 0.75], [ph, pr]], 6);
+        mb.lathe(c[0], c[2], [[0, pr * 0.75], [ph, pr]], 5);
         mb.color = lin(rnd.pick(SHRUB));
         const leaf = pr * (1.3 + rnd.float());
         mb.lathe(c[0], c[2], rnd.chance(0.25)
-          ? [[ph, 0.03], [ph + 0.25, 0.04], [ph + 0.5, leaf], [ph + 1.0, leaf * 0.8], [ph + 1.25, 0.03]]
-          : [[ph - 0.02, pr * 0.8], [ph + leaf * 0.6, leaf], [ph + leaf * 1.3, 0.04]], 5);
+          ? [[ph, 0.03], [ph + 0.5, leaf], [ph + 1.25, 0.03]]
+          : [[ph - 0.02, pr * 0.8], [ph + leaf * 0.6, leaf], [ph + leaf * 1.3, 0.04]], 4);
       }
       break;
     }
@@ -259,7 +259,7 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
     }
     case 'weeds': {
       const k = p.size ?? 0.8;
-      const blades = 3 + (p.variant % 3);
+      const blades = 2 + (p.variant % 3);
       for (let i = 0; i < blades; i++) {
         const c = at((rnd.float() - 0.5) * 0.5 * k, (rnd.float() - 0.5) * 0.5 * k);
         mb.color = lin(rnd.pick([0x4a5a2a, 0x5a6a30, 0x6a6a3a, 0x3e5228]));
