@@ -689,6 +689,30 @@ async function run(): Promise<void> {
     if (car) enterCar(car);
     return car?.label ?? 'none';
   };
+  // Mouse Y: normal (mouse up looks up) or inverted, for walking and driving alike. I toggles it; the choice is
+  // remembered in this browser; ?invertY=1 / 0 sets it.
+  const INVERT_KEY = 'citypop.invertY';
+  const setInvertY = (on: boolean, save: boolean): void => {
+    controls.invertY = on;
+    driving.invertY = on;
+    if (save) {
+      try {
+        localStorage.setItem(INVERT_KEY, on ? '1' : '0');
+      } catch {
+        /* storage blocked: it lasts this session */
+      }
+    }
+  };
+  {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(INVERT_KEY);
+    } catch {
+      /* none */
+    }
+    const url = params.get('invertY');
+    setInvertY((url ?? saved) === '1', url !== null);
+  }
   // The dashboard: speed and gear, while driving.
   const dash = document.createElement('div');
   Object.assign(dash.style, { position: 'fixed', left: '24px', bottom: '22px', zIndex: '16', padding: '8px 14px', background: 'rgba(8,8,14,0.72)', border: '1px solid #3a3850', color: '#e8e6f0', font: "bold 26px 'Consolas', monospace", display: 'none', pointerEvents: 'none' });
@@ -818,6 +842,10 @@ async function run(): Promise<void> {
     if (e.code === 'KeyT') flags.set(FLAG_TIME, TIMES[(TIMES.indexOf(time()) + 1) % TIMES.length]);
     if (e.code === 'KeyR') flags.set(FLAG_WEATHER, WEATHERS[(WEATHERS.indexOf(weather()) + 1) % WEATHERS.length]);
     if (e.code === 'KeyF' && !driving.car) controls.fly = !controls.fly;
+    if (e.code === 'KeyI') {
+      setInvertY(!controls.invertY, true);
+      toast(controls.invertY ? 'Mouse Y inverted (mouse up looks down) · I to switch back' : 'Mouse Y normal (mouse up looks up) · I to invert');
+    }
     if (e.code === 'KeyC') {
       mood.grade = GRADE_NAMES[(GRADE_NAMES.indexOf(mood.grade) + 1) % GRADE_NAMES.length];
       grade.grade = mood.grade;
@@ -1109,7 +1137,7 @@ async function run(): Promise<void> {
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (content.subway.stops.has(t.placementId) ? 'Take the subway' : isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
-        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look`,
+        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · I invert mouse Y · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look`,
       ].join('\n');
       builtThisWindow = 0;
     }

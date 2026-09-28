@@ -33,7 +33,10 @@ export class Driving {
   private yaw = 0;
   private steer = 0;
   private orbitYaw = 0;
-  private orbitPitch = 0;
+  /** How far the view looks up (rad; negative looks down). The chase camera drops lower to look up. */
+  private lookPitch = 0;
+  /** Invert the mouse's up and down (the walker's controls have the same setting). */
+  invertY = false;
   private mouseIdle = 0;
   private readonly camPos = new THREE.Vector3();
   private shake = 0;
@@ -55,7 +58,8 @@ export class Driving {
       if (!this.car || !document.pointerLockElement) return;
       if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
       this.orbitYaw -= e.movementX * 0.003;
-      this.orbitPitch = THREE.MathUtils.clamp(this.orbitPitch - e.movementY * 0.003, -0.5, 0.6);
+      const my = this.invertY ? -e.movementY : e.movementY;
+      this.lookPitch = THREE.MathUtils.clamp(this.lookPitch - my * 0.003, -0.6, 0.5);
       this.mouseIdle = 0;
     });
   }
@@ -70,7 +74,7 @@ export class Driving {
     this.yaw = Math.atan2(car.dx, car.dz);
     this.steer = 0;
     this.orbitYaw = 0;
-    this.orbitPitch = 0;
+    this.lookPitch = 0;
     this.keys.clear();
     this.camPos.copy(this.chaseTarget());
   }
@@ -179,7 +183,9 @@ export class Driving {
     const back = c.bus ? 12 : 6.4;
     const up = c.bus ? 4.4 : 2.5;
     const a = Math.atan2(c.dx, c.dz) + this.orbitYaw;
-    return new THREE.Vector3(c.x - Math.sin(a) * back * Math.cos(this.orbitPitch), up + Math.sin(this.orbitPitch) * back, c.z - Math.cos(a) * back * Math.cos(this.orbitPitch));
+    // Looking up swings the camera down behind the car (and looking down lifts it), about the car.
+    const elev = -this.lookPitch;
+    return new THREE.Vector3(c.x - Math.sin(a) * back * Math.cos(elev), up + Math.sin(elev) * back, c.z - Math.cos(a) * back * Math.cos(elev));
   }
 
   private placeCamera(dt: number): void {
@@ -189,7 +195,7 @@ export class Driving {
     if (this.mouseIdle > 1.2) {
       const ease = 1 - Math.exp(-dt * 2.5);
       this.orbitYaw -= this.orbitYaw * ease;
-      if (this.view === 'chase') this.orbitPitch -= this.orbitPitch * ease;
+      if (this.view === 'chase') this.lookPitch -= this.lookPitch * ease;
     }
     this.shake = Math.max(0, this.shake - dt * 3);
     const jolt = (): number => (Math.random() - 0.5) * this.shake * 0.25;
@@ -200,7 +206,7 @@ export class Driving {
       const h = c.bus ? 1.9 : 0.95;
       cam.position.set(c.x + c.dx * (c.half - 0.2) + jolt(), h + jolt(), c.z + c.dz * (c.half - 0.2));
       const a = Math.atan2(c.dx, c.dz) + this.orbitYaw;
-      cam.lookAt(cam.position.x + Math.sin(a), h + Math.tan(this.orbitPitch - 0.02), cam.position.z + Math.cos(a));
+      cam.lookAt(cam.position.x + Math.sin(a), h + Math.tan(this.lookPitch - 0.02), cam.position.z + Math.cos(a));
       this.camPos.copy(this.chaseTarget());
       return;
     }

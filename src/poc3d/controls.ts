@@ -59,6 +59,8 @@ export class FirstPerson {
   held = false;
   /** Mouse look off (driving: the driving camera takes the mouse). */
   mouseLook = true;
+  /** Invert the mouse's up and down (mouse up looks down). */
+  invertY = false;
   /** The walker's floor height (y of the feet). */
   private level = 0;
   /** Height above the floor while jumping, and the vertical speed. */
@@ -119,7 +121,7 @@ export class FirstPerson {
       return;
     }
     const mx = e.movementX;
-    const my = e.movementY;
+    const my = this.invertY ? -e.movementY : e.movementY;
     if (Math.abs(mx) > SPIKE || Math.abs(my) > SPIKE) return;
     const k = MOUSE * this.look.pointerSpeed;
     const eu = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
