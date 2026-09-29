@@ -84,6 +84,11 @@ export class MeshBuilder {
     return this.nv;
   }
 
+  /** Raises every vertex added since vertex `from` by dy (a car up on a lift). */
+  lift(from: number, dy: number): void {
+    for (let i = from; i < this.nv; i++) this.pos[i * 3 + 1] += dy;
+  }
+
   /** Empties the builder, keeping its buffers (reuse one builder for many meshes to avoid reallocating). */
   reset(): this {
     this.nv = 0;

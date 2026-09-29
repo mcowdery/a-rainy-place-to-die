@@ -20,10 +20,10 @@ export interface Sea {
 }
 
 /**
- * Fades a material's colour (after the fog) into `horizon` between these distances from the camera (m): open
- * water further off reflects the sky low down, and it meets the sky's horizon without a seam.
+ * Water reflecting the sky's horizon colour, more the lower you look across it, and fully between these
+ * distances from the camera (m), so the open sea meets the sky's horizon without a seam.
  */
-function horizonFade(m: THREE.Material, horizon: { value: THREE.Color }, from = 150, to = 650): void {
+function horizonFade(m: THREE.Material, horizon: { value: THREE.Color }, from = 700, to = 1120): void {
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uHorizon = horizon;
     shader.vertexShader = shader.vertexShader
@@ -36,7 +36,12 @@ function horizonFade(m: THREE.Material, horizon: { value: THREE.Color }, from = 
         varying vec3 vSeaWorld;
         uniform vec3 uHorizon;`)
       .replace('#include <fog_fragment>', `#include <fog_fragment>
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, uHorizon, smoothstep(${from.toFixed(1)}, ${to.toFixed(1)}, distance(vSeaWorld.xz, cameraPosition.xz)));`);
+        // The sky's horizon in the water: more the lower you look across it (Fresnel), and all of it at the
+        // edge of the view, where it meets the sky.
+        vec3 toSea = normalize(vSeaWorld - cameraPosition);
+        float grazing = pow(1.0 - clamp(abs(toSea.y), 0.0, 1.0), 4.0) * 0.85;
+        float edge = smoothstep(${from.toFixed(1)}, ${to.toFixed(1)}, distance(vSeaWorld.xz, cameraPosition.xz));
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, uHorizon, max(grazing, edge));`);
   };
   m.customProgramCacheKey = () => `horizon-${from}-${to}`;
 }

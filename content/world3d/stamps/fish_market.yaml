@@ -1,0 +1,13 @@
+# 東都中央卸売市場 Tōto Central Wholesale Market, by the river mouth (Tsukiji-like; real/port.ts, kind fish_market):
+# the long hall with its loading bays, turret trucks and styrofoam boxes under the canopy, and the outer market's
+# little shops at the west end. Busy before dawn.
+id: fish_market
+name: 東都中央卸売市場 Fish Market
+footprint: [64, 40]
+height: 10
+front: north
+landmark: fish_market
+nodes:
+  front: { kind: spawn, name: Tōto Fish Market 東都市場, at: [30, 10], facing: south, view: [180, 8] }
+  auction: { kind: hotspot, name: The tuna auction, at: [28, 0.6] }
+  outer: { kind: spawn, name: The outer market 場外, at: [7, 5], facing: south }

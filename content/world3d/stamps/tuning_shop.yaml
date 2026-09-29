@@ -1,0 +1,11 @@
+# SPEED LAB: a tuning shop near the port's ramps off route 1 (real/port.ts, kind tuning_shop): three bays, a car up
+# on the lift, tyre stacks and drums, a sports car out front. Where the racing scene's cars get their parts.
+id: tuning_shop
+name: SPEED LAB (tuning shop)
+footprint: [24, 18]
+height: 7.5
+front: north
+landmark: tuning_shop
+nodes:
+  front: { kind: spawn, name: SPEED LAB (tuning shop), at: [12, 9], facing: south, view: [180, 6] }
+  mechanic: { kind: npc, name: Mechanic, at: [10, 1.2], figure: { body: man, pose: stand, color: '#6a9ad8' } }

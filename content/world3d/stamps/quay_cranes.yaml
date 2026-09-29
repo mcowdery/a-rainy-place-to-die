@@ -1,0 +1,10 @@
+# The container terminal's quay cranes (real/port.ts, kind gantry): three gantry cranes on their rails along the
+# quay, 40 m legs, booms out over the water.
+id: quay_cranes
+name: Container terminal quay
+footprint: [106, 22]
+height: 58
+front: north
+landmark: gantry
+nodes:
+  front: { kind: spawn, name: Container terminal quay, at: [53, 12], facing: south, view: [180, 20] }

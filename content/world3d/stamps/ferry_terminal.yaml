@@ -1,0 +1,11 @@
+# 東都港フェリーターミナル, the ferry terminal on the quay (real/port.ts, kind ferry_terminal): a glass hall under a
+# long canopy, the departure board, and the ferry moored behind it with its gangway. The gate is a story door.
+id: ferry_terminal
+name: 東都港フェリーターミナル Ferry Terminal
+footprint: [40, 20]
+height: 11
+front: north
+landmark: ferry_terminal
+nodes:
+  front: { kind: spawn, name: Tōto Port Ferry Terminal, at: [20, 10], facing: south, view: [180, 8] }
+  gate: { kind: door, name: Ferry boarding gate 乗船口, at: [20, 0.6], returnSpawn: front }

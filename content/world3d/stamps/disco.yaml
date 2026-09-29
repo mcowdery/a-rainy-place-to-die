@@ -1,0 +1,13 @@
+# JULIET BAYSIDE ジュリエット湾岸: a bubble-era disco in a black harbour warehouse (real/port.ts, kind disco): the neon
+# name over a lit portal, the rope line and its queue, doormen, a limousine at the kerb. Its door is a story door
+# (a VN entry key).
+id: disco
+name: JULIET BAYSIDE (disco)
+footprint: [30, 26]
+height: 10.6
+front: north
+landmark: disco
+nodes:
+  front: { kind: spawn, name: JULIET BAYSIDE (disco), at: [15, 11], facing: south, view: [180, 10] }
+  door: { kind: door, name: JULIET BAYSIDE, at: [15, 0.6], returnSpawn: front }
+  doorman: { kind: npc, name: Doorman, at: [19.6, 0.8] }

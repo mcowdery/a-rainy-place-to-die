@@ -156,3 +156,25 @@
   stamp: city_garage
   cell: [26, 12]
   offset: [10, 91]
+# Tōto Port (docs/city-plan.md): the fish market by the river mouth, the disco on the warehouse strip, the tuning
+# shop by route 1's ramps, the ferry terminal and the quay cranes on the seawall.
+- id: fish_market
+  stamp: fish_market
+  cell: [34, 19]
+  offset: [30, 40]
+- id: juliet
+  stamp: disco
+  cell: [24, 19]
+  offset: [50, 50]
+- id: speed_lab
+  stamp: tuning_shop
+  cell: [25, 18]
+  offset: [30, 40]
+- id: ferry_terminal
+  stamp: ferry_terminal
+  cell: [20, 21]
+  offset: [40, 98]
+- id: quay_cranes
+  stamp: quay_cranes
+  cell: [9, 21]
+  offset: [11, 96]

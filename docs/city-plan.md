@@ -81,7 +81,7 @@ between; slopes and stairs): Takanodai heights, Gakuenzaka's slope, Kawabata's t
 ## Build order
 
 Progress: L0 v2 and the groundwork are in; Kasumi-chō and the port's streets and warehouses are generated, with
-the sea; route 1 and the Wangan are built (two-way, ramps into the port); next the port's set pieces and islands.
+the sea; route 1 and the Wangan are built (two-way, ramps into the port); the fish market, the disco (JULIET BAYSIDE), the tuning shop (SPEED LAB), the ferry terminal and the quay cranes stand in the port; next the islands (Ebisu-jima PA, the bridge, Shiomi-jima).
 
 1. The plan (this; L0 v2 in place).
 2. Groundwork: the lightmap in tiles, routing on the road network, traffic generated from the streets, the
