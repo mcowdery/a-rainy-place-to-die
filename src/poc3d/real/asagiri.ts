@@ -21,7 +21,7 @@ import type { ScreenLight } from './screenLight';
  * members' club, and Toto City Hall (twin towers; an elevator to the observatory on tower A).
  * Each kind has a builder, collision rects and lightmap lights; city hall also has a raised floor.
  */
-export const ASAGIRI_KINDS = ['idol_agency', 'police_hq', 'residence', 'bank', 'law_firm', 'ad_agency', 'biz_hotel', 'members_club', 'city_hall', 'dept_store', 'sento'] as const;
+export const ASAGIRI_KINDS = ['idol_agency', 'police_hq', 'residence', 'bank', 'law_firm', 'ad_agency', 'biz_hotel', 'members_club', 'city_hall', 'dept_store', 'sento', 'garage'] as const;
 export type AsagiriKind = (typeof ASAGIRI_KINDS)[number];
 
 const art = import.meta.glob(
@@ -37,6 +37,12 @@ const artUrl = (name: string): string => Object.entries(art).find(([k]) => k.inc
 
 // ---- Toto City Hall: the observatory ----
 export const DECK_Y = 172;
+/**
+ * Your garage by the Toto Line: a brick railway-arch workshop, three bays along a 20 m face, 14 m deep. The
+ * middle bay (u b0..b1, `depth` deep) is open, its shutter rolled up, lit inside: your car parks in it.
+ */
+export const GARAGE = { b0: 7.2, b1: 12.8, depth: 6 } as const;
+
 /** Tower A (the east tower, looking out over Kaburo) carries the observatory; tower B is the west one. */
 const TA = { u0: 48, u1: 70, t0: 20, t1: 44 } as const;
 const CORE = { u0: 56, u1: 62, t0: 29, t1: 35 } as const;
@@ -103,6 +109,9 @@ export function asagiriColliders(kind: AsagiriKind, b: Building3, floor: number)
     case 'sento':
       // Solid, but for a shallow pocket at the doorway (so stepping out of the interior never lands you in the wall).
       return [R(0, 16, 1.25, 22), R(0, 5.4, 0.6, 1.25), R(10.6, 16, 0.6, 1.25)];
+    case 'garage':
+      // Solid brick but for the open middle bay, where your car lives (you can drive or walk in).
+      return [R(0, GARAGE.b0, 0.3, 14), R(GARAGE.b1, 20, 0.3, 14), R(GARAGE.b0, GARAGE.b1, GARAGE.depth, 14)];
   }
 }
 
@@ -121,6 +130,8 @@ export function asagiriShelters(kind: AsagiriKind, b: Building3): { rect: Rect; 
       return [R(18, 32, 7, 10, 0, 8)];
     case 'sento':
       return [R(0.5, 15.5, 0.9, 22, 0, 9, true)];
+    case 'garage':
+      return [R(GARAGE.b0, GARAGE.b1, 0.3, GARAGE.depth, 0, 3.8)];
     case 'dept_store':
       return [R(0, DEPT.w, 1.2, DEPT.d, -6.5, DEPT.h, true), R(0, DEPT.w, -0.2, 1.2, 0, 6.5)];
     default:
@@ -159,6 +170,8 @@ export function asagiriLights(kind: AsagiriKind, b: Building3): Light[] {
       return [L(11, -1.5, 10, warm, 0.9), L(33, -1.5, 10, warm, 0.9), L(22, -2, 12, [1.0, 0.9, 0.8], 0.5)];
     case 'sento':
       return [L(8, -1.5, 7, warm, 0.8), L(3, -1, 3, [1.0, 0.6, 0.4], 0.4)];
+    case 'garage':
+      return [L(10, 3, 5, cool, 1.0), L(10, -2.5, 6, [1.0, 0.5, 0.8], 0.6)];
   }
 }
 
@@ -232,6 +245,57 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
   // ---- SAKURA-YU (桜湯): the neighbourhood's public bath. A gabled entrance (plaster and dark wood, a tiled
   // roof with its gable to the street), the noren and a lit sign at the door, the tiled bath hall behind
   // with steamy high windows, and the tall chimney with the bath's name down it ----
+  garage(k) {
+    const BRICK = 0x6a3226;
+    const DARK = 0x3a1a14;
+    const { b0, b1, depth } = GARAGE;
+    // The mass behind, leaving the middle bay open as a room.
+    k.box(BRICK, 0, b0, 0.6, 14, 0, 7);
+    k.box(BRICK, b1, 20, 0.6, 14, 0, 7);
+    k.box(BRICK, b0, b1, depth, 14, 0, 7);
+    k.box(BRICK, b0, b1, 0.6, depth, 3.9, 7);
+    // The face: pillars between the bays and a lintel, each opening arched (stepped brick in its top corners).
+    const bays: [number, number][] = [[0.8, 6.4], [b0, b1], [13.6, 19.2]];
+    for (const [u0, u1] of [[0, 0.8], [6.4, b0], [b1, 13.6], [19.2, 20]]) k.box(DARK, u0, u1, 0, 0.6, 0, 7);
+    k.box(DARK, 0, 20, 0, 0.6, 4.4, 7);
+    k.box(0x2a1410, -0.1, 20.1, -0.05, 0.65, 6.8, 7.2);
+    for (const [u0, u1] of bays) {
+      const w = u1 - u0;
+      for (let i = 0; i < 5; i++) {
+        const a = ((i + 0.5) / 5) * (Math.PI / 2);
+        const inset = (w / 2) * (1 - Math.sin(a));
+        const y = 3.0 + (1.4 * i) / 5;
+        k.box(DARK, u0, u0 + inset, 0, 0.6, y, y + 0.28);
+        k.box(DARK, u1 - inset, u1, 0, 0.6, y, y + 0.28);
+      }
+    }
+    // Closed shutters in the outer bays (ribbed steel), the middle one rolled up in its box.
+    for (const [u0, u1] of [bays[0], bays[2]]) {
+      k.kind(KIND.gloss, 0x5a5e62, u0, u1, 0.3, 0.4, 0, 3.6);
+      for (let y = 0.25; y < 3.6; y += 0.3) k.box(0x3a3e42, u0, u1, 0.26, 0.3, y, y + 0.05);
+      k.box(0x2a2c30, u0, u1, 0.2, 0.6, 3.6, 4.0);
+    }
+    k.box(0x2a2c30, b0, b1, 0.2, 0.6, 3.5, 3.95);
+    // Inside the open bay: a painted floor, fluorescent tubes, a workbench and pegboard, stacked tyres.
+    k.box(0x4a4a48, b0, b1, 0.3, depth, 0, 0.02);
+    for (const t of [1.8, 4.4]) k.glow([2.2, 2.4, 2.5], 9.2, 10.8, t - 0.05, t + 0.05, 3.72, 3.8, EMIT.always);
+    k.box(0x6a4a30, b0 + 0.1, b0 + 0.7, 2.0, 5.0, 0.85, 0.92);
+    k.box(0x8a7a5a, b0 + 0.02, b0 + 0.05, 2.2, 4.8, 1.3, 2.4);
+    k.lathe(0x151517, b1 - 0.5, 5.2, [[0, 0.32], [0.2, 0.34], [0.4, 0.32], [0.42, 0.2], [0.6, 0.32], [0.8, 0.34], [1.0, 0.32], [1.02, 0.2], [1.2, 0.32], [1.4, 0.34], [1.6, 0.32]], 14);
+    // The sign over the open bay (neon), and a warm lamp either side of it.
+    k.plane(k.canvas(768, 160, (g) => {
+      g.fillStyle = '#0c0a10';
+      g.fillRect(0, 0, 768, 160);
+      text(g, '夜鷹ガレージ', 384, 62, "bold 70px 'Yu Gothic', sans-serif", '#ff5fb8');
+      text(g, 'YOTAKA GARAGE', 384, 128, 'bold 36px Consolas, monospace', '#7fe8ff');
+    }), 5.2, 1.08, 10, -0.02, 5.4, 'out', 1.4, true);
+    for (const u of [6.8, 13.2]) k.glow([1.4, 0.9, 0.5], u - 0.15, u + 0.15, -0.35, -0.05, 4.9, 5.25, EMIT.lamp);
+    // The bay number stencilled on the pillar.
+    k.plane(k.canvas(128, 128, (g) => {
+      g.clearRect(0, 0, 128, 128);
+      text(g, '2', 64, 70, 'bold 96px Impact, sans-serif', '#e8d8b0');
+    }), 0.5, 0.5, 6.8, -0.01, 2.6, 'out', 0.9);
+  },
   sento(k) {
     const P = (u: number, t: number, y: number): [number, number, number] => {
       const [x, z] = toWorld(k.f, u, t);

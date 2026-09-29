@@ -1,0 +1,14 @@
+# 夜鷹ガレージ Yotaka Garage: your garage, a brick railway-arch workshop facing the Toto Line (built by
+# real/asagiri.ts, kind garage). Three bays; the middle one is open and lit, and your car lives in it (the
+# `bay` node: where it parks, facing out). E at the door opens the garage screen (garage.html); from there
+# you come back out to the street.
+id: city_garage
+name: 夜鷹ガレージ Yotaka Garage
+footprint: [14, 20]
+height: 7.2
+front: west
+landmark: garage
+nodes:
+  front: { kind: spawn, name: Yotaka Garage (your garage), at: [10, 9], facing: east, view: [-90, 4] }
+  door: { kind: door, name: your garage, at: [7.6, -1.2], returnSpawn: front }
+  bay: { kind: spawn, at: [10, -3.2], facing: west }

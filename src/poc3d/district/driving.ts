@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { DrivenVehicle } from '../real/traffic';
+import type { OwnCar } from './ownCar';
 
 /**
  * Driving a vehicle you've taken the wheel of (E by a car stopped in traffic). A kinematic bicycle model: the
@@ -9,6 +10,7 @@ import type { DrivenVehicle } from '../real/traffic';
  * the mouse looks round (the view swings back to straight ahead). You get out by the driver's door, on the
  * right (Japan drives on the left).
  * Collisions stop the car (with a knock back); the traffic system keeps drawing it and stops for it.
+ * Your own car (ownCar.ts) drives on the racing model instead: grip, slides, its tuning; the same keys.
  */
 
 /** Per kind: top speed and reverse (m/s), acceleration and braking (m/s^2), wheelbase (m), full lock (rad). */
@@ -24,6 +26,8 @@ export type Collide = (x: number, z: number, r: number) => boolean;
 
 export class Driving {
   car: DrivenVehicle | null = null;
+  /** Your own car, when it's the one you're driving (the racing model). */
+  own: OwnCar | null = null;
   /** 'chase' behind the car, or 'bumper': low at the front looking out, the body hidden (no interior yet). */
   view: 'chase' | 'bumper' = 'chase';
   /** A knock this frame (speed of the impact, m/s), for a sound and a shake; 0 if none. */
@@ -69,8 +73,13 @@ export class Driving {
   }
 
   /** Take the wheel of `car` (already handed over by the traffic system). */
-  enter(car: DrivenVehicle): void {
+  enter(car: DrivenVehicle, own: OwnCar | null = null): void {
     this.car = car;
+    this.own = own;
+    if (own) {
+      own.sound.start();
+      own.sound.setVolume(1);
+    }
     this.yaw = Math.atan2(car.dx, car.dz);
     this.steer = 0;
     this.orbitYaw = 0;
@@ -103,6 +112,8 @@ export class Driving {
 
   leave(): void {
     if (this.car) this.car.hideBody = false;
+    this.own?.park();
+    this.own = null;
     this.car = null;
     this.keys.clear();
   }
@@ -131,6 +142,17 @@ export class Driving {
     const brake = k.has('KeyS') || k.has('ArrowDown');
     const hand = k.has('Space');
     const turn = Number(k.has('KeyD') || k.has('ArrowRight')) - Number(k.has('KeyA') || k.has('ArrowLeft'));
+    if (this.own) {
+      // Your car: the racing model does it all (it collides, slides and knocks by itself).
+      this.own.drive(dt, { throttle: gas ? 1 : 0, brake: brake ? 1 : 0, steer: -turn, handbrake: hand });
+      const knock = this.own.sim.bump;
+      if (knock > 1.5) {
+        this.bump = knock;
+        this.shake = Math.min(1, knock / 8);
+      }
+      this.placeCamera(dt);
+      return;
+    }
     let v = c.v;
     // Longitudinal: drive, brake, reverse, roll to a stop.
     let a: number;
@@ -185,7 +207,7 @@ export class Driving {
     const a = Math.atan2(c.dx, c.dz) + this.orbitYaw;
     // Looking up swings the camera down behind the car (and looking down lifts it), about the car.
     const elev = -this.lookPitch;
-    return new THREE.Vector3(c.x - Math.sin(a) * back * Math.cos(elev), up + Math.sin(elev) * back, c.z - Math.cos(a) * back * Math.cos(elev));
+    return new THREE.Vector3(c.x - Math.sin(a) * back * Math.cos(elev), this.floor + up + Math.sin(elev) * back, c.z - Math.cos(a) * back * Math.cos(elev));
   }
 
   private placeCamera(dt: number): void {
@@ -203,7 +225,7 @@ export class Driving {
     c.hideBody = this.view === 'bumper';
     if (this.view === 'bumper') {
       // Low at the front of the car, looking out along the road.
-      const h = c.bus ? 1.9 : 0.95;
+      const h = (c.bus ? 1.9 : 0.95) + this.floor;
       cam.position.set(c.x + c.dx * (c.half - 0.2) + jolt(), h + jolt(), c.z + c.dz * (c.half - 0.2));
       const a = Math.atan2(c.dx, c.dz) + this.orbitYaw;
       cam.lookAt(cam.position.x + Math.sin(a), h + Math.tan(this.lookPitch - 0.02), cam.position.z + Math.cos(a));
@@ -213,11 +235,11 @@ export class Driving {
     // Chase: follow a point behind (eased, so turns and stops show), pulled in if a wall is in the way.
     const want = this.chaseTarget();
     this.camPos.lerp(want, 1 - Math.exp(-dt * 5));
-    const pivot = new THREE.Vector3(c.x, c.bus ? 2.6 : 1.3, c.z);
+    const pivot = new THREE.Vector3(c.x, (c.bus ? 2.6 : 1.3) + this.floor, c.z);
     let t = 1;
     while (t > 0.25 && this.collide(pivot.x + (this.camPos.x - pivot.x) * t, pivot.z + (this.camPos.z - pivot.z) * t, 0.3)) t -= 0.08;
     cam.position.set(pivot.x + (this.camPos.x - pivot.x) * t + jolt(), pivot.y + (this.camPos.y - pivot.y) * t + jolt(), pivot.z + (this.camPos.z - pivot.z) * t);
-    cam.lookAt(c.x + c.dx * 3, c.bus ? 2.2 : 1.1, c.z + c.dz * 3);
+    cam.lookAt(c.x + c.dx * 3, (c.bus ? 2.2 : 1.1) + this.floor, c.z + c.dz * 3);
   }
 
   /** km/h, for the dashboard. */
@@ -225,7 +247,13 @@ export class Driving {
     return Math.abs(this.car?.v ?? 0) * 3.6;
   }
 
+  /** The ground under the car (the expressway's deck is above the street). */
+  private get floor(): number {
+    return this.own?.sim.y ?? 0;
+  }
+
   get gear(): string {
+    if (this.own) return this.own.sim.gear === 0 ? 'R' : String(this.own.sim.gear);
     const v = this.car?.v ?? 0;
     return v < -0.1 ? 'R' : v > 0.1 ? 'D' : 'N';
   }

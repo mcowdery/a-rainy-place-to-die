@@ -151,3 +151,8 @@
   stamp: sento
   cell: [16, 11]
   offset: [40, 30]
+# Your garage (racing): by the Toto Line, south of Kaburo Station.
+- id: city_garage
+  stamp: city_garage
+  cell: [26, 12]
+  offset: [10, 97]

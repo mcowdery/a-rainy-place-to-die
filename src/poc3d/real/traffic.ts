@@ -286,6 +286,11 @@ export interface DrivenVehicle {
   curv: number;
   /** Hide the body (the camera's on the bumper, looking out). */
   hideBody: boolean;
+  /**
+   * Your own car (district/ownCar.ts): drawn, posed and wheeled by its owner; the traffic system only keeps it
+   * in the traffic (stopping behind it, honking, lighting) and never drives it.
+   */
+  readonly own?: boolean;
 }
 
 interface Vehicle extends DrivenVehicle {
@@ -497,7 +502,7 @@ export class TrafficSystem {
       }
       const near = v.mode === 'driven' || Math.hypot(v.x - camera.x, v.z - camera.z) < DRAW;
       v.obj.visible = near && !v.hideBody;
-      if (!near) continue;
+      if (!near || v.own) continue;
       const p = v.mode === 'traffic' ? this.pose(v) : { x: v.x, z: v.z, dx: v.dx, dz: v.dz, k: v.curv };
       v.obj.position.set(p.x, 0, p.z);
       v.obj.rotation.y = Math.atan2(p.dx, p.dz);
@@ -683,7 +688,9 @@ export class TrafficSystem {
 
   /** The n vehicles nearest a point: position, velocity, acceleration, and whether it's a bus. */
   nearest(p: THREE.Vector3, n: number): { x: number; z: number; vx: number; vz: number; speed: number; acc: number; bus: boolean }[] {
+    // (Your own car has its own engine sound.)
     return this.vehicles
+      .filter((v) => !v.own)
       .map((v) => ({ v, d: (v.x - p.x) ** 2 + (v.z - p.z) ** 2 }))
       .sort((a, b) => a.d - b.d)
       .slice(0, n)
@@ -708,11 +715,11 @@ export class TrafficSystem {
    * A vehicle you could get into: stopped (or crawling: at a light, in a queue, or where you left it), its
    * nearest side within reach of p, and roughly in front of the view (fx, fz).
    */
-  takeable(p: THREE.Vector3, fx: number, fz: number, reach = 2.2, any = false): DrivenVehicle | null {
+  takeable(p: THREE.Vector3, fx: number, fz: number, reach = 2.2, any = false, ownOnly = false): DrivenVehicle | null {
     let best: Vehicle | null = null;
     let bestD = reach;
     for (const v of this.vehicles) {
-      if (v.mode === 'driven' || (!any && Math.abs(v.v) > 1.2)) continue;
+      if (v.mode === 'driven' || (!any && Math.abs(v.v) > 1.2) || (ownOnly && !v.own)) continue;
       const ox = p.x - v.x;
       const oz = p.z - v.z;
       if (ox * ox + oz * oz > (v.half + reach + 1) ** 2) continue;
@@ -724,6 +731,22 @@ export class TrafficSystem {
       if (d < bestD && (any || toward > 0.2)) [best, bestD] = [v, d];
     }
     return best;
+  }
+
+  /**
+   * Your own car joins the traffic, parked: `obj` is its model (placed by its owner), half its length, width
+   * its width.
+   */
+  addOwn(obj: THREE.Object3D, half: number, width: number, label: string, x: number, z: number, dx: number, dz: number): DrivenVehicle {
+    const t = this.vehicles[0];
+    const brake = new THREE.Object3D();
+    const v: Vehicle = {
+      obj, brake, route: t.route, half, width, bus: false, driver: t.driver, label, mode: 'parked', s: 0, v: 0, acc: 0, curv: 0, hideBody: false,
+      stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle: half - 0.95, waited: 0, hornIn: 0, x, z, dx, dz, wheels: t.wheels, turned: 0, own: true,
+    };
+    this.group.add(obj);
+    this.vehicles.push(v);
+    return v;
   }
 
   /** Take the wheel: the vehicle leaves its loop; the driving code moves it from now on. */

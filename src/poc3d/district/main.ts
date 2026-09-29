@@ -34,6 +34,7 @@ import { INTERIORS, type Interior } from '../real/interiors';
 import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem, type DrivenVehicle } from '../real/traffic';
 import { Driving } from './driving';
+import { OwnCar } from './ownCar';
 import { NavGrid, pointsAhead, type NavMode } from './gps';
 import { Guide, type GuideDest, type GuideFrom } from './guide';
 import { PhoneMaps } from './phoneMaps';
@@ -663,16 +664,26 @@ async function run(): Promise<void> {
     const car = takeableCar();
     if (car) enterCar(car);
   };
-  // Driving: E by a car stopped in traffic (or one you left) takes the wheel; E again gets out.
+  // Driving: your own car (ownCar.ts), which lives in its bay at your garage (夜鷹ガレージ, by the Toto Line)
+  // or wherever you left it. E by it takes the wheel; E again gets out. Cars in traffic aren't yours to take.
   const driving = new Driving(camera, (x, z, r) => district.blocked(x, z, r, 0) || traffic.blocked(x, z, r, driving.car) || npcBlocked(x, z, r));
+  const bay = nodeById.get('city_garage.bay');
+  const ownCar = new OwnCar(
+    city,
+    traffic,
+    bay ? { x: bay.x, z: bay.z, h: Math.atan2(bay.nx, bay.nz) } : { x: camera.position.x + 4, z: camera.position.z, h: 0 },
+    (x, z, r, self) => district.blocked(x, z, r, 0) || traffic.blocked(x, z, r, self) || npcBlocked(x, z, r),
+    () => 0,
+    params.get('car') === 'home',
+  );
   const takeableCar = (): DrivenVehicle | null => {
     if (controls.fly || inVn || Math.abs(camera.position.y - 1.7) > 1.2) return null;
     camera.getWorldDirection(forward);
-    return traffic.takeable(camera.position, forward.x, forward.z);
+    return traffic.takeable(camera.position, forward.x, forward.z, 2.2, false, true);
   };
   const enterCar = (car: DrivenVehicle): void => {
     traffic.take(car);
-    driving.enter(car);
+    driving.enter(car, car === ownCar.vehicle ? ownCar : null);
     controls.held = true;
     controls.mouseLook = false;
     toast(`${car.label} · W/S drive · A/D steer · Space handbrake · Q camera · E get out`, 5);
@@ -689,12 +700,15 @@ async function run(): Promise<void> {
     controls.mouseLook = true;
     controls.setView(spot.yawDeg, 0);
   };
-  // ?debug=1: window.__drive() takes the wheel of the nearest vehicle, wherever it is (for checks).
-  if (debug) (window as unknown as { __drive: () => string }).__drive = () => {
-    const car = traffic.takeable(camera.position, 0, 0, 400, true);
-    if (car) enterCar(car);
-    return car?.label ?? 'none';
+  // ?debug=1: window.__drive() takes the wheel of your car (bringing it to where you stand, facing your way,
+  // if it's more than 15 m off).
+  if (debug) (window as unknown as { __drive: () => string; __own: OwnCar }).__drive = () => {
+    const yaw = (lookYaw() * Math.PI) / 180;
+    if (Math.hypot(ownCar.sim.x - camera.position.x, ownCar.sim.z - camera.position.z) > 15) ownCar.place(camera.position.x, camera.position.z, Math.atan2(-Math.sin(yaw), -Math.cos(yaw)));
+    enterCar(ownCar.vehicle);
+    return ownCar.name;
   };
+  if (debug) (window as unknown as { __own: OwnCar }).__own = ownCar;
   // Mouse Y: normal (mouse up looks up) or inverted, for walking and driving alike. I toggles it; the choice is
   // remembered in this browser; ?invertY=1 / 0 sets it.
   const INVERT_KEY = 'citypop.invertY';
@@ -800,6 +814,13 @@ async function run(): Promise<void> {
   document.body.append(dash);
   const use = async (n: Node3): Promise<void> => {
     if (inVn) return;
+    // Your garage: its screen (buy, tune, paint), and back out to the street.
+    if (n.id === 'city_garage.door') {
+      inVn = true;
+      await fadeTo(1);
+      location.href = 'garage.html?from=city';
+      return;
+    }
     if (n.kind === 'station' && n.returnSpawn) {
       if (content.subway.stops.has(n.placementId)) {
         if (late()) return toast(LAST_TRAIN);
@@ -1045,6 +1066,7 @@ async function run(): Promise<void> {
     // The walker, when on foot at street level, is someone the traffic has to stop for.
     const cp0 = camera.position;
     if (!inVn) driving.update(dt);
+    ownCar.pose(inVn ? 0 : dt);
     updateGps(dt);
     if (driving.bump > 2) audio.bump(driving.bump);
     dash.style.display = driving.car ? 'block' : 'none';
