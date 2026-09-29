@@ -1,0 +1,11 @@
+# 東都タワー TŌTO TOWER in Kawabata (Tokyo Tower-like; real/kawabata.ts, kind tv_tower): the 250 m lattice tower in
+# orange and white, its outline lit at night. The lift to the main deck is a story door.
+id: tv_tower
+name: 東都タワー TŌTO TOWER
+footprint: [80, 80]
+height: 250
+front: north
+landmark: tv_tower
+nodes:
+  front: { kind: spawn, name: Tōto Tower, at: [40, 16], facing: south, view: [180, 40] }
+  lift: { kind: door, name: Tower lift to the main deck 大展望台, at: [40, -29.4], returnSpawn: front }

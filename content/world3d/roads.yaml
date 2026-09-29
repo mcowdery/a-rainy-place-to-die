@@ -32,6 +32,13 @@ avenues:
 # The north: Kita-ōdōri across Gakuenzaka and Suidō-chō; the Toto Line's viaduct on north over its own street
 # to Gakuenzaka's station.
   - { name: 北大通り KITA-ŌDŌRI, row: 6, from: 22, to: 37, width: 24, median: 0 }
+# Over the river into Kawabata: the crosstown avenues run on east of their bridges (bridges below).
+  - { name: 北大通り KITA-ŌDŌRI, row: 6, from: 38, to: 42, width: 20, median: 0 }
+  - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 32, to: 37, width: 24, median: 0 }
+  - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 38, to: 43, width: 24, median: 0 }
+  - { name: 靖原通り YASUHARA-DŌRI, row: 13, from: 32, to: 37, width: 20, median: 0 }
+  - { name: 靖原通り YASUHARA-DŌRI, row: 13, from: 38, to: 43, width: 20, median: 0 }
+  - { name: 霞通り KASUMI-DŌRI, row: 16, from: 38, to: 43, width: 20, median: 0 }
   - { name: 高架下通り KŌKASHITA-DŌRI, col: 26, from: 6, to: 9, width: 16, median: 0 }
 # Denkō-chō's main street, down the middle of the electric town (Akihabara's Chūō-dōri).
   - { name: 電光通り DENKŌ-DŌRI, col: 34, from: 8, to: 14, width: 24, median: 0 }
@@ -47,3 +54,8 @@ avenues:
 bridges:
   - { name: 汐見大橋 SHIOMI-ŌHASHI, col: 28, from: 22, to: 23, width: 32, median: 2.4 }
   - { name: 羽根島大橋 HANEJIMA-ŌHASHI, col: 8, from: 22, to: 23, width: 32, median: 2.4 }
+# Over the river (隅川 Sumikawa) to Kawabata.
+  - { name: 北橋 KITA-BASHI, row: 6, from: 37, to: 38, width: 20, median: 0 }
+  - { name: 東都橋 TŌTO-BASHI, row: 10, from: 37, to: 38, width: 24, median: 0 }
+  - { name: 靖原橋 YASUHARA-BASHI, row: 13, from: 37, to: 38, width: 20, median: 0 }
+  - { name: 霞橋 KASUMI-BASHI, row: 16, from: 37, to: 38, width: 20, median: 0 }

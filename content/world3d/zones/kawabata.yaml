@@ -1,0 +1,156 @@
+# 川端 Kawabata, the old town across the river (Asakusa / Yanaka-like; format: src/poc3d/district/zones.ts; the
+# whole-city plan: docs/city-plan.md). The riverside strip along the embankment (col 38: the promenade, food stalls,
+# houseboats), the temple quarter and its shopping streets to the north, the tower's plaza, and wooden houses and
+# apāto on narrow lanes everywhere else (the detective lives here; the Rindō-gumi's family house stands among them).
+# Bridges carry the crosstown avenues over the river (roads.yaml).
+district: oldtown
+area: 川端 Kawabata
+origin: [38, 4]
+map:
+  - WWWW.
+  - WWWW.
+  - RTTWW
+  - RTTWW
+  - RMMWW
+  - RMWWW
+  - RSSSS
+  - RWWWW
+  - RWWWW
+  - RWKKW
+  - RWWWW
+  - RWWWW
+  - RWWWW
+  - RWWWW
+
+zones:
+  W:
+    id: kawabata_lanes
+    name: Kawabata (lanes)
+    plan:
+      floors: [[2, 2, 60], [3, 3, 28], [4, 5, 12]]
+      lotW: [5, 9]
+      localStreet: [2.5, 4]
+      block: [16, 34]
+      lotGap: 0.3
+      signChance: 0.25
+      open: { parking: 0.05, vacant: 0.04, playground: 0.02 }
+      pots: 0.8
+    signs:
+      words: [銭湯, 豆腐, 酒, 煙草, 理容, 米, 佃煮, 質, 駄菓子, 蕎麦, 定食, 骨董]
+      colors: ['#ffffff', '#ffe45f', '#ff4f4f']
+    ads: { street: 3, food: 1, loan: 1 }
+    look:
+      windows: { punched: 50, small: 40, balcony: 10 }
+      walls: ['#8a6a4a', '#6a5040', '#c8b8a0', '#a89070', '#d8ccb8', '#5a4a3a', '#b8a888']
+      tiled: true
+      shops: { warm: 5, cool: 1 }
+      open: 0.6
+      homes: 0.75
+      roofs: 0.85
+      bikes: 0.7
+
+  R:
+    id: kawabata_riverside
+    name: Kawabata riverside
+    plan:
+      floors: [[2, 3, 60], [4, 6, 40]]
+      lotW: [6, 12]
+      signChance: 0.5
+      pots: 0.5
+    signs:
+      words: [鰻, 天ぷら, 屋形船, 船宿, 料亭, 居酒屋, 甘味処, 団子]
+      colors: ['#ffffff', '#ffe45f', '#ff4f4f']
+    ads: { food: 3, street: 1 }
+    look:
+      windows: { punched: 60, small: 40 }
+      walls: ['#8a6a4a', '#c8b8a0', '#a89070', '#d8ccb8', '#5a4a3a']
+      tiled: true
+      shops: { warm: 6 }
+      open: 0.9
+      homes: 0.3
+      roofs: 0.7
+
+  T:
+    id: kawabata_temple
+    name: Tōkō-ji (the temple quarter)
+    plan:
+      floors: [[2, 2, 50], [3, 4, 50]]
+      lotW: [5, 9]
+      signChance: 0.7
+      verticalSign: 0.7
+      pots: 0.6
+      streetTrees: 0.3
+    signs:
+      words: [人形焼, 煎餅, 仏具, 数珠, 甘味処, 天ぷら, 蕎麦, 土産, 着物レンタル, 人力車]
+      colors: ['#ffffff', '#ffe45f', '#ff4f4f']
+    ads: { food: 3, street: 2 }
+    look:
+      windows: { punched: 50, small: 50 }
+      walls: ['#8a6a4a', '#c8b8a0', '#a89070', '#d8ccb8']
+      tiled: true
+      shops: { warm: 7, colourful: 1 }
+      open: 1
+      homes: 0.2
+      roofs: 0.8
+
+  M:
+    id: kawabata_nakamise
+    name: Kawabata shopping streets
+    plan:
+      floors: [[2, 3, 60], [4, 5, 40]]
+      lotW: [4, 8]
+      localStreet: [3, 5]
+      lotGap: 0.1
+      signChance: 0.95
+      verticalSign: 0.7
+      setback: [0, 0.3]
+      pots: 0.4
+    signs:
+      words: [人形焼, 煎餅, 雷おこし, 扇子, 手拭, 甘味, 玩具, 簪, 団子, 和傘, 提灯, 土産, 着物, 下駄]
+      colors: ['#ffffff', '#ffe45f', '#ff4f4f', '#ffb040']
+    ads: { food: 4, street: 2 }
+    look:
+      windows: { punched: 60, small: 40 }
+      walls: ['#b8a88c', '#c2b49a', '#a89878', '#7c604c', '#d8d5cc']
+      tiled: true
+      shops: { warm: 7, colourful: 2 }
+      open: 1
+      homes: 0.1
+      roofs: 0.5
+
+  S:
+    id: kawabata_avenue
+    name: Kawabata (Tōto-ōdōri)
+    plan:
+      floors: [[4, 7, 60], [8, 11, 40]]
+      lotW: [8, 16]
+      signChance: 0.7
+    signs:
+      words: [銀行, 郵便局, 薬局, 牛丼, コンビニ, パチンコ, ホテル, 喫茶, 寿司]
+      colors: ['#ffffff', '#4fe3ff', '#ffe45f', '#ff4f4f']
+    ads: { mainstream: 2, food: 2, street: 2, loan: 1 }
+    look:
+      windows: { punched: 50, ribbon: 30, balcony: 20 }
+      walls: ['#9a9890', '#b8b4a8', '#7a7870', '#c2b49a']
+      tiled: true
+      shops: { warm: 3, cool: 3 }
+      open: 1
+
+  K:
+    id: kawabata_tower
+    name: Tōto Tower plaza
+    plan:
+      floors: [[3, 5, 60], [6, 9, 40]]
+      lotW: [10, 20]
+      signChance: 0.6
+      streetTrees: 0.8
+    signs:
+      words: [TŌTO TOWER, 東都タワー, 土産, CAFE, 蝋人形館, 水族館]
+      colors: ['#ffffff', '#ffe45f', '#ff4f4f']
+    ads: { fun: 2, mainstream: 2, food: 2 }
+    look:
+      windows: { ribbon: 40, punched: 40, curtain: 20 }
+      walls: ['#d8d4cc', '#c8c4b8', '#e8e4dc']
+      tiled: false
+      shops: { colourful: 3, warm: 2 }
+      open: 1

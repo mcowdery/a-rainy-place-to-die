@@ -270,6 +270,37 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     park: 0,
     onlyZoned: true,
   },
+  oldtown: {
+    // 川端 Kawabata, the old town across the river (Asakusa / Yanaka-like): wooden houses and small shops on narrow
+    // lanes, the temple and its shopping street, the tower; generated where its zone file paints.
+    name: 'Kawabata',
+    edgeRoads: [6, 8, 10],
+    localStreet: [2.5, 4],
+    block: [16, 36],
+    twoRowDepth: 22,
+    lotW: [5, 10],
+    lotGap: 0.25,
+    floors: [
+      [2, 2, 55],
+      [3, 3, 25],
+      [4, 6, 15],
+      [8, 11, 5],
+    ],
+    signChance: 0.45,
+    verticalSign: 0.6,
+    signWords: ['煎餅', '甘味処', '団子', '天ぷら', '蕎麦', '人形焼', '銭湯', '酒', '呉服', '下駄', '骨董', '豆腐', '佃煮', '鰻', 'もんじゃ', '質'],
+    signColors: [0xffffff, 0xffe45f, 0xff4f4f, 0x6bff8a],
+    open: { parking: 0.05, vacant: 0.03, playground: 0.02 },
+    rear: [1, 3],
+    setback: [0.2, 1.2],
+    stepBack: 0.05,
+    streetTrees: 0.15,
+    hedges: 0.1,
+    pots: 0.7,
+    towerCover: null,
+    park: 0,
+    onlyZoned: true,
+  },
   campus: {
     // 学園坂 Gakuenzaka, the university on its slope (Waseda / Takadanobaba-like): lecture halls and labs on big
     // blocks round green quads, generated where its zone file paints.

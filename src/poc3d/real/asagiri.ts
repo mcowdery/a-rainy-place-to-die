@@ -1,3 +1,4 @@
+import { KAWABATA_BUILDERS, KAWABATA_KINDS, kawabataColliders, kawabataLights, kawabataShelters, type KawabataKind } from './kawabata';
 import { NORTH_BUILDERS, NORTH_KINDS, northColliders, northLights, northShelters, type NorthKind } from './north';
 import { DENKO_BUILDERS, DENKO_KINDS, denkoColliders, denkoLights, denkoShelters, type DenkoKind } from './denko';
 import { PORT_BUILDERS, PORT_KINDS, portColliders, portLights, portShelters, type PortKind } from './port';
@@ -25,7 +26,7 @@ import type { ScreenLight } from './screenLight';
  * Each kind has a builder, collision rects and lightmap lights; city hall also has a raised floor.
  */
 // (The kit landmarks' registry: Tōto Port's set pieces live in port.ts and are registered here too.)
-export const ASAGIRI_KINDS = ['idol_agency', 'police_hq', 'residence', 'bank', 'law_firm', 'ad_agency', 'biz_hotel', 'members_club', 'city_hall', 'dept_store', 'sento', 'garage', ...PORT_KINDS, ...DENKO_KINDS, ...NORTH_KINDS] as const;
+export const ASAGIRI_KINDS = ['idol_agency', 'police_hq', 'residence', 'bank', 'law_firm', 'ad_agency', 'biz_hotel', 'members_club', 'city_hall', 'dept_store', 'sento', 'garage', ...PORT_KINDS, ...DENKO_KINDS, ...NORTH_KINDS, ...KAWABATA_KINDS] as const;
 export type AsagiriKind = (typeof ASAGIRI_KINDS)[number];
 
 const art = import.meta.glob(
@@ -117,6 +118,7 @@ export function asagiriColliders(kind: AsagiriKind, b: Building3, floor: number)
       // Solid brick but for the open middle bay, where your car lives (you can drive or walk in).
       return [R(0, GARAGE.b0, 0.3, 14), R(GARAGE.b1, 20, 0.3, 14), R(GARAGE.b0, GARAGE.b1, GARAGE.depth, 14)];
     default:
+      if ((KAWABATA_KINDS as readonly string[]).includes(kind)) return kawabataColliders(kind as KawabataKind, b);
       if ((NORTH_KINDS as readonly string[]).includes(kind)) return northColliders(kind as NorthKind, b);
       return (DENKO_KINDS as readonly string[]).includes(kind) ? denkoColliders(kind as DenkoKind, b) : portColliders(kind as PortKind, b);
   }
@@ -142,6 +144,7 @@ export function asagiriShelters(kind: AsagiriKind, b: Building3): { rect: Rect; 
     case 'dept_store':
       return [R(0, DEPT.w, 1.2, DEPT.d, -6.5, DEPT.h, true), R(0, DEPT.w, -0.2, 1.2, 0, 6.5)];
     default:
+      if ((KAWABATA_KINDS as readonly string[]).includes(kind)) return kawabataShelters(kind as KawabataKind, b);
       if ((NORTH_KINDS as readonly string[]).includes(kind)) return northShelters(kind as NorthKind, b);
       if ((DENKO_KINDS as readonly string[]).includes(kind)) return denkoShelters(kind as DenkoKind, b);
       return (PORT_KINDS as readonly string[]).includes(kind) ? portShelters(kind as PortKind, b) : [];
@@ -182,6 +185,7 @@ export function asagiriLights(kind: AsagiriKind, b: Building3): Light[] {
     case 'garage':
       return [L(10, 3, 5, cool, 1.0), L(10, -2.5, 6, [1.0, 0.5, 0.8], 0.6)];
     default:
+      if ((KAWABATA_KINDS as readonly string[]).includes(kind)) return kawabataLights(kind as KawabataKind, b);
       if ((NORTH_KINDS as readonly string[]).includes(kind)) return northLights(kind as NorthKind, b);
       return (DENKO_KINDS as readonly string[]).includes(kind) ? denkoLights(kind as DenkoKind, b) : portLights(kind as PortKind, b);
   }
@@ -200,7 +204,7 @@ export interface AsagiriBuilt {
 export function buildAsagiri(kind: AsagiriKind, b: Building3, id: string, city: THREE.Material, ghost: THREE.Material, u: CityUniforms): AsagiriBuilt {
   const k = new Kit(b);
   const kits: Record<string, Kit> = {};
-  const extra = BUILDERS[kind](k, id, (name) => (kits[name] ??= new Kit(b)));
+  const extra = BUILDERS[kind](k, id, (name) => (kits[name] ??= new Kit(b)), u);
   const group = k.finish(city, ghost);
   const parts: Record<string, THREE.Object3D> = {};
   for (const [name, pk] of Object.entries(kits)) group.add((parts[name] = pk.finish(city, ghost)));
@@ -216,7 +220,7 @@ export function buildAsagiri(kind: AsagiriKind, b: Building3, id: string, city: 
 }
 
 /** A set piece's builder; part(name) gives a Kit for a named part of the exterior (see AsagiriBuilt.parts). */
-type Builder = (k: Kit, id: string, part: (name: string) => Kit) => ((camera: THREE.Vector3, dt: number) => void) | void;
+type Builder = (k: Kit, id: string, part: (name: string) => Kit, u: CityUniforms) => ((camera: THREE.Vector3, dt: number) => void) | void;
 
 /** A car parked in local coordinates, nose along local (du, dt). */
 function car(k: Kit, u: number, t: number, du: number, dt: number, type: 'sedan' | 'minivan' | 'kei' | 'taxi', paint: number, variant: number): void {
@@ -257,6 +261,7 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
   ...PORT_BUILDERS,
   ...DENKO_BUILDERS,
   ...NORTH_BUILDERS,
+  ...KAWABATA_BUILDERS,
   // ---- SAKURA-YU (桜湯): the neighbourhood's public bath. A gabled entrance (plaster and dark wood, a tiled
   // roof with its gable to the street), the noren and a lit sign at the door, the tiled bath hall behind
   // with steamy high windows, and the tall chimney with the bath's name down it ----

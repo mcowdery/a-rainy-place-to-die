@@ -1,0 +1,14 @@
+# 東光寺 Tōkō-ji, the old town's great temple (Sensō-ji-like; real/kawabata.ts, kind temple): the thunder gate and
+# its giant lantern, the Nakamise street of little shops, the second gate, the incense burner, the main hall, the
+# pagoda. New Year visits and festivals start here.
+id: temple
+name: 東光寺 Tōkō-ji (temple)
+footprint: [104, 104]
+height: 35
+front: south
+landmark: temple
+nodes:
+  front: { kind: spawn, name: Tōkō-ji (the thunder gate), at: [52, 12], facing: north, view: [0, 12] }
+  hall: { kind: hotspot, name: Pray at the main hall, at: [52, -79.5] }
+  omikuji: { kind: hotspot, name: Omikuji (fortunes), at: [62, -72] }
+  monk: { kind: npc, name: Monk sweeping the steps, at: [46, -77], figure: { body: elder, pose: stand, color: '#e8c8a0' } }

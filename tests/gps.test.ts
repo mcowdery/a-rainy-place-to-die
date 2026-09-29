@@ -171,3 +171,23 @@ describe('the airport', () => {
     expect(r!.some(([x, z]) => Math.abs(x - 8 * 128) < 20 && z > 22 * 128 && z < 23 * 128 + 10) || r!.some((p, i) => i > 0 && Math.abs(p[0] - 8 * 128) < 20 && Math.abs(r![i - 1][0] - 8 * 128) < 20 && r![i - 1][1] < 22 * 128 && p[1] > 23 * 128)).toBe(true);
   });
 });
+
+describe('Kawabata', () => {
+  it('drives from the crossing over a river bridge to the temple', () => {
+    const d = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues, content.bridges);
+    const drive = new Router({ bounds: d.bounds, cells: d.cells, plan: (mx, my) => d.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL, bridges: content.bridges }, 'drive');
+    const from = node('kaburo_crossing.view');
+    const to = node('tokoji.front');
+    const r = drive.route(from.x, from.z, to.x, to.z)!;
+    expect(r).not.toBeNull();
+    // It crosses the river (col 37) on one of the bridges' rows.
+    const rows = content.bridges.filter((b) => !b.road.vertical && b.road.rect.x === 37 * CELL).map((b) => b.road.rect.y + b.road.rect.h / 2);
+    let crossed = false;
+    for (let i = 1; i < r.length; i++) {
+      const [ax, az] = r[i - 1];
+      const [bx, bz] = r[i];
+      if ((ax - 37.5 * CELL) * (bx - 37.5 * CELL) < 0 && rows.some((z) => Math.abs(az - z) < 12 && Math.abs(bz - z) < 12)) crossed = true;
+    }
+    expect(crossed).toBe(true);
+  });
+});

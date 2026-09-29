@@ -243,3 +243,25 @@
   stamp: amusement
   cell: [34, 5]
   offset: [14, 14]
+# Kawabata, the old town across the river (docs/city-plan.md): the temple, the tower, the Rindō-gumi's house, the
+# detective's apāto, the riverside walk.
+- id: tokoji
+  stamp: temple
+  cell: [40, 7]
+  offset: [12, 12]
+- id: toto_tower
+  stamp: tv_tower
+  cell: [40, 13]
+  offset: [24, 24]
+- id: rindo
+  stamp: yakuza_house
+  cell: [41, 9]
+  offset: [30, 30]
+- id: kopo
+  stamp: apato
+  cell: [40, 15]
+  offset: [40, 40]
+- id: riverside
+  stamp: river_walk
+  cell: [38, 11]
+  offset: [10, 14]

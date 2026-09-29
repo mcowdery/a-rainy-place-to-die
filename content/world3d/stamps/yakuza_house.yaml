@@ -1,0 +1,12 @@
+# 竜胆組 本家, the Rindō-gumi's family house in Kawabata (real/kawabata.ts, kind yakuza_house): the plastered wall,
+# the heavy gate with the crest's lanterns, the pine, black sedans and the men outside. The gate is a story door.
+id: yakuza_house
+name: 竜胆組 本家 (Rindō-gumi)
+footprint: [48, 40]
+height: 9
+front: north
+landmark: yakuza_house
+nodes:
+  front: { kind: spawn, name: The Rindō-gumi's house, at: [24, 12], facing: south, view: [180, 6] }
+  gate: { kind: door, name: The Rindō-gumi's gate, at: [24, 0.6], returnSpawn: front }
+  guard: { kind: npc, name: Young man at the gate, at: [18.4, 1.6], figure: { body: man, pose: pockets, color: '#8a8aa0' } }

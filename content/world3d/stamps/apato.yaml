@@ -1,0 +1,12 @@
+# コーポ川端 Kōpo Kawabata, a worn wooden apartment block in the old town (real/kawabata.ts, kind apato). The
+# detective's home: room 201 up the outside stair is a story door.
+id: apato
+name: コーポ川端 Kōpo Kawabata
+footprint: [22, 12]
+height: 6.2
+front: north
+landmark: apato
+nodes:
+  front: { kind: spawn, name: Kōpo Kawabata (the detective's), at: [9, 6], facing: south, view: [180, 8] }
+  room_201: { kind: door, name: Room 201 (the detective's), at: [2, 0.4], returnSpawn: front }
+  mailbox: { kind: hotspot, name: The mailboxes, at: [16, 0.6] }

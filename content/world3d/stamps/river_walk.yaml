@@ -1,0 +1,12 @@
+# The Kawabata riverside walk (real/kawabata.ts, kind river_walk): the promenade on the embankment, cherry trees,
+# lanterns, food stalls under red lanterns, houseboats moored in the river.
+id: river_walk
+name: 隅川 Sumikawa riverside
+footprint: [22, 100]
+height: 4
+front: west
+landmark: river_walk
+nodes:
+  front: { kind: spawn, name: Sumikawa riverside (food stalls), at: [50, 4], facing: north, view: [0, 4] }
+  yatai: { kind: npc, name: Oden stall keeper, at: [20, -4.4], figure: { body: elder, pose: stand, color: '#e8c8a0' } }
+  boat: { kind: hotspot, name: The houseboat 屋形船, at: [18, 9] }
