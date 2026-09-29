@@ -12,7 +12,7 @@ import type { ZoneMap } from './zones';
 export interface Destination {
   readonly id: string;
   readonly name: string;
-  readonly group: 'Places' | 'Zones';
+  readonly group: 'Places' | 'Zones' | 'Expressway';
   readonly x: number;
   readonly z: number;
   /** Camera yaw / pitch in degrees. */
@@ -102,7 +102,13 @@ export class TravelMap {
      * Whether clicking a place's dot travels there (debug only), the lines drawn, and the GPS: a click anywhere
      * else (or a place in the list) marks a destination, a right click clears it (mark(null)).
      */
-    private readonly opts: { readonly travel: boolean; readonly lines: readonly MapLine[]; readonly mark?: (m: { x: number; z: number; label: string } | null) => void } = { travel: true, lines: [] },
+    private readonly opts: {
+      readonly travel: boolean;
+      readonly lines: readonly MapLine[];
+      readonly mark?: (m: { x: number; z: number; label: string } | null) => void;
+      /** The expressway's roads (centrelines, world x/z), drawn over the streets. */
+      readonly expressway?: readonly { readonly x: ArrayLike<number>; readonly z: ArrayLike<number>; readonly closed: boolean }[];
+    } = { travel: true, lines: [] },
   ) {
     this.root = document.createElement('div');
     this.root.id = 'travel';
@@ -192,7 +198,7 @@ export class TravelMap {
     Object.assign(clear.style, { display: 'block', width: '100%', textAlign: 'left', margin: '2px 0 6px', padding: '5px 8px', background: '#12202a', color: '#8adcff', border: '1px solid #2a4a5a', cursor: 'pointer', font: 'inherit' });
     clear.addEventListener('click', () => opts.mark?.(null));
     this.list.append(clear);
-    for (const group of ['Places', 'Zones'] as const) {
+    for (const group of ['Places', 'Zones', 'Expressway'] as const) {
       const h = document.createElement('div');
       h.textContent = group.toUpperCase();
       Object.assign(h.style, { color: '#8a88a0', margin: '10px 0 4px' });
@@ -311,6 +317,17 @@ export class TravelMap {
     }
     g.fillStyle = '#ffd070';
     for (const p of this.district.placed) g.fillRect(p.rect.x, p.rect.y, p.rect.w, p.rect.h);
+    // The expressway: a green band over the streets it runs above, ramps and spurs thinner.
+    for (const r of this.opts.expressway ?? []) {
+      g.strokeStyle = r.closed ? '#2fb86a' : '#1f8a50';
+      g.lineWidth = r.closed ? 9 : 5;
+      g.lineJoin = 'round';
+      g.beginPath();
+      for (let i = 0; i < r.x.length; i += 4) (i ? g.lineTo(r.x[i], r.z[i]) : g.moveTo(r.x[i], r.z[i]));
+      if (r.closed) g.closePath();
+      else g.lineTo(r.x[r.x.length - 1], r.z[r.z.length - 1]);
+      g.stroke();
+    }
     // Railway lines: a band in each line's colour through its stations, a ring at each.
     for (const l of this.opts.lines) {
       const col = `#${l.color.toString(16).padStart(6, '0')}`;
@@ -374,7 +391,7 @@ export class TravelMap {
     g.textAlign = 'left';
     for (const d of this.opts.travel ? this.dests : []) {
       const [x, y] = this.toScreen(d.x, d.z);
-      g.fillStyle = d.group === 'Places' ? '#ff8ad8' : '#4fe3ff';
+      g.fillStyle = d.group === 'Places' ? '#ff8ad8' : d.group === 'Expressway' ? '#2fe38a' : '#4fe3ff';
       g.beginPath();
       g.arc(x, y, 5, 0, Math.PI * 2);
       g.fill();

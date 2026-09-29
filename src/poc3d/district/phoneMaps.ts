@@ -71,10 +71,10 @@ export class PhoneMaps implements PhoneApp {
     const places = document.createElement('div');
     places.className = 'mp-places';
     places.hidden = true;
-    for (const group of ['Places', 'Zones'] as const) {
+    for (const group of ['Places', 'Zones', 'Expressway'] as const) {
       const h = document.createElement('div');
       h.className = 'mp-group';
-      h.textContent = group === 'Places' ? 'PLACES' : 'AREAS';
+      h.textContent = group === 'Places' ? 'PLACES' : group === 'Zones' ? 'AREAS' : 'EXPRESSWAY ENTRANCES';
       places.append(h);
       for (const d of this.dests.filter((x) => x.group === group && !x.name.includes('('))) {
         const b = document.createElement('button');

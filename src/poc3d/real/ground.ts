@@ -29,6 +29,13 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rec
     const crossings = plan.roads.filter((o) => o !== r && o.vertical !== r.vertical && o.kind !== 'coast' && overlaps(o.rect, r.rect));
     for (const strip of sidewalkStrips(r)) for (const piece of cut(strip, crossings, r.vertical)) slab(piece, 0, 0.15, KIND.plain, KIND.sidewalk, 0x8a867e);
   }
+  // Avenues' medians: a kerbed strip down the middle, planted (the expressway's piers stand in it).
+  for (const m of plan.medians) {
+    slab(m, 0, 0.18, KIND.plain, KIND.sidewalk, 0x9a968c);
+    const inset = 0.35;
+    const g: Rect = { x: m.x + inset, y: m.y + inset, w: m.w - 2 * inset, h: m.h - 2 * inset };
+    if (g.w > 0.3 && g.h > 0.3) slab(g, 0.18, 0.22, KIND.grass, KIND.grass, 0x3a5a2e);
+  }
   // Stamp plazas: paving raised to pavement height, in a lighter stone.
   for (const q of plazas) slab(q, 0, 0.15, KIND.plain, KIND.sidewalk, 0xa09a90);
   // Open ground (openLots.ts): car park asphalt and bay lines, earth, lawns, paths, ponds, plaza paving.
@@ -152,7 +159,14 @@ function paint(mb: MeshBuilder, plan: CellPlan3): void {
         }
       };
       const boulevard = carriage >= 11;
-      if (boulevard) {
+      if (r.median) {
+        // Two lanes each way either side of the median: a lane line down the middle of each side.
+        const lane = r.median / 2 + (carriage / 2 - r.median / 2) / 2;
+        line(centre - lane, 0.15, WHITE, 5, 5);
+        line(centre + lane, 0.15, WHITE, 5, 5);
+        line(centre - r.median / 2 - 0.3, 0.15, YELLOW, 1e9, 0);
+        line(centre + r.median / 2 + 0.3, 0.15, YELLOW, 1e9, 0);
+      } else if (boulevard) {
         line(centre - 0.12, 0.15, YELLOW, 1e9, 0);
         line(centre + 0.12, 0.15, YELLOW, 1e9, 0);
         line(centre - carriage / 4, 0.15, WHITE, 5, 5);

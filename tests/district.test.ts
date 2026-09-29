@@ -57,13 +57,28 @@ describe('3D district planner', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('leaves stamps and their forecourt clear', () => {
+  it('leaves stamps and their forecourt clear, with the avenues at their full width', () => {
+    const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
     for (const placed of content.placed) {
       const r = reservedRect(placed);
-      const p = planCell3(content.macro, placed.cell[0], placed.cell[1], [r], 7)!;
+      const p = model.plan(placed.cell[0], placed.cell[1])!;
       expect(p.buildings.some((b) => overlaps(footprint(b), r))).toBe(false);
-      expect(p.roads.some((q) => q.kind !== 'coast' && overlaps(q.rect, placed.rect))).toBe(false);
+      // No road under any stamp, in its cell or a neighbour's (an avenue's half reaches 16 m in).
+      for (let y = placed.cell[1] - 1; y <= placed.cell[1] + 1; y++)
+        for (let x = placed.cell[0] - 1; x <= placed.cell[0] + 1; x++)
+          expect(model.plan(x, y)?.roads.some((q) => q.kind !== 'coast' && overlaps(q.rect, placed.rect)) ?? false, `${placed.id} on a road`).toBe(false);
     }
+  });
+
+  it('builds the avenues round the expressway: 32 m with a median, broken at junctions', () => {
+    const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
+    const p = model.plan(27, 11)!;
+    const south = p.roads.find((r) => !r.vertical && r.rect.y + r.rect.h / 2 === 12 * CELL)!;
+    expect(south.rect.h).toBe(32);
+    expect(south.median).toBeGreaterThan(2);
+    expect(p.medians.length).toBeGreaterThan(0);
+    // The median stops short of the junctions at the cell's corners.
+    for (const m of p.medians) expect(m.x > 27 * CELL + 2 && m.x + m.w < 28 * CELL - 2).toBe(true);
   });
 });
 
@@ -209,7 +224,7 @@ describe('Kaburo zones', () => {
 });
 
 describe('Open ground and greenery', () => {
-  const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const inZone = (id: string) => model.cells.filter(([mx, my]) => content.zones.at(mx, my)?.id === id);
   const area = (rs: readonly Rect[]) => rs.reduce((t, r) => t + r.w * r.h, 0);
 
@@ -244,7 +259,8 @@ describe('Open ground and greenery', () => {
     const built = area(cells.flatMap(([mx, my]) => model.plan(mx, my)!.buildings.map(footprint)));
     const plazas = cells.flatMap(([mx, my]) => model.plan(mx, my)!.open.filter((o) => o.kind === 'plaza'));
     expect(built / (cells.length * CELL * CELL)).toBeLessThan(0.45);
-    expect(plazas.length).toBeGreaterThan(cells.length);
+    // About one plaza a cell (the avenues round the expressway loop take a little of the ground).
+    expect(plazas.length).toBeGreaterThanOrEqual(cells.length);
     for (const [mx, my] of cells) {
       const p = model.plan(mx, my)!;
       for (const b of p.buildings) {
@@ -255,7 +271,8 @@ describe('Open ground and greenery', () => {
   });
 
   it('gives Asagiri a central park and Kaburo a park, with trees and paths', () => {
-    for (const [id, share] of [['central_park', 0.75], ['kaburo_park', 0.35]] as const) {
+    // (Central Park is bounded by avenues on the expressway loop, as the real one is, so less of its cells is park.)
+    for (const [id, share] of [['central_park', 0.6], ['kaburo_park', 0.35]] as const) {
       const cells = inZone(id);
       expect(cells.length).toBeGreaterThan(0);
       const parks = cells.flatMap(([mx, my]) => model.plan(mx, my)!.open.filter((o) => o.kind === 'park'));
@@ -293,7 +310,7 @@ describe('Open ground and greenery', () => {
 });
 
 describe('Places you can walk into, and fast travel', () => {
-  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const placed = (id: string) => content.placed.find((p) => p.id === id)!;
 
   it('lets you walk into Yoru Mart through its doors, but not through the glass or the shelves', () => {
@@ -340,7 +357,7 @@ describe('Places you can walk into, and fast travel', () => {
 });
 
 describe('Live house 地下室', () => {
-  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const f = localFrame(content.placed.find((p) => p.id === 'live_house')!.building);
   const at = (u: number, t: number) => toWorld(f, u, t);
 
@@ -370,7 +387,7 @@ describe('Live house 地下室', () => {
 });
 
 describe('Hoshikuzu Yokocho', () => {
-  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const f = localFrame(content.placed.find((p) => p.id === 'yokocho')!.building);
   const at = (u: number, t: number) => toWorld(f, u, t);
 
@@ -387,7 +404,7 @@ describe('Hoshikuzu Yokocho', () => {
 });
 
 describe('Asagiri set pieces and traffic', () => {
-  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const plan = (mx: number, my: number) => district.plan(mx, my);
 
   it('keeps every traffic lane clear of buildings, props and stops', () => {
@@ -426,7 +443,7 @@ describe('Asagiri set pieces and traffic', () => {
 });
 
 describe('Traffic signals and junctions', () => {
-  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const plan = (mx: number, my: number) => district.plan(mx, my);
 
   it('never shows green (or amber) to both roads at once, and clears with all-red', () => {
@@ -537,7 +554,7 @@ describe('Traffic signals and junctions', () => {
 
 describe('Subway', () => {
   const net = content.subway;
-  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const placed = (id: string) => content.placed.find((p) => p.id === id)!;
 
   it('numbers the stations along two straight lines under the roads', () => {
@@ -654,7 +671,7 @@ describe('Subway', () => {
 });
 
 describe('Sakuragaoka (residential)', () => {
-  const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const cells = model.cells.filter(([mx, my]) => content.macro.kindAt(mx, my) === 'residential');
 
   it('is generated only where its zones are painted, west of Asagiri', () => {
@@ -688,7 +705,7 @@ describe('Sakuragaoka (residential)', () => {
 });
 
 describe('Interiors: Sakura-yu, the public bath', () => {
-  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const bath = content.placed.find((p) => p.id === 'sakura_yu')!;
 
   it('keeps the bath solid from the street, but for the doorway pocket', async () => {
@@ -728,7 +745,7 @@ describe('Interiors: Sakura-yu, the public bath', () => {
 });
 
 describe('Interiors: the Toto department store', () => {
-  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const store = content.placed.find((p) => p.id === 'totochuo_dept')!;
   const f = localFrame(store.building);
   const layout = INTERIORS.dept_store.layout(store.building);
@@ -810,7 +827,7 @@ describe('Interiors: the Toto department store', () => {
 });
 
 describe('Interiors: the penthouse at The Peak', () => {
-  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const tower = content.placed.find((p) => p.id === 'the_peak')!;
   const f = localFrame(tower.building);
   const layout = INTERIORS.residence.layout(tower.building);
@@ -869,7 +886,7 @@ describe('Interiors: the penthouse at The Peak', () => {
 });
 
 describe('Interiors: Hotel Rouge', () => {
-  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const hotel = content.placed.find((p) => p.id === 'hotel_rouge')!;
   const f = localFrame(hotel.building);
   const layout = INTERIORS.love_hotel.layout(hotel.building);

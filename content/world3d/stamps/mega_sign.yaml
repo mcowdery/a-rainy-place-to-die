@@ -9,15 +9,17 @@ height: 35
 front: south
 landmark: mega_sign
 # The crossing: the junction's south-west corner, across from the tower, is an open square (the junction
-# centre is 10 m west and 30 m south of the footprint's NW corner when placed at offset [10, 98]).
-plaza: { at: [-44, 30], size: [40, 40] }
+# centre is 10 m west and 36 m south of the footprint's NW corner when placed at offset [10, 92]: the tower stands
+# back from 夜霧通り Yogiri-dōri, the avenue along its south side).
+plaza: { at: [-44, 36], size: [40, 40] }
 # The junction itself is a scramble crossing.
-scramble: [-10, 30]
+scramble: [-10, 36]
 nodes:
-  # Kaburo's front door: across the crossing from the tower, looking up at the dragon.
+  # Kaburo's front door: across the crossing from the tower (on the far pavement of the avenue), looking up
+  # at the dragon.
   view:
     kind: spawn
     name: Kaburo Crossing
-    at: [-34, 34]
+    at: [-34, 42]
     facing: north
     view: [-42, 20]

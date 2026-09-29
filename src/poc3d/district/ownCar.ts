@@ -133,6 +133,8 @@ export class OwnCar {
       }
     }
     const y0 = this.sim.y;
+    // Left somewhere the city has since changed under it (a building, a median): back to the garage.
+    if (at !== home && y0 < 1 && this.blocked(at.x, at.z, 0.9, null as unknown as DrivenVehicle)) at = home;
     this.sim.place(at.x, at.z, at.h, this.ground);
     // Left up on the expressway: back up there (its height at that spot).
     this.sim.y = this.ex?.at(at.x, at.z, y0)?.height ?? this.sim.y;

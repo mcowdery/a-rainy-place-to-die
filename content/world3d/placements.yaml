@@ -7,11 +7,11 @@
 - id: kaburo_crossing
   stamp: mega_sign
   cell: [30, 11]
-  offset: [10, 98]
+  offset: [10, 92]
 - id: yoru_mart
   stamp: yoru_mart
   cell: [30, 12]
-  offset: [10, 12]
+  offset: [10, 16]
 - id: kaburo_inari
   stamp: shrine
   cell: [27, 10]
@@ -23,7 +23,7 @@
 - id: live_house
   stamp: live_house
   cell: [27, 11]
-  offset: [60, 96]
+  offset: [60, 90]
 - id: yokocho
   stamp: yokocho
   cell: [26, 10]
@@ -35,7 +35,7 @@
 - id: yasuichi
   stamp: yasuichi
   cell: [29, 11]
-  offset: [96, 96]
+  offset: [96, 92]
 - id: kaburo_station
   stamp: station_kaburo
   cell: [26, 12]
@@ -51,11 +51,11 @@
 - id: the_peak
   stamp: the_peak
   cell: [22, 11]
-  offset: [44, 84]
+  offset: [44, 78]
 - id: stella_production
   stamp: stella_production
   cell: [22, 9]
-  offset: [40, 82]
+  offset: [40, 76]
 - id: police_hq
   stamp: police_hq
   cell: [20, 12]

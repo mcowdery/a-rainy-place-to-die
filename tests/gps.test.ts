@@ -5,7 +5,7 @@ import { CELL, DISTRICTS3 } from '../src/poc3d/district/plan';
 import { District } from '../src/poc3d/district/world';
 
 const content = loadDistrictContent();
-const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones);
+const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
 const t0 = performance.now();
 const nav = new NavGrid({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL });
 const buildMs = performance.now() - t0;

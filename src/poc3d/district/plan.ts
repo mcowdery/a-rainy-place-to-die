@@ -4,6 +4,7 @@ import { isWide } from '../../core/wide';
 import { isLand, type CellKind, type DistrictId, type MacroMap } from '../../gen/macro';
 import { STYLES } from '../../gen/styles';
 import type { AdCategory } from '../models/ads';
+import type { EdgeSpec } from './roads';
 
 /**
  * 3D district planner: the 2D prototype's model (L0 macro cells, hashed cell-edge roads, BSP into
@@ -23,6 +24,8 @@ export interface Road3 {
   /** Raised sidewalk width on each long side (0 = shared surface). */
   readonly sidewalk: number;
   readonly vertical: boolean;
+  /** A raised central strip (m; 0 for none): an avenue's median, broken at junctions (`CellPlan3.medians`). */
+  readonly median: number;
 }
 
 export interface Sign3 {
@@ -117,6 +120,8 @@ export interface CellPlan3 {
   /** The style it was planned with (the zone's, or the district's). */
   readonly style: DistrictStyle3;
   readonly roads: readonly Road3[];
+  /** The avenues' medians in this cell: raised strips down their middle, broken where streets cross. */
+  readonly medians: readonly Rect[];
   readonly buildings: readonly Building3[];
   readonly open: readonly OpenLot3[];
   readonly signs: readonly Sign3[];
@@ -204,7 +209,9 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
   },
   tower: {
     name: 'Asagiri',
-    edgeRoads: [10, 12, 14],
+    // West Shinjuku's grid of wide avenues (the loop's are wider still: roads.yaml). At most 20 m where a
+    // subway runs under them (its stations stand 10 m from the road's centre).
+    edgeRoads: [16, 18, 18],
     localStreet: [6, 10],
     block: [30, 60],
     twoRowDepth: 30,
@@ -280,7 +287,8 @@ export function planCell3(
   seed: number,
   zone?: Zone3,
   /** Cell edges widened to boulevards (edgeKey), e.g. the approaches to a scramble crossing. */
-  wide?: ReadonlySet<string>,
+  /** Cell edges built to their own width (avenues, a scramble crossing's approaches): edgeKey to spec. */
+  edges?: ReadonlyMap<string, EdgeSpec>,
 ): CellPlan3 | null {
   const kind = macro.kindAt(mx, my);
   if (!isLand(kind)) return null;
@@ -289,17 +297,19 @@ export function planCell3(
   const R: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
   const roads: Road3[] = [];
 
-  const edge = (neighbour: CellKind, keyX: number, keyY: number, vertical: boolean): number => {
-    if (neighbour !== kind) return BOUNDARY_ROAD;
-    if (wide?.has(edgeKey(keyX, keyY, vertical))) return SCRAMBLE_ROAD;
+  const edge = (neighbour: CellKind, keyX: number, keyY: number, vertical: boolean): { w: number; median: number } => {
+    const spec = edges?.get(edgeKey(keyX, keyY, vertical));
+    if (spec) return { w: spec.width, median: spec.median };
+    if (neighbour !== kind) return { w: BOUNDARY_ROAD, median: 0 };
     const opts = style.edgeRoads;
-    return opts[hash(seed, keyX, keyY, vertical ? 1 : 2) % opts.length];
+    return { w: opts[hash(seed, keyX, keyY, vertical ? 1 : 2) % opts.length], median: 0 };
   };
-  const road = (rect: Rect, width: number, vertical: boolean, coast = false): Road3 => ({
+  const road = (rect: Rect, width: number, vertical: boolean, coast = false, median = 0): Road3 => ({
     rect,
     vertical,
     kind: coast ? 'coast' : width >= 14 ? 'boulevard' : width >= 8 ? 'street' : width >= 3 ? 'street' : 'alley',
     sidewalk: coast ? 0 : width >= 8 ? Math.min(3, width * 0.2) : 0,
+    median,
   });
 
   // Cell edges: roads centred on the boundary (each side owns half), width hashed from the shared edge
@@ -322,10 +332,10 @@ export function planCell3(
     }
     const keyX = side === 'w' ? mx - 1 : mx;
     const keyY = side === 'n' ? my - 1 : my;
-    const w = edge(n, keyX, keyY, vertical);
+    const { w, median } = edge(n, keyX, keyY, vertical);
     const r = side === 'w' ? { x: R.x - w / 2, y: R.y, w, h: CELL } : side === 'e' ? { x: R.x + CELL - w / 2, y: R.y, w, h: CELL }
       : side === 'n' ? { x: R.x, y: R.y - w / 2, w: CELL, h: w } : { x: R.x, y: R.y + CELL - w / 2, w: CELL, h: w };
-    roads.push(road(r, w, vertical));
+    roads.push(road(r, w, vertical, false, median));
     insets[side] = w / 2;
   }
 
@@ -345,7 +355,29 @@ export function planCell3(
     if (style.towerCover && Math.min(b.w, b.h) >= 30 && !reserved.some((q) => overlaps(q, b))) towerBlock(b, fill);
     else fillBlock(b, fill);
   }
-  return { mx, my, kind, rect: R, style, roads, buildings, open, signs };
+  return { mx, my, kind, rect: R, style, roads, medians: medianRects(roads), buildings, open, signs };
+}
+
+/**
+ * The medians of a cell's avenues: a strip down each one's centre, cut where another street crosses it (plus
+ * room for the stop lines), so traffic turns and crosses at the junctions.
+ */
+function medianRects(roads: readonly Road3[]): Rect[] {
+  const out: Rect[] = [];
+  for (const r of roads) {
+    if (!r.median) continue;
+    const q = r.rect;
+    const strip: Rect = r.vertical ? { x: q.x + q.w / 2 - r.median / 2, y: q.y, w: r.median, h: q.h } : { x: q.x, y: q.y + q.h / 2 - r.median / 2, w: q.w, h: r.median };
+    // Along the road: the spans between the crossings.
+    let spans: [number, number][] = [r.vertical ? [q.y, q.y + q.h] : [q.x, q.x + q.w]];
+    for (const o of roads) {
+      if (o === r || o.vertical === r.vertical || o.kind === 'coast' || !overlaps(o.rect, q)) continue;
+      const [a, b] = r.vertical ? [o.rect.y - 4, o.rect.y + o.rect.h + 4] : [o.rect.x - 4, o.rect.x + o.rect.w + 4];
+      spans = spans.flatMap(([s, e]) => [[s, Math.min(e, a)], [Math.max(s, b), e]] as [number, number][]).filter(([s, e]) => e - s > 1);
+    }
+    for (const [s, e] of spans) out.push(r.vertical ? { x: strip.x, y: s, w: strip.w, h: e - s } : { x: s, y: strip.y, w: e - s, h: strip.h });
+  }
+  return out;
 }
 
 /** What filling a block writes to, and with. */

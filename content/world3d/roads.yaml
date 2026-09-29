@@ -1,0 +1,18 @@
+# Avenues (大通り): cell-edge roads built wider than their district's own, for driving (format and checks:
+# src/poc3d/district/roads.ts). A run of cell edges along one grid line:
+#   row: n   the horizontal line at z = n * 128 (between L0 rows n-1 and n), from/to: the columns it spans [from, to)
+#   col: n   the vertical line at x = n * 128 (between L0 columns n-1 and n), from/to: the rows it spans
+# width: kerb to kerb plus both pavements (m); median: a raised central strip (m, 0 for none), where the
+# expressway's piers stand. Later entries override earlier ones on the same edge.
+#
+# The four round the Tōto Expressway's inner loop (expressway.yaml), 32 m: two lanes each way either side of
+# the median, 3 m pavements, the deck overhead. They run a block on past the loop's corners (so the corner
+# junctions are wide both ways).
+avenues:
+  - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 20, to: 32, width: 32, median: 2.4 }
+  - { name: 夜霧通り YOGIRI-DŌRI, row: 12, from: 20, to: 32, width: 32, median: 2.4 }
+  - { name: 朝霧西通り ASAGIRI-NISHI-DŌRI, col: 21, from: 9, to: 13, width: 32, median: 2.4 }
+  - { name: 明王通り MYŌŌ-DŌRI, col: 31, from: 9, to: 13, width: 32, median: 2.4 }
+  # Past the terminal, Tōto-ōdōri narrows over the Seikō Line's Tōto-Chūō station (subway stations stand
+  # 10 m from their road's centre, so a road with a line under it is 20 m at most).
+  - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 25, to: 26, width: 20, median: 2.4 }

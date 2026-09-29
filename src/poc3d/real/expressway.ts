@@ -99,8 +99,7 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
       }
     }
     if (road.kind === 'spur') portal(mb, road);
-    // Ramp piers where they're high enough to stand on legs.
-    if (road.kind === 'ramp') for (let i = 12; i < n; i += 24) if (road.y[i] > 4) box(CONCRETE, road.x[i], road.z[i], 0, road.y[i] - 1.2, 1.1, 1.1);
+    if (road.kind === 'ramp') ramp(mb, road, box);
   }
   // Piers with crossbeams under the deck (the street's colliders are the same piers, less those in junctions).
   for (const p of ex.piers()) {
@@ -132,14 +131,16 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
     mb.style = [0, 0, 0, 0];
     pools.push({ x: hx, z: hz, y: L.y });
   }
-  // Gantry signs: before each ramp's exit and each spur (green, white lettering).
+  // Gantry signs over the deck before each exit (green, white lettering), and at street level a sign before
+  // each entrance, on the avenue's median.
   for (const road of ex.roads) {
     if (road.kind === 'loop') continue;
-    const up = road.kind === 'ramp' && road.y[0] < road.y[road.y.length - 1];
-    if (up) continue;
-    const i = road.kind === 'spur' ? 0 : 0;
-    const text = road.kind === 'spur' ? [`${road.sign}`, 'TUNNEL · 直進'] : ['出口 EXIT', '歌舞路 KABURO'];
-    group.add(gantry(road, i, text, ex));
+    if (road.rampKind === 'on') {
+      group.add(entranceSign(road));
+      continue;
+    }
+    const text = road.kind === 'spur' ? [`${road.sign}`, 'TUNNEL · 直進'] : [`出口 EXIT`, `${road.sign}`];
+    group.add(gantry(road, 0, text, ex));
   }
   const mesh = new THREE.Mesh(mb.build()!, city);
   mesh.frustumCulled = false;
@@ -156,6 +157,108 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
   pools3.name = 'sodium';
   group.add(pools3);
   return { group };
+}
+
+/**
+ * A ramp's solid part: where it's too low to walk or drive under (below 5.2 m), a filled embankment between
+ * retaining walls, down to the street; above that, on piers. Where an exit ramp's embankment starts, facing
+ * the street traffic coming along the lane under it, a yellow-and-black crash cushion.
+ */
+function ramp(mb: MeshBuilder, road: Road, box: (hex: number, cx: number, cz: number, y0: number, y1: number, w: number, d: number) => void): void {
+  const n = road.x.length;
+  const h = road.half;
+  const L = (i: number, lat: number, y: number): V3 => [road.x[i] + road.tz[i] * lat, y, road.z[i] - road.tx[i] * lat];
+  const LOW = 5.2;
+  mb.kind = KIND.plain;
+  mb.color = lin(CONCRETE);
+  for (let i = 0; i + 1 < n; i++) {
+    const ya = road.y[i];
+    const yb = road.y[i + 1];
+    if (Math.min(ya, yb) >= LOW) continue;
+    for (const s of [1, -1]) {
+      const nx = road.tz[i] * s;
+      const nz = -road.tx[i] * s;
+      const n3: V3 = [nx, 0, nz];
+      mb.quadN(L(i, s * (h + 0.25), 0), L(i + 1, s * (h + 0.25), 0), L(i + 1, s * (h + 0.25), yb), L(i, s * (h + 0.25), ya), n3, n3, n3, n3);
+    }
+  }
+  // Piers under the high part.
+  for (let i = 12; i < n; i += 24) if (road.y[i] > LOW) box(CONCRETE, road.x[i], road.z[i], 0, road.y[i] - 1.2, 1.1, 1.1);
+  // The end of the embankment that faces the street's oncoming traffic (an off-ramp's, where it drops below
+  // the clearance): a concrete face and a striped cushion.
+  if (road.rampKind === 'off') {
+    let i = 0;
+    while (i < n - 1 && road.y[i] >= LOW) i++;
+    const y = road.y[i];
+    mb.kind = KIND.plain;
+    mb.color = lin(CONCRETE);
+    const back: V3 = [-road.tx[i], 0, -road.tz[i]];
+    mb.quadN(L(i, h + 0.25, 0), L(i, -h - 0.25, 0), L(i, -h - 0.25, y), L(i, h + 0.25, y), back, back, back, back);
+    const cx = road.x[i] - road.tx[i] * 0.6;
+    const cz = road.z[i] - road.tz[i] * 0.6;
+    for (let k = 0; k < 5; k++) {
+      mb.kind = KIND.gloss;
+      mb.color = lin(k % 2 ? 0x141414 : 0xe8c020);
+      mb.box(cx, cz, 0.15 + k * 0.22, 0.37 + k * 0.22, Math.abs(road.tz[i]) * 2.8 + Math.abs(road.tx[i]) * 1.0, Math.abs(road.tx[i]) * 2.8 + Math.abs(road.tz[i]) * 1.0, KIND.gloss, true);
+    }
+    // Amber flashers on top (lamps: bright at night).
+    mb.kind = KIND.emit;
+    mb.style = [EMIT.lamp, 0, 0, 0];
+    mb.color = [2.0, 1.1, 0.1];
+    mb.box(cx, cz, 1.3, 1.5, 0.25, 0.25, KIND.emit, true);
+    mb.style = [0, 0, 0, 0];
+  }
+}
+
+/**
+ * At street level before an entrance, on the avenue's median: 東都高速 入口 with the district and an arrow up
+ * the ramp (the expressway's green, on a post), facing the traffic coming.
+ */
+function entranceSign(road: Road): THREE.Group {
+  const g = new THREE.Group();
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 384;
+  const cg = c.getContext('2d')!;
+  cg.fillStyle = '#0e6a3a';
+  cg.fillRect(0, 0, 512, 384);
+  cg.strokeStyle = '#f0f0f0';
+  cg.lineWidth = 7;
+  cg.strokeRect(8, 8, 496, 368);
+  cg.fillStyle = '#f4f4f0';
+  cg.textAlign = 'center';
+  cg.font = "bold 68px 'Yu Gothic', 'Meiryo', sans-serif";
+  cg.fillText('東都高速 入口', 256, 96);
+  cg.font = 'bold 40px Consolas, sans-serif';
+  cg.fillText('EXPRESSWAY', 256, 150);
+  cg.font = "bold 44px 'Yu Gothic', sans-serif";
+  cg.fillText(road.sign ?? '', 256, 216);
+  // The arrow: ahead and up (the ramp rises from the lane by the median).
+  cg.beginPath();
+  cg.moveTo(256, 250);
+  cg.lineTo(316, 310);
+  cg.lineTo(280, 310);
+  cg.lineTo(280, 364);
+  cg.lineTo(232, 364);
+  cg.lineTo(232, 310);
+  cg.lineTo(196, 310);
+  cg.closePath();
+  cg.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.8), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(0.9, 0.9, 0.9) }));
+  const steel = new THREE.MeshStandardMaterial({ color: 0x8a8e94, metalness: 0.5, roughness: 0.5 });
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.6, 0.16), steel);
+  post.position.set(0, 1.8, 0);
+  sign.position.set(0, 3.3, -0.1);
+  sign.rotation.y = Math.PI;
+  g.add(post, sign);
+  // 22 m before the ramp's foot, on the median (5.9 m to the ramp's right, i.e. the avenue's centre line).
+  const back = 22;
+  const lat = -(road.half + 4.6 - 0.6);
+  g.position.set(road.x[0] - road.tx[0] * back + road.tz[0] * lat, 0.18, road.z[0] - road.tz[0] * back - road.tx[0] * lat);
+  g.rotation.y = Math.atan2(road.tx[0], road.tz[0]);
+  return g;
 }
 
 /** A tunnel portal at a spur's end: a concrete headwall round a dark mouth, lamps inside, the name over it. */

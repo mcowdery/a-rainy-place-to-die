@@ -11,6 +11,7 @@ import { DistrictModel } from './model';
 import { CELL, cellKey, DISTRICTS3, STYLES3, type Building3, type CellPlan3 } from './plan';
 import type { Node3, Placed3 } from './stamps';
 import type { ZoneMap } from './zones';
+import type { Avenues } from './roads';
 import { landmarkColliders, landmarkFloor, landmarkRaisedColliders, landmarkShelters, type Shelter } from './landmarks';
 import type { Rect } from '../../core/coords';
 import type { Interior } from '../real/interiors';
@@ -109,8 +110,9 @@ export class District {
     placed: readonly Placed3[],
     private readonly seed: number,
     zones?: ZoneMap,
+    avenues?: Avenues,
   ) {
-    this.model = new DistrictModel(macro, kinds, placed, seed, zones);
+    this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues);
     this.nodes = placed.flatMap((p) => p.nodes);
     // Stamps collide as their footprint, or (landmarks you can walk into) as their walls and fixtures.
     const solid = (p: Placed3): Rect[] => [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }];
@@ -340,6 +342,8 @@ export class District {
       for (let dx = -1; dx <= 1; dx++) {
         const p = this.model.plan(mx + dx, my + dy);
         if (p?.buildings.some(hit)) return true;
+        // An avenue's median (raised, planted, the expressway's piers in it): only crossed at junctions.
+        if (p?.medians.length && inRects(p.medians)) return true;
         const d = this.model.detail(mx + dx, my + dy);
         if (d && (propBlocked(d.props, x, z, r) || inRects(d.solids))) return true;
       }

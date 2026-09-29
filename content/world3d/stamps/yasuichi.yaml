@@ -11,6 +11,6 @@ nodes:
   front:
     kind: spawn
     name: Yasuichi discount store
-    at: [9, 15]
+    at: [9, 3]
     facing: north
     view: [4, 20]

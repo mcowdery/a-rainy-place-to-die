@@ -24,7 +24,7 @@ self.onmessage = (e: MessageEvent<WorkerIn>) => {
   const m = e.data;
   if (m.type === 'init') {
     const content = loadDistrictContent();
-    const model = new DistrictModel(content.macro, m.kinds, content.placed, m.seed, content.zones);
+    const model = new DistrictModel(content.macro, m.kinds, content.placed, m.seed, content.zones, content.avenues);
     builder = new ChunkBuilder(model, new SignLayout(signTexts(m.words, content.placed)));
     self.postMessage({ type: 'ready' });
     return;

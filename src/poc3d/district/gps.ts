@@ -70,6 +70,8 @@ export class NavGrid {
       // ...but never into a building or a set piece (a street ending at one).
       for (const [mx, my] of src.cells) for (const q of src.plan(mx, my)?.buildings ?? []) fill(q.x - q.w / 2, q.z - q.d / 2, q.w, q.d, 0, 0.4);
       for (const r of src.blocked) fill(r.x, r.y, r.w, r.h, 0, 0.2);
+      // ...nor across an avenue's median (you cross or turn at the junctions, where it's broken).
+      for (const [mx, my] of src.cells) for (const m of src.plan(mx, my)?.medians ?? []) fill(m.x, m.y, m.w, m.h, 0);
       return;
     }
     // Everything in the district is walkable (dear), then buildings and set pieces out, then streets and open

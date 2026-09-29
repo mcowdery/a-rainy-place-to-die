@@ -25,7 +25,7 @@ export interface ExpresswayDef {
   readonly deck: number;
   readonly radius: number;
   readonly half: number;
-  readonly ramps: readonly { readonly id: string; readonly kind: 'on' | 'off'; readonly side: Side; readonly from: number; readonly length: number }[];
+  readonly ramps: readonly { readonly id: string; readonly kind: 'on' | 'off'; readonly side: Side; readonly block: number; readonly name: string }[];
   readonly exits: readonly { readonly id: string; readonly venue: string; readonly corner: Corner; readonly length: number; readonly name: string }[];
 }
 
@@ -46,7 +46,7 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
   if (!Array.isArray(d.ramps)) err('ramps: a list');
   else
     d.ramps.forEach((r: Record<string, unknown>, i: number) => {
-      if (typeof r?.id !== 'string' || !['on', 'off'].includes(r.kind as string) || !sides.includes(r.side as string) || !num(r.from) || !num(r.length) || (r.length as number) < 120) err(`ramps[${i}]: { id, kind: on|off, side, from, length >= 120 }`);
+      if (typeof r?.id !== 'string' || !['on', 'off'].includes(r.kind as string) || !sides.includes(r.side as string) || !num(r.block) || typeof r.name !== 'string') err(`ramps[${i}]: { id, kind: on|off, side, block, name }`);
     });
   if (!Array.isArray(d.exits)) err('exits: a list');
   else
@@ -68,9 +68,10 @@ export interface Road {
   readonly tz: Float64Array;
   readonly half: number;
   readonly closed: boolean;
-  /** Spurs: the venue their tunnel leads to, and its sign. */
+  /** Spurs: the venue their tunnel leads to, and its sign. Ramps: the district they serve, and on or off. */
   readonly venue?: string;
   readonly sign?: string;
+  readonly rampKind?: 'on' | 'off';
 }
 
 /** Where a point is on the network. */
@@ -83,6 +84,8 @@ export interface OnRoad {
 }
 
 const GRID = 16;
+/** A ramp's run (m): the climb to the deck at under 10% at its steepest. */
+export const RAMP = 240;
 const smooth = (t: number): number => {
   const c = Math.max(0, Math.min(1, t));
   return c * c * (3 - 2 * c);
@@ -177,17 +180,21 @@ export class Expressway {
     const L = resample(dense, true);
     this.loop = makeRoad('loop', 'loop', L.x, L.z, () => D, def.half, true);
     this.roads.push(this.loop);
-    // Ramps: a single lane outside the deck (on the left), overlapping its edge by 0.6 m so the two join.
+    // Ramps: a single lane outside the deck (on the left), overlapping its edge by 0.6 m so the two join, over
+    // the inner lane of the avenue below (next to its median). Each works within one block of its side (the
+    // 128 m between two junctions, counted from the side's start corner in the direction of travel): an
+    // on-ramp's foot is at the start of its block and the part too low to pass under (a wall to the street)
+    // stays inside the block; an off-ramp comes down to its foot at the end of its block.
     const side = (s: Side): { start: [number, number]; dir: [number, number] } => {
       switch (s) {
         case 'north':
-          return { start: [x0 + R, z0], dir: [1, 0] };
+          return { start: [x0, z0], dir: [1, 0] };
         case 'east':
-          return { start: [x1, z0 + R], dir: [0, 1] };
+          return { start: [x1, z0], dir: [0, 1] };
         case 'south':
-          return { start: [x1 - R, z1], dir: [-1, 0] };
+          return { start: [x1, z1], dir: [-1, 0] };
         case 'west':
-          return { start: [x0, z1 - R], dir: [0, -1] };
+          return { start: [x0, z1], dir: [0, -1] };
       }
     };
     const rh = 1.9;
@@ -195,16 +202,21 @@ export class Expressway {
       const { start, dir } = side(r.side);
       const left: [number, number] = [dir[1], -dir[0]];
       const off = def.half + rh - 0.6;
-      const a = r.kind === 'off' ? r.from : r.from - r.length;
+      const s0 = r.block * CELL;
+      const a = r.kind === 'on' ? s0 + 16 : s0 + 112 - RAMP;
       const xs: number[] = [];
       const zs: number[] = [];
-      for (let d = 0; d <= r.length; d++) {
-        xs.push(start[0] + dir[0] * (a + d) + left[0] * off);
-        zs.push(start[1] + dir[1] * (a + d) + left[1] * off);
+      // Where it meets the deck it angles in over the last (first) 60 m, into the deck's outside lane, so you
+      // drive straight on and merge (or drift out of the lane and off).
+      const lane = 1.8;
+      for (let d = 0; d <= RAMP; d++) {
+        const k = r.kind === 'on' ? smooth((d - (RAMP - 60)) / 60) : 1 - smooth(d / 60);
+        const o = off - (off - lane) * k;
+        xs.push(start[0] + dir[0] * (a + d) + left[0] * o);
+        zs.push(start[1] + dir[1] * (a + d) + left[1] * o);
       }
-      const Lr = r.length;
-      const y = r.kind === 'off' ? (i: number): number => D * (1 - smooth((i - 40) / (Lr - 60))) : (i: number): number => D * smooth((i - 20) / (Lr - 60));
-      this.roads.push(makeRoad(r.id, 'ramp', xs, zs, y, rh, false));
+      const y = r.kind === 'off' ? (i: number): number => D * (1 - smooth(i / RAMP)) : (i: number): number => D * smooth(i / RAMP);
+      this.roads.push(makeRoad(r.id, 'ramp', xs, zs, y, rh, false, { sign: r.name, rampKind: r.kind }));
     }
     // Exits: at a corner, straight on (the way the loop arrived) into a tunnel.
     const arrive: Record<Corner, { c: [number, number]; dir: [number, number] }> = {
@@ -288,6 +300,8 @@ export class Expressway {
     let best: { px: number; pz: number; nx: number; nz: number; d: number } | null = null;
     for (const [road, i] of this.near(x, z, this.def.half + 4)) {
       if (Math.abs(road.y[i] - y) > 1.6) continue;
+      // A ramp's foot is at street level: no walls there (you drive on or off it from the street).
+      if (road.y[i] < 0.35) continue;
       const dx = x - road.x[i];
       const dz = z - road.z[i];
       const lateral = dx * road.tz[i] - dz * road.tx[i];
@@ -339,7 +353,7 @@ export class Expressway {
       if (road.kind !== 'ramp') continue;
       for (let i = 0; i + 4 < road.x.length; i += 4) {
         const h = (road.y[i] + road.y[i + 4]) / 2;
-        if (h < 0.35 || h > 5) continue;
+        if (h < 0.35 || h > 5.2) continue;
         const xs = [road.x[i], road.x[i + 4]];
         const zs = [road.z[i], road.z[i + 4]];
         const hw = road.half;

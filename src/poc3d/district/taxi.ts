@@ -21,6 +21,8 @@ export function fare(metres: number, late: boolean): number {
 /** How far a taxi goes to get there: along the grid's streets (the Manhattan distance), plus a little for the corners. */
 export const rideMetres = (ax: number, az: number, bx: number, bz: number): number => (Math.abs(bx - ax) + Math.abs(bz - az)) * 1.08 + 60;
 
+const ORDER = ['Zones', 'Places', 'Expressway'];
+
 /** The list of where to: places by name, their distance and fare. */
 export class TaxiPicker {
   readonly root: HTMLDivElement;
@@ -57,13 +59,13 @@ export class TaxiPicker {
     const rows = places
       .map((d) => ({ d, m: rideMetres(from.x, from.z, d.x, d.z) }))
       .filter(({ m }) => m > 250)
-      .sort((a, b) => (a.d.group === b.d.group ? a.d.name.localeCompare(b.d.name) : a.d.group === 'Zones' ? -1 : 1));
+      .sort((a, b) => (a.d.group === b.d.group ? a.d.name.localeCompare(b.d.name) : ORDER.indexOf(a.d.group) - ORDER.indexOf(b.d.group)));
     let group = '';
     for (const { d, m } of rows) {
       if (d.group !== group) {
         group = d.group;
         const h = document.createElement('div');
-        h.textContent = group === 'Zones' ? 'Districts' : 'Places';
+        h.textContent = group === 'Zones' ? 'Districts' : group === 'Expressway' ? 'Expressway entrances' : 'Places';
         Object.assign(h.style, { color: '#c8c6d8', margin: '12px 0 6px' });
         this.list.append(h);
       }

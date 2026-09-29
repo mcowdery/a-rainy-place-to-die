@@ -4,6 +4,8 @@ import { cellDetail, type CellDetail } from '../real/props';
 import { CELL, cellKey, edgeKey, planCell3, STYLES3, type Building3, type CellPlan3 } from './plan';
 import { plazaRect, reservedRect, type Placed3 } from './stamps';
 import { ZoneMap } from './zones';
+import type { Avenues, EdgeSpec } from './roads';
+import { SCRAMBLE_ROAD } from './plan';
 import { landmarkHoles } from './landmarks';
 
 /**
@@ -19,7 +21,8 @@ export class DistrictModel {
   private readonly plans = new Map<number, CellPlan3>();
   private readonly details = new Map<number, CellDetail>();
   readonly placedByCell = new Map<number, Placed3[]>();
-  private readonly wide = new Set<string>();
+  /** Cell edges built to their own width: the avenues, and a scramble crossing's approaches (at least 18 m). */
+  private readonly edges = new Map<string, EdgeSpec>();
 
   constructor(
     private readonly macro: MacroMap,
@@ -28,7 +31,9 @@ export class DistrictModel {
     readonly placed: readonly Placed3[],
     private readonly seed: number,
     readonly zones: ZoneMap = ZoneMap.EMPTY,
+    avenues: Avenues = new Map(),
   ) {
+    for (const [k, v] of avenues) this.edges.set(k, v);
     const cells: [number, number][] = [];
     const wanted = new Set<string>(typeof kinds === 'string' ? [kinds] : kinds);
     for (let my = 0; my < macro.rows; my++) {
@@ -50,7 +55,10 @@ export class DistrictModel {
       const gx = (p.rect.x + s[0]) / CELL;
       const gy = (p.rect.y + s[1]) / CELL;
       if (!Number.isInteger(gx) || !Number.isInteger(gy)) continue;
-      for (const k of [edgeKey(gx - 1, gy - 1, true), edgeKey(gx - 1, gy, true), edgeKey(gx - 1, gy - 1, false), edgeKey(gx, gy - 1, false)]) this.wide.add(k);
+      for (const k of [edgeKey(gx - 1, gy - 1, true), edgeKey(gx - 1, gy, true), edgeKey(gx - 1, gy - 1, false), edgeKey(gx, gy - 1, false)]) {
+        const a = this.edges.get(k);
+        this.edges.set(k, { width: Math.max(SCRAMBLE_ROAD, a?.width ?? 0), median: a?.median ?? 0, name: a?.name ?? 'scramble' });
+      }
     }
     for (const p of placed) {
       const k = cellKey(p.cell[0], p.cell[1]);
@@ -69,7 +77,7 @@ export class DistrictModel {
     if (!p) {
       const cellRect: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
       const reserved = this.placed.flatMap((q) => [reservedRect(q), plazaRect(q) ?? []].flat()).filter((r) => overlaps(r, cellRect));
-      p = planCell3(this.macro, mx, my, reserved, this.seed, this.zones.at(mx, my), this.wide)!;
+      p = planCell3(this.macro, mx, my, reserved, this.seed, this.zones.at(mx, my), this.edges)!;
       this.plans.set(k, p);
     }
     return p;

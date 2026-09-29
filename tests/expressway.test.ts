@@ -80,7 +80,8 @@ describe('the expressway', () => {
   it('loads', () => {
     expect(errors).toEqual([]);
     expect(ex.loop.x.length).toBeGreaterThan(3000);
-    expect(ex.roads.filter((r) => r.kind === 'ramp')).toHaveLength(2);
+    expect(ex.roads.filter((r) => r.rampKind === 'on')).toHaveLength(4);
+    expect(ex.roads.filter((r) => r.rampKind === 'off')).toHaveLength(4);
     expect(ex.roads.filter((r) => r.kind === 'spur').map((r) => r.venue)).toEqual(['kurokami', 'yunagi']);
   });
 
@@ -90,7 +91,7 @@ describe('the expressway', () => {
       const hi = Math.max(r.y[0], r.y[r.y.length - 1]);
       expect(lo).toBeCloseTo(0, 3);
       expect(hi).toBeCloseTo(def.deck, 3);
-      for (let i = 1; i < r.y.length; i++) expect(Math.abs(r.y[i] - r.y[i - 1])).toBeLessThan(0.13);
+      for (let i = 1; i < r.y.length; i++) expect(Math.abs(r.y[i] - r.y[i - 1])).toBeLessThan(0.1);
       // The deck end overlaps the loop at its height, on the ramp's inner (right) side: a merge.
       const top = r.y[0] > r.y[r.y.length - 1] ? 0 : r.y.length - 1;
       expect(ex.at(r.x[top] - r.tz[top] * 1.8, r.z[top] + r.tx[top] * 1.8, def.deck)).not.toBe(null);
@@ -105,7 +106,7 @@ describe('the expressway', () => {
   });
 
   it('a car climbs the on-ramp from the street onto the deck', () => {
-    const on = ex.roads.find((r) => r.id === 'kaburo_on')!;
+    const on = ex.roads.find((r) => r.id === 'kaburo_n_on')!;
     const run = follow(on, 2, on.x.length, 0, 0.8);
     expect(run.offRoad).toBe(0);
     expect(run.car.y).toBeGreaterThan(def.deck - 0.5);
@@ -144,5 +145,50 @@ describe('taxi fares', () => {
     expect(fare(5000, false)).toBeGreaterThan(fare(2000, false));
     expect(fare(3000, true)).toBeGreaterThan(fare(3000, false));
     expect(rideMetres(0, 0, 300, 400)).toBeGreaterThan(700);
+  });
+});
+
+import { loadDistrictContent } from '../src/poc3d/district/content';
+import { District } from '../src/poc3d/district/world';
+import { DISTRICTS3 } from '../src/poc3d/district/plan';
+import { along, routeFor } from '../src/poc3d/district/traffic';
+
+describe('the expressway over the avenues', () => {
+  const content = loadDistrictContent();
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
+  district.extraColliders.push(...ex.streetColliders());
+
+  it('stands every ramp over a street, its foot reachable from the lane behind it', () => {
+    for (const r of ex.roads.filter((q) => q.kind === 'ramp')) {
+      const i = r.rampKind === 'on' ? 0 : r.x.length - 1;
+      const s = r.rampKind === 'on' ? -1 : 1;
+      // The foot, and 30 m of lane before an entrance (after an exit) at street level: open road.
+      for (let d = 0; d <= 30; d += 3) {
+        const x = r.x[i] + r.tx[i] * s * d;
+        const z = r.z[i] + r.tz[i] * s * d;
+        expect(district.blocked(x, z, 0.9), `${r.id} ${d} m`).toBe(false);
+      }
+    }
+  });
+
+  it('keeps the street traffic clear of the piers, the medians and the ramps', () => {
+    const plan = (mx: number, my: number) => district.plan(mx, my);
+    for (const loop of [...content.traffic.cars.map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
+      const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail.x] : []);
+      for (let s = 0; s < route.length; s += 2) {
+        const p = along(route, s);
+        expect(district.blocked(p.x, p.z, 0.8), `${loop[0].join(',')} at ${s}`).toBe(false);
+      }
+    }
+  });
+});
+
+describe('ramp feet', () => {
+  it('lets a car drive off the bottom of an exit ramp onto the street', () => {
+    for (const r of ex.roads.filter((q) => q.rampKind === 'off')) {
+      const n = r.x.length - 1;
+      // Just past the foot, at street level: nothing pushes you back up the ramp.
+      expect(ex.pushBack(r.x[n] + r.tx[n] * 1.5, r.z[n] + r.tz[n] * 1.5, 0)).toBe(null);
+    }
   });
 });

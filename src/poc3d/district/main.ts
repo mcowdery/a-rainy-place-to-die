@@ -129,7 +129,24 @@ async function run(): Promise<void> {
   const style = STYLES3.neon!;
   const cityU = cityUniforms();
   const city = cityMaterial(cityU);
-  const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones);
+  const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones, content.avenues);
+  // The Tōto Expressway's layout (expressway.ts): built here, as its entrances are places to go (the map, taxis).
+  const exErrors: string[] = [];
+  const exDef = parseExpressway('content/world3d/expressway.yaml', expresswayText, exErrors);
+  if (!exDef) throw new Error(exErrors.join('\n'));
+  const expressway = new Expressway(exDef);
+  /** Every place to go: the named spawns and zones, and the expressway's entrances (the street before each). */
+  const allPlaces = (): Destination[] => [
+    ...destinations(district, nodes, content.zones),
+    ...expressway.roads
+      .filter((r) => r.rampKind === 'on')
+      .map((r) => {
+        const back = 26;
+        const x = r.x[0] - r.tx[0] * back;
+        const z = r.z[0] - r.tz[0] * back;
+        return { id: `expressway.${r.id}`, name: `東都高速 入口 Expressway entrance · ${r.sign}`, group: 'Expressway' as const, x, z, yaw: (Math.atan2(-r.tx[0], -r.tz[0]) * 180) / Math.PI, pitch: 4, floor: 0 };
+      }),
+  ];
   const words = content.zones.words([...new Set(DISTRICTS3.flatMap((k) => STYLES3[k]!.signWords))]);
   const atlas = new SignAtlas(signTexts(words, content.placed));
   const M = 16;
@@ -422,7 +439,7 @@ async function run(): Promise<void> {
     // The Toto Line is in the subway network (as an elevated line) since the terminal; only add it here if not.
     ...(rail && railStations.length >= 2 && !content.subway.lines.some((l) => l.letter === 'T') ? [{ name: `${rail.name} ${rail.nameEn}`, color: rail.color, letter: 'T', stops: [...railStations].sort((a, b) => a.z - b.z).map((s, i) => ({ x: rail.x, z: s.z, code: `T${String(i + 1).padStart(2, '0')}`, name: `${s.names.jp} ${s.names.en}` })) }] : []),
   ];
-  const travel = new TravelMap(district, content.zones, destinations(district, nodes, content.zones), (d: Destination) => {
+  const travel = new TravelMap(district, content.zones, allPlaces(), (d: Destination) => {
     camera.position.set(d.x, d.floor + 1.7, d.z);
     updateInteriors();
     const level = district.floorAt(d.x, d.z, d.floor);
@@ -431,7 +448,7 @@ async function run(): Promise<void> {
     controls.setView(d.yaw, d.pitch);
     travel.hide();
     controls.lock();
-  }, { travel: debug, lines: mapLines, mark: (m) => setGps(m) });
+  }, { travel: debug, lines: mapLines, mark: (m) => setGps(m), expressway: expressway.roads });
   const picker = new RoutePicker(content.subway);
   // Short messages at the top of the screen.
   const toastEl = document.createElement('div');
@@ -674,10 +691,6 @@ async function run(): Promise<void> {
   // or wherever you left it. E by it takes the wheel; E again gets out. Cars in traffic aren't yours to take.
   const driving = new Driving(camera, (x, z, r) => district.blocked(x, z, r, 0) || traffic.blocked(x, z, r, driving.car) || npcBlocked(x, z, r));
   // The Tōto Expressway (expressway.ts): the elevated inner loop, its ramps and its exits to the passes.
-  const exErrors: string[] = [];
-  const exDef = parseExpressway('content/world3d/expressway.yaml', expresswayText, exErrors);
-  if (!exDef) throw new Error(exErrors.join('\n'));
-  const expressway = new Expressway(exDef);
   district.extraColliders.push(...expressway.streetColliders());
   const exView = buildExpressway(expressway, city);
   const exTraffic = new ExpresswayTraffic(expressway, city);
@@ -711,7 +724,7 @@ async function run(): Promise<void> {
   let leavingFor: string | null = null;
   // Taxis (taxi.ts): H at the kerb waves one down; it pulls in beside you; E gets in and you say where to.
   const taxiPicker = new TaxiPicker();
-  const places = destinations(district, nodes, content.zones);
+  const places = allPlaces();
   /** The ride under way: from, to, the fare, and the seconds it lasts (sped up) and has run. */
   let taxiRide: { dest: Destination; fare: number; t: number; T: number; x0: number; z0: number; path: [number, number][]; cum: number[]; heading?: number } | null = null;
   const hailTaxi = (): void => {
@@ -917,7 +930,7 @@ async function run(): Promise<void> {
     new PhoneMaps(
       () => travel.baseImage(),
       district.bounds,
-      destinations(district, nodes, content.zones),
+      allPlaces(),
       guide,
       () => ({ ...gpsFrom(), yaw: driving.car ? (Math.atan2(-driving.car.dx, -driving.car.dz) * 180) / Math.PI : lookYaw() }),
       (d) => setGps(d),

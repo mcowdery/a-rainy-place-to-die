@@ -171,7 +171,9 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
     const vertical = d[0] === 0;
     const line = vertical ? a[0] : a[1];
     const h = half(vertical, line, vertical ? a[1] : a[0], vertical ? b[1] : b[0]);
-    let o = Math.max(1.1, h.c / 2);
+    // Two lanes each way (an avenue): the kerb lane (keep left; the inner one is for overtaking and the
+    // expressway's ramps). One lane: its middle.
+    let o = h.c >= 9 ? h.c - 3 : Math.max(1.1, h.c / 2);
     if (vertical && piers.some((x) => Math.abs(x - line) < 1)) o = Math.max(o, 2.4);
     // Left of travel: (dz, -dx).
     lanes.push({ p: a, d, o, kerb: h.w / 2 - h.s * 0.5 });
