@@ -701,7 +701,8 @@ async function run(): Promise<void> {
     city,
     traffic,
     bay ? { x: bay.x, z: bay.z, h: Math.atan2(bay.nx, bay.nz) } : { x: camera.position.x + 4, z: camera.position.z, h: 0 },
-    (x, z, r, self) => district.blocked(x, z, r, 0) || traffic.blocked(x, z, r, self) || npcBlocked(x, z, r),
+    // What's in the way (crash.ts): people stop you; other vehicles are hard; the district says hard or soft.
+    (x, z, r, self) => (npcBlocked(x, z, r) ? 'person' : traffic.blocked(x, z, r, self) ? 'hard' : district.obstacle(x, z, r)),
     expressway,
     () => exTraffic.obstacles,
     params.get('car') === 'home',
@@ -805,7 +806,25 @@ async function run(): Promise<void> {
     camera.getWorldDirection(forward);
     return traffic.takeable(camera.position, forward.x, forward.z, 2.2, false, true);
   };
+  scene.add(ownCar.smoke);
+  // Totalled (crash.ts): the car won't go; a moment later the tow truck has it, back in its bay at your
+  // garage, and you're on the street where it happened. The garage repairs it.
+  ownCar.onTotaled = () => {
+    toast('大破 Totalled. Get out: the tow truck will take it to your garage.', 6);
+  };
+  const towHome = async (): Promise<void> => {
+    if (!bay) return;
+    await fadeTo(1);
+    ownCar.place(bay.x, bay.z, Math.atan2(bay.nx, bay.nz));
+    ownCar.save();
+    await fadeTo(0);
+    toast('Your car was towed to your garage. It needs repairing before you can drive it (the garage: E at its door).', 7);
+  };
   const enterCar = (car: DrivenVehicle): void => {
+    if (car === ownCar.vehicle && ownCar.totaled) {
+      toast('It won’t start: totalled. Repair it at your garage.', 4);
+      return;
+    }
     traffic.take(car);
     driving.enter(car, car === ownCar.vehicle ? ownCar : null);
     controls.held = true;
@@ -813,6 +832,15 @@ async function run(): Promise<void> {
     toast(`${car.label} · W/S drive · A/D steer · Space handbrake · Q camera · E get out`, 5);
   };
   const exitCar = (): void => {
+    // Totalled up on the expressway: the tow truck takes you both down (you to your garage too).
+    if (driving.own && ownCar.totaled && ownCar.sim.y > 1) {
+      traffic.leave(driving.car!);
+      driving.leave();
+      controls.held = false;
+      controls.mouseLook = true;
+      void towHome().then(() => teleport('city_garage.front'));
+      return;
+    }
     if (driving.own && ownCar.sim.y > 1) return toast('Not on the expressway: take the Kaburo ramp down first.');
     const spot = driving.exitSpot((x, z) => !district.blocked(x, z, 0.4, 0) && !traffic.blocked(x, z, 0.4) && !npcBlocked(x, z, 0.4));
     if (!spot) return toast('No room to get out here.');
@@ -824,6 +852,8 @@ async function run(): Promise<void> {
     controls.held = false;
     controls.mouseLook = true;
     controls.setView(spot.yawDeg, 0);
+    // Out of a totalled car: the tow truck comes for it.
+    if (ownCar.totaled) setTimeout(() => void towHome(), 2500);
   };
   // ?debug=1: window.__drive() takes the wheel of your car (bringing it to where you stand, facing your way,
   // if it's more than 15 m off).
@@ -1231,7 +1261,7 @@ async function run(): Promise<void> {
     updateGps(dt);
     if (driving.bump > 2) audio.bump(driving.bump);
     dash.style.display = driving.car ? 'block' : 'none';
-    if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}`;
+    if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}${driving.own ? `  車体 ${Math.round(100 - ownCar.condition)}%` : ''}`;
     const onFoot = !driving.car && !controls.fly && !inVn && Math.abs(cp0.y - 1.7) < 1.2;
     let wvx = dt > 0 ? (cp0.x - lastWalker.x) / dt : 0;
     let wvz = dt > 0 ? (cp0.z - lastWalker.z) / dt : 0;

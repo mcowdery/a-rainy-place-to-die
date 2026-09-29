@@ -8,6 +8,7 @@ import type { CarType } from '../poc3d/models/vehicles';
 import { cityMaterial, cityUniforms } from '../poc3d/real/city';
 import { BANNERS, model, MODELS, NEON, PAINT_PALETTE, PARTS, PRICES, stats, tunedSpec, type Parts, type Stats } from './catalog';
 import { buildCar, type CarView, type Look } from './carView';
+import { repairCost, TOTALED } from '../poc3d/district/crash';
 import { cityReturnViaGarage, rememberCityReturn } from './cityLink';
 import { buildGarage } from './garageScene';
 import { buyCar, currentCar, loadProfile, saveProfile, spend, yen, type Livery, type OwnedCar } from './profile';
@@ -131,7 +132,8 @@ function render(): void {
     const owned = profile.cars
       .map((o) => {
         const om = model(o.type);
-        return `<button class="row${o.id === c.id && !viewing ? ' on' : ''}" data-act="pick" data-v="${o.id}"><b>${om.maker} ${om.name}</b><span>${o.id === c.id ? 'driving' : 'drive this'}</span></button>`;
+        const hurt = (o.damage ?? 0) >= TOTALED ? ' · 大破 totalled' : (o.damage ?? 0) >= 1 ? ` · ${Math.round(100 - (o.damage ?? 0))}%` : '';
+        return `<button class="row${o.id === c.id && !viewing ? ' on' : ''}" data-act="pick" data-v="${o.id}"><b>${om.maker} ${om.name}</b><span>${o.id === c.id ? 'driving' : 'drive this'}${hurt}</span></button>`;
       })
       .join('');
     const dealer = MODELS.map((dm) => {
@@ -142,7 +144,7 @@ function render(): void {
     body = `<h3>Your cars</h3>${owned}<h3>Dealer</h3>${dealer}${
       vm
         ? `<div class="detail"><b>${vm.maker} ${vm.name}</b><p>${vm.blurb}</p>${statBars(stats(spec), stats(vm.spec))}<button class="buy" data-act="buy" data-v="${vm.type}" ${profile.yen < vm.price ? 'disabled' : ''}>Buy · ${yen(vm.price)}</button></div>`
-        : `<div class="detail"><b>${m.maker} ${m.name}</b><p>${m.blurb}</p>${statBars(stats(spec))}</div>`
+        : `<div class="detail"><b>${m.maker} ${m.name}</b><p>${m.blurb}</p>${condition(c)}${statBars(stats(spec))}</div>`
     }`;
   } else if (tab === 'tuning') {
     let hover = spec;
@@ -183,6 +185,14 @@ function render(): void {
 }
 
 let hoverPart: string | null = null;
+
+/** The car's condition after crashes in the city, and the repair (district/crash.ts). */
+function condition(c: OwnedCar): string {
+  const d = c.damage ?? 0;
+  if (d < 1) return '<div class="cond">Bodywork <b>like new</b></div>';
+  const cost = repairCost(d);
+  return `<div class="cond">Bodywork <i><b style="width:${Math.max(3, 100 - d)}%"></b></i> ${d >= TOTALED ? '大破 totalled' : `${Math.round(100 - d)}%`}</div><button class="buy" data-act="repair" ${profile.yen < cost ? 'disabled' : ''}>Repair · ${yen(cost)}${d >= TOTALED ? ' (tow included)' : ''}</button>`;
+}
 
 const liveryCost = (a: Livery, b: Livery): number =>
   (a.stripes !== b.stripes && b.stripes !== null ? PRICES.stripes : 0) + (a.side !== b.side && b.side !== null ? PRICES.side : 0) + (a.number !== b.number && b.number !== null ? PRICES.number : 0) + (a.banner !== b.banner && b.banner !== null ? PRICES.banner : 0);
@@ -283,6 +293,13 @@ panel.addEventListener('click', (e) => {
       break;
     case 'apply':
       apply(c);
+      break;
+    case 'repair':
+      if (spend(profile, repairCost(c.damage ?? 0))) {
+        c.damage = 0;
+        saveProfile(profile);
+        toast('Repaired: like new');
+      }
       break;
   }
   render();

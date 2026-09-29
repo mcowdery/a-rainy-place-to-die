@@ -27,6 +27,8 @@ export interface OwnedCar {
   /** Neon underglow: fitted or not, and its colour. */
   neon: number | null;
   neonFitted: boolean;
+  /** Its condition after crashes in the city: 0 like new to 100 totalled (district/crash.ts). */
+  damage?: number;
 }
 
 export interface Profile {

@@ -145,7 +145,7 @@ export class Driving {
     if (this.own) {
       // Your car: the racing model does it all (it collides, slides and knocks by itself).
       this.own.drive(dt, { throttle: gas ? 1 : 0, brake: brake ? 1 : 0, steer: -turn, handbrake: hand });
-      const knock = this.own.sim.bump;
+      const knock = this.own.knock;
       if (knock > 1.5) {
         this.bump = knock;
         this.shake = Math.min(1, knock / 8);
