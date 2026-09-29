@@ -100,7 +100,7 @@ const PAINTS = [0xff3fa4, 0x3ff0ff, 0xffe03f, 0x7dff4a, 0xff8a2a].map((h) => new
 
 /** Something for the sound to play: shots, clicks, hits (with where, for distance). */
 export interface ShotEvent {
-  readonly kind: 'pistol' | 'paint' | 'dry' | 'reload' | 'ding' | 'paper' | 'splat' | 'ground';
+  readonly kind: 'pistol' | 'paint' | 'dry' | 'reload' | 'ding' | 'paper' | 'splat' | 'ground' | 'clang';
   readonly at: THREE.Vector3;
 }
 
@@ -119,6 +119,15 @@ interface Ball {
   life: number;
   mult: number;
   why: string;
+}
+
+/** A shot striking a car (a hit volume in `Shooting.bodies`): which, where, the surface's outward normal. */
+export interface BodyHit {
+  readonly id: string;
+  readonly object: THREE.Object3D;
+  readonly point: THREE.Vector3;
+  readonly normal: THREE.Vector3;
+  readonly distance: number;
 }
 
 export interface FireContext {
@@ -177,6 +186,20 @@ export class Shooting {
   private readonly guns: Record<Weapon['id'], THREE.Group>;
   private readonly muzzleZ: Record<Weapon['id'], number> = { pistol: 0.2, paint: 0.52 };
   private paintNext = 0;
+  /**
+   * Cars that can be shot (invisible hit volumes with `userData.id`; never the shooter's own), and what to do
+   * when one is struck. `assist` pulls the pistol's aimed shots onto a target or car near the crosshair (the
+   * player's; a rival's accuracy is its own).
+   */
+  readonly bodies: THREE.Object3D[] = [];
+  onBody: ((h: BodyHit, kind: 'bullet' | 'paint', color?: THREE.Color) => void) | null = null;
+  assist = true;
+  /**
+   * Who's shooting: the driver in the right-hand seat (you), or a gunman in the left seat (a rival car's
+   * passenger). `sideFor`'s 'driver' is then the shooter's own window, 'across' the far one.
+   */
+  seat: 'right' | 'left' = 'right';
+  private readonly ray = new THREE.Raycaster();
   private readonly m4 = new THREE.Matrix4();
   private readonly q = new THREE.Quaternion();
   private readonly v = new THREE.Vector3();
@@ -309,14 +332,15 @@ export class Shooting {
    */
   pose(car: THREE.Object3D, aimPoint: THREE.Vector3, side: Side): void {
     this.arm.visible = true;
+    const m = this.seat === 'right' ? 1 : -1;
     if (side === 'driver') {
-      const w = this.v.set(-0.95, 1.02, 0.1);
+      const w = this.v.set(-0.95 * m, 1.02, 0.1);
       const d = car.worldToLocal(this.v2.copy(aimPoint)).sub(w).normalize();
       this.arm.position.copy(w).addScaledVector(d, 0.32);
     } else {
       // Across the car the view is the driver's own: the weapon held out low and to the right of the eye,
       // pointing at the crosshair, as in a first-person view.
-      const eye = car.localToWorld(this.v.set(EYE.x, EYE.y, EYE.z));
+      const eye = car.localToWorld(this.v.set(EYE.x * m, EYE.y, EYE.z));
       const d = this.v2.copy(aimPoint).sub(eye).normalize();
       const right = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize();
       eye.addScaledVector(d, 0.6).addScaledVector(right, 0.2).add(new THREE.Vector3(0, -0.24, 0));
@@ -326,12 +350,25 @@ export class Shooting {
   }
 
   /** Nearest thing along a ray: a target face, the ground, or (none) far along it. */
-  pick(origin: THREE.Vector3, dir: THREE.Vector3, far = 320): { point: THREE.Vector3; target: TargetHit | null; ground: boolean } {
+  pick(origin: THREE.Vector3, dir: THREE.Vector3, far = 320): { point: THREE.Vector3; target: TargetHit | null; body: BodyHit | null; ground: boolean } {
     const t = this.targets.cast(origin, dir, far);
-    const g = this.groundCast(origin, dir, t ? t.distance : far);
-    if (g !== null) return { point: origin.clone().addScaledVector(dir, g), target: null, ground: true };
-    if (t) return { point: t.point, target: t, ground: false };
-    return { point: origin.clone().addScaledVector(dir, far), target: null, ground: false };
+    const b = this.castBodies(origin, dir, far);
+    const g = this.groundCast(origin, dir, Math.min(t?.distance ?? far, b?.distance ?? far));
+    if (g !== null) return { point: origin.clone().addScaledVector(dir, g), target: null, body: null, ground: true };
+    if (b && (!t || b.distance < t.distance)) return { point: b.point, target: null, body: b, ground: false };
+    if (t) return { point: t.point, target: t, body: null, ground: false };
+    return { point: origin.clone().addScaledVector(dir, far), target: null, body: null, ground: false };
+  }
+
+  /** The nearest car hit volume along a ray, within far. */
+  castBodies(origin: THREE.Vector3, dir: THREE.Vector3, far: number): BodyHit | null {
+    if (!this.bodies.length) return null;
+    this.ray.set(origin, dir);
+    this.ray.far = far;
+    const h = this.ray.intersectObjects(this.bodies, false)[0];
+    if (!h) return null;
+    const normal = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : dir.clone().negate();
+    return { id: h.object.userData.id as string, object: h.object, point: h.point.clone(), normal, distance: h.distance };
   }
 
   /** Distance along a ray to the ground (marching, then bisecting), or null within far. */
@@ -376,12 +413,15 @@ export class Shooting {
     this.shots++;
     const dir = ctx.aimPoint.clone().sub(muzzle).normalize();
     // The pistol's assist (aiming only): a target within a couple of degrees pulls the shot most of the way to its centre.
-    if (W.id === 'pistol' && !ctx.hip) {
+    if (W.id === 'pistol' && !ctx.hip && this.assist) {
       let best = 0.035;
       let pull: THREE.Vector3 | null = null;
-      for (const t of this.targets.list) {
-        if (t.fall > 0.3) continue;
-        const c = this.targets.centre(t, new THREE.Vector3()).sub(muzzle);
+      const centres = [
+        ...this.targets.list.filter((t) => t.fall <= 0.3).map((t) => this.targets.centre(t, new THREE.Vector3())),
+        ...this.bodies.map((b) => b.getWorldPosition(new THREE.Vector3())),
+      ];
+      for (const at of centres) {
+        const c = at.sub(muzzle);
         const ang = c.angleTo(dir);
         if (ang < best) {
           best = ang;
@@ -397,6 +437,7 @@ export class Shooting {
       this.showTracer(muzzle, p.point);
       this.flashAt(muzzle);
       if (p.target) this.land(p.target, 'bullet', ctx.mult, ctx.why);
+      else if (p.body) this.strike(p.body, 'bullet');
       else {
         this.miss();
         if (p.ground) {
@@ -432,6 +473,22 @@ export class Shooting {
       this.burst(h.point, plate ? [3, 1.6, 0.5] : [0.92, 0.9, 0.84], plate ? 16 : 10, plate ? 4 : 2, h.normal);
       this.events.push({ kind: plate ? 'ding' : 'paper', at: h.point });
     }
+  }
+
+  /** A shot strikes a car: sparks or paint, a sound, and the page's say (damage, penalties, marks on it). */
+  private strike(h: BodyHit, kind: 'bullet' | 'paint', color?: THREE.Color): void {
+    this.hits++;
+    this.streak++;
+    this.bestStreak = Math.max(this.bestStreak, this.streak);
+    this.hitMark = 0.25;
+    if (kind === 'paint') {
+      this.burst(h.point, [color!.r, color!.g, color!.b], 14, 2.2, h.normal);
+      this.events.push({ kind: 'splat', at: h.point });
+    } else {
+      this.burst(h.point, [3, 1.8, 0.7], 14, 4, h.normal);
+      this.events.push({ kind: 'clang', at: h.point });
+    }
+    this.onBody?.(h, kind, color);
   }
 
   private miss(): void {
@@ -473,8 +530,12 @@ export class Shooting {
       const len = dir.length();
       dir.divideScalar(len || 1);
       const t = this.targets.cast(prev, dir, len);
+      const bh = this.castBodies(prev, dir, len);
       const g = this.groundCast(prev, dir, len);
-      if (t && (g === null || t.distance < g)) {
+      if (bh && (g === null || bh.distance < g) && (!t || bh.distance < t.distance)) {
+        this.strike(bh, 'paint', b.color);
+        this.balls.splice(i, 1);
+      } else if (t && (g === null || t.distance < g)) {
         this.land(t, 'paint', b.mult, b.why, b.color);
         this.balls.splice(i, 1);
       } else if (g !== null) {
@@ -590,7 +651,7 @@ function jitter(d: THREE.Vector3, a: number): void {
 }
 
 /** Textures drawn once: a white splat (tinted per instance), a bullet's mark, a muzzle flash. */
-function decalTexture(kind: 'splat' | 'hole' | 'flash'): THREE.CanvasTexture {
+export function decalTexture(kind: 'splat' | 'hole' | 'flash'): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d')!;

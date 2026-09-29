@@ -75,6 +75,18 @@
       #menu a.mode:hover { background: rgba(255, 138, 208, 0.14); border-color: rgba(255, 138, 208, 0.5); }
       #menu a.mode span { color: #8a90a8; font-size: 12px; }
       #menu small { color: #6a7088; }
+      #shoot .hp { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font: bold 13px Consolas, monospace; color: #c8d0e8; margin-bottom: 4px; }
+      #shoot .hp i, #rival i { display: inline-block; width: 150px; height: 8px; background: #2a2030; border-radius: 4px; overflow: hidden; }
+      #shoot .hp b, #rival b { display: block; height: 100%; background: linear-gradient(90deg, #ff4f4f, #ffe45f); }
+      #shoot .hp.you b { background: linear-gradient(90deg, #ff4f4f, #7ef0b0); }
+      #shoot .paint { color: #c8d0e8; font-size: 13px; }
+      #shoot .paint b { color: #ff8ad0; font-size: 18px; }
+      #rival { position: fixed; transform: translate(-50%, -100%); display: none; font: bold 11px Consolas, monospace; color: #ff9aa4; text-shadow: 0 1px 2px #000; text-align: center; pointer-events: none; white-space: nowrap; }
+      #rival i { display: block; width: 60px; height: 4px; margin: 3px auto 0; }
+      #hurt { position: fixed; inset: 0; pointer-events: none; }
+      #results .time.win { color: #7ef0b0; }
+      #results .time.lose { color: #ff6a78; }
+      #menu a.mode.battle { border-color: rgba(255, 90, 110, 0.25); }
       #help { position: fixed; top: 34px; left: 12px; color: #8a90a8; font-size: 12px; white-space: pre; }
     </style>
   </head>
@@ -84,6 +96,8 @@
     <div id="speedo"></div>
     <div id="drift"></div>
     <div id="slowmo"></div>
+    <div id="hurt"></div>
+    <div id="rival"></div>
     <div id="count"></div>
     <div id="split"></div>
     <div id="results"></div>

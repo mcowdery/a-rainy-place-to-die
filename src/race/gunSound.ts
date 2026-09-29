@@ -55,15 +55,22 @@ export class GunSound {
     for (const e of events) {
       const d = e.at.distanceTo(listener);
       const k = 1 / (1 + d / 12);
+      // Shots carry further than hits (the rival's, across the road).
+      const ks = Math.min(1, 1 / (1 + Math.max(0, d - 4) / 30));
       switch (e.kind) {
         case 'pistol':
-          this.noise(0.18, 'lowpass', 3200, 0.9, 0.002, true);
-          this.noise(0.012, 'highpass', 4000, 0.6, 0.0005);
-          this.tone(120, 38, 0.18, 0.7, 'sine');
+          this.noise(0.18, 'lowpass', 3200, 0.9 * ks, 0.002, true);
+          this.noise(0.012, 'highpass', 4000, 0.6 * ks, 0.0005);
+          this.tone(120, 38, 0.18, 0.7 * ks, 'sine');
           break;
         case 'paint':
-          this.noise(0.05, 'bandpass', 700, 0.45, 0.002);
-          this.noise(0.09, 'highpass', 3000, 0.08, 0.01);
+          this.noise(0.05, 'bandpass', 700, 0.45 * ks, 0.002);
+          this.noise(0.09, 'highpass', 3000, 0.08 * ks, 0.01);
+          break;
+        case 'clang':
+          // A round into a car's panel: a hard knock and a short metallic ring.
+          this.noise(0.04, 'bandpass', 2400, 0.6 * k, 0.001);
+          for (const [f, g] of [[520, 0.2], [1370, 0.1]] as const) this.tone(f, f * 0.97, 0.25, g * k, 'triangle', 0.001);
           break;
         case 'dry':
           this.noise(0.015, 'highpass', 2500, 0.3, 0.0005);

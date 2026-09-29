@@ -4,13 +4,13 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { cityMaterial, cityUniforms } from '../poc3d/real/city';
-import { MeshBuilder } from '../poc3d/real/meshBuilder';
-import { addVehicle, addWheel, wheelLayout } from '../poc3d/models/vehicles';
+import { DAMAGE, HEALTH, PAINT_PENALTY, RivalDriver, separateCars, type Arms } from './battle';
+import { addHeadlights, buildCar, CarMarks, hitVolumes, poseCar, turnWheels } from './carView';
 import { loadCourses } from './courses';
 import { buildVenue } from './scene';
 import { GunSound } from './gunSound';
 import { buildCabin } from './cabin';
-import { EYE, nearestShot, Shooting, sideFor, spreadOf, WEAPONS, wrap, type Side } from './shooting';
+import { EYE, nearestShot, Shooting, sideFor, spreadOf, WEAPONS, wrap, type BodyHit, type Side } from './shooting';
 import { CarSound } from './sound';
 import { clock, GhostTrack, loadBest, medalFor, saveBest, Trial, trialPlan, type BestRun, type Dir, type Medal } from './trial';
 import { Targets } from './targets';
@@ -40,7 +40,12 @@ const venueId = courses.has(params.get('venue') ?? '') ? params.get('venue')! : 
 const course = courses.get(venueId)!;
 const ground = course.ground;
 const modeParam = params.get('mode');
-const mode: 'free' | Dir = modeParam === 'up' || modeParam === 'down' ? modeParam : 'free';
+/** Free drive, a time trial, or a battle against an armed rival (real guns or paintball; downhill unless ?dir=up). */
+const kind: 'free' | 'trial' | 'battle' = modeParam === 'up' || modeParam === 'down' ? 'trial' : modeParam === 'battle' ? 'battle' : 'free';
+const arms: Arms = params.get('arms') === 'paint' ? 'paint' : 'gun';
+const dir: Dir = modeParam === 'up' || (modeParam === 'battle' && params.get('dir') === 'up') ? 'up' : 'down';
+/** 'free', or the direction a race (trial or battle) runs. */
+const mode: 'free' | Dir = kind === 'free' ? 'free' : dir;
 const atmosphere = course.def.atmosphere;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -73,33 +78,14 @@ const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerH
 const venue = buildVenue(course);
 scene.add(venue.group);
 
-// The car: the showroom's coupe on the city material (its lamps lit), with two headlight beams.
+// The car: the showroom's coupe on the city material (its lamps lit), with two headlight beams (carView.ts).
 const cityU = cityUniforms();
 cityU.uLightGain.value = 0;
 cityU.uLamps.value = 1;
-const mb = new MeshBuilder(1 << 17);
-addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type: 'sports', paint: Number(params.get('paint') ?? 0xf0f0ec), detail: 0.05, wheels: false });
 const carMat = cityMaterial(cityU);
-const body = new THREE.Mesh(mb.build()!, carMat);
-const carObj = new THREE.Group();
-carObj.rotation.order = 'YXZ';
-carObj.add(body);
-// The wheels, apart from the body so they turn: the fronts steer, all roll with the road, the rears spin up
-// with wheelspin and stop dead under the handbrake.
-const WL = wheelLayout('sports');
-const wheelGeo = new Map<1 | -1, THREE.BufferGeometry>();
-for (const sd of [1, -1] as const) {
-  const wb = new MeshBuilder(1 << 14);
-  addWheel(wb, WL.r, WL.tw, sd, WL.rims);
-  wheelGeo.set(sd, wb.build()!);
-}
-const wheels = WL.spots.map((w) => {
-  const m = new THREE.Mesh(wheelGeo.get(w.sd)!, carMat);
-  m.position.set(w.x, w.y, w.z);
-  m.rotation.order = 'YXZ';
-  body.add(m);
-  return { m, front: w.front, roll: 0 };
-});
+const player = buildCar(Number(params.get('paint') ?? 0xf0f0ec), carMat);
+const carObj = player.obj;
+const body = player.body;
 scene.add(carObj);
 // Shooting practice: the lot's targets, and the driver's pistol and paintball marker (shooting.ts).
 const targets = new Targets(course);
@@ -120,23 +106,18 @@ let pov = 0;
 const gunSound = new GunSound();
 /** Aiming, the car holds its line a little better (more countersteer), so one hand on the wheel will do. */
 const AIM_ASSISTS: Assists = { ...DRIFT_ASSISTS, countersteer: 0.7 };
-const beams: THREE.SpotLight[] = [];
-for (const s of [-0.62, 0.62]) {
-  const l = new THREE.SpotLight(0xfff2dc, 140, 140, 0.3, 0.6, 1);
-  l.position.set(s, 0.72, 2.1);
-  l.target.position.set(s * 1.2, -0.1, 30);
-  carObj.add(l, l.target);
-  beams.push(l);
-}
+addHeadlights(carObj);
 
 const car = new Car(COUPE, DRIFT_ASSISTS);
 const at = mode === 'free' ? (params.get('at') ?? 'lot') : 'grid';
 const placeAt = (where: string): void => {
   if (where === 'grid' && trial) {
     // The trial's grid: on the road behind the line, facing the way the run goes.
+    // In a battle you start in the left lane (Japan keeps left), the rival beside you on the right.
     const i = trial.plan.grid;
     const s = trial.plan.dir === 'up' ? 1 : -1;
-    car.place(course.x[i], course.z[i], Math.atan2(course.tx[i] * s, course.tz[i] * s), ground);
+    const lane = kind === 'battle' ? 1.7 : 0;
+    car.place(course.x[i] + course.tz[i] * s * lane, course.z[i] - course.tx[i] * s * lane, Math.atan2(course.tx[i] * s, course.tz[i] * s), ground);
   } else if (where === 'top') {
     const n = course.x.length - 1;
     const s = course.summit;
@@ -155,7 +136,7 @@ const placeAt = (where: string): void => {
 
 // ---- Time trial: the run, your best (its splits and ghost), the ghost car, the recording of this run.
 let trial: Trial | null = null;
-let best: BestRun | null = mode === 'free' ? null : loadBest(venueId, mode);
+let best: BestRun | null = kind === 'trial' ? loadBest(venueId, dir) : null;
 let track = new GhostTrack();
 let ghostTrack: GhostTrack | null = best ? new GhostTrack([...best.ghost]) : null;
 let driftAtStart = 0;
@@ -170,7 +151,167 @@ const startTrial = (): void => {
   track = new GhostTrack();
   result = null;
   placeAt('grid');
+  if (kind === 'battle') startBattle(trial);
 };
+
+// ---- Battle: the rival, a red coupe on the same handling model (RivalDriver drives it), armed as you are.
+// Real guns: each hit takes health (more through the glass); a car at none is out, coasting to a stop, and the
+// first down wins. Paintball: each hit you take adds PAINT_PENALTY seconds to your time; the lower total wins.
+const inBattle = kind === 'battle';
+const rivalCar = new Car(COUPE, DRIFT_ASSISTS);
+const rivalView = buildCar(0xc01818, carMat);
+const rivalDrv = new RivalDriver(rivalCar, course, dir, Number(params.get('skill') ?? 1));
+const rivalShooting = new Shooting(course, targets);
+rivalShooting.assist = false;
+// The rival car carries a gunman in the passenger (left) seat: his wide arc is out of the left window.
+rivalShooting.seat = 'left';
+const playerMarks = new CarMarks(carObj);
+const rivalMarks = new CarMarks(rivalView.obj);
+let rivalTrial: Trial | null = null;
+const FRESH = { you: HEALTH, them: HEALTH, youTaken: 0, themTaken: 0, youOut: false, themOut: false, youOutAt: 0, youTime: null as number | null, themTime: null as number | null, cool: 2, aimT: 0, burstLeft: 3, burstT: 0.8 };
+const fight = { ...FRESH };
+/** The outcome; a time is null for a car that hadn't finished (then `youSoFar`/`themSoFar`: its clock when it was settled). */
+let battleResult: { win: boolean; why: string; you: number | null; them: number | null; youPen: number; themPen: number; youSoFar: number; themSoFar: number } | null = null;
+/** A hit on you: the screen's edge flashes (red for a round, the paint's colour), and a round shakes the view. */
+let hurtT = 0;
+let hurtColor = 'rgba(255, 40, 50, ';
+let shake = 0;
+if (inBattle) {
+  scene.add(rivalView.obj, rivalShooting.group);
+  addHeadlights(rivalView.obj);
+  rivalView.obj.add(rivalShooting.arm);
+  shooting.pickWeapon(arms === 'gun' ? 0 : 1);
+  rivalShooting.pickWeapon(arms === 'gun' ? 0 : 1);
+  shooting.bodies.push(...hitVolumes(rivalView.obj, 'them'));
+  rivalShooting.bodies.push(...hitVolumes(carObj, 'you'));
+  shooting.onBody = (h, k, col) => struck('them', h, k, col);
+  rivalShooting.onBody = (h, k, col) => struck('you', h, k, col);
+}
+
+function startBattle(t: Trial): void {
+  rivalTrial = new Trial(t.plan);
+  const i = t.plan.grid;
+  const s = dir === 'up' ? 1 : -1;
+  rivalCar.place(course.x[i] - course.tz[i] * s * 1.7, course.z[i] + course.tx[i] * s * 1.7, Math.atan2(course.tx[i] * s, course.tz[i] * s), ground);
+  rivalDrv.reset(-1.7);
+  Object.assign(fight, FRESH);
+  battleResult = null;
+  playerMarks.clear();
+  rivalMarks.clear();
+  shooting.reset();
+  rivalShooting.reset();
+}
+
+/** A shot struck a car: the mark on it, then damage (real guns) or a penalty second (paint). */
+function struck(who: 'you' | 'them', h: BodyHit, k: 'bullet' | 'paint', col?: THREE.Color): void {
+  (who === 'you' ? playerMarks : rivalMarks).add(h.point, h.normal, k, col);
+  if (who === 'you' ? fight.youOut : fight.themOut) return;
+  const glass = !!h.object.userData.glass;
+  if (arms === 'gun') {
+    const dmg = glass ? DAMAGE.glass : DAMAGE.body;
+    if (who === 'them') {
+      fight.them = Math.max(0, fight.them - dmg);
+      pops.push({ text: `${glass ? 'THROUGH THE GLASS' : 'HIT'} −${dmg}`, t: 1.4 });
+      if (fight.them === 0) {
+        fight.themOut = true;
+        pops.push({ text: 'RIVAL DOWN', t: 2.5 });
+      }
+    } else {
+      fight.you = Math.max(0, fight.you - dmg);
+      hurtT = glass ? 0.7 : 0.45;
+      hurtColor = 'rgba(255, 40, 50, ';
+      shake = glass ? 0.8 : 0.45;
+      if (fight.you === 0) {
+        fight.youOut = true;
+        fight.youOutAt = elapsed.t;
+      }
+    }
+  } else if (who === 'them') {
+    fight.themTaken++;
+    pops.push({ text: `SPLAT  rival +${PAINT_PENALTY} s`, t: 1.4 });
+  } else {
+    fight.youTaken++;
+    hurtT = 0.45;
+    hurtColor = `rgba(${Math.round(col!.r * 255)}, ${Math.round(col!.g * 255)}, ${Math.round(col!.b * 255)}, `;
+  }
+}
+
+/**
+ * The rival's gun, in its gunman's hands (the passenger seat, so the left window is his wide side): he shoots
+ * when he has a line on you through a window (your rules, mirrored) within range, after a moment to aim; it leads a paintball, and misses by more the
+ * further off you are, the faster you both go, and across its car. Pistol shots come in twos and threes,
+ * paint in short bursts, with a pause between.
+ */
+function rivalGun(dt: number): void {
+  const S = rivalShooting;
+  const live = inBattle && trial?.phase === 'running' && !fight.themOut && !fight.youOut && fight.themTime === null && fight.youTime === null;
+  if (!live) {
+    S.arm.visible = false;
+    fight.aimT = 0;
+    return;
+  }
+  rivalView.obj.updateMatrixWorld();
+  carObj.updateMatrixWorld();
+  // From the gunman's eye (the driver's, mirrored to the left seat); his windows are the driver's mirrored.
+  const eye = rivalView.obj.localToWorld(new THREE.Vector3(-EYE.x, EYE.y, EYE.z));
+  const at = carObj.localToWorld(new THREE.Vector3(0, 0.8, 0.2));
+  const dist = eye.distanceTo(at);
+  const dl = at.clone().sub(eye).applyQuaternion(rivalView.obj.quaternion.clone().invert()).normalize();
+  const side = sideFor(-Math.atan2(dl.x, dl.z), Math.asin(THREE.MathUtils.clamp(dl.y, -1, 1)));
+  fight.cool -= dt;
+  if (!side || dist > (arms === 'gun' ? 42 : 34)) {
+    fight.aimT = Math.max(0, fight.aimT - dt * 2);
+    if (fight.aimT <= 0) S.arm.visible = false;
+    return;
+  }
+  fight.aimT = Math.min(3, fight.aimT + dt);
+  const vel = (c: Car): THREE.Vector3 => new THREE.Vector3(Math.sin(c.h) * c.u + Math.cos(c.h) * c.w, 0, Math.cos(c.h) * c.u - Math.sin(c.h) * c.w);
+  const rv = vel(rivalCar);
+  const aimPoint = at.clone().addScaledVector(vel(car).sub(rv), arms === 'paint' ? dist / 88 : 0);
+  const miss = (0.45 + dist * 0.045 + (car.speed + rivalCar.speed) * 0.02 + (side === 'across' ? 0.6 : 0)) / rivalDrv.skill;
+  aimPoint.add(new THREE.Vector3(Math.random() - 0.5, (Math.random() - 0.5) * 0.6, Math.random() - 0.5).multiplyScalar(miss * 2));
+  S.pose(rivalView.obj, aimPoint, side);
+  if (fight.aimT < 0.8 || fight.cool > 0) return;
+  const ctx = { aimPoint, carVel: rv, across: side === 'across', hip: false, slide: rivalCar.slide, speed: rivalCar.speed, mult: 1, why: '' };
+  if (arms === 'gun') {
+    if (S.fire(ctx, false) === 0 && S.reloading === 0) return;
+    fight.cool = 0.4 + Math.random() * 0.5;
+    if (--fight.burstLeft <= 0) {
+      fight.cool = 1.8 + Math.random() * 2.2;
+      fight.burstLeft = 2 + Math.floor(Math.random() * 3);
+    }
+  } else {
+    S.fire(ctx, true);
+    fight.burstT -= dt;
+    if (fight.burstT <= 0) {
+      fight.cool = 1.6 + Math.random() * 1.8;
+      fight.burstT = 0.35 + Math.random() * 0.5;
+    }
+  }
+}
+
+/** Who has won, once it's settled. */
+function decideBattle(): void {
+  if (!trial || !rivalTrial || battleResult) return;
+  const pen = (n: number): number => (arms === 'paint' ? n * PAINT_PENALTY : 0);
+  const end = (win: boolean, why: string): void => {
+    battleResult = { win, why, you: fight.youTime, them: fight.themTime, youPen: pen(fight.youTaken), themPen: pen(fight.themTaken), youSoFar: trial!.t, themSoFar: rivalTrial!.t };
+  };
+  if (arms === 'gun') {
+    if (fight.youOut && elapsed.t - fight.youOutAt > 1.5) return end(false, 'Your car was shot to pieces.');
+    if (fight.youTime !== null) return end(true, fight.themOut ? 'You shot the rival off the pass and made it down.' : 'You crossed the line first.');
+    if (fight.themTime !== null) return end(false, 'The rival crossed the line first.');
+    return;
+  }
+  // Paint: the lower time plus penalties. Settled when both are in, or when one is in and the other's clock
+  // plus its penalties already runs past it.
+  const you = fight.youTime === null ? null : fight.youTime + pen(fight.youTaken);
+  const them = fight.themTime === null ? null : fight.themTime + pen(fight.themTaken);
+  const youNow = you ?? trial.t + pen(fight.youTaken);
+  const themNow = them ?? rivalTrial.t + pen(fight.themTaken);
+  if (you !== null && (them !== null || themNow > you)) return end(you <= themNow, you <= themNow ? 'Quicker down, paint and all.' : 'The rival was quicker, paint and all.');
+  if (them !== null && youNow > them) return end(false, 'The rival was quicker, paint and all.');
+}
 
 // ---- Tyre smoke: puffs from the rear wheels while sliding or spinning, rising and fading.
 const SMOKE = 260;
@@ -231,7 +372,7 @@ let help = true;
 window.addEventListener('keydown', (e) => {
   sound.start();
   gunSound.start();
-  if (e.code === 'KeyF') shooting.pickWeapon(shooting.weaponIndex + 1);
+  if (e.code === 'KeyF' && kind !== 'battle') shooting.pickWeapon(shooting.weaponIndex + 1);
   if (e.code === 'KeyE') shooting.reload();
   if (e.code === 'KeyT') shooting.reset();
   if (e.code === 'KeyG') {
@@ -298,8 +439,8 @@ let aimPitch = 0;
 let trigger = false;
 let pulled = false;
 document.addEventListener('contextmenu', (e) => e.preventDefault());
-/** Trials are about the clock: no shooting. Free drive shoots anywhere (targets where the venue has them). */
-const armed = mode === 'free';
+/** Trials are about the clock: no shooting. Free drive and battles shoot (targets where the venue has them). */
+const armed = kind !== 'trial';
 document.addEventListener('mousedown', (e) => {
   if (!document.pointerLockElement || !armed) return;
   if (e.button === 2) startAiming();
@@ -386,7 +527,9 @@ const driftEl = document.getElementById('drift')!;
 const timerEl = document.getElementById('timer')!;
 const helpEl = document.getElementById('help')!;
 // A trial's help is only the driving (no shooting in trials).
-if (mode !== 'free') helpEl.textContent = 'W / S  drive · brake     A / D  steer     Space  handbrake     Q  camera     R  back on the road\nEnter  start again     M  venues     H  hide this     The blue car is your best run.';
+if (kind === 'battle')
+  helpEl.textContent = `W / S  drive · brake     A / D  steer     Space  handbrake     Q  camera     R  back on the road\nRight mouse  aim (the driver's window, on the right, is the wide one)     Left mouse  fire     E  reload     Enter  start again     M  venues     H  hide this\n${arms === 'gun' ? 'Real guns: shoot the red car to pieces, or beat it down.' : `Paintball: every hit you take adds ${PAINT_PENALTY} s to your time.`}`;
+else if (kind === 'trial') helpEl.textContent = 'W / S  drive · brake     A / D  steer     Space  handbrake     Q  camera     R  back on the road\nEnter  start again     M  venues     H  hide this     The blue car is your best run.';
 const HELP = helpEl.textContent ?? '';
 let chain = 0;
 let chainT = 0;
@@ -419,7 +562,7 @@ const showMenu = (open: boolean): void => {
           const m = b ? medalFor(b.time, c.def.trial[d]) : null;
           return `<a class="mode" href="?venue=${id}&mode=${d}">${label}<span>${b ? `${clock(b.time)} ${medalHtml(m)}` : `gold ${clock(c.def.trial[d][2])}`}</span></a>`;
         };
-        return `<div class="card${id === venueId ? ' here' : ''}"><div class="name">${c.def.name}</div><div class="meta">${c.def.atmosphere.label} · ${(c.length / 1000).toFixed(1)} km · ${Math.round(c.summit.y)} m climb</div><p>${c.def.blurb}</p>${row('up', '▲ Time trial, uphill')}${row('down', '▼ Time trial, downhill')}<a class="mode" href="?venue=${id}&mode=free">Free drive<span>the lot, drifting${c.def.targets?.length ? ', shooting' : ''}</span></a></div>`;
+        return `<div class="card${id === venueId ? ' here' : ''}"><div class="name">${c.def.name}</div><div class="meta">${c.def.atmosphere.label} · ${(c.length / 1000).toFixed(1)} km · ${Math.round(c.summit.y)} m climb</div><p>${c.def.blurb}</p>${row('up', '▲ Time trial, uphill')}${row('down', '▼ Time trial, downhill')}<a class="mode battle" href="?venue=${id}&mode=battle&arms=gun">⚔ Battle, real guns<span>▼ against a rival</span></a><a class="mode battle" href="?venue=${id}&mode=battle&arms=paint">⚔ Battle, paintball<span>▼ +${PAINT_PENALTY} s a hit</span></a><a class="mode" href="?venue=${id}&mode=free">Free drive<span>the lot, drifting${c.def.targets?.length ? ', shooting' : ''}</span></a></div>`;
       })
       .join('')}</div><small>${params.has('venue') ? 'M closes this · ' : ''}Times are kept in this browser.</small>`;
   }
@@ -440,12 +583,55 @@ const drawTrialHud = (dt: number): void => {
   countEl.className = cd > 0 ? 'n' : 'go';
   const label = mode === 'up' ? '▲ UPHILL' : '▼ DOWNHILL';
   timerEl.textContent = trial.phase === 'finished' && result ? `${label}  ${clock(result.time)}` : `${label}  ${clock(trial.t)}`;
+  if (inBattle) {
+    const pos = rivalDrv.progress(car) >= rivalDrv.progress(rivalCar) ? '1ST' : '2ND';
+    if (trial.phase === 'running' && fight.youTime === null) timerEl.textContent += `   ${pos}`;
+    resultsEl.style.display = battleResult ? 'block' : 'none';
+    if (battleResult) {
+      const r = battleResult;
+      const t = (x: number | null, pen: number, soFar: number): string =>
+        x === null ? `${clock(soFar)} so far${pen ? ` + ${pen} s` : ''}` : pen ? `${clock(x)} + ${pen} s = ${clock(x + pen)}` : clock(x);
+      const rows = [
+        `<div>You<span>${fight.youOut ? 'wrecked' : t(r.you, r.youPen, r.youSoFar)}</span></div>`,
+        `<div>Rival<span>${fight.themOut ? 'wrecked' : t(r.them, r.themPen, r.themSoFar)}</span></div>`,
+        arms === 'gun' ? `<div>Your car<span>${fight.you}%</span></div><div>Rival's car<span>${fight.them}%</span></div>` : `<div>Paint on the rival<span>${fight.themTaken}</span></div><div>Paint on you<span>${fight.youTaken}</span></div>`,
+        `<div>Your shots<span>${shooting.hits} of ${shooting.shots} hit</span></div>`,
+      ].join('');
+      resultsEl.innerHTML = `<div class="head">${course.def.name}  ${label}  ⚔ ${arms === 'gun' ? 'real guns' : 'paintball'}</div><div class="time ${r.win ? 'win' : 'lose'}">${r.win ? 'YOU WIN' : 'YOU LOSE'}</div><div class="prev">${r.why}</div><div class="splits">${rows}</div><small>Enter  again · M  venues</small>`;
+    }
+    return;
+  }
   resultsEl.style.display = result ? 'block' : 'none';
   if (result) {
     const r = result;
     const splits = r.splits.map((t, i) => `<div>Checkpoint ${i + 1}<span>${clock(t)}</span></div>`).join('');
     resultsEl.innerHTML = `<div class="head">${course.def.name}  ${label}</div><div class="time">${clock(r.time)}</div>${medalHtml(r.medal)}${r.newBest ? `<div class="best">NEW BEST${r.prev !== null ? `  ${signed(r.time - r.prev)}` : ''}</div>` : `<div class="prev">best ${clock(r.prev!)}  (${signed(r.time - r.prev!)})</div>`}<div class="splits">${splits}<div>Drift<span>${r.drift.toLocaleString()}</span></div></div><div class="medals">gold ${clock(course.def.trial[mode as Dir][2])} · silver ${clock(course.def.trial[mode as Dir][1])} · bronze ${clock(course.def.trial[mode as Dir][0])}</div><small>Enter  again · M  venues</small>`;
   }
+};
+
+// Battle HUD: both cars' state (health, or the paint on each), the marker over the rival, and the hurt flash.
+const rivalEl = document.getElementById('rival')!;
+const hurtEl = document.getElementById('hurt')!;
+const drawBattleHud = (dt: number): void => {
+  const bar = (label: string, hp: number, cls: string): string => `<div class="hp ${cls}">${label}<i><b style="width:${hp}%"></b></i>${hp}</div>`;
+  shootEl.style.display = 'block';
+  shootEl.innerHTML =
+    arms === 'gun'
+      ? `${bar('YOU', fight.you, 'you')}${bar('RIVAL', fight.them, 'them')}`
+      : `<div class="paint">paint on the rival <b>${fight.themTaken}</b> (+${fight.themTaken * PAINT_PENALTY} s)</div><div class="paint">paint on you <b>${fight.youTaken}</b> (+${fight.youTaken * PAINT_PENALTY} s)</div>`;
+  // The marker: over the rival's roof, with the distance (and its health, or its paint).
+  const p = rivalView.obj.position.clone().add(new THREE.Vector3(0, 1.9, 0));
+  const d = p.distanceTo(camera.position);
+  p.project(camera);
+  const on = p.z < 1 && Math.abs(p.x) < 1.1 && Math.abs(p.y) < 1.1 && d > 5;
+  rivalEl.style.display = on ? 'block' : 'none';
+  if (on) {
+    rivalEl.style.left = `${((p.x + 1) / 2) * window.innerWidth}px`;
+    rivalEl.style.top = `${((1 - p.y) / 2) * window.innerHeight}px`;
+    rivalEl.innerHTML = `${fight.themOut ? 'WRECKED' : 'RIVAL'} ${Math.round(d)} m${arms === 'gun' ? `<i><b style="width:${fight.them}%"></b></i>` : ` · +${fight.themTaken} s`}`;
+  }
+  hurtT = Math.max(0, hurtT - dt);
+  hurtEl.style.boxShadow = hurtT > 0 ? `inset 0 0 ${Math.round(80 + hurtT * 160)}px ${hurtColor}${Math.min(0.85, hurtT * 1.6).toFixed(2)})` : 'none';
 };
 
 // Shooting HUD: the crosshair (its circle the spread), the weapon and rounds, the score, and points popping up.
@@ -481,7 +667,7 @@ const drawShootingHud = (dt: number, side: Side | null, hip: boolean): void => {
   gunEl.style.display = armed ? 'block' : 'none';
   shootEl.style.display = armed && targets.list.length > 0 ? 'block' : 'none';
   focusEl.style.display = armed ? 'block' : 'none';
-  gunEl.innerHTML = `<div class="name">${W.label}</div><div class="ammo">${shooting.reloading > 0 ? 'reloading…' : pips}</div><small>F ${WEAPONS[(shooting.weaponIndex + 1) % WEAPONS.length].label} · E reload · T clean targets</small>`;
+  gunEl.innerHTML = `<div class="name">${W.label}</div><div class="ammo">${shooting.reloading > 0 ? 'reloading…' : pips}</div><small>${inBattle ? 'E reload' : `F ${WEAPONS[(shooting.weaponIndex + 1) % WEAPONS.length].label} · E reload · T clean targets`}</small>`;
   const acc = shooting.shots ? Math.round((shooting.hits / shooting.shots) * 100) : 0;
   shootEl.innerHTML = `<div class="score">${shooting.score.toLocaleString()}</div><small>${shooting.hits}/${shooting.shots} hits · ${acc}% · streak ${shooting.streak} (best ${shooting.bestStreak})</small>`;
 };
@@ -578,10 +764,15 @@ function frame(now: number): void {
   slow += ((slowOn ? 1 : 0) - slow) * Math.min(1, dt * 7);
   /** The world's time step (the car, targets, shots, smoke); dt stays real for the camera and the clock. */
   const gdt = dt * (1 - 0.7 * slow);
-  const c = menuOpen ? { throttle: 0, brake: 1, steer: 0, handbrake: false } : controls();
+  const c = menuOpen ? { throttle: 0, brake: 1, steer: 0, handbrake: false } : fight.youOut ? { throttle: 0, brake: 0.35, steer: 0, handbrake: false } : controls();
   car.assists = aiming ? AIM_ASSISTS : DRIFT_ASSISTS;
   // Held on the grid through the countdown (the engine still revs).
   if (!trial || trial.phase !== 'countdown') car.update(gdt, c, ground);
+  if (inBattle && trial) {
+    if (trial.phase !== 'countdown') rivalCar.update(gdt, rivalDrv.controls(gdt, car, fight.themOut || fight.themTime !== null), ground);
+    separateCars(car, rivalCar);
+    for (const e of rivalTrial?.update(dt, course.nearest(rivalCar.x, rivalCar.z).i) ?? []) if (e.kind === 'finish' && !fight.themOut) fight.themTime = e.t;
+  }
   const here: 'lot' | 'top' | 'road' = course.inLot(car.x, car.z) ? 'lot' : course.inSummit(car.x, car.z) ? 'top' : 'road';
   // The trial runs on real time (slow motion is no help against the clock).
   if (trial) {
@@ -590,10 +781,13 @@ function frame(now: number): void {
       if (e.kind === 'go') driftAtStart = total + chain;
       if (e.kind === 'split') {
         const prev = best?.splits[e.n - 1];
-        splitEl.innerHTML = `CHECKPOINT ${e.n}  ${clock(e.t)}${prev !== undefined ? `  <b class="${e.t <= prev ? 'ahead' : 'behind'}">${signed(e.t - prev)}</b>` : ''}`;
+        const lead = inBattle && rivalTrial ? rivalTrial.splits[e.n - 1] : undefined;
+        if (inBattle) splitEl.innerHTML = `CHECKPOINT ${e.n}  ${clock(e.t)}  ${lead === undefined ? '<b class="ahead">LEADING</b>' : `<b class="behind">+${(e.t - lead).toFixed(2)} behind</b>`}`;
+        else splitEl.innerHTML = `CHECKPOINT ${e.n}  ${clock(e.t)}${prev !== undefined ? `  <b class="${e.t <= prev ? 'ahead' : 'behind'}">${signed(e.t - prev)}</b>` : ''}`;
         splitT = 3;
       }
-      if (e.kind === 'finish') {
+      if (e.kind === 'finish' && kind === 'battle') fight.youTime = e.t;
+      if (e.kind === 'finish' && kind === 'trial') {
         const prev = best?.time ?? null;
         const newBest = prev === null || e.t < prev;
         result = { time: e.t, medal: medalFor(e.t, course.def.trial[mode as Dir]), newBest, prev, splits: [...trial.splits], drift: Math.round(total + chain - driftAtStart) };
@@ -636,22 +830,20 @@ function frame(now: number): void {
     lostFlash = 1.2;
   }
   lostFlash = Math.max(0, lostFlash - dt);
-  // The car on the ground: pitched and rolled by the slope under it and by the load shifting.
-  const [nx, ny, nz] = ground.normal(car.x, car.z);
+  // The car on the ground. In the driver's-eye view the lean is damped to a third (a driver holds their head
+  // level against it), so the passenger window doesn't tip into the ground mid-drift; the other views keep it.
   const fx = Math.sin(car.h);
   const fz = Math.cos(car.h);
-  const slopePitch = Math.atan2(nx * fx + nz * fz, ny);
-  const slopeRoll = Math.atan2(nx * Math.cos(car.h) - nz * Math.sin(car.h), ny);
-  carObj.position.set(car.x, car.y, car.z);
-  // In the driver's-eye view the lean is damped to a third (a driver holds their head level against it), so
-  // the passenger window doesn't tip into the ground mid-drift; the shoulder and chase views keep all of it.
-  const lean = 1 - 0.65 * pov;
-  carObj.rotation.set(slopePitch - car.ax * 0.006 * lean, car.h, -slopeRoll + car.ay * 0.007 * lean);
+  poseCar(player, car, ground, 1 - 0.65 * pov);
   body.visible = view === 'chase' || aiming || hipT > 0;
-  for (const wh of wheels) {
-    const rate = wh.front ? car.u / WL.r : car.handbrake ? 0 : (car.u / WL.r) * (1 + car.spin * 2.5) + car.spin * 25;
-    wh.roll = (wh.roll + rate * gdt) % (Math.PI * 2);
-    wh.m.rotation.set(wh.roll, wh.front ? car.steer : 0, 0);
+  turnWheels(player, car, gdt);
+  if (inBattle) {
+    poseCar(rivalView, rivalCar, ground);
+    turnWheels(rivalView, rivalCar, gdt);
+    // Shot up: smoke from under the bonnet, thicker as it goes, pouring once it's out.
+    for (const [c2, hp] of [[car, fight.you], [rivalCar, fight.them]] as const) {
+      if (arms === 'gun' && hp < 50 && Math.random() < ((50 - hp) / 50) * 0.8 * (gdt / dt)) puff(c2.x + Math.sin(c2.h) * 1.5, c2.y + 0.9, c2.z + Math.cos(c2.h) * 1.5, Math.sin(c2.h) * c2.u, Math.cos(c2.h) * c2.u);
+    }
   }
   // Smoke from the rear wheels.
   const slideSmoke = Math.max(0, ang - 0.18) * 3 * Math.min(1, car.u / 8) + car.spin;
@@ -676,6 +868,10 @@ function frame(now: number): void {
   if (snapCam) camDir = car.h;
   placeCamera(dt, snapCam);
   snapCam = false;
+  if (shake > 0) {
+    camera.position.add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(shake * 0.12));
+    shake = Math.max(0, shake - dt * 2.5);
+  }
   venue.stars.position.copy(camera.position);
   // Shooting: the crosshair's point in the world (aimed, or where the camera looks from the hip), which window
   // it's through as seen from the driver's seat, the weapon held toward it, the trigger.
@@ -701,7 +897,7 @@ function frame(now: number): void {
     const nd = new THREE.Vector3(Math.sin(n.rel) * Math.cos(n.pitch), Math.sin(n.pitch), Math.cos(n.rel) * Math.cos(n.pitch)).applyQuaternion(carObj.quaternion);
     const armAt = side ? aimPoint : head.clone().addScaledVector(nd, 20);
     shooting.pose(carObj, armAt, side ?? n.side);
-    if (trigger && side) {
+    if (trigger && side && !fight.youOut) {
       if (hip) hipT = 1.2;
       const across = side === 'across';
       const mult = (drifting ? 2 : 1) * (across ? 1.5 : 1);
@@ -716,11 +912,20 @@ function frame(now: number): void {
     pulled = false;
   } else shooting.arm.visible = false;
   shooting.update(gdt);
+  if (inBattle) {
+    rivalGun(gdt);
+    rivalShooting.update(gdt);
+    gunSound.play(rivalShooting.events, camera.position);
+    rivalShooting.events.length = 0;
+    rivalShooting.scored.length = 0;
+    decideBattle();
+  }
   sound.slow = slow;
   gunSound.setSlow(slow);
   gunSound.play(shooting.events, camera.position);
   shooting.events.length = 0;
   drawShootingHud(dt, side, hip);
+  if (inBattle) drawBattleHud(dt);
   slowEl.style.opacity = (slow * 0.9).toFixed(3);
   sound.update(dt, { rev: car.rev, gear: car.gear, throttle: c.throttle, speed: Math.hypot(car.u, car.w), slide: car.slide, spin: car.spin, bump: car.bump });
   // HUD.
@@ -734,7 +939,7 @@ function frame(now: number): void {
   helpEl.style.display = help || toastT > 0 ? 'block' : 'none';
   if (toastT > 0) helpEl.textContent = toastText;
   else if (helpEl.textContent !== HELP) helpEl.textContent = HELP;
-  hud.textContent = `${course.def.name} · ${course.def.atmosphere.label} · ${mode === 'free' ? `free drive · ${here === 'lot' ? 'practice lot' : here === 'top' ? 'the viewpoint' : 'the pass'}` : `time trial ${mode === 'up' ? '▲ uphill' : '▼ downhill'}${best ? ` · best ${clock(best.time)}` : ''}`} · M venues`;
+  hud.textContent = `${course.def.name} · ${course.def.atmosphere.label} · ${mode === 'free' ? `free drive · ${here === 'lot' ? 'practice lot' : here === 'top' ? 'the viewpoint' : 'the pass'}` : kind === 'battle' ? `⚔ battle, ${arms === 'gun' ? 'real guns' : 'paintball'} ${dir === 'up' ? '▲ uphill' : '▼ downhill'}` : `time trial ${mode === 'up' ? '▲ uphill' : '▼ downhill'}${best ? ` · best ${clock(best.time)}` : ''}`} · M venues`;
   composer.render(dt);
   requestAnimationFrame(frame);
 }
@@ -772,6 +977,7 @@ window.addEventListener('resize', () => {
   },
   state: () => ({ aiming, slow, focus, hipT }),
   trial: () => trial,
+  battle: () => ({ fight, battleResult, rival: rivalCar, rivalTrial, rivalShooting }),
   trigger: (on: boolean): void => {
     trigger = on;
     pulled = on;
