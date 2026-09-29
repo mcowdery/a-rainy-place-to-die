@@ -1,0 +1,93 @@
+# 電光町 Denkō-chō, the electric town east of Kaburo (Akihabara-like; format: src/poc3d/district/zones.ts; the
+# whole-city plan: docs/city-plan.md). Denkō-dōri, the main street, runs down its middle (col 34) lined with tall
+# narrow buildings covered in signs; parts shops and arcades fill the back streets; maid cafés, anime and card
+# shops along the lanes to the north; the station quarter where the Kawabata Line will cross (row 11).
+# Set pieces: the idol theatre, the game-centre tower, the multi-storey car park.
+district: electric
+origin: [32, 8]
+map:
+  - BCCCB
+  - BMMCB
+  - BMMCB
+  - SMMSS
+  - BMMBB
+  - BBBBB
+
+zones:
+  M:
+    id: denko_main
+    name: Denkō-dōri
+    plan:
+      floors: [[6, 9, 40], [10, 14, 45], [15, 20, 15]]
+      lotW: [6, 12]
+      signChance: 1
+      verticalSign: 0.8
+    signs:
+      words: [電気街, 総合免税店, PC, ゲーム, アニメ, フィギュア, ホビー, カード, 中古PC, 買取, DUTY FREE, 電光電気, メガネ, オーディオ, 家電, スマホ, カメラ, 無線]
+      colors: ['#ff5fc8', '#4fe3ff', '#ffe45f', '#6bff8a', '#ff4f4f', '#ffffff', '#ff9a2a']
+    ads: { gaming: 5, fun: 3, mainstream: 2 }
+    look:
+      windows: { ribbon: 35, punched: 30, blank: 20, curtain: 15 }
+      walls: ['#3a3a44', '#d8d8d0', '#8a8e94', '#2a2a30', '#c84a3a', '#e8e4d8', '#4a6a8a']
+      tiled: false
+      shops: { colourful: 6, cool: 2, warm: 1 }
+      open: 1
+
+  B:
+    id: denko_back
+    name: Denkō-chō back streets
+    plan:
+      floors: [[3, 5, 55], [6, 9, 45]]
+      lotW: [4, 8]
+      localStreet: [3, 5]
+      signChance: 0.9
+      verticalSign: 0.6
+    signs:
+      words: [電子部品, ジャンク, パーツ, ケーブル, 真空管, 無線, 中古, レトロゲーム, 基板, ネジ, ラジオ, 修理]
+      colors: ['#ffe45f', '#4fe3ff', '#ffffff', '#ff4f4f', '#6bff8a']
+    ads: { gaming: 3, street: 3, food: 1 }
+    look:
+      windows: { punched: 45, small: 35, blank: 20 }
+      walls: ['#9a9890', '#7a7870', '#c2b49a', '#5a5e64', '#b8a88c']
+      tiled: true
+      shops: { colourful: 4, cool: 3, warm: 1 }
+      open: 1
+
+  C:
+    id: denko_culture
+    name: Maid café lanes
+    plan:
+      floors: [[4, 7, 60], [8, 11, 40]]
+      lotW: [5, 9]
+      localStreet: [3, 5]
+      signChance: 0.95
+      verticalSign: 0.7
+    signs:
+      words: [メイドカフェ, おかえりなさいませ, アニメ, 同人誌, コスプレ, カラオケ, カード, ガチャ, フィギュア, ゲーム, 萌え, 猫カフェ, 耳かき]
+      colors: ['#ff8ad8', '#ff5fc8', '#b48cff', '#4fe3ff', '#ffe45f', '#ffffff']
+    ads: { fun: 4, gaming: 3, food: 2 }
+    look:
+      windows: { punched: 40, ribbon: 30, small: 30 }
+      walls: ['#f0d8e0', '#e8e4d8', '#d8c8e8', '#3a3a44', '#f8f0e8']
+      tiled: false
+      shops: { colourful: 7, warm: 2 }
+      open: 1
+
+  S:
+    id: denko_station
+    name: Denkō-chō station quarter
+    plan:
+      floors: [[5, 8, 50], [9, 14, 50]]
+      lotW: [8, 16]
+      signChance: 0.8
+      verticalSign: 0.5
+    signs:
+      words: [電光町駅, 電気街口, 牛丼, ラーメン, カフェ, コンビニ, 薬局, ホテル, 立ち食いそば]
+      colors: ['#ffffff', '#4fe3ff', '#ffe45f', '#ff4f4f']
+    ads: { food: 3, mainstream: 3, gaming: 1 }
+    look:
+      windows: { ribbon: 45, punched: 35, curtain: 20 }
+      walls: ['#8a8e94', '#c8c8c0', '#5a5e64', '#e8e4d8']
+      tiled: false
+      shops: { warm: 3, cool: 3, colourful: 2 }
+      open: 1

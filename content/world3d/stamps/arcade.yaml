@@ -1,0 +1,12 @@
+# DENKŌ GAME TOWER, a game centre on Denkō-dōri (real/denko.ts, kind arcade): a red tower of neon over an open
+# front of crane games.
+id: arcade
+name: DENKŌ GAME TOWER
+footprint: [20, 18]
+height: 25
+front: east
+landmark: arcade
+nodes:
+  front: { kind: spawn, name: DENKŌ GAME TOWER (arcade), at: [9, 10], facing: west, view: [90, 12] }
+  crane: { kind: hotspot, name: The crane game, at: [7, -3.8] }
+  regular: { kind: npc, name: Arcade regular, at: [13, -3], figure: { body: man, pose: pockets, hair: cap, color: '#a8c8ff' } }

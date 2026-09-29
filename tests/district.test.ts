@@ -418,9 +418,9 @@ describe('Asagiri set pieces and traffic', () => {
     }
   });
 
-  it('rejects traffic loops off the generated districts', () => {
+  it('rejects traffic loops off the generated districts (across the river, not built yet)', () => {
     const errors: string[] = [];
-    parseTraffic3('t.yaml', 'cars:\n  - { rect: [30, 10, 33, 12] }', content.macro, errors);
+    parseTraffic3('t.yaml', 'cars:\n  - { rect: [34, 10, 39, 12] }', content.macro, errors);
     expect(errors.join('\n')).toMatch(/generated cells on both sides/);
   });
 

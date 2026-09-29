@@ -318,7 +318,7 @@ export class TravelMap {
     g.fillStyle = '#ffd070';
     for (const p of this.district.placed) g.fillRect(p.rect.x, p.rect.y, p.rect.w, p.rect.h);
     // The expressway: a green band over the streets it runs above, ramps and spurs thinner.
-    for (const r of this.opts.expressway ?? []) {
+    for (const r of (this.opts.expressway ?? []).filter((q) => (q as { kind?: string }).kind !== 'deck')) {
       g.strokeStyle = r.closed ? '#2fb86a' : '#1f8a50';
       g.lineWidth = r.closed ? 9 : 5;
       g.lineJoin = 'round';

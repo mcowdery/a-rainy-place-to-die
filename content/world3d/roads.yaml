@@ -29,6 +29,8 @@ avenues:
 # The way to the airport: Kūkō-dōri down through the container terminal, over the bridge, into Hanejima.
   - { name: 空港通り KŪKŌ-DŌRI, col: 8, from: 21, to: 22, width: 32, median: 2.4 }
   - { name: 空港通り KŪKŌ-DŌRI, col: 8, from: 23, to: 25, width: 32, median: 2.4 }
+# Denkō-chō's main street, down the middle of the electric town (Akihabara's Chūō-dōri).
+  - { name: 電光通り DENKŌ-DŌRI, col: 34, from: 8, to: 14, width: 24, median: 0 }
 
 # The Toto Line's viaduct runs on south through Kasumi-chō over its own street, as wide as it is between the districts.
   - { name: 高架下通り KŌKASHITA-DŌRI, col: 26, from: 14, to: 17, width: 16, median: 0 }

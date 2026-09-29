@@ -105,8 +105,11 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
 
 export interface Road {
   readonly id: string;
-  /** A closed route (a loop), an open one, a ramp or a spur to a tunnel. */
-  readonly kind: 'loop' | 'route' | 'ramp' | 'spur';
+  /**
+   * A closed route (a loop), an open one, a ramp or a spur to a tunnel; or a deck: a raised driving surface of
+   * a set piece (the multi-storey car park's floors and ramps), on the network for driving but drawn by its owner.
+   */
+  readonly kind: 'loop' | 'route' | 'ramp' | 'spur' | 'deck';
   readonly x: Float64Array;
   readonly z: Float64Array;
   readonly y: Float64Array;
@@ -167,7 +170,7 @@ function resample(pts: readonly [number, number][], closed: boolean): { x: numbe
   return { x, z };
 }
 
-function makeRoad(id: string, kind: Road['kind'], x: number[], z: number[], y: (i: number, n: number) => number, half: number, closed: boolean, extra: Partial<Road> = {}): Road {
+export function makeRoad(id: string, kind: Road['kind'], x: number[], z: number[], y: (i: number, n: number) => number, half: number, closed: boolean, extra: Partial<Road> = {}): Road {
   const n = x.length;
   const tx = new Float64Array(n);
   const tz = new Float64Array(n);
@@ -188,8 +191,11 @@ export class Expressway {
   /** The first loop (the inner loop): its traffic runs on it. */
   readonly loop: Road;
   private readonly grid = new Map<number, [Road, number][]>();
+  /** The widest road's half-width (the search reach round a point). */
+  private maxHalf: number;
 
   constructor(readonly def: ExpresswayDef) {
+    this.maxHalf = def.half;
     const R = def.radius;
     const D = def.deck;
     const world = (p: readonly [number, number]): [number, number] => [p[0] * CELL, p[1] * CELL];
@@ -283,13 +289,24 @@ export class Expressway {
       }
       this.roads.push(makeRoad(e.id, 'spur', xs, zs, () => D, def.half, false, { venue: e.venue, sign: e.name, ...(e.hill ? { hill: e.hill } : {}) }));
     }
-    for (const road of this.roads) {
-      for (let i = 0; i < road.x.length; i++) {
-        const k = this.key(Math.floor(road.x[i] / GRID), Math.floor(road.z[i] / GRID));
-        const l = this.grid.get(k);
-        if (l) l.push([road, i]);
-        else this.grid.set(k, [[road, i]]);
-      }
+    for (const road of this.roads) this.index(road);
+  }
+
+  private index(road: Road): void {
+    this.maxHalf = Math.max(this.maxHalf, road.half);
+    for (let i = 0; i < road.x.length; i++) {
+      const k = this.key(Math.floor(road.x[i] / GRID), Math.floor(road.z[i] / GRID));
+      const l = this.grid.get(k);
+      if (l) l.push([road, i]);
+      else this.grid.set(k, [[road, i]]);
+    }
+  }
+
+  /** Adds set pieces' decks (kind 'deck': a car park's floors and ramps) to the network for driving. */
+  addDecks(roads: readonly Road[]): void {
+    for (const r of roads) {
+      this.roads.push(r);
+      this.index(r);
     }
   }
 
@@ -324,7 +341,7 @@ export class Expressway {
    */
   at(x: number, z: number, y: number, tol = 1.4): OnRoad | null {
     let best: OnRoad | null = null;
-    for (const [road, i] of this.near(x, z, this.def.half + 3)) {
+    for (const [road, i] of this.near(x, z, this.maxHalf + 3)) {
       const dx = x - road.x[i];
       const dz = z - road.z[i];
       // Across the road (left positive), and along it: past the end of a spur or ramp is off it.
@@ -346,7 +363,7 @@ export class Expressway {
   pushBack(x: number, z: number, y: number, margin = 0.05): { px: number; pz: number; nx: number; nz: number } | null {
     if (this.at(x, z, y)) return null;
     let best: { px: number; pz: number; nx: number; nz: number; d: number } | null = null;
-    for (const [road, i] of this.near(x, z, this.def.half + 4)) {
+    for (const [road, i] of this.near(x, z, this.maxHalf + 4)) {
       if (Math.abs(road.y[i] - y) > 1.6) continue;
       // A ramp's foot is at street level: no walls there (you drive on or off it from the street).
       if (road.y[i] < 0.35) continue;
@@ -375,7 +392,7 @@ export class Expressway {
 
   /** Is (x, z) under a raised part of the network, between `lo` and `hi` metres up (the street's walls)? */
   solidAbove(x: number, z: number, lo: number, hi: number): boolean {
-    for (const [road, i] of this.near(x, z, this.def.half + 2)) {
+    for (const [road, i] of this.near(x, z, this.maxHalf + 2)) {
       const dx = x - road.x[i];
       const dz = z - road.z[i];
       const lateral = dx * road.tz[i] - dz * road.tx[i];
@@ -425,7 +442,7 @@ export class Expressway {
   piers(): { x: number; z: number; top: number }[] {
     const out: { x: number; z: number; top: number }[] = [];
     for (const road of this.roads) {
-      if (road.kind === 'ramp') continue;
+      if (road.kind === 'ramp' || road.kind === 'deck') continue;
       const start = road.kind === 'spur' ? 40 : 0;
       // An offset deck's piers stand back on its grid line (the median), under both of a two-way route's decks.
       const o = road.offset ?? 0;
@@ -436,7 +453,7 @@ export class Expressway {
 
   /** Is the point inside another road than `road`, at about the same height (so no wall there)? */
   insideOther(road: Road, x: number, z: number, y: number): boolean {
-    for (const [r, i] of this.near(x, z, this.def.half + 2)) {
+    for (const [r, i] of this.near(x, z, this.maxHalf + 2)) {
       if (r === road) continue;
       const dx = x - r.x[i];
       const dz = z - r.z[i];

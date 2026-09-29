@@ -238,3 +238,40 @@ describe('the expressway as a network', () => {
     expect(errs2.join()).toMatch(/grid line/);
   });
 });
+
+describe('the Denkō-chō car park', () => {
+  it('drives from the street up every ramp to the roof without a step, and walls its floors off from the ramps beside them', async () => {
+    const { carParkDecks, PARK } = await import('../src/poc3d/real/denko');
+    const { localFrame, toWorld } = await import('../src/poc3d/real/localFrame');
+    const content = loadDistrictContent();
+    const p = content.placed.find((q) => q.stamp.landmark === 'car_park')!;
+    const n = new Expressway(def);
+    n.addDecks(carParkDecks(p.building, p.id));
+    const f = localFrame(p.building);
+    const { east, west, u0, u1, levels } = PARK;
+    // Up ramp 1, along the first floor, up ramp 2, along the second, up ramp 3 to the roof.
+    const legs: [number, number][][] = [
+      [[east, -4], [east, 33.5]],
+      [[east, 33.5], [u0 - 1.5, 33.5]],
+      [[west, 33.5], [west, 6.5]],
+      [[west, 6.5], [u1 + 1.5, 6.5]],
+      [[east, 6.5], [east, 33.5]],
+      [[east, 33.5], [30, 33.5]],
+    ];
+    let y = 0;
+    for (const [a, b] of legs) {
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      for (let s = 0; s <= L; s += 0.5) {
+        const [x, z] = toWorld(f, a[0] + ((b[0] - a[0]) * s) / L, a[1] + ((b[1] - a[1]) * s) / L);
+        const on = n.at(x, z, y);
+        expect(on, `at ${a} +${s}`).not.toBe(null);
+        expect(Math.abs(on!.height - y), `step at ${a} +${s}`).toBeLessThan(0.3);
+        y = on!.height;
+      }
+    }
+    expect(y).toBeCloseTo(levels[2], 1);
+    // Off the first floor's east edge mid-way (beside ramp 1): a wall.
+    const [x, z] = toWorld(f, u1 + 1.6, 20);
+    expect(n.pushBack(x, z, levels[0])).not.toBe(null);
+  });
+});

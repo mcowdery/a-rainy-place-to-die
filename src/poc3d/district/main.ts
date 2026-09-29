@@ -45,6 +45,7 @@ import { Expressway, parseExpressway } from './expressway';
 import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
 import { buildSea } from '../real/sea';
 import { buildAirport, onAirfield } from '../real/airport';
+import { carParkDecks } from '../real/denko';
 import expresswayText from '../../../content/world3d/expressway.yaml?raw';
 import { pointsAhead, Router, type NavMode } from './gps';
 import { Guide, type GuideDest, type GuideFrom } from './guide';
@@ -712,6 +713,8 @@ async function run(): Promise<void> {
   const driving = new Driving(camera, (x, z, r) => district.blocked(x, z, r, 0) || traffic.blocked(x, z, r, driving.car) || npcBlocked(x, z, r));
   // The Tōto Expressway (expressway.ts): the elevated inner loop, its ramps and its exits to the passes.
   district.extraColliders.push(...expressway.streetColliders());
+  // Set pieces you drive up (real/denko.ts: the car park's floors and ramps) join the network as decks.
+  for (const p of content.placed) if (p.stamp.landmark === 'car_park') expressway.addDecks(carParkDecks(p.building, p.id));
   // The bay and the river (real/sea.ts): water over the map's water cells, seawalls where built land meets it.
   const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), cityU.uHorizon, content.bridges);
   // Hanejima's airfield and its traffic (real/airport.ts).

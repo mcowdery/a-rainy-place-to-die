@@ -1,0 +1,11 @@
+# 電光町パーキング, a multi-storey car park in Denkō-chō (real/denko.ts, kind car_park): drive in at the east end
+# of its front and up the switchback ramps to the rooftop, open for drifting (its floors and ramps join the
+# expressway's network for driving: carParkDecks).
+id: car_park
+name: 電光町パーキング Denkō-chō car park
+footprint: [77, 40]
+height: 17
+front: north
+landmark: car_park
+nodes:
+  front: { kind: spawn, name: Denkō-chō car park (the rooftop), at: [66, 8], facing: south, view: [160, 8] }

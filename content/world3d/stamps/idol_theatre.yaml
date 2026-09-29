@@ -1,0 +1,12 @@
+# STELLA THEATER ステラ劇場 in Denkō-chō (real/denko.ts, kind idol_theatre): the small idol venue on the eighth floor
+# of a narrow tower on Denkō-dōri, the goods shop at street level, the queue of fans. The lift up is a story door.
+id: idol_theatre
+name: STELLA THEATER ステラ劇場
+footprint: [20, 16]
+height: 32
+front: west
+landmark: idol_theatre
+nodes:
+  front: { kind: spawn, name: STELLA THEATER (Denkō-chō), at: [8, 12], facing: east, view: [-90, 14] }
+  lift: { kind: door, name: Theatre lift to 8F, at: [4, 0.6], returnSpawn: front }
+  flyer: { kind: npc, name: Maid handing out flyers, at: [2, 3.5], figure: { body: woman, pose: wave, hair: long, color: '#ffc8e8' } }

@@ -204,3 +204,16 @@
   stamp: control_tower
   cell: [10, 24]
   offset: [56, 70]
+# Denkō-chō (docs/city-plan.md): the idol theatre and the game tower on Denkō-dōri, the car park by Yasuhara-dōri.
+- id: idol_theatre
+  stamp: idol_theatre
+  cell: [34, 10]
+  offset: [14, 40]
+- id: game_tower
+  stamp: arcade
+  cell: [33, 9]
+  offset: [94, 30]
+- id: denko_parking
+  stamp: car_park
+  cell: [33, 13]
+  offset: [24, 14]

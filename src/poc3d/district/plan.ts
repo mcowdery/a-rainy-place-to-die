@@ -270,6 +270,36 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     park: 0,
     onlyZoned: true,
   },
+  electric: {
+    // 電光町 Denkō-chō, the electric town (Akihabara-like): tall narrow buildings covered in signs along the main
+    // street, parts shops and arcades in the back streets, maid cafés, anime and card shops; generated where its
+    // zone file paints (all of it).
+    name: 'Denkō-chō',
+    edgeRoads: [10, 12, 14],
+    localStreet: [4, 7],
+    block: [20, 44],
+    twoRowDepth: 24,
+    lotW: [5, 11],
+    lotGap: 0.08,
+    floors: [
+      [4, 7, 45],
+      [8, 12, 40],
+      [13, 18, 15],
+    ],
+    signChance: 0.95,
+    verticalSign: 0.7,
+    signWords: ['電気', 'PC', 'パーツ', '無線', 'ゲーム', 'アニメ', 'フィギュア', 'カード', '中古', '買取', 'DUTY FREE', '免税', 'メイドカフェ', 'ホビー', 'レトロゲーム', 'オーディオ', 'カメラ', 'スマホ', '電子部品', 'ジャンク'],
+    signColors: [0xff5fc8, 0x4fe3ff, 0xffe45f, 0x6bff8a, 0xff4f4f, 0xffffff, 0xff9a2a],
+    open: { parking: 0.04 },
+    rear: [0.3, 1.5],
+    setback: [0, 0.6],
+    stepBack: 0.15,
+    streetTrees: 0.2,
+    hedges: 0.1,
+    pots: 0.05,
+    towerCover: null,
+    park: 0,
+  },
   harbor: {
     // Tōto Port: warehouses on big blocks along wide truck roads, container yards, a few office and hotel
     // towers by the water; only where its zone file paints (the islands come with their set pieces).

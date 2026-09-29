@@ -35,6 +35,8 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
   const pools: { x: number; z: number; y: number }[] = [];
   const lampHeads: { x: number; z: number; y: number; ox: number; oz: number }[] = [];
   for (const road of ex.roads) {
+    // (Set pieces' decks are drawn by their owners.)
+    if (road.kind === 'deck') continue;
     const n = road.x.length;
     const segs = road.closed ? n : n - 1;
     const L = (i: number, lat: number, dy = 0): V3 => [road.x[i] + road.tz[i] * lat, road.y[i] + dy, road.z[i] - road.tx[i] * lat];
