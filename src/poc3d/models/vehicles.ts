@@ -323,6 +323,8 @@ export interface VehicleSpec {
   readonly ad?: TaxiAd;
   /** false leaves the wheels off, for a car whose wheels are drawn apart so they can turn (`wheelLayout`, `addWheel`). */
   readonly wheels?: boolean;
+  /** Livery: twin racing stripes over the top (bonnet, roof, boot; not the glass), and a stripe along each side. */
+  readonly livery?: { readonly stripes?: number | null; readonly side?: number | null };
 }
 
 /** Text geometry for vehicles that carry lettering (taxi ads, delivery boxes). */
@@ -1008,8 +1010,63 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     }
   }
 
+  // Livery.
+  const lv = spec.livery;
+  if (lv?.stripes != null) {
+    // Twin stripes along the top, over the flat crown (bonnet, roof, boot), skipping the glass and a soft top.
+    mb.kind = KIND.gloss;
+    mb.color = lin(lv.stripes);
+    const skip = (x: number): boolean => within(x, d.windscreen) || within(x, d.rearGlass) || (!!d.softTop && x > d.rearGlass[0] && x < d.windscreen[0]);
+    for (let x = 0.02; x < d.L - 0.04; x += 0.05) {
+      const xb = Math.min(d.L - 0.02, x + 0.05);
+      if (skip(x) || skip(xb)) continue;
+      const ya = top(x) + 0.005;
+      const yb = top(xb) + 0.005;
+      const n = N([-(yb - ya), xb - x, 0]);
+      for (const [z0, z1] of [[0.05, 0.21], [-0.21, -0.05]]) mb.quadN(P(x, ya, z0), P(xb, yb, z0), P(xb, yb, z1), P(x, ya, z1), n, n, n, n);
+    }
+  }
+  if (lv?.side != null) {
+    // A band along each flank below the beltline, broken by the wheel arches.
+    mb.kind = KIND.gloss;
+    mb.color = lin(lv.side);
+    for (let x = 0.2; x < d.L - 0.3; x += 0.05) {
+      const xb = x + 0.05;
+      const yb = Math.min(belt(x), belt(xb)) - 0.1;
+      const ya = yb - 0.06;
+      if (bottom(x) > ya - 0.02 || bottom(xb) > ya - 0.02) continue;
+      for (const sd of [-1, 1]) {
+        const n = N([0, 0, sd]);
+        mb.quadN(P(x, ya, sd * (halfW(x) + 0.006)), P(xb, ya, sd * (halfW(xb) + 0.006)), P(xb, yb, sd * (halfW(xb) + 0.006)), P(x, yb, sd * (halfW(x) + 0.006)), n, n, n, n);
+      }
+    }
+  }
+
   // Wheels.
   if (spec.wheels !== false) for (const wx of d.wheelX) for (const sd of [-1, 1]) wheel(mb, P, N, wx, d.wheelR, d.tyreW, sd * (d.W - 0.035), sd, d.rims);
+}
+
+/**
+ * Where a car's livery text goes, in its frame (the car at the origin pointing +z, +x its left): the door
+ * roundel's centre on the left flank (mirror x for the right) and its radius, and the windscreen banner: the
+ * top edge of the screen from (y0, z0) at the roof down to (y1, z1), and its half-width.
+ */
+export function liveryAnchors(type: CarType): { door: { x: number; y: number; z: number; r: number }; banner: { y0: number; z0: number; y1: number; z1: number; half: number } } {
+  const d = DESIGNS[type];
+  const top = curve(d.top);
+  const belt = curve(d.belt);
+  const half = d.L / 2;
+  const dx = d.seams.length >= 2 ? (d.seams[0] + d.seams[1]) / 2 : d.L / 2;
+  const bl = Math.min(belt(dx), top(dx) - 0.02);
+  const b = d.clear;
+  const r = Math.min(0.2, (bl - b) * 0.36);
+  const [w0, w1] = d.windscreen;
+  const x0 = w0 + 0.02;
+  const x1 = w0 + (w1 - w0) * 0.26;
+  return {
+    door: { x: d.W + 0.008, y: b + (bl - b) * 0.55, z: dx - half, r },
+    banner: { y0: top(x0) + 0.006, z0: x0 - half, y1: top(x1) + 0.006, z1: x1 - half, half: Math.max(0.3, d.W - d.roofInset - 0.12) },
+  };
 }
 
 /** A wheel's hub in its car's frame (the car at the origin pointing +z; +x is the car's left), and its side. */

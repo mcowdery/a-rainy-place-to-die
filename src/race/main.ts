@@ -11,10 +11,12 @@ import { buildVenue } from './scene';
 import { GunSound } from './gunSound';
 import { buildCabin } from './cabin';
 import { EYE, nearestShot, Shooting, sideFor, spreadOf, WEAPONS, wrap, type BodyHit, type Side } from './shooting';
+import { model, tunedSpec } from './catalog';
+import { currentCar, earn, loadProfile, PAY, saveProfile, trialPay, yen } from './profile';
 import { CarSound } from './sound';
 import { clock, GhostTrack, loadBest, medalFor, saveBest, Trial, trialPlan, type BestRun, type Dir, type Medal } from './trial';
 import { Targets } from './targets';
-import { Car, COUPE, DRIFT_ASSISTS, type Assists, type Controls } from './vehicle';
+import { Car, DRIFT_ASSISTS, type Assists, type Controls } from './vehicle';
 
 /**
  * The racing venues (race.html): a venue (course.ts, scene.ts) in its own time of day, the coupe on the
@@ -83,7 +85,16 @@ const cityU = cityUniforms();
 cityU.uLightGain.value = 0;
 cityU.uLamps.value = 1;
 const carMat = cityMaterial(cityU);
-const player = buildCar(Number(params.get('paint') ?? 0xf0f0ec), carMat);
+// Your car: the one you're driving in the garage (profile.ts), its paint, livery and neon, tuned by its parts.
+const profile = loadProfile();
+// Checks and testing: ?yen= sets your money.
+if (params.has('yen')) {
+  profile.yen = Number(params.get('yen'));
+  saveProfile(profile);
+}
+const mine = currentCar(profile);
+const mineModel = model(mine.type);
+const player = buildCar({ type: mine.type, paint: mine.paint, paint2: mine.paint2, livery: mine.livery, neon: mine.neonFitted ? mine.neon : null }, carMat);
 const carObj = player.obj;
 const body = player.body;
 scene.add(carObj);
@@ -108,7 +119,7 @@ const gunSound = new GunSound();
 const AIM_ASSISTS: Assists = { ...DRIFT_ASSISTS, countersteer: 0.7 };
 addHeadlights(carObj);
 
-const car = new Car(COUPE, DRIFT_ASSISTS);
+const car = new Car(tunedSpec(mine.type, mine.parts), DRIFT_ASSISTS);
 const at = mode === 'free' ? (params.get('at') ?? 'lot') : 'grid';
 const placeAt = (where: string): void => {
   if (where === 'grid' && trial) {
@@ -159,8 +170,9 @@ const startTrial = (): void => {
 // is lethal. A car at none is out (it spins or coasts to a stop) and loses at once; otherwise the first down
 // wins. Shooting the rival's gunman silences his gun. Paintball: each hit you take adds PAINT_PENALTY seconds to your time; the lower total wins.
 const inBattle = kind === 'battle';
-const rivalCar = new Car(COUPE, DRIFT_ASSISTS);
-const rivalView = buildCar(0xc01818, carMat);
+// The rival drives the same model as you, stock (your parts are your edge), in red (or black if you're red).
+const rivalCar = new Car(mineModel.spec, DRIFT_ASSISTS);
+const rivalView = buildCar({ type: mine.type, paint: mine.paint === 0xc01818 ? 0x121316 : 0xc01818 }, carMat);
 const rivalDrv = new RivalDriver(rivalCar, course, dir, Number(params.get('skill') ?? 1));
 const rivalShooting = new Shooting(course, targets);
 rivalShooting.assist = false;
@@ -183,8 +195,8 @@ if (inBattle) {
   rivalView.obj.add(rivalShooting.arm);
   shooting.pickWeapon(arms === 'gun' ? 0 : 1);
   rivalShooting.pickWeapon(arms === 'gun' ? 0 : 1);
-  shooting.bodies.push(...hitVolumes(rivalView.obj, 'them', true));
-  rivalShooting.bodies.push(...hitVolumes(carObj, 'you'));
+  shooting.bodies.push(...hitVolumes(rivalView.obj, 'them', true, mine.type));
+  rivalShooting.bodies.push(...hitVolumes(carObj, 'you', false, mine.type));
   shooting.onBody = (h, k, col) => struck('them', h, k, col);
   rivalShooting.onBody = (h, k, col) => struck('you', h, k, col);
 }
@@ -332,6 +344,7 @@ function decideBattle(): void {
   if (!trial || !rivalTrial || battleResult) return;
   const pen = (n: number): number => (arms === 'paint' ? n * PAINT_PENALTY : 0);
   const end = (win: boolean, why: string): void => {
+    payout(win ? PAY.battle[arms] : PAY.battleLoss, win ? 'battle won' : 'battle');
     battleResult = { win, why, you: fight.youTime, them: fight.themTime, youPen: pen(fight.youTaken), themPen: pen(fight.themTaken), youSoFar: trial!.t, themSoFar: rivalTrial!.t };
   };
   if (arms === 'gun') {
@@ -411,6 +424,7 @@ let view: 'chase' | 'bumper' = params.get('cam') === 'bumper' ? 'bumper' : 'chas
 let help = true;
 window.addEventListener('keydown', (e) => {
   sound.start();
+  sound.configure(mineModel.sound);
   gunSound.start();
   if (e.code === 'KeyF' && kind !== 'battle') shooting.pickWeapon(shooting.weaponIndex + 1);
   if (e.code === 'KeyE') shooting.reload();
@@ -580,6 +594,15 @@ let lostFlash = 0;
 let snapCam = true;
 const countEl = document.getElementById('count')!;
 const splitEl = document.getElementById('split')!;
+const payEl = document.getElementById('pay')!;
+let payT = 0;
+/** Money in: into the wallet (saved), and a line under the clock. */
+function payout(amount: number, why: string): void {
+  earn(profile, amount);
+  saveProfile(profile);
+  payEl.innerHTML = `+${yen(amount)} <span>${why}</span>`;
+  payT = 2.5;
+}
 const resultsEl = document.getElementById('results')!;
 let splitT = 0;
 const MEDAL: Record<Medal, string> = { gold: '金 GOLD', silver: '銀 SILVER', bronze: '銅 BRONZE' };
@@ -595,7 +618,7 @@ const showMenu = (open: boolean): void => {
   if (open) {
     if (document.pointerLockElement) document.exitPointerLock();
     keys.clear();
-    menuEl.innerHTML = `<h1>峠 <span>the passes</span></h1><div class="cards">${[...courses.entries()]
+    menuEl.innerHTML = `<h1>峠 <span>the passes</span></h1><a class="garage" href="garage.html"><b>ガレージ Garage</b><span>${mineModel.maker} ${mineModel.name} · ${yen(profile.yen)}</span></a><div class="cards">${[...courses.entries()]
       .map(([id, c]) => {
         const row = (d: Dir, label: string): string => {
           const b = loadBest(id, d);
@@ -835,6 +858,7 @@ function frame(now: number): void {
         const prev = best?.time ?? null;
         const newBest = prev === null || e.t < prev;
         result = { time: e.t, medal: medalFor(e.t, course.def.trial[mode as Dir]), newBest, prev, splits: [...trial.splits], drift: Math.round(total + chain - driftAtStart) };
+        payout(trialPay(result.medal, newBest), result.medal ? `${result.medal} medal` : 'finished');
         if (newBest) {
           track.record(e.t, car.x, car.y, car.z, car.h);
           best = { time: e.t, splits: [...trial.splits], ghost: track.data };
@@ -863,6 +887,7 @@ function frame(now: number): void {
     chainIdle += gdt;
     if (chainIdle > 1.2) {
       total += Math.round(chain);
+      if (chain >= 5) payout(Math.round(chain) * PAY.drift, 'drift');
       bestChain = Math.max(bestChain, Math.round(chain));
       chain = 0;
       chainT = 0;
@@ -971,7 +996,7 @@ function frame(now: number): void {
   drawShootingHud(dt, side, hip);
   if (inBattle) drawBattleHud(dt);
   slowEl.style.opacity = (slow * 0.9).toFixed(3);
-  sound.update(dt, { rev: car.rev, gear: car.gear, throttle: c.throttle, speed: Math.hypot(car.u, car.w), slide: car.slide, spin: car.spin, bump: car.bump });
+  sound.update(dt, { rev: car.rev, gear: car.gear, throttle: c.throttle, speed: Math.hypot(car.u, car.w), slide: car.slide, spin: car.spin, bump: car.bump, boost: car.boost, turbo: !!car.spec.turbo });
   // HUD.
   const kmh = Math.round(Math.abs(car.u) * 3.6);
   speedo.innerHTML = `<div class="kmh">${kmh}<span>km/h</span></div><div class="gear">${car.gear === 0 ? 'R' : car.gear}</div><div class="rev"><i style="width:${Math.round(car.rev * 100)}%"></i></div>`;
@@ -979,11 +1004,13 @@ function frame(now: number): void {
     ? `<div class="angle">${Math.round((ang * 180) / Math.PI)}°</div><div class="chain ${lostFlash > 0 ? 'lost' : ''}">${lostFlash > 0 ? 'CHAIN LOST' : `+${Math.round(chain).toLocaleString()}`}</div><div class="mult">×${Math.min(4, 1 + chainT * 0.3).toFixed(1)}</div>`
     : `<div class="total">DRIFT ${total.toLocaleString()}<br><small>best chain ${bestChain.toLocaleString()}</small></div>`;
   drawTrialHud(dt);
+  payT = Math.max(0, payT - dt);
+  payEl.style.opacity = Math.min(1, payT * 2).toFixed(2);
   toastT = Math.max(0, toastT - dt);
   helpEl.style.display = help || toastT > 0 ? 'block' : 'none';
   if (toastT > 0) helpEl.textContent = toastText;
   else if (helpEl.textContent !== HELP) helpEl.textContent = HELP;
-  hud.textContent = `${course.def.name} · ${course.def.atmosphere.label} · ${mode === 'free' ? `free drive · ${here === 'lot' ? 'practice lot' : here === 'top' ? 'the viewpoint' : 'the pass'}` : kind === 'battle' ? `⚔ battle, ${arms === 'gun' ? 'real guns' : 'paintball'} ${dir === 'up' ? '▲ uphill' : '▼ downhill'}` : `time trial ${mode === 'up' ? '▲ uphill' : '▼ downhill'}${best ? ` · best ${clock(best.time)}` : ''}`} · M venues`;
+  hud.textContent = `${course.def.name} · ${course.def.atmosphere.label} · ${mode === 'free' ? `free drive · ${here === 'lot' ? 'practice lot' : here === 'top' ? 'the viewpoint' : 'the pass'}` : kind === 'battle' ? `⚔ battle, ${arms === 'gun' ? 'real guns' : 'paintball'} ${dir === 'up' ? '▲ uphill' : '▼ downhill'}` : `time trial ${mode === 'up' ? '▲ uphill' : '▼ downhill'}${best ? ` · best ${clock(best.time)}` : ''}`} · ${mineModel.name} · ${yen(profile.yen)} · M venues`;
   composer.render(dt);
   requestAnimationFrame(frame);
 }

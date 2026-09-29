@@ -14,6 +14,12 @@ export class CarSound {
   private windGain!: GainNode;
   private master!: GainNode;
   private lastGear = 1;
+  /** The engine: redline, firing pulses per revolution, how buzzy (the square wave's share). */
+  private profile = { maxRpm: 7300, fire: 2, buzz: 0.3 };
+  private buzzGain: GainNode | null = null;
+  private whistle: OscillatorNode | null = null;
+  private whistleGain: GainNode | null = null;
+  private lastBoost = 0;
   private lp!: BiquadFilterNode;
   /** Slow motion (0-1): the engine drops in pitch and everything goes muffled. */
   slow = 0;
@@ -43,6 +49,7 @@ export class CarSound {
       o.detune.value = detune * 10;
       const g = ctx.createGain();
       g.gain.value = detune === -12 ? 0.25 : 0.5;
+      if (detune === -12) this.buzzGain = g;
       o.connect(g).connect(this.engineFilter);
       o.start();
       this.engine.push(o);
@@ -69,18 +76,39 @@ export class CarSound {
     this.windGain = ctx.createGain();
     this.windGain.gain.value = 0;
     noise().connect(wf).connect(this.windGain).connect(this.master);
+    // A turbo's whistle, rising with the boost.
+    this.whistle = ctx.createOscillator();
+    this.whistle.type = 'sine';
+    this.whistleGain = ctx.createGain();
+    this.whistleGain.gain.value = 0;
+    this.whistle.connect(this.whistleGain).connect(this.master);
+    this.whistle.start();
+    this.configure(this.profile);
+  }
+
+  /** The car's engine: its redline, firing pulses per revolution (four-cylinder 2, six 3, triple 1.5), buzz. */
+  configure(p: { maxRpm: number; fire: number; buzz: number }): void {
+    this.profile = { ...p };
+    if (this.buzzGain) this.buzzGain.gain.value = 0.1 + p.buzz * 0.55;
   }
 
   /** Per frame: rev (0-1 in the gear), gear, throttle (0-1), speed (m/s), slide (rad), wheelspin (0-1). */
-  update(dt: number, s: { rev: number; gear: number; throttle: number; speed: number; slide: number; spin: number; bump: number }): void {
+  update(dt: number, s: { rev: number; gear: number; throttle: number; speed: number; slide: number; spin: number; bump: number; boost?: number; turbo?: boolean }): void {
     const ctx = this.ctx;
     if (!ctx) return;
     const t = ctx.currentTime;
     if (s.gear !== this.lastGear && s.gear > this.lastGear) this.dip = 0.18;
     this.lastGear = s.gear;
     this.dip = Math.max(0, this.dip - dt);
-    const rpm = 900 + s.rev * 6400 - this.dip * 9000;
-    const f = Math.max(28, rpm / 30) * (1 - this.slow * 0.35);
+    const P = this.profile;
+    const rpm = 900 + s.rev * (P.maxRpm - 900) - this.dip * 9000;
+    const f = Math.max(28, (rpm / 60) * P.fire) * (1 - this.slow * 0.35);
+    // Turbo: the whistle with the boost, and a blow-off puff when you lift off boost.
+    const boost = s.turbo ? (s.boost ?? 0) : 0;
+    this.whistle?.frequency.setTargetAtTime(2600 + boost * 3800, t, 0.05);
+    this.whistleGain?.gain.setTargetAtTime(boost * s.throttle * 0.018, t, 0.05);
+    if (s.turbo && this.lastBoost > 0.6 && s.throttle === 0) this.blowOff();
+    this.lastBoost = s.throttle === 0 ? 0 : boost;
     this.lp.frequency.setTargetAtTime(20000 * Math.pow(0.045, this.slow), t, 0.05);
     for (const o of this.engine) o.frequency.setTargetAtTime(f, t, 0.03);
     this.engineFilter.frequency.setTargetAtTime(500 + s.throttle * 2200 + s.rev * 900, t, 0.05);
@@ -90,6 +118,25 @@ export class CarSound {
     this.squealFilter.frequency.setTargetAtTime(1100 + slip * 900, t, 0.1);
     this.windGain.gain.setTargetAtTime(Math.min(0.25, (s.speed / 60) ** 2 * 0.3), t, 0.2);
     if (s.bump > 2) this.thump(Math.min(1, s.bump / 10));
+  }
+
+  private blowOff(): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 0.3, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.setValueAtTime(3200, t);
+    f.frequency.exponentialRampToValueAtTime(900, t + 0.25);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t);
   }
 
   private thump(k: number): void {

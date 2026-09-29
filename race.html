@@ -87,6 +87,12 @@
       #results .time.win { color: #7ef0b0; }
       #results .time.lose { color: #ff6a78; }
       #menu a.mode.battle { border-color: rgba(255, 90, 110, 0.25); }
+      #pay { position: fixed; left: 50%; top: 44px; transform: translateX(-50%); font: bold 18px Consolas, monospace; color: #ffe07a; text-shadow: 0 0 10px rgba(255, 200, 80, 0.5); opacity: 0; pointer-events: none; }
+      #pay span { color: #c8b890; font-size: 13px; font-weight: normal; }
+      #menu a.garage { display: flex; gap: 14px; align-items: baseline; padding: 10px 18px; color: #fff; text-decoration: none; background: rgba(255, 138, 208, 0.12); border: 1px solid rgba(255, 138, 208, 0.45); border-radius: 5px; }
+      #menu a.garage:hover { background: rgba(255, 138, 208, 0.25); }
+      #menu a.garage b { font-size: 16px; }
+      #menu a.garage span { color: #c8d0e8; font-size: 13px; }
       #help { position: fixed; top: 34px; left: 12px; color: #8a90a8; font-size: 12px; white-space: pre; }
     </style>
   </head>
@@ -100,6 +106,7 @@
     <div id="rival"></div>
     <div id="count"></div>
     <div id="split"></div>
+    <div id="pay"></div>
     <div id="results"></div>
     <div id="menu"></div>
     <div id="reticle"><i></i></div>

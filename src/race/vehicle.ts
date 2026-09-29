@@ -6,7 +6,8 @@
  * The model: a planar bicycle model (front and rear axle) with
  * - tyre lateral force from the slip angle through a saturating curve (grip builds, peaks, falls off),
  * - the friction circle per axle (drive or brake force eats into the lateral grip: power oversteer, brake
- *   lock-up understeer), rear-wheel drive,
+ *   lock-up understeer), rear- or all-wheel drive (a share of the drive at the front), turbo lag (the boost
+ *   builds with the revs under throttle), a limited-slip differential (the rear holds its line while spinning),
  * - load transfer front/rear with acceleration (lift off and the rear lightens),
  * - the handbrake (rear grip mostly gone, rear braking),
  * - gravity along the slope of the ground, aerodynamic drag and rolling resistance,
@@ -50,6 +51,12 @@ export interface CarSpec {
   readonly reverse: number;
   /** Gear change speeds (m/s): gear n runs up to shift[n - 1]. */
   readonly shift: readonly number[];
+  /** All-wheel drive: the share of the drive at the front (0 or absent: rear-wheel drive). */
+  readonly awd?: number;
+  /** Turbo: seconds for the boost to build (absent: none); off boost the engine makes 55% of its power. */
+  readonly turbo?: number;
+  /** Limited-slip differential 0-1: how much sideways grip the rear keeps while spinning (open: half). */
+  readonly lsd?: number;
 }
 
 export interface Assists {
@@ -157,6 +164,8 @@ export class Car {
   /** The throttle as the engine sees it (a keyboard's 0/1 ramped), and time since the handbrake (s). */
   private throttle = 0;
   private sinceHandbrake = 99;
+  /** Turbo boost 0-1 (for the sound and the dashboard). */
+  boost = 0;
 
   constructor(
     readonly spec: CarSpec = COUPE,
@@ -254,7 +263,16 @@ export class Car {
       brakeF = c.throttle * S.brake * m * G * S.brakeFront;
       brakeR = c.throttle * S.brake * m * G * (1 - S.brakeFront);
     }
-    if (thr > 0 && u >= -0.5) drive = thr * Math.min(S.maxDrive, S.power / Math.max(u, 4));
+    // Turbo: boost builds under throttle once the revs are up, and bleeds off when you lift.
+    if (S.turbo) {
+      const want = thr > 0.5 && this.rev > 0.35 ? 1 : 0;
+      this.boost += (want - this.boost) * Math.min(1, dt / (want ? S.turbo : 0.25));
+    } else this.boost = 1;
+    const power = S.power * (S.turbo ? 0.55 + 0.45 * this.boost : 1);
+    if (thr > 0 && u >= -0.5) drive = thr * Math.min(S.maxDrive, power / Math.max(u, 4));
+    // All-wheel drive: the front takes its share (pulling the car through, at the cost of front grip).
+    const driveF = drive > 0 && S.awd ? drive * S.awd : 0;
+    drive -= driveF;
     if (c.handbrake) brakeR += 0.55 * Nr;
     const sgn = u >= 0 ? 1 : -1;
     // Rear: drive or braking shares the tyre's grip with cornering (a friction ellipse: pulling costs less
@@ -268,9 +286,9 @@ export class Car {
     this.spin = Math.max(0, Math.min(1, (Math.abs(Fxr) - cap) / (0.3 * cap + 1)));
     Fxr = Math.max(-cap, Math.min(cap, Fxr));
     const Df = S.gripFront * Nf * surf;
-    const Fxf = Math.max(-Df * 1.1, Math.min(Df * 1.1, -brakeF * sgn));
+    const Fxf = Math.max(-Df * 1.1, Math.min(Df * 1.1, driveF - brakeF * sgn));
     const ellipse = (F: number, D: number): number => D * Math.sqrt(Math.max(0, 1 - (F / (D * 1.35)) ** 2));
-    const latR = ellipse(Fxr, Dr) * (spinning ? 0.5 : 1);
+    const latR = ellipse(Fxr, Dr) * (spinning ? 0.5 + 0.25 * (S.lsd ?? 0) : 1);
     const latF = ellipse(Fxf, Df);
     const curve = (alpha: number): number => Math.sin(S.C * Math.atan(S.B * alpha));
     let Fyf = 0;
