@@ -1,0 +1,36 @@
+# 学園坂下 Gakuenzaka-shita, the student town between the university and the core (Takadanobaba-like; format:
+# src/poc3d/district/zones.ts): cheap food, second-hand bookshops, izakaya and karaoke, mahjong parlours, and the
+# streets that join the north of the city to Asagiri and Kaburo.
+district: residential
+area: 学園坂下 Gakuenzaka-shita
+origin: [20, 8]
+map:
+  - SSSSSSSSSSSS
+
+zones:
+  S:
+    id: student_town
+    name: Student town
+    plan:
+      floors: [[3, 5, 55], [6, 9, 45]]
+      lotW: [5, 11]
+      localStreet: [3, 6]
+      block: [18, 44]
+      lotGap: 0.12
+      signChance: 0.9
+      verticalSign: 0.6
+      open: { parking: 0.05 }
+      setback: [0, 0.6]
+      rear: [0.5, 2]
+      streetTrees: 0.3
+      pots: 0.2
+    signs:
+      words: [ラーメン, 牛丼, カレー, 居酒屋, カラオケ, 雀荘, 古本, 定食, 喫茶, 学生ローン, コピー, 餃子, 立ち飲み, 漫画喫茶]
+      colors: ['#ffe45f', '#ff4f4f', '#4fe3ff', '#ffffff', '#6bff8a', '#ff5fc8']
+    ads: { food: 4, street: 3, fun: 2, loan: 1 }
+    look:
+      windows: { punched: 50, small: 30, ribbon: 20 }
+      walls: ['#b8a88c', '#9a9890', '#7c604c', '#c2b49a', '#5a5e64', '#d8d5cc']
+      tiled: true
+      shops: { warm: 5, colourful: 3, cool: 1 }
+      open: 1

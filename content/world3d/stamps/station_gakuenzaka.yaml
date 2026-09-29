@@ -1,0 +1,29 @@
+# 学園坂駅 Gakuenzaka Station on the Toto Line, its northern terminus below the university (a copy of Asagiri
+# Station's plan; real/station.ts): its street face is 10 m west of the line, under the viaduct.
+id: station_gakuenzaka
+name: 学園坂駅 Gakuenzaka Station
+footprint: [24, 60]
+height: 16.6
+front: east
+landmark: station
+station: { jp: 学園坂, en: GAKUENZAKA }
+nodes:
+  exit:
+    kind: spawn
+    name: Gakuenzaka Station
+    at: [30, 8]
+    facing: west
+    view: [70, 16]
+  platform:
+    kind: spawn
+    name: Gakuenzaka Station (platform)
+    at: [44, 3.2]
+    floor: 9.1
+    facing: east
+    view: [-90, 2]
+  board:
+    kind: station
+    name: Toto Line to Asagiri 朝霧
+    at: [44, 5.4]
+    floor: 9.1
+    returnSpawn: asagiri_station.platform

@@ -576,7 +576,7 @@ describe('Subway', () => {
   it('numbers the stations along two straight lines under the roads', () => {
     expect(net.lines.map((l) => l.id)).toEqual(['toto', 'yako', 'wakaba', 'seiko']);
     expect(net.lines[3].stops.map((s) => s.code)).toEqual(['S01', 'S02', 'S03', 'S04']);
-    expect(net.lines[0].stops.map((s) => `${s.code} ${s.en}`)).toEqual(['T01 ASAGIRI', 'T02 TŌTO-CHŪŌ', 'T03 KABURO']);
+    expect(net.lines[0].stops.map((s) => `${s.code} ${s.en}`)).toEqual(['T01 GAKUENZAKA', 'T02 ASAGIRI', 'T03 TŌTO-CHŪŌ', 'T04 KABURO']);
     expect(net.lines[1].stops.map((s) => s.code)).toEqual(['Y01', 'Y02', 'Y03', 'Y04', 'Y05']);
     expect(net.lines[2].stops.map((s) => s.code)).toEqual(['W01', 'W02', 'W03']);
     for (const l of net.lines) {
@@ -600,8 +600,10 @@ describe('Subway', () => {
       { kind: 'transfer', from: 'w02_station', to: 'y04_station' },
       { kind: 'ride', line: 'yako', from: 3, to: 2 },
       { kind: 'transfer', from: 'y03_station', to: 'totochuo_station' },
-      { kind: 'ride', line: 'toto', from: 1, to: 0 },
+      { kind: 'ride', line: 'toto', from: 2, to: 1 },
     ]);
+    // Up the Toto Line to its new northern end, Gakuenzaka (the university).
+    expect(subwayRoute(net, 'totochuo_station', 'gakuenzaka_station')).toEqual([{ kind: 'ride', line: 'toto', from: 2, to: 0 }]);
   });
 
   it('walks the underground mall from Kaburo-nishiguchi to the west exit and up to the rotary', () => {

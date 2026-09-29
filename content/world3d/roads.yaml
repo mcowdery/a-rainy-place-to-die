@@ -13,8 +13,8 @@ avenues:
   - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 20, to: 32, width: 32, median: 2.4 }
   - { name: 夜霧通り YOGIRI-DŌRI, row: 12, from: 20, to: 32, width: 32, median: 2.4 }
   - { name: 靖原通り YASUHARA-DŌRI, row: 13, from: 20, to: 32, width: 32, median: 2.4 }
-  - { name: 朝霧西通り ASAGIRI-NISHI-DŌRI, col: 21, from: 9, to: 18, width: 32, median: 2.4 }
-  - { name: 明王通り MYŌŌ-DŌRI, col: 31, from: 9, to: 18, width: 32, median: 2.4 }
+  - { name: 朝霧西通り ASAGIRI-NISHI-DŌRI, col: 21, from: 8, to: 18, width: 32, median: 2.4 }
+  - { name: 明王通り MYŌŌ-DŌRI, col: 31, from: 3, to: 18, width: 32, median: 2.4 }
 # Kasumi-chō and the port (docs/city-plan.md): the radials above run on south to the harbour front; Kaigan-dōri
 # along the harbour front; Kasumi-dōri across Kasumi-chō; the harbour radial's avenue (route 1 overhead).
   - { name: 海岸通り KAIGAN-DŌRI, row: 18, from: 7, to: 37, width: 32, median: 2.4 }
@@ -29,6 +29,10 @@ avenues:
 # The way to the airport: Kūkō-dōri down through the container terminal, over the bridge, into Hanejima.
   - { name: 空港通り KŪKŌ-DŌRI, col: 8, from: 21, to: 22, width: 32, median: 2.4 }
   - { name: 空港通り KŪKŌ-DŌRI, col: 8, from: 23, to: 25, width: 32, median: 2.4 }
+# The north: Kita-ōdōri across Gakuenzaka and Suidō-chō; the Toto Line's viaduct on north over its own street
+# to Gakuenzaka's station.
+  - { name: 北大通り KITA-ŌDŌRI, row: 6, from: 22, to: 37, width: 24, median: 0 }
+  - { name: 高架下通り KŌKASHITA-DŌRI, col: 26, from: 6, to: 9, width: 16, median: 0 }
 # Denkō-chō's main street, down the middle of the electric town (Akihabara's Chūō-dōri).
   - { name: 電光通り DENKŌ-DŌRI, col: 34, from: 8, to: 14, width: 24, median: 0 }
 

@@ -1,0 +1,11 @@
+# 水道町ワンダーランド SUIDŌ WONDERLAND beside Tōto Dome (real/north.ts, kind amusement): the rollercoaster running
+# its track, the drop tower. The ticket gate is a story door.
+id: amusement
+name: 水道町ワンダーランド SUIDŌ WONDERLAND
+footprint: [100, 100]
+height: 62
+front: north
+landmark: amusement
+nodes:
+  front: { kind: spawn, name: Suidō Wonderland (the coaster), at: [19, 8], facing: south, view: [170, 24] }
+  gate: { kind: door, name: Wonderland ticket gate, at: [19, 0.6], returnSpawn: front }

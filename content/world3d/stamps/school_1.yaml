@@ -1,0 +1,12 @@
+# A school (real/north.ts, kind school; the kit every school uses): the classroom block with its clock, the gym, the
+# rooftop pool, the sports field behind its netted fence. School No. 1 (docs/city-plan.md); the name is by its id.
+id: school_1
+name: 桜ヶ丘中学校 Sakuragaoka Junior High
+footprint: [100, 100]
+height: 19
+front: north
+landmark: school
+nodes:
+  gate: { kind: spawn, name: Sakuragaoka Junior High, at: [37, 6], facing: south, view: [180, 10] }
+  entrance: { kind: door, name: School entrance 昇降口, at: [37, 2.4], returnSpawn: gate }
+  staff: { kind: npc, name: Teacher on gate duty, at: [40, 1.4], figure: { body: woman, pose: stand, color: '#d8e0f0' } }

@@ -270,6 +270,36 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     park: 0,
     onlyZoned: true,
   },
+  campus: {
+    // 学園坂 Gakuenzaka, the university on its slope (Waseda / Takadanobaba-like): lecture halls and labs on big
+    // blocks round green quads, generated where its zone file paints.
+    name: 'Gakuenzaka',
+    edgeRoads: [10, 12, 14],
+    localStreet: [5, 8],
+    block: [40, 80],
+    twoRowDepth: 40,
+    lotW: [20, 40],
+    lotGap: 0.6,
+    floors: [
+      [3, 5, 50],
+      [6, 9, 40],
+      [10, 14, 10],
+    ],
+    signChance: 0.2,
+    verticalSign: 0.2,
+    signWords: ['学生会館', '図書館', '研究棟', '講義棟', '学生食堂', '生協', '書店', 'CAFE', '体育館', '国際会議場'],
+    signColors: [0xffffff, 0x4fe3ff, 0xffe45f],
+    open: { parking: 0.05, playground: 0.02 },
+    rear: [2, 5],
+    setback: [3, 8],
+    stepBack: 0,
+    streetTrees: 0.9,
+    hedges: 0.6,
+    pots: 0.1,
+    towerCover: null,
+    park: 0,
+    onlyZoned: true,
+  },
   electric: {
     // 電光町 Denkō-chō, the electric town (Akihabara-like): tall narrow buildings covered in signs along the main
     // street, parts shops and arcades in the back streets, maid cafés, anime and card shops; generated where its

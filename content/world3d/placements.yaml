@@ -217,3 +217,29 @@
   stamp: car_park
   cell: [33, 13]
   offset: [24, 14]
+# The north (docs/city-plan.md): Gakuenzaka's university and high school, its Toto Line station; Suidō-chō's dome
+# and amusement park; School No. 1 in Sakuragaoka.
+- id: gakuenzaka_station
+  stamp: station_gakuenzaka
+  cell: [25, 6]
+  offset: [94, 30]
+- id: university
+  stamp: university
+  cell: [25, 5]
+  offset: [28, 64]
+- id: school_2
+  stamp: school_2
+  cell: [22, 6]
+  offset: [14, 16]
+- id: school_1
+  stamp: school_1
+  cell: [15, 11]
+  offset: [14, 14]
+- id: dome
+  stamp: dome
+  cell: [33, 4]
+  offset: [12, 12]
+- id: wonderland
+  stamp: amusement
+  cell: [34, 5]
+  offset: [14, 14]

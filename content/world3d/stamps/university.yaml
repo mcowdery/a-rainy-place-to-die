@@ -1,0 +1,12 @@
+# 東都大学 大講堂 Tōto University's auditorium (real/north.ts, kind university): a brick hall with arched windows and
+# its clock tower, facing Kita-ōdōri across from the main quad. The lecture hall is a story door.
+id: university
+name: 東都大学 大講堂 Tōto University
+footprint: [70, 50]
+height: 70
+front: south
+landmark: university
+nodes:
+  front: { kind: spawn, name: Tōto University (the auditorium), at: [35, 22], facing: north, view: [0, 18] }
+  hall: { kind: door, name: The lecture hall 大講堂, at: [35, 4.2], returnSpawn: front }
+  student: { kind: npc, name: Student on the steps, at: [30, 3], figure: { body: woman, pose: phone, hair: long, color: '#ffd8c8' } }

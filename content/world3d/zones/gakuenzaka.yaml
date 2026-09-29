@@ -1,0 +1,70 @@
+# 学園坂 Gakuenzaka, the university district north of the core (Waseda / Takadanobaba-like; format:
+# src/poc3d/district/zones.ts; the whole-city plan: docs/city-plan.md). Tōto University's lecture halls and labs on
+# big blocks round its quads (the clock-tower auditorium faces the main quad), its affiliated high school to the
+# south-west, and the lanes at the bottom of the slope. Gakuenzaka-shita, the student town below, is a residential
+# area (zones/gakuenshita.yaml).
+district: campus
+origin: [22, 3]
+map:
+  - UUUUUUUU
+  - UUUQQUUU
+  - UUUQQUUU
+  - UUUUUUUU
+  - LLLLLLLL
+
+zones:
+  U:
+    id: campus_halls
+    name: Tōto University
+    plan:
+      floors: [[3, 5, 50], [6, 9, 40], [10, 14, 10]]
+    signs:
+      words: [東都大学, 文学部, 理工学部, 法学部, 図書館, 研究棟, 学生会館, 生協, 講義棟, 国際会議場]
+      colors: ['#ffffff', '#4fe3ff', '#ffe45f']
+    ads: { mainstream: 2, food: 1 }
+    look:
+      windows: { punched: 50, ribbon: 30, curtain: 20 }
+      walls: ['#8a4a36', '#9a5a44', '#c8bca8', '#b8b0a0', '#7a3a2a', '#d8d0c0']
+      tiled: true
+      shops: { cool: 2, warm: 2 }
+      open: 0.6
+
+  Q:
+    id: campus_quad
+    name: Tōto University (the quad)
+    plan:
+      park: 0.55
+      floors: [[3, 5, 60], [6, 8, 40]]
+    ads: { mainstream: 1 }
+    look:
+      windows: { punched: 60, ribbon: 40 }
+      walls: ['#8a4a36', '#9a5a44', '#c8bca8']
+      tiled: true
+      shops: { cool: 1, warm: 2 }
+      open: 0.5
+
+  L:
+    id: campus_lanes
+    name: Gakuenzaka (the slope)
+    plan:
+      floors: [[2, 3, 50], [4, 6, 50]]
+      lotW: [5, 10]
+      localStreet: [3, 5]
+      block: [18, 40]
+      lotGap: 0.15
+      signChance: 0.85
+      verticalSign: 0.5
+      setback: [0, 0.6]
+      rear: [0.5, 1.5]
+      streetTrees: 0.3
+      pots: 0.3
+    signs:
+      words: [古本, 喫茶, 定食, カレー, ラーメン, コピー, 文具, 雀荘, 居酒屋, 学生街, 下宿]
+      colors: ['#ffe45f', '#ff4f4f', '#ffffff', '#6bff8a']
+    ads: { food: 4, street: 2, fun: 1 }
+    look:
+      windows: { punched: 60, small: 40 }
+      walls: ['#b8a88c', '#c2b49a', '#a89878', '#7c604c', '#d8d5cc']
+      tiled: true
+      shops: { warm: 6, colourful: 2, cool: 1 }
+      open: 0.9

@@ -1,0 +1,67 @@
+# 水道町 Suidō-chō, Dome City north-east of the core (Kōrakuen-like; format: src/poc3d/district/zones.ts; the
+# whole-city plan: docs/city-plan.md): flats round Tōto Dome and its amusement park, and the plazas where the
+# crowds gather on concert nights.
+district: residential
+area: 水道町 Suidō-chō
+origin: [30, 3]
+map:
+  - FFFFFFF
+  - FFFDDFF
+  - FFFDDFF
+  - FFFFFFF
+  - FFFFFFF
+
+zones:
+  F:
+    id: suido_flats
+    name: Suidō-chō (flats)
+    plan:
+      floors: [[5, 8, 45], [9, 14, 45], [15, 20, 10]]
+      lotW: [14, 26]
+      localStreet: [5, 8]
+      block: [28, 56]
+      twoRowDepth: 30
+      lotGap: 0.4
+      signChance: 0.25
+      open: { parking: 0.1, playground: 0.04 }
+      rear: [2, 5]
+      setback: [1.5, 3.5]
+      streetTrees: 0.6
+      hedges: 0.5
+      pots: 0.2
+    signs:
+      words: [クリニック, 歯科, 不動産, コンビニ, 薬局, 学習塾, 美容室, カフェ, 定食, スポーツ用品]
+      colors: ['#ffffff', '#4fe3ff', '#ffe45f', '#6bff8a']
+    ads: { mainstream: 2, street: 2, food: 1 }
+    look:
+      windows: { balcony: 55, punched: 30, ribbon: 15 }
+      walls: ['#e0dcd0', '#d0ccc0', '#c8c4b8', '#b8b4a8', '#d8c8b8', '#a8a49a']
+      tiled: true
+      shops: { cool: 2, warm: 3 }
+      open: 0.7
+      homes: 0.6
+      bikes: 0.5
+
+  D:
+    id: dome_city
+    name: Dome City
+    plan:
+      floors: [[3, 5, 70], [6, 9, 30]]
+      lotW: [20, 36]
+      localStreet: [8, 12]
+      block: [40, 80]
+      signChance: 0.6
+      open: { parking: 0.2 }
+      setback: [3, 8]
+      streetTrees: 0.9
+      hedges: 0.6
+    signs:
+      words: [TŌTO DOME, 東都ドーム, GOODS, グッズ, チケット, TICKETS, FOOD COURT, SPORTS BAR, 野球殿堂]
+      colors: ['#ffffff', '#4fe3ff', '#ffe45f', '#ff5fc8']
+    ads: { fun: 3, mainstream: 3, food: 2 }
+    look:
+      windows: { curtain: 40, ribbon: 40, blank: 20 }
+      walls: ['#d8dcdc', '#b8c4cc', '#e8e4dc', '#8a9aa8']
+      tiled: false
+      shops: { colourful: 3, cool: 2, warm: 1 }
+      open: 0.9

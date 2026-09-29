@@ -1,0 +1,12 @@
+# 東都ドーム TŌTO DOME in Suidō-chō (Tokyo Dome-like; real/north.ts, kind dome): the big concert venue, its white
+# air-supported roof on the ring, the gates, the screen over the plaza with tonight's show. The gate is a story door.
+id: dome
+name: 東都ドーム TŌTO DOME
+footprint: [104, 104]
+height: 29
+front: south
+landmark: dome
+nodes:
+  front: { kind: spawn, name: TŌTO DOME (concerts), at: [52, 16], facing: north, view: [0, 14] }
+  gate: { kind: door, name: TŌTO DOME Gate 22 ゲート, at: [30, 1.5], returnSpawn: front }
+  staff: { kind: npc, name: Dome staff with a megaphone, at: [70, 2], figure: { body: man, pose: wave, hair: cap, color: '#ffe08a' } }
