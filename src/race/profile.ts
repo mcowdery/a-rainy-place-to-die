@@ -1,3 +1,4 @@
+import type { Parts as DamageParts } from '../poc3d/district/crash';
 import type { CarType } from '../poc3d/models/vehicles';
 import { model, type Parts } from './catalog';
 import type { Medal } from './trial';
@@ -29,6 +30,8 @@ export interface OwnedCar {
   neonFitted: boolean;
   /** Its condition after crashes in the city: 0 like new to 100 totalled (district/crash.ts). */
   damage?: number;
+  /** The damage by part (front, rear, sides, tyres: 0 to 100 each). */
+  sections?: DamageParts;
 }
 
 export interface Profile {

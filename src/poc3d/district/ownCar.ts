@@ -1,12 +1,32 @@
 import * as THREE from 'three';
+import { wheelLayout } from '../models/vehicles';
 import { model, tunedSpec } from '../../race/catalog';
 import { buildCar, poseCar, turnWheels, type CarView } from '../../race/carView';
+import { Dents } from '../../race/dents';
 import { currentCar, loadProfile, saveProfile } from '../../race/profile';
 import { CarSound } from '../../race/sound';
 import { Car, ROAD_ASSISTS, type Assists, type Controls, type Ground } from '../../race/vehicle';
 import type { DrivenVehicle, TrafficSystem } from '../real/traffic';
 import type { Expressway } from './expressway';
-import { impactDamage, passThrough, powerLeft, TOTALED, type HitKind } from './crash';
+import {
+  DIRECT,
+  impactDamage,
+  newParts,
+  NUDGE,
+  overall,
+  partsOf,
+  passThrough,
+  powerLeft,
+  scrapeDamage,
+  sectionsAt,
+  totaled,
+  tyreGrip,
+  tyrePull,
+  WRECKED,
+  type HitKind,
+  type Parts,
+  type Section,
+} from './crash';
 
 /** Something on the expressway your car can run into (a car in its traffic). */
 export interface DeckObstacle {
@@ -24,24 +44,30 @@ export interface DeckObstacle {
  * traffic as a parked vehicle (traffic stops behind it and honks; E by it takes the wheel), and it stays where
  * you leave it (localStorage `citypop.city.car`; at first, and after ?car=home, in its bay at the garage).
  *
- * The racing model wants a Ground. On the street: height 0, and what's in the way from `probe` (hard,
- * soft or a person: crash.ts). Crashing is forgiving: only something hard (or a person) across the car's
- * centre line stops it (pushed out the shortest way, only the speed into it lost: a glancing hit scrapes
- * along), with damage by that speed; a corner or a side through something hard, and anything soft, you drive
- * through, losing some speed and some of the car. On the expressway (district/expressway.ts; up a ramp from
- * its foot, or anywhere once you're above the street): its height, its parapets (a corner off the network is
- * pushed back on, a hit like any wall) and the cars in its traffic (`deckObstacles`, hard).
- * The car's condition (crash.ts: 0 like new, 100 totalled) is kept with it in the profile; a damaged car
- * loses power and smokes, and a totalled one won't go (`onTotaled`; the garage repairs it).
+ * The racing model wants a Ground. On the street: height 0, and what's in the way from `probe` (crash.ts:
+ * a wall, a car, a pole, something soft or a person). Crashing is forgiving (crash.ts): walls and people stop
+ * the car, pushed back against its travel and losing only the speed into them (at an angle you slide along a
+ * wall at speed); a car or a pole stops it only when the nose meets it head-on at speed, and anything else you
+ * drive through, losing some speed. On the expressway (district/expressway.ts): its height, its parapets
+ * (walls) and the cars in its traffic (`deckObstacles`).
+ *
+ * Damage goes to the part that took it (`parts`: front, rear, sides, tyres), shows on the car (the body
+ * crumples and scrapes there; a flat tyre drops its corner and a damaged one wobbles), is listed for the HUD
+ * (`hits`), costs power (the front) and grip (the tyres), and is kept with the car in the profile; a totalled
+ * car won't go (`onTotaled`; the garage repairs it).
  */
 
 /** The city: road assists, but with room to slide (the expressway's long bends). */
 export const CITY_ASSISTS: Assists = { ...ROAD_ASSISTS, maxSlide: (38 * Math.PI) / 180 };
 
 const SAVE_KEY = 'citypop.city.car';
-/** The car's centre line is probed with small circles (a real hit), its sides with more (pass through). */
+/** The car's centre line is probed with small circles (what can stop it), its sides with more (drive through). */
 const CL = 0.35;
 const SIDE = 0.55;
+const HL = 2.15;
+const HW = 0.85;
+/** Sliding along a wall keeps nearly all your speed. */
+const WALL_FRICTION = 0.998;
 const DIRS = Array.from({ length: 16 }, (_, i) => [Math.cos((i / 16) * Math.PI * 2), Math.sin((i / 16) * Math.PI * 2)] as const);
 
 export class OwnCar {
@@ -52,21 +78,30 @@ export class OwnCar {
   readonly name: string;
   readonly sound = new CarSound();
   private saveT = 0;
-  /** 0 (like new) to TOTALED; which owned car this is (for keeping its condition). */
-  condition = 0;
+  /** Damage by part (0 whole to 100 gone), and which owned car this is (for keeping it). */
+  readonly parts: Parts;
   private readonly carId: string;
-  /** What stopped the car this step, if anything (so a person costs no damage). */
-  private lastHit: HitKind | null = null;
-  /** What the car was driving through last frame (pass-through: the knock is on the way in, once). */
+  /** Where the wheels are along the car (rear, front), for which tyre a hit catches. */
+  private readonly wheelAlong: [number, number];
+  /** What stopped the car this step and where on it (car frame: along forward, across to the left). */
+  private contact: { kind: HitKind; along: number; across: number; nx: number; nz: number } | null = null;
+  /** What the car was driving through last frame (the knock is on the way in, once per kind of thing). */
   private touching = new Set<HitKind>();
-  /** A knock this frame for the sound and the camera (m/s), and the car totalled just now. */
+  /** Damage taken, by part, since the HUD last took them (it empties this). */
+  readonly hits: { part: Section; amount: number }[] = [];
+  /** A knock this frame for the sound and the camera (m/s). */
   knock = 0;
   onTotaled: (() => void) | null = null;
-  /** Engine smoke from a damaged car (world space: add it to the scene). */
+  /** Engine smoke from a smashed front (world space: add it to the scene). */
   readonly smoke: THREE.Points;
   private readonly smokePos: Float32Array;
   private readonly smokeLife: Float32Array;
   private smokeNext = 0;
+  /** The damage showing on the car (race/dents.ts), redone when it changes. */
+  private readonly dents: Dents;
+  private reshape = true;
+  private unsaved = false;
+  private keptT = 0;
 
   constructor(
     material: THREE.Material,
@@ -80,12 +115,15 @@ export class OwnCar {
     const height = (x: number, z: number): number => this.ex?.at(x, z, this.sim.y)?.height ?? 0;
     const mine = currentCar(loadProfile());
     this.carId = mine.id;
-    this.condition = mine.damage ?? 0;
+    this.parts = partsOf(mine);
     const m = model(mine.type);
     this.name = `${m.maker} ${m.name}`;
     this.sim = new Car(tunedSpec(mine.type, mine.parts), CITY_ASSISTS);
     this.view = buildCar({ type: mine.type, paint: mine.paint, paint2: mine.paint2, livery: mine.livery, neon: mine.neonFitted ? mine.neon : null }, material);
     this.sound.configure(m.sound);
+    const zs = wheelLayout(mine.type).spots.map((s) => s.z);
+    this.wheelAlong = [Math.min(...zs), Math.max(...zs)];
+    this.dents = new Dents(this.view);
     this.ground = {
       height,
       normal: (x, z) => {
@@ -96,46 +134,7 @@ export class OwnCar {
         return [n.x, n.y, n.z];
       },
       grip: () => 1,
-      collide: (x, z, h, hl, hw) => {
-        const fx = Math.sin(h);
-        const fz = Math.cos(h);
-        this.lastHit = null;
-        if (this.onExpressway(x, z)) {
-          // On the expressway: each corner kept on the network (the parapets).
-          const y = this.sim.y;
-          for (const f of [hl - 0.25, -(hl - 0.25)]) {
-            for (const s of [hw, -hw]) {
-              const p = this.ex!.pushBack(x + fx * f + fz * s, z + fz * f - fx * s, y);
-              if (p) {
-                this.lastHit = 'hard';
-                return p;
-              }
-            }
-          }
-        }
-        // Along the centre line: anything hard (or a person) there stops the car, pushed out the shortest way.
-        const stops = (k: HitKind | null): boolean => k === 'hard' || k === 'person';
-        for (const f of [hl - 0.3, (hl - 0.3) / 3, -(hl - 0.3) / 3, -(hl - 0.3)]) {
-          const cx = x + fx * f;
-          const cz = z + fz * f;
-          const k = this.kindAt(cx, cz, CL);
-          if (!stops(k)) continue;
-          this.lastHit = k;
-          // Pushed back the way it came (not round the side of a pole or a person): only directions against
-          // the travel, or across it, will do.
-          const vx = Math.sin(this.sim.h) * this.sim.u + Math.cos(this.sim.h) * this.sim.w;
-          const vz = Math.cos(this.sim.h) * this.sim.u - Math.sin(this.sim.h) * this.sim.w;
-          const sp = Math.hypot(vx, vz);
-          for (let d = 0.05; d <= 1.2; d += 0.05) {
-            for (const [nx, nz] of DIRS) {
-              if (sp > 0.5 && nx * vx + nz * vz > 0.17 * sp) continue;
-              if (!stops(this.kindAt(cx + nx * d, cz + nz * d, CL))) return { px: nx * d, pz: nz * d, nx, nz };
-            }
-          }
-          return null;
-        }
-        return null;
-      },
+      collide: (x, z, h, hl, hw) => this.collide(x, z, h, hl, hw),
     };
     let at = home;
     if (!atHome) {
@@ -149,13 +148,13 @@ export class OwnCar {
     }
     const y0 = this.sim.y;
     // Left somewhere the city has since changed under it (a building, a median): back to the garage.
-    if (at !== home && y0 < 1 && this.probe(at.x, at.z, 0.9, null as unknown as DrivenVehicle) === 'hard') at = home;
+    if (at !== home && y0 < 1 && this.probe(at.x, at.z, 0.9, null as unknown as DrivenVehicle) === 'wall') at = home;
     this.sim.place(at.x, at.z, at.h, this.ground);
     // Left up on the expressway: back up there (its height at that spot).
     this.sim.y = this.ex?.at(at.x, at.z, y0)?.height ?? this.sim.y;
     this.vehicle = traffic.addOwn(this.view.obj, 2.2, 1.8, this.name, at.x, at.z, Math.sin(at.h), Math.cos(at.h));
     this.sync();
-    // Engine smoke (grey puffs from under the bonnet), for a car in a bad way.
+    // Engine smoke (grey puffs from under the bonnet), for a car with a smashed front.
     const N = 90;
     this.smokePos = new Float32Array(N * 3);
     this.smokeLife = new Float32Array(N);
@@ -189,8 +188,13 @@ export class OwnCar {
     this.pose(0);
   }
 
+  /** Overall condition, 0 like new to 100 totalled (crash.ts `overall`). */
+  get condition(): number {
+    return overall(this.parts);
+  }
+
   get totaled(): boolean {
-    return this.condition >= TOTALED;
+    return totaled(this.parts);
   }
 
   /** What's at (x, z) within r for the car: on the expressway, its traffic; on the street, `probe`. */
@@ -200,68 +204,192 @@ export class OwnCar {
       const ox = x - o.x;
       const oz = z - o.z;
       if (Math.abs(ox) > 7 || Math.abs(oz) > 7) continue;
-      if (Math.abs(ox * o.dx + oz * o.dz) < o.half + r && Math.abs(ox * o.dz - oz * o.dx) < o.hw + r) return 'hard';
+      if (Math.abs(ox * o.dx + oz * o.dz) < o.half + r && Math.abs(ox * o.dz - oz * o.dx) < o.hw + r) return 'car';
     }
     return null;
   }
 
-  /** Drive a step: the handling model, then the traffic system's copy of where the car is. */
-  drive(dt: number, c: Controls): void {
-    // A wreck limps; a totalled car won't go.
-    const k = this.totaled ? 0 : powerLeft(this.condition);
-    c = this.totaled ? { throttle: 0, brake: 0.6, steer: c.steer, handbrake: c.handbrake } : { ...c, throttle: c.throttle * k };
-    const before = this.condition;
-    this.sim.update(dt, c, this.ground);
-    // A real hit (something hard across the centre line): damage by the speed into it.
-    if (this.sim.bump > 0 && this.lastHit !== 'person') this.condition += impactDamage(this.sim.bump);
-    this.knock = this.sim.bump;
-    this.passThrough(dt);
-    this.condition = Math.min(TOTALED, this.condition);
-    if (this.condition !== before) {
-      this.keepCondition();
-      if (this.totaled && before < TOTALED) {
-        this.sim.u *= 0.3;
-        this.sim.w *= 0.3;
-        this.onTotaled?.();
+  /**
+   * The way out of what's at (cx, cz): the nearest clear distance, and the mean of the directions clear there
+   * (the obstacle's surface normal, near enough). `against` keeps to directions against the travel (vx, vz).
+   */
+  private way(cx: number, cz: number, k: HitKind, vx: number, vz: number, against: boolean): { d: number; nx: number; nz: number } | null {
+    const sp = Math.hypot(vx, vz);
+    for (let d = 0.05; d <= 1.2; d += 0.05) {
+      let nx = 0;
+      let nz = 0;
+      for (const [dx, dz] of DIRS) {
+        if (against && dx * vx + dz * vz > 0.17 * sp) continue;
+        const kk = this.kindAt(cx + dx * d, cz + dz * d, CL);
+        if (!(kk === 'wall' || kk === 'person' || kk === k)) {
+          nx += dx;
+          nz += dz;
+        }
+      }
+      const n = Math.hypot(nx, nz);
+      if (n > 1e-6) return { d, nx: nx / n, nz: nz / n };
+    }
+    return null;
+  }
+
+  /** The Ground's walls (see the class comment): what stops the car this step, and the push out of it. */
+  private collide(x: number, z: number, h: number, hl: number, hw: number): { px: number; pz: number; nx: number; nz: number; friction: number } | null {
+    const fx = Math.sin(h);
+    const fz = Math.cos(h);
+    const lx = fz;
+    const lz = -fx;
+    if (this.onExpressway(x, z)) {
+      // The parapets: each corner kept on the network.
+      const y = this.sim.y;
+      for (const f of [hl - 0.25, -(hl - 0.25)]) {
+        for (const s of [hw, -hw]) {
+          const p = this.ex!.pushBack(x + fx * f + lx * s, z + fz * f + lz * s, y);
+          if (p) {
+            this.contact = { kind: 'wall', along: f, across: s, nx: p.nx, nz: p.nz };
+            return { ...p, friction: WALL_FRICTION };
+          }
+        }
       }
     }
+    const s = this.sim;
+    const vx = fx * s.u + lx * s.w;
+    const vz = fz * s.u + lz * s.w;
+    const sp = Math.hypot(vx, vz);
+    const probes = [hl - 0.3, (hl - 0.3) / 3, -(hl - 0.3) / 3, -(hl - 0.3)];
+    for (let i = 0; i < probes.length; i++) {
+      const f = probes[i];
+      const cx = x + fx * f;
+      const cz = z + fz * f;
+      const k = this.kindAt(cx, cz, CL);
+      if (k !== 'wall' && k !== 'person' && k !== 'car' && k !== 'pole') continue;
+      if (k === 'car' || k === 'pole') {
+        // Only the nose, at speed, meeting it fresh (not already ploughing through it), and head-on.
+        if (i !== 0 || sp < NUDGE || this.touching.has(k)) continue;
+        const n = this.way(cx, cz, k, vx, vz, false);
+        if (!n || -(vx * n.nx + vz * n.nz) / sp < DIRECT) continue;
+      }
+      // Out along the surface's normal (a wall met at an angle takes only the speed into it); a person pushes
+      // back against the travel, not round their side.
+      const out = (k === 'person' && sp > 0.5 ? this.way(cx, cz, k, vx, vz, true) : null) ?? this.way(cx, cz, k, vx, vz, false);
+      if (!out) return null;
+      // Where it touches the car (the probe's edge toward it), for which part takes the hit.
+      const px = -out.nx * CL;
+      const pz = -out.nz * CL;
+      this.contact = { kind: k, along: f + px * fx + pz * fz, across: px * lx + pz * lz, nx: out.nx, nz: out.nz };
+      return { px: out.nx * out.d, pz: out.nz * out.d, nx: out.nx, nz: out.nz, friction: WALL_FRICTION };
+    }
+    return null;
+  }
+
+  /** Drive a step: the handling model, the damage it took, then the traffic system's copy of where the car is. */
+  drive(dt: number, c: Controls): void {
+    const P = this.parts;
+    const wasTotaled = this.totaled;
+    // A smashed front limps, damaged tyres grip less and pull; a totalled car won't go.
+    this.sim.gripMul = tyreGrip(P);
+    c = wasTotaled
+      ? { throttle: 0, brake: 0.6, steer: c.steer, handbrake: c.handbrake }
+      : { ...c, throttle: c.throttle * powerLeft(P), steer: Math.max(-1, Math.min(1, c.steer + tyrePull(P))) };
+    this.contact = null;
+    this.sim.update(dt, c, this.ground);
+    this.knock = 0;
+    const hit = this.contact as { kind: HitKind; along: number; across: number; nx: number; nz: number } | null;
+    if (hit?.kind === 'wall') this.glance(dt, hit.nx, hit.nz);
+    if (hit && hit.kind !== 'person') {
+      const shares = sectionsAt(hit.along, hit.across, HL, HW, this.wheelAlong);
+      // A real hit costs by the speed into it (and a little by the speed at all: a glancing knock); sliding
+      // along a wall, a scrape.
+      const d = impactDamage(this.sim.bump) + (this.sim.bump > 2 ? 0.05 * this.sim.speed : 0);
+      this.take(shares, d > 0 ? d : hit.kind === 'wall' ? scrapeDamage(this.sim.speed, dt) : 0);
+      this.knock = this.sim.bump;
+    }
+    this.passThrough(dt, hit?.kind ?? null);
+    if (this.totaled && !wasTotaled) {
+      this.sim.u *= 0.3;
+      this.sim.w *= 0.3;
+      this.onTotaled?.();
+    }
+    this.keptT += dt;
+    if (this.unsaved && (this.keptT > 0.5 || this.totaled)) this.keepCondition();
     this.sync();
     this.saveT += dt;
     if (this.saveT > 5) this.save();
-    this.sound.update(dt, { rev: this.sim.rev, gear: this.sim.gear, throttle: c.throttle, speed: this.sim.speed, slide: this.sim.slide, spin: this.sim.spin, bump: this.sim.bump, boost: this.sim.boost, turbo: !!this.sim.spec.turbo });
+    this.sound.update(dt, { rev: this.sim.rev, gear: this.sim.gear, throttle: c.throttle, speed: this.sim.speed, slide: this.sim.slide, spin: this.sim.spin, bump: this.knock, boost: this.sim.boost, turbo: !!this.sim.spec.turbo });
   }
 
   /**
-   * Driving through things: the sides' probes (and the centre line's, for soft things). A knock on the way
-   * into each (damage, a cut in speed), and drag while any is still inside.
+   * A wall met at an angle (under ~45 degrees) turns the car along it, so you slide down the wall keeping your
+   * speed instead of grinding to a stop nose-in (n: the wall's normal, out toward the car).
    */
-  private passThrough(dt: number): void {
+  private glance(dt: number, nx: number, nz: number): void {
+    const s = this.sim;
+    if (s.speed < 3) return;
+    const fx = Math.sin(s.h);
+    const fz = Math.cos(s.h);
+    const fn = fx * nx + fz * nz;
+    if (fn >= 0 || fn < -0.7) return;
+    const th = Math.atan2(fx - fn * nx, fz - fn * nz);
+    let dh = th - s.h;
+    dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+    const step = Math.max(-3 * dt, Math.min(3 * dt, dh));
+    s.h += step;
+    s.r *= 0.6;
+  }
+
+  /** Damage `d` to the parts by their shares: kept, shown on the car, and listed for the HUD. */
+  private take(shares: Partial<Parts>, d: number): void {
+    if (d <= 0) return;
+    for (const [k, v] of Object.entries(shares) as [Section, number][]) {
+      const before = this.parts[k];
+      this.parts[k] = Math.min(WRECKED, before + d * v);
+      const took = this.parts[k] - before;
+      if (took <= 0) continue;
+      const last = this.hits.find((h) => h.part === k);
+      if (last) last.amount += took;
+      else this.hits.push({ part: k, amount: took });
+    }
+    this.reshape = true;
+    this.unsaved = true;
+  }
+
+  /**
+   * Driving through things (cars and poles not met head-on, anything soft): a knock on the way into each kind
+   * of thing (damage to the parts touching it, a cut in speed), and drag while you're in it.
+   */
+  private passThrough(dt: number, stopped: HitKind | null): void {
     const s = this.sim;
     const fx = Math.sin(s.h);
     const fz = Math.cos(s.h);
-    const hl = 2.15 - 0.3;
-    const probes: [number, number, boolean][] = [];
+    const hl = HL - 0.3;
+    const now = new Map<'car' | 'pole' | 'soft', [number, number][]>();
     for (const f of [hl, hl / 3, -hl / 3, -hl]) {
-      probes.push([f, 0, true]);
-      for (const side of [SIDE, -SIDE]) probes.push([f, side, false]);
+      for (const lat of [0, SIDE, -SIDE]) {
+        const k = this.kindAt(s.x + fx * f + fz * lat, s.z + fz * f - fx * lat, CL);
+        if ((k !== 'car' && k !== 'pole' && k !== 'soft') || k === stopped) continue;
+        const at = now.get(k) ?? [];
+        at.push([f, lat]);
+        now.set(k, at);
+      }
     }
     let drag = 0;
-    const now = new Set<HitKind>();
-    for (const [f, lat, centre] of probes) {
-      const k = this.kindAt(s.x + fx * f + fz * lat, s.z + fz * f - fx * lat, CL);
-      if (k === 'soft' || (k === 'hard' && !centre)) now.add(k);
-    }
-    for (const k of now) {
-      const p = passThrough(k as 'hard' | 'soft', s.speed);
+    for (const [k, where] of now) {
+      const p = passThrough(k, s.speed);
       if (!this.touching.has(k)) {
-        this.condition += p.damage;
+        // The parts touching it share the knock (a probe out at the side stands for the side's skin).
+        const shares: Partial<Parts> = {};
+        for (const [a, lat] of where) {
+          for (const [sec, v] of Object.entries(sectionsAt(a, lat === 0 ? 0 : Math.sign(lat) * HW, HL, HW, this.wheelAlong)) as [Section, number][]) {
+            shares[sec] = (shares[sec] ?? 0) + v / where.length;
+          }
+        }
+        this.take(shares, p.damage);
         s.u *= 1 - p.cut;
         s.w *= 1 - p.cut;
         this.knock = Math.max(this.knock, s.speed * p.cut * 3);
       }
       drag = Math.max(drag, p.drag);
     }
-    this.touching = now;
+    this.touching = new Set(now.keys());
     if (drag > 0 && s.speed > 0.1) {
       const k = Math.max(0, 1 - (drag * dt) / s.speed);
       s.u *= k;
@@ -271,19 +399,28 @@ export class OwnCar {
 
   /** Keep the car's condition with it (the garage repairs it). */
   private keepCondition(): void {
+    this.unsaved = false;
+    this.keptT = 0;
     const p = loadProfile();
     const c = p.cars.find((q) => q.id === this.carId);
     if (!c) return;
+    c.sections = { ...this.parts };
     c.damage = Math.round(this.condition * 10) / 10;
     saveProfile(p);
   }
 
-  /** Every frame: the body on the ground, the wheels turning, the smoke of a damaged car. */
+  /** Every frame: the body on the ground, the wheels turning, the damage showing, the smoke of a smashed front. */
   pose(dt: number): void {
     poseCar(this.view, this.sim, this.ground);
     turnWheels(this.view, this.sim, dt);
+    const P = this.parts;
+    this.dents.tyres(P);
+    if (this.reshape) {
+      this.reshape = false;
+      this.dents.apply(P);
+    }
     const s = this.sim;
-    const heavy = Math.max(0, (this.condition - 55) / 45);
+    const heavy = Math.max(0, (P.front - 45) / 55);
     if (heavy > 0 && Math.random() < heavy * dt * 30) {
       const k = this.smokeNext++ % this.smokeLife.length;
       this.smokePos.set([s.x + Math.sin(s.h) * 1.5 + (Math.random() - 0.5) * 0.6, s.y + 1.0, s.z + Math.cos(s.h) * 1.5 + (Math.random() - 0.5) * 0.6], k * 3);
@@ -298,9 +435,11 @@ export class OwnCar {
     this.smoke.geometry.attributes.life.needsUpdate = true;
   }
 
-  /** Repaired (at the garage): like new again. */
-  repaired(): void {
-    this.condition = 0;
+  /** Repaired: like new again. */
+  repair(): void {
+    Object.assign(this.parts, newParts());
+    this.reshape = true;
+    this.keepCondition();
   }
 
   /** On the expressway (its ramps included), rather than the street. */
@@ -324,6 +463,7 @@ export class OwnCar {
 
   save(): void {
     this.saveT = 0;
+    if (this.unsaved) this.keepCondition();
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({ x: this.sim.x, z: this.sim.z, h: this.sim.h, y: this.sim.y }));
     } catch {

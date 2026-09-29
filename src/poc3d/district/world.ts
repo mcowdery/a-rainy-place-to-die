@@ -3,7 +3,7 @@ import type { DistrictId, MacroMap } from '../../gen/macro';
 import type { Lightmap } from '../real/lightmap';
 import { KIND } from '../real/meshBuilder';
 import { propBlocked, propDist, type Prop } from '../real/props';
-import { SOFT_PROPS } from './crash';
+import { CAR_PROPS, SOFT_PROPS } from './crash';
 import { rawBytes, rawTriangles, toGeometry } from '../real/rawGeometry';
 import type { SignAtlas } from '../real/signs';
 import type { ChunkBuilt, Stage } from './chunkBuild';
@@ -353,34 +353,38 @@ export class District {
   };
 
   /**
-   * For a car at street level (crash.ts): what's at (x, z) within r: `hard` (buildings, set pieces, poles,
-   * trees, parked cars, vending machines, playground frames, the expressway's piers and ramp walls, the edge
-   * of the district), `soft` (hedges, pots, bikes, fences, the avenues' medians), or null.
+   * For a car at street level (crash.ts): what's at (x, z) within r, the most solid first: a `wall` (buildings,
+   * set pieces, playground frames and toilets, the expressway's piers and ramp walls, the edge of the district),
+   * a `car` (parked), a `pole` (lamps, poles, signals, trees, vending machines), `soft` (hedges, pots, bikes,
+   * fences, the avenues' medians), or null.
    */
-  obstacle = (x: number, z: number, r: number): 'hard' | 'soft' | null => {
+  obstacle = (x: number, z: number, r: number): 'wall' | 'car' | 'pole' | 'soft' | null => {
     const inRects = (rs: readonly Rect[]): boolean => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
-    for (const it of this.interiors.values()) if (inRects(it.colliders(0))) return 'hard';
-    if (!this.inDistrict(x, z)) return 'hard';
+    for (const it of this.interiors.values()) if (inRects(it.colliders(0))) return 'wall';
+    if (!this.inDistrict(x, z)) return 'wall';
+    if (this.stampColliders.some(inRects) || inRects(this.extraColliders)) return 'wall';
     const mx = Math.floor(x / CELL);
     const my = Math.floor(z / CELL);
-    let soft = false;
+    let found: 'car' | 'pole' | 'soft' | null = null;
+    const rank = { soft: 1, pole: 2, car: 3 } as const;
+    const see = (k: 'car' | 'pole' | 'soft'): void => {
+      if (!found || rank[k] > rank[found]) found = k;
+    };
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         const p = this.model.plan(mx + dx, my + dy);
-        if (p?.buildings.some((b) => Math.abs(x - b.x) < b.w / 2 + r && Math.abs(z - b.z) < b.d / 2 + r)) return 'hard';
-        if (p?.medians.length && inRects(p.medians)) soft = true;
+        if (p?.buildings.some((b) => Math.abs(x - b.x) < b.w / 2 + r && Math.abs(z - b.z) < b.d / 2 + r)) return 'wall';
+        if (p?.medians.length && inRects(p.medians)) see('soft');
         const d = this.model.detail(mx + dx, my + dy);
         if (!d) continue;
-        if (inRects(d.solids)) return 'hard';
+        if (inRects(d.solids)) return 'wall';
         for (const q of d.props) {
           if (q.solid === false || propDist(q, x, z) >= q.radius + r) continue;
-          if (SOFT_PROPS.has(q.kind)) soft = true;
-          else return 'hard';
+          see(SOFT_PROPS.has(q.kind) ? 'soft' : CAR_PROPS.has(q.kind) ? 'car' : 'pole');
         }
       }
     }
-    if (this.stampColliders.some(inRects) || inRects(this.extraColliders)) return 'hard';
-    return soft ? 'soft' : null;
+    return found;
   };
 
   /** More street-level colliders from outside the plan (the expressway's piers and ramp walls). */

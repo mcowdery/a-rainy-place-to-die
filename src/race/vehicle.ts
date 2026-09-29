@@ -126,7 +126,7 @@ export interface Ground {
    * The push (world x, z) that takes a car of half length hl and half width hw at (x, z) heading h back inside,
    * with the wall's normal (pointing inside); null when it's clear.
    */
-  collide(x: number, z: number, h: number, hl: number, hw: number): { px: number; pz: number; nx: number; nz: number } | null;
+  collide(x: number, z: number, h: number, hl: number, hw: number): { px: number; pz: number; nx: number; nz: number; friction?: number } | null;
 }
 
 export const FLAT: Ground = {
@@ -166,6 +166,8 @@ export class Car {
   private sinceHandbrake = 99;
   /** Turbo boost 0-1 (for the sound and the dashboard). */
   boost = 0;
+  /** Grip left at the front and rear axles (1 whole; a damaged or flat tyre less: district/crash.ts). */
+  gripMul: [number, number] = [1, 1];
 
   constructor(
     readonly spec: CarSpec = COUPE,
@@ -277,7 +279,7 @@ export class Car {
     const sgn = u >= 0 ? 1 : -1;
     // Rear: drive or braking shares the tyre's grip with cornering (a friction ellipse: pulling costs less
     // cornering than sliding does), and past the traction limit the wheels spin and the rear lets go.
-    const Dr = S.gripRear * Nr * surf * (c.handbrake ? S.handbrakeGrip : 1);
+    const Dr = S.gripRear * this.gripMul[1] * Nr * surf * (c.handbrake ? S.handbrakeGrip : 1);
     const cap = Dr * 1.1;
     let Fxr = drive - brakeR * sgn;
     const sideways = Math.abs(u) > 3 && Math.abs(Math.atan2(w, Math.abs(u))) > 0.14;
@@ -285,7 +287,7 @@ export class Car {
     const spinning = Math.abs(Fxr) > cap;
     this.spin = Math.max(0, Math.min(1, (Math.abs(Fxr) - cap) / (0.3 * cap + 1)));
     Fxr = Math.max(-cap, Math.min(cap, Fxr));
-    const Df = S.gripFront * Nf * surf;
+    const Df = S.gripFront * this.gripMul[0] * Nf * surf;
     const Fxf = Math.max(-Df * 1.1, Math.min(Df * 1.1, driveF - brakeF * sgn));
     const ellipse = (F: number, D: number): number => D * Math.sqrt(Math.max(0, 1 - (F / (D * 1.35)) ** 2));
     const latR = ellipse(Fxr, Dr) * (spinning ? 0.5 + 0.25 * (S.lsd ?? 0) : 1);
@@ -353,9 +355,10 @@ export class Car {
         this.bump = Math.max(this.bump, -vn);
         vx -= 1.25 * vn * hit.nx;
         vz -= 1.25 * vn * hit.nz;
-        // Scraping along it slows you.
-        vx *= 0.97;
-        vz *= 0.97;
+        // Scraping along it slows you (by default hard: the passes' guardrails; the city lets you slide on).
+        const f = hit.friction ?? 0.97;
+        vx *= f;
+        vz *= f;
         r *= 0.6;
       }
       u = vx * nfx + vz * nfz;

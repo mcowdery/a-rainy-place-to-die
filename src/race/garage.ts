@@ -1,3 +1,4 @@
+import { installSnap } from '../debug/snap';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -8,7 +9,8 @@ import type { CarType } from '../poc3d/models/vehicles';
 import { cityMaterial, cityUniforms } from '../poc3d/real/city';
 import { BANNERS, model, MODELS, NEON, PAINT_PALETTE, PARTS, PRICES, stats, tunedSpec, type Parts, type Stats } from './catalog';
 import { buildCar, type CarView, type Look } from './carView';
-import { repairCost, TOTALED } from '../poc3d/district/crash';
+import { Dents } from './dents';
+import { BODY, partsOf, repairCost, TOTALED, TYRES, WRECKED, type Section } from '../poc3d/district/crash';
 import { cityReturnViaGarage, rememberCityReturn } from './cityLink';
 import { buildGarage } from './garageScene';
 import { buyCar, currentCar, loadProfile, saveProfile, spend, yen, type Livery, type OwnedCar } from './profile';
@@ -81,6 +83,13 @@ function showCar(): void {
   const c = currentCar(profile);
   const look: Look = viewing ? { type: viewing, paint: model(viewing).paint, paint2: model(viewing).paint2 } : lookOf(c);
   shown = buildCar(look, carMat);
+  // Your own car shows its crash damage until it's repaired (dents.ts).
+  if (!viewing) {
+    const dents = new Dents(shown);
+    const p = partsOf(c);
+    dents.apply(p);
+    dents.tyres(p);
+  }
   scene.add(shown.obj);
 }
 
@@ -186,12 +195,15 @@ function render(): void {
 
 let hoverPart: string | null = null;
 
-/** The car's condition after crashes in the city, and the repair (district/crash.ts). */
+/** The car's condition after crashes in the city, part by part, and the repair (district/crash.ts). */
+const PART_NAMES: Record<Section, string> = { front: 'Front', rear: 'Rear', left: 'Left side', right: 'Right side', fl: 'Tyre FL', fr: 'Tyre FR', rl: 'Tyre RL', rr: 'Tyre RR' };
 function condition(c: OwnedCar): string {
   const d = c.damage ?? 0;
-  if (d < 1) return '<div class="cond">Bodywork <b>like new</b></div>';
-  const cost = repairCost(d);
-  return `<div class="cond">Bodywork <i><b style="width:${Math.max(3, 100 - d)}%"></b></i> ${d >= TOTALED ? '大破 totalled' : `${Math.round(100 - d)}%`}</div><button class="buy" data-act="repair" ${profile.yen < cost ? 'disabled' : ''}>Repair · ${yen(cost)}${d >= TOTALED ? ' (tow included)' : ''}</button>`;
+  const p = partsOf(c);
+  if (d < 1 && [...BODY, ...TYRES].every((k) => p[k] < 1)) return '<div class="cond">Bodywork <b>like new</b></div>';
+  const cost = repairCost(p);
+  const bar = (label: string, health: number): string => `<div class="cond"><span style="width:84px">${label}</span><i><b style="width:${Math.max(3, health)}%"></b></i> <span style="width:44px;text-align:right">${health <= 0 ? '✕' : `${Math.round(health)}%`}</span></div>`;
+  return `${bar('Overall', d >= TOTALED ? 0 : 100 - d)}${[...BODY, ...TYRES].map((k) => bar(PART_NAMES[k], 100 - (p[k] / WRECKED) * 100)).join('')}<button class="buy" data-act="repair" ${profile.yen < cost ? 'disabled' : ''}>Repair · ${yen(cost)}${d >= TOTALED ? ' (tow included)' : ''}</button>`;
 }
 
 const liveryCost = (a: Livery, b: Livery): number =>
@@ -295,9 +307,11 @@ panel.addEventListener('click', (e) => {
       apply(c);
       break;
     case 'repair':
-      if (spend(profile, repairCost(c.damage ?? 0))) {
+      if (spend(profile, repairCost(partsOf(c)))) {
         c.damage = 0;
+        delete c.sections;
         saveProfile(profile);
+        showCar();
         toast('Repaired: like new');
       }
       break;
@@ -341,8 +355,11 @@ function frame(now: number): void {
   toastT = Math.max(0, toastT - dt);
   toastEl.style.opacity = Math.min(1, toastT * 2).toFixed(2);
   composer.render(dt);
+  snap.afterRender();
   requestAnimationFrame(frame);
 }
+// F9: a snapshot and a note for reporting an issue (debug/snap.ts, saved to debug-shots/).
+const snap = installSnap(renderer.domElement, 'garage', () => ({ car: currentCar(profile) }));
 requestAnimationFrame(frame);
 
 window.addEventListener('resize', () => {

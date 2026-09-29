@@ -35,6 +35,8 @@ import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem, type DrivenVehicle } from '../real/traffic';
 import { Driving } from './driving';
 import { OwnCar } from './ownCar';
+import { DamageHud } from './damageHud';
+import { installSnap } from '../../debug/snap';
 import { fare, rideMetres, TaxiPicker } from './taxi';
 import { loadProfile, saveProfile } from '../../race/profile';
 import { Expressway, parseExpressway } from './expressway';
@@ -702,7 +704,7 @@ async function run(): Promise<void> {
     traffic,
     bay ? { x: bay.x, z: bay.z, h: Math.atan2(bay.nx, bay.nz) } : { x: camera.position.x + 4, z: camera.position.z, h: 0 },
     // What's in the way (crash.ts): people stop you; other vehicles are hard; the district says hard or soft.
-    (x, z, r, self) => (npcBlocked(x, z, r) ? 'person' : traffic.blocked(x, z, r, self) ? 'hard' : district.obstacle(x, z, r)),
+    (x, z, r, self) => (npcBlocked(x, z, r) ? 'person' : traffic.blocked(x, z, r, self) ? 'car' : district.obstacle(x, z, r)),
     expressway,
     () => exTraffic.obstacles,
     params.get('car') === 'home',
@@ -977,6 +979,25 @@ async function run(): Promise<void> {
   const dash = document.createElement('div');
   Object.assign(dash.style, { position: 'fixed', left: '24px', bottom: '22px', zIndex: '16', padding: '8px 14px', background: 'rgba(8,8,14,0.72)', border: '1px solid #3a3850', color: '#e8e6f0', font: "bold 26px 'Consolas', monospace", display: 'none', pointerEvents: 'none' });
   document.body.append(dash);
+  // Your car's damage by part, over the speedo (damageHud.ts).
+  const damageHud = new DamageHud();
+  // F9: a snapshot and a note for reporting an issue (debug/snap.ts, saved to debug-shots/).
+  const shot = installSnap(renderer.domElement, 'district', () => ({
+    camera: [camera.position.x, camera.position.y, camera.position.z].map((v) => Math.round(v * 10) / 10),
+    yaw: Math.round(lookYaw()),
+    time: time(),
+    weather: weather(),
+    driving: driving.car
+      ? {
+          vehicle: driving.car.label,
+          kmh: Math.round(driving.kmh),
+          own: !!driving.own,
+          ...(driving.own
+            ? { at: [ownCar.sim.x, ownCar.sim.y, ownCar.sim.z].map((v) => Math.round(v * 10) / 10), heading: Math.round((ownCar.sim.h * 180) / Math.PI), onExpressway: ownCar.onExpressway(), condition: Math.round(ownCar.condition * 10) / 10, parts: Object.fromEntries(Object.entries(ownCar.parts).map(([k, v]) => [k, Math.round(v * 10) / 10])) }
+            : {}),
+        }
+      : null,
+  }));
   const use = async (n: Node3): Promise<void> => {
     if (inVn) return;
     // Your garage: its screen (buy, tune, paint), and back out to the street.
@@ -1261,7 +1282,8 @@ async function run(): Promise<void> {
     updateGps(dt);
     if (driving.bump > 2) audio.bump(driving.bump);
     dash.style.display = driving.car ? 'block' : 'none';
-    if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}${driving.own ? `  車体 ${Math.round(100 - ownCar.condition)}%` : ''}`;
+    if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}`;
+    damageHud.update(inVn ? 0 : dt, driving.own ? ownCar : null);
     const onFoot = !driving.car && !controls.fly && !inVn && Math.abs(cp0.y - 1.7) < 1.2;
     let wvx = dt > 0 ? (cp0.x - lastWalker.x) / dt : 0;
     let wvz = dt > 0 ? (cp0.z - lastWalker.z) / dt : 0;
@@ -1405,6 +1427,7 @@ async function run(): Promise<void> {
     overlay.setRain(rainAmount * 0.11 * (inside ? 0 : 1), now / 1000);
     renderer.info.reset();
     composer.render(dt);
+    shot.afterRender();
     if (bench) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     const frameMs = performance.now() - t0;
     if (bench && phase && frameMs > 25 && params.get('diag') === '1') console.log(`slow frame ${frameMs.toFixed(1)} ms · update ${(tUpd - t0).toFixed(1)} · render ${(performance.now() - tUpd).toFixed(1)} · integrated ${built} (${(district.lastBytes / 1e6).toFixed(1)} MB) · tris ${renderer.info.render.triangles} · progs ${renderer.info.programs?.length}`);

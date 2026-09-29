@@ -7,3 +7,4 @@ dist/
 .env.krea
 # Generated ad candidates awaiting review (approved ones move to assets/ads/source/)
 assets/ads/pending/
+debug-shots/

@@ -1,3 +1,4 @@
+import { installSnap } from '../debug/snap';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
@@ -1016,8 +1017,19 @@ function frame(now: number): void {
   else if (helpEl.textContent !== HELP) helpEl.textContent = HELP;
   hud.textContent = `${course.def.name} · ${course.def.atmosphere.label} · ${mode === 'free' ? `free drive · ${here === 'lot' ? 'practice lot' : here === 'top' ? 'the viewpoint' : 'the pass'}` : kind === 'battle' ? `⚔ battle, ${arms === 'gun' ? 'real guns' : 'paintball'} ${dir === 'up' ? '▲ uphill' : '▼ downhill'}` : `time trial ${mode === 'up' ? '▲ uphill' : '▼ downhill'}${best ? ` · best ${clock(best.time)}` : ''}`} · ${mineModel.name} · ${yen(profile.yen)} · M venues`;
   composer.render(dt);
+  snap.afterRender();
   requestAnimationFrame(frame);
 }
+// F9: a snapshot and a note for reporting an issue (debug/snap.ts, saved to debug-shots/).
+const snap = installSnap(renderer.domElement, 'race', () => ({
+  venue: venueId,
+  mode,
+  car: mineModel.name,
+  at: [car.x, car.y, car.z].map((v) => Math.round(v * 10) / 10),
+  heading: Math.round((car.h * 180) / Math.PI),
+  kmh: Math.round(car.speed * 3.6),
+  gear: car.gear,
+}));
 requestAnimationFrame(frame);
 
 window.addEventListener('resize', () => {
