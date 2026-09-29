@@ -55,20 +55,31 @@ export function freshProfile(): Profile {
   return { v: 1, yen: START_YEN, cars: [newCar('hatch', 'car1')], current: 'car1', earned: 0 };
 }
 
+/**
+ * DEBUG: while this is on, your wallet is topped up to RICH every time the profile loads (every page, every
+ * taxi fare), so money never runs out. Turn it off (false) for the real economy.
+ */
+export const DEBUG_RICH = true;
+const RICH = 99_999_999;
+
 export function loadProfile(): Profile {
+  const rich = (p: Profile): Profile => {
+    if (DEBUG_RICH) p.yen = Math.max(p.yen, RICH);
+    return p;
+  };
   try {
     const s = localStorage.getItem(KEY);
     if (s) {
       const p = JSON.parse(s) as Profile;
       if (p.v === 1 && Array.isArray(p.cars) && p.cars.length && typeof p.yen === 'number') {
         if (!p.cars.some((c) => c.id === p.current)) p.current = p.cars[0].id;
-        return p;
+        return rich(p);
       }
     }
   } catch {
     /* storage blocked or corrupt: start afresh */
   }
-  return freshProfile();
+  return rich(freshProfile());
 }
 
 export function saveProfile(p: Profile): void {
