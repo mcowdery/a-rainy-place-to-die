@@ -72,7 +72,8 @@ export interface Route {
   /** The driven path: straights joined by turns, sampled (see `along`). */
   readonly path: Path;
   readonly length: number;
-  /** Per edge: the left kerb offset from the lane (for bus shelters) and the edge's mid distance. */
+  /** Per edge: the left kerb offset from the lane (for bus shelters) and where its stop is (`mid`, a distance
+   * along the path: mid-block near the edge's middle, on a stretch of kerb clear of crossing streets). */
   readonly edges: readonly { readonly mid: number; readonly kerb: readonly [number, number]; readonly dir: readonly [number, number]; readonly side: Side }[];
   /** The signal-controlled junctions along the route (every grid corner it passes), in route order. */
   readonly junctions: readonly Junction[];
@@ -215,10 +216,43 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
     return ((s % length) + length) % length;
   };
   const path = buildPath(pts, lanes.map((l) => l.d), turnAt, straight, start, length);
+  // A crossing street (one running across this edge) at (x, z): a bus stop can't stand there.
+  const crossing = (x: number, z: number, vertical: boolean): boolean => {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (const r of plan(Math.floor(x / CELL) + dx, Math.floor(z / CELL) + dy)?.roads ?? []) {
+          if (r.vertical === vertical || r.kind === 'coast') continue;
+          const q = r.rect;
+          if (x > q.x - 0.5 && x < q.x + q.w + 0.5 && z > q.y - 0.5 && z < q.y + q.h + 0.5) return true;
+        }
+      }
+    }
+    return false;
+  };
   const edges = lanes.map((l, i) => {
     const left: [number, number] = [l.d[1], -l.d[0]];
     const side: Side = l.d[0] === 0 ? (l.p[0] === X0 ? 'west' : 'east') : l.p[1] === Z0 ? 'north' : 'south';
-    return { mid: onEdge(i, edgeLen[i] / 2), kerb: [left[0] * (l.kerb - l.o), left[1] * (l.kerb - l.o)] as [number, number], dir: l.d, side };
+    const kerb: [number, number] = [left[0] * (l.kerb - l.o), left[1] * (l.kerb - l.o)];
+    // The stop: mid-block (an edge's middle is often a junction), the block nearest the middle first, moved
+    // along until the shelter and its pole (3 m behind to 4 m ahead) stand clear of any crossing street.
+    const vertical = l.d[0] === 0;
+    const blocks = Math.max(1, Math.round(edgeLen[i] / CELL));
+    const origin = (pts[i][0] - l.p[0]) * l.d[0] + (pts[i][1] - l.p[1]) * l.d[1];
+    const at = (t: number): [number, number] => [l.p[0] + l.d[0] * t + left[0] * l.kerb, l.p[1] + l.d[1] * t + left[1] * l.kerb];
+    const clear = (t: number): boolean => [-3, -1, 1, 3, 4].every((k) => !crossing(...at(t + k), vertical));
+    const mids = Array.from({ length: blocks }, (_, k) => (k + 0.5) * CELL).sort((p, q) => Math.abs(p - (blocks * CELL) / 2) - Math.abs(q - (blocks * CELL) / 2));
+    let stop = mids[0];
+    search: for (const m of mids) {
+      for (let off = 0; off <= 48; off += 4) {
+        for (const t of off ? [m + off, m - off] : [m]) {
+          if (clear(t)) {
+            stop = t;
+            break search;
+          }
+        }
+      }
+    }
+    return { mid: onEdge(i, Math.max(0, Math.min(edgeLen[i], stop - origin))), kerb, dir: l.d, side };
   });
   // Junctions: every grid corner along each edge (including the corner it turns at, not the one it
   // started from), projected onto the lane; the stop line sits before the crossing road's zebra.
