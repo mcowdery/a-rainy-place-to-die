@@ -7,7 +7,7 @@ import { DistrictModel } from '../src/poc3d/district/model';
 import { parseZones3 } from '../src/poc3d/district/zones';
 import { destinations } from '../src/poc3d/district/travel';
 import * as THREE from 'three';
-import { along, parseTraffic3, routeFor, Signals, TURN, TURN_R } from '../src/poc3d/district/traffic';
+import { along, carLoops, parseTraffic3, routeFor, Signals, TURN, TURN_R } from '../src/poc3d/district/traffic';
 import { TrafficSystem } from '../src/poc3d/real/traffic';
 import { District } from '../src/poc3d/district/world';
 import { localFrame, toWorld } from '../src/poc3d/real/localFrame';
@@ -409,7 +409,7 @@ describe('Asagiri set pieces and traffic', () => {
   const plan = (mx: number, my: number) => district.plan(mx, my);
 
   it('keeps every traffic lane clear of buildings, props and stops', () => {
-    for (const loop of [...content.traffic.cars.map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
+    for (const loop of [...carLoops(content.macro, content.traffic, plan).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
       const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail.x] : []);
       for (let s = 0; s < route.length; s += 2) {
         const p = along(route, s);
@@ -464,7 +464,7 @@ describe('Traffic signals and junctions', () => {
   });
 
   it('puts a junction with a stop line before it at every grid corner along each loop', () => {
-    for (const loop of content.traffic.cars) {
+    for (const loop of carLoops(content.macro, content.traffic, plan)) {
       const route = routeFor(loop.rect, true, plan, []);
       const [c0, r0, c1, r1] = loop.rect;
       expect(route.junctions).toHaveLength(2 * (c1 - c0) + 2 * (r1 - r0));
@@ -479,7 +479,7 @@ describe('Traffic signals and junctions', () => {
   });
 
   it('drives round the corners on a smooth path, moving the way it faces (no sliding)', () => {
-    for (const [rect, cw] of [...content.traffic.cars.map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
+    for (const [rect, cw] of [...carLoops(content.macro, content.traffic, plan).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
       const route = routeFor(rect, cw, plan, []);
       const ds = 0.25;
       let prev = along(route, 0);
@@ -529,6 +529,21 @@ describe('Traffic signals and junctions', () => {
     expect(Math.hypot(first.x - p.x, first.z - p.z)).toBeLessThan(10);
     expect(closest).toBeGreaterThan(3);
     expect(honks).toBeGreaterThan(0);
+  });
+
+  it('keeps traffic far from the camera waiting where it is, and drives it on when you come back', () => {
+    const loop = content.traffic.cars[0];
+    const route = routeFor(loop.rect, true, plan, []);
+    const traffic = new TrafficSystem([{ route, spacing: route.length / 4 }], [], new THREE.MeshBasicMaterial(), new Signals());
+    const start = along(route, 0);
+    const where = (): number[] => traffic.nearest(new THREE.Vector3(start.x, 0, start.z), 4).map((c) => Math.round(c.x * 10) + Math.round(c.z * 10) * 1e5);
+    const before = where();
+    const far = new THREE.Vector3(start.x + 5000, 1.7, start.z);
+    for (let t = 0; t < 10; t += 0.1) traffic.update(0.1, far);
+    expect(where()).toEqual(before);
+    const near = new THREE.Vector3(start.x, 1.7, start.z);
+    for (let t = 0; t < 10; t += 0.1) traffic.update(0.1, near);
+    expect(where()).not.toEqual(before);
   });
 
   it('drives on past someone waiting on the pavement', () => {

@@ -151,7 +151,7 @@ describe('taxi fares', () => {
 import { loadDistrictContent } from '../src/poc3d/district/content';
 import { District } from '../src/poc3d/district/world';
 import { DISTRICTS3 } from '../src/poc3d/district/plan';
-import { along, routeFor } from '../src/poc3d/district/traffic';
+import { along, carLoops, routeFor } from '../src/poc3d/district/traffic';
 
 describe('the expressway over the avenues', () => {
   const content = loadDistrictContent();
@@ -173,7 +173,7 @@ describe('the expressway over the avenues', () => {
 
   it('keeps the street traffic clear of the piers, the medians and the ramps', () => {
     const plan = (mx: number, my: number) => district.plan(mx, my);
-    for (const loop of [...content.traffic.cars.map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
+    for (const loop of [...carLoops(content.macro, content.traffic, plan).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
       const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail.x] : []);
       for (let s = 0; s < route.length; s += 2) {
         const p = along(route, s);

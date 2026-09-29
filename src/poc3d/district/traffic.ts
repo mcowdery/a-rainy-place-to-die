@@ -1,5 +1,6 @@
 import YAML from 'yaml';
 import type { MacroMap } from '../../gen/macro';
+import { roadClass } from './gps';
 import { CELL, STYLES3, type CellPlan3 } from './plan';
 
 /**
@@ -24,6 +25,8 @@ export interface BusLine {
 export interface TrafficContent {
   readonly cars: readonly TrafficLoop[];
   readonly buses: readonly BusLine[];
+  /** Generated car loops over the rest of the city (`carLoops`): their size in cells and their spacing. */
+  readonly auto: { readonly size: number; readonly spacing: number } | null;
 }
 
 const isRect = (v: unknown): v is [number, number, number, number] => Array.isArray(v) && v.length === 4 && v.every((n) => Number.isInteger(n)) && v[0] < v[2] && v[1] < v[3];
@@ -43,7 +46,7 @@ export function parseTraffic3(file: string, text: string, macro: MacroMap, error
     doc = (YAML.parse(text) ?? {}) as Record<string, unknown>;
   } catch (e) {
     err(`YAML: ${(e as Error).message}`);
-    return { cars: [], buses: [] };
+    return { cars: [], buses: [], auto: null };
   }
   const cars: TrafficLoop[] = [];
   for (const [i, raw] of (Array.isArray(doc.cars) ? doc.cars : []).entries()) {
@@ -60,7 +63,59 @@ export function parseTraffic3(file: string, text: string, macro: MacroMap, error
     else if (!Array.isArray(r.stops) || r.stops.length !== 4) err(`buses ${i}: stops must name the 4 stops (north, east, south, west edge)`);
     else buses.push({ id: String(r.id), name: String(r.name), en: String(r.en), rect: r.rect, buses: typeof r.buses === 'number' ? r.buses : 1, stops: r.stops.map(String) });
   }
-  return { cars, buses };
+  let auto: TrafficContent['auto'] = null;
+  if (doc.auto !== undefined) {
+    const a = doc.auto as Record<string, unknown>;
+    if (!Number.isInteger(a?.size) || (a.size as number) < 1 || (a.size as number) > 4) err('auto.size: 1-4 cells');
+    else auto = { size: a.size as number, spacing: typeof a.spacing === 'number' && a.spacing >= 12 ? a.spacing : 50 };
+  }
+  return { cars, buses, auto };
+}
+
+/**
+ * Every car loop: the authored ones, then (with `auto`) generated ones tiling the rest of the city, a square of
+ * `size` cells on a fixed lattice, wherever it overlaps no other loop, has generated cells on both sides of every
+ * edge, and every road along its edges is a proper street (raised pavements, or an avenue: the roads the GPS
+ * drives, gps.ts `roadClass`). So traffic comes with each new district; the narrow lanes stay quiet.
+ */
+export function carLoops(macro: MacroMap, traffic: TrafficContent, plan: (mx: number, my: number) => CellPlan3 | null): TrafficLoop[] {
+  const out = [...traffic.cars];
+  const a = traffic.auto;
+  if (!a) return out;
+  const n = a.size;
+  const overlaps = (p: readonly number[], q: readonly number[]): boolean => p[0] < q[2] && q[0] < p[2] && p[1] < q[3] && q[1] < p[3];
+  // The roads along a grid line between two points on it, as the planner laid them out in the cells beside it.
+  const proper = (vertical: boolean, line: number, a0: number, a1: number): boolean => {
+    for (let k = a0; k < a1; k++) {
+      let found = false;
+      for (const side of [line - 1, line]) {
+        for (const r of plan(vertical ? side : k, vertical ? k : side)?.roads ?? []) {
+          if (r.vertical !== vertical || r.kind === 'coast') continue;
+          const q = r.rect;
+          const at = line * CELL;
+          if (vertical ? !(q.x < at && q.x + q.w > at) : !(q.y < at && q.y + q.h > at)) continue;
+          found = true;
+          if (roadClass(r) !== 'main') return false;
+        }
+      }
+      if (!found) return false;
+    }
+    return true;
+  };
+  // Generated cells on both sides of every edge (by the plans: a residential cell no zone paints isn't built).
+  const builtRound = ([c0, r0, c1, r1]: readonly number[]): boolean => {
+    for (let r = r0 - 1; r <= r1; r++) for (let c = c0 - 1; c <= c1; c++) if (!plan(c, r)) return false;
+    return true;
+  };
+  for (let r0 = 0; r0 + n <= macro.rows; r0 += n) {
+    for (let c0 = 0; c0 + n <= macro.cols; c0 += n) {
+      const rect = [c0, r0, c0 + n, r0 + n] as const;
+      if (out.some((l) => overlaps(l.rect, rect)) || !builtRound(rect)) continue;
+      if (!proper(false, r0, c0, c0 + n) || !proper(false, r0 + n, c0, c0 + n) || !proper(true, c0, r0, r0 + n) || !proper(true, c0 + n, r0, r0 + n)) continue;
+      out.push({ rect, spacing: a.spacing });
+    }
+  }
+  return out;
 }
 
 export type Side = 'north' | 'east' | 'south' | 'west';

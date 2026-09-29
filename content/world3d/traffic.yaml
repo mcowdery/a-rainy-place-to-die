@@ -1,7 +1,10 @@
 # Traffic on the roads along the L0 cell edges. A loop is a rectangle of grid lines [col0, row0, col1, row1];
 # every edge must have generated cells on both sides (both halves of the road exist). Cars drive the loops
 # clockwise and keep left; loops that share an edge use its two lanes in opposite directions. Buses drive
-# their loops anticlockwise (the other lane of the outer edges) and stop at the middle of each edge.
+# their loops anticlockwise (the other lane of the outer edges) and stop mid-block on each edge.
+# auto: generated car loops over the rest of the city (district/traffic.ts carLoops): squares of `size` cells on a
+# fixed lattice wherever no loop is, every edge a proper street (raised pavements) with generated cells both sides.
+auto: { size: 2, spacing: 52 }
 cars:
   - { rect: [26, 10, 28, 12], spacing: 48 }
   - { rect: [28, 10, 30, 12], spacing: 48 }

@@ -41,7 +41,7 @@ export function loadDistrictContent(): DistrictContent {
   const zoneFiles = import.meta.glob('../../../content/world3d/zones/*.yaml', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
   const zones = macro ? ZoneMap.merge(Object.entries(zoneFiles).map(([path, text]) => parseZones3(path.replace(/^(\.\.\/)+/, ''), text, macro, errors))) : ZoneMap.EMPTY;
   const rail = macro ? parseRail3('content/world3d/rail.yaml', railText, macro, errors) : null;
-  const traffic = macro ? parseTraffic3('content/world3d/traffic.yaml', trafficText, macro, errors) : { cars: [], buses: [] };
+  const traffic = macro ? parseTraffic3('content/world3d/traffic.yaml', trafficText, macro, errors) : { cars: [], buses: [], auto: null };
   const subway = parseSubway3('content/world3d/subway.yaml', subwayText, placed, errors, rail ? { id: rail.id, name: rail.name, nameEn: rail.nameEn, color: rail.color, x: rail.x } : null);
   const avenues = macro ? parseRoads3('content/world3d/roads.yaml', roadsText, macro, errors) : new Map();
   const ids = zones.zones.map((z) => z.id);

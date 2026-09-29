@@ -20,6 +20,13 @@ import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
  */
 
 const DRAW = 320;
+/**
+ * Traffic further than this from the camera waits where it is (not simulated, not drawn), so the cost stays with
+ * the cars round you however big the city gets; it drives on when you come back.
+ */
+export const SIM = 900;
+/** The spatial grid for finding the vehicle ahead (m a square). */
+const BUCKET = 40;
 /** The sideways pull drivers take a turn at (m/s^2): turning speed = sqrt(pull * radius). */
 const TURN_PULL = 2.6;
 
@@ -323,6 +330,8 @@ interface Vehicle extends DrivenVehicle {
   /** Its wheels (drawn by `Wheels`) and how far they've turned (rad). */
   readonly wheels: WheelLayout;
   turned: number;
+  /** Simulated this frame (within SIM of the camera, or not in traffic). */
+  live: boolean;
 }
 
 /**
@@ -424,7 +433,7 @@ export class TrafficSystem {
       this.group.add(obj);
       // The rear axle sits about a fifth of the length in from the back (a car's overhang; a bus's longer).
       const axle = bus ? half - 2.6 : half - 0.95;
-      this.vehicles.push({ obj, brake, route, half, width, bus, driver, label, mode: 'traffic', s, v: driver.v0 * 0.6, acc: 0, curv: 0, hideBody: false, stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle, waited: 0, hornIn: 0, x: 0, z: 0, dx: 0, dz: 1, wheels, turned: 0 });
+      this.vehicles.push({ obj, brake, route, half, width, bus, driver, label, mode: 'traffic', s, v: driver.v0 * 0.6, acc: 0, curv: 0, hideBody: false, stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle, waited: 0, hornIn: 0, x: 0, z: 0, dx: 0, dz: 1, wheels, turned: 0, live: true });
     };
     for (const { route, spacing } of cars) {
       const n = Math.max(2, Math.floor(route.length / spacing));
@@ -458,10 +467,47 @@ export class TrafficSystem {
         add(obj, busBrakeGeo, route, BUS_LEN / 2, 2.5, true, { v0: 9.5, a: 0.9, b: 1.6, T: 1.6, s0: 3 }, (route.length * (i + 0.3)) / line.buses, 'Bus', BUS_WHEELS);
       }
     }
+    for (const v of this.vehicles) {
+      const p = this.pose(v);
+      v.x = p.x;
+      v.z = p.z;
+      v.dx = p.dx;
+      v.dz = p.dz;
+    }
     this.wheels = new Wheels(this.group, city, this.vehicles.length * 4);
     const stops = busStops(buses, city);
     this.group.add(stops.mesh);
     this.colliders.push(...stops.colliders);
+  }
+
+  /** The live vehicles by square of the spatial grid (rebuilt each frame). */
+  private readonly grid = new Map<number, Vehicle[]>();
+
+  private static key(x: number, z: number): number {
+    return (Math.floor(x / BUCKET) + 2048) * 4096 + Math.floor(z / BUCKET) + 2048;
+  }
+
+  private bucket(): void {
+    for (const list of this.grid.values()) list.length = 0;
+    for (const v of this.vehicles) {
+      if (!v.live) continue;
+      const k = TrafficSystem.key(v.x, v.z);
+      const list = this.grid.get(k);
+      if (list) list.push(v);
+      else this.grid.set(k, [v]);
+    }
+  }
+
+  /** The live vehicles in the grid squares within `rings` squares of (x, z). */
+  private *near(x: number, z: number, rings: number): Generator<Vehicle> {
+    const bx = Math.floor(x / BUCKET);
+    const bz = Math.floor(z / BUCKET);
+    for (let i = -rings; i <= rings; i++) {
+      for (let j = -rings; j <= rings; j++) {
+        const list = this.grid.get((bx + i + 2048) * 4096 + bz + j + 2048);
+        if (list) yield* list;
+      }
+    }
   }
 
   /** The time the signals run on (seconds). */
@@ -486,8 +532,9 @@ export class TrafficSystem {
   update(dt: number, camera: THREE.Vector3, people: readonly Walker[] = []): void {
     this.time += dt;
     const V = this.vehicles;
+    for (const v of V) v.live = v.mode !== 'traffic' || v === this.hail?.taxi || Math.hypot(v.x - camera.x, v.z - camera.z) < SIM;
     for (const v of V) {
-      if (v.mode !== 'traffic') continue;
+      if (v.mode !== 'traffic' || !v.live) continue;
       const p = this.pose(v);
       v.x = p.x;
       v.z = p.z;
@@ -500,9 +547,14 @@ export class TrafficSystem {
       if (o.mode === 'traffic' || o.aloft) continue;
       for (const f of [-0.6, 0, 0.6]) others.push({ x: o.x + o.dx * o.half * f, z: o.z + o.dz * o.half * f, vx: o.dx * o.v, vz: o.dz * o.v, r: o.width / 2 + 0.2 });
     }
-    for (const v of V) if (v.mode === 'traffic') v.acc = this.accel(v, dt, others, camera);
+    this.bucket();
+    for (const v of V) if (v.mode === 'traffic' && v.live) v.acc = this.accel(v, dt, others, camera);
     this.wheels.begin();
     for (const v of V) {
+      if (!v.live) {
+        v.obj.visible = false;
+        continue;
+      }
       if (v.mode === 'traffic') {
         const L = v.route.length;
         v.v = Math.max(0, v.v + v.acc * dt);
@@ -579,7 +631,7 @@ export class TrafficSystem {
     // The vehicle ahead in the lane, on any loop: in front, roughly the same heading, not off to the side.
     let lead: Vehicle | null = null;
     let leadGap = Infinity;
-    for (const o of this.vehicles) {
+    for (const o of this.near(v.x + v.dx * 35, v.z + v.dz * 35, 2)) {
       if (o === v) continue;
       const rx = o.x - v.x;
       const rz = o.z - v.z;
@@ -676,7 +728,7 @@ export class TrafficSystem {
 
   /** Oncoming traffic on its way through junction j (moving, heading the other way, near the box). */
   private oncoming(v: Vehicle, j: Junction): boolean {
-    for (const o of this.vehicles) {
+    for (const o of this.near(j.x, j.z, 1)) {
       if (o === v || o.v < 1) continue;
       if (o.dx * v.dx + o.dz * v.dz > -0.8) continue;
       const rx = j.x - o.x;
@@ -803,7 +855,7 @@ export class TrafficSystem {
     const brake = new THREE.Object3D();
     const v: Vehicle = {
       obj, brake, route: t.route, half, width, bus: false, driver: t.driver, label, mode: 'parked', s: 0, v: 0, acc: 0, curv: 0, hideBody: false,
-      stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle: half - 0.95, waited: 0, hornIn: 0, x, z, dx, dz, wheels: t.wheels, turned: 0, own: true,
+      stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle: half - 0.95, waited: 0, hornIn: 0, x, z, dx, dz, wheels: t.wheels, turned: 0, own: true, live: true,
     };
     this.group.add(obj);
     this.vehicles.push(v);

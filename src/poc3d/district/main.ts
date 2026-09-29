@@ -53,7 +53,7 @@ import { SsrPass } from '../real/ssr';
 import { CityAudio } from '../real/audio';
 import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater } from '../real/weather';
 import { moodFromUrl, MoodPanel } from './moodPanel';
-import { routeFor, Signals } from './traffic';
+import { carLoops, routeFor, Signals } from './traffic';
 import { destinations, TravelMap, type Destination, type MapLine } from './travel';
 import { RoutePicker } from './routePicker';
 import { subwayRoute } from './subway';
@@ -255,7 +255,7 @@ async function run(): Promise<void> {
   );
   const signals = new Signals(scrambles);
   const traffic = new TrafficSystem(
-    content.traffic.cars.map((c) => ({ route: routeFor(c.rect, true, plan, piers), spacing: c.spacing })),
+    carLoops(content.macro, content.traffic, plan).map((c) => ({ route: routeFor(c.rect, true, plan, piers), spacing: c.spacing })),
     content.traffic.buses.map((line) => ({ line, route: routeFor(line.rect, false, plan, piers) })),
     city,
     signals,
