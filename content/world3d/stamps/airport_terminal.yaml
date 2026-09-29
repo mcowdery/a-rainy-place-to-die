@@ -1,0 +1,12 @@
+# 東都空港 TŌTO AIRPORT's terminal on Hanejima (Haneda-like; real/port.ts, kind airport_terminal): the glass hall,
+# the wing of a roof over the departures kerb, taxis and the limousine bus. The airfield behind it is
+# real/airport.ts. Check-in is a story door (a departure, or someone arriving).
+id: airport_terminal
+name: 東都空港 TŌTO AIRPORT
+footprint: [96, 60]
+height: 18
+front: north
+landmark: airport_terminal
+nodes:
+  front: { kind: spawn, name: Tōto Airport (departures), at: [48, 26], facing: south, view: [180, 12] }
+  check_in: { kind: door, name: Check-in 搭乗手続き, at: [48, 0.6], returnSpawn: front }

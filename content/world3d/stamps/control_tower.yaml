@@ -1,0 +1,9 @@
+# The airport's control tower on Hanejima (real/port.ts, kind control_tower): a landmark over the bay.
+id: control_tower
+name: TŌTO TOWER (air traffic control)
+footprint: [16, 16]
+height: 70
+front: north
+landmark: control_tower
+nodes:
+  front: { kind: spawn, name: Tōto Airport control tower, at: [8, 10], facing: south, view: [180, 30] }

@@ -195,3 +195,12 @@
   stamp: bay_hall
   cell: [30, 25]
   offset: [38, 30]
+# Hanejima (docs/city-plan.md): the airport's terminal and control tower on its landside; the airfield south of them.
+- id: airport
+  stamp: airport_terminal
+  cell: [8, 24]
+  offset: [18, 30]
+- id: airport_tower
+  stamp: control_tower
+  cell: [10, 24]
+  offset: [56, 70]

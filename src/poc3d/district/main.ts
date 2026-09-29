@@ -44,6 +44,7 @@ import { loadProfile, saveProfile } from '../../race/profile';
 import { Expressway, parseExpressway } from './expressway';
 import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
 import { buildSea } from '../real/sea';
+import { buildAirport, onAirfield } from '../real/airport';
 import expresswayText from '../../../content/world3d/expressway.yaml?raw';
 import { pointsAhead, Router, type NavMode } from './gps';
 import { Guide, type GuideDest, type GuideFrom } from './guide';
@@ -712,7 +713,10 @@ async function run(): Promise<void> {
   // The Tōto Expressway (expressway.ts): the elevated inner loop, its ramps and its exits to the passes.
   district.extraColliders.push(...expressway.streetColliders());
   // The bay and the river (real/sea.ts): water over the map's water cells, seawalls where built land meets it.
-  const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my), cityU.uHorizon, content.bridges);
+  const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), cityU.uHorizon, content.bridges);
+  // Hanejima's airfield and its traffic (real/airport.ts).
+  const airport = buildAirport();
+  scene.add(airport.group);
   scene.add(sea.group);
   if (debug) (window as unknown as { __sea: unknown }).__sea = { sea, renderer, horizon: cityU.uHorizon };
   const exView = buildExpressway(expressway, city);
@@ -742,14 +746,23 @@ async function run(): Promise<void> {
   const back = params.get('from');
   const exitRoad = back ? expressway.roads.find((r) => r.kind === 'spur' && r.id === back) : undefined;
   if (exitRoad) {
-    const L = expressway.loop;
-    let best = 0;
-    let bd = Infinity;
-    for (let i = 0; i < L.x.length; i++) {
-      const d = Math.hypot(L.x[i] - exitRoad.x[0], L.z[i] - exitRoad.z[0]);
-      if (d < bd) [best, bd] = [i, d];
-    }
-    const i = (best + 55) % L.x.length;
+    // A route heading away from the tunnel from near its mouth (the other deck of a two-way route): on it, a
+    // little way along. Else (a loop's corner) on the loop, just past the corner.
+    const near = (r: typeof exitRoad): { i: number; d: number } => {
+      let i = 0;
+      let d = Infinity;
+      for (let k = 0; k < r.x.length; k++) {
+        const e = Math.hypot(r.x[k] - exitRoad.x[0], r.z[k] - exitRoad.z[0]);
+        if (e < d) [i, d] = [k, e];
+      }
+      return { i, d };
+    };
+    const away = expressway.roads
+      .filter((r) => r.kind === 'route')
+      .map((r) => ({ r, ...near(r) }))
+      .find(({ r, i, d }) => d < 30 && r.tx[i] * exitRoad.tx[0] + r.tz[i] * exitRoad.tz[0] < -0.5);
+    const L = away?.r ?? expressway.loop;
+    const i = away ? Math.min(L.x.length - 1, away.i + 30) : (near(L).i + 55) % L.x.length;
     ownCar.place(L.x[i] + L.tz[i] * 1.8, L.z[i] - L.tx[i] * 1.8, Math.atan2(L.tx[i], L.tz[i]), L.y[i]);
     ownCar.sim.u = 16;
   }
@@ -1354,6 +1367,7 @@ async function run(): Promise<void> {
     // tunnels at the end of the exits (drive in: you're at that pass).
     const onLoop = ownCar.onExpressway() ? expressway.at(ownCar.sim.x, ownCar.sim.z, ownCar.sim.y) : null;
     exTraffic.update(inVn ? 0 : dt, onLoop && onLoop.road === expressway.loop ? { i: onLoop.i, lateral: onLoop.lateral, v: ownCar.sim.u } : null);
+    airport.update(inVn ? 0 : dt, time() === 'night' || time() === 'dusk');
     (sodium.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
     sodium.visible = cityU.uLamps.value > 0.05;
     const tunnel = driving.own ? expressway.portal(ownCar.sim.x, ownCar.sim.z, ownCar.sim.y) : null;

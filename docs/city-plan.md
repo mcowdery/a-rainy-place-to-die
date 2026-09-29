@@ -81,7 +81,7 @@ between; slopes and stairs): Takanodai heights, Gakuenzaka's slope, Kawabata's t
 ## Build order
 
 Progress: L0 v2 and the groundwork are in; Kasumi-chō and the port's streets and warehouses are generated, with
-the sea; route 1 and the Wangan are built (two-way, ramps into the port); the fish market, the disco (JULIET BAYSIDE), the tuning shop (SPEED LAB), the ferry terminal and the quay cranes stand in the port; the islands are in (Ebisu-jima and its PA; the Shiomi bridge, street and expressway decks, to Shiomi-jima with TŌTO TV, the Sky Wheel and TŌTO BAY HALL). Next: Hanejima (the airport) and the Wangan's ends, then Denkō-chō.
+the sea; route 1 and the Wangan are built (two-way, ramps into the port); the fish market, the disco (JULIET BAYSIDE), the tuning shop (SPEED LAB), the ferry terminal and the quay cranes stand in the port; the islands are in (Ebisu-jima and its PA; the Shiomi bridge, street and expressway decks, to Shiomi-jima with TŌTO TV, the Sky Wheel and TŌTO BAY HALL). Hanejima is in too (the landside, the terminal and tower, the airfield with its traffic, the bridge and the airport branch), and the Wangan runs east over the river to the Yūnagi tunnel in the east headland. Next: Denkō-chō (the monorail and the Wangan's west end past the airport can come with a later transit pass).
 
 1. The plan (this; L0 v2 in place).
 2. Groundwork: the lightmap in tiles, routing on the road network, traffic generated from the streets, the

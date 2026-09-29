@@ -80,9 +80,13 @@ describe('the expressway', () => {
   it('loads', () => {
     expect(errors).toEqual([]);
     expect(ex.loop.x.length).toBeGreaterThan(3000);
-    // The loop's four pairs, route 1's pair into the port, the Wangan's at each end and at Ebisu-jima, Shiomi-jima's.
-    expect(ex.roads.filter((r) => r.rampKind === 'on')).toHaveLength(9);
-    expect(ex.roads.filter((r) => r.rampKind === 'off')).toHaveLength(9);
+    // The loop's four pairs, route 1's pair into the port, the Wangan's at each end and at Ebisu-jima, the islands'.
+    expect(ex.roads.filter((r) => r.rampKind === 'on')).toHaveLength(10);
+    expect(ex.roads.filter((r) => r.rampKind === 'off')).toHaveLength(10);
+    // The Yūnagi tunnel is at the Wangan's east end now, in the headland.
+    const yunagi = ex.roads.find((r) => r.id === 'yunagi')!;
+    expect(yunagi.x[0]).toBeGreaterThan(41 * 128 - 40);
+    expect(yunagi.hill).toBeGreaterThan(0);
     // Two-way routes: a deck each way, side by side, their piers shared on the line between them.
     const r1s = ex.roads.find((r) => r.id === 'r1_s')!;
     const r1n = ex.roads.find((r) => r.id === 'r1_n')!;

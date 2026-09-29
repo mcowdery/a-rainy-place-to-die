@@ -158,3 +158,16 @@ describe('the islands', () => {
     expect(drive.route(from.x, from.z, 16.5 * CELL, 22.6 * CELL)).not.toBeNull();
   });
 });
+
+describe('the airport', () => {
+  it('drives from the crossing over the Hanejima bridge to the terminal', () => {
+    const d = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues, content.bridges);
+    const drive = new Router({ bounds: d.bounds, cells: d.cells, plan: (mx, my) => d.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL, bridges: content.bridges }, 'drive');
+    const from = node('kaburo_crossing.view');
+    const to = node('airport.front');
+    const r = drive.route(from.x, from.z, to.x, to.z);
+    expect(r).not.toBeNull();
+    // It crosses the water on the bridge (col 8, rows 22-23).
+    expect(r!.some(([x, z]) => Math.abs(x - 8 * 128) < 20 && z > 22 * 128 && z < 23 * 128 + 10) || r!.some((p, i) => i > 0 && Math.abs(p[0] - 8 * 128) < 20 && Math.abs(r![i - 1][0] - 8 * 128) < 20 && r![i - 1][1] < 22 * 128 && p[1] > 23 * 128)).toBe(true);
+  });
+});

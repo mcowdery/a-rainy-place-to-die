@@ -26,6 +26,9 @@ avenues:
 # expressway's branch over it, its ramps on the island).
   - { name: 汐見通り SHIOMI-DŌRI, col: 28, from: 21, to: 22, width: 32, median: 2.4 }
   - { name: 汐見通り SHIOMI-DŌRI, col: 28, from: 23, to: 26, width: 32, median: 2.4 }
+# The way to the airport: Kūkō-dōri down through the container terminal, over the bridge, into Hanejima.
+  - { name: 空港通り KŪKŌ-DŌRI, col: 8, from: 21, to: 22, width: 32, median: 2.4 }
+  - { name: 空港通り KŪKŌ-DŌRI, col: 8, from: 23, to: 25, width: 32, median: 2.4 }
 
 # The Toto Line's viaduct runs on south through Kasumi-chō over its own street, as wide as it is between the districts.
   - { name: 高架下通り KŌKASHITA-DŌRI, col: 26, from: 14, to: 17, width: 16, median: 0 }
@@ -37,3 +40,4 @@ avenues:
 # cell-edge roads either side carry on over it. The Shiomi bridge's upper deck is the expressway's (expressway.yaml).
 bridges:
   - { name: 汐見大橋 SHIOMI-ŌHASHI, col: 28, from: 22, to: 23, width: 32, median: 2.4 }
+  - { name: 羽根島大橋 HANEJIMA-ŌHASHI, col: 8, from: 22, to: 23, width: 32, median: 2.4 }

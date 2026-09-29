@@ -1,0 +1,54 @@
+# 羽根島 Hanejima, the airport island (Haneda-like; format: src/poc3d/district/zones.ts; the whole-city plan:
+# docs/city-plan.md), over the Hanejima bridge from the container terminal. Its north half is the landside
+# (hotels, car parks, cargo sheds round the terminal); its south half is the airfield, drawn by real/airport.ts and
+# fenced off (not painted here, so it isn't generated).
+district: harbor
+area: 羽根島 Hanejima (Tōto Airport)
+origin: [4, 23]
+map:
+  - CCHHHHCC
+  - CCHHHHCC
+
+zones:
+  H:
+    id: airport_landside
+    name: Airport landside
+    plan:
+      floors: [[3, 6, 50], [8, 14, 50]]
+      lotW: [20, 36]
+      localStreet: [8, 12]
+      block: [40, 80]
+      signChance: 0.5
+      open: { parking: 0.3 }
+      setback: [3, 6]
+      streetTrees: 0.8
+      hedges: 0.6
+    signs:
+      words: [HOTEL, AIRPORT HOTEL, 空港, P, RENT A CAR, レンタカー, 駐車場, CAFE]
+      colors: ['#ffffff', '#4fe3ff', '#ffe45f']
+    ads: { mainstream: 3, food: 1 }
+    look:
+      windows: { ribbon: 45, curtain: 30, punched: 25 }
+      walls: ['#d8dcdc', '#c8ccd0', '#e8e4dc', '#8a949c']
+      tiled: false
+      shops: { cool: 3, warm: 1 }
+      open: 0.8
+
+  C:
+    id: airport_cargo
+    name: Air cargo
+    plan:
+      yardCover: 0.2
+      floors: [[2, 3, 70], [4, 5, 30]]
+      signChance: 0.25
+      open: { parking: 0.25 }
+    signs:
+      words: [AIR CARGO, 航空貨物, 税関, 保税倉庫, FEDERAL, LOGISTICS]
+      colors: ['#ffffff', '#ffe45f']
+    ads: { street: 1 }
+    look:
+      windows: { blank: 55, small: 30, ribbon: 15 }
+      walls: ['#9a9890', '#b8b4a8', '#7a7870', '#5a6a7a']
+      tiled: false
+      shops: { cool: 2 }
+      open: 0.2

@@ -30,8 +30,12 @@ import { EMIT } from './meshBuilder';
  *   rim lit at night.
  * - bay_hall: TŌTO BAY HALL (Zepp-like), a black box concert hall: tonight's show on the marquee, fans queueing
  *   with light sticks, the merch tent.
+ * Hanejima (the airfield itself is real/airport.ts):
+ * - airport_terminal: 東都空港 TŌTO AIRPORT's terminal: a long glass hall under a wing of a roof, the departures
+ *   kerb with its canopy, taxis and buses waiting, the name along the roof.
+ * - control_tower: the control tower, its cab glowing green-blue at night, the beacon on top.
  */
-export const PORT_KINDS = ['fish_market', 'disco', 'tuning_shop', 'ferry_terminal', 'gantry', 'parking_area', 'tv_station', 'ferris_wheel', 'bay_hall'] as const;
+export const PORT_KINDS = ['fish_market', 'disco', 'tuning_shop', 'ferry_terminal', 'gantry', 'parking_area', 'tv_station', 'ferris_wheel', 'bay_hall', 'airport_terminal', 'control_tower'] as const;
 export type PortKind = (typeof PORT_KINDS)[number];
 
 type C3 = [number, number, number];
@@ -63,6 +67,10 @@ export function portColliders(kind: PortKind, b: Building3): Rect[] {
       return [R(10, 30, 4, 20), R(1, 3, 11, 13), R(37, 39, 11, 13)];
     case 'bay_hall':
       return [R(0, 50, 2, 36), R(36, 36.3, -6, -5.7), R(45.7, 46, -6, -5.7)];
+    case 'airport_terminal':
+      return [R(0, 96, 6, 60), ...[8, 32, 56, 80].map((u) => R(u - 0.4, u + 0.4, -6.4, -5.6))];
+    case 'control_tower':
+      return [R(0, 16, 0, 16)];
   }
 }
 
@@ -82,6 +90,8 @@ export function portShelters(kind: PortKind, b: Building3): { rect: Rect; y0: nu
       return [R(66, 96, 52, 58, 0, 4)];
     case 'bay_hall':
       return [R(10, 40, -3, 2, 0, 5), R(36, 46, -6, -1.5, 0, 3)];
+    case 'airport_terminal':
+      return [R(0, 96, -7, 6, 0, 8)];
     default:
       return [];
   }
@@ -115,6 +125,10 @@ export function portLights(kind: PortKind, b: Building3): Light[] {
       return [L(20, -2, 12, [1.0, 0.7, 0.9], 0.7)];
     case 'bay_hall':
       return [L(25, -2, 12, [1.0, 0.5, 0.9], 0.8), L(41, -4, 6, warm, 0.7)];
+    case 'airport_terminal':
+      return [20, 48, 76].map((u) => L(u, -3, 12, fluo, 0.8));
+    case 'control_tower':
+      return [L(8, 8, 8, fluo, 0.4)];
   }
 }
 
@@ -611,5 +625,45 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: s
     // The tour's trucks round the side.
     car(k, 54, 20, 0, 1, 'minivan', 0xe8e8e4, 31);
     car(k, 54, 28, 0, 1, 'minivan', 0x1a1a1c, 32);
+  },
+
+  // ---- 東都空港 TŌTO AIRPORT's terminal: a long glass hall lit inside, a deep wing of a roof over it and the
+  // departures kerb, the name along the roof edge, taxis and a limousine bus at the kerb, travellers with cases ----
+  airport_terminal(k) {
+    k.lit(0xe8eef0, 0, 96, 6, 60, 0, 14, true);
+    for (let u = 0; u <= 96; u += 4) k.box(0x8a949c, u - 0.12, u + 0.12, 5.9, 6.1, 0, 14);
+    for (let u = 0; u < 96; u += 4) k.pane(u, u + 4, 0, 14, 5.95);
+    k.box(0xc8ccd0, 0, 96, 8, 60, 14, 15);
+    // The wing of a roof, reaching out over the kerb, and its columns.
+    k.box(0xdce0e4, -4, 100, -7, 62, 15, 16.2);
+    k.lit(0xf0f4f4, -3.8, 99.8, -6.8, 5.8, 14.95, 15.0);
+    for (const u of [8, 32, 56, 80]) k.post(0xb8c0c4, u, -6, 0, 15, 0.4, 12);
+    plate(k, 46, 3.2, 48, -7.1, 17.9, (g, W, H) => {
+      g.fillStyle = '#f4f6f8';
+      g.fillRect(0, 0, W, H);
+      text(g, '東都空港', W * 0.3, H * 0.55, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#1a2a5a');
+      text(g, 'TŌTO AIRPORT · DEPARTURES 出発', W * 0.72, H * 0.55, `bold ${Math.round(H * 0.24)}px Arial, sans-serif`, '#1a4aa0');
+    });
+    // The kerb: taxis in a line, the limousine bus, travellers.
+    for (let i = 0; i < 4; i++) car(k, 12 + i * 5.5, -9, 1, 0, 'taxi', 0x2a2a2e, 40 + i);
+    car(k, 60, -9, 1, 0, 'minivan', 0xe8e8e4, 45);
+    const who: ['man' | 'woman', number][] = [['woman', 20], ['man', 34], ['man', 46], ['woman', 58], ['woman', 70], ['man', 84]];
+    who.forEach(([body, u], i) => k.person(u, -3 - (i % 2) * 1.5, i % 2 ? 1 : -1, 0, { body, pose: i % 3 === 0 ? 'phone' : 'walk', color: body === 'woman' ? [1.0, 0.85, 0.9] : [0.8, 0.88, 1.0], ...(body === 'woman' ? { hair: 'long' as const } : {}) }));
+  },
+
+  // ---- The control tower: a tapering shaft, the cab of green-tinted glass (lit at night), antennas, the beacon ----
+  control_tower(k) {
+    k.box(0xc8ccd0, 4, 12, 4, 12, 0, 54);
+    k.box(0x9aa0a6, 2, 14, 2, 14, 54, 56);
+    k.lit(0x6ac8b0, 2.4, 13.6, 2.4, 13.6, 56, 61, false);
+    for (const [u0, u1, t0, t1] of [[2, 14, 2, 2.4], [2, 14, 13.6, 14], [2, 2.4, 2, 14], [13.6, 14, 2, 14]] as const) k.box(0x3a4046, u0, u1, t0, t1, 60.5, 61);
+    k.box(0x5a6066, 1.6, 14.4, 1.6, 14.4, 61, 62.2);
+    k.post(0x8a8e92, 8, 8, 62.2, 70, 0.15, 6);
+    k.glow([3.0, 0.2, 0.15], 7.6, 8.4, 7.6, 8.4, 70, 70.8, EMIT.always);
+    plate(k, 10, 1.4, 8, -0.05, 50, (g, W, H) => {
+      g.fillStyle = '#e8ecf0';
+      g.fillRect(0, 0, W, H);
+      text(g, 'TŌTO TOWER', W / 2, H * 0.6, `bold ${Math.round(H * 0.55)}px Arial, sans-serif`, '#1a2a5a');
+    });
   },
 };

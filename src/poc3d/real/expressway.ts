@@ -357,6 +357,15 @@ function entranceSign(road: Road): THREE.Group {
 function portal(mb: MeshBuilder, road: Road): void {
   const n = road.x.length;
   const i = n - 1;
+  // The headland it bores into: a wooded mound over the far end of the tunnel.
+  if (road.hill) {
+    mb.kind = KIND.plain;
+    mb.color = lin(0x26301e);
+    const cx = road.x[i] + road.tx[i] * 150;
+    const cz = road.z[i] + road.tz[i] * 150;
+    const H = road.hill;
+    mb.lathe(cx, cz, [[-3, 230], [H * 0.35, 190], [H * 0.7, 120], [H, 50], [H + 6, 8]], 24);
+  }
   const fx = road.tx[i];
   const fz = road.tz[i];
   const lx = road.tz[i];

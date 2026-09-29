@@ -47,7 +47,7 @@ export interface ExpresswayDef {
    */
   readonly suspension?: readonly { readonly col?: number; readonly row?: number; readonly from: number; readonly to: number; readonly width: number; readonly name: string }[];
   /** At a route's point `at` (a loop's corner, or an open route's last point), straight on into a tunnel. */
-  readonly exits: readonly { readonly id: string; readonly venue: string; readonly route: string; readonly at: number; readonly length: number; readonly name: string }[];
+  readonly exits: readonly { readonly id: string; readonly venue: string; readonly route: string; readonly at: number; readonly length: number; readonly name: string; readonly hill?: number }[];
 }
 
 export function parseExpressway(file: string, text: string, errors: string[]): ExpresswayDef | null {
@@ -119,6 +119,8 @@ export interface Road {
   readonly venue?: string;
   readonly sign?: string;
   readonly rampKind?: 'on' | 'off';
+  /** Spurs: the height of the hill its tunnel bores into (drawn round the portal), if any. */
+  readonly hill?: number;
   /** Metres left of its grid line (a two-way route's decks): its piers stand back on the line. */
   readonly offset?: number;
 }
@@ -279,7 +281,7 @@ export class Expressway {
         xs.push(c[0] + dir[0] * d);
         zs.push(c[1] + dir[1] * d);
       }
-      this.roads.push(makeRoad(e.id, 'spur', xs, zs, () => D, def.half, false, { venue: e.venue, sign: e.name }));
+      this.roads.push(makeRoad(e.id, 'spur', xs, zs, () => D, def.half, false, { venue: e.venue, sign: e.name, ...(e.hill ? { hill: e.hill } : {}) }));
     }
     for (const road of this.roads) {
       for (let i = 0; i < road.x.length; i++) {
