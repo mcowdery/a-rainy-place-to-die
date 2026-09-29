@@ -54,10 +54,13 @@ const GREENS: Record<string, readonly number[]> = {
   pine: [0x24381e, 0x2a4222, 0x1e3018],
   camphor: [0x2e4a26, 0x36522a, 0x3e5a2e, 0x2a4422],
   dogwood: [0x3e5a2e, 0x4a6a34],
-  dogwoodBloom: [0xf0ece4, 0xf2c8d4, 0x4a6a34],
+  dogwoodBloom: [0x3e5a2e, 0x4a6a34],
   azalea: [0x2e4a26, 0x36522a],
   box: [0x2e4a26, 0x3a5a2a],
 };
+
+/** Flowering dogwood's bracts: three pinks (a tree is one of them; cream ones read as a pale ball under a lamp). */
+const DOGWOOD_BRACTS = [0xd98aa8, 0xe2a2ba, 0xcf7f9f] as const;
 
 /** A lumpy foliage mass: an ellipsoid-ish lathe, radius rx, half-height ry, centred at (x, y, z); 15 quads. */
 function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: number, hex: number, n = 5): void {
@@ -196,10 +199,14 @@ export function addTree(mb: MeshBuilder, t: TreeSpec): void {
     }
     case 'dogwood':
     case 'dogwoodBloom': {
-      // A small round crown on a slim trunk: fits a 2 m pavement.
+      // A small round crown on a slim trunk: fits a 2 m pavement. In flower, each tree is one colour (pink or
+      // cream bracts, as hanamizuki are) over green, so it reads as blossom rather than a pale ball under a lamp.
       trunk(mb, x, z, 0, 2.6 * k, 0.1 * k, 0.07 * k, bark);
-      around(3, (a) => mass(mb, x + Math.cos(a) * 0.6 * k, (3.4 + rnd.float() * 0.4) * k, z + Math.sin(a) * 0.6 * k, 1.1 * k, 0.85 * k, g(), 5));
-      mass(mb, x, 4.2 * k, z, 0.9 * k, 0.6 * k, g(), 5);
+      const bloom = t.species === 'dogwoodBloom' ? rnd.pick(DOGWOOD_BRACTS) : null;
+      const leaf = (): number => rnd.pick(GREENS.dogwood);
+      let n = 0;
+      around(3, (a) => mass(mb, x + Math.cos(a) * 0.6 * k, (3.4 + rnd.float() * 0.4) * k, z + Math.sin(a) * 0.6 * k, 1.1 * k, 0.85 * k, bloom && n++ !== 1 ? bloom : leaf(), 5));
+      mass(mb, x, 4.2 * k, z, 0.9 * k, 0.6 * k, bloom ?? leaf(), 5);
       break;
     }
     case 'azalea': {

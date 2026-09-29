@@ -259,8 +259,9 @@ describe('Open ground and greenery', () => {
     const built = area(cells.flatMap(([mx, my]) => model.plan(mx, my)!.buildings.map(footprint)));
     const plazas = cells.flatMap(([mx, my]) => model.plan(mx, my)!.open.filter((o) => o.kind === 'plaza'));
     expect(built / (cells.length * CELL * CELL)).toBeLessThan(0.45);
-    // About one plaza a cell (the avenues round the expressway loop take a little of the ground).
-    expect(plazas.length).toBeGreaterThanOrEqual(cells.length);
+    // Most cells have one (the avenues round the expressway loop take some of the ground: the blocks along
+    // Yasuhara-dōri, the loop's south side, hold one big tower plaza each rather than several).
+    expect(plazas.length).toBeGreaterThanOrEqual(cells.length * 0.6);
     for (const [mx, my] of cells) {
       const p = model.plan(mx, my)!;
       for (const b of p.buildings) {

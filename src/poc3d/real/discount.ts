@@ -89,6 +89,12 @@ export function buildDiscount(b: Building3, city: THREE.Material, u: CityUniform
   mb.flags = 0;
   mb.style = [0, 0, 0, 0];
   box(0x2a2a2e, 0, fw, 0, depth, H, H + 0.6);
+  // The ground floor behind the arcade: blank walls on the west and back, the east side's shops set into it,
+  // a service door and a steel shutter at the back.
+  box(0x34343a, 0, fw, ARCADE + 0.02, depth, 0, 4.5);
+  box(0x55575c, 5, 6.2, depth, depth + 0.05, 0, 2.2);
+  box(0x6a6c70, 10, 14, depth, depth + 0.05, 0, 3.2);
+  for (let y = 0.2; y < 3.2; y += 0.25) box(0x4a4c50, 10, 14, depth + 0.05, depth + 0.07, y, y + 0.06);
   // The arcade: a lit, packed store interior behind open fronts, columns, the canopy.
   glow([0.5, 0.47, 0.4], 0.2, fw - 0.2, ARCADE - 0.02, ARCADE, 0, 4.4);
   box(0xd8d4c8, 0.2, fw - 0.2, 0, ARCADE, -0.01, 0.02);

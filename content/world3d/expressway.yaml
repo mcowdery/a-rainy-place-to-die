@@ -6,7 +6,7 @@
 # radius: the corners (m, tight, Shuto-like); half: the deck's half-width (two lanes and a shoulder).
 name: 東都高速 都心環状線
 nameEn: TOTO EXPRESSWAY · INNER LOOP
-loop: [21, 10, 31, 12]
+loop: [21, 10, 31, 13]
 deck: 15
 radius: 20
 half: 4.6

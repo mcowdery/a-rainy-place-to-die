@@ -1,7 +1,8 @@
 # Kaburo's zones (format: src/poc3d/district/zones.ts). One letter per 128 m L0 cell, from origin [26, 9],
 # the district's north-west cell. Loosely after Kabukicho: the crossing and the mega-sign at the south
 # centre facing the station side, the love hotels of the Love District to the north-east, host clubs between them,
-# the old back alleys to the north-west, and a lane of food and music west of the crossing. Kaburo Park
+# the old back alleys to the north-west, and a lane of food and music west of the crossing; the station edge runs on south of the crossing to the
+# expressway's avenue (Kaburo's southern edge, like Yasukuni-dōri's side of Kabukichō). Kaburo Park
 # (after Okubo Park) takes half a cell north of the crossing, between the back alleys and host street.
 district: neon
 origin: [26, 9]
@@ -10,6 +11,7 @@ map:
   - AAPHLL
   - MMCCCH
   - SSSCCS
+  - SSSSSS
 
 zones:
   C:

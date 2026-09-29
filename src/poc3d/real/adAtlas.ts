@@ -213,19 +213,20 @@ export function adMaterial(u: CityUniforms, atlas: { readonly texture: THREE.Tex
           for (int k = 0; k < 8; k++) {
             if (float(k) >= vLamps) break;
             float lx = (float(k) + 0.5) / vLamps * W;
-            // Each lamp throws a pool that widens and fades down the face; brightest just under the lamp.
-            float spread = 0.3 + 0.35 * m.y;
+            // Each lamp throws a pool that widens and fades down the face: a scalloped hot spot just under the
+            // lamp, then the pools overlapping into an even wash that dims toward the bottom edge (lit to read,
+            // never glowing like a screen).
+            float spread = 0.5 + 0.55 * m.y;
             float dx = m.x - lx;
-            // A scalloped hot spot just under each lamp, then the pool widening and fading down the face.
-            float pool = exp(-dx * dx / (2.0 * spread * spread)) * 1.5 * exp(-0.95 * m.y);
+            float pool = exp(-dx * dx / (2.0 * spread * spread)) * 1.5 * exp(-0.25 * m.y);
             light += pool * smoothstep(0.0, 0.12, m.y);
           }
-          // A little stray light everywhere, so the lower panel isn't black.
-          light = light + 0.04;
-          totalEmissiveRadiance += ad * min(light, 2.0) * 0.8 * uNeon;
+          // Some stray light everywhere (the lamps' spill, the street's glow).
+          light = light + 0.12;
+          totalEmissiveRadiance += ad * min(light, 1.6) * 0.7 * uNeon;
         }`);
   };
-  m.customProgramCacheKey = () => 'ads-v2';
+  m.customProgramCacheKey = () => 'ads-v3';
   return m;
 }
 

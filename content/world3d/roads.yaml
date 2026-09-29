@@ -7,12 +7,14 @@
 #
 # The four round the Tōto Expressway's inner loop (expressway.yaml), 32 m: two lanes each way either side of
 # the median, 3 m pavements, the deck overhead. They run a block on past the loop's corners (so the corner
-# junctions are wide both ways).
+# junctions are wide both ways). Yogiri-dōri, Kaburo Crossing's avenue a block inside the loop's south side
+# (Yasuhara-dōri, along Kaburo's southern edge), is as wide, without the deck.
 avenues:
   - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 20, to: 32, width: 32, median: 2.4 }
   - { name: 夜霧通り YOGIRI-DŌRI, row: 12, from: 20, to: 32, width: 32, median: 2.4 }
-  - { name: 朝霧西通り ASAGIRI-NISHI-DŌRI, col: 21, from: 9, to: 13, width: 32, median: 2.4 }
-  - { name: 明王通り MYŌŌ-DŌRI, col: 31, from: 9, to: 13, width: 32, median: 2.4 }
+  - { name: 靖原通り YASUHARA-DŌRI, row: 13, from: 20, to: 32, width: 32, median: 2.4 }
+  - { name: 朝霧西通り ASAGIRI-NISHI-DŌRI, col: 21, from: 9, to: 14, width: 32, median: 2.4 }
+  - { name: 明王通り MYŌŌ-DŌRI, col: 31, from: 9, to: 14, width: 32, median: 2.4 }
   # Past the terminal, Tōto-ōdōri narrows over the Seikō Line's Tōto-Chūō station (subway stations stand
   # 10 m from their road's centre, so a road with a line under it is 20 m at most).
   - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 25, to: 26, width: 20, median: 2.4 }

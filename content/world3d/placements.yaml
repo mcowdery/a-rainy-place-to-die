@@ -39,7 +39,7 @@
 - id: kaburo_station
   stamp: station_kaburo
   cell: [26, 12]
-  offset: [10, 30]
+  offset: [10, 26]
 - id: asagiri_station
   stamp: station_asagiri
   cell: [25, 9]
@@ -59,7 +59,7 @@
 - id: police_hq
   stamp: police_hq
   cell: [20, 12]
-  offset: [30, 74]
+  offset: [30, 67]
 - id: toto_bank
   stamp: toto_bank
   cell: [24, 10]
@@ -67,7 +67,7 @@
 - id: law_firm
   stamp: law_firm
   cell: [23, 12]
-  offset: [50, 94]
+  offset: [50, 87]
 - id: hakkodo
   stamp: hakkodo
   cell: [23, 10]
@@ -79,11 +79,11 @@
 - id: hotel_totoinn
   stamp: hotel_totoinn
   cell: [24, 12]
-  offset: [60, 100]
+  offset: [60, 93]
 - id: club_shirasagi
   stamp: club_shirasagi
   cell: [21, 12]
-  offset: [48, 92]
+  offset: [48, 85]
 # Subway stations (content/world3d/subway.yaml): each entrance faces the road its line runs under, 10 m out.
 - id: y01_station
   stamp: subway_y01
@@ -155,4 +155,4 @@
 - id: city_garage
   stamp: city_garage
   cell: [26, 12]
-  offset: [10, 97]
+  offset: [10, 91]
