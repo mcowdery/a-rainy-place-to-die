@@ -344,8 +344,11 @@ export class District {
         if (d && (propBlocked(d.props, x, z, r) || inRects(d.solids))) return true;
       }
     }
-    return this.stampColliders.some(inRects);
+    return this.stampColliders.some(inRects) || inRects(this.extraColliders);
   };
+
+  /** More street-level colliders from outside the plan (the expressway's piers and ramp walls). */
+  readonly extraColliders: Rect[] = [];
 
   /**
    * Per frame: drop far chunks, send the nearest wanted stages to the workers, and turn finished results

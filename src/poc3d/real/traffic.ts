@@ -291,6 +291,8 @@ export interface DrivenVehicle {
    * in the traffic (stopping behind it, honking, lighting) and never drives it.
    */
   readonly own?: boolean;
+  /** Up on the expressway: out of the street's way (its traffic, walkers and headlights ignore it). */
+  aloft?: boolean;
 }
 
 interface Vehicle extends DrivenVehicle {
@@ -486,7 +488,7 @@ export class TrafficSystem {
     // In the way besides people: the cars the player is driving or has left, each as three points along it.
     const others: Walker[] = [...people];
     for (const o of V) {
-      if (o.mode === 'traffic') continue;
+      if (o.mode === 'traffic' || o.aloft) continue;
       for (const f of [-0.6, 0, 0.6]) others.push({ x: o.x + o.dx * o.half * f, z: o.z + o.dz * o.half * f, vx: o.dx * o.v, vz: o.dz * o.v, r: o.width / 2 + 0.2 });
     }
     for (const v of V) if (v.mode === 'traffic') v.acc = this.accel(v, dt, others, camera);
@@ -674,7 +676,7 @@ export class TrafficSystem {
    */
   fillLights(camera: THREE.Vector3, out: THREE.Vector4[]): number {
     const near = this.vehicles
-      .filter((v) => v.obj.visible)
+      .filter((v) => v.obj.visible && !v.aloft)
       .map((v) => ({ v, d: (v.x - camera.x) ** 2 + (v.z - camera.z) ** 2 }))
       .sort((a, b) => a.d - b.d)
       .slice(0, out.length);
@@ -700,7 +702,7 @@ export class TrafficSystem {
   /** Whether a walker (or a driven car's piece) at (x, z) of radius r touches a vehicle (other than `except`). */
   blocked(x: number, z: number, r: number, except: DrivenVehicle | null = null): boolean {
     for (const v of this.vehicles) {
-      if (v === except) continue;
+      if (v === except || v.aloft) continue;
       const ox = x - v.x;
       const oz = z - v.z;
       if (Math.abs(ox) > 7 || Math.abs(oz) > 7) continue;

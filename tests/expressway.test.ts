@@ -1,0 +1,135 @@
+import { describe, expect, it } from 'vitest';
+import text from '../content/world3d/expressway.yaml?raw';
+import { Expressway, parseExpressway, type Road } from '../src/poc3d/district/expressway';
+import { Car, ROAD_ASSISTS, type Ground } from '../src/race/vehicle';
+
+const errors: string[] = [];
+const def = parseExpressway('expressway.yaml', text, errors)!;
+const ex = new Expressway(def);
+
+/** The racing model's ground on the network alone (for a car that stays on it). */
+function ground(car: () => Car): Ground {
+  const h = (x: number, z: number): number => ex.at(x, z, car().y, 1.4)?.height ?? car().y;
+  return {
+    height: h,
+    normal: (x, z) => {
+      const e = 0.6;
+      const nx = -(h(x + e, z) - h(x - e, z)) / (2 * e);
+      const nz = -(h(x, z + e) - h(x, z - e)) / (2 * e);
+      const l = Math.hypot(nx, 1, nz);
+      return [nx / l, 1 / l, nz / l];
+    },
+    grip: () => 1,
+    collide: (x, z, hd, hl, hw) => {
+      for (const f of [hl - 0.3, -(hl - 0.3)]) {
+        for (const s of [hw, -hw]) {
+          const px = x + Math.sin(hd) * f + Math.cos(hd) * s;
+          const pz = z + Math.cos(hd) * f - Math.sin(hd) * s;
+          const p = ex.pushBack(px, pz, car().y);
+          if (p) return p;
+        }
+      }
+      return null;
+    },
+  };
+}
+
+/** Follow a road's centreline (offset left by `lane`) from sample i0 for up to n samples (or a lap). */
+function follow(road: Road, i0: number, n: number, lane = 0, pace = 1): { car: Car; offRoad: number; maxBump: number; steps: number } {
+  const car = new Car(undefined, ROAD_ASSISTS);
+  const g = ground(() => car);
+  const lx = (i: number): number => road.x[i] + road.tz[i] * lane;
+  const lz = (i: number): number => road.z[i] - road.tx[i] * lane;
+  car.place(lx(i0), lz(i0), Math.atan2(road.tx[i0], road.tz[i0]), g);
+  car.y = road.y[i0];
+  let offRoad = 0;
+  let maxBump = 0;
+  let i = i0;
+  let steps = 0;
+  const N = road.x.length;
+  for (let t = 0; t < 600 && steps < n; t += 1 / 60) {
+    // Nearest sample ahead.
+    let best = i;
+    for (let k = 0; k < 12; k++) {
+      const j = road.closed ? (i + k) % N : Math.min(N - 1, i + k);
+      if (Math.hypot(road.x[j] - car.x, road.z[j] - car.z) < Math.hypot(road.x[best] - car.x, road.z[best] - car.z)) best = j;
+    }
+    steps += (best - i + N) % N;
+    i = best;
+    if (!road.closed && i >= N - 3) break;
+    const look = Math.round(6 + Math.abs(car.u) * 0.5);
+    const j = road.closed ? (i + look) % N : Math.min(N - 1, i + look);
+    const dx = lx(j) - car.x;
+    const dz = lz(j) - car.z;
+    const err = Math.atan2(dx * Math.cos(car.h) - dz * Math.sin(car.h), dx * Math.sin(car.h) + dz * Math.cos(car.h));
+    let turn = 0;
+    for (let k = 5; k <= 40; k += 5) {
+      const a = road.closed ? (i + k - 5) % N : Math.min(N - 1, i + k - 5);
+      const b = road.closed ? (i + k) % N : Math.min(N - 1, i + k);
+      turn = Math.max(turn, Math.acos(Math.min(1, road.tx[a] * road.tx[b] + road.tz[a] * road.tz[b])));
+    }
+    const want = Math.min(33, Math.max(8, Math.sqrt(6 * (5 / Math.max(turn, 1e-3))))) * pace;
+    car.update(1 / 60, { throttle: car.u < want ? 1 : 0, brake: car.u > want + 2 ? 1 : 0, steer: Math.max(-1, Math.min(1, err * 3)), handbrake: false }, g);
+    maxBump = Math.max(maxBump, car.bump);
+    if (!ex.at(car.x, car.z, car.y)) offRoad++;
+  }
+  return { car, offRoad, maxBump, steps };
+}
+
+describe('the expressway', () => {
+  it('loads', () => {
+    expect(errors).toEqual([]);
+    expect(ex.loop.x.length).toBeGreaterThan(3000);
+    expect(ex.roads.filter((r) => r.kind === 'ramp')).toHaveLength(2);
+    expect(ex.roads.filter((r) => r.kind === 'spur').map((r) => r.venue)).toEqual(['kurokami', 'yunagi']);
+  });
+
+  it('ramps meet the street and the deck, on a drivable grade', () => {
+    for (const r of ex.roads.filter((x) => x.kind === 'ramp')) {
+      const lo = Math.min(r.y[0], r.y[r.y.length - 1]);
+      const hi = Math.max(r.y[0], r.y[r.y.length - 1]);
+      expect(lo).toBeCloseTo(0, 3);
+      expect(hi).toBeCloseTo(def.deck, 3);
+      for (let i = 1; i < r.y.length; i++) expect(Math.abs(r.y[i] - r.y[i - 1])).toBeLessThan(0.13);
+      // The deck end overlaps the loop at its height, on the ramp's inner (right) side: a merge.
+      const top = r.y[0] > r.y[r.y.length - 1] ? 0 : r.y.length - 1;
+      expect(ex.at(r.x[top] - r.tz[top] * 1.8, r.z[top] + r.tx[top] * 1.8, def.deck)).not.toBe(null);
+    }
+  });
+
+  it('a car drives a lap of the loop in the outside lane without leaving it', () => {
+    const lap = follow(ex.loop, 0, ex.loop.x.length - 5, 1.7);
+    expect(lap.steps).toBeGreaterThan(ex.loop.x.length - 20);
+    expect(lap.offRoad).toBe(0);
+    expect(lap.maxBump).toBeLessThan(3);
+  });
+
+  it('a car climbs the on-ramp from the street onto the deck', () => {
+    const on = ex.roads.find((r) => r.id === 'kaburo_on')!;
+    const run = follow(on, 2, on.x.length, 0, 0.8);
+    expect(run.offRoad).toBe(0);
+    expect(run.car.y).toBeGreaterThan(def.deck - 0.5);
+  });
+
+  it('keeps you on: a point off the edge is pushed back; under the deck is the street', () => {
+    const i = 400;
+    const L = ex.loop;
+    const out = { x: L.x[i] + L.tz[i] * (def.half + 0.5), z: L.z[i] - L.tx[i] * (def.half + 0.5) };
+    const p = ex.pushBack(out.x, out.z, def.deck)!;
+    expect(p).not.toBe(null);
+    expect(ex.at(out.x + p.px, out.z + p.pz, def.deck)).not.toBe(null);
+    // At street level under the deck: not on the network, and nothing solid 0.35-5 m up there.
+    expect(ex.at(L.x[i], L.z[i], 0)).toBe(null);
+    expect(ex.solidAbove(L.x[i], L.z[i], 0.35, 5)).toBe(false);
+    // The piers stand clear of the junctions.
+    const rects = ex.streetColliders();
+    expect(rects.length).toBeGreaterThan(50);
+  });
+
+  it('spurs end at their portals', () => {
+    const s = ex.roads.find((r) => r.kind === 'spur')!;
+    const n = s.x.length;
+    expect(ex.portal(s.x[n - 3], s.z[n - 3], def.deck)).toBe(s);
+    expect(ex.portal(s.x[n - 40], s.z[n - 40], def.deck)).toBe(null);
+  });
+});

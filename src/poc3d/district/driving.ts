@@ -237,7 +237,7 @@ export class Driving {
     this.camPos.lerp(want, 1 - Math.exp(-dt * 5));
     const pivot = new THREE.Vector3(c.x, (c.bus ? 2.6 : 1.3) + this.floor, c.z);
     let t = 1;
-    while (t > 0.25 && this.collide(pivot.x + (this.camPos.x - pivot.x) * t, pivot.z + (this.camPos.z - pivot.z) * t, 0.3)) t -= 0.08;
+    while (this.floor < 2 && t > 0.25 && this.collide(pivot.x + (this.camPos.x - pivot.x) * t, pivot.z + (this.camPos.z - pivot.z) * t, 0.3)) t -= 0.08;
     cam.position.set(pivot.x + (this.camPos.x - pivot.x) * t + jolt(), pivot.y + (this.camPos.y - pivot.y) * t + jolt(), pivot.z + (this.camPos.z - pivot.z) * t);
     cam.lookAt(c.x + c.dx * 3, (c.bus ? 2.2 : 1.1) + this.floor, c.z + c.dz * 3);
   }

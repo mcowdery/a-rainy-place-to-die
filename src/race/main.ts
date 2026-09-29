@@ -618,7 +618,8 @@ const showMenu = (open: boolean): void => {
   if (open) {
     if (document.pointerLockElement) document.exitPointerLock();
     keys.clear();
-    menuEl.innerHTML = `<h1>峠 <span>the passes</span></h1><a class="garage" href="garage.html"><b>ガレージ Garage</b><span>${mineModel.maker} ${mineModel.name} · ${yen(profile.yen)}</span></a><div class="cards">${[...courses.entries()]
+    const fromCity = params.get('from');
+    menuEl.innerHTML = `<h1>峠 <span>the passes</span></h1>${fromCity ? `<a class="garage" href="district.html?from=${fromCity}&time=night"><b>◂ Back to the city</b><span>the expressway, where you came off it</span></a>` : ''}<a class="garage" href="garage.html"><b>ガレージ Garage</b><span>${mineModel.maker} ${mineModel.name} · ${yen(profile.yen)}</span></a><div class="cards">${[...courses.entries()]
       .map(([id, c]) => {
         const row = (d: Dir, label: string): string => {
           const b = loadBest(id, d);

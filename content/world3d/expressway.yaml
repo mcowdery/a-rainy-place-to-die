@@ -1,0 +1,22 @@
+# The Tōto Expressway (東都高速, 都心環状線 inner loop): an elevated one-way loop over the cell-edge roads round
+# Asagiri and Kaburo, Shuto-style (format and layout: src/poc3d/district/expressway.ts).
+# loop: the L0 cell-edge rectangle it follows [col0, row0, col1, row1], driven clockwise on the map (east along
+# the north side); deck: the road surface's height (m; clear of the Toto Line's viaduct, 8 m, and its trains);
+# radius: the corners (m, tight, Shuto-like); half: the deck's half-width (two lanes and a shoulder).
+name: 東都高速 都心環状線
+nameEn: TOTO EXPRESSWAY · INNER LOOP
+loop: [21, 10, 31, 13]
+deck: 15
+radius: 20
+half: 4.6
+# Ramps along a side of the loop, in the outside (left) lane: an off-ramp down to the street and, after it,
+# an on-ramp back up. side: north | east | south | west; from: metres along that side from its start corner
+# (in the direction of travel) to where the ramp leaves (off) or meets (on) the deck; length: its run.
+ramps:
+  - { id: kaburo_off, kind: off, side: south, from: 40, length: 260 }
+  - { id: kaburo_on, kind: on, side: south, from: 610, length: 260 }
+# Exits to the passes: at a corner the outside lane runs straight on into a tunnel (a spur), signed to a venue.
+# corner: nw | ne | se | sw (the corner the loop turns at); length: the spur's run to the portal.
+exits:
+  - { id: kurokami, venue: kurokami, corner: nw, length: 110, name: 黒神峠 KUROKAMI }
+  - { id: yunagi, venue: yunagi, corner: ne, length: 110, name: 夕凪峠 YŪNAGI }

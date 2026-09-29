@@ -35,6 +35,9 @@ import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem, type DrivenVehicle } from '../real/traffic';
 import { Driving } from './driving';
 import { OwnCar } from './ownCar';
+import { Expressway, parseExpressway } from './expressway';
+import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
+import expresswayText from '../../../content/world3d/expressway.yaml?raw';
 import { NavGrid, pointsAhead, type NavMode } from './gps';
 import { Guide, type GuideDest, type GuideFrom } from './guide';
 import { PhoneMaps } from './phoneMaps';
@@ -667,15 +670,42 @@ async function run(): Promise<void> {
   // Driving: your own car (ownCar.ts), which lives in its bay at your garage (夜鷹ガレージ, by the Toto Line)
   // or wherever you left it. E by it takes the wheel; E again gets out. Cars in traffic aren't yours to take.
   const driving = new Driving(camera, (x, z, r) => district.blocked(x, z, r, 0) || traffic.blocked(x, z, r, driving.car) || npcBlocked(x, z, r));
+  // The Tōto Expressway (expressway.ts): the elevated inner loop, its ramps and its exits to the passes.
+  const exErrors: string[] = [];
+  const exDef = parseExpressway('content/world3d/expressway.yaml', expresswayText, exErrors);
+  if (!exDef) throw new Error(exErrors.join('\n'));
+  const expressway = new Expressway(exDef);
+  district.extraColliders.push(...expressway.streetColliders());
+  const exView = buildExpressway(expressway, city);
+  const exTraffic = new ExpresswayTraffic(expressway, city);
+  scene.add(exView.group, exTraffic.group);
+  const sodium = exView.group.getObjectByName('sodium') as THREE.Mesh;
   const bay = nodeById.get('city_garage.bay');
   const ownCar = new OwnCar(
     city,
     traffic,
     bay ? { x: bay.x, z: bay.z, h: Math.atan2(bay.nx, bay.nz) } : { x: camera.position.x + 4, z: camera.position.z, h: 0 },
     (x, z, r, self) => district.blocked(x, z, r, 0) || traffic.blocked(x, z, r, self) || npcBlocked(x, z, r),
-    () => 0,
+    expressway,
+    () => exTraffic.obstacles,
     params.get('car') === 'home',
   );
+  // Back from a pass (race.html's 'Back to the city'): on the loop just past that exit's corner, driving.
+  const back = params.get('from');
+  const exitRoad = back ? expressway.roads.find((r) => r.kind === 'spur' && r.id === back) : undefined;
+  if (exitRoad) {
+    const L = expressway.loop;
+    let best = 0;
+    let bd = Infinity;
+    for (let i = 0; i < L.x.length; i++) {
+      const d = Math.hypot(L.x[i] - exitRoad.x[0], L.z[i] - exitRoad.z[0]);
+      if (d < bd) [best, bd] = [i, d];
+    }
+    const i = (best + 55) % L.x.length;
+    ownCar.place(L.x[i] + L.tz[i] * 1.8, L.z[i] - L.tx[i] * 1.8, Math.atan2(L.tx[i], L.tz[i]), L.y[i]);
+    ownCar.sim.u = 16;
+  }
+  let leavingFor: string | null = null;
   const takeableCar = (): DrivenVehicle | null => {
     if (controls.fly || inVn || Math.abs(camera.position.y - 1.7) > 1.2) return null;
     camera.getWorldDirection(forward);
@@ -708,7 +738,16 @@ async function run(): Promise<void> {
     enterCar(ownCar.vehicle);
     return ownCar.name;
   };
-  if (debug) (window as unknown as { __own: OwnCar }).__own = ownCar;
+  if (exitRoad) enterCar(ownCar.vehicle);
+  if (debug) (window as unknown as { __own: OwnCar; __ex: Expressway }).__own = ownCar;
+  if (debug) (window as unknown as { __ex: Expressway }).__ex = expressway;
+  // ?debug=1: window.__onExpressway(i, road) puts your car on the loop (or the named ramp or spur) at sample i
+  // (outside lane) and takes the wheel.
+  if (debug) (window as unknown as { __onExpressway: (i: number, road?: string) => void }).__onExpressway = (i, road) => {
+    const L = expressway.roads.find((r) => r.id === road) ?? expressway.loop;
+    ownCar.place(L.x[i] + L.tz[i] * 1.8, L.z[i] - L.tx[i] * 1.8, Math.atan2(L.tx[i], L.tz[i]), L.y[i]);
+    if (!driving.car) enterCar(ownCar.vehicle);
+  };
   // Mouse Y: normal (mouse up looks up) or inverted, for walking and driving alike. I toggles it; the choice is
   // remembered in this browser; ?invertY=1 / 0 sets it.
   const INVERT_KEY = 'citypop.invertY';
@@ -1067,6 +1106,18 @@ async function run(): Promise<void> {
     const cp0 = camera.position;
     if (!inVn) driving.update(dt);
     ownCar.pose(inVn ? 0 : dt);
+    // The expressway: its traffic (slowing for you in its lane), the sodium lamps' light at night, and the
+    // tunnels at the end of the exits (drive in: you're at that pass).
+    const onLoop = ownCar.onExpressway() ? expressway.at(ownCar.sim.x, ownCar.sim.z, ownCar.sim.y) : null;
+    exTraffic.update(inVn ? 0 : dt, onLoop && onLoop.road === expressway.loop ? { i: onLoop.i, lateral: onLoop.lateral, v: ownCar.sim.u } : null);
+    (sodium.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
+    sodium.visible = cityU.uLamps.value > 0.05;
+    const tunnel = driving.own ? expressway.portal(ownCar.sim.x, ownCar.sim.z, ownCar.sim.y) : null;
+    if (tunnel && !leavingFor) {
+      leavingFor = tunnel.venue!;
+      ownCar.save();
+      void fadeTo(1).then(() => (location.href = `race.html?venue=${tunnel.venue}&mode=free&from=${tunnel.id}`));
+    }
     updateGps(dt);
     if (driving.bump > 2) audio.bump(driving.bump);
     dash.style.display = driving.car ? 'block' : 'none';
