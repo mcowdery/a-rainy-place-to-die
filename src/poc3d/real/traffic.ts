@@ -295,6 +295,13 @@ export interface DrivenVehicle {
   aloft?: boolean;
 }
 
+/** A taxi you've waved down: where along its route it will pull in, and whether it has stopped there. */
+export interface Hail {
+  readonly taxi: DrivenVehicle;
+  readonly at: number;
+  stopped: boolean;
+}
+
 interface Vehicle extends DrivenVehicle {
   readonly brake: THREE.Object3D;
   readonly route: Route;
@@ -391,6 +398,8 @@ export class TrafficSystem {
   readonly group = new THREE.Group();
   readonly colliders: Rect[] = [];
   private readonly vehicles: Vehicle[] = [];
+  /** The taxi pulling in for you (hail), if any. */
+  hail: Hail | null = null;
   private readonly wheels: Wheels;
   private time = 0;
 
@@ -610,6 +619,16 @@ export class TrafficSystem {
       const toCentre = ahead(v.s, j.s - 1.5, L);
       if (j.turn === 'right' && toCentre < 12 && this.oncoming(v, j)) obstacle(toCentre, 0);
     }
+    // A hailed taxi pulls in at its spot and waits there.
+    const h = this.hail;
+    if (h && h.taxi === v) {
+      const dist = ahead(v.s, h.at, L);
+      if (dist < 1.5 && v.v < 0.5) {
+        h.stopped = true;
+        v.v = 0;
+        obstacle(d.s0 * 0.2, 0);
+      } else if (dist < L / 2) obstacle(dist + d.s0 - 0.5, 0);
+    }
     // Buses pull in at each edge's stop and wait there.
     if (v.bus) {
       v.route.edges.forEach((e, i) => {
@@ -733,6 +752,46 @@ export class TrafficSystem {
       if (d < bestD && (any || toward > 0.2)) [best, bestD] = [v, d];
     }
     return best;
+  }
+
+  /**
+   * Wave down a taxi from p (the kerb): the nearest cruising taxi coming toward you on its loop (behind the
+   * point on its route nearest you, within 150 m, no nearer than it can stop comfortably) pulls in there.
+   * Returns it, or null if none is near enough.
+   */
+  hailTaxi(p: THREE.Vector3): Hail | null {
+    if (this.hail) return this.hail;
+    let best: { v: Vehicle; at: number; d: number } | null = null;
+    for (const v of this.vehicles) {
+      if (v.mode !== 'traffic' || v.label !== 'Taxi') continue;
+      // The point on its route nearest you (a coarse search, then fine).
+      const L = v.route.length;
+      let at = 0;
+      let bd = Infinity;
+      for (let s = 0; s < L; s += 4) {
+        const q = along(v.route, s);
+        const dd = (q.x - p.x) ** 2 + (q.z - p.z) ** 2;
+        if (dd < bd) [at, bd] = [s, dd];
+      }
+      for (let s = at - 4; s <= at + 4; s += 0.5) {
+        const q = along(v.route, s);
+        const dd = (q.x - p.x) ** 2 + (q.z - p.z) ** 2;
+        if (dd < bd) [at, bd] = [(s + L) % L, dd];
+      }
+      if (Math.sqrt(bd) > 14) continue;
+      const toGo = ahead(v.s, at, L);
+      const need = (v.v * v.v) / (2 * 2.5) + v.half + 4;
+      if (toGo < need || toGo > 150) continue;
+      if (!best || toGo < best.d) best = { v, at, d: toGo };
+    }
+    if (!best) return null;
+    this.hail = { taxi: best.v, at: best.at, stopped: false };
+    return this.hail;
+  }
+
+  /** The hailed taxi goes on its way (you got in, or walked off). */
+  releaseHail(): void {
+    this.hail = null;
   }
 
   /**

@@ -35,6 +35,8 @@ import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem, type DrivenVehicle } from '../real/traffic';
 import { Driving } from './driving';
 import { OwnCar } from './ownCar';
+import { fare, rideMetres, TaxiPicker } from './taxi';
+import { loadProfile, saveProfile } from '../../race/profile';
 import { Expressway, parseExpressway } from './expressway';
 import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
 import expresswayText from '../../../content/world3d/expressway.yaml?raw';
@@ -662,6 +664,7 @@ async function run(): Promise<void> {
   };
   const interact = async (): Promise<void> => {
     if (driving.car) return exitCar();
+    if (taxiHere()) return getInTaxi();
     const n = target();
     if (n) return use(n);
     const car = takeableCar();
@@ -706,6 +709,84 @@ async function run(): Promise<void> {
     ownCar.sim.u = 16;
   }
   let leavingFor: string | null = null;
+  // Taxis (taxi.ts): H at the kerb waves one down; it pulls in beside you; E gets in and you say where to.
+  const taxiPicker = new TaxiPicker();
+  const places = destinations(district, nodes, content.zones);
+  /** The ride under way: from, to, the fare, and the seconds it lasts (sped up) and has run. */
+  let taxiRide: { dest: Destination; fare: number; t: number; T: number; x0: number; z0: number; path: [number, number][]; cum: number[]; heading?: number } | null = null;
+  const hailTaxi = (): void => {
+    if (driving.car || taxiRide || inVn || Math.abs(camera.position.y - 1.7) > 1.2) return;
+    const h = traffic.hailTaxi(camera.position);
+    toast(h ? 'タクシー! A taxi is pulling in for you: E to get in when it stops.' : 'No free taxi coming this way. Stand at the kerb of a main street (the cell-edge roads) and try again.', 4);
+  };
+  const taxiHere = (): boolean => {
+    const h = traffic.hail;
+    return !!h && h.stopped && Math.hypot(h.taxi.x - camera.position.x, h.taxi.z - camera.position.z) < 10;
+  };
+  const getInTaxi = (): void => {
+    const profile = loadProfile();
+    document.exitPointerLock();
+    taxiPicker.show({ x: camera.position.x, z: camera.position.z }, places, profile.yen, late(), (d) => {
+      // The way a car goes (the GPS's driving grid: along the carriageways), else the grid's L.
+      const x0 = camera.position.x;
+      const z0 = camera.position.z;
+      const path = navGrid('drive').route(x0, z0, d.x, d.z) ?? [[x0, z0], [d.x, z0], [d.x, d.z]];
+      const cum = [0];
+      for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]));
+      const m = Math.max(cum[cum.length - 1], rideMetres(x0, z0, d.x, d.z) * 0.7);
+      // The ride takes a few seconds per kilometre (the city going by, sped up); E skips.
+      taxiRide = { dest: d, fare: fare(m, late()), t: 0, T: Math.min(24, 5 + (m / 1000) * 5), x0, z0, path, cum };
+      controls.held = true;
+      controls.lock();
+      toast(`${d.name} · 〜¥${taxiRide.fare.toLocaleString('en-US')} · E to skip the ride`, 4);
+    });
+  };
+  const endTaxi = async (): Promise<void> => {
+    const r = taxiRide!;
+    taxiRide = null;
+    traffic.releaseHail();
+    await fadeTo(1);
+    const profile = loadProfile();
+    const paid = Math.min(profile.yen, r.fare);
+    profile.yen -= paid;
+    saveProfile(profile);
+    camera.position.set(r.dest.x, r.dest.floor + 1.7, r.dest.z);
+    updateInteriors();
+    controls.setLevel(district.floorAt(r.dest.x, r.dest.z, r.dest.floor));
+    controls.setView(r.dest.yaw, r.dest.pitch);
+    controls.held = false;
+    await fadeTo(0);
+    toast(paid < r.fare ? `The driver takes the ¥${paid.toLocaleString('en-US')} you have, with a look. どうも。` : `¥${paid.toLocaleString('en-US')} · ありがとうございました`, 4);
+  };
+  /** The back seat: the camera in the taxi, looking out of the side window, the city passing (a straight line, sped up). */
+  const rideTaxi = (dt: number): void => {
+    const r = taxiRide!;
+    r.t += dt;
+    const k = Math.min(1, r.t / r.T);
+    const e = k * k * (3 - 2 * k);
+    // Along the route: where we are on it, and the way it's heading (eased round the corners).
+    const total = r.cum[r.cum.length - 1] || 1;
+    const at = (d: number): [number, number] => {
+      let i = 1;
+      while (i < r.path.length - 1 && r.cum[i] < d) i++;
+      const f = (d - r.cum[i - 1]) / (r.cum[i] - r.cum[i - 1] || 1);
+      return [r.path[i - 1][0] + (r.path[i][0] - r.path[i - 1][0]) * Math.min(1, Math.max(0, f)), r.path[i - 1][1] + (r.path[i][1] - r.path[i - 1][1]) * Math.min(1, Math.max(0, f))];
+    };
+    const [x, z] = at(e * total);
+    const [ax, az] = at(Math.min(total, e * total + 30));
+    const want = Math.atan2(ax - x, az - z);
+    r.heading = r.heading === undefined ? want : r.heading + Math.atan2(Math.sin(want - r.heading), Math.cos(want - r.heading)) * Math.min(1, dt * 3);
+    // From the back seat (behind the driver, on the left): ahead down the street, turned a little to the side.
+    camera.position.set(x, 1.3, z);
+    const look = r.heading + 0.3;
+    camera.lookAt(x + Math.sin(look) * 10, 1.25, z + Math.cos(look) * 10);
+    meterEl.style.display = 'block';
+    meterEl.innerHTML = `<b>¥${Math.round((r.fare * Math.min(1, 0.3 + e * 0.7)) / 10) * 10}</b> 賃走 ${r.dest.name}`;
+    if (r.t >= r.T) void endTaxi();
+  };
+  const meterEl = document.createElement('div');
+  Object.assign(meterEl.style, { position: 'fixed', left: '50%', bottom: '24px', transform: 'translateX(-50%)', display: 'none', padding: '8px 18px', background: 'rgba(8,8,16,0.85)', border: '1px solid #ffd34f', borderRadius: '4px', font: "15px Consolas, 'Yu Gothic', monospace", color: '#ffd34f', zIndex: '6' } satisfies Partial<CSSStyleDeclaration>);
+  document.body.append(meterEl);
   const takeableCar = (): DrivenVehicle | null => {
     if (controls.fly || inVn || Math.abs(camera.position.y - 1.7) > 1.2) return null;
     camera.getWorldDirection(forward);
@@ -740,6 +821,7 @@ async function run(): Promise<void> {
   };
   if (exitRoad) enterCar(ownCar.vehicle);
   if (debug) (window as unknown as { __own: OwnCar; __ex: Expressway }).__own = ownCar;
+  if (debug) (window as unknown as { __taxi: unknown }).__taxi = { hail: () => hailTaxi(), state: () => ({ hail: traffic.hail && { stopped: traffic.hail.stopped, d: Math.hypot(traffic.hail.taxi.x - camera.position.x, traffic.hail.taxi.z - camera.position.z) }, here: taxiHere(), ride: taxiRide && { t: taxiRide.t, T: taxiRide.T, fare: taxiRide.fare } }), getIn: () => getInTaxi(), path: () => taxiRide && { path: taxiRide.path.map((p) => p.map(Math.round)), blocked: taxiRide.path.map((p) => district.blocked(p[0], p[1], 0.5)) }, taxis: () => (traffic as unknown as { vehicles: { label: string; x: number; z: number; mode: string }[] }).vehicles.filter((v) => v.label === 'Taxi').map((v) => [Math.round(v.x), Math.round(v.z), v.mode, Math.round(Math.hypot(v.x - camera.position.x, v.z - camera.position.z))]) };
   if (debug) (window as unknown as { __ex: Expressway }).__ex = expressway;
   // ?debug=1: window.__onExpressway(i, road) puts your car on the loop (or the named ramp or spur) at sample i
   // (outside lane) and takes the wheel.
@@ -966,6 +1048,15 @@ async function run(): Promise<void> {
       if (e.code === 'Escape' || e.code === 'KeyE') picker.hide();
       return;
     }
+    if (taxiRide) {
+      if (e.code === 'KeyE') taxiRide.t = taxiRide.T;
+      return;
+    }
+    if (taxiPicker.open) {
+      if (e.code === 'Escape') taxiPicker.hide();
+      return;
+    }
+    if (e.code === 'KeyH') hailTaxi();
     if (e.code === 'KeyL') {
       flags.set(FLAG_LATE, !late());
       toast(late() ? LAST_TRAIN : 'Trains are running (始発 the first trains have started).');
@@ -1008,7 +1099,7 @@ async function run(): Promise<void> {
   });
   document.body.addEventListener('click', () => {
     audio.start();
-    if (!bench && !inVn && !travel.open && !panel.open && !picker.open) controls.lock();
+    if (!bench && !inVn && !travel.open && !panel.open && !picker.open && !taxiPicker.open) controls.lock();
   });
   controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
   controls.look.addEventListener('unlock', () => ($('overlay').hidden = bench));
@@ -1106,6 +1197,11 @@ async function run(): Promise<void> {
     const cp0 = camera.position;
     if (!inVn) driving.update(dt);
     ownCar.pose(inVn ? 0 : dt);
+    if (taxiRide && !inVn) rideTaxi(dt);
+    else meterEl.style.display = 'none';
+    // Walked away from the taxi you hailed: it gives up after a while and drives on.
+    const hail = traffic.hail;
+    if (hail && !taxiRide && !taxiPicker.open && Math.hypot(hail.taxi.x - camera.position.x, hail.taxi.z - camera.position.z) > 60) traffic.releaseHail();
     // The expressway: its traffic (slowing for you in its lane), the sodium lamps' light at night, and the
     // tunnels at the end of the exits (drive in: you're at that pass).
     const onLoop = ownCar.onExpressway() ? expressway.at(ownCar.sim.x, ownCar.sim.z, ownCar.sim.y) : null;
@@ -1294,7 +1390,7 @@ async function run(): Promise<void> {
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
-        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (content.subway.stops.has(t.placementId) ? 'Take the subway' : isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
+        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (content.subway.stops.has(t.placementId) ? 'Take the subway' : isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : taxiHere() ? '[E] Get in the taxi' : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
         `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · I invert mouse Y · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look`,
       ].join('\n');
       builtThisWindow = 0;

@@ -133,3 +133,16 @@ describe('the expressway', () => {
     expect(ex.portal(s.x[n - 40], s.z[n - 40], def.deck)).toBe(null);
   });
 });
+
+import { fare, rideMetres } from '../src/poc3d/district/taxi';
+
+describe('taxi fares', () => {
+  it('charges the flag fall, then by the distance, more late at night', () => {
+    expect(fare(800, false)).toBe(500);
+    expect(fare(1100, false)).toBe(500);
+    expect(fare(1400, false)).toBe(700);
+    expect(fare(5000, false)).toBeGreaterThan(fare(2000, false));
+    expect(fare(3000, true)).toBeGreaterThan(fare(3000, false));
+    expect(rideMetres(0, 0, 300, 400)).toBeGreaterThan(700);
+  });
+});
