@@ -264,7 +264,7 @@ async function run(): Promise<void> {
   );
   const signals = new Signals(scrambles);
   const traffic = new TrafficSystem(
-    carLoops(content.macro, content.traffic, plan).map((c) => ({ route: routeFor(c.rect, true, plan, piers), spacing: c.spacing })),
+    carLoops(content.macro, content.traffic, plan, expressway.rampColliders()).map((c) => ({ route: routeFor(c.rect, true, plan, piers), spacing: c.spacing })),
     content.traffic.buses.map((line) => ({ line, route: routeFor(line.rect, false, plan, piers) })),
     city,
     signals,

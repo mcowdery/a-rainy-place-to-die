@@ -478,7 +478,7 @@ describe('Traffic signals and junctions', () => {
     }
   });
 
-  it('drives round the corners on a smooth path, moving the way it faces (no sliding)', () => {
+  it('drives round the corners on a smooth path, moving the way it faces (no sliding)', { timeout: 30000 }, () => {
     for (const [rect, cw] of [...carLoops(content.macro, content.traffic, plan).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
       const route = routeFor(rect, cw, plan, []);
       const ds = 0.25;

@@ -1,6 +1,7 @@
 import YAML from 'yaml';
 import type { MacroMap } from '../../gen/macro';
 import { roadClass } from './gps';
+import type { Rect } from '../../core/coords';
 import { CELL, STYLES3, type CellPlan3 } from './plan';
 
 /**
@@ -78,7 +79,7 @@ export function parseTraffic3(file: string, text: string, macro: MacroMap, error
  * edge, and every road along its edges is a proper street (raised pavements, or an avenue: the roads the GPS
  * drives, gps.ts `roadClass`). So traffic comes with each new district; the narrow lanes stay quiet.
  */
-export function carLoops(macro: MacroMap, traffic: TrafficContent, plan: (mx: number, my: number) => CellPlan3 | null): TrafficLoop[] {
+export function carLoops(macro: MacroMap, traffic: TrafficContent, plan: (mx: number, my: number) => CellPlan3 | null, avoid: readonly Rect[] = []): TrafficLoop[] {
   const out = [...traffic.cars];
   const a = traffic.auto;
   if (!a) return out;
@@ -112,6 +113,14 @@ export function carLoops(macro: MacroMap, traffic: TrafficContent, plan: (mx: nu
       const rect = [c0, r0, c0 + n, r0 + n] as const;
       if (out.some((l) => overlaps(l.rect, rect)) || !builtRound(rect)) continue;
       if (!proper(false, r0, c0, c0 + n) || !proper(false, r0 + n, c0, c0 + n) || !proper(true, c0, r0, r0 + n) || !proper(true, c0 + n, r0, r0 + n)) continue;
+      // Not along a street with an expressway ramp's walled foot in it (it stands in the kerb lane).
+      const X0 = c0 * CELL;
+      const X1 = (c0 + n) * CELL;
+      const Z0 = r0 * CELL;
+      const Z1 = (r0 + n) * CELL;
+      const onEdge = (q: Rect): boolean =>
+        q.x < X1 + 16 && q.x + q.w > X0 - 16 && q.y < Z1 + 16 && q.y + q.h > Z0 - 16 && !(q.x > X0 + 16 && q.x + q.w < X1 - 16 && q.y > Z0 + 16 && q.y + q.h < Z1 - 16);
+      if (avoid.some(onEdge)) continue;
       out.push({ rect, spacing: a.spacing });
     }
   }

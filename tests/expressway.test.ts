@@ -80,8 +80,13 @@ describe('the expressway', () => {
   it('loads', () => {
     expect(errors).toEqual([]);
     expect(ex.loop.x.length).toBeGreaterThan(3000);
-    expect(ex.roads.filter((r) => r.rampKind === 'on')).toHaveLength(4);
-    expect(ex.roads.filter((r) => r.rampKind === 'off')).toHaveLength(4);
+    // The loop's four pairs, route 1's pair into the port, the Wangan's pair at each end.
+    expect(ex.roads.filter((r) => r.rampKind === 'on')).toHaveLength(7);
+    expect(ex.roads.filter((r) => r.rampKind === 'off')).toHaveLength(7);
+    // Two-way routes: a deck each way, side by side, their piers shared on the line between them.
+    const r1s = ex.roads.find((r) => r.id === 'r1_s')!;
+    const r1n = ex.roads.find((r) => r.id === 'r1_n')!;
+    expect(Math.abs(r1s.x[100] - r1n.x[r1n.x.length - 101])).toBeCloseTo(10.4, 0);
     expect(ex.roads.filter((r) => r.kind === 'spur').map((r) => r.venue)).toEqual(['kurokami', 'yunagi']);
   });
 
@@ -173,7 +178,7 @@ describe('the expressway over the avenues', () => {
 
   it('keeps the street traffic clear of the piers, the medians and the ramps', () => {
     const plan = (mx: number, my: number) => district.plan(mx, my);
-    for (const loop of [...carLoops(content.macro, content.traffic, plan).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
+    for (const loop of [...carLoops(content.macro, content.traffic, plan, ex.rampColliders()).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
       const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail] : []);
       for (let s = 0; s < route.length; s += 2) {
         const p = along(route, s);
@@ -198,7 +203,7 @@ describe('the expressway as a network', () => {
     // A radial from the loop's south side straight down three blocks, with a tunnel at its end.
     const net: typeof def = {
       ...def,
-      routes: [...def.routes, { id: 'r1', name: '1号線', nameEn: 'ROUTE 1', loop: false, pts: [[24, 13], [24, 16]] }],
+      routes: [...def.routes, { id: 'r1', name: '1号線', nameEn: 'ROUTE 1', loop: false, pts: [[27, 13], [27, 16]] }],
       exits: [...def.exits, { id: 'port', venue: 'kurokami', route: 'r1', at: 1, length: 60, name: 'PORT' }],
     };
     const errs: string[] = [];
@@ -210,7 +215,7 @@ describe('the expressway as a network', () => {
     expect(r1.x.length).toBeGreaterThan(380);
     // Along it at deck height: on the network; where it starts, it's on the loop's deck too (a junction).
     for (let i = 0; i < r1.x.length; i += 10) expect(n.at(r1.x[i], r1.z[i], def.deck), `r1 ${i}`).not.toBe(null);
-    expect(n.at(24 * 128, 13 * 128 + 3, def.deck)).not.toBe(null);
+    expect(n.at(27 * 128, 13 * 128 + 3, def.deck)).not.toBe(null);
     // Off its side, part-way down: a wall pushes you back on.
     const i = 200;
     const side = { x: r1.x[i] + r1.tz[i] * (def.half + 0.5), z: r1.z[i] - r1.tx[i] * (def.half + 0.5) };

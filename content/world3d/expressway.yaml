@@ -13,6 +13,12 @@ radius: 20
 half: 4.6
 routes:
   - { id: c1, name: 都心環状線, nameEn: INNER LOOP, loop: true, pts: [[21, 10], [31, 10], [31, 13], [21, 13]] }
+# Route 1 (1号線) from the loop's south side down Kōnan-dōri to the Wangan, and the Wangan (湾岸線) along the port
+# a block in from the seawall, each two-way: a route each way, offset left of the line, decks side by side.
+  - { id: r1_s, name: 1号線 南行, nameEn: ROUTE 1 SOUTH, loop: false, offset: 5.2, pts: [[24, 13], [24, 21]] }
+  - { id: r1_n, name: 1号線 北行, nameEn: ROUTE 1 NORTH, loop: false, offset: 5.2, pts: [[24, 21], [24, 13]] }
+  - { id: wangan_e, name: 湾岸線 東行, nameEn: WANGAN EAST, loop: false, offset: 5.2, pts: [[7, 21], [36, 21]] }
+  - { id: wangan_w, name: 湾岸線 西行, nameEn: WANGAN WEST, loop: false, offset: 5.2, pts: [[36, 21], [7, 21]] }
 # Ramps, in the outside (left) lane of a route, over the inner lane of the avenue below: route, leg (from point
 # `leg` to the next), block (which 128 m block of that leg, from its start in the direction of travel). An
 # on-ramp rises from the start of its block; an off-ramp comes down to the end of its block. name: the district,
@@ -26,6 +32,14 @@ ramps:
   - { id: kaburo_s_on, kind: on, route: c1, leg: 2, block: 3, name: 歌舞路 KABURO }
   - { id: asagiri_s_off, kind: off, route: c1, leg: 2, block: 6, name: 朝霧 ASAGIRI }
   - { id: asagiri_s_on, kind: on, route: c1, leg: 2, block: 7, name: 朝霧 ASAGIRI }
+# The port: route 1's pair over Kōnan-dōri; the Wangan's at each end (the stubs run on to the airport branch in the
+# west and over the river to the old town in the east).
+  - { id: port_s_off, kind: off, route: r1_s, leg: 0, block: 5, name: 東都港 TŌTO PORT }
+  - { id: port_n_on, kind: on, route: r1_n, leg: 0, block: 2, name: 東都港 TŌTO PORT }
+  - { id: terminal_e_on, kind: on, route: wangan_e, leg: 0, block: 1, name: 東都港 TERMINAL }
+  - { id: terminal_w_off, kind: off, route: wangan_w, leg: 0, block: 27, name: 東都港 TERMINAL }
+  - { id: fishmarket_w_on, kind: on, route: wangan_w, leg: 0, block: 1, name: 東都市場 FISH MARKET }
+  - { id: fishmarket_e_off, kind: off, route: wangan_e, leg: 0, block: 27, name: 東都市場 FISH MARKET }
 # Exits to the passes: at a route's point (a loop's corner, or an open route's end) the outside lane runs straight
 # on into a tunnel (a spur), signed to a venue. length: the spur's run to the portal.
 exits:

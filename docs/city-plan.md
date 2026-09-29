@@ -48,8 +48,10 @@ Expressway (`content/world3d/expressway.yaml`, to become a network of routes):
 - Route 4, the Kurokami radial: from C1's north-west corner north along col 21 to row 3, then west to the
   Kurokami tunnel at [9, 3].
 - Route 1, the harbour radial: col 24 from C1's south side down to the Wangan (row 22).
-- Wangan: along the seawall (row 22) from the airport branch (col 8) to the Yūnagi tunnel at the east
-  headland; Ebisu-jima PA on its island; a suspension bridge branch (col 28) to Shiomi-jima.
+- Wangan: along the port a block in from the seawall (row 21, over Wangan-dōro: ramps need a street under
+  them), from the airport branch (col 8) to the Yūnagi tunnel at the east headland; Ebisu-jima PA on its
+  island; a suspension bridge branch (col 28) to Shiomi-jima. Route 1 and the Wangan are two-way (a deck each
+  way).
 
 The pass tunnels move: Kurokami to the end of route 4, Yūnagi to the east end of the Wangan.
 
@@ -79,7 +81,7 @@ between; slopes and stairs): Takanodai heights, Gakuenzaka's slope, Kawabata's t
 ## Build order
 
 Progress: L0 v2 and the groundwork are in; Kasumi-chō and the port's streets and warehouses are generated, with
-the sea; next the expressway's route 1 and the Wangan, then the port's set pieces and islands.
+the sea; route 1 and the Wangan are built (two-way, ramps into the port); next the port's set pieces and islands.
 
 1. The plan (this; L0 v2 in place).
 2. Groundwork: the lightmap in tiles, routing on the road network, traffic generated from the streets, the

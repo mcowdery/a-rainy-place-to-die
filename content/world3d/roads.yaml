@@ -19,7 +19,9 @@ avenues:
 # along the harbour front; Kasumi-dōri across Kasumi-chō; the harbour radial's avenue (route 1 overhead).
   - { name: 海岸通り KAIGAN-DŌRI, row: 18, from: 7, to: 37, width: 32, median: 2.4 }
   - { name: 霞通り KASUMI-DŌRI, row: 16, from: 8, to: 37, width: 20, median: 0 }
-  - { name: 港南通り KŌNAN-DŌRI, col: 24, from: 13, to: 18, width: 32, median: 2.4 }
+  - { name: 港南通り KŌNAN-DŌRI, col: 24, from: 13, to: 21, width: 32, median: 2.4 }
+# Under the Wangan, a block in from the seawall (its two decks over the carriageways, piers in the median).
+  - { name: 湾岸道路 WANGAN-DŌRO, row: 21, from: 6, to: 37, width: 32, median: 2.4 }
 # The Toto Line's viaduct runs on south through Kasumi-chō over its own street, as wide as it is between the districts.
   - { name: 高架下通り KŌKASHITA-DŌRI, col: 26, from: 14, to: 17, width: 16, median: 0 }
   # Past the terminal, Tōto-ōdōri narrows over the Seikō Line's Tōto-Chūō station (subway stations stand

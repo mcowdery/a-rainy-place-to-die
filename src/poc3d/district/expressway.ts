@@ -24,6 +24,12 @@ export interface RouteDef {
   readonly loop: boolean;
   /** Its corners: L0 grid points [col, row], in the direction of travel. */
   readonly pts: readonly (readonly [number, number])[];
+  /**
+   * Metres to the left of the grid line (keep left): a two-way expressway is two routes, one each way, each
+   * offset to its own left, so their decks stand side by side over one avenue. Their piers stay on the line
+   * (in the median), under both decks.
+   */
+  readonly offset?: number;
 }
 
 export interface ExpresswayDef {
@@ -60,6 +66,7 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
       if (!ok) return err(`routes[${i}]: { id, name, nameEn, loop: true|false, pts: [[col, row], ...] }`);
       const P = pts as [number, number][];
       if (P.length < (r.loop ? 3 : 2)) return err(`routes[${i}]: a loop needs 3 points, a route 2`);
+      if (r.offset !== undefined && (!num(r.offset) || Math.abs(r.offset as number) > 12)) err(`routes[${i}]: offset is metres left of the line, up to 12`);
       if (routes.has(r.id as string)) return err(`routes[${i}]: id ${r.id} twice`);
       const legs: number[] = [];
       for (let k = 0; k < (r.loop ? P.length : P.length - 1); k++) {
@@ -107,6 +114,8 @@ export interface Road {
   readonly venue?: string;
   readonly sign?: string;
   readonly rampKind?: 'on' | 'off';
+  /** Metres left of its grid line (a two-way route's decks): its piers stand back on the line. */
+  readonly offset?: number;
 }
 
 /** Where a point is on the network. */
@@ -210,7 +219,16 @@ export class Expressway {
       }
       if (!r.loop) dense.push(P[P.length - 1]);
       const L = resample(dense, r.loop);
-      const road = makeRoad(r.id, r.loop ? 'loop' : 'route', L.x, L.z, () => D, def.half, r.loop, { sign: r.name });
+      const off = r.offset ?? 0;
+      if (off) {
+        // To the left of the line by `off` (left of travel: (tz, -tx)).
+        const base = makeRoad(r.id, 'route', L.x, L.z, () => D, def.half, r.loop);
+        for (let i = 0; i < L.x.length; i++) {
+          L.x[i] = base.x[i] + base.tz[i] * off;
+          L.z[i] = base.z[i] - base.tx[i] * off;
+        }
+      }
+      const road = makeRoad(r.id, r.loop ? 'loop' : 'route', L.x, L.z, () => D, def.half, r.loop, { sign: r.name, ...(off ? { offset: off } : {}) });
       routeRoads.set(r.id, road);
       this.roads.push(road);
     }
@@ -225,7 +243,7 @@ export class Expressway {
       const route = def.routes.find((q) => q.id === r.route)!;
       const { start, dir } = legsOf(route)[r.leg];
       const left: [number, number] = [dir[1], -dir[0]];
-      const off = def.half + rh - 0.6;
+      const off = def.half + rh - 0.6 + (route.offset ?? 0);
       const s0 = r.block * CELL;
       const a = r.kind === 'on' ? s0 + 16 : s0 + 112 - RAMP;
       const xs: number[] = [];
@@ -235,7 +253,7 @@ export class Expressway {
       const lane = 1.8;
       for (let d = 0; d <= RAMP; d++) {
         const k = r.kind === 'on' ? smooth((d - (RAMP - 60)) / 60) : 1 - smooth(d / 60);
-        const o = off - (off - lane) * k;
+        const o = off - (off - lane - (route.offset ?? 0)) * k;
         xs.push(start[0] + dir[0] * (a + d) + left[0] * o);
         zs.push(start[1] + dir[1] * (a + d) + left[1] * o);
       }
@@ -247,7 +265,9 @@ export class Expressway {
       const route = def.routes.find((q) => q.id === e.route)!;
       const legs = legsOf(route);
       const dir = legs[(e.at - 1 + legs.length) % legs.length].dir;
-      const c = world(route.pts[e.at]);
+      const o = route.offset ?? 0;
+      const w = world(route.pts[e.at]);
+      const c: [number, number] = [w[0] + dir[1] * o, w[1] - dir[0] * o];
       const xs: number[] = [];
       const zs: number[] = [];
       for (let d = -R - 10; d <= e.length; d++) {
@@ -388,13 +408,21 @@ export class Expressway {
     return out;
   }
 
+  /** The ramps' walled feet alone (between 0.35 m and 5.2 m up): the generated traffic keeps off their edges. */
+  rampColliders(): Rect[] {
+    const piers = new Set(this.piers().map((p) => `${Math.round(p.x - 0.7)},${Math.round(p.z - 0.7)}`));
+    return this.streetColliders().filter((q) => !(q.w === 1.4 && q.h === 1.4 && piers.has(`${Math.round(q.x)},${Math.round(q.y)}`)));
+  }
+
   /** Where the deck's piers stand (every 32 m along the loop and spurs; the ramps stand on their own walls). */
   piers(): { x: number; z: number; top: number }[] {
     const out: { x: number; z: number; top: number }[] = [];
     for (const road of this.roads) {
       if (road.kind === 'ramp') continue;
       const start = road.kind === 'spur' ? 40 : 0;
-      for (let i = start; i < road.x.length; i += 32) out.push({ x: road.x[i], z: road.z[i], top: road.y[i] - 1.2 });
+      // An offset deck's piers stand back on its grid line (the median), under both of a two-way route's decks.
+      const o = road.offset ?? 0;
+      for (let i = start; i < road.x.length; i += 32) out.push({ x: road.x[i] - road.tz[i] * o, z: road.z[i] + road.tx[i] * o, top: road.y[i] - 1.2 });
     }
     return out;
   }
