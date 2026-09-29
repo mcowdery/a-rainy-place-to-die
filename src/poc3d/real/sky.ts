@@ -67,7 +67,8 @@ export class Sky {
         }
         void main() {
           vec3 d = normalize(vDir);
-          vec3 col = d.y >= 0.0 ? mix(uHorizon, uZenith, pow(d.y, 0.45)) : uHorizon * mix(1.0, 0.45, clamp(-d.y * 6.0, 0.0, 1.0));
+          // Below the horizon: the horizon colour (the land and sea round the city fade into it, real/sea.ts).
+          vec3 col = d.y >= 0.0 ? mix(uHorizon, uZenith, pow(d.y, 0.45)) : uHorizon;
           float sd = max(dot(d, normalize(uSunDir)), 0.0);
           col += uSunColor * (step(0.99965, sd) * 12.0 * uDisc + pow(sd, 12.0) * 0.35 + pow(sd, 3.0) * 0.08);
           if (uStars > 0.0 && d.y > 0.08) {

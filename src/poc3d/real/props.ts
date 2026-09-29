@@ -26,7 +26,9 @@ export interface Prop {
     | 'lamp' | 'pole' | 'vending' | 'tree' | 'car' | 'signal'
     // Greenery and the furniture of open ground (openLots.ts).
     | 'hedge' | 'pots' | 'planter' | 'bench' | 'postlamp' | 'fence' | 'paymachine' | 'psign' | 'wheelstop'
-    | 'swing' | 'slide' | 'sandbox' | 'toilet' | 'weeds' | 'board' | 'cones' | 'bike';
+    | 'swing' | 'slide' | 'sandbox' | 'toilet' | 'weeds' | 'board' | 'cones' | 'bike'
+    // The port's container yards: a stack of shipping containers (size: how many high; half: half its length).
+    | 'container';
   readonly x: number;
   readonly z: number;
   /**

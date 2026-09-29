@@ -145,6 +145,7 @@ export function openLayout(lot: OpenLot3, buildings: readonly Building3[]): Open
     case 'parking': parking(L); break;
     case 'playground': playground(L, 0, 0, L.W, L.D, true); break;
     case 'vacant': vacant(L); break;
+    case 'yard': yard(L); break;
     case 'plaza': plaza(L); break;
     case 'park': park(L); break;
   }
@@ -251,6 +252,50 @@ function vacant(L: Layout): void {
     L.prop('weeds', u, t, 0, -1, { solid: false, radius: 0.3, size: 0.5 + rnd.float() * (edge ? 0.9 : 0.5), variant: rnd.int(0, 7) });
   }
   if (rnd.chance(0.4)) L.prop('cones', W * (0.3 + rnd.float() * 0.4), D * (0.4 + rnd.float() * 0.4), 0, -1, { radius: 0.5, variant: rnd.int(0, 3) });
+}
+
+/**
+ * A container yard (the port): asphalt behind a fence along the street with a gate in it, blocks of 40 ft and
+ * 20 ft containers stacked one to four high in rows down the lot, lanes between the blocks for the trucks and
+ * straddle carriers, and tall floodlight masts along the lanes.
+ */
+function yard(L: Layout): void {
+  const { W, D, rnd } = L;
+  L.ground.push({ rect: L.lot.rect, top: 0.03, kind: KIND.asphalt, hex: 0x3e3e42 });
+  // The fence along the street, broken by the gate in the middle.
+  const gate = W / 2;
+  L.run('fence', 0.4, 0.4, gate - 5, 0.4, 2, 0.08);
+  L.run('fence', gate + 5, 0.4, W - 0.4, 0.4, 2, 0.08);
+  L.run('fence', 0.4, 0.4, 0.4, D - 0.4, 2, 0.08);
+  L.run('fence', W - 0.4, 0.4, W - 0.4, D - 0.4, 2, 0.08);
+  // Blocks of stacks: rows running along the lot (u), six containers wide (across, t), with a 12 m lane
+  // between blocks and a 10 m apron inside the fence.
+  const ROW = 2.6;
+  const LANE = 12;
+  const start = 10;
+  for (let t0 = start; t0 + ROW * 3 < D - 6; t0 += ROW * 6 + LANE) {
+    const rows = Math.min(6, Math.floor((D - 6 - t0) / ROW));
+    for (let r = 0; r < rows; r++) {
+      const t = t0 + r * ROW + ROW / 2;
+      let u = 6;
+      while (u < W - 6) {
+        const long = rnd.chance(0.7);
+        const len = long ? 12.2 : 6.1;
+        if (u + len > W - 6) break;
+        // Mostly full, a few gaps; stacks one to four high (lower at the ends of a row, where they're worked).
+        if (rnd.chance(0.9)) {
+          const high = 1 + Math.min(3, Math.floor(rnd.float() * 4.2));
+          L.prop('container', u + len / 2, t, 0, -1, { half: len / 2, radius: 1.25, size: high, variant: rnd.int(0, 1 << 16) });
+        }
+        u += len + 0.4;
+      }
+    }
+    // Floodlight masts along the lane beyond the block.
+    const laneT = t0 + rows * ROW + LANE / 2;
+    if (laneT < D - 2) for (let u = 14; u < W - 8; u += 36) L.lamp(u, laneT, 22, [0.92, 0.95, 1.0], 1.0);
+  }
+  // A lamp over the gate.
+  L.lamp(gate, 1.5, 12, [0.92, 0.95, 1.0], 0.8);
 }
 
 /**

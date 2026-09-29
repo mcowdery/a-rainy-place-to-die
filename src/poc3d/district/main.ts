@@ -43,6 +43,7 @@ import { fare, rideMetres, TaxiPicker } from './taxi';
 import { loadProfile, saveProfile } from '../../race/profile';
 import { Expressway, parseExpressway } from './expressway';
 import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
+import { buildSea } from '../real/sea';
 import expresswayText from '../../../content/world3d/expressway.yaml?raw';
 import { pointsAhead, Router, type NavMode } from './gps';
 import { Guide, type GuideDest, type GuideFrom } from './guide';
@@ -255,7 +256,7 @@ async function run(): Promise<void> {
   // Everything on the surface, hidden below ground (the stations' own groups stay: they reach up to the street).
   const surface: THREE.Object3D[] = [];
   // Traffic: cars and taxis clockwise round their loops, buses anticlockwise round theirs.
-  const piers = rail ? [rail.x] : [];
+  const piers = rail ? [rail] : [];
   const plan = (mx: number, my: number) => district.plan(mx, my);
   // Every grid-corner junction has signals; scramble crossings add a pedestrian phase.
   const scrambles = new Set(
@@ -711,6 +712,10 @@ async function run(): Promise<void> {
   const driving = new Driving(camera, (x, z, r) => district.blocked(x, z, r, 0) || traffic.blocked(x, z, r, driving.car) || npcBlocked(x, z, r));
   // The Tōto Expressway (expressway.ts): the elevated inner loop, its ramps and its exits to the passes.
   district.extraColliders.push(...expressway.streetColliders());
+  // The bay and the river (real/sea.ts): water over the map's water cells, seawalls where built land meets it.
+  const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my), cityU.uHorizon);
+  scene.add(sea.group);
+  if (debug) (window as unknown as { __sea: unknown }).__sea = { sea, renderer, horizon: cityU.uHorizon };
   const exView = buildExpressway(expressway, city);
   const exTraffic = new ExpresswayTraffic(expressway, city);
   scene.add(exView.group, exTraffic.group);

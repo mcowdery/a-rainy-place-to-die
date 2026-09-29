@@ -279,6 +279,24 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
       for (let y = 1.0; y < 1.35; y += 0.1) mb.frameBox(o, r, n, -0.45, -0.05 + rnd.float() * 0.45, y, y + 0.04, 0.06, 0.07);
       break;
     }
+    case 'container': {
+      // A stack of shipping containers along r: each a box with a darker band top and bottom (the frame and
+      // the corrugation's shadow), doors at one end; colours by the shipping lines' liveries.
+      const COLS = [0x1f4f8a, 0xb0302a, 0xd86a1e, 0x2a6a3a, 0x8a8e94, 0xe8e4dc, 0x6a2a6a, 0x2a8a9a, 0x9a6a2a];
+      const H = 2.59;
+      const w = 1.22;
+      for (let k = 0; k < (p.size ?? 1); k++) {
+        const y0 = k * H;
+        mb.color = lin(COLS[hash(p.variant, k) % COLS.length]);
+        mb.frameBox(o, r, n, -half + 0.02, half - 0.02, y0 + 0.12, y0 + H - 0.1, -w + 0.02, w - 0.02);
+        mb.color = lin(0x2a2a2c);
+        mb.frameBox(o, r, n, -half, half, y0, y0 + 0.12, -w, w);
+        mb.frameBox(o, r, n, -half, half, y0 + H - 0.1, y0 + H, -w, w);
+        // The doors' end: two dark lines down it.
+        mb.frameBox(o, r, n, half - 0.02, half, y0 + 0.2, y0 + H - 0.2, -0.03, 0.03);
+      }
+      break;
+    }
     case 'cones': {
       const k = 2 + (p.variant % 3);
       for (let i = 0; i < k; i++) {

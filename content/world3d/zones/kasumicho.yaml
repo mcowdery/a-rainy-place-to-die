@@ -1,0 +1,148 @@
+# Kasumi-chō (霞町), south of the core between Kaburo and Asagiri and the port (format: src/poc3d/district/zones.ts;
+# the whole-city plan: docs/city-plan.md). Mid-rise flats and offices under the core, houses to the west, a small
+# shopping street, a park (the cemetery avenue will stand here), and its main streets from roads.yaml (the radials
+# down to the harbour front, and Kasumi-dōri across it). The residential style is generated only where a zone
+# file paints (onlyZoned).
+district: residential
+area: Kasumi-chō
+origin: [8, 14]
+map:
+  - HHHHHHMMMMPPBBBBBBBBBBBBMMMMM
+  - HHHHHHMMMMPPMMMMMMMMMMMMMMMMM
+  - HHHHHHSSSSSSMMMMMMMMMMMMMMMMM
+  - HHHHHHMMMMMMMMMMMMMMMMMMMMMMM
+
+zones:
+  H:
+    id: kasumi_houses
+    name: Kasumi-chō (houses)
+    plan:
+      floors: [[2, 2, 60], [3, 3, 28], [4, 6, 12]]
+      lotW: [7, 11]
+      localStreet: [3, 4.5]
+      block: [16, 36]
+      lotGap: 0.45
+      signChance: 0.06
+      open: { parking: 0.08, vacant: 0.04, playground: 0.03 }
+      rear: [1.5, 3.5]
+      setback: [0.8, 2.4]
+      streetTrees: 0.15
+      hedges: 0.1
+      pots: 0.55
+    ads: { street: 2, food: 1, mainstream: 1 }
+    look:
+      windows: { punched: 45, small: 30, balcony: 25 }
+      walls: ['#d8d0c0', '#c8c0b0', '#e8e0d0', '#b8a890', '#a8b0b8', '#d0c8b8', '#8a7a6a']
+      tiled: true
+      shops: { warm: 3, cool: 1 }
+      open: 0.5
+      homes: 0.9
+      roofs: 0.6
+      bikes: 0.6
+
+  M:
+    id: kasumi_flats
+    name: Kasumi-chō (flats)
+    plan:
+      floors: [[4, 7, 45], [8, 12, 40], [13, 18, 15]]
+      lotW: [14, 26]
+      localStreet: [5, 8]
+      block: [28, 56]
+      twoRowDepth: 30
+      lotGap: 0.4
+      signChance: 0.2
+      open: { parking: 0.1, playground: 0.04, vacant: 0.02 }
+      rear: [2, 5]
+      setback: [1.5, 3.5]
+      streetTrees: 0.5
+      hedges: 0.4
+      pots: 0.2
+    signs:
+      words: [クリニック, 歯科, 不動産, コンビニ, 薬局, 学習塾, 美容室, カフェ, 定食, 整骨院, クリーニング]
+      colors: ['#ffffff', '#4fe3ff', '#ffe45f', '#6bff8a']
+    ads: { street: 2, mainstream: 2, food: 1 }
+    look:
+      windows: { balcony: 60, punched: 30, ribbon: 10 }
+      walls: ['#e0dcd0', '#d0ccc0', '#c8c4b8', '#b8b4a8', '#d8c8b8', '#a8a49a']
+      tiled: true
+      shops: { cool: 2, warm: 3 }
+      open: 0.7
+      homes: 0.6
+      bikes: 0.6
+
+  B:
+    id: kasumi_business
+    name: Kasumi-chō (offices)
+    plan:
+      floors: [[8, 12, 50], [13, 20, 40], [22, 28, 10]]
+      lotW: [16, 28]
+      localStreet: [6, 9]
+      block: [30, 56]
+      twoRowDepth: 30
+      lotGap: 0.3
+      signChance: 0.35
+      open: { parking: 0.06 }
+      rear: [1, 3]
+      setback: [1, 3]
+      streetTrees: 0.8
+      hedges: 0.5
+      pots: 0.05
+    signs:
+      words: [BANK, HOTEL, 保険, 証券, CAFE, 貸会議室, BUSINESS HOTEL, 居酒屋, ラーメン, 牛丼]
+      colors: ['#ffffff', '#4fe3ff', '#ffe45f']
+    ads: { mainstream: 3, food: 2, street: 1 }
+    look:
+      windows: { ribbon: 45, curtain: 25, punched: 30 }
+      walls: ['#8a8e94', '#a8aab0', '#6a6e74', '#c8c4bc', '#5a5e64']
+      tiled: false
+      shops: { cool: 3, warm: 2 }
+      open: 0.8
+
+  S:
+    id: kasumi_shotengai
+    name: Kasumi-chō shopping street
+    plan:
+      floors: [[2, 3, 60], [4, 5, 40]]
+      lotW: [5, 9]
+      localStreet: [4, 6]
+      lotGap: 0.1
+      signChance: 0.9
+      verticalSign: 0.5
+      open: { parking: 0.03 }
+      rear: [0.5, 1.5]
+      setback: [0, 0.4]
+      streetTrees: 0.1
+      pots: 0.5
+    signs:
+      words: [八百屋, 魚屋, 肉屋, 惣菜, 花屋, 喫茶, 和菓子, 布団, 金物, 酒店, 焼鳥, 霞町商店街]
+      colors: ['#ffe45f', '#ff4f4f', '#ffb040', '#ffffff', '#6bff8a']
+    ads: { food: 4, street: 3, mainstream: 1 }
+    look:
+      windows: { punched: 60, small: 40 }
+      walls: ['#b8a88c', '#c2b49a', '#a89878', '#7c604c', '#d8d5cc']
+      tiled: true
+      shops: { warm: 7, cool: 2, colourful: 1 }
+      open: 0.9
+      homes: 0.12
+      roofs: 0.3
+      bikes: 0.3
+
+  P:
+    id: kasumi_park
+    name: Kasumi Park
+    plan:
+      park: 0.8
+      floors: [[3, 5, 70], [6, 8, 30]]
+      lotW: [10, 16]
+      localStreet: [4, 6]
+      rear: [1.5, 3.5]
+      setback: [1, 2.4]
+      pots: 0.3
+    ads: { street: 1, mainstream: 1 }
+    look:
+      windows: { punched: 50, balcony: 50 }
+      walls: ['#d8d0c0', '#c8c0b0', '#e8e0d0', '#b8a890']
+      tiled: true
+      shops: { warm: 2 }
+      open: 0.5
+      homes: 0.8

@@ -410,7 +410,7 @@ describe('Asagiri set pieces and traffic', () => {
 
   it('keeps every traffic lane clear of buildings, props and stops', () => {
     for (const loop of [...carLoops(content.macro, content.traffic, plan).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
-      const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail.x] : []);
+      const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail] : []);
       for (let s = 0; s < route.length; s += 2) {
         const p = along(route, s);
         expect(district.blocked(p.x, p.z, 0.8), `${loop[0].join(',')} at ${s}`).toBe(false);
@@ -688,10 +688,14 @@ describe('Subway', () => {
 
 describe('Sakuragaoka (residential)', () => {
   const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
-  const cells = model.cells.filter(([mx, my]) => content.macro.kindAt(mx, my) === 'residential');
+  // Sakuragaoka's own cells (its zone file names no area; Kasumi-chō's is another residential area).
+  const residential = model.cells.filter(([mx, my]) => content.macro.kindAt(mx, my) === 'residential');
+  const cells = residential.filter(([mx, my]) => content.zones.at(mx, my)?.id.startsWith('sakuragaoka'));
 
   it('is generated only where its zones are painted, west of Asagiri', () => {
     expect(cells.length).toBe(24);
+    // Every generated residential cell is painted by some zone file.
+    for (const [mx, my] of residential) expect(content.zones.at(mx, my), `${mx},${my}`).toBeDefined();
     for (const [mx, my] of cells) {
       expect(mx >= 14 && mx <= 19 && my >= 9 && my <= 12, `${mx},${my}`).toBe(true);
       expect(content.zones.at(mx, my)).toBeDefined();

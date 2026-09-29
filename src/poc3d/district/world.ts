@@ -3,7 +3,7 @@ import type { DistrictId, MacroMap } from '../../gen/macro';
 import type { Lightmap } from '../real/lightmap';
 import { KIND } from '../real/meshBuilder';
 import { propBlocked, propDist, type Prop } from '../real/props';
-import { CAR_PROPS, SOFT_PROPS } from './crash';
+import { CAR_PROPS, SOFT_PROPS, WALL_PROPS } from './crash';
 import { rawBytes, rawTriangles, toGeometry } from '../real/rawGeometry';
 import type { SignAtlas } from '../real/signs';
 import type { ChunkBuilt, Stage } from './chunkBuild';
@@ -292,7 +292,10 @@ export class District {
 
   /** The district's name at a world position (for the HUD), if it's a generated one. */
   districtAt(x: number, z: number): string | null {
-    const k = this.macro.kindAt(Math.floor(x / CELL), Math.floor(z / CELL));
+    const [mx, my] = [Math.floor(x / CELL), Math.floor(z / CELL)];
+    const area = this.model.zones.at(mx, my)?.area;
+    if (area) return area;
+    const k = this.macro.kindAt(mx, my);
     return k in STYLES3 ? STYLES3[k as DistrictId]!.name : null;
   }
 
@@ -382,6 +385,7 @@ export class District {
         if (inRects(d.solids)) return 'wall';
         for (const q of d.props) {
           if (q.solid === false || propDist(q, x, z) >= q.radius + r) continue;
+          if (WALL_PROPS.has(q.kind)) return 'wall';
           see(SOFT_PROPS.has(q.kind) ? 'soft' : CAR_PROPS.has(q.kind) ? 'car' : 'pole');
         }
       }

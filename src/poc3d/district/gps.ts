@@ -12,8 +12,9 @@ import type { CellPlan3, Road3 } from './plan';
  * - drive: the proper streets (raised pavements, 8 m and up, where the traffic drives) and the avenues; the
  *   narrow shared lanes only at a heavy price (`LANE`), so a route takes one only to reach a place on it; no
  *   alleys or lanes too tight for a car.
- * A route snaps its ends to the nearest road it may use, then A* over the graph; its points are the ends, where
- * they meet the road, and the junctions where it turns.
+ * A route snaps its ends to the nearest road it may use, then A* over the graph (driving prefers the avenues,
+ * and every turn costs a little, so routes run along the big roads with few turns, as a GPS's do); its points
+ * are the ends, where they meet the road, and the junctions where it turns.
  *
  * Walks of up to `WALK_GRID` metres go over a grid instead (`NavGrid`, built over just the area round the
  * trip), which crosses plazas and parks and cuts through the gaps between buildings. `Router` picks. Pure:
@@ -60,7 +61,13 @@ interface Edge {
   readonly b: number;
   readonly len: number;
   readonly cls: RoadClass;
+  /** An avenue or boulevard (driving prefers them, as a GPS does). */
+  readonly fast: boolean;
 }
+
+/** Driving along an avenue costs this much a metre against a street's 1; each turn costs `TURN` metres. */
+const FAST = 0.8;
+const TURN: Readonly<Record<NavMode, number>> = { drive: 40, walk: 6 };
 
 /** Where a point meets the nearest usable road: the edge, how far along it (0 at a, 1 at b), the point. */
 interface Snap {
@@ -174,7 +181,7 @@ export class RoadNet {
       const b = this.node(bx, bz);
       if (a === b) continue;
       const e = this.edges.length;
-      this.edges.push({ a, b, len: Math.hypot(bx - ax, bz - az), cls });
+      this.edges.push({ a, b, len: Math.hypot(bx - ax, bz - az), cls, fast: r.kind === 'boulevard' });
       this.adj[a].push(e);
       this.adj[b].push(e);
       for (let my = Math.floor(Math.min(az, bz) / C); my <= Math.floor(Math.max(az, bz) / C); my++) {
@@ -240,7 +247,17 @@ export class RoadNet {
     const s = this.snapEdge(ax, az, this.reach());
     const t = this.snapEdge(bx, bz, this.reach());
     if (!s || !t) return null;
-    const cost = (e: number): number => COST[this.mode][this.edges[e].cls];
+    const cost = (e: number): number => {
+      const E = this.edges[e];
+      const c = COST[this.mode][E.cls];
+      return this.mode === 'drive' && E.fast ? c * FAST : c;
+    };
+    // The direction each node was reached in (for the turn penalty: fewer, simpler turns, as a GPS gives).
+    const heading = new Map<number, [number, number]>();
+    const turnCost = (n: number, dx: number, dz: number): number => {
+      const h = heading.get(n);
+      return h && h[0] * dx + h[1] * dz < 0.7 ? TURN[this.mode] : 0;
+    };
     const S = this.edges[s.e];
     const T = this.edges[t.e];
     const START = -1;
@@ -249,11 +266,14 @@ export class RoadNet {
     const from = new Map<number, number>();
     const closed = new Set<number>();
     const heap = new MinHeap();
-    const hOf = (n: number): number => Math.hypot(this.xs[n] - t.x, this.zs[n] - t.z);
-    const relax = (n: number, cst: number, prev: number): void => {
+    // (The heuristic prices the rest at the cheapest rate, avenues, so it never overestimates.)
+    const hMul = this.mode === 'drive' ? FAST : 1;
+    const hOf = (n: number): number => Math.hypot(this.xs[n] - t.x, this.zs[n] - t.z) * hMul;
+    const relax = (n: number, cst: number, prev: number, dir?: [number, number]): void => {
       if (cst < (g.get(n) ?? Infinity)) {
         g.set(n, cst);
         from.set(n, prev);
+        if (dir) heading.set(n, dir);
         heap.push(n, cst + (n === GOAL ? 0 : hOf(n)));
       }
     };
@@ -275,7 +295,10 @@ export class RoadNet {
         if (c <= 0) continue;
         const E = this.edges[e];
         const m = E.a === n ? E.b : E.a;
-        if (!closed.has(m)) relax(m, gn + E.len * c, n);
+        if (closed.has(m)) continue;
+        const dx = (this.xs[m] - this.xs[n]) / E.len;
+        const dz = (this.zs[m] - this.zs[n]) / E.len;
+        relax(m, gn + E.len * (this.mode === 'drive' && E.fast ? c * FAST : c) + turnCost(n, dx, dz), n, [dx, dz]);
       }
     }
     if (!from.has(GOAL)) return null;

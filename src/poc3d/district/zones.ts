@@ -10,6 +10,7 @@ import { LOT_OPEN, STYLES3, type DistrictStyle3, type Zone3, type ZoneLook } fro
  *
  *   district: neon
  *   origin: [26, 9]            # L0 cell of the map's first character
+ *   area: Kasumi-chō           # optional: the neighbourhood's name in the HUD (else the district style's)
  *   map:                       # one letter per L0 cell; '.' keeps the district's own style
  *     - AAHHLL
  *   zones:
@@ -34,6 +35,7 @@ import { LOT_OPEN, STYLES3, type DistrictStyle3, type Zone3, type ZoneLook } fro
  *   pots: 0.15              # chance of potted plants outside a building
  *   towerCover: [0.3, 0.45] # towers standing in plazas, covering this share of their block
  *   park: 0.5               # share of each cell given to a park (1: the whole cell)
+ *   yardCover: 0.8          # chance a big block is a container yard (the port)
  */
 export class ZoneMap {
   constructor(
@@ -63,10 +65,10 @@ const HEX = /^#[0-9a-f]{6}$/i;
 const SHOPS = ['warm', 'cool', 'colourful', 'bar'] as const;
 const PLAN_KEYS = [
   'localStreet', 'block', 'twoRowDepth', 'lotW', 'lotGap', 'floors', 'signChance', 'verticalSign',
-  'open', 'rear', 'setback', 'stepBack', 'streetTrees', 'hedges', 'pots', 'towerCover', 'park',
+  'open', 'rear', 'setback', 'stepBack', 'streetTrees', 'hedges', 'pots', 'towerCover', 'park', 'yardCover',
 ] as const;
 /** Plan keys that are chances or shares, 0 to 1. */
-const SHARES = ['stepBack', 'streetTrees', 'hedges', 'pots', 'park'];
+const SHARES = ['stepBack', 'streetTrees', 'hedges', 'pots', 'park', 'yardCover'];
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isRange = (v: unknown, min = 1e-9): v is [number, number] => Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === 'number' && n >= min) && v[0] <= v[1];
 const hex = (s: string): number => parseInt(s.slice(1), 16);
@@ -86,6 +88,9 @@ export function parseZones3(file: string, text: string, macro: MacroMap, errors:
   if (!base) return err(`district '${district}' has no 3D style`), ZoneMap.EMPTY;
   if (!isObj(doc.zones)) return err('zones must be a mapping of map letters to zones'), ZoneMap.EMPTY;
 
+  // The neighbourhood's name for the HUD (a district kind spread over several areas, like the residential rings).
+  if (doc.area !== undefined && (typeof doc.area !== 'string' || !doc.area.trim())) err('area must be a name');
+  const area = typeof doc.area === 'string' && doc.area.trim() ? doc.area.trim() : null;
   const zones = new Map<string, Zone3>();
   for (const [key, raw] of Object.entries(doc.zones)) {
     const at = `zone '${key}'`;
@@ -188,7 +193,7 @@ export function parseZones3(file: string, text: string, macro: MacroMap, errors:
       return v;
     };
     const look: ZoneLook = { windows, walls, tiled: lookRaw.tiled === true, shops, open, homes: share('homes'), roofs: share('roofs'), bikes: share('bikes') };
-    zones.set(key, { key, id, name: String(raw.name), style: style as unknown as DistrictStyle3, look, ads });
+    zones.set(key, { key, id, name: String(raw.name), style: style as unknown as DistrictStyle3, look, ads, area });
   }
   const ids = [...zones.values()].map((z) => z.id);
   if (new Set(ids).size !== ids.length) err('zone ids must be unique');

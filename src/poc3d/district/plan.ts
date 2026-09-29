@@ -90,6 +90,8 @@ export interface Zone3 {
   readonly name: string;
   readonly style: DistrictStyle3;
   readonly look: ZoneLook;
+  /** The neighbourhood's name for the HUD, when its zone file gives one (a residential area among several). */
+  readonly area: string | null;
   /** Category weights for the zone's billboards and posters. */
   readonly ads: Readonly<Partial<Record<AdCategory, number>>>;
 }
@@ -98,7 +100,7 @@ export interface Zone3 {
  * Open ground: lots a row leaves open between buildings (coin parking, a pocket playground, a vacant
  * lot), the public plaza round towers, and parks.
  */
-export type OpenKind = 'parking' | 'playground' | 'vacant' | 'plaza' | 'park';
+export type OpenKind = 'parking' | 'playground' | 'vacant' | 'plaza' | 'park' | 'yard';
 /** The kinds a row of lots can leave open (plazas come from towerCover, parks from park). */
 export const LOT_OPEN = ['parking', 'playground', 'vacant'] as const;
 export type LotOpenKind = (typeof LOT_OPEN)[number];
@@ -165,6 +167,8 @@ export interface DistrictStyle3 {
   readonly towerCover: Range | null;
   /** Share of the cell given to a park (0 none, 1 the whole cell). */
   readonly park: number;
+  /** Chance a big block (30 m and up) is a container yard, fenced, stacked and floodlit (the port). */
+  readonly yardCover?: number;
   /**
    * Generate only the cells the district's zone file paints: a bounded neighbourhood in a district whose
    * L0 cells spread far beyond it (the residential ring round the centre).
@@ -266,6 +270,36 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     park: 0,
     onlyZoned: true,
   },
+  harbor: {
+    // Tōto Port: warehouses on big blocks along wide truck roads, container yards, a few office and hotel
+    // towers by the water; only where its zone file paints (the islands come with their set pieces).
+    name: 'Tōto Port',
+    edgeRoads: [16, 18],
+    localStreet: [8, 12],
+    block: [40, 90],
+    twoRowDepth: 50,
+    lotW: [22, 44],
+    lotGap: 0.6,
+    floors: [
+      [3, 4, 55],
+      [5, 7, 30],
+      [10, 16, 15],
+    ],
+    signChance: 0.25,
+    verticalSign: 0.1,
+    signWords: ['倉庫', '東都港運', '冷蔵倉庫', '物流センター', '水産', '港湾', '海運', 'SHIPPING', 'LOGISTICS', '食堂', '運送', '船具'],
+    signColors: [0xffffff, 0x4fe3ff, 0xffe45f, 0xff4f4f],
+    open: { parking: 0.12, vacant: 0.05 },
+    rear: [2, 6],
+    setback: [2, 6],
+    stepBack: 0,
+    streetTrees: 0.15,
+    hedges: 0.05,
+    pots: 0.02,
+    towerCover: null,
+    park: 0,
+    onlyZoned: true,
+  },
 };
 
 /** Every district with a 3D style, i.e. every district the 3D city generates. */
@@ -353,7 +387,9 @@ export function planCell3(
   const fill: Fill = { style, rnd, reserved, buildings, signs, open, idBase, zone };
   for (const b of blocks) {
     if (style.towerCover && Math.min(b.w, b.h) >= 30 && !reserved.some((q) => overlaps(q, b))) towerBlock(b, fill);
-    else fillBlock(b, fill);
+    else if (style.yardCover && Math.min(b.w, b.h) >= 30 && !reserved.some((q) => overlaps(q, b)) && rnd.chance(style.yardCover)) {
+      open.push({ kind: 'yard', rect: b, front: b.w >= b.h ? 'south' : 'east', seed: openSeed(b, 6) });
+    } else fillBlock(b, fill);
   }
   return { mx, my, kind, rect: R, style, roads, medians: medianRects(roads), buildings, open, signs };
 }

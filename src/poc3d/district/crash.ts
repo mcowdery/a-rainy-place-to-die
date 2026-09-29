@@ -129,5 +129,7 @@ export function repairCost(p: Parts): number {
 
 /** The soft street props (by kind): you drive through them. */
 export const SOFT_PROPS: ReadonlySet<string> = new Set(['pots', 'bike', 'hedge', 'fence']);
+/** Street props as solid as a wall (container stacks). */
+export const WALL_PROPS: ReadonlySet<string> = new Set(['container']);
 /** Street props that are parked cars (the rest that are hard are poles). */
 export const CAR_PROPS: ReadonlySet<string> = new Set(['car']);

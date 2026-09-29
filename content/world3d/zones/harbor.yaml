@@ -1,0 +1,110 @@
+# 東都港 Tōto Port, along the coast south of Kasumi-chō (format: src/poc3d/district/zones.ts; the whole-city plan:
+# docs/city-plan.md). Warehouses on big blocks along wide truck roads; the container terminal to the west; a strip
+# of warehouse nightlife (the disco's street); harbour towers by the water; the fish market's streets by the river
+# mouth. The harbour front avenue (Kaigan-dōri) runs along its north edge. Generated only where this map paints
+# (onlyZoned): the bay's islands come with their set pieces.
+district: harbor
+area: Tōto Port
+origin: [6, 18]
+map:
+  - .CCCCCCCWWWWWWWWWNNNNTTTTTFFFFF
+  - CCCCCCCCWWWWWWWWWNNNNTTTTTFFFFF
+  - CCCCCCCCWWWWWWWWWWWWWWWWWWFFFFF
+  - CCCCCCCCWWWWWWWWWWWWWWWWWWWWWWW
+
+zones:
+  C:
+    id: port_terminal
+    name: Container terminal
+    plan:
+      yardCover: 0.85
+      floors: [[3, 4, 70], [5, 6, 30]]
+      signChance: 0.15
+      open: { parking: 0.2 }
+    signs:
+      words: [東都港コンテナターミナル, 税関, GATE, TRUCK, 港運, 検疫]
+      colors: ['#ffffff', '#ffe45f']
+    ads: { street: 1 }
+    look:
+      windows: { blank: 60, small: 30, ribbon: 10 }
+      walls: ['#8a9098', '#a8aeb4', '#6a7078', '#c8ccd0', '#5a6a7a']
+      tiled: false
+      shops: { cool: 3 }
+      open: 0.2
+
+  W:
+    id: port_warehouses
+    name: Warehouse district
+    plan:
+      yardCover: 0.12
+      floors: [[3, 4, 60], [5, 7, 30], [9, 12, 10]]
+      signChance: 0.25
+    ads: { street: 2, mainstream: 1 }
+    look:
+      windows: { blank: 45, small: 35, ribbon: 20 }
+      walls: ['#9a9890', '#b8b4a8', '#7a7870', '#c0b8a8', '#8a6a4a', '#5a6a7a', '#a86a4a']
+      tiled: false
+      shops: { cool: 2, warm: 1 }
+      open: 0.25
+
+  N:
+    id: port_nightlife
+    name: Warehouse nightlife
+    plan:
+      floors: [[3, 4, 70], [5, 6, 30]]
+      lotW: [18, 34]
+      signChance: 0.8
+      verticalSign: 0.3
+    signs:
+      words: [DISCO, CLUB, LIVE, BAR, ダンスホール, レストラン, 倉庫バー, NIGHT, DJ, 湾岸]
+      colors: ['#ff5fc8', '#4fe3ff', '#ffe45f', '#b48cff', '#ff4f4f']
+    ads: { fun: 4, food: 2, mainstream: 1 }
+    look:
+      windows: { blank: 40, small: 40, ribbon: 20 }
+      walls: ['#3a3a44', '#2a2a30', '#5a4a5a', '#7a7870', '#4a3a3a']
+      tiled: false
+      shops: { bar: 4, colourful: 2 }
+      open: 0.8
+
+  T:
+    id: port_towers
+    name: Harbour towers
+    plan:
+      towerCover: [0.25, 0.4]
+      floors: [[20, 30, 50], [32, 44, 50]]
+      signChance: 0.2
+      streetTrees: 0.8
+      hedges: 0.5
+    signs:
+      words: [HARBOUR TOWER, 東都ベイ, RESIDENCE, HOTEL, CAFE]
+      colors: ['#ffffff', '#4fe3ff']
+    ads: { mainstream: 3, food: 1 }
+    look:
+      windows: { curtain: 50, balcony: 40, ribbon: 10 }
+      walls: ['#c8ccd0', '#a8b0b8', '#e0e0dc', '#8a949c']
+      tiled: false
+      shops: { cool: 3, warm: 1 }
+      open: 0.8
+
+  F:
+    id: port_fish_market
+    name: Fish market streets
+    plan:
+      floors: [[2, 3, 70], [4, 5, 30]]
+      lotW: [8, 16]
+      localStreet: [5, 8]
+      block: [24, 48]
+      lotGap: 0.2
+      signChance: 0.8
+      verticalSign: 0.4
+      open: { parking: 0.1 }
+    signs:
+      words: [鮮魚, 寿司, 海鮮丼, 刃物, 乾物, 市場食堂, 仲卸, 氷, 鰹節, 東都市場]
+      colors: ['#ffe45f', '#ff4f4f', '#ffffff', '#4fe3ff']
+    ads: { food: 5, street: 2 }
+    look:
+      windows: { punched: 40, small: 40, blank: 20 }
+      walls: ['#b8a88c', '#9a9890', '#7c604c', '#c2b49a', '#6a7a8a']
+      tiled: true
+      shops: { warm: 6, cool: 2 }
+      open: 0.9

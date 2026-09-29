@@ -192,7 +192,8 @@ export class Signals {
  * east edge south... Keep left: the lane is left of the travel direction, half-way across the carriageway
  * half (the narrowest along the edge); at least 2.4 m out from the centre line where a viaduct's piers stand.
  */
-export function routeFor(rect: readonly [number, number, number, number], clockwise: boolean, plan: (mx: number, my: number) => CellPlan3 | null, piers: readonly number[]): Route {
+/** Piers: viaducts along grid lines (x, from z0 to z1): an edge along one keeps its lane clear of the piers. */
+export function routeFor(rect: readonly [number, number, number, number], clockwise: boolean, plan: (mx: number, my: number) => CellPlan3 | null, piers: readonly { readonly x: number; readonly z0: number; readonly z1: number }[]): Route {
   const [c0, r0, c1, r1] = rect;
   const X0 = c0 * CELL;
   const X1 = c1 * CELL;
@@ -230,7 +231,8 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
     // Two lanes each way (an avenue): the kerb lane (keep left; the inner one is for overtaking and the
     // expressway's ramps). One lane: its middle.
     let o = h.c >= 9 ? h.c - 3 : Math.max(1.1, h.c / 2);
-    if (vertical && piers.some((x) => Math.abs(x - line) < 1)) o = Math.max(o, 2.4);
+    const [ea, eb] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
+    if (vertical && piers.some((q) => Math.abs(q.x - line) < 1 && q.z0 < eb && q.z1 > ea)) o = Math.max(o, 2.4);
     // Left of travel: (dz, -dx).
     lanes.push({ p: a, d, o, kerb: h.w / 2 - h.s * 0.5 });
   }

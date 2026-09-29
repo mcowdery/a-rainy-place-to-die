@@ -174,7 +174,7 @@ describe('the expressway over the avenues', () => {
   it('keeps the street traffic clear of the piers, the medians and the ramps', () => {
     const plan = (mx: number, my: number) => district.plan(mx, my);
     for (const loop of [...carLoops(content.macro, content.traffic, plan).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
-      const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail.x] : []);
+      const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail] : []);
       for (let s = 0; s < route.length; s += 2) {
         const p = along(route, s);
         expect(district.blocked(p.x, p.z, 0.8), `${loop[0].join(',')} at ${s}`).toBe(false);
