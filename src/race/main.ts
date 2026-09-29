@@ -12,6 +12,7 @@ import { GunSound } from './gunSound';
 import { buildCabin } from './cabin';
 import { EYE, nearestShot, Shooting, sideFor, spreadOf, WEAPONS, wrap, type BodyHit, type Side } from './shooting';
 import { model, tunedSpec } from './catalog';
+import { cityReturn, rememberCityReturn } from './cityLink';
 import { currentCar, earn, loadProfile, PAY, saveProfile, trialPay, yen } from './profile';
 import { CarSound } from './sound';
 import { clock, GhostTrack, loadBest, medalFor, saveBest, Trial, trialPlan, type BestRun, type Dir, type Medal } from './trial';
@@ -93,6 +94,8 @@ if (params.has('yen')) {
   saveProfile(profile);
 }
 const mine = currentCar(profile);
+// Came from the city (a tunnel, or the garage): remembered, so the menu's way back goes the same way.
+rememberCityReturn(params);
 const mineModel = model(mine.type);
 const player = buildCar({ type: mine.type, paint: mine.paint, paint2: mine.paint2, livery: mine.livery, neon: mine.neonFitted ? mine.neon : null }, carMat);
 const carObj = player.obj;
@@ -618,8 +621,8 @@ const showMenu = (open: boolean): void => {
   if (open) {
     if (document.pointerLockElement) document.exitPointerLock();
     keys.clear();
-    const fromCity = params.get('from');
-    menuEl.innerHTML = `<h1>峠 <span>the passes</span></h1>${fromCity ? `<a class="garage" href="district.html?from=${fromCity}&time=night"><b>◂ Back to the city</b><span>the expressway, where you came off it</span></a>` : ''}<a class="garage" href="garage.html"><b>ガレージ Garage</b><span>${mineModel.maker} ${mineModel.name} · ${yen(profile.yen)}</span></a><div class="cards">${[...courses.entries()]
+    const back = cityReturn();
+    menuEl.innerHTML = `<h1>峠 <span>the passes</span></h1><a class="garage" href="${back.href}"><b>${back.label}</b><span>${back.note}</span></a><a class="garage" href="garage.html"><b>ガレージ Garage</b><span>${mineModel.maker} ${mineModel.name} · ${yen(profile.yen)}</span></a><div class="cards">${[...courses.entries()]
       .map(([id, c]) => {
         const row = (d: Dir, label: string): string => {
           const b = loadBest(id, d);

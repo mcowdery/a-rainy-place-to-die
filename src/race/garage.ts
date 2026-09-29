@@ -8,6 +8,7 @@ import type { CarType } from '../poc3d/models/vehicles';
 import { cityMaterial, cityUniforms } from '../poc3d/real/city';
 import { BANNERS, model, MODELS, NEON, PAINT_PALETTE, PARTS, PRICES, stats, tunedSpec, type Parts, type Stats } from './catalog';
 import { buildCar, type CarView, type Look } from './carView';
+import { cityReturnViaGarage, rememberCityReturn } from './cityLink';
 import { buildGarage } from './garageScene';
 import { buyCar, currentCar, loadProfile, saveProfile, spend, yen, type Livery, type OwnedCar } from './profile';
 
@@ -20,8 +21,8 @@ import { buyCar, currentCar, loadProfile, saveProfile, spend, yen, type Livery, 
  */
 
 const params = new URLSearchParams(location.search);
-/** Came in from the city (your garage by the Toto Line): the way back out is to the street, your car in its bay. */
-const fromCity = params.get('from') === 'city';
+// The way back to the city is always here: the garage street (your car in its bay).
+rememberCityReturn(params);
 const profile = loadProfile();
 if (params.has('yen')) profile.yen = Number(params.get('yen'));
 saveProfile(profile);
@@ -173,7 +174,7 @@ function render(): void {
         : `<button class="buy" data-act="apply" ${draft.neon == null || profile.yen < cost ? 'disabled' : ''}>Fit neon · ${yen(PRICES.neon)}</button>`
     }`;
   }
-  panel.innerHTML = `<div class="car">${viewing ? `${model(viewing).maker} ${model(viewing).name}` : `${m.maker} ${m.name}`}</div><div class="tabs">${tabs}</div><div class="body">${body}</div>${fromCity ? '<a class="drive" href="district.html?spawn=city_garage.front&car=home">◂ Back to the street</a>' : ''}<a class="drive" href="race.html">Drive ▸ the passes</a>`;
+  panel.innerHTML = `<div class="car">${viewing ? `${model(viewing).maker} ${model(viewing).name}` : `${m.maker} ${m.name}`}</div><div class="tabs">${tabs}</div><div class="body">${body}</div><a class="drive" data-act="street" href="district.html?spawn=city_garage.front&car=home">◂ Back to the street</a><a class="drive" href="race.html">Drive ▸ the passes</a>`;
   const num = document.getElementById('num') as HTMLInputElement | null;
   num?.addEventListener('change', () => {
     const n = Math.max(1, Math.min(99, Math.round(Number(num.value))));
@@ -206,6 +207,10 @@ panel.addEventListener('click', (e) => {
   const el = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
   if (!el || (el as HTMLButtonElement).disabled) return;
   const act = el.dataset.act!;
+  if (act === 'street') {
+    cityReturnViaGarage();
+    return;
+  }
   const v = el.dataset.v ?? '';
   const c = currentCar(profile);
   const num = (): number | null => (v === 'none' ? null : Number(v));
