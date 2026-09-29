@@ -1,4 +1,4 @@
-import { type NavGrid, type NavMode, onRoute } from './gps';
+import { type NavMode, onRoute, type Router } from './gps';
 
 /** Where the GPS routes from, and how you're getting about. */
 export interface GuideFrom {
@@ -27,7 +27,7 @@ export class Guide {
   private readonly listeners = new Set<() => void>();
 
   constructor(
-    private readonly grid: (mode: NavMode) => NavGrid,
+    private readonly grid: (mode: NavMode) => Router,
     private readonly now: () => number = () => performance.now(),
   ) {}
 

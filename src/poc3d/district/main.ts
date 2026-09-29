@@ -42,7 +42,7 @@ import { loadProfile, saveProfile } from '../../race/profile';
 import { Expressway, parseExpressway } from './expressway';
 import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
 import expresswayText from '../../../content/world3d/expressway.yaml?raw';
-import { NavGrid, pointsAhead, type NavMode } from './gps';
+import { pointsAhead, Router, type NavMode } from './gps';
 import { Guide, type GuideDest, type GuideFrom } from './guide';
 import { PhoneMaps } from './phoneMaps';
 import { GpsMarks } from '../real/gpsMarks';
@@ -905,10 +905,10 @@ async function run(): Promise<void> {
   // The GPS: mark a destination on the map (M) or in the phone's Maps app; the route follows the streets for
   // how you're getting about (gps.ts: on foot, or by car on the carriageways only), chevrons light the next
   // stretch of it on the ground, a beacon stands on the destination, and the compass at the top points the way.
-  const grids = new Map<NavMode, NavGrid>();
-  const navGrid = (mode: NavMode): NavGrid => {
+  const grids = new Map<NavMode, Router>();
+  const navGrid = (mode: NavMode): Router => {
     let g = grids.get(mode);
-    if (!g) grids.set(mode, (g = new NavGrid({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL }, mode)));
+    if (!g) grids.set(mode, (g = new Router({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL }, mode)));
     return g;
   };
   const guide = new Guide(navGrid);
@@ -946,7 +946,8 @@ async function run(): Promise<void> {
     // Chevrons on the street ahead (not below ground or up in a building).
     const street = (driving.car || Math.abs(camera.position.y - 1.7) < 1.2) && !subway.riding;
     const car = from.mode === 'drive';
-    const ahead = at && route && street ? pointsAhead(route, at.seg, at.t, car ? 90 : 60, car ? 7 : 4.5, car ? 6 : 3) : [];
+    // Driving, the route runs down the road's centre line: the chevrons sit in the left lane (keep left).
+    const ahead = (at && route && street ? pointsAhead(route, at.seg, at.t, car ? 90 : 60, car ? 7 : 4.5, car ? 6 : 3) : []).map((p) => (car ? { ...p, x: p.x + p.dz * 1.5, z: p.z - p.dx * 1.5 } : p));
     gpsMarks.update(dt, ahead, dest);
     gpsMarks.group.visible = camera.position.y > -2 && !subway.riding;
     // The compass: toward the route a little way ahead (or the destination itself), from where you're looking.

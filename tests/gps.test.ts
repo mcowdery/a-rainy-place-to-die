@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { loadDistrictContent } from '../src/poc3d/district/content';
-import { NavGrid, nextTurn, onRoute, pointsAhead } from '../src/poc3d/district/gps';
+import { nextTurn, onRoute, pointsAhead, Router } from '../src/poc3d/district/gps';
 import { CELL, DISTRICTS3 } from '../src/poc3d/district/plan';
 import { District } from '../src/poc3d/district/world';
 
 const content = loadDistrictContent();
 const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
 const t0 = performance.now();
-const nav = new NavGrid({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL });
+const nav = new Router({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL });
 const buildMs = performance.now() - t0;
 const node = (id: string) => content.placed.flatMap((p) => p.nodes).find((n) => n.id === id)!;
 const inBuilding = (x: number, z: number): boolean => {
@@ -71,7 +71,7 @@ describe('GPS', () => {
   });
 
   it('drives only on the carriageways of proper streets and boulevards (no lanes, alleys, pavements or plazas)', () => {
-    const drive = new NavGrid({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL }, 'drive');
+    const drive = new Router({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL }, 'drive');
     const A0 = node('kaburo_crossing.view');
     /** On a carriageway; `main`: of a proper street (raised pavements) or a boulevard, not a shared lane. */
     const onCarriageway = (x: number, z: number, main: boolean): boolean => {

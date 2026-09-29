@@ -1,26 +1,32 @@
 import type { Rect } from '../../core/coords';
-import type { CellPlan3 } from './plan';
+import type { CellPlan3, Road3 } from './plan';
 
 /**
  * The GPS: routes on foot or by car from where you are to a marked destination, along the streets.
  *
- * A navigation grid over the district (NAV metres a square), one per way of getting about:
- * - walk: roads and plazas are the cheapest, open ground (parks, car parks) a little dearer, the gaps between
- *   buildings (yards, setbacks) dearest; buildings and set pieces blocked.
- * - drive: the carriageways (kerb to kerb) of the proper streets, the ones with raised pavements (8 m and up,
- *   where the traffic drives); the narrow shared lanes without pavements only at a heavy price (`LANE`), so a
- *   route takes one only to reach a destination on it; no alleys, lanes too tight for a car, pavements, plazas
- *   or parks.
- * An A* search over it (8 neighbours, no cutting corners past a blocked square) gives the route, straightened
- * (a leg runs straight while the ground under it stays as cheap) so its corners are real turns. Pure: tests
- * build it from the district's plans.
+ * A graph of the road network (`RoadNet`): each road's centreline, cut at the junctions where the roads that
+ * cross it (or end at it) meet it; nodes merged by position, so a road runs on through the cell corners. It's
+ * built a cell at a time as a search reaches it, so it costs nothing where no one goes and grows with the city.
+ * The roads are classed (`roadClass`) and each way of getting about prices them (`COST`):
+ * - walk: every street and lane; alleys a little dearer.
+ * - drive: the proper streets (raised pavements, 8 m and up, where the traffic drives) and the avenues; the
+ *   narrow shared lanes only at a heavy price (`LANE`), so a route takes one only to reach a place on it; no
+ *   alleys or lanes too tight for a car.
+ * A route snaps its ends to the nearest road it may use, then A* over the graph; its points are the ends, where
+ * they meet the road, and the junctions where it turns.
+ *
+ * Walks of up to `WALK_GRID` metres go over a grid instead (`NavGrid`, built over just the area round the
+ * trip), which crosses plazas and parks and cuts through the gaps between buildings. `Router` picks. Pure:
+ * tests build them from the district's plans.
  */
 
 export const NAV = 3;
 const ROAD = 1;
 const OPEN = 1.6;
 const YARD = 4;
-/** Driving: a shared lane (no pavements) at least this wide takes a car, but costs `LANE` a square. */
+/** Walks up to this far (straight line, m) go over the grid; longer ones, and all driving, over the road graph. */
+export const WALK_GRID = 800;
+/** Driving: a shared lane (no pavements) at least this wide takes a car, but costs `LANE` a metre. */
 const TIGHT = 3.5;
 const LANE = 12;
 
@@ -28,13 +34,284 @@ export interface NavSource {
   readonly bounds: { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number };
   readonly cells: readonly (readonly [number, number])[];
   plan(mx: number, my: number): CellPlan3 | null;
-  /** Set pieces' footprints (stamps): blocked. */
+  /** Set pieces' footprints (stamps). */
   readonly blocked: readonly Rect[];
   readonly cell: number;
 }
 
 export type NavMode = 'walk' | 'drive';
+export type RoadClass = 'main' | 'lane' | 'alley';
 
+/** Cost per metre of each class of road, for each way of getting about (0: closed). */
+const COST: Readonly<Record<NavMode, Readonly<Record<RoadClass, number>>>> = {
+  walk: { main: 1, lane: 1, alley: 1.2 },
+  drive: { main: 1, lane: LANE, alley: 0 },
+};
+
+/** A road's class: proper streets and avenues, shared lanes, and alleys (or lanes too tight for a car). */
+export function roadClass(r: Road3): RoadClass {
+  if (r.kind === 'alley') return 'alley';
+  if (r.kind === 'boulevard' || r.sidewalk > 0) return 'main';
+  return (r.vertical ? r.rect.w : r.rect.h) - 2 * r.sidewalk < TIGHT ? 'alley' : 'lane';
+}
+
+interface Edge {
+  readonly a: number;
+  readonly b: number;
+  readonly len: number;
+  readonly cls: RoadClass;
+}
+
+/** Where a point meets the nearest usable road: the edge, how far along it (0 at a, 1 at b), the point. */
+interface Snap {
+  readonly e: number;
+  readonly t: number;
+  readonly x: number;
+  readonly z: number;
+}
+
+export class RoadNet {
+  private readonly xs: number[] = [];
+  private readonly zs: number[] = [];
+  private readonly adj: number[][] = [];
+  private readonly edges: Edge[] = [];
+  private readonly nodeAt = new Map<string, number>();
+  private readonly built = new Set<string>();
+  private readonly seen = new Set<string>();
+  /** Edges by the cells they pass through (for snapping). */
+  private readonly byCell = new Map<string, number[]>();
+
+  constructor(
+    private readonly src: NavSource,
+    readonly mode: NavMode = 'walk',
+  ) {}
+
+  /** How many junctions and road pieces the graph holds so far (it grows as searches reach new cells). */
+  get size(): { nodes: number; edges: number } {
+    return { nodes: this.xs.length, edges: this.edges.length };
+  }
+
+  private node(x: number, z: number): number {
+    const k = `${Math.round(x * 2)},${Math.round(z * 2)}`;
+    let n = this.nodeAt.get(k);
+    if (n === undefined) {
+      n = this.xs.length;
+      this.xs.push(x);
+      this.zs.push(z);
+      this.adj.push([]);
+      this.nodeAt.set(k, n);
+    }
+    return n;
+  }
+
+  /** The plans of the cells a rectangle (grown by `grow`) overlaps. */
+  private plansOver(x0: number, z0: number, x1: number, z1: number, grow: number): CellPlan3[] {
+    const C = this.src.cell;
+    const out: CellPlan3[] = [];
+    for (let my = Math.floor((z0 - grow) / C); my <= Math.floor((z1 + grow) / C); my++) {
+      for (let mx = Math.floor((x0 - grow) / C); mx <= Math.floor((x1 + grow) / C); mx++) {
+        const p = this.src.plan(mx, my);
+        if (p) out.push(p);
+      }
+    }
+    return out;
+  }
+
+  /** Adds the cell's roads to the graph (once). */
+  private ensure(mx: number, my: number): void {
+    const key = `${mx},${my}`;
+    if (this.built.has(key)) return;
+    this.built.add(key);
+    for (const r of this.src.plan(mx, my)?.roads ?? []) {
+      if (r.kind === 'coast') continue;
+      const q = r.rect;
+      const k = `${q.x},${q.y},${q.w},${q.h},${r.vertical ? 1 : 0}`;
+      if (this.seen.has(k)) continue;
+      this.seen.add(k);
+      this.addRoad(r);
+    }
+  }
+
+  /** The cells round a point (a junction on a cell's edge or corner touches up to four). */
+  private ensureAround(x: number, z: number, reach = 20): void {
+    const C = this.src.cell;
+    for (let my = Math.floor((z - reach) / C); my <= Math.floor((z + reach) / C); my++) {
+      for (let mx = Math.floor((x - reach) / C); mx <= Math.floor((x + reach) / C); mx++) this.ensure(mx, my);
+    }
+  }
+
+  /** A road's centreline, cut at every junction along it (roads crossing it, or ending at its side). */
+  private addRoad(r: Road3): void {
+    const q = r.rect;
+    const half = (r.vertical ? q.w : q.h) / 2;
+    const c = r.vertical ? q.x + half : q.y + half;
+    const s0 = r.vertical ? q.y : q.x;
+    const s1 = r.vertical ? q.y + q.h : q.x + q.w;
+    const stations = [s0, s1];
+    for (const p of this.plansOver(q.x, q.y, q.x + q.w, q.y + q.h, 20)) {
+      for (const o of p.roads) {
+        if (o.vertical === r.vertical || o.kind === 'coast') continue;
+        const oq = o.rect;
+        const oHalf = (o.vertical ? oq.w : oq.h) / 2;
+        const oc = o.vertical ? oq.x + oHalf : oq.y + oHalf;
+        const o0 = o.vertical ? oq.y : oq.x;
+        const o1 = o.vertical ? oq.y + oq.h : oq.x + oq.w;
+        // They meet where each one's centreline reaches the other (a road ending at another's side stops at its
+        // kerb, half that road's width short of its centreline).
+        if (c < o0 - half - 1 || c > o1 + half + 1) continue;
+        if (oc < s0 - oHalf - 1 || oc > s1 + oHalf + 1) continue;
+        stations.push(oc);
+      }
+    }
+    const sorted = [...new Set(stations.map((v) => Math.round(v * 2) / 2))].sort((u, v) => u - v);
+    const cls = roadClass(r);
+    const at = (s: number): [number, number] => (r.vertical ? [c, s] : [s, c]);
+    const C = this.src.cell;
+    for (let i = 0; i + 1 < sorted.length; i++) {
+      const [ax, az] = at(sorted[i]);
+      const [bx, bz] = at(sorted[i + 1]);
+      const a = this.node(ax, az);
+      const b = this.node(bx, bz);
+      if (a === b) continue;
+      const e = this.edges.length;
+      this.edges.push({ a, b, len: Math.hypot(bx - ax, bz - az), cls });
+      this.adj[a].push(e);
+      this.adj[b].push(e);
+      for (let my = Math.floor(Math.min(az, bz) / C); my <= Math.floor(Math.max(az, bz) / C); my++) {
+        for (let mx = Math.floor(Math.min(ax, bx) / C); mx <= Math.floor(Math.max(ax, bx) / C); mx++) {
+          const k = `${mx},${my}`;
+          const list = this.byCell.get(k);
+          if (list) list.push(e);
+          else this.byCell.set(k, [e]);
+        }
+      }
+    }
+  }
+
+  /** The nearest point on a road this way of getting about may use, within `reach` metres. */
+  private snapEdge(x: number, z: number, reach: number): Snap | null {
+    this.ensureAround(x, z, reach + 20);
+    const C = this.src.cell;
+    let best: Snap | null = null;
+    let bestD = reach;
+    const checked = new Set<number>();
+    for (let my = Math.floor((z - reach) / C); my <= Math.floor((z + reach) / C); my++) {
+      for (let mx = Math.floor((x - reach) / C); mx <= Math.floor((x + reach) / C); mx++) {
+        for (const e of this.byCell.get(`${mx},${my}`) ?? []) {
+          if (checked.has(e)) continue;
+          checked.add(e);
+          const E = this.edges[e];
+          if (COST[this.mode][E.cls] <= 0) continue;
+          const ax = this.xs[E.a];
+          const az = this.zs[E.a];
+          const dx = this.xs[E.b] - ax;
+          const dz = this.zs[E.b] - az;
+          const L2 = dx * dx + dz * dz;
+          const t = L2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2)) : 0;
+          const px = ax + dx * t;
+          const pz = az + dz * t;
+          const d = Math.hypot(px - x, pz - z);
+          if (d < bestD) {
+            bestD = d;
+            best = { e, t, x: px, z: pz };
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  private reach(): number {
+    return this.mode === 'drive' ? 120 : 60;
+  }
+
+  /** The nearest point on a usable road to (x, z), within `reach` metres; null if none. */
+  snap(x: number, z: number, reach = this.reach()): [number, number] | null {
+    const s = this.snapEdge(x, z, reach);
+    return s ? [s.x, s.z] : null;
+  }
+
+  /**
+   * The route from (ax, az) to (bx, bz): a polyline (world x, z) from the start, where it meets the road, the
+   * junctions where it turns, where it leaves the road, to the end; null if there's no way (or an end is
+   * nowhere near a usable road).
+   */
+  route(ax: number, az: number, bx: number, bz: number): [number, number][] | null {
+    const s = this.snapEdge(ax, az, this.reach());
+    const t = this.snapEdge(bx, bz, this.reach());
+    if (!s || !t) return null;
+    const cost = (e: number): number => COST[this.mode][this.edges[e].cls];
+    const S = this.edges[s.e];
+    const T = this.edges[t.e];
+    const START = -1;
+    const GOAL = -2;
+    const g = new Map<number, number>();
+    const from = new Map<number, number>();
+    const closed = new Set<number>();
+    const heap = new MinHeap();
+    const hOf = (n: number): number => Math.hypot(this.xs[n] - t.x, this.zs[n] - t.z);
+    const relax = (n: number, cst: number, prev: number): void => {
+      if (cst < (g.get(n) ?? Infinity)) {
+        g.set(n, cst);
+        from.set(n, prev);
+        heap.push(n, cst + (n === GOAL ? 0 : hOf(n)));
+      }
+    };
+    relax(S.a, s.t * S.len * cost(s.e), START);
+    relax(S.b, (1 - s.t) * S.len * cost(s.e), START);
+    // Both on the same stretch of road: straight along it.
+    if (s.e === t.e) relax(GOAL, Math.abs(s.t - t.t) * S.len * cost(s.e), START);
+    while (heap.size) {
+      const n = heap.pop();
+      if (n === GOAL) break;
+      if (closed.has(n)) continue;
+      closed.add(n);
+      const gn = g.get(n)!;
+      if (n === T.a) relax(GOAL, gn + t.t * T.len * cost(t.e), n);
+      if (n === T.b) relax(GOAL, gn + (1 - t.t) * T.len * cost(t.e), n);
+      this.ensureAround(this.xs[n], this.zs[n]);
+      for (const e of this.adj[n]) {
+        const c = cost(e);
+        if (c <= 0) continue;
+        const E = this.edges[e];
+        const m = E.a === n ? E.b : E.a;
+        if (!closed.has(m)) relax(m, gn + E.len * c, n);
+      }
+    }
+    if (!from.has(GOAL)) return null;
+    const nodes: number[] = [];
+    for (let n = from.get(GOAL)!; n !== START; n = from.get(n)!) nodes.push(n);
+    nodes.reverse();
+    const pts: [number, number][] = [[ax, az], [s.x, s.z], ...nodes.map((n) => [this.xs[n], this.zs[n]] as [number, number]), [t.x, t.z], [bx, bz]];
+    // Drop repeats, and the junctions the way only runs straight through (keeping the ends as they are).
+    const out: [number, number][] = [pts[0]];
+    for (let i = 1; i < pts.length; i++) {
+      const p = pts[i];
+      const last = out[out.length - 1];
+      if (i < pts.length - 1 && Math.hypot(p[0] - last[0], p[1] - last[1]) < 0.5) continue;
+      if (out.length >= 3 && i < pts.length - 1) {
+        const [x0, z0] = out[out.length - 2];
+        const [x1, z1] = last;
+        // Off the line from the point before to this one by under 1.5 m (a straight run, or a jog where two
+        // roads' centrelines meet slightly apart), and not doubling back: drop it.
+        const L = Math.hypot(p[0] - x0, p[1] - z0);
+        const off = L > 0 ? Math.abs((p[0] - x0) * (z1 - z0) - (p[1] - z0) * (x1 - x0)) / L : 0;
+        const ahead = (x1 - x0) * (p[0] - x1) + (z1 - z0) * (p[1] - z1) > 0;
+        if (ahead && off < 1.5) out.pop();
+      }
+      out.push(p);
+    }
+    return out;
+  }
+}
+
+/**
+ * Walking over short distances: a grid (NAV metres a square) over the area round the trip. Roads and plazas
+ * are the cheapest, open ground (parks, car parks) a little dearer, the gaps between buildings (yards,
+ * setbacks) dearest; buildings and set pieces blocked. An A* search (8 neighbours, no cutting corners past a
+ * blocked square), straightened (a leg runs straight while the ground under it stays as cheap) so its corners
+ * are real turns. It crosses plazas and parks and cuts through gaps, which the road graph can't.
+ */
 export class NavGrid {
   readonly w: number;
   readonly h: number;
@@ -45,9 +322,9 @@ export class NavGrid {
 
   constructor(
     src: NavSource,
-    readonly mode: NavMode = 'walk',
+    /** The area to cover (metres): the trip's surroundings. */
+    b: { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number },
   ) {
-    const b = src.bounds;
     this.x0 = b.minX;
     this.z0 = b.minZ;
     this.w = Math.ceil((b.maxX - b.minX) / NAV);
@@ -60,38 +337,14 @@ export class NavGrid {
       const j1 = Math.min(this.h - 1, Math.floor((z + d + grow - this.z0) / NAV - 0.5));
       for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) this.cost[j * this.w + i] = c;
     };
-    if (mode === 'drive') {
-      // Carriageways only: each street's and boulevard's rect less its pavements, run on a few metres past its
-      // ends to meet the crossing road's carriageway through the junction (not stop at its pavement)...
-      // Lanes first, so the main roads win where they meet.
-      const ON = 5;
-      for (const main of [false, true]) {
-        for (const [mx, my] of src.cells) {
-          for (const r of src.plan(mx, my)?.roads ?? []) {
-            if (r.kind === 'alley' || r.kind === 'coast') continue;
-            const q = r.rect;
-            const sw = r.sidewalk;
-            if ((sw > 0 || r.kind === 'boulevard') !== main) continue;
-            if ((r.vertical ? q.w : q.h) - 2 * sw < TIGHT) continue;
-            const c = main ? ROAD : LANE;
-            if (r.vertical) fill(q.x + sw, q.y - ON, q.w - 2 * sw, q.h + 2 * ON, c);
-            else fill(q.x - ON, q.y + sw, q.w + 2 * ON, q.h - 2 * sw, c);
-          }
-        }
-      }
-      // ...but never into a building or a set piece (a street ending at one).
-      for (const [mx, my] of src.cells) for (const q of src.plan(mx, my)?.buildings ?? []) fill(q.x - q.w / 2, q.z - q.d / 2, q.w, q.d, 0, 0.4);
-      for (const r of src.blocked) fill(r.x, r.y, r.w, r.h, 0, 0.2);
-      // ...nor across an avenue's median (you cross or turn at the junctions, where it's broken).
-      for (const [mx, my] of src.cells) for (const m of src.plan(mx, my)?.medians ?? []) fill(m.x, m.y, m.w, m.h, 0);
-      return;
-    }
     // Everything in the district is walkable (dear), then buildings and set pieces out, then streets and open
     // ground in (cheap: a street can't overlap a building).
-    for (const [mx, my] of src.cells) fill(mx * src.cell, my * src.cell, src.cell, src.cell, YARD);
-    for (const [mx, my] of src.cells) for (const q of src.plan(mx, my)?.buildings ?? []) fill(q.x - q.w / 2, q.z - q.d / 2, q.w, q.d, 0, 0.4);
+    const C = src.cell;
+    const cells = src.cells.filter(([mx, my]) => (mx + 1) * C > b.minX && mx * C < b.maxX && (my + 1) * C > b.minZ && my * C < b.maxZ);
+    for (const [mx, my] of cells) fill(mx * C, my * C, C, C, YARD);
+    for (const [mx, my] of cells) for (const q of src.plan(mx, my)?.buildings ?? []) fill(q.x - q.w / 2, q.z - q.d / 2, q.w, q.d, 0, 0.4);
     for (const r of src.blocked) fill(r.x, r.y, r.w, r.h, 0, 0.2);
-    for (const [mx, my] of src.cells) {
+    for (const [mx, my] of cells) {
       const p = src.plan(mx, my);
       if (!p) continue;
       for (const o of p.open) fill(o.rect.x, o.rect.y, o.rect.w, o.rect.h, o.kind === 'plaza' ? ROAD : OPEN);
@@ -226,6 +479,35 @@ export class NavGrid {
       }
     }
     return true;
+  }
+}
+
+/** The GPS's router for one way of getting about: the road graph, or for short walks a grid round the trip. */
+export class Router {
+  private readonly net: RoadNet;
+
+  constructor(
+    private readonly src: NavSource,
+    readonly mode: NavMode = 'walk',
+  ) {
+    this.net = new RoadNet(src, mode);
+  }
+
+  /** The nearest point you can route from to (x, z): on foot any walkable ground, driving a usable road. */
+  snap(x: number, z: number): [number, number] | null {
+    if (this.mode === 'drive') return this.net.snap(x, z);
+    const m = 80;
+    return new NavGrid(this.src, { minX: x - m, maxX: x + m, minZ: z - m, maxZ: z + m }).snap(x, z);
+  }
+
+  route(ax: number, az: number, bx: number, bz: number): [number, number][] | null {
+    if (this.mode === 'walk' && Math.hypot(bx - ax, bz - az) <= WALK_GRID) {
+      const m = 160;
+      const grid = new NavGrid(this.src, { minX: Math.min(ax, bx) - m, maxX: Math.max(ax, bx) + m, minZ: Math.min(az, bz) - m, maxZ: Math.max(az, bz) + m });
+      const r = grid.route(ax, az, bx, bz);
+      if (r) return r;
+    }
+    return this.net.route(ax, az, bx, bz);
   }
 }
 
