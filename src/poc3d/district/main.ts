@@ -68,7 +68,7 @@ import { loadDistrictContent } from './content';
 import { signTexts } from './model';
 import { CELL, DISTRICTS3, STYLES3 } from './plan';
 import type { Node3 } from './stamps';
-import { District } from './world';
+import { District, LIGHTMAP_WINDOW } from './world';
 
 /**
  * Kaburo (Neon Core), generated at full scale from the L0 map and streamed in chunks, rendered
@@ -153,9 +153,11 @@ async function run(): Promise<void> {
   const atlas = new SignAtlas(signTexts(words, content.placed));
   const M = 16;
   const b = district.bounds;
-  const lightmap = new Lightmap(renderer, { x: b.minX - M, y: b.minZ - M, w: b.maxX - b.minX + 2 * M, h: b.maxZ - b.minZ + 2 * M }, CELL);
+  // The lightmap wraps round a 16-cell window (2 km) about the camera, so it doesn't grow with the city.
+  const lightmap = new Lightmap(renderer, { x: b.minX - M, y: b.minZ - M, w: b.maxX - b.minX + 2 * M, h: b.maxZ - b.minZ + 2 * M }, CELL, LIGHTMAP_WINDOW);
   cityU.tLight.value = lightmap.texture;
   cityU.uLightRect.value = lightmap.uniformRect;
+  cityU.uLightFade.value.set(...lightmap.fade);
   const ghost = ghostMaterial();
   const ads = adMaterial(cityU, new DistrictAdAtlas());
   district.setKit({ city, signs: signMaterial(cityU, atlas), ghost, ads, atlas, lightmap, words });

@@ -41,6 +41,8 @@ export interface CityUniforms extends ScreenUniforms {
   tLight: { value: THREE.Texture | null };
   /** Lightmap placement: (x0, z0, 1 / width, 1 / depth) in metres. */
   uLightRect: { value: THREE.Vector4 };
+  /** Fades the lightmap out between these max-norm distances from the camera (m); (0, 0) for none (lightmap.ts). */
+  uLightFade: { value: THREE.Vector2 };
   uLightGain: { value: number };
 }
 
@@ -61,6 +63,7 @@ export function cityUniforms(): CityUniforms {
     uRoomAmbient: { value: new THREE.Color(0x000000) },
     tLight: { value: null },
     uLightRect: { value: new THREE.Vector4(0, 0, 1, 1) },
+    uLightFade: { value: new THREE.Vector2(0, 0) },
     uLightGain: { value: 1 },
     ...screenUniforms(),
   };
@@ -117,6 +120,7 @@ const common = /* glsl */ `
   uniform vec3 uRoomAmbient;
   uniform sampler2D tLight;
   uniform vec4 uLightRect;
+  uniform vec2 uLightFade;
   uniform float uLightGain;
   varying vec4 vFacade;
   flat varying vec4 vStyle;
@@ -136,6 +140,10 @@ const common = /* glsl */ `
   }
   vec3 lightAt(vec2 p) {
     vec3 L = texture2D(tLight, (p - uLightRect.xy) * uLightRect.zw).rgb * uLightGain;
+    if (uLightFade.y > 0.0) {
+      vec2 dc = abs(p - cameraPosition.xz);
+      L *= 1.0 - smoothstep(uLightFade.x, uLightFade.y, max(dc.x, dc.y));
+    }
     // Darkness: square the falloff, so light pools under its source and the gaps between go black.
     return mix(L, L * L * 1.5, uDark);
   }

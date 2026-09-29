@@ -69,27 +69,44 @@ export function paintLights(g: Ctx2D, x: number, z: number, S: number, lights: r
 }
 
 /**
- * One lightmap texture over the whole district at RES px/m. Each chunk's tile (its cell, with neighbouring
- * cells' lights included so pools cross borders seamlessly) is painted by the chunk worker and uploaded here
- * as just that region. The city material samples it for every surface near the street.
+ * The street lightmap at RES px/m. Each chunk's tile (its cell, with neighbouring cells' lights included so pools
+ * cross borders seamlessly) is painted by the chunk worker and uploaded here as just that region; the city
+ * material samples it for every surface near the street.
+ *
+ * Two layouts. Over fixed `bounds` (the showroom): one texture covering them. Wrapping (`windowCells`, the city):
+ * a fixed window of N x N cells that wraps round the world (a cell's tile goes in slot (mx mod N, my mod N), and
+ * the texture repeats), so its size doesn't grow with the city. That holds while every loaded chunk lies within
+ * half the window of the camera (world.ts unloads them well before), and a chunk's slot is cleared when it's
+ * dropped; the material fades the lightmap out toward the window's edge (`fade`), where a slot could belong to
+ * a cell a window away.
  */
 export class Lightmap {
   readonly texture: THREE.DataTexture;
   readonly rect: Rect;
+  /** Where the material fades the lightmap out (max-norm distance from the camera, m); [0, 0] for no fade. */
+  readonly fade: readonly [number, number];
   private readonly pos = new THREE.Vector2();
+  private readonly size: number;
+  private readonly blank: Uint8Array;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
     bounds: Rect,
     private readonly cell: number,
+    private readonly windowCells = 0,
   ) {
-    this.rect = bounds;
-    const w = Math.ceil(bounds.w * RES);
-    const h = Math.ceil(bounds.h * RES);
+    const wrap = windowCells > 0;
+    this.size = windowCells * cell;
+    this.rect = wrap ? { x: 0, y: 0, w: this.size, h: this.size } : bounds;
+    this.fade = wrap ? [this.size / 2 - cell * 0.6, this.size / 2 - 16] : [0, 0];
+    const w = Math.ceil(this.rect.w * RES);
+    const h = Math.ceil(this.rect.h * RES);
     this.texture = new THREE.DataTexture(new Uint8Array(w * h * 4), w, h);
     this.texture.magFilter = THREE.LinearFilter;
     this.texture.minFilter = THREE.LinearFilter;
+    if (wrap) this.texture.wrapS = this.texture.wrapT = THREE.RepeatWrapping;
     this.texture.needsUpdate = true;
+    this.blank = new Uint8Array(cell * RES * cell * RES * 4);
     renderer.initTexture(this.texture);
   }
 
@@ -102,8 +119,17 @@ export class Lightmap {
   upload(x: number, z: number, data: Uint8Array): void {
     const S = this.cell * RES;
     const src = new THREE.DataTexture(data, S, S);
-    this.pos.set(Math.round((x - this.rect.x) * RES), Math.round((z - this.rect.y) * RES));
+    if (this.windowCells > 0) {
+      const slot = (v: number): number => ((((Math.round(v / this.cell)) % this.windowCells) + this.windowCells) % this.windowCells) * S;
+      this.pos.set(slot(x), slot(z));
+    } else this.pos.set(Math.round((x - this.rect.x) * RES), Math.round((z - this.rect.y) * RES));
     if (this.pos.x < 0 || this.pos.y < 0 || this.pos.x + S > this.texture.image.width || this.pos.y + S > this.texture.image.height) return;
     this.renderer.copyTextureToTexture(src, this.texture, null, this.pos);
+    src.dispose();
+  }
+
+  /** Clears the tile of the cell whose NW corner is (x, z) (its chunk was dropped). */
+  clear(x: number, z: number): void {
+    this.upload(x, z, this.blank);
   }
 }

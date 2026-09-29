@@ -940,3 +940,13 @@ describe('Interiors: Hotel Rouge', () => {
     expect(district.nodes.find((n) => n.id === 'hotel_rouge.entrance')!.through).toBe(true);
   });
 });
+
+describe('the lightmap window', () => {
+  it('holds every loaded chunk: they all lie within half the wrapping window of the camera, clear of the fade', async () => {
+    const { UNLOAD_RADIUS, LIGHTMAP_WINDOW } = await import('../src/poc3d/district/world');
+    // A chunk is kept while its centre is within UNLOAD_RADIUS; its far corner is half a cell's diagonal on.
+    const farthest = UNLOAD_RADIUS + (CELL * Math.SQRT2) / 2;
+    const fadeStart = (LIGHTMAP_WINDOW * CELL) / 2 - CELL * 0.6;
+    expect(farthest).toBeLessThan(fadeStart);
+  });
+});

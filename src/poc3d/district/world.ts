@@ -20,6 +20,8 @@ import type { Interior } from '../real/interiors';
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
 export const LOAD_RADIUS = 620;
 export const UNLOAD_RADIUS = 820;
+/** The lightmap's wrapping window in cells (real/lightmap.ts): every loaded chunk must stay within half of it. */
+export const LIGHTMAP_WINDOW = 16;
 /** Within this, a chunk shows its full detail (built on demand); beyond, plain building masses. */
 export const LOD_DISTANCE = 300;
 /** Detail is built a little before it's needed and dropped well after. */
@@ -613,6 +615,7 @@ export class District {
 
   private unload(c: Chunk): void {
     this.dropNear(c);
+    this.kit?.lightmap.clear(c.mx * CELL, c.my * CELL);
     this.root.remove(c.group);
     c.group.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
