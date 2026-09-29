@@ -26,6 +26,13 @@ export type PhoneEvent = { readonly kind: 'message'; readonly contact: Contact; 
 /** idle -> armed (its condition held) -> running (their messages) -> awaiting (your reply) -> replied (their answer) -> done. */
 type BeatState = { phase: 'idle' } | { phase: 'armed'; at: number } | { phase: 'running' } | { phase: 'awaiting' } | { phase: 'replied' } | { phase: 'done' };
 
+/** The phone's state for a save: the clock, and each contact's conversation so far (by contact id). */
+export interface PhoneSave {
+  readonly t: number;
+  readonly clock: number;
+  readonly threads: Readonly<Record<string, { readonly beats: BeatState[]; readonly msgs: Msg[]; readonly queue: { msg: ScriptMsg; wait: number }[]; readonly current: number | null; readonly unread: number; readonly shown: boolean }>>;
+}
+
 interface Thread {
   readonly contact: Contact;
   readonly beats: BeatState[];
@@ -72,6 +79,31 @@ export class Phone {
   ) {
     this.clock = clock;
     this.threads = contacts.map((c) => ({ contact: c, beats: c.beats.map(() => ({ phase: 'idle' as const })), msgs: [], queue: [], current: null, unread: 0, shown: false }));
+  }
+
+  /** Everything the phone holds, as plain data (for a save). */
+  snapshot(): PhoneSave {
+    const threads = Object.fromEntries(this.threads.map((th) => [th.contact.id, { beats: th.beats, msgs: th.msgs, queue: th.queue, current: th.current, unread: th.unread, shown: th.shown }]));
+    return JSON.parse(JSON.stringify({ t: this.t, clock: this.clock, threads })) as PhoneSave;
+  }
+
+  /**
+   * Puts the phone back as a save had it. A contact the save doesn't know, or whose script has since changed its
+   * number of beats, starts afresh.
+   */
+  restore(s: PhoneSave): void {
+    this.t = s.t;
+    this.clock = s.clock;
+    for (const th of this.threads) {
+      const d = s.threads[th.contact.id];
+      if (!d || d.beats.length !== th.beats.length) continue;
+      th.beats.splice(0, th.beats.length, ...d.beats);
+      th.msgs.splice(0, th.msgs.length, ...d.msgs);
+      th.queue.splice(0, th.queue.length, ...d.queue);
+      th.current = d.current;
+      th.unread = d.unread;
+      th.shown = d.shown;
+    }
   }
 
   /** Advance by dt seconds: arm beats whose conditions now hold, start due ones, deliver typed messages. */

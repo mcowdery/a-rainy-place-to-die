@@ -21,6 +21,18 @@ export class FlagStore {
     for (const fn of this.listeners) fn(key);
   }
 
+  /** Every flag, for a save. */
+  entries(): Record<string, FlagValue> {
+    return Object.fromEntries(this.values);
+  }
+
+  /** Replaces every flag (a save being loaded); listeners hear each key that was or is now set. */
+  load(values: Readonly<Record<string, FlagValue>>): void {
+    const keys = new Set([...this.values.keys(), ...Object.keys(values)]);
+    this.values = new Map(Object.entries(values));
+    for (const k of keys) for (const fn of this.listeners) fn(k);
+  }
+
   subscribe(fn: (key: string) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);

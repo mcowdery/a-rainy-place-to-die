@@ -36,6 +36,8 @@ import { SignalLamps, TrafficSystem, type DrivenVehicle } from '../real/traffic'
 import { Driving } from './driving';
 import { OwnCar } from './ownCar';
 import { DamageHud } from './damageHud';
+import { SaveApp } from './saveApp';
+import { readSave, SAVE_VERSION, SLOTS, writeSave, type SaveGame, type Slot } from '../../save/save';
 import { installSnap } from '../../debug/snap';
 import { fare, rideMetres, TaxiPicker } from './taxi';
 import { loadProfile, saveProfile } from '../../race/profile';
@@ -95,6 +97,12 @@ type C3 = [number, number, number];
 async function run(): Promise<void> {
   const content = loadDistrictContent();
   const flags = new FlagStore({ [FLAG_TIME]: params.get('time') ?? 'night', [FLAG_WEATHER]: params.get('weather') ?? 'clear', [FLAG_LATE]: params.get('late') === '1' });
+  // ?load=<slot>: a saved game (save/save.ts). Its world's flags now; its character's car, money, place and phone
+  // as each of those is set up below.
+  const loadSlot = params.get('load') as Slot | null;
+  const loaded: SaveGame | null = loadSlot && (SLOTS as readonly string[]).includes(loadSlot) ? readSave(loadSlot) : null;
+  const me = loaded ? loaded.characters[loaded.current] : null;
+  if (loaded) flags.load(loaded.world.flags);
   const late = (): boolean => flags.get(FLAG_LATE) === true;
   const time = (): TimeOfDay => flags.get(FLAG_TIME) as TimeOfDay;
   const weather = (): Weather => flags.get(FLAG_WEATHER) as Weather;
@@ -494,6 +502,12 @@ async function run(): Promise<void> {
     controls.setView(cam[3], cam[4]);
   }
 
+  if (me) {
+    camera.position.set(me.at.x, me.at.y, me.at.z);
+    updateInteriors();
+    controls.setLevel(district.floorAt(me.at.x, me.at.z, me.at.y - 1.7));
+    controls.setView(me.at.yaw, me.at.pitch);
+  }
   // Warm start: the workers build the neighbourhood (every stage) before the first frame.
   $('overlay').textContent = 'building the city...';
   const warm0 = performance.now();
@@ -648,6 +662,7 @@ async function run(): Promise<void> {
   // ?debug=1&flags=met_mama,asked_detective: set story flags from the start (to try conversations).
   if (debug) for (const f of (params.get('flags') ?? '').split(',').filter(Boolean)) flags.set(f, true);
   const phone = new Phone(phoneContent.contacts, { get: flags.get, set: (k, v) => flags.set(k, v) });
+  if (me?.phone) phone.restore(me.phone);
   const phoneUi = new PhoneUI(phone, phoneContent.url, {
     onOpen: () => document.exitPointerLock(),
     onClose: () => controls.lock(),
@@ -701,6 +716,14 @@ async function run(): Promise<void> {
   scene.add(exView.group, exTraffic.group);
   const sodium = exView.group.getObjectByName('sodium') as THREE.Mesh;
   const bay = nodeById.get('city_garage.bay');
+  if (me?.profile) saveProfile(me.profile);
+  if (me?.car) {
+    try {
+      localStorage.setItem('citypop.city.car', JSON.stringify(me.car));
+    } catch {
+      /* this session only */
+    }
+  }
   const ownCar = new OwnCar(
     city,
     traffic,
@@ -868,6 +891,7 @@ async function run(): Promise<void> {
     return ownCar.name;
   };
   if (exitRoad) enterCar(ownCar.vehicle);
+  if (me?.driving && !exitRoad) enterCar(ownCar.vehicle);
   if (debug) (window as unknown as { __own: OwnCar; __ex: Expressway }).__own = ownCar;
   if (debug) (window as unknown as { __taxi: unknown }).__taxi = { hail: () => hailTaxi(), state: () => ({ hail: traffic.hail && { stopped: traffic.hail.stopped, d: Math.hypot(traffic.hail.taxi.x - camera.position.x, traffic.hail.taxi.z - camera.position.z) }, here: taxiHere(), ride: taxiRide && { t: taxiRide.t, T: taxiRide.T, fare: taxiRide.fare } }), getIn: () => getInTaxi(), path: () => taxiRide && { path: taxiRide.path.map((p) => p.map(Math.round)), blocked: taxiRide.path.map((p) => district.blocked(p[0], p[1], 0.5)) }, taxis: () => (traffic as unknown as { vehicles: { label: string; x: number; z: number; mode: string }[] }).vehicles.filter((v) => v.label === 'Taxi').map((v) => [Math.round(v.x), Math.round(v.z), v.mode, Math.round(Math.hypot(v.x - camera.position.x, v.z - camera.position.z))]) };
   if (debug) (window as unknown as { __ex: Expressway }).__ex = expressway;
@@ -972,6 +996,57 @@ async function run(): Promise<void> {
       (x, z) => district.zoneAt(x, z),
     ),
   );
+  // Saving (save/save.ts): the world's flags and the MC's place, car, phone, money and cars. Not in the middle of a
+  // ride or a scene (you'd load into a moving train); the autosave waits for those to end.
+  const played0 = loaded?.played ?? 0;
+  const t0 = performance.now();
+  const saveBlocked = (): string | null => (inVn ? 'Not during a scene.' : taxiRide || subway.riding || trains?.riding ? 'Not during a ride.' : null);
+  const gather = (): SaveGame => {
+    const d = camera.getWorldDirection(new THREE.Vector3());
+    const p = driving.car ? { x: driving.car.x, z: driving.car.z } : camera.position;
+    const zone = district.zoneAt(p.x, p.z);
+    const place = `${district.districtAt(p.x, p.z) ?? 'Tōto'}${zone ? ` · ${zone}` : ''}`;
+    return {
+      v: SAVE_VERSION,
+      savedAt: new Date().toISOString(),
+      place,
+      played: played0 + (performance.now() - t0) / 1000,
+      current: 'mc',
+      world: { flags: flags.entries() },
+      characters: {
+        mc: {
+          id: 'mc',
+          name: 'MC',
+          at: { x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: lookYaw(), pitch: (Math.asin(Math.max(-1, Math.min(1, d.y))) * 180) / Math.PI },
+          driving: !!driving.own,
+          car: { x: ownCar.sim.x, z: ownCar.sim.z, h: ownCar.sim.h, y: ownCar.sim.y },
+          phone: phone.snapshot(),
+          profile: loadProfile(),
+        },
+      },
+    };
+  };
+  const saveTo = (slot: Slot): string | null => {
+    const blocked = saveBlocked();
+    if (blocked) return blocked;
+    ownCar.save();
+    return writeSave(slot, gather()) ? null : 'The browser won’t keep the save (storage blocked or full).';
+  };
+  const loadFrom = (slot: Slot): void => {
+    const url = new URL(location.href);
+    for (const k of ['spawn', 'cam', 'car', 'from', 'ride', 'vn', 'load']) url.searchParams.delete(k);
+    url.searchParams.set('load', slot);
+    void fadeTo(1).then(() => (location.href = url.toString()));
+  };
+  let autosaveIn = 120;
+  const autosave = (): void => {
+    if (!saveBlocked()) saveTo('auto');
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') autosave();
+  });
+  phoneUi.register(new SaveApp(saveTo, loadFrom));
+  if (debug) (window as unknown as { __save: unknown }).__save = { save: saveTo, load: loadFrom, gather };
   // ?debug=1: window.__gps('<spawn id>') marks it as the GPS destination (for checks).
   if (debug) (window as unknown as { __gps: (id: string) => boolean }).__gps = (id) => {
     const n = nodeById.get(id);
@@ -1284,6 +1359,11 @@ async function run(): Promise<void> {
       void fadeTo(1).then(() => (location.href = `race.html?venue=${tunnel.venue}&mode=free&from=${tunnel.id}`));
     }
     updateGps(dt);
+    autosaveIn -= dt;
+    if (autosaveIn <= 0) {
+      autosaveIn = saveBlocked() ? 10 : 120;
+      autosave();
+    }
     if (driving.bump > 2) audio.bump(driving.bump);
     dash.style.display = driving.car ? 'block' : 'none';
     if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}`;
