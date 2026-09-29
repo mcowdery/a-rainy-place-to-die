@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { MacroMap } from '../../gen/macro';
 import type { Bridge3 } from '../district/roads';
+import type { Terrain } from '../district/terrain';
 
 /**
  * The sea and the land round the city. Water over every L0 water cell (the bay, the river down to it), a little
@@ -47,7 +48,7 @@ function horizonFade(m: THREE.Material, horizon: { value: THREE.Color }, from = 
   m.customProgramCacheKey = () => `horizon-${from}-${to}`;
 }
 
-export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: number) => boolean, horizon: { value: THREE.Color }, bridges: readonly Bridge3[] = []): Sea {
+export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: number) => boolean, horizon: { value: THREE.Color }, bridges: readonly Bridge3[] = [], terrain?: Terrain): Sea {
   const group = new THREE.Group();
   const material = new THREE.MeshStandardMaterial({ color: 0x0c1c26, roughness: 0.12, metalness: 0.35 });
   horizonFade(material, horizon);
@@ -133,8 +134,16 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
         mx++;
         continue;
       }
+      // Next to the hills: a cell of its own, its corners at the terrain's heights.
+      if (terrain && terrain.raised(mx, my)) {
+        const [x0, z0, x1, z1] = [mx * cell, my * cell, (mx + 1) * cell, (my + 1) * cell];
+        const h = (gx: number, gy: number): number => terrain.junction(gx, gy) - 0.03;
+        land.push(x0, h(mx, my), z0, x0, h(mx, my + 1), z1, x1, h(mx + 1, my + 1), z1, x0, h(mx, my), z0, x1, h(mx + 1, my + 1), z1, x1, h(mx + 1, my), z0);
+        mx++;
+        continue;
+      }
       const start = mx;
-      while (mx < macro.cols && unbuilt(mx, my)) mx++;
+      while (mx < macro.cols && unbuilt(mx, my) && !terrain?.raised(mx, my)) mx++;
       flat(start === 0 ? -BEYOND : start * cell, my * cell, mx === macro.cols ? W + BEYOND : mx * cell, (my + 1) * cell);
     }
   }

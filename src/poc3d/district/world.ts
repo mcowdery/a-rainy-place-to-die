@@ -1,3 +1,4 @@
+import { Terrain } from './terrain';
 import * as THREE from 'three';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import type { Lightmap } from '../real/lightmap';
@@ -116,8 +117,10 @@ export class District {
     avenues?: Avenues,
     /** Street bridges over the water (roads.ts): ground you can walk and drive, outside any cell. */
     readonly bridges: readonly Bridge3[] = [],
+    /** The lie of the land (terrain.ts). */
+    readonly terrain: Terrain = Terrain.FLAT,
   ) {
-    this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues);
+    this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues, terrain);
     this.nodes = placed.flatMap((p) => p.nodes);
     // Stamps collide as their footprint, or (landmarks you can walk into) as their walls and fixtures.
     const solid = (p: Placed3): Rect[] => [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }];
@@ -175,8 +178,13 @@ export class District {
       const y = landmarkFloor(p, x, z, current);
       if (y !== null) return y;
     }
-    return 0;
+    return this.terrain.height(x, z);
   };
+
+  /** Height above the ground (the terrain) at (x, z): 0 at street level anywhere, on a hill or not. */
+  aboveGround(x: number, z: number, y: number): number {
+    return y - this.terrain.height(x, z);
+  }
 
   get placed(): readonly Placed3[] {
     return this.model.placed;
@@ -194,7 +202,8 @@ export class District {
   shelterAt(x: number, z: number, y: number): Shelter | null {
     let best: Shelter | null = null;
     for (const s of this.shelters) {
-      if (y > s.y0 && y < s.y1 && x > s.rect.x && x < s.rect.x + s.rect.w && z > s.rect.y && z < s.rect.y + s.rect.h) {
+      const yr = y - this.terrain.height(x, z);
+      if (yr > s.y0 && yr < s.y1 && x > s.rect.x && x < s.rect.x + s.rect.w && z > s.rect.y && z < s.rect.y + s.rect.h) {
         if (s.enclosed) return s;
         best = s;
       }
@@ -340,7 +349,9 @@ export class District {
   }
 
   /** Collision: outside the district, inside a building footprint (this cell or a neighbour), a stamp or a prop. */
-  blocked = (x: number, z: number, r: number, floor = 0): boolean => {
+  blocked = (x: number, z: number, r: number, floorAbs = 0): boolean => {
+    // (Levels are relative to the ground: street level on a hill is still 0.)
+    const floor = floorAbs - this.terrain.height(x, z);
     const inRects = (rs: readonly Rect[]): boolean => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
     const inside = (): boolean => {
       for (const it of this.interiors.values()) if (inRects(it.colliders(floor))) return true;

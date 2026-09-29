@@ -32,7 +32,7 @@ import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../re
 import { buildRotary, type RotaryBuilt } from '../real/rotary';
 import { INTERIORS, type Interior } from '../real/interiors';
 import { hash } from '../../core/hash';
-import { SignalLamps, TrafficSystem, type DrivenVehicle } from '../real/traffic';
+import { SignalLamps, TrafficSystem, type DrivenVehicle, setTrafficGround } from '../real/traffic';
 import { Driving } from './driving';
 import { OwnCar } from './ownCar';
 import { DamageHud } from './damageHud';
@@ -141,7 +141,11 @@ async function run(): Promise<void> {
 
   const cityU = cityUniforms();
   const city = cityMaterial(cityU);
-  const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones, content.avenues, content.bridges);
+  const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones, content.avenues, content.bridges, content.terrain);
+  // The ground's height (terrain.ts): 0 but on the hills.
+  const groundAt = (x: number, z: number): number => content.terrain.height(x, z);
+  /** The camera's height over the ground there (so street level is the same on a hill). */
+  const camAbove = (): number => camera.position.y - groundAt(camera.position.x, camera.position.z);
   // The Tōto Expressway's layout (expressway.ts): built here, as its entrances are places to go (the map, taxis).
   const exErrors: string[] = [];
   const exDef = parseExpressway('content/world3d/expressway.yaml', expresswayText, exErrors);
@@ -209,11 +213,11 @@ async function run(): Promise<void> {
   for (const placed of content.placed) {
     const f = frontFrame(placed.building);
     // Landmarks dress their own doors.
-    if (placed.stamp.landmark === null) for (const n of placed.nodes) if (n.kind === 'door') dressDoor(dressing, n, f.r, f.n);
+    if (placed.stamp.landmark === null) for (const n of placed.nodes) if (n.kind === 'door') dressDoor(dressing, n, f.r, f.n, groundAt(n.x, n.z));
     for (const n of placed.nodes) {
       if (n.kind !== 'npc') continue;
       const gb = new GhostBuilder();
-      addFigure(gb, npcSpec(n, f.n));
+      addFigure(gb, { ...npcSpec(n, f.n), y: n.floor + groundAt(n.x, n.z) });
       const mesh = new THREE.Mesh(gb.build(0, 0)!, ghost);
       mesh.renderOrder = 2;
       scene.add(mesh);
@@ -264,6 +268,7 @@ async function run(): Promise<void> {
     content.placed.filter((p) => p.stamp.scramble).map((p) => `${Math.round((p.rect.x + p.stamp.scramble![0]) / CELL)},${Math.round((p.rect.y + p.stamp.scramble![1]) / CELL)}`),
   );
   const signals = new Signals(scrambles);
+  setTrafficGround(groundAt);
   const traffic = new TrafficSystem(
     carLoops(content.macro, content.traffic, plan, expressway.rampColliders()).map((c) => ({ route: routeFor(c.rect, true, plan, piers), spacing: c.spacing })),
     content.traffic.buses.map((line) => ({ line, route: routeFor(line.rect, false, plan, piers) })),
@@ -296,6 +301,10 @@ async function run(): Promise<void> {
   district.addColliders(traffic.colliders);
   for (const placed of content.placed) {
     const lm = placed.stamp.landmark;
+    // On a hill, the landmark stands level at its footing (everything it adds to the scene lifted with it).
+    const sceneBefore = scene.children.length;
+    const b0 = placed.building;
+    const footing = content.terrain.footing(b0.x, b0.z, b0.w, b0.d);
     if (lm && (ASAGIRI_KINDS as readonly string[]).includes(lm)) {
       const a = buildAsagiri(lm as AsagiriKind, placed.building, placed.id, city, ghost, cityU);
       scene.add(a.group);
@@ -350,6 +359,7 @@ async function run(): Promise<void> {
       exteriors.set(placed.id, { group: h.group, parts: {} });
       landmarkUpdates.push(h.update);
     }
+    if (footing) for (let i = sceneBefore; i < scene.children.length; i++) scene.children[i].position.y += footing;
   }
   // The surface: the city, traffic, weather and the other landmarks (everything but the subway's own).
   for (const o of scene.children) if (o !== subway.group && !subwayViews.some((v) => v.view.group === o) && !rotaries.some((v) => v.r.group === o) && !(o instanceof THREE.Light) && o !== sky.mesh) surface.push(o);
@@ -426,7 +436,7 @@ async function run(): Promise<void> {
   let stepCover: 'open' | 'roof' | 'enclosed' = 'open';
   const stepSound = (run: boolean, land?: number): void => {
     const p = camera.position;
-    audio.step(district.surfaceAt(p.x, p.z, p.y - 1.7), { run, wet: cityU.uWet.value, cover: stepCover, volume: mood.volume, land });
+    audio.step(district.surfaceAt(p.x, p.z, district.aboveGround(p.x, p.z, p.y) - 1.7), { run, wet: cityU.uWet.value, cover: stepCover, volume: mood.volume, land });
   };
   controls.onStep = (run) => stepSound(run);
   controls.onLand = (speed) => stepSound(false, speed);
@@ -687,7 +697,7 @@ async function run(): Promise<void> {
     camera.getWorldDirection(forward);
     let best: Node3 | null = null;
     let bestD = 3.2;
-    const level = camera.position.y - 1.7;
+    const level = camAbove() - 1.7;
     for (const n of nodes) {
       if (n.trigger !== 'interact' || !visibleNode(n) || Math.abs(n.floor - level) > 2) continue;
       const dx = n.x - camera.position.x;
@@ -716,7 +726,7 @@ async function run(): Promise<void> {
   // Set pieces you drive up (real/denko.ts: the car park's floors and ramps) join the network as decks.
   for (const p of content.placed) if (p.stamp.landmark === 'car_park') expressway.addDecks(carParkDecks(p.building, p.id));
   // The bay and the river (real/sea.ts): water over the map's water cells, seawalls where built land meets it.
-  const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), cityU.uHorizon, content.bridges);
+  const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), cityU.uHorizon, content.bridges, content.terrain);
   // Hanejima's airfield and its traffic (real/airport.ts).
   const airport = buildAirport();
   scene.add(airport.group);
@@ -744,6 +754,7 @@ async function run(): Promise<void> {
     expressway,
     () => exTraffic.obstacles,
     params.get('car') === 'home',
+    content.terrain,
   );
   // Back from a pass (race.html's 'Back to the city'): on the loop just past that exit's corner, driving.
   const back = params.get('from');
@@ -776,7 +787,7 @@ async function run(): Promise<void> {
   /** The ride under way: from, to, the fare, and the seconds it lasts (sped up) and has run. */
   let taxiRide: { dest: Destination; fare: number; t: number; T: number; x0: number; z0: number; path: [number, number][]; cum: number[]; heading?: number } | null = null;
   const hailTaxi = (): void => {
-    if (driving.car || taxiRide || inVn || Math.abs(camera.position.y - 1.7) > 1.2) return;
+    if (driving.car || taxiRide || inVn || Math.abs(camAbove() - 1.7) > 1.2) return;
     const h = traffic.hailTaxi(camera.position);
     toast(h ? 'タクシー! A taxi is pulling in for you: E to get in when it stops.' : 'No free taxi coming this way. Stand at the kerb of a main street (the cell-edge roads) and try again.', 4);
   };
@@ -849,7 +860,7 @@ async function run(): Promise<void> {
   Object.assign(meterEl.style, { position: 'fixed', left: '50%', bottom: '24px', transform: 'translateX(-50%)', display: 'none', padding: '8px 18px', background: 'rgba(8,8,16,0.85)', border: '1px solid #ffd34f', borderRadius: '4px', font: "15px Consolas, 'Yu Gothic', monospace", color: '#ffd34f', zIndex: '6' } satisfies Partial<CSSStyleDeclaration>);
   document.body.append(meterEl);
   const takeableCar = (): DrivenVehicle | null => {
-    if (controls.fly || inVn || Math.abs(camera.position.y - 1.7) > 1.2) return null;
+    if (controls.fly || inVn || Math.abs(camAbove() - 1.7) > 1.2) return null;
     camera.getWorldDirection(forward);
     return traffic.takeable(camera.position, forward.x, forward.z, 2.2, false, true);
   };
@@ -880,7 +891,7 @@ async function run(): Promise<void> {
   };
   const exitCar = (): void => {
     // Totalled up on the expressway: the tow truck takes you both down (you to your garage too).
-    if (driving.own && ownCar.totaled && ownCar.sim.y > 1) {
+    if (driving.own && ownCar.totaled && ownCar.aloft()) {
       traffic.leave(driving.car!);
       driving.leave();
       controls.held = false;
@@ -888,7 +899,7 @@ async function run(): Promise<void> {
       void towHome().then(() => teleport('city_garage.front'));
       return;
     }
-    if (driving.own && ownCar.sim.y > 1) return toast('Not on the expressway: take the Kaburo ramp down first.');
+    if (driving.own && ownCar.aloft()) return toast('Not on the expressway: take the Kaburo ramp down first.');
     const spot = driving.exitSpot((x, z) => !district.blocked(x, z, 0.4, 0) && !traffic.blocked(x, z, 0.4) && !npcBlocked(x, z, 0.4));
     if (!spot) return toast('No room to get out here.');
     traffic.leave(driving.car!);
@@ -988,11 +999,11 @@ async function run(): Promise<void> {
     const { at } = g;
     const route = guide.route;
     // Chevrons on the street ahead (not below ground or up in a building).
-    const street = (driving.car || Math.abs(camera.position.y - 1.7) < 1.2) && !subway.riding;
+    const street = (driving.car || Math.abs(camAbove() - 1.7) < 1.2) && !subway.riding;
     const car = from.mode === 'drive';
     // Driving, the route runs down the road's centre line: the chevrons sit in the left lane (keep left).
     const ahead = (at && route && street ? pointsAhead(route, at.seg, at.t, car ? 90 : 60, car ? 7 : 4.5, car ? 6 : 3) : []).map((p) => (car ? { ...p, x: p.x + p.dz * 1.5, z: p.z - p.dx * 1.5 } : p));
-    gpsMarks.update(dt, ahead, dest);
+    gpsMarks.update(dt, ahead.map((p) => ({ ...p, y: (driving.own && ownCar.aloft() ? ownCar.sim.y : groundAt(p.x, p.z)) })), { ...dest, y: groundAt(dest.x, dest.z) });
     gpsMarks.group.visible = camera.position.y > -2 && !subway.riding;
     // The compass: toward the route a little way ahead (or the destination itself), from where you're looking.
     const next = at && route ? (pointsAhead(route, at.seg, at.t, 14, 14, 14)[0] ?? dest) : dest;
@@ -1389,7 +1400,7 @@ async function run(): Promise<void> {
     dash.style.display = driving.car ? 'block' : 'none';
     if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}`;
     damageHud.update(inVn ? 0 : dt, driving.own ? ownCar : null);
-    const onFoot = !driving.car && !controls.fly && !inVn && Math.abs(cp0.y - 1.7) < 1.2;
+    const onFoot = !driving.car && !controls.fly && !inVn && Math.abs(camAbove() - 1.7) < 1.2;
     let wvx = dt > 0 ? (cp0.x - lastWalker.x) / dt : 0;
     let wvz = dt > 0 ? (cp0.z - lastWalker.z) / dt : 0;
     // Faster than anyone runs: a teleport or a ride, not a step.
@@ -1609,8 +1620,8 @@ async function run(): Promise<void> {
 }
 
 /** Bar entrance: wooden frame, warm glass door, a noren curtain and two red paper lanterns. */
-function dressDoor(mb: MeshBuilder, n: Node3, r: C3, nn: C3): void {
-  const o: C3 = [n.x, 0, n.z];
+function dressDoor(mb: MeshBuilder, n: Node3, r: C3, nn: C3, y = 0): void {
+  const o: C3 = [n.x, y, n.z];
   mb.style = [0, 0, 0, 0];
   mb.kind = KIND.plain;
   mb.color = lin(0x3a2616);

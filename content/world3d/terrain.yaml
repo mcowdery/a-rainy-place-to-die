@@ -1,0 +1,10 @@
+# The lie of the land (format: src/poc3d/district/terrain.ts). Terraces raise whole L0 cells to a level; each grid
+# corner stands at the highest level of the cells round it and a cell's ground blends its four corners, so the
+# terraces are flat plateaus and the cells round them hillsides whose streets climb (the whole-city plan:
+# docs/city-plan.md). Keep them clear of the rail viaducts, subway stations and the expressway, which stand on level
+# ground.
+terraces:
+  # 学園坂: the university's upper campus; the slope (the "zaka") runs down the next row to Kita-ōdōri.
+  - { name: Gakuenzaka, cells: [22, 3, 30, 5], level: 12 }
+  # 東光寺: the temple on its rise over the river.
+  - { name: Tōkō-ji rise, cells: [39, 6, 41, 8], level: 6 }

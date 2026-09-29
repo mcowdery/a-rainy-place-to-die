@@ -66,7 +66,7 @@ export class GpsMarks {
    * Per frame: the chevrons at `ahead` (points along the route, with its heading), the beacon at the
    * destination, the floor they lie on. `dt` runs the pulse.
    */
-  update(dt: number, ahead: readonly { x: number; z: number; dx: number; dz: number }[], dest: { x: number; z: number } | null, floor = 0): void {
+  update(dt: number, ahead: readonly { x: number; z: number; dx: number; dz: number; y?: number }[], dest: { x: number; z: number; y?: number } | null, floor = 0): void {
     this.time += dt;
     this.group.visible = dest !== null;
     if (!dest) return;
@@ -74,7 +74,7 @@ export class GpsMarks {
     for (let i = 0; i < n; i++) {
       const p = ahead[i];
       this.q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, Math.atan2(p.dx, p.dz));
-      this.m.compose(new THREE.Vector3(p.x, floor + 0.06, p.z), this.q, new THREE.Vector3(1, 1, 1));
+      this.m.compose(new THREE.Vector3(p.x, (p.y ?? floor) + 0.06, p.z), this.q, new THREE.Vector3(1, 1, 1));
       this.chevrons.setMatrixAt(i, this.m);
       // A pulse running away from you toward the destination; the far ones fade.
       const wave = 0.55 + 0.45 * Math.max(0, Math.cos((i * 0.9 - this.time * 5) % (Math.PI * 2)));
@@ -85,8 +85,8 @@ export class GpsMarks {
     this.chevrons.count = n;
     this.chevrons.instanceMatrix.needsUpdate = true;
     if (this.chevrons.instanceColor) this.chevrons.instanceColor.needsUpdate = true;
-    this.beacon.position.set(dest.x, floor, dest.z);
-    this.ring.position.set(dest.x, floor + 0.07, dest.z);
+    this.beacon.position.set(dest.x, dest.y ?? floor, dest.z);
+    this.ring.position.set(dest.x, (dest.y ?? floor) + 0.07, dest.z);
     const s = 1 + 0.12 * Math.sin(this.time * 3);
     this.ring.scale.set(s, 1, s);
   }

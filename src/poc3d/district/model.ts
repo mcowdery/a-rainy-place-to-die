@@ -1,3 +1,4 @@
+import { Terrain } from './terrain';
 import { intersect, overlaps, type Rect } from '../../core/coords';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import { cellDetail, type CellDetail } from '../real/props';
@@ -32,6 +33,8 @@ export class DistrictModel {
     private readonly seed: number,
     readonly zones: ZoneMap = ZoneMap.EMPTY,
     avenues: Avenues = new Map(),
+    /** The lie of the land (terrain.ts): the chunk workers lift the geometry onto it. */
+    readonly terrain: Terrain = Terrain.FLAT,
   ) {
     for (const [k, v] of avenues) this.edges.set(k, v);
     const cells: [number, number][] = [];

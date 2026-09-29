@@ -1,3 +1,4 @@
+import { Terrain } from './terrain';
 import * as THREE from 'three';
 import { wheelLayout } from '../models/vehicles';
 import { model, tunedSpec } from '../../race/catalog';
@@ -111,8 +112,10 @@ export class OwnCar {
     private readonly ex: Expressway | null = null,
     private readonly deckObstacles: () => readonly DeckObstacle[] = () => [],
     atHome = false,
+    /** The lie of the land (terrain.ts): the street's height on the hills. */
+    private readonly terrain: Terrain = Terrain.FLAT,
   ) {
-    const height = (x: number, z: number): number => this.ex?.at(x, z, this.sim.y)?.height ?? 0;
+    const height = (x: number, z: number): number => this.ex?.at(x, z, this.sim.y)?.height ?? this.terrain.height(x, z);
     const mine = currentCar(loadProfile());
     this.carId = mine.id;
     this.parts = partsOf(mine);
@@ -442,9 +445,14 @@ export class OwnCar {
     this.keepCondition();
   }
 
+  /** Up off the street (on the expressway's deck, or a car park's floors). */
+  aloft(): boolean {
+    return this.sim.y - this.terrain.height(this.sim.x, this.sim.z) > 1;
+  }
+
   /** On the expressway (its ramps included), rather than the street. */
   onExpressway(x = this.sim.x, z = this.sim.z): boolean {
-    return !!this.ex && (this.sim.y > 0.6 || this.ex.at(x, z, this.sim.y) !== null);
+    return !!this.ex && (this.sim.y - this.terrain.height(x, z) > 0.6 || this.ex.at(x, z, this.sim.y) !== null);
   }
 
   private sync(): void {
@@ -452,7 +460,7 @@ export class OwnCar {
     const s = this.sim;
     v.acc = (s.u - v.v) / 0.016;
     // Up on the expressway, the street's traffic doesn't see you.
-    v.aloft = s.y > 2;
+    v.aloft = s.y - this.terrain.height(s.x, s.z) > 2;
     v.x = s.x;
     v.z = s.z;
     v.dx = Math.sin(s.h);

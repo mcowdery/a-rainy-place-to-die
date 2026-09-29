@@ -225,7 +225,7 @@
   offset: [94, 30]
 - id: university
   stamp: university
-  cell: [25, 5]
+  cell: [25, 4]
   offset: [28, 64]
 - id: school_2
   stamp: school_2

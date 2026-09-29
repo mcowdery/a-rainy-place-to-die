@@ -1,3 +1,4 @@
+import { liftRaw } from './terrain';
 import { addBuilding } from '../real/buildings';
 import { addDistrictAds } from '../real/districtAds';
 import { addGround } from '../real/ground';
@@ -56,12 +57,21 @@ export class ChunkBuilder {
     const cz = (my + 0.5) * CELL;
     // Landmarks keep their footprint (collision, prop clearance) but are built on the main thread.
     const buildings = m.massed(mx, my);
+    // The lie of the land (terrain.ts): everything lifted onto the ground, buildings level at their footing.
+    const T = m.terrain;
+    const raised = T.raised(mx, my);
+    const footings = new Map<number, number>();
+    if (raised) for (const b of m.buildings(mx, my)) footings.set(b.id, T.footing(b.x, b.z, b.w, b.d));
+    const lift = <R extends Parameters<typeof liftRaw>[0]>(r: R): R => {
+      if (raised) liftRaw(r, T, cx, cz, footings);
+      return r;
+    };
     if (stage === 'base') {
       addGround(this.mb.reset(), plan, m.plazas(mx, my), m.scrambles(mx, my), m.holes(mx, my), m.detail(mx, my)!.open);
-      const base = this.mb.raw(cx, cz);
+      const base = lift(this.mb.raw(cx, cz));
       const mb = this.mb.reset();
       for (const b of buildings) addBuilding(mb, b, false);
-      const far = mb.raw(cx, cz);
+      const far = lift(mb.raw(cx, cz));
       // Lightmap tile: this cell's lights plus any from the neighbours that reach across the border.
       const lights: Light[] = [];
       for (let dy = -1; dy <= 1; dy++) {
@@ -92,7 +102,7 @@ export class ChunkBuilder {
       addSigns([...plan.signs, ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb, seen);
       const ab = this.ab.reset();
       addDistrictAds(ab, mb, buildings, plan.signs, m.detail(mx, my)!.props, undefined, seen, plan.open);
-      return { mx, my, stage, meshes: { near: mb.raw(cx, cz), signs: sb.raw(cx, cz), ads: ab.raw(cx, cz) }, ms: performance.now() - t0 };
+      return { mx, my, stage, meshes: { near: lift(mb.raw(cx, cz)), signs: lift(sb.raw(cx, cz)), ads: lift(ab.raw(cx, cz)) }, ms: performance.now() - t0 };
     }
     const crowd = cellCrowd(plan, m.detail(mx, my)!, m.plazas(mx, my));
     const gb = this.gb.reset();
@@ -101,7 +111,7 @@ export class ChunkBuilder {
       addFigure(gb, f);
       addUmbrella(ub, f);
     }
-    return { mx, my, stage, meshes: { ghosts: gb.raw(cx, cz), umbrellas: ub.raw(cx, cz) }, people: crowd.length, ms: performance.now() - t0 };
+    return { mx, my, stage, meshes: { ghosts: lift(gb.raw(cx, cz)), umbrellas: lift(ub.raw(cx, cz)) }, people: crowd.length, ms: performance.now() - t0 };
   }
 }
 

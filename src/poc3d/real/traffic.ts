@@ -20,6 +20,11 @@ import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
  */
 
 const DRAW = 320;
+/** The ground's height (district/terrain.ts), set by the page: vehicles, their lamps and signals stand on it. */
+let groundY: (x: number, z: number) => number = () => 0;
+export function setTrafficGround(f: (x: number, z: number) => number): void {
+  groundY = f;
+}
 /**
  * Traffic further than this from the camera waits where it is (not simulated, not drawn), so the cost stays with
  * the cars round you however big the city gets; it drives on when you come back.
@@ -567,12 +572,14 @@ export class TrafficSystem {
       v.obj.visible = near && !v.hideBody;
       if (!near || v.own) continue;
       const p = v.mode === 'traffic' ? this.pose(v) : { x: v.x, z: v.z, dx: v.dx, dz: v.dz, k: v.curv };
-      v.obj.position.set(p.x, 0, p.z);
+      v.obj.position.set(p.x, groundY(p.x, p.z), p.z);
       v.obj.rotation.y = Math.atan2(p.dx, p.dz);
-      // Nose dips under braking, lifts pulling away (eased, like a suspension settling).
+      // Nose dips under braking, lifts pulling away (eased, like a suspension settling); up and down hills, the
+      // body follows the road (nose up climbing).
       const target = THREE.MathUtils.clamp(-v.acc * 0.0045, -0.012, 0.022) * (v.bus ? 0.5 : 1);
       v.pitch += (target - v.pitch) * Math.min(1, dt * 6);
-      v.obj.rotation.x = v.pitch;
+      const climb = groundY(p.x + p.dx * 1.5, p.z + p.dz * 1.5) - groundY(p.x - p.dx * 1.5, p.z - p.dz * 1.5);
+      v.obj.rotation.x = v.pitch - Math.atan(climb / 3);
       // The body leans out of a turn with the sideways pull (v^2 * curvature; k > 0 turning right). In the
       // car's frame (+z forward, +x to its left) a positive roll tips the roof to the right: turning right, lean left.
       const lean = THREE.MathUtils.clamp(-v.v * v.v * p.k * 0.011, -0.035, 0.035) * (v.bus ? 0.6 : 1);
@@ -942,7 +949,7 @@ export class SignalLamps {
             const du = face < 0 ? -0.265 : 0.015;
             const x = p.x + r[0] * du + nv[0] * a;
             const z = p.z + r[2] * du + nv[2] * a;
-            this.m.makeRotationY(Math.atan2(r[0] * face, r[2] * face)).setPosition(x, 5.22, z);
+            this.m.makeRotationY(Math.atan2(r[0] * face, r[2] * face)).setPosition(x, groundY(p.x, p.z) + 5.22, z);
             this.mesh.setMatrixAt(n++, this.m);
           }
         }
