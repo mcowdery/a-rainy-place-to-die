@@ -975,6 +975,7 @@ async function run(): Promise<void> {
     if (n) setGps({ x: n.x, z: n.z, label: n.name ?? id });
     return !!guide.route;
   };
+  if (debug) (window as unknown as { __guide: Guide }).__guide = guide;
   // The dashboard: speed and gear, while driving.
   const dash = document.createElement('div');
   Object.assign(dash.style, { position: 'fixed', left: '24px', bottom: '22px', zIndex: '16', padding: '8px 14px', background: 'rgba(8,8,14,0.72)', border: '1px solid #3a3850', color: '#e8e6f0', font: "bold 26px 'Consolas', monospace", display: 'none', pointerEvents: 'none' });

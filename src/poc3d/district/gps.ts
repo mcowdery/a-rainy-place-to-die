@@ -7,7 +7,10 @@ import type { CellPlan3 } from './plan';
  * A navigation grid over the district (NAV metres a square), one per way of getting about:
  * - walk: roads and plazas are the cheapest, open ground (parks, car parks) a little dearer, the gaps between
  *   buildings (yards, setbacks) dearest; buildings and set pieces blocked.
- * - drive: only the carriageways of streets and boulevards (kerb to kerb): no alleys, pavements, plazas, parks.
+ * - drive: the carriageways (kerb to kerb) of the proper streets, the ones with raised pavements (8 m and up,
+ *   where the traffic drives); the narrow shared lanes without pavements only at a heavy price (`LANE`), so a
+ *   route takes one only to reach a destination on it; no alleys, lanes too tight for a car, pavements, plazas
+ *   or parks.
  * An A* search over it (8 neighbours, no cutting corners past a blocked square) gives the route, straightened
  * (a leg runs straight while the ground under it stays as cheap) so its corners are real turns. Pure: tests
  * build it from the district's plans.
@@ -17,6 +20,9 @@ export const NAV = 3;
 const ROAD = 1;
 const OPEN = 1.6;
 const YARD = 4;
+/** Driving: a shared lane (no pavements) at least this wide takes a car, but costs `LANE` a square. */
+const TIGHT = 3.5;
+const LANE = 12;
 
 export interface NavSource {
   readonly bounds: { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number };
@@ -57,14 +63,20 @@ export class NavGrid {
     if (mode === 'drive') {
       // Carriageways only: each street's and boulevard's rect less its pavements, run on a few metres past its
       // ends to meet the crossing road's carriageway through the junction (not stop at its pavement)...
+      // Lanes first, so the main roads win where they meet.
       const ON = 5;
-      for (const [mx, my] of src.cells) {
-        for (const r of src.plan(mx, my)?.roads ?? []) {
-          if (r.kind === 'alley' || r.kind === 'coast') continue;
-          const q = r.rect;
-          const sw = r.sidewalk;
-          if (r.vertical) fill(q.x + sw, q.y - ON, q.w - 2 * sw, q.h + 2 * ON, ROAD);
-          else fill(q.x - ON, q.y + sw, q.w + 2 * ON, q.h - 2 * sw, ROAD);
+      for (const main of [false, true]) {
+        for (const [mx, my] of src.cells) {
+          for (const r of src.plan(mx, my)?.roads ?? []) {
+            if (r.kind === 'alley' || r.kind === 'coast') continue;
+            const q = r.rect;
+            const sw = r.sidewalk;
+            if ((sw > 0 || r.kind === 'boulevard') !== main) continue;
+            if ((r.vertical ? q.w : q.h) - 2 * sw < TIGHT) continue;
+            const c = main ? ROAD : LANE;
+            if (r.vertical) fill(q.x + sw, q.y - ON, q.w - 2 * sw, q.h + 2 * ON, c);
+            else fill(q.x - ON, q.y + sw, q.w + 2 * ON, q.h - 2 * sw, c);
+          }
         }
       }
       // ...but never into a building or a set piece (a street ending at one).

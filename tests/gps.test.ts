@@ -70,14 +70,17 @@ describe('GPS', () => {
     expect(pts[6].dz).toBeCloseTo(1);
   });
 
-  it('drives only on the carriageways of streets and boulevards (no alleys, pavements or plazas)', () => {
+  it('drives only on the carriageways of proper streets and boulevards (no lanes, alleys, pavements or plazas)', () => {
     const drive = new NavGrid({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL }, 'drive');
-    const onCarriageway = (x: number, z: number): boolean => {
+    const A0 = node('kaburo_crossing.view');
+    /** On a carriageway; `main`: of a proper street (raised pavements) or a boulevard, not a shared lane. */
+    const onCarriageway = (x: number, z: number, main: boolean): boolean => {
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           const p = district.plan(Math.floor(x / CELL) + dx, Math.floor(z / CELL) + dy);
           for (const r of p?.roads ?? []) {
             if (r.kind === 'alley' || r.kind === 'coast') continue;
+            if (main && r.sidewalk === 0 && r.kind !== 'boulevard') continue;
             const q = r.rect;
             const sw = r.sidewalk - 0.8;
             // Past a road's ends: its mouth across the crossing road's zebra, into the junction.
@@ -87,19 +90,29 @@ describe('GPS', () => {
       }
       return false;
     };
-    for (const [a, b] of [['kaburo_crossing.view', 'hotel_rouge.front'], ['bar_kanpai.out', 'the_peak.front'], ['the_peak.front', 'sakura_yu.front']] as const) {
-      const A = node(a);
-      const B = node(b);
+    // (A lane is fine near either end, to reach a place that's on one; the user's trip from a Sakuragaoka
+    // street to the crossing used to cut through the lanes.)
+    const trips: [{ x: number; z: number }, { x: number; z: number }, string][] = [
+      ...([['kaburo_crossing.view', 'hotel_rouge.front'], ['bar_kanpai.out', 'the_peak.front'], ['the_peak.front', 'sakura_yu.front']] as const).map(([a, b]) => [node(a), node(b), `${a} -> ${b}`] as [typeof A0, typeof A0, string]),
+      [{ x: 2101.8, z: 1280.8 }, node('kaburo_crossing.view'), 'Sakuragaoka -> crossing'],
+    ];
+    for (const [A, B, name] of trips) {
       const route = drive.route(A.x, A.z, B.x, B.z)!;
-      expect(route, `${a} -> ${b}`).not.toBeNull();
+      expect(route, name).not.toBeNull();
       let carLen = 0;
+      const total = route.reduce((t, p, i) => (i ? t + Math.hypot(p[0] - route[i - 1][0], p[1] - route[i - 1][1]) : 0), 0);
       for (let i = 0; i + 1 < route.length; i++) {
         const [ax, az] = route[i];
         const [bx, bz] = route[i + 1];
         const L = Math.hypot(bx - ax, bz - az);
+        if (i > 0 && i + 2 < route.length) {
+          for (let s = 0; s <= L; s += 1) {
+            const at = carLen + s;
+            const main = at > 80 && at < total - 80;
+            expect(onCarriageway(ax + ((bx - ax) * s) / L, az + ((bz - az) * s) / L, main), `${name} leg ${i} at ${s}${main ? ' (main road)' : ''}`).toBe(true);
+          }
+        }
         carLen += L;
-        if (i === 0 || i + 2 === route.length) continue;
-        for (let s = 0; s <= L; s += 1) expect(onCarriageway(ax + ((bx - ax) * s) / L, az + ((bz - az) * s) / L), `${a} -> ${b} leg ${i} at ${s}`).toBe(true);
       }
       // Driving never finds a shorter way than walking (it has fewer ways through).
       const walk = nav.route(A.x, A.z, B.x, B.z)!;
