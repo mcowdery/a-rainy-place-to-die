@@ -6,7 +6,7 @@ import { parseRail3, type RailLine3 } from './rail';
 import { parseSubway3, type SubwayNet3 } from './subway';
 import { parseTraffic3, type TrafficContent } from './traffic';
 import { parseZones3, ZoneMap } from './zones';
-import { parseRoads3, type Avenues } from './roads';
+import { parseBridges, parseRoads3, type Avenues, type Bridge3 } from './roads';
 import roadsText from '../../../content/world3d/roads.yaml?raw';
 import l0Text from '../../../content/world3d/l0.txt?raw';
 import placementsText from '../../../content/world3d/placements.yaml?raw';
@@ -24,6 +24,8 @@ export interface DistrictContent {
   readonly traffic: TrafficContent;
   readonly subway: SubwayNet3;
   readonly avenues: Avenues;
+  /** Street bridges over the water (roads.yaml `bridges`). */
+  readonly bridges: readonly Bridge3[];
 }
 
 /** Loads and cross-validates the 3D district content; throws ContentError listing every problem. */
@@ -44,8 +46,9 @@ export function loadDistrictContent(): DistrictContent {
   const traffic = macro ? parseTraffic3('content/world3d/traffic.yaml', trafficText, macro, errors) : { cars: [], buses: [], auto: null };
   const subway = parseSubway3('content/world3d/subway.yaml', subwayText, placed, errors, rail ? { id: rail.id, name: rail.name, nameEn: rail.nameEn, color: rail.color, x: rail.x } : null);
   const avenues = macro ? parseRoads3('content/world3d/roads.yaml', roadsText, macro, errors) : new Map();
+  const bridges = macro ? parseBridges('content/world3d/roads.yaml', roadsText, macro, errors) : [];
   const ids = zones.zones.map((z) => z.id);
   if (new Set(ids).size !== ids.length) errors.push('content/world3d/zones: zone ids must be unique across districts');
   if (errors.length > 0 || !macro || !atmosphere) throw new ContentError(errors);
-  return { macro, placed, atmosphere, zones, rail, traffic, subway, avenues };
+  return { macro, placed, atmosphere, zones, rail, traffic, subway, avenues, bridges };
 }

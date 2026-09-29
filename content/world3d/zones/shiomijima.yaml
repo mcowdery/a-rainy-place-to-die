@@ -1,0 +1,75 @@
+# 汐見島 Shiomi-jima, the harbour island (Odaiba-like; format: src/poc3d/district/zones.ts; the whole-city plan:
+# docs/city-plan.md), over the Shiomi bridge from the port. An event quarter across the middle (the TV station, the
+# concert hall), bayside towers to the south-east, and a seaside park round the west and east shores, where the
+# Sky Wheel stands in the open.
+district: harbor
+area: 汐見島 Shiomi-jima
+origin: [26, 23]
+map:
+  - PEEEEP
+  - PEEETT
+  - PPEEEP
+
+zones:
+  E:
+    id: shiomi_events
+    name: Shiomi event quarter
+    plan:
+      floors: [[3, 5, 50], [6, 10, 35], [12, 18, 15]]
+      lotW: [20, 36]
+      localStreet: [8, 12]
+      block: [40, 80]
+      lotGap: 0.5
+      signChance: 0.5
+      open: { parking: 0.15 }
+      setback: [3, 8]
+      streetTrees: 0.9
+      hedges: 0.6
+    signs:
+      words: [SHIOMI, BAYSIDE, EVENT HALL, CAFE, 展示場, シーサイド, FOOD COURT, GAME, CINEMA]
+      colors: ['#ffffff', '#4fe3ff', '#ff5fc8', '#ffe45f']
+    ads: { fun: 3, mainstream: 3, food: 2 }
+    look:
+      windows: { curtain: 40, ribbon: 40, blank: 20 }
+      walls: ['#d8dcdc', '#b8c4cc', '#e8e4dc', '#8a9aa8', '#c8b8a8']
+      tiled: false
+      shops: { colourful: 3, cool: 2, warm: 1 }
+      open: 0.9
+
+  T:
+    id: shiomi_towers
+    name: Shiomi bayside towers
+    plan:
+      towerCover: [0.25, 0.4]
+      # (Kept under the Sky Wheel's 110 m, so the wheel stands out over the island.)
+      floors: [[12, 18, 50], [19, 26, 50]]
+      signChance: 0.25
+      streetTrees: 0.9
+      hedges: 0.6
+    signs:
+      words: [BAYSIDE TOWER, HOTEL, 汐見, RESIDENCE, SKY LOUNGE]
+      colors: ['#ffffff', '#4fe3ff']
+    ads: { mainstream: 3, food: 1 }
+    look:
+      windows: { curtain: 55, balcony: 35, ribbon: 10 }
+      walls: ['#c8ccd0', '#a8b0b8', '#e0e0dc', '#8a949c']
+      tiled: false
+      shops: { cool: 3, warm: 1 }
+      open: 0.8
+
+  P:
+    id: shiomi_park
+    name: Shiomi seaside park
+    plan:
+      park: 0.85
+      floors: [[3, 5, 70], [6, 8, 30]]
+      lotW: [12, 20]
+      localStreet: [5, 8]
+      setback: [2, 4]
+    ads: { mainstream: 1 }
+    look:
+      windows: { curtain: 40, punched: 60 }
+      walls: ['#d8dcdc', '#c8c4bc']
+      tiled: false
+      shops: { cool: 2, warm: 2 }
+      open: 0.8

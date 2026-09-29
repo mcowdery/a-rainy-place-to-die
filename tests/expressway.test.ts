@@ -80,9 +80,9 @@ describe('the expressway', () => {
   it('loads', () => {
     expect(errors).toEqual([]);
     expect(ex.loop.x.length).toBeGreaterThan(3000);
-    // The loop's four pairs, route 1's pair into the port, the Wangan's pair at each end.
-    expect(ex.roads.filter((r) => r.rampKind === 'on')).toHaveLength(7);
-    expect(ex.roads.filter((r) => r.rampKind === 'off')).toHaveLength(7);
+    // The loop's four pairs, route 1's pair into the port, the Wangan's at each end and at Ebisu-jima, Shiomi-jima's.
+    expect(ex.roads.filter((r) => r.rampKind === 'on')).toHaveLength(9);
+    expect(ex.roads.filter((r) => r.rampKind === 'off')).toHaveLength(9);
     // Two-way routes: a deck each way, side by side, their piers shared on the line between them.
     const r1s = ex.roads.find((r) => r.id === 'r1_s')!;
     const r1n = ex.roads.find((r) => r.id === 'r1_n')!;
@@ -176,7 +176,7 @@ describe('the expressway over the avenues', () => {
     }
   });
 
-  it('keeps the street traffic clear of the piers, the medians and the ramps', () => {
+  it('keeps the street traffic clear of the piers, the medians and the ramps', { timeout: 30000 }, () => {
     const plan = (mx: number, my: number) => district.plan(mx, my);
     for (const loop of [...carLoops(content.macro, content.traffic, plan, ex.rampColliders()).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
       const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail] : []);

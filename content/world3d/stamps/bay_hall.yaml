@@ -1,0 +1,12 @@
+# TŌTO BAY HALL 東都ベイホール on Shiomi-jima (Zepp-like; real/port.ts, kind bay_hall): the mid-size concert hall,
+# tonight's show on the marquee, fans queueing with light sticks, the merch tent. Its door is a story door.
+id: bay_hall
+name: TŌTO BAY HALL
+footprint: [50, 36]
+height: 16.6
+front: north
+landmark: bay_hall
+nodes:
+  front: { kind: spawn, name: TŌTO BAY HALL (concerts), at: [25, 14], facing: south, view: [180, 10] }
+  door: { kind: door, name: TŌTO BAY HALL, at: [25, 0.6], returnSpawn: front }
+  staff: { kind: npc, name: Hall staff, at: [33, 1.4] }

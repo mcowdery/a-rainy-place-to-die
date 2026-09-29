@@ -1,0 +1,11 @@
+# The Shiomi Sky Wheel (real/port.ts, kind ferris_wheel): 100 m across, turning slowly, lit at night. The
+# boarding station is a story door (a ride together is a scene).
+id: ferris_wheel
+name: 汐見 SKY WHEEL
+footprint: [40, 24]
+height: 110
+front: south
+landmark: ferris_wheel
+nodes:
+  front: { kind: spawn, name: Shiomi Sky Wheel, at: [20, 22], facing: north, view: [0, 30] }
+  boarding: { kind: door, name: Sky Wheel boarding 乗り場, at: [20, 0.6], returnSpawn: front }

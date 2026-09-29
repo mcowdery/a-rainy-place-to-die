@@ -132,3 +132,29 @@ describe('GPS', () => {
     expect(nextTurn(route, 2, 0.5)).toEqual({ dist: 30, dir: 'arrive' });
   });
 });
+
+describe('the islands', () => {
+  const d = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues, content.bridges);
+  const src = { bounds: d.bounds, cells: d.cells, plan: (mx: number, my: number) => d.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL, bridges: content.bridges };
+
+  it('carries you over the Shiomi bridge: its deck is ground, the water beside it is not', () => {
+    const b = content.bridges.find((q) => q.name.includes('SHIOMI'))!;
+    const q = b.road.rect;
+    const mid = q.y + q.h / 2;
+    // The carriageways either side of the median, and the pavements.
+    for (const x of [q.x + 6, q.x + q.w - 6, q.x + 1.5]) expect(d.blocked(x, mid, 0.4), `${x}`).toBe(false);
+    expect(d.blocked(q.x + q.w / 2, mid, 0.4)).toBe(true);
+    expect(d.blocked(q.x - 3, mid, 0.4)).toBe(true);
+    expect(d.blocked(q.x + q.w + 3, mid, 0.4)).toBe(true);
+  });
+
+  it('drives from the crossing to Shiomi-jima over the bridge, and to Ebisu-jima', () => {
+    const drive = new Router(src, 'drive');
+    const from = node('kaburo_crossing.view');
+    const shiomi = drive.route(from.x, from.z, 29.5 * CELL, 24.5 * CELL);
+    expect(shiomi).not.toBeNull();
+    const b = content.bridges[0].road.rect;
+    expect(shiomi!.some(([x, z]) => Math.abs(x - (b.x + b.w / 2)) < 20 && z > b.y && z < b.y + b.h + 130)).toBe(true);
+    expect(drive.route(from.x, from.z, 16.5 * CELL, 22.6 * CELL)).not.toBeNull();
+  });
+});

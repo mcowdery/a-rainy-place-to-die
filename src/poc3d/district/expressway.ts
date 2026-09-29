@@ -41,6 +41,11 @@ export interface ExpresswayDef {
   readonly routes: readonly RouteDef[];
   /** On a route's leg (from point `leg` to the next), in its 128 m `block` (counted from the leg's start). */
   readonly ramps: readonly { readonly id: string; readonly kind: 'on' | 'off'; readonly route: string; readonly leg: number; readonly block: number; readonly name: string }[];
+  /**
+   * Suspension bridges (a look: the decks are the routes'): towers on a grid line at `from` and `to` (L0 rows or
+   * cols, fractional), straddling `width` metres of deck, main cables slung between them and down to anchors.
+   */
+  readonly suspension?: readonly { readonly col?: number; readonly row?: number; readonly from: number; readonly to: number; readonly width: number; readonly name: string }[];
   /** At a route's point `at` (a loop's corner, or an open route's last point), straight on into a tunnel. */
   readonly exits: readonly { readonly id: string; readonly venue: string; readonly route: string; readonly at: number; readonly length: number; readonly name: string }[];
 }

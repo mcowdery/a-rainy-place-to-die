@@ -1,0 +1,12 @@
+# 恵比寿島PA Ebisu-jima parking area (Daikoku-like; real/port.ts, kind parking_area): a floodlit lot off the Wangan
+# where the street-racing scene meets at night, the rest building and its vending machines, the spiral ramp.
+id: parking_area
+name: 恵比寿島PA Ebisu-jima PA
+footprint: [100, 100]
+height: 16
+front: north
+landmark: parking_area
+nodes:
+  front: { kind: spawn, name: Ebisu-jima PA (car meet), at: [30, 6], facing: south, view: [180, 6] }
+  racer: { kind: npc, name: Racer by the silver coupe, at: [14.5, -20.5], figure: { body: man, pose: pockets, color: '#c8d8ff' } }
+  vending: { kind: hotspot, name: Vending machines, at: [79, -55.8] }

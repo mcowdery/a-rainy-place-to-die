@@ -19,6 +19,12 @@ routes:
   - { id: r1_n, name: 1号線 北行, nameEn: ROUTE 1 NORTH, loop: false, offset: 5.2, pts: [[24, 21], [24, 13]] }
   - { id: wangan_e, name: 湾岸線 東行, nameEn: WANGAN EAST, loop: false, offset: 5.2, pts: [[7, 21], [36, 21]] }
   - { id: wangan_w, name: 湾岸線 西行, nameEn: WANGAN WEST, loop: false, offset: 5.2, pts: [[36, 21], [7, 21]] }
+# The branch off the Wangan over the Shiomi bridge's upper deck to Shiomi-jima.
+  - { id: shiomi_s, name: 汐見線 南行, nameEn: SHIOMI SOUTH, loop: false, offset: 5.2, pts: [[28, 21], [28, 24]] }
+  - { id: shiomi_n, name: 汐見線 北行, nameEn: SHIOMI NORTH, loop: false, offset: 5.2, pts: [[28, 24], [28, 21]] }
+# The suspension bridge (a look: its decks are the routes above and, below, the street bridge in roads.yaml).
+suspension:
+  - { col: 28, from: 22.1, to: 22.9, width: 36, name: 汐見大橋 }
 # Ramps, in the outside (left) lane of a route, over the inner lane of the avenue below: route, leg (from point
 # `leg` to the next), block (which 128 m block of that leg, from its start in the direction of travel). An
 # on-ramp rises from the start of its block; an off-ramp comes down to the end of its block. name: the district,
@@ -40,6 +46,11 @@ ramps:
   - { id: terminal_w_off, kind: off, route: wangan_w, leg: 0, block: 27, name: 東都港 TERMINAL }
   - { id: fishmarket_w_on, kind: on, route: wangan_w, leg: 0, block: 1, name: 東都市場 FISH MARKET }
   - { id: fishmarket_e_off, kind: off, route: wangan_e, leg: 0, block: 27, name: 東都市場 FISH MARKET }
+# Ebisu-jima (the parking area and the car meets), off the Wangan; Shiomi-jima, at the end of its branch.
+  - { id: ebisu_e_off, kind: off, route: wangan_e, leg: 0, block: 8, name: 恵比寿島PA EBISU-JIMA PA }
+  - { id: ebisu_w_on, kind: on, route: wangan_w, leg: 0, block: 19, name: 恵比寿島 EBISU-JIMA }
+  - { id: shiomi_off, kind: off, route: shiomi_s, leg: 0, block: 2, name: 汐見島 SHIOMI-JIMA }
+  - { id: shiomi_on, kind: on, route: shiomi_n, leg: 0, block: 0, name: 汐見島 SHIOMI-JIMA }
 # Exits to the passes: at a route's point (a loop's corner, or an open route's end) the outside lane runs straight
 # on into a tunnel (a spur), signed to a venue. length: the spur's run to the portal.
 exits:

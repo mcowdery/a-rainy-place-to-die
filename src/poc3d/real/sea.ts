@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { MacroMap } from '../../gen/macro';
+import type { Bridge3 } from '../district/roads';
 
 /**
  * The sea and the land round the city. Water over every L0 water cell (the bay, the river down to it), a little
@@ -46,7 +47,7 @@ function horizonFade(m: THREE.Material, horizon: { value: THREE.Color }, from = 
   m.customProgramCacheKey = () => `horizon-${from}-${to}`;
 }
 
-export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: number) => boolean, horizon: { value: THREE.Color }): Sea {
+export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: number) => boolean, horizon: { value: THREE.Color }, bridges: readonly Bridge3[] = []): Sea {
   const group = new THREE.Group();
   const material = new THREE.MeshStandardMaterial({ color: 0x0c1c26, roughness: 0.12, metalness: 0.35 });
   horizonFade(material, horizon);
@@ -147,5 +148,56 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
   ground.receiveShadow = true;
   ground.frustumCulled = false;
   group.add(ground);
+  for (const b of bridges) group.add(bridgeDeck(b));
   return { group, material };
+}
+
+/**
+ * A street bridge's deck (roads.ts Bridge3): the carriageway at street level on a deep girder, raised pavements
+ * either side, a planted median if it has one, lane paint, parapets with a rail, and lamps along the pavements.
+ */
+function bridgeDeck(b: Bridge3): THREE.Group {
+  const g = new THREE.Group();
+  const r = b.road;
+  const q = r.rect;
+  const v = r.vertical;
+  const W = v ? q.w : q.h;
+  const L = v ? q.h : q.w;
+  // Local frame: along (a, 0..L) and across (c, -W/2..W/2) to world boxes.
+  const box = (a0: number, a1: number, c0: number, c1: number, y0: number, y1: number, color: number, emissive = 0): void => {
+    const cx = v ? q.x + W / 2 + (c0 + c1) / 2 : q.x + (a0 + a1) / 2;
+    const cz = v ? q.y + (a0 + a1) / 2 : q.y + W / 2 + (c0 + c1) / 2;
+    const sx = v ? c1 - c0 : a1 - a0;
+    const sz = v ? a1 - a0 : c1 - c0;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, y1 - y0, sz), new THREE.MeshStandardMaterial({ color, roughness: 0.85, emissive: emissive ? color : 0x000000, emissiveIntensity: emissive }));
+    m.position.set(cx, (y0 + y1) / 2, cz);
+    m.receiveShadow = true;
+    g.add(m);
+  };
+  const sw = r.sidewalk;
+  box(0, L, -W / 2, W / 2, -2.4, -0.02, 0x2a2c2e);
+  box(0, L, -W / 2 + sw, W / 2 - sw, -0.1, 0.0, 0x26262a);
+  box(0, L, -W / 2, -W / 2 + sw, -0.1, 0.15, 0x8a8a86);
+  box(0, L, W / 2 - sw, W / 2, -0.1, 0.15, 0x8a8a86);
+  if (r.median) box(0, L, -r.median / 2, r.median / 2, -0.1, 0.2, 0x4a5a3a);
+  // Lane paint: a dashed line down each carriageway, the edge lines.
+  const half = r.median ? r.median / 2 : 0;
+  const lane = half + (W / 2 - sw - half) / 2;
+  for (let a = 2; a < L - 2; a += 10) for (const c of r.median ? [-lane, lane] : [0]) box(a, a + 5, c - 0.08, c + 0.08, 0.0, 0.012, 0xd8d8d0);
+  for (const c of [-W / 2 + sw + 0.5, W / 2 - sw - 0.5]) box(0, L, c - 0.08, c + 0.08, 0.0, 0.012, 0xd8d8d0);
+  // Parapets and their rail.
+  for (const s of [-1, 1]) {
+    const c = s * (W / 2 - 0.2);
+    box(0, L, c - 0.2, c + 0.2, 0.15, 0.95, 0x9a9a96);
+    box(0, L, c - 0.06, c + 0.06, 0.95, 1.25, 0x6a6e72);
+  }
+  // Lamps along the pavements, their heads glowing at night.
+  for (let a = 8; a < L - 4; a += 24) {
+    for (const s of [-1, 1]) {
+      const c = s * (W / 2 - sw + 0.5);
+      box(a - 0.1, a + 0.1, c - 0.1, c + 0.1, 0.15, 8, 0x5a5e62);
+      box(a - 0.4, a + 0.4, c - 0.25, c + 0.25, 7.8, 8.05, 0xffe2b0, 1.4);
+    }
+  }
+  return g;
 }

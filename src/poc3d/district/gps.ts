@@ -38,6 +38,8 @@ export interface NavSource {
   /** Set pieces' footprints (stamps). */
   readonly blocked: readonly Rect[];
   readonly cell: number;
+  /** Roads outside any cell's plan (street bridges over the water). */
+  readonly bridges?: readonly { readonly road: Road3 }[];
 }
 
 export type NavMode = 'walk' | 'drive';
@@ -129,7 +131,9 @@ export class RoadNet {
     const key = `${mx},${my}`;
     if (this.built.has(key)) return;
     this.built.add(key);
-    for (const r of this.src.plan(mx, my)?.roads ?? []) {
+    const C = this.src.cell;
+    const bridges = (this.src.bridges ?? []).map((b) => b.road).filter((r) => r.rect.x < (mx + 1) * C && r.rect.x + r.rect.w > mx * C && r.rect.y < (my + 1) * C && r.rect.y + r.rect.h > my * C);
+    for (const r of [...(this.src.plan(mx, my)?.roads ?? []), ...bridges]) {
       if (r.kind === 'coast') continue;
       const q = r.rect;
       const k = `${q.x},${q.y},${q.w},${q.h},${r.vertical ? 1 : 0}`;

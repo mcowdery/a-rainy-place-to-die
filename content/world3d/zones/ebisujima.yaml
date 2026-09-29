@@ -1,0 +1,29 @@
+# 恵比寿島 Ebisu-jima, reclaimed land off the port under the Wangan (format: src/poc3d/district/zones.ts; the
+# whole-city plan: docs/city-plan.md): warehouses and truck yards round its parking area, where the street-racing
+# scene meets at night (Daikoku-like; the PA is a set piece).
+district: harbor
+area: 恵比寿島 Ebisu-jima
+origin: [15, 22]
+map:
+  - WWWW
+  - WWWW
+
+zones:
+  W:
+    id: ebisu_warehouses
+    name: Ebisu-jima warehouses
+    plan:
+      yardCover: 0.3
+      floors: [[3, 4, 70], [5, 7, 30]]
+      signChance: 0.2
+      open: { parking: 0.2, vacant: 0.08 }
+    signs:
+      words: [倉庫, 恵比寿島, 物流, 冷蔵倉庫, TRUCK, 港運]
+      colors: ['#ffffff', '#ffe45f']
+    ads: { street: 1 }
+    look:
+      windows: { blank: 50, small: 35, ribbon: 15 }
+      walls: ['#9a9890', '#b8b4a8', '#7a7870', '#5a6a7a', '#a86a4a']
+      tiled: false
+      shops: { cool: 2 }
+      open: 0.2

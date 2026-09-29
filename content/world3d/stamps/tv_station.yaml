@@ -1,0 +1,11 @@
+# 東都テレビ TŌTO TV on Shiomi-jima (Fuji TV-like; real/port.ts, kind tv_station): two towers joined by a lattice of
+# sky bridges holding the titanium sphere. Its lobby is a story door.
+id: tv_station
+name: 東都テレビ TŌTO TV
+footprint: [80, 64]
+height: 94
+front: south
+landmark: tv_station
+nodes:
+  front: { kind: spawn, name: TŌTO TV (Shiomi-jima), at: [40, 14], facing: north, view: [0, 24] }
+  lobby: { kind: door, name: TŌTO TV lobby, at: [14, 0.6], returnSpawn: front }

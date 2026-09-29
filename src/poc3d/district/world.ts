@@ -12,7 +12,7 @@ import { DistrictModel } from './model';
 import { CELL, cellKey, DISTRICTS3, STYLES3, type Building3, type CellPlan3 } from './plan';
 import type { Node3, Placed3 } from './stamps';
 import type { ZoneMap } from './zones';
-import type { Avenues } from './roads';
+import type { Avenues, Bridge3 } from './roads';
 import { landmarkColliders, landmarkFloor, landmarkRaisedColliders, landmarkShelters, type Shelter } from './landmarks';
 import type { Rect } from '../../core/coords';
 import type { Interior } from '../real/interiors';
@@ -114,6 +114,8 @@ export class District {
     private readonly seed: number,
     zones?: ZoneMap,
     avenues?: Avenues,
+    /** Street bridges over the water (roads.ts): ground you can walk and drive, outside any cell. */
+    readonly bridges: readonly Bridge3[] = [],
   ) {
     this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues);
     this.nodes = placed.flatMap((p) => p.nodes);
@@ -328,7 +330,13 @@ export class District {
   }
 
   inDistrict(x: number, z: number): boolean {
-    return this.model.has(Math.floor(x / CELL), Math.floor(z / CELL));
+    if (this.model.has(Math.floor(x / CELL), Math.floor(z / CELL))) return true;
+    return this.bridges.some((b) => x >= b.road.rect.x && x <= b.road.rect.x + b.road.rect.w && z >= b.road.rect.y && z <= b.road.rect.y + b.road.rect.h);
+  }
+
+  /** On a bridge's median (solid, like an avenue's). */
+  private onBridgeMedian(x: number, z: number, r: number): boolean {
+    return this.bridges.some((b) => b.median !== null && x > b.median.x - r && x < b.median.x + b.median.w + r && z > b.median.y - r && z < b.median.y + b.median.h + r);
   }
 
   /** Collision: outside the district, inside a building footprint (this cell or a neighbour), a stamp or a prop. */
@@ -341,6 +349,7 @@ export class District {
     if (floor < -1) return (floor > -8 ? this.basementColliders : this.deepColliders).some(inRects) || inside();
     if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? [])) || inside();
     if (!this.inDistrict(x, z)) return true;
+    if (this.onBridgeMedian(x, z, r)) return true;
     const mx = Math.floor(x / CELL);
     const my = Math.floor(z / CELL);
     const hit = (b: Pick<Building3, 'x' | 'z' | 'w' | 'd'>): boolean => Math.abs(x - b.x) < b.w / 2 + r && Math.abs(z - b.z) < b.d / 2 + r;
@@ -368,6 +377,7 @@ export class District {
     for (const it of this.interiors.values()) if (inRects(it.colliders(0))) return 'wall';
     if (!this.inDistrict(x, z)) return 'wall';
     if (this.stampColliders.some(inRects) || inRects(this.extraColliders)) return 'wall';
+    if (this.onBridgeMedian(x, z, r)) return 'soft';
     const mx = Math.floor(x / CELL);
     const my = Math.floor(z / CELL);
     let found: 'car' | 'pole' | 'soft' | null = null;

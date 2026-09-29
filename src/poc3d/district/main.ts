@@ -139,7 +139,7 @@ async function run(): Promise<void> {
 
   const cityU = cityUniforms();
   const city = cityMaterial(cityU);
-  const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones, content.avenues);
+  const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones, content.avenues, content.bridges);
   // The Tōto Expressway's layout (expressway.ts): built here, as its entrances are places to go (the map, taxis).
   const exErrors: string[] = [];
   const exDef = parseExpressway('content/world3d/expressway.yaml', expresswayText, exErrors);
@@ -712,7 +712,7 @@ async function run(): Promise<void> {
   // The Tōto Expressway (expressway.ts): the elevated inner loop, its ramps and its exits to the passes.
   district.extraColliders.push(...expressway.streetColliders());
   // The bay and the river (real/sea.ts): water over the map's water cells, seawalls where built land meets it.
-  const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my), cityU.uHorizon);
+  const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my), cityU.uHorizon, content.bridges);
   scene.add(sea.group);
   if (debug) (window as unknown as { __sea: unknown }).__sea = { sea, renderer, horizon: cityU.uHorizon };
   const exView = buildExpressway(expressway, city);
@@ -936,7 +936,7 @@ async function run(): Promise<void> {
   const grids = new Map<NavMode, Router>();
   const navGrid = (mode: NavMode): Router => {
     let g = grids.get(mode);
-    if (!g) grids.set(mode, (g = new Router({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL }, mode)));
+    if (!g) grids.set(mode, (g = new Router({ bounds: district.bounds, cells: district.cells, plan: (mx, my) => district.plan(mx, my), blocked: content.placed.map((p) => p.rect), cell: CELL, bridges: content.bridges }, mode)));
     return g;
   };
   const guide = new Guide(navGrid);
@@ -1538,7 +1538,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        trains?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto')).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
+        trains?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,

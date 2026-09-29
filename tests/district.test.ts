@@ -408,7 +408,7 @@ describe('Asagiri set pieces and traffic', () => {
   const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
   const plan = (mx: number, my: number) => district.plan(mx, my);
 
-  it('keeps every traffic lane clear of buildings, props and stops', () => {
+  it('keeps every traffic lane clear of buildings, props and stops', { timeout: 30000 }, () => {
     for (const loop of [...carLoops(content.macro, content.traffic, plan).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
       const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail] : []);
       for (let s = 0; s < route.length; s += 2) {

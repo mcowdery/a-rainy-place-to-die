@@ -178,3 +178,20 @@
   stamp: quay_cranes
   cell: [9, 21]
   offset: [11, 96]
+# The bay's islands (docs/city-plan.md): Ebisu-jima's parking area; Shiomi-jima's TV station, wheel and concert hall.
+- id: ebisu_pa
+  stamp: parking_area
+  cell: [16, 22]
+  offset: [12, 14]
+- id: tv_station
+  stamp: tv_station
+  cell: [27, 23]
+  offset: [14, 36]
+- id: sky_wheel
+  stamp: ferris_wheel
+  cell: [31, 23]
+  offset: [44, 56]
+- id: bay_hall
+  stamp: bay_hall
+  cell: [30, 25]
+  offset: [38, 30]

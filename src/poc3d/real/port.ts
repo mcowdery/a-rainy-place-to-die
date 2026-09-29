@@ -20,8 +20,18 @@ import { EMIT } from './meshBuilder';
  * - ferry_terminal: the ferry terminal on the quay: a glass hall under a canopy, the departure board, and the
  *   ferry moored behind it with its gangway.
  * - gantry: the container terminal's quay cranes, three on their rails, booms out over the water.
+ * The islands:
+ * - parking_area: 恵比寿島PA on Ebisu-jima (Daikoku-like): a floodlit lot where the street-racing scene meets at
+ *   night (tuned cars in rows, their drivers round them), the rest building with its vending machines, and the
+ *   spiral ramp climbing round behind the lot.
+ * - tv_station: 東都テレビ on Shiomi-jima (Fuji TV-like): two towers joined by a lattice of sky bridges, and the
+ *   titanium sphere held in the lattice.
+ * - ferris_wheel: the big wheel on Shiomi-jima, 100 m across, turning slowly, its gondolas hanging level and its
+ *   rim lit at night.
+ * - bay_hall: TŌTO BAY HALL (Zepp-like), a black box concert hall: tonight's show on the marquee, fans queueing
+ *   with light sticks, the merch tent.
  */
-export const PORT_KINDS = ['fish_market', 'disco', 'tuning_shop', 'ferry_terminal', 'gantry'] as const;
+export const PORT_KINDS = ['fish_market', 'disco', 'tuning_shop', 'ferry_terminal', 'gantry', 'parking_area', 'tv_station', 'ferris_wheel', 'bay_hall'] as const;
 export type PortKind = (typeof PORT_KINDS)[number];
 
 type C3 = [number, number, number];
@@ -42,6 +52,17 @@ export function portColliders(kind: PortKind, b: Building3): Rect[] {
     case 'gantry':
       // Only the cranes' legs stand on the quay.
       return [15, 55, 95].flatMap((c) => [c - 8, c + 8].flatMap((u) => [R(u - 0.8, u + 0.8, 2, 3.6), R(u - 0.8, u + 0.8, 18.4, 20)]));
+    case 'parking_area': {
+      // The rest building, the vending machines along its front, the spiral's piers.
+      const piers = SPIRAL_PIERS.map(([u, t]) => R(u - 0.8, u + 0.8, t - 0.8, t + 0.8));
+      return [R(66, 96, 58, 92), R(68, 90, 56.6, 57.6), ...piers];
+    }
+    case 'tv_station':
+      return [R(0, 28, 8, 60), R(52, 80, 8, 60)];
+    case 'ferris_wheel':
+      return [R(10, 30, 4, 20), R(1, 3, 11, 13), R(37, 39, 11, 13)];
+    case 'bay_hall':
+      return [R(0, 50, 2, 36), R(36, 36.3, -6, -5.7), R(45.7, 46, -6, -5.7)];
   }
 }
 
@@ -57,6 +78,10 @@ export function portShelters(kind: PortKind, b: Building3): { rect: Rect; y0: nu
       return [R(0.5, 23.5, 0.6, 7, 0, 5)];
     case 'ferry_terminal':
       return [R(0, 40, -5, 3, 0, 6)];
+    case 'parking_area':
+      return [R(66, 96, 52, 58, 0, 4)];
+    case 'bay_hall':
+      return [R(10, 40, -3, 2, 0, 5), R(36, 46, -6, -1.5, 0, 3)];
     default:
       return [];
   }
@@ -81,6 +106,15 @@ export function portLights(kind: PortKind, b: Building3): Light[] {
       return [L(10, -2, 9, fluo, 0.7), L(30, -2, 9, fluo, 0.7), L(20, -4, 8, warm, 0.5)];
     case 'gantry':
       return [15, 55, 95].map((u) => L(u, 11, 22, [0.95, 0.95, 1.0], 0.9));
+    case 'parking_area':
+      // Tall floodlights over the lot, the rest building's glow.
+      return [...[[12, 18], [40, 18], [12, 44], [40, 44], [62, 30]].map(([u, t]) => L(u, t, 22, [0.95, 0.95, 1.0], 0.85)), L(80, 52, 10, warm, 0.8)];
+    case 'tv_station':
+      return [L(40, -4, 14, fluo, 0.6), L(14, 4, 8, warm, 0.6), L(66, 4, 8, warm, 0.6)];
+    case 'ferris_wheel':
+      return [L(20, -2, 12, [1.0, 0.7, 0.9], 0.7)];
+    case 'bay_hall':
+      return [L(25, -2, 12, [1.0, 0.5, 0.9], 0.8), L(41, -4, 6, warm, 0.7)];
   }
 }
 
@@ -102,7 +136,14 @@ function plate(k: Kit, w: number, h: number, u: number, t: number, y: number, dr
   return k.plane(k.canvas(W, H, (g) => draw(g, W, H)), w, h, u, t, y, facing, neon ? 1.4 : 1.0, neon);
 }
 
-export const PORT_BUILDERS: Record<PortKind, (k: Kit) => ((camera: THREE.Vector3, dt: number) => void) | void> = {
+/** The PA's spiral ramp: its centre and radius (local), and where its piers stand. */
+const SPIRAL = { u: 26, t: 76, r: 18, w: 8 } as const;
+const SPIRAL_PIERS: readonly [number, number][] = Array.from({ length: 8 }, (_, i) => {
+  const a = (i / 8) * Math.PI * 2;
+  return [SPIRAL.u + Math.cos(a) * SPIRAL.r, SPIRAL.t + Math.sin(a) * SPIRAL.r] as [number, number];
+});
+
+export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: string) => Kit) => ((camera: THREE.Vector3, dt: number) => void) | void> = {
   // ---- 東都中央卸売市場: the long wholesale hall (sawtooth roof, grey concrete), open loading bays under a deep
   // canopy with turret trucks and stacks of styrofoam boxes, and the outer market's shops at the west end ----
   fish_market(k) {
@@ -326,5 +367,249 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit) => ((camera: THREE.Vector3
       // Floodlights under the frame, onto the quay.
       k.glow([2.0, 2.0, 1.8], c - 7, c + 7, 10.6, 11.4, 12.6, 12.8, EMIT.lamp);
     }
+  },
+
+  // ---- 恵比寿島PA: a floodlit parking area where the racing scene meets. Rows of bays with tuned cars nose to
+  // nose and their drivers standing round them, the rest building with lit windows and a row of vending machines,
+  // tall floodlights, the green PA sign at the entrance, and the spiral ramp climbing round behind the lot ----
+  parking_area(k) {
+    k.box(0x2a2a2e, 0, 100, 0, 100, 0, 0.03);
+    // Bays: two rows facing each other across an aisle, twice over.
+    const PAINTS = [0xc81a1a, 0xe8e8e4, 0x1a1a1c, 0x2a5ad0, 0xe8c020, 0x8a2ac8, 0xd86a1e, 0x2a8a4a, 0xa8b0b8];
+    let n = 0;
+    for (const [t0, facing] of [[12, 1], [23, -1], [34, 1], [45, -1]] as const) {
+      for (let u = 6; u < 58; u += 2.8) {
+        k.box(0xd8d8d0, u - 0.06, u + 0.06, t0, t0 + 5.4, 0.03, 0.05);
+        const hot = (Math.sin(u * 3.1 + t0) * 43758.5453) % 1;
+        if (Math.abs(hot) < 0.6) car(k, u + 1.4, t0 + 2.7, 0, facing, 'sedan', PAINTS[n++ % PAINTS.length], 20 + n);
+      }
+    }
+    // Drivers in knots between the rows, some on their phones.
+    const knots: [number, number][] = [[14, 20.5], [30, 20.5], [48, 20.5], [20, 42.5], [40, 42.5]];
+    knots.forEach(([u, t], i) => {
+      k.person(u, t, 1, 0, { body: 'man', pose: 'talk', color: [0.8, 0.85, 1.0] });
+      k.person(u + 1.1, t - 0.4, -1, 0, { body: i % 2 ? 'woman' : 'man', pose: i % 3 ? 'stand' : 'phone', color: [1.0, 0.8, 0.9], ...(i % 2 ? { hair: 'long' as const } : {}) });
+      k.person(u + 0.5, t + 0.8, 0, -1, { body: 'man', pose: 'pockets', color: [0.75, 0.8, 0.9], hair: 'cap' });
+    });
+    // Floodlights: tall poles with a head of lamps.
+    for (const [u, t] of [[12, 18], [40, 18], [12, 44], [40, 44], [62, 30]] as const) {
+      k.post(0x6a6e72, u, t, 0, 16, 0.2, 8);
+      k.box(0x4a4e52, u - 1.4, u + 1.4, t - 0.5, t + 0.5, 15.6, 16.3);
+      k.glow([2.2, 2.2, 2.0], u - 1.3, u + 1.3, t - 0.45, t + 0.45, 15.5, 15.6, EMIT.lamp);
+    }
+    // The rest building: low, lit, a row of vending machines under its canopy, the toilets' signs.
+    k.facade(0xc8c8c0, [3, 0.5, 1.6, 1], 1 + 2 * 2, 66, 96, 58, 92, 0, 6, false);
+    k.box(0x5a5c5e, 64, 98, 52, 58, 3.8, 4.2);
+    k.lit(0xeef2f4, 64.2, 97.8, 52.2, 57.8, 3.78, 3.8, false, true);
+    const VEND = [[0.9, 0.2, 0.15], [0.2, 0.5, 1.0], [0.95, 0.95, 0.9], [1.0, 0.6, 0.1], [0.2, 0.8, 0.4]] as const;
+    for (let i = 0; i < 11; i++) {
+      const u = 68 + i * 2;
+      k.box([0xc82a2a, 0x2a5ad0, 0xe8e8e0, 0xd87a1a, 0x2a8a4a][i % 5], u, u + 1.8, 56.6, 57.6, 0, 1.9);
+      k.glow([VEND[i % 5][0] * 1.4, VEND[i % 5][1] * 1.4, VEND[i % 5][2] * 1.4], u + 0.1, u + 1.7, 56.55, 56.6, 0.9, 1.7, EMIT.always);
+    }
+    plate(k, 24, 2.2, 81, 57.95, 5.0, (g, W, H) => {
+      g.fillStyle = '#1a6a3a';
+      g.fillRect(0, 0, W, H);
+      text(g, '恵比寿島パーキングエリア', W / 2, H * 0.55, `bold ${Math.round(H * 0.52)}px 'Yu Gothic', sans-serif`, '#ffffff');
+    });
+    // The green PA sign at the entrance.
+    k.post(0x6a6e72, 50, -2, 0, 6.5, 0.15, 8);
+    plate(k, 7, 3.2, 50, -2.25, 5.0, (g, W, H) => {
+      g.fillStyle = '#1a6a3a';
+      g.fillRect(0, 0, W, H);
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = 6;
+      g.strokeRect(6, 6, W - 12, H - 12);
+      text(g, 'P 恵比寿島', W / 2, H * 0.36, `bold ${Math.round(H * 0.28)}px 'Yu Gothic', sans-serif`, '#ffffff');
+      text(g, 'EBISU-JIMA PA', W / 2, H * 0.74, `bold ${Math.round(H * 0.2)}px Arial, sans-serif`, '#ffffff');
+    });
+    // The spiral: a ramp deck climbing two turns round behind the lot, on piers, parapets and lamps along it.
+    const { u: cu, t: ct, r, w } = SPIRAL;
+    const steps = 96;
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 4;
+      const y = 5 + (i / steps) * 10;
+      const u = cu + Math.cos(a) * r;
+      const t = ct + Math.sin(a) * r;
+      k.box(0x8a8a84, u - 1.7, u + 1.7, t - 1.7, t + 1.7, y - 1, y);
+      const uo = cu + Math.cos(a) * (r + w / 2);
+      const to = ct + Math.sin(a) * (r + w / 2);
+      k.box(0x9a9a96, uo - 0.4, uo + 0.4, to - 0.4, to + 0.4, y, y + 1.1);
+      const ui = cu + Math.cos(a) * (r - w / 2);
+      const ti = ct + Math.sin(a) * (r - w / 2);
+      k.box(0x8a8a84, ui - 1.2, ui + 1.2, ti - 1.2, ti + 1.2, y - 1, y);
+      if (i % 8 === 0) k.glow([2.4, 1.1, 0.3], uo - 0.3, uo + 0.3, to - 0.3, to + 0.3, y + 5, y + 5.3, EMIT.lamp);
+    }
+    for (const [u, t] of SPIRAL_PIERS) k.box(0x8a8a84, u - 0.8, u + 0.8, t - 0.8, t + 0.8, 0, 5);
+  },
+
+  // ---- 東都テレビ TŌTO TV: two towers of glass and grey steel joined by a lattice of sky bridges, the titanium
+  // sphere held in the lattice between them, the name on the east tower and a plaza under the lattice ----
+  tv_station(k) {
+    const STEEL = 0x8a949c;
+    for (const [u0, u1] of [[0, 28], [52, 80]] as const) {
+      k.facade(0xb8c0c8, [2.4, 0.6, 1.4, 2], 1 + 1 * 2, u0, u1, 8, 60, 0, 92, true);
+      k.box(0x6a747c, u0, u1, 8, 60, 92, 94);
+    }
+    // The lattice: beams across between the towers at every level, and posts, a grid of sky bridges.
+    for (const y of [22, 38, 54, 70, 86]) {
+      for (const t of [12, 24, 36, 48]) k.box(STEEL, 28, 52, t - 1, t + 1, y - 1.5, y);
+      for (const u of [34, 40, 46]) k.box(STEEL, u - 0.6, u + 0.6, 12, 48, y - 1.5, y);
+    }
+    for (const u of [34, 46]) for (const t of [12, 48]) k.box(STEEL, u - 0.6, u + 0.6, t - 0.6, t + 0.6, 22, 86);
+    // The sphere, in the lattice's upper storeys.
+    const R = 15;
+    const rings: [number, number][] = [];
+    for (let i = 0; i <= 12; i++) {
+      const a = -Math.PI / 2 + (i / 12) * Math.PI;
+      rings.push([70 + Math.sin(a) * R, Math.max(0.01, Math.cos(a) * R)]);
+    }
+    k.lathe(0xd0d4d8, 40, 30, rings, 24);
+    k.glow([1.6, 1.4, 1.1], 38, 42, 15.5, 16, 68, 72, EMIT.lamp);
+    // The plaza's canopy and the name.
+    k.box(0x5a646c, 28, 52, 2, 8, 6, 6.4);
+    k.lit(0xe8eef0, 28.2, 51.8, 2.2, 7.8, 5.98, 6.0);
+    plate(k, 20, 3.6, 66, 7.9, 30, (g, W, H) => {
+      g.fillStyle = '#e8eef0';
+      g.fillRect(0, 0, W, H);
+      g.fillStyle = '#e8401a';
+      g.beginPath();
+      g.arc(H * 0.5, H * 0.5, H * 0.34, 0, Math.PI * 2);
+      g.fill();
+      text(g, '東都テレビ', W * 0.58, H * 0.45, `bold ${Math.round(H * 0.4)}px 'Yu Gothic', sans-serif`, '#1a2a4a');
+      text(g, 'TŌTO TV', W * 0.58, H * 0.82, `bold ${Math.round(H * 0.2)}px Arial, sans-serif`, '#e8401a');
+    });
+    k.person(36, -3, 0, 1, { body: 'woman', pose: 'phone', color: [1.0, 0.85, 0.9] });
+    k.person(44, -2, -1, 0, { body: 'man', pose: 'walk', color: [0.8, 0.9, 1.0] });
+  },
+
+  // ---- The big wheel: 100 m across on two A-frame legs over its boarding station, turning once every eight
+  // minutes; the gondolas hang level as it turns, and the rim and spokes are lit at night ----
+  ferris_wheel(k, _id, part) {
+    const HUB = { u: 20, t: 12, y: 58 };
+    const R = 50;
+    // The boarding station and the legs (static).
+    k.box(0xe8ecec, 10, 30, 4, 20, 0, 5);
+    k.lit(0xf4e8f0, 10.5, 29.5, 3.9, 4, 0.2, 4.6, true);
+    for (const du of [-18, 18]) {
+      for (const dt of [-6, 6]) {
+        // A leg from the ground out wide up to the hub: stacked boxes stepping in.
+        const u0 = HUB.u + du;
+        const t0 = HUB.t + dt;
+        const n = 24;
+        for (let i = 0; i < n; i++) {
+          const f = i / n;
+          const u = u0 + (HUB.u - u0) * f;
+          const t = t0 + (HUB.t - t0) * f * 0.8;
+          k.box(0xe8ecec, u - 0.7, u + 0.7, t - 0.7, t + 0.7, (HUB.y * i) / n, (HUB.y * (i + 1)) / n + 0.2);
+        }
+      }
+    }
+    plate(k, 18, 2, 20, 3.9, 6.2, (g, W, H) => {
+      g.fillStyle = '#1a1a2a';
+      g.fillRect(0, 0, W, H);
+      neonText(g, '汐見 SKY WHEEL', W / 2, H * 0.55, `bold ${Math.round(H * 0.55)}px 'Yu Gothic', sans-serif`, '#ff8ad8');
+    }, true);
+    // The wheel (a separate part, turned about the hub): rim, spokes, the hub, lights on the rim.
+    const w = part('wheel');
+    const at = (a: number, r: number): [number, number] => [HUB.u + Math.cos(a) * r, HUB.y + Math.sin(a) * r];
+    const SEG = 72;
+    for (let i = 0; i < SEG; i++) {
+      const a = (i / SEG) * Math.PI * 2;
+      const [u, y] = at(a, R);
+      for (const dt of [-1.8, 1.8]) w.box(0xe0e4e8, u - 2.3, u + 2.3, HUB.t + dt - 0.35, HUB.t + dt + 0.35, y - 2.3, y + 2.3);
+      // A ring of lights on the rim, in bands of pink, blue and gold (bright enough to read from the mainland).
+      const c = [[3.2, 0.5, 2.4], [0.7, 1.6, 3.2], [3.2, 2.2, 0.6]][Math.floor(i / 6) % 3] as [number, number, number];
+      w.glow(c, u - 0.9, u + 0.9, HUB.t - 2.5, HUB.t - 2.2, y - 0.9, y + 0.9, EMIT.neon);
+      w.glow(c, u - 0.9, u + 0.9, HUB.t + 2.2, HUB.t + 2.5, y - 0.9, y + 0.9, EMIT.neon);
+    }
+    const SPOKES = 18;
+    for (let i = 0; i < SPOKES; i++) {
+      const a = (i / SPOKES) * Math.PI * 2;
+      for (let r = 3; r < R; r += 3) {
+        const [u, y] = at(a, r);
+        w.box(0xc8ccd0, u - 0.3, u + 0.3, HUB.t - 0.3, HUB.t + 0.3, y - 0.3, y + 0.3);
+      }
+    }
+    w.box(0xb8bcc0, HUB.u - 2.5, HUB.u + 2.5, HUB.t - 3, HUB.t + 3, HUB.y - 2.5, HUB.y + 2.5);
+    // The gondolas: one instanced mesh, placed each frame round the rim, always level.
+    const GONDOLAS = 36;
+    const gm = new THREE.InstancedMesh(new THREE.BoxGeometry(2.6, 2.4, 2.4), new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.1, emissive: 0xffffff, emissiveIntensity: 0.12 }), GONDOLAS);
+    const COL = [0xe84a8a, 0x4a8ae8, 0xe8c84a, 0x4ae88a, 0xe87a3a, 0xa84ae8];
+    for (let i = 0; i < GONDOLAS; i++) gm.setColorAt(i, new THREE.Color(COL[i % COL.length]));
+    gm.frustumCulled = false;
+    k.group.add(gm);
+    const f = k.f;
+    const hub = toWorld(f, HUB.u, HUB.t);
+    // The wheel's axis is across its face (the local t direction, into the lot): world -n.
+    const axis = new THREE.Vector3(-f.n[0], 0, -f.n[2]).normalize();
+    let angle = 0;
+    let pivot: THREE.Object3D | null = null;
+    const m = new THREE.Matrix4();
+    const along = new THREE.Vector3(f.r[0], 0, f.r[2]);
+    return (_c, dt) => {
+      // The wheel part is built by now (finish runs before the first update): hang it on a pivot at the hub.
+      if (!pivot && w.group.parent) {
+        pivot = new THREE.Object3D();
+        pivot.position.set(hub[0], HUB.y, hub[1]);
+        w.group.parent.add(pivot);
+        pivot.add(w.group);
+        w.group.position.set(-hub[0], -HUB.y, -hub[1]);
+      }
+      angle = (angle + dt * ((Math.PI * 2) / 480)) % (Math.PI * 2);
+      if (pivot) pivot.quaternion.setFromAxisAngle(axis, angle);
+      for (let i = 0; i < GONDOLAS; i++) {
+        const a = (i / GONDOLAS) * Math.PI * 2 + angle;
+        // Round the rim in the wheel's plane (along r and up), hanging 2.4 m below its pin.
+        const x = hub[0] + along.x * Math.cos(a) * (R - 1);
+        const z = hub[1] + along.z * Math.cos(a) * (R - 1);
+        const y = HUB.y + Math.sin(a) * (R - 1) - 2.4;
+        m.makeTranslation(x, y, z);
+        gm.setMatrixAt(i, m);
+      }
+      gm.instanceMatrix.needsUpdate = true;
+    };
+  },
+
+  // ---- TŌTO BAY HALL: a black box hall with tonight's show on the marquee, fans queueing along the front with
+  // light sticks, the merch tent, and the tour's trucks round the side ----
+  bay_hall(k) {
+    const BLACK = 0x16161a;
+    k.box(BLACK, 0, 50, 2, 36, 0, 16);
+    k.box(0x222228, 0, 50, 2, 36, 16, 16.6);
+    // The entrance: glass doors under a lit canopy.
+    k.lit(0x3a2a3a, 18, 32, 1.95, 2, 0, 3.8, true);
+    k.box(0x2a2a30, 10, 40, -3, 2, 4.6, 5.0);
+    k.lit(0xf0d8f0, 10.2, 39.8, -2.8, 1.8, 4.58, 4.6);
+    // The name, and the marquee with tonight's show.
+    plate(k, 34, 3.2, 25, 1.9, 12.4, (g, W, H) => {
+      g.fillStyle = '#08080a';
+      g.fillRect(0, 0, W, H);
+      neonText(g, 'TŌTO BAY HALL', W / 2, H * 0.45, `900 ${Math.round(H * 0.5)}px Arial, sans-serif`, '#ffffff');
+      text(g, '東都ベイホール', W / 2, H * 0.85, `bold ${Math.round(H * 0.22)}px 'Yu Gothic', sans-serif`, '#ff8ad8');
+    }, true);
+    plate(k, 26, 2.6, 25, 1.9, 7.6, (g, W, H) => {
+      g.fillStyle = '#1a0a1a';
+      g.fillRect(0, 0, W, H);
+      g.strokeStyle = '#ffe45f';
+      g.lineWidth = 5;
+      g.strokeRect(5, 5, W - 10, H - 10);
+      text(g, 'TONIGHT ✦ STELLA PRODUCTION PRESENTS', W / 2, H * 0.34, `bold ${Math.round(H * 0.18)}px Arial, sans-serif`, '#ffe45f');
+      text(g, '星屑ガールズ LIVE 2026', W / 2, H * 0.7, `bold ${Math.round(H * 0.3)}px 'Yu Gothic', sans-serif`, '#ff8ad8');
+    }, true);
+    // The queue along the front, light sticks up (waving), and a few more by the merch tent.
+    for (let i = 0; i < 14; i++) {
+      const u = 2 + i * 1.1;
+      k.person(u, -1.2 - (i % 2) * 0.8, 1, 0, { body: i % 3 === 0 ? 'woman' : 'man', pose: i % 4 === 0 ? 'wave' : i % 4 === 1 ? 'phone' : 'stand', color: i % 2 ? [1.0, 0.6, 0.9] : [0.6, 0.8, 1.0], ...(i % 3 === 0 ? { hair: 'long' as const } : {}) });
+    }
+    // The merch tent.
+    k.box(0xe8e8e8, 36, 46, -6, -1.5, 2.8, 3.0);
+    k.lit(0xfff0f8, 36.2, 45.8, -5.8, -1.7, 2.78, 2.8);
+    for (const u of [36.15, 45.85]) for (const t of [-5.85, -1.65]) k.post(0xc8c8c8, u, t, 0, 2.8, 0.06, 6);
+    k.box(0xd84a8a, 36.5, 45.5, -2.4, -1.8, 0, 1.0);
+    k.person(41, -3, 0, -1, { body: 'woman', pose: 'stand', color: [1.0, 0.85, 0.9] });
+    // The tour's trucks round the side.
+    car(k, 54, 20, 0, 1, 'minivan', 0xe8e8e4, 31);
+    car(k, 54, 28, 0, 1, 'minivan', 0x1a1a1c, 32);
   },
 };

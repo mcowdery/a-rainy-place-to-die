@@ -106,17 +106,109 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
     const cell = 128;
     const nearJ = Math.hypot(p.x - Math.round(p.x / cell) * cell, p.z - Math.round(p.z / cell) * cell) < 20;
     if (nearJ) continue;
-    box(CONCRETE, p.x, p.z, 0, p.top, 1.4, 1.4);
-    const road = ex.loop;
-    // The beam across the deck: its long side across the road here.
+    // Down below the street (and the water, where a route crosses the bay).
+    box(CONCRETE, p.x, p.z, -4, p.top, 1.4, 1.4);
+    // The beam across the deck (both decks of a two-way route): its long side across the road here.
     let best = 0;
+    let road = ex.loop;
     let bd = Infinity;
-    for (let i = 0; i < road.x.length; i += 4) {
-      const d = Math.hypot(road.x[i] - p.x, road.z[i] - p.z);
-      if (d < bd) [best, bd] = [i, d];
+    for (const r of ex.roads) {
+      if (r.kind === 'ramp') continue;
+      for (let i = 0; i < r.x.length; i += 4) {
+        const d = Math.hypot(r.x[i] - r.tz[i] * (r.offset ?? 0) - p.x, r.z[i] + r.tx[i] * (r.offset ?? 0) - p.z);
+        if (d < bd) [best, bd, road] = [i, d, r];
+      }
     }
     const across = Math.abs(road.tx[best]) > 0.7;
-    box(CONCRETE, p.x, p.z, p.top - 1.2, p.top, across ? 1.6 : ex.def.half * 2 + 1, across ? ex.def.half * 2 + 1 : 1.6);
+    const span = (Math.abs(road.offset ?? 0) + ex.def.half) * 2 + 1;
+    box(CONCRETE, p.x, p.z, p.top - 1.2, p.top, across ? 1.6 : span, across ? span : 1.6);
+  }
+  // Suspension bridges: two towers, the main cables slung between them and down to anchors beyond, hangers down
+  // to the deck, and lamps along the cables (lit at night, like the Rainbow Bridge's).
+  for (const sb of ex.def.suspension ?? []) {
+    const v = sb.col !== undefined;
+    const line = (v ? sb.col! : sb.row!) * 128;
+    const a0 = sb.from * 128;
+    const a1 = sb.to * 128;
+    const D = ex.def.deck;
+    const TOP = D + 55;
+    const hw = sb.width / 2;
+    const at = (a: number, c: number): [number, number] => (v ? [line + c, a] : [a, line + c]);
+    // The towers: two legs each side of the decks, cross beams, a cap.
+    for (const a of [a0, a1]) {
+      for (const c of [-hw - 1.5, hw + 1.5]) {
+        const [x, z] = at(a, c);
+        box(0xe8ecec, x, z, -4, TOP, 3, 3);
+      }
+      for (const y of [D - 3, D + 22, TOP - 3]) {
+        const [x, z] = at(a, 0);
+        box(0xe8ecec, x, z, y, y + 2.5, v ? sb.width + 6 : 3, v ? 3 : sb.width + 6);
+      }
+    }
+    // A cable as a chain of sloped strips from point to point: a vertical ribbon and a flat one along each
+    // segment, both faces (so it reads as a round cable from any side, with no steps on the steep runs).
+    const cable = (pts: [number, number, number][]): void => {
+      mb.kind = KIND.plain;
+      mb.color = lin(0xd8dcdc);
+      const r = 0.22;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const [ax, ay, az] = pts[i];
+        const [bx, by, bz] = pts[i + 1];
+        const dx = bx - ax;
+        const dz = bz - az;
+        const l = Math.hypot(dx, dz) || 1;
+        // Across the cable, level.
+        const cx = (-dz / l) * r;
+        const cz = (dx / l) * r;
+        const up: V3 = [0, 1, 0];
+        const side: V3 = [-dz / l, 0, dx / l];
+        const ribbon = (p0: V3, p1: V3, p2: V3, p3: V3, n: V3): void => {
+          quad(p0, p1, p2, p3, n);
+          quad(p0, p3, p2, p1, [-n[0], -n[1], -n[2]]);
+        };
+        ribbon([ax, ay - r, az], [bx, by - r, bz], [bx, by + r, bz], [ax, ay + r, az], side);
+        ribbon([ax - cx, ay, az - cz], [ax + cx, ay, az + cz], [bx + cx, by, bz + cz], [bx - cx, by, bz - cz], up);
+      }
+    };
+    const back = 70;
+    for (const c of [-hw - 1.5, hw + 1.5]) {
+      const pts: [number, number, number][] = [];
+      // From the anchor before the first tower, up to its top, the sag across the main span, down to the far anchor.
+      const [bx0, bz0] = at(a0 - back, c);
+      pts.push([bx0, D + 1, bz0]);
+      const main = 24;
+      for (let k = 0; k <= main; k++) {
+        const t = k / main;
+        const a = a0 + (a1 - a0) * t;
+        const sag = TOP - 2 - (TOP - 2 - (D + 4)) * (1 - (2 * t - 1) ** 2);
+        const [x, z] = at(a, c);
+        pts.push([x, sag, z]);
+      }
+      const [bx1, bz1] = at(a1 + back, c);
+      pts.push([bx1, D + 1, bz1]);
+      cable(pts);
+      // Hangers every 8 m across the main span; lamps along the cable.
+      for (let a = a0 + 8; a < a1 - 4; a += 8) {
+        const t = (a - a0) / (a1 - a0);
+        const sag = TOP - 2 - (TOP - 2 - (D + 4)) * (1 - (2 * t - 1) ** 2);
+        const [x, z] = at(a, c);
+        box(0xc8cccc, x, z, D + 1, sag, 0.15, 0.15);
+        mb.kind = KIND.emit;
+        mb.style = [EMIT.lamp, 0, 0, 0];
+        mb.color = [2.2, 2.0, 1.6];
+        mb.box(x, z, sag + 0.3, sag + 0.7, 0.4, 0.4, KIND.emit, true);
+        mb.style = [0, 0, 0, 0];
+      }
+    }
+    // The tower tops' red aircraft lights.
+    for (const a of [a0, a1]) {
+      const [x, z] = at(a, 0);
+      mb.kind = KIND.emit;
+      mb.style = [EMIT.always, 0, 0, 0];
+      mb.color = [3.0, 0.2, 0.15];
+      mb.box(x, z, TOP - 0.5, TOP + 0.6, 1.2, 1.2, KIND.emit, true);
+      mb.style = [0, 0, 0, 0];
+    }
   }
   for (const L of lampHeads) {
     // The pole on the parapet, the arm, the head (a sodium lamp: orange, on at night).
