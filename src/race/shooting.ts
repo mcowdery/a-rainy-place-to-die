@@ -365,8 +365,18 @@ export class Shooting {
     if (!this.bodies.length) return null;
     this.ray.set(origin, dir);
     this.ray.far = far;
-    const h = this.ray.intersectObjects(this.bodies, false)[0];
-    if (!h) return null;
+    const hits = this.ray.intersectObjects(this.bodies, false);
+    if (!hits.length) return null;
+    // Through a window (not the roof: steel) to a head behind it; into the side of the body at a wheel, the tyre.
+    let h = hits[0];
+    const part = (x: THREE.Intersection): string => x.object.userData.part as string;
+    const window = !!h.face && h.face.normal.clone().transformDirection(h.object.matrixWorld).y < 0.5;
+    for (const k of hits.slice(1)) {
+      if ((part(h) === 'glass' && window && part(k) === 'head' && k.distance - h.distance < 2.2) || (part(h) === 'body' && part(k) === 'tyre' && k.distance - h.distance < 0.35)) {
+        h = k;
+        break;
+      }
+    }
     const normal = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : dir.clone().negate();
     return { id: h.object.userData.id as string, object: h.object, point: h.point.clone(), normal, distance: h.distance };
   }
@@ -413,12 +423,14 @@ export class Shooting {
     this.shots++;
     const dir = ctx.aimPoint.clone().sub(muzzle).normalize();
     // The pistol's assist (aiming only): a target within a couple of degrees pulls the shot most of the way to its centre.
-    if (W.id === 'pistol' && !ctx.hip && this.assist) {
+    // Only when the shot would miss (a precise shot at a tyre or a head stays where it's aimed), and only toward
+    // a car's body, never a tyre or a head.
+    if (W.id === 'pistol' && !ctx.hip && this.assist && !this.castBodies(muzzle, dir, 400)) {
       let best = 0.035;
       let pull: THREE.Vector3 | null = null;
       const centres = [
         ...this.targets.list.filter((t) => t.fall <= 0.3).map((t) => this.targets.centre(t, new THREE.Vector3())),
-        ...this.bodies.map((b) => b.getWorldPosition(new THREE.Vector3())),
+        ...this.bodies.filter((b) => b.userData.part === 'body').map((b) => b.getWorldPosition(new THREE.Vector3())),
       ];
       for (const at of centres) {
         const c = at.sub(muzzle);

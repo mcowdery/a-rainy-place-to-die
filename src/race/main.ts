@@ -5,7 +5,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { cityMaterial, cityUniforms } from '../poc3d/real/city';
 import { DAMAGE, HEALTH, PAINT_PENALTY, RivalDriver, separateCars, type Arms } from './battle';
-import { addHeadlights, buildCar, CarMarks, hitVolumes, poseCar, turnWheels } from './carView';
+import { addHeadlights, buildCar, CarMarks, hitVolumes, poseCar, turnWheels, type Part } from './carView';
 import { loadCourses } from './courses';
 import { buildVenue } from './scene';
 import { GunSound } from './gunSound';
@@ -155,8 +155,9 @@ const startTrial = (): void => {
 };
 
 // ---- Battle: the rival, a red coupe on the same handling model (RivalDriver drives it), armed as you are.
-// Real guns: each hit takes health (more through the glass); a car at none is out, coasting to a stop, and the
-// first down wins. Paintball: each hit you take adds PAINT_PENALTY seconds to your time; the lower total wins.
+// Real guns: each hit takes health (more through the glass); a tyre shot out or a round in the driver's head
+// is lethal. A car at none is out (it spins or coasts to a stop) and loses at once; otherwise the first down
+// wins. Shooting the rival's gunman silences his gun. Paintball: each hit you take adds PAINT_PENALTY seconds to your time; the lower total wins.
 const inBattle = kind === 'battle';
 const rivalCar = new Car(COUPE, DRIFT_ASSISTS);
 const rivalView = buildCar(0xc01818, carMat);
@@ -168,7 +169,7 @@ rivalShooting.seat = 'left';
 const playerMarks = new CarMarks(carObj);
 const rivalMarks = new CarMarks(rivalView.obj);
 let rivalTrial: Trial | null = null;
-const FRESH = { you: HEALTH, them: HEALTH, youTaken: 0, themTaken: 0, youOut: false, themOut: false, youOutAt: 0, youTime: null as number | null, themTime: null as number | null, cool: 2, aimT: 0, burstLeft: 3, burstT: 0.8 };
+const FRESH = { you: HEALTH, them: HEALTH, youTaken: 0, themTaken: 0, youOut: false, themOut: false, youOutAt: 0, themOutAt: 0, youWhy: '', themWhy: '', youDead: false, gunmanDown: false, youTime: null as number | null, themTime: null as number | null, cool: 2, aimT: 0, burstLeft: 3, burstT: 0.8 };
 const fight = { ...FRESH };
 /** The outcome; a time is null for a car that hadn't finished (then `youSoFar`/`themSoFar`: its clock when it was settled). */
 let battleResult: { win: boolean; why: string; you: number | null; them: number | null; youPen: number; themPen: number; youSoFar: number; themSoFar: number } | null = null;
@@ -182,7 +183,7 @@ if (inBattle) {
   rivalView.obj.add(rivalShooting.arm);
   shooting.pickWeapon(arms === 'gun' ? 0 : 1);
   rivalShooting.pickWeapon(arms === 'gun' ? 0 : 1);
-  shooting.bodies.push(...hitVolumes(rivalView.obj, 'them'));
+  shooting.bodies.push(...hitVolumes(rivalView.obj, 'them', true));
   rivalShooting.bodies.push(...hitVolumes(carObj, 'you'));
   shooting.onBody = (h, k, col) => struck('them', h, k, col);
   rivalShooting.onBody = (h, k, col) => struck('you', h, k, col);
@@ -202,28 +203,63 @@ function startBattle(t: Trial): void {
   rivalShooting.reset();
 }
 
-/** A shot struck a car: the mark on it, then damage (real guns) or a penalty second (paint). */
+/** A car is out: why, and when (the result waits a moment so you see it go). A blown tyre spins it. */
+function knockOut(who: 'you' | 'them', why: string, tyre: boolean): void {
+  const c = who === 'you' ? car : rivalCar;
+  if (tyre) c.r += (Math.random() < 0.5 ? -1 : 1) * (1.2 + Math.random());
+  if (who === 'you') {
+    fight.you = 0;
+    fight.youOut = true;
+    fight.youOutAt = elapsed.t;
+    fight.youWhy = why;
+  } else {
+    fight.them = 0;
+    fight.themOut = true;
+    fight.themOutAt = elapsed.t;
+    fight.themWhy = why;
+  }
+}
+
+/** A shot struck a car: the mark on it (not on a head: that's inside), then damage (real guns) or a penalty (paint). */
 function struck(who: 'you' | 'them', h: BodyHit, k: 'bullet' | 'paint', col?: THREE.Color): void {
-  (who === 'you' ? playerMarks : rivalMarks).add(h.point, h.normal, k, col);
+  const part = h.object.userData.part as Part;
+  if (part !== 'head') (who === 'you' ? playerMarks : rivalMarks).add(h.point, h.normal, k, col);
   if (who === 'you' ? fight.youOut : fight.themOut) return;
-  const glass = !!h.object.userData.glass;
+  const glass = part === 'glass' || part === 'head';
   if (arms === 'gun') {
-    const dmg = glass ? DAMAGE.glass : DAMAGE.body;
+    const gunman = h.object.userData.who === 'gunman';
     if (who === 'them') {
-      fight.them = Math.max(0, fight.them - dmg);
-      pops.push({ text: `${glass ? 'THROUGH THE GLASS' : 'HIT'} −${dmg}`, t: 1.4 });
-      if (fight.them === 0) {
-        fight.themOut = true;
-        pops.push({ text: 'RIVAL DOWN', t: 2.5 });
+      if (part === 'head' && gunman) {
+        if (!fight.gunmanDown) pops.push({ text: 'HEADSHOT  the gunman is down', t: 2.5 });
+        fight.gunmanDown = true;
+      } else if (part === 'head') {
+        pops.push({ text: 'HEADSHOT', t: 2.5 });
+        knockOut('them', 'You shot the rival driver.', false);
+      } else if (part === 'tyre') {
+        pops.push({ text: 'TYRE SHOT OUT', t: 2.5 });
+        knockOut('them', "You shot out the rival's tyre.", true);
+      } else {
+        const dmg = glass ? DAMAGE.glass : DAMAGE.body;
+        fight.them = Math.max(0, fight.them - dmg);
+        pops.push({ text: `${glass ? 'THROUGH THE GLASS' : 'HIT'} −${dmg}`, t: 1.4 });
+        if (fight.them === 0) {
+          pops.push({ text: 'RIVAL DOWN', t: 2.5 });
+          knockOut('them', 'You shot the rival car to pieces.', false);
+        }
       }
     } else {
-      fight.you = Math.max(0, fight.you - dmg);
-      hurtT = glass ? 0.7 : 0.45;
       hurtColor = 'rgba(255, 40, 50, ';
+      hurtT = glass ? 0.7 : 0.45;
       shake = glass ? 0.8 : 0.45;
-      if (fight.you === 0) {
-        fight.youOut = true;
-        fight.youOutAt = elapsed.t;
+      if (part === 'head') {
+        fight.youDead = true;
+        knockOut('you', 'You were shot through the window.', false);
+      } else if (part === 'tyre') {
+        shake = 1.2;
+        knockOut('you', 'Your tyre was shot out.', true);
+      } else {
+        fight.you = Math.max(0, fight.you - (glass ? DAMAGE.glass : DAMAGE.body));
+        if (fight.you === 0) knockOut('you', 'Your car was shot to pieces.', false);
       }
     }
   } else if (who === 'them') {
@@ -244,7 +280,7 @@ function struck(who: 'you' | 'them', h: BodyHit, k: 'bullet' | 'paint', col?: TH
  */
 function rivalGun(dt: number): void {
   const S = rivalShooting;
-  const live = inBattle && trial?.phase === 'running' && !fight.themOut && !fight.youOut && fight.themTime === null && fight.youTime === null;
+  const live = inBattle && trial?.phase === 'running' && !fight.themOut && !fight.youOut && !fight.gunmanDown && fight.themTime === null && fight.youTime === null;
   if (!live) {
     S.arm.visible = false;
     fight.aimT = 0;
@@ -254,7 +290,8 @@ function rivalGun(dt: number): void {
   carObj.updateMatrixWorld();
   // From the gunman's eye (the driver's, mirrored to the left seat); his windows are the driver's mirrored.
   const eye = rivalView.obj.localToWorld(new THREE.Vector3(-EYE.x, EYE.y, EYE.z));
-  const at = carObj.localToWorld(new THREE.Vector3(0, 0.8, 0.2));
+  // He aims at the cabin (a stray low round can still find a tyre).
+  const at = carObj.localToWorld(new THREE.Vector3(0, 0.95, 0.1));
   const dist = eye.distanceTo(at);
   const dl = at.clone().sub(eye).applyQuaternion(rivalView.obj.quaternion.clone().invert()).normalize();
   const side = sideFor(-Math.atan2(dl.x, dl.z), Math.asin(THREE.MathUtils.clamp(dl.y, -1, 1)));
@@ -269,7 +306,7 @@ function rivalGun(dt: number): void {
   const rv = vel(rivalCar);
   const aimPoint = at.clone().addScaledVector(vel(car).sub(rv), arms === 'paint' ? dist / 88 : 0);
   const miss = (0.45 + dist * 0.045 + (car.speed + rivalCar.speed) * 0.02 + (side === 'across' ? 0.6 : 0)) / rivalDrv.skill;
-  aimPoint.add(new THREE.Vector3(Math.random() - 0.5, (Math.random() - 0.5) * 0.6, Math.random() - 0.5).multiplyScalar(miss * 2));
+  aimPoint.add(new THREE.Vector3(Math.random() - 0.5, (Math.random() - 0.5) * 0.3, Math.random() - 0.5).multiplyScalar(miss * 2));
   S.pose(rivalView.obj, aimPoint, side);
   if (fight.aimT < 0.8 || fight.cool > 0) return;
   const ctx = { aimPoint, carVel: rv, across: side === 'across', hip: false, slide: rivalCar.slide, speed: rivalCar.speed, mult: 1, why: '' };
@@ -298,8 +335,11 @@ function decideBattle(): void {
     battleResult = { win, why, you: fight.youTime, them: fight.themTime, youPen: pen(fight.youTaken), themPen: pen(fight.themTaken), youSoFar: trial!.t, themSoFar: rivalTrial!.t };
   };
   if (arms === 'gun') {
-    if (fight.youOut && elapsed.t - fight.youOutAt > 1.5) return end(false, 'Your car was shot to pieces.');
-    if (fight.youTime !== null) return end(true, fight.themOut ? 'You shot the rival off the pass and made it down.' : 'You crossed the line first.');
+    // A car out ends it (after a moment to see it go); otherwise the first down wins.
+    if (fight.youOut && elapsed.t - fight.youOutAt > 1.5) return end(false, fight.youWhy);
+    if (fight.themOut && elapsed.t - fight.themOutAt > 1.5) return end(true, fight.themWhy);
+    if (fight.youOut || fight.themOut) return;
+    if (fight.youTime !== null) return end(true, 'You crossed the line first.');
     if (fight.themTime !== null) return end(false, 'The rival crossed the line first.');
     return;
   }
@@ -592,9 +632,10 @@ const drawTrialHud = (dt: number): void => {
       const t = (x: number | null, pen: number, soFar: number): string =>
         x === null ? `${clock(soFar)} so far${pen ? ` + ${pen} s` : ''}` : pen ? `${clock(x)} + ${pen} s = ${clock(x + pen)}` : clock(x);
       const rows = [
-        `<div>You<span>${fight.youOut ? 'wrecked' : t(r.you, r.youPen, r.youSoFar)}</span></div>`,
-        `<div>Rival<span>${fight.themOut ? 'wrecked' : t(r.them, r.themPen, r.themSoFar)}</span></div>`,
+        `<div>You<span>${fight.youOut ? (fight.youDead ? 'shot' : 'out') : t(r.you, r.youPen, r.youSoFar)}</span></div>`,
+        `<div>Rival<span>${fight.themOut ? 'out' : t(r.them, r.themPen, r.themSoFar)}</span></div>`,
         arms === 'gun' ? `<div>Your car<span>${fight.you}%</span></div><div>Rival's car<span>${fight.them}%</span></div>` : `<div>Paint on the rival<span>${fight.themTaken}</span></div><div>Paint on you<span>${fight.youTaken}</span></div>`,
+        arms === 'gun' && fight.gunmanDown ? `<div>Rival's gunman<span>shot</span></div>` : '',
         `<div>Your shots<span>${shooting.hits} of ${shooting.shots} hit</span></div>`,
       ].join('');
       resultsEl.innerHTML = `<div class="head">${course.def.name}  ${label}  ⚔ ${arms === 'gun' ? 'real guns' : 'paintball'}</div><div class="time ${r.win ? 'win' : 'lose'}">${r.win ? 'YOU WIN' : 'YOU LOSE'}</div><div class="prev">${r.why}</div><div class="splits">${rows}</div><small>Enter  again · M  venues</small>`;
@@ -628,9 +669,12 @@ const drawBattleHud = (dt: number): void => {
   if (on) {
     rivalEl.style.left = `${((p.x + 1) / 2) * window.innerWidth}px`;
     rivalEl.style.top = `${((1 - p.y) / 2) * window.innerHeight}px`;
-    rivalEl.innerHTML = `${fight.themOut ? 'WRECKED' : 'RIVAL'} ${Math.round(d)} m${arms === 'gun' ? `<i><b style="width:${fight.them}%"></b></i>` : ` · +${fight.themTaken} s`}`;
+    rivalEl.innerHTML = `${fight.themOut ? 'OUT' : fight.gunmanDown ? 'RIVAL (unarmed)' : 'RIVAL'} ${Math.round(d)} m${arms === 'gun' ? `<i><b style="width:${fight.them}%"></b></i>` : ` · +${fight.themTaken} s`}`;
   }
   hurtT = Math.max(0, hurtT - dt);
+  // Shot dead: the view darkens to a deep red.
+  const dead = fight.youDead ? Math.min(1, (elapsed.t - fight.youOutAt) / 1.2) : 0;
+  hurtEl.style.background = dead > 0 ? `rgba(40, 0, 4, ${(dead * 0.78).toFixed(2)})` : 'none';
   hurtEl.style.boxShadow = hurtT > 0 ? `inset 0 0 ${Math.round(80 + hurtT * 160)}px ${hurtColor}${Math.min(0.85, hurtT * 1.6).toFixed(2)})` : 'none';
 };
 

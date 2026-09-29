@@ -10,7 +10,10 @@ import type { Car, Controls } from './vehicle';
 
 export type Arms = 'gun' | 'paint';
 
-/** Real guns: a car's health, and the damage of a hit on the body or through the glass. */
+/**
+ * Real guns: a car's health, and the damage of a hit on the body or through the glass. A tyre shot out or a
+ * round in the driver's head is lethal: the car is out at once (a gunman's head silences his gun).
+ */
 export const HEALTH = 100;
 export const DAMAGE = { body: 6, glass: 12 } as const;
 /** Paintball: seconds added to your time for each hit you take. */

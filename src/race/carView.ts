@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { addVehicle, addWheel, wheelLayout } from '../poc3d/models/vehicles';
 import { MeshBuilder } from '../poc3d/real/meshBuilder';
-import { decalTexture } from './shooting';
+import { decalTexture, EYE } from './shooting';
 import type { Car, Ground } from './vehicle';
 
 /**
@@ -75,23 +75,35 @@ export function turnWheels(v: CarView, c: Car, dt: number): void {
   }
 }
 
+/** The part of a car a shot struck: its body, its glass, a tyre, or someone's head (the driver's, or a gunman's). */
+export type Part = 'body' | 'glass' | 'tyre' | 'head';
+
 /**
- * What shots strike: the lower body and the glasshouse above it (a hit there is through the glass), as
- * invisible boxes in the car's frame, tagged with `id` (and `glass`).
+ * What shots strike, as invisible volumes in the car's frame tagged with `id`, their `part` and (heads) `who`:
+ * the lower body, the glasshouse above it, the four tyres (standing just proud of the body's sides, so a shot at
+ * a wheel finds the tyre), and the heads inside: the driver's on the right, and a gunman's on the left if the car
+ * carries one. Shooting.castBodies lets a round through the glass reach a head behind it.
  */
-export function hitVolumes(obj: THREE.Object3D, id: string): THREE.Mesh[] {
+export function hitVolumes(obj: THREE.Object3D, id: string, gunman = false): THREE.Mesh[] {
   const mat = new THREE.MeshBasicMaterial();
-  const lower = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.8, 4.3), mat);
-  lower.position.set(0, 0.6, 0);
-  const glass = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.34, 1.9), mat);
-  glass.position.set(0, 1.08, -0.25);
-  const boxes = [lower, glass];
-  boxes.forEach((b, i) => {
-    b.visible = false;
-    b.userData = { id, glass: i === 1 };
-    obj.add(b);
-  });
-  return boxes;
+  const vols: THREE.Mesh[] = [];
+  const add = (geo: THREE.BufferGeometry, x: number, y: number, z: number, part: Part, who?: 'driver' | 'gunman'): void => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.visible = false;
+    m.userData = { id, part, who };
+    obj.add(m);
+    vols.push(m);
+  };
+  add(new THREE.BoxGeometry(1.78, 0.8, 4.3), 0, 0.6, 0, 'body');
+  add(new THREE.BoxGeometry(1.34, 0.34, 1.9), 0, 1.08, -0.25, 'glass');
+  const tyre = new THREE.BoxGeometry(0.44, WL.r * 2.05, WL.r * 2.05);
+  for (const w of WL.spots) add(tyre, Math.sign(w.x) * 0.73, WL.r, w.z, 'tyre');
+  // Heads sit inside the glasshouse (below its roof), reached only through a window.
+  const head = new THREE.SphereGeometry(0.13, 12, 8);
+  add(head, EYE.x, EYE.y, EYE.z - 0.04, 'head', 'driver');
+  if (gunman) add(head, -EYE.x, EYE.y, EYE.z - 0.04, 'head', 'gunman');
+  return vols;
 }
 
 /** Marks shots leave on a car: bullet holes and paint splats, stuck to it where they struck (the oldest go first). */
