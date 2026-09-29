@@ -9,6 +9,8 @@ const COLORS: Record<CellKind, string> = {
   oldtown: '#b0845a',
   harbor: '#7a7a82',
   beach: '#d8c890',
+  electric: '#e08a4a',
+  campus: '#9a8ac8',
   water: '#1a3a5a',
   void: '#0b0b10',
 };

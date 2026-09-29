@@ -46,7 +46,7 @@ export const COAST_WIDTH = 3;
 
 const NEON = ['neon_pink', 'neon_cyan', 'neon_yellow', 'neon_green', 'neon_red'] as const;
 
-export const STYLES: Readonly<Record<DistrictId, DistrictStyle>> = {
+const BASE_STYLES: Readonly<Record<Exclude<DistrictId, 'electric' | 'campus'>, DistrictStyle>> = {
   residential: {
     fill: 'ground', coast: 'sidewalk',
     edgeRoads: [3, 3, 4], localStreet: [2, 3], blockW: [18, 40], blockH: [12, 22],
@@ -119,3 +119,7 @@ export const STYLES: Readonly<Record<DistrictId, DistrictStyle>> = {
     yard: 'sand',
   },
 };
+
+/** The 3D city's newer kinds borrow the nearest 2D look (the 2D prototype is set aside). */
+export const STYLES: Readonly<Record<DistrictId, DistrictStyle>> = { ...BASE_STYLES, electric: BASE_STYLES.neon, campus: BASE_STYLES.residential };
+

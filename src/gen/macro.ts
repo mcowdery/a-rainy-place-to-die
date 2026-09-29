@@ -3,7 +3,8 @@
  * Stamps are anchored to macro cells (not raw tile coords), so re-tuning cell size keeps them in place.
  */
 
-export const DISTRICTS = ['residential', 'tower', 'neon', 'oldtown', 'harbor', 'beach'] as const;
+/** (electric: an Akihabara-like electric town; campus: a university and its student town. The 3D city's L0.) */
+export const DISTRICTS = ['residential', 'tower', 'neon', 'oldtown', 'harbor', 'beach', 'electric', 'campus'] as const;
 export type DistrictId = (typeof DISTRICTS)[number];
 export type CellKind = DistrictId | 'water' | 'void';
 
@@ -14,6 +15,8 @@ export const CELL_CHARS: Readonly<Record<string, CellKind>> = {
   O: 'oldtown',
   H: 'harbor',
   B: 'beach',
+  E: 'electric',
+  U: 'campus',
   '~': 'water',
   '.': 'void',
 };
