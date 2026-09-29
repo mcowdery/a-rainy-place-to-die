@@ -53,7 +53,7 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
       mb.kind = KIND.paint;
       mb.color = lin(0xe8e8e0);
       for (const lat of [h - 0.9, -(h - 0.9)]) quad(L(i, lat + 0.08, 0.02), L(j, lat + 0.08, 0.02), L(j, lat - 0.08, 0.02), L(i, lat - 0.08, 0.02), [0, 1, 0]);
-      if (road.kind === 'loop' && k % 12 < 6) quad(L(i, 0.08, 0.02), L(j, 0.08, 0.02), L(j, -0.08, 0.02), L(i, -0.08, 0.02), [0, 1, 0]);
+      if ((road.kind === 'loop' || road.kind === 'route') && k % 12 < 6) quad(L(i, 0.08, 0.02), L(j, 0.08, 0.02), L(j, -0.08, 0.02), L(i, -0.08, 0.02), [0, 1, 0]);
       // Each edge: a wall (a parapet with a rail) unless another road carries on past it (a merge).
       for (const s of [1, -1]) {
         const lat = s * h;
@@ -134,7 +134,7 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
   // Gantry signs over the deck before each exit (green, white lettering), and at street level a sign before
   // each entrance, on the avenue's median.
   for (const road of ex.roads) {
-    if (road.kind === 'loop') continue;
+    if (road.kind === 'loop' || road.kind === 'route') continue;
     if (road.rampKind === 'on') {
       group.add(entranceSign(road));
       continue;

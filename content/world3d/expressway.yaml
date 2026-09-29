@@ -1,30 +1,33 @@
-# The Tōto Expressway (東都高速, 都心環状線 inner loop): an elevated one-way loop over the cell-edge roads round
-# Asagiri and Kaburo, Shuto-style (format and layout: src/poc3d/district/expressway.ts), above the avenues
-# of roads.yaml (32 m, the piers in their medians).
-# loop: the L0 cell-edge rectangle it follows [col0, row0, col1, row1], driven clockwise on the map (east along
-# the north side); deck: the road surface's height (m; clear of the Toto Line's viaduct, 8 m, and its trains);
-# radius: the corners (m, tight, Shuto-like); half: the deck's half-width (two lanes and a shoulder).
-name: 東都高速 都心環状線
-nameEn: TOTO EXPRESSWAY · INNER LOOP
-loop: [21, 10, 31, 13]
+# The Tōto Expressway (東都高速): elevated routes over the cell-edge roads, Shuto-style (format and layout:
+# src/poc3d/district/expressway.ts), above the avenues of roads.yaml (32 m, the piers in their medians). So far
+# the inner loop (都心環状線) round Asagiri and Kaburo.
+# The network (docs/city-plan.md has where it's going: route 4 to Kurokami, route 1 and the Wangan to the port).
+# routes: each a list of L0 grid points [col, row] (its corners), driven in that order; loop: true closes it back
+# to its first point (the inner loop, clockwise on the map: east along its north side). deck: the road surface's
+# height (m; clear of the Toto Line's viaduct, 8 m, and its trains); radius: the corners (m, tight, Shuto-like);
+# half: the deck's half-width (two lanes and a shoulder).
+name: 東都高速
+nameEn: TOTO EXPRESSWAY
 deck: 15
 radius: 20
 half: 4.6
-# Ramps, in the outside (left) lane of the deck, over the inner lane of the avenue below: side: north | east |
-# south | west; block: which 128 m block of that side (counted from the side's start corner in the direction
-# of travel: north runs east from the NW corner, south west from the SE corner). An on-ramp rises from the
-# start of its block; an off-ramp comes down to the end of its block. name: the district, for the signs.
+routes:
+  - { id: c1, name: 都心環状線, nameEn: INNER LOOP, loop: true, pts: [[21, 10], [31, 10], [31, 13], [21, 13]] }
+# Ramps, in the outside (left) lane of a route, over the inner lane of the avenue below: route, leg (from point
+# `leg` to the next), block (which 128 m block of that leg, from its start in the direction of travel). An
+# on-ramp rises from the start of its block; an off-ramp comes down to the end of its block. name: the district,
+# for the signs.
 ramps:
-  - { id: asagiri_n_off, kind: off, side: north, block: 2, name: 朝霧 ASAGIRI }
-  - { id: asagiri_n_on, kind: on, side: north, block: 3, name: 朝霧 ASAGIRI }
-  - { id: kaburo_n_off, kind: off, side: north, block: 6, name: 歌舞路 KABURO }
-  - { id: kaburo_n_on, kind: on, side: north, block: 7, name: 歌舞路 KABURO }
-  - { id: kaburo_s_off, kind: off, side: south, block: 2, name: 歌舞路 KABURO }
-  - { id: kaburo_s_on, kind: on, side: south, block: 3, name: 歌舞路 KABURO }
-  - { id: asagiri_s_off, kind: off, side: south, block: 6, name: 朝霧 ASAGIRI }
-  - { id: asagiri_s_on, kind: on, side: south, block: 7, name: 朝霧 ASAGIRI }
-# Exits to the passes: at a corner the outside lane runs straight on into a tunnel (a spur), signed to a venue.
-# corner: nw | ne | se | sw (the corner the loop turns at); length: the spur's run to the portal.
+  - { id: asagiri_n_off, kind: off, route: c1, leg: 0, block: 2, name: 朝霧 ASAGIRI }
+  - { id: asagiri_n_on, kind: on, route: c1, leg: 0, block: 3, name: 朝霧 ASAGIRI }
+  - { id: kaburo_n_off, kind: off, route: c1, leg: 0, block: 6, name: 歌舞路 KABURO }
+  - { id: kaburo_n_on, kind: on, route: c1, leg: 0, block: 7, name: 歌舞路 KABURO }
+  - { id: kaburo_s_off, kind: off, route: c1, leg: 2, block: 2, name: 歌舞路 KABURO }
+  - { id: kaburo_s_on, kind: on, route: c1, leg: 2, block: 3, name: 歌舞路 KABURO }
+  - { id: asagiri_s_off, kind: off, route: c1, leg: 2, block: 6, name: 朝霧 ASAGIRI }
+  - { id: asagiri_s_on, kind: on, route: c1, leg: 2, block: 7, name: 朝霧 ASAGIRI }
+# Exits to the passes: at a route's point (a loop's corner, or an open route's end) the outside lane runs straight
+# on into a tunnel (a spur), signed to a venue. length: the spur's run to the portal.
 exits:
-  - { id: kurokami, venue: kurokami, corner: nw, length: 110, name: 黒神峠 KUROKAMI }
-  - { id: yunagi, venue: yunagi, corner: ne, length: 110, name: 夕凪峠 YŪNAGI }
+  - { id: kurokami, venue: kurokami, route: c1, at: 0, length: 110, name: 黒神峠 KUROKAMI }
+  - { id: yunagi, venue: yunagi, route: c1, at: 1, length: 110, name: 夕凪峠 YŪNAGI }

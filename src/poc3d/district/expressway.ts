@@ -3,30 +3,40 @@ import type { Rect } from '../../core/coords';
 import { CELL } from './plan';
 
 /**
- * The Tōto Expressway (content/world3d/expressway.yaml): an elevated one-way loop over the cell-edge roads,
- * its ramps down to the street and back up, and spurs at two corners that run on into tunnels to the passes.
- * Pure geometry, so the tests drive it: each road is a centreline sampled every metre with a height and a
- * half-width, and the network is their union. A point is on the network where it lies within a road at
- * (about) the height you're at, so ramps merge with the deck where their areas overlap at the same height,
- * and everywhere else the edge is a wall. Also: the piers and the ramps' solid undersides, as rects for the
- * street's collision.
+ * The Tōto Expressway (content/world3d/expressway.yaml): a network of elevated routes over the cell-edge roads,
+ * ramps down to the street and back up, and spurs that run on into tunnels to the passes. A route is a list of
+ * L0 grid points (its corners, rounded at `radius`); a closed one is a loop (the inner loop, C1), an open one
+ * runs from its first point to its last (a radial, the Wangan). Routes are one-way, driven in the order of their
+ * points; keep left, so the outside lane is the left one, and ramps and exits leave from it.
  *
- * The loop is driven clockwise on the map (east along its north side); keep left, so the outside lane is the
- * left one, and ramps and exits leave from it.
+ * Pure geometry, so the tests drive it: each road is a centreline sampled every metre with a height and a
+ * half-width, and the network is their union. A point is on the network where it lies within a road at (about)
+ * the height you're at, so ramps and routes merge where their areas overlap at the same height (a route that
+ * starts or ends on another joins it there), and everywhere else the edge is a wall. Also: the piers and the
+ * ramps' solid undersides, as rects for the street's collision.
  */
 
-export type Side = 'north' | 'east' | 'south' | 'west';
-export type Corner = 'nw' | 'ne' | 'se' | 'sw';
+export interface RouteDef {
+  readonly id: string;
+  readonly name: string;
+  readonly nameEn: string;
+  /** Closed (a loop, back to its first point) or open. */
+  readonly loop: boolean;
+  /** Its corners: L0 grid points [col, row], in the direction of travel. */
+  readonly pts: readonly (readonly [number, number])[];
+}
 
 export interface ExpresswayDef {
   readonly name: string;
   readonly nameEn: string;
-  readonly loop: readonly [number, number, number, number];
   readonly deck: number;
   readonly radius: number;
   readonly half: number;
-  readonly ramps: readonly { readonly id: string; readonly kind: 'on' | 'off'; readonly side: Side; readonly block: number; readonly name: string }[];
-  readonly exits: readonly { readonly id: string; readonly venue: string; readonly corner: Corner; readonly length: number; readonly name: string }[];
+  readonly routes: readonly RouteDef[];
+  /** On a route's leg (from point `leg` to the next), in its 128 m `block` (counted from the leg's start). */
+  readonly ramps: readonly { readonly id: string; readonly kind: 'on' | 'off'; readonly route: string; readonly leg: number; readonly block: number; readonly name: string }[];
+  /** At a route's point `at` (a loop's corner, or an open route's last point), straight on into a tunnel. */
+  readonly exits: readonly { readonly id: string; readonly venue: string; readonly route: string; readonly at: number; readonly length: number; readonly name: string }[];
 }
 
 export function parseExpressway(file: string, text: string, errors: string[]): ExpresswayDef | null {
@@ -40,18 +50,42 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
     return null;
   }
   const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-  if (!Array.isArray(d.loop) || d.loop.length !== 4 || !d.loop.every(num) || d.loop[0] >= d.loop[2] || d.loop[1] >= d.loop[3]) err('loop: [col0, row0, col1, row1]');
   for (const k of ['deck', 'radius', 'half']) if (!num(d[k]) || (d[k] as number) <= 0) err(`${k}: a positive number`);
-  const sides = ['north', 'east', 'south', 'west'];
+  const routes = new Map<string, { loop: boolean; legs: number[] }>();
+  if (!Array.isArray(d.routes) || d.routes.length === 0) err('routes: a list');
+  else
+    d.routes.forEach((r: Record<string, unknown>, i: number) => {
+      const pts = r?.pts as unknown;
+      const ok = typeof r?.id === 'string' && typeof r.name === 'string' && typeof r.nameEn === 'string' && typeof r.loop === 'boolean' && Array.isArray(pts) && pts.every((p) => Array.isArray(p) && p.length === 2 && p.every((v) => Number.isInteger(v)));
+      if (!ok) return err(`routes[${i}]: { id, name, nameEn, loop: true|false, pts: [[col, row], ...] }`);
+      const P = pts as [number, number][];
+      if (P.length < (r.loop ? 3 : 2)) return err(`routes[${i}]: a loop needs 3 points, a route 2`);
+      if (routes.has(r.id as string)) return err(`routes[${i}]: id ${r.id} twice`);
+      const legs: number[] = [];
+      for (let k = 0; k < (r.loop ? P.length : P.length - 1); k++) {
+        const [a, b] = [P[k], P[(k + 1) % P.length]];
+        if (a[0] !== b[0] && a[1] !== b[1]) err(`routes[${i}]: leg ${k} must run along a grid line`);
+        legs.push(Math.hypot(b[0] - a[0], b[1] - a[1]) * CELL);
+      }
+      routes.set(r.id as string, { loop: r.loop as boolean, legs });
+    });
   if (!Array.isArray(d.ramps)) err('ramps: a list');
   else
     d.ramps.forEach((r: Record<string, unknown>, i: number) => {
-      if (typeof r?.id !== 'string' || !['on', 'off'].includes(r.kind as string) || !sides.includes(r.side as string) || !num(r.block) || typeof r.name !== 'string') err(`ramps[${i}]: { id, kind: on|off, side, block, name }`);
+      if (typeof r?.id !== 'string' || !['on', 'off'].includes(r.kind as string) || typeof r.route !== 'string' || !Number.isInteger(r.leg) || !Number.isInteger(r.block) || typeof r.name !== 'string') return err(`ramps[${i}]: { id, kind: on|off, route, leg, block, name }`);
+      const R = routes.get(r.route);
+      if (!R) return err(`ramps[${i}]: no route ${r.route}`);
+      const leg = R.legs[r.leg as number];
+      if (leg === undefined || (r.block as number) < 0 || ((r.block as number) + 1) * CELL > leg) err(`ramps[${i}]: route ${r.route} has no leg ${r.leg} block ${r.block}`);
     });
   if (!Array.isArray(d.exits)) err('exits: a list');
   else
     d.exits.forEach((x: Record<string, unknown>, i: number) => {
-      if (typeof x?.id !== 'string' || typeof x.venue !== 'string' || !['nw', 'ne', 'se', 'sw'].includes(x.corner as string) || !num(x.length) || typeof x.name !== 'string') err(`exits[${i}]: { id, venue, corner, length, name }`);
+      if (typeof x?.id !== 'string' || typeof x.venue !== 'string' || typeof x.route !== 'string' || !Number.isInteger(x.at) || !num(x.length) || typeof x.name !== 'string') return err(`exits[${i}]: { id, venue, route, at, length, name }`);
+      const R = routes.get(x.route);
+      if (!R) return err(`exits[${i}]: no route ${x.route}`);
+      const n = R.loop ? R.legs.length : R.legs.length + 1;
+      if ((x.at as number) < 0 || (x.at as number) >= n || (!R.loop && x.at !== n - 1)) err(`exits[${i}]: at must be a corner of the loop, or an open route's last point`);
     });
   if (errors.length > before) return null;
   return d as unknown as ExpresswayDef;
@@ -59,7 +93,8 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
 
 export interface Road {
   readonly id: string;
-  readonly kind: 'loop' | 'ramp' | 'spur';
+  /** A closed route (a loop), an open one, a ramp or a spur to a tunnel. */
+  readonly kind: 'loop' | 'route' | 'ramp' | 'spur';
   readonly x: Float64Array;
   readonly z: Float64Array;
   readonly y: Float64Array;
@@ -134,72 +169,61 @@ function makeRoad(id: string, kind: Road['kind'], x: number[], z: number[], y: (
 
 export class Expressway {
   readonly roads: Road[] = [];
+  /** The first loop (the inner loop): its traffic runs on it. */
   readonly loop: Road;
-  /** The loop's corners and sides in world metres. */
-  readonly x0: number;
-  readonly z0: number;
-  readonly x1: number;
-  readonly z1: number;
   private readonly grid = new Map<number, [Road, number][]>();
 
   constructor(readonly def: ExpresswayDef) {
-    const [c0, r0, c1, r1] = def.loop;
-    const x0 = (this.x0 = c0 * CELL);
-    const z0 = (this.z0 = r0 * CELL);
-    const x1 = (this.x1 = c1 * CELL);
-    const z1 = (this.z1 = r1 * CELL);
     const R = def.radius;
     const D = def.deck;
-    // The loop: clockwise on the map, straight along each side and a fillet at each corner.
-    const corners: [number, number][] = [
-      [x0, z0],
-      [x1, z0],
-      [x1, z1],
-      [x0, z1],
-    ];
-    const dense: [number, number][] = [];
-    for (let k = 0; k < 4; k++) {
-      const c = corners[k];
-      const prev = corners[(k + 3) % 4];
-      const next = corners[(k + 1) % 4];
-      const din = norm(c[0] - prev[0], c[1] - prev[1]);
-      const dout = norm(next[0] - c[0], next[1] - c[1]);
-      const s: [number, number] = [c[0] - din[0] * R, c[1] - din[1] * R];
-      const e: [number, number] = [c[0] + dout[0] * R, c[1] + dout[1] * R];
-      const cen: [number, number] = [s[0] + dout[0] * R, s[1] + dout[1] * R];
-      const a0 = Math.atan2(s[1] - cen[1], s[0] - cen[0]);
-      let a1 = Math.atan2(e[1] - cen[1], e[0] - cen[0]);
-      while (a1 - a0 > Math.PI) a1 -= Math.PI * 2;
-      while (a0 - a1 > Math.PI) a1 += Math.PI * 2;
-      for (let t = 0; t <= 24; t++) {
-        const a = a0 + ((a1 - a0) * t) / 24;
-        dense.push([cen[0] + Math.cos(a) * R, cen[1] + Math.sin(a) * R]);
-      }
-      // (The straight to the next corner is the line between this fillet's end and the next one's start.)
-    }
-    const L = resample(dense, true);
-    this.loop = makeRoad('loop', 'loop', L.x, L.z, () => D, def.half, true);
-    this.roads.push(this.loop);
-    // Ramps: a single lane outside the deck (on the left), overlapping its edge by 0.6 m so the two join, over
-    // the inner lane of the avenue below (next to its median). Each works within one block of its side (the
-    // 128 m between two junctions, counted from the side's start corner in the direction of travel): an
-    // on-ramp's foot is at the start of its block and the part too low to pass under (a wall to the street)
-    // stays inside the block; an off-ramp comes down to its foot at the end of its block.
-    const side = (s: Side): { start: [number, number]; dir: [number, number] } => {
-      switch (s) {
-        case 'north':
-          return { start: [x0, z0], dir: [1, 0] };
-        case 'east':
-          return { start: [x1, z0], dir: [0, 1] };
-        case 'south':
-          return { start: [x1, z1], dir: [-1, 0] };
-        case 'west':
-          return { start: [x0, z1], dir: [0, -1] };
-      }
+    const world = (p: readonly [number, number]): [number, number] => [p[0] * CELL, p[1] * CELL];
+    // A route's centreline: straight along each leg, a fillet at each corner (every point of a loop; the
+    // inner points of an open route, whose ends run straight).
+    const legsOf = (r: RouteDef): { start: [number, number]; dir: [number, number] }[] => {
+      const P = r.pts.map(world);
+      const n = r.loop ? P.length : P.length - 1;
+      return Array.from({ length: n }, (_, k) => ({ start: P[k], dir: norm(P[(k + 1) % P.length][0] - P[k][0], P[(k + 1) % P.length][1] - P[k][1]) }));
     };
+    const routeRoads = new Map<string, Road>();
+    for (const r of def.routes) {
+      const P = r.pts.map(world);
+      const dense: [number, number][] = [];
+      if (!r.loop) dense.push(P[0]);
+      for (let k = r.loop ? 0 : 1; k < (r.loop ? P.length : P.length - 1); k++) {
+        const c = P[k];
+        const prev = P[(k - 1 + P.length) % P.length];
+        const next = P[(k + 1) % P.length];
+        const din = norm(c[0] - prev[0], c[1] - prev[1]);
+        const dout = norm(next[0] - c[0], next[1] - c[1]);
+        const s0: [number, number] = [c[0] - din[0] * R, c[1] - din[1] * R];
+        const e: [number, number] = [c[0] + dout[0] * R, c[1] + dout[1] * R];
+        const cen: [number, number] = [s0[0] + dout[0] * R, s0[1] + dout[1] * R];
+        const a0 = Math.atan2(s0[1] - cen[1], s0[0] - cen[0]);
+        let a1 = Math.atan2(e[1] - cen[1], e[0] - cen[0]);
+        while (a1 - a0 > Math.PI) a1 -= Math.PI * 2;
+        while (a0 - a1 > Math.PI) a1 += Math.PI * 2;
+        for (let t = 0; t <= 24; t++) {
+          const a = a0 + ((a1 - a0) * t) / 24;
+          dense.push([cen[0] + Math.cos(a) * R, cen[1] + Math.sin(a) * R]);
+        }
+        // (The straight to the next corner is the line between this fillet's end and the next one's start.)
+      }
+      if (!r.loop) dense.push(P[P.length - 1]);
+      const L = resample(dense, r.loop);
+      const road = makeRoad(r.id, r.loop ? 'loop' : 'route', L.x, L.z, () => D, def.half, r.loop, { sign: r.name });
+      routeRoads.set(r.id, road);
+      this.roads.push(road);
+    }
+    this.loop = this.roads.find((r) => r.kind === 'loop') ?? this.roads[0];
+    // Ramps: a single lane outside the deck (on the left), overlapping its edge by 0.6 m so the two join, over
+    // the inner lane of the avenue below (next to its median). Each works within one block of its leg (the 128 m
+    // between two junctions, counted from the leg's start in the direction of travel): an on-ramp's foot is at the
+    // start of its block and the part too low to pass under (a wall to the street) stays inside the block; an
+    // off-ramp comes down to its foot at the end of its block.
     const rh = 1.9;
     for (const r of def.ramps) {
-      const { start, dir } = side(r.side);
+      const route = def.routes.find((q) => q.id === r.route)!;
+      const { start, dir } = legsOf(route)[r.leg];
       const left: [number, number] = [dir[1], -dir[0]];
       const off = def.half + rh - 0.6;
       const s0 = r.block * CELL;
@@ -218,15 +242,12 @@ export class Expressway {
       const y = r.kind === 'off' ? (i: number): number => D * (1 - smooth(i / RAMP)) : (i: number): number => D * smooth(i / RAMP);
       this.roads.push(makeRoad(r.id, 'ramp', xs, zs, y, rh, false, { sign: r.name, rampKind: r.kind }));
     }
-    // Exits: at a corner, straight on (the way the loop arrived) into a tunnel.
-    const arrive: Record<Corner, { c: [number, number]; dir: [number, number] }> = {
-      nw: { c: [x0, z0], dir: [0, -1] },
-      ne: { c: [x1, z0], dir: [1, 0] },
-      se: { c: [x1, z1], dir: [0, 1] },
-      sw: { c: [x0, z1], dir: [-1, 0] },
-    };
+    // Exits: at a route's point, straight on (the way the route arrived there) into a tunnel.
     for (const e of def.exits) {
-      const { c, dir } = arrive[e.corner];
+      const route = def.routes.find((q) => q.id === e.route)!;
+      const legs = legsOf(route);
+      const dir = legs[(e.at - 1 + legs.length) % legs.length].dir;
+      const c = world(route.pts[e.at]);
       const xs: number[] = [];
       const zs: number[] = [];
       for (let d = -R - 10; d <= e.length; d++) {

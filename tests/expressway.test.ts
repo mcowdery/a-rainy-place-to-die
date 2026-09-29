@@ -192,3 +192,40 @@ describe('ramp feet', () => {
     }
   });
 });
+
+describe('the expressway as a network', () => {
+  it('builds an open route off the loop: joined to it where they meet, walled elsewhere, into a tunnel at its end', () => {
+    // A radial from the loop's south side straight down three blocks, with a tunnel at its end.
+    const net: typeof def = {
+      ...def,
+      routes: [...def.routes, { id: 'r1', name: '1号線', nameEn: 'ROUTE 1', loop: false, pts: [[24, 13], [24, 16]] }],
+      exits: [...def.exits, { id: 'port', venue: 'kurokami', route: 'r1', at: 1, length: 60, name: 'PORT' }],
+    };
+    const errs: string[] = [];
+    const reparsed = parseExpressway('net.yaml', JSON.stringify(net), errs);
+    expect(errs).toEqual([]);
+    const n = new Expressway(reparsed!);
+    const r1 = n.roads.find((r) => r.id === 'r1')!;
+    expect(r1.kind).toBe('route');
+    expect(r1.x.length).toBeGreaterThan(380);
+    // Along it at deck height: on the network; where it starts, it's on the loop's deck too (a junction).
+    for (let i = 0; i < r1.x.length; i += 10) expect(n.at(r1.x[i], r1.z[i], def.deck), `r1 ${i}`).not.toBe(null);
+    expect(n.at(24 * 128, 13 * 128 + 3, def.deck)).not.toBe(null);
+    // Off its side, part-way down: a wall pushes you back on.
+    const i = 200;
+    const side = { x: r1.x[i] + r1.tz[i] * (def.half + 0.5), z: r1.z[i] - r1.tx[i] * (def.half + 0.5) };
+    expect(n.pushBack(side.x, side.z, def.deck)).not.toBe(null);
+    // Its end runs on into the tunnel.
+    const s = n.roads.find((r) => r.id === 'port')!;
+    expect(n.portal(s.x[s.x.length - 3], s.z[s.x.length - 3], def.deck)).toBe(s);
+  });
+
+  it('refuses a ramp on a leg a route does not have, and a leg off the grid lines', () => {
+    const errs: string[] = [];
+    parseExpressway('bad.yaml', JSON.stringify({ ...def, ramps: [{ id: 'x', kind: 'on', route: 'c1', leg: 9, block: 0, name: 'X' }] }), errs);
+    expect(errs.length).toBeGreaterThan(0);
+    const errs2: string[] = [];
+    parseExpressway('bad.yaml', JSON.stringify({ ...def, routes: [{ id: 'd', name: 'D', nameEn: 'D', loop: false, pts: [[0, 0], [3, 4]] }] }), errs2);
+    expect(errs2.join()).toMatch(/grid line/);
+  });
+});
