@@ -800,6 +800,7 @@ async function run(): Promise<void> {
     toast(`${car.label} · W/S drive · A/D steer · Space handbrake · Q camera · E get out`, 5);
   };
   const exitCar = (): void => {
+    if (driving.own && ownCar.sim.y > 1) return toast('Not on the expressway: take the Kaburo ramp down first.');
     const spot = driving.exitSpot((x, z) => !district.blocked(x, z, 0.4, 0) && !traffic.blocked(x, z, 0.4) && !npcBlocked(x, z, 0.4));
     if (!spot) return toast('No room to get out here.');
     traffic.leave(driving.car!);
