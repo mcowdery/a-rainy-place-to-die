@@ -15,12 +15,15 @@ import { addBike, BIKE_LENGTH, type BikeType } from './bikes';
  * added on top. Wheels are turned: rounded tyres with alloy spokes or steel hubcaps.
  *
  * Designs lean on real Japanese cars (alternate-world Japan) under invented names: a modern saloon, the
- * classic boxy taxi, a kei tall-wagon, a minivan and a kei truck.
+ * classic boxy taxi, a kei tall-wagon, a minivan and a kei truck; and the sports cars for the passes: the
+ * coupe, an 80s light hatchback, a rotary coupe, a turbo all-wheel-drive coupe and a kei roadster.
  */
 
-export type CarType = 'sedan' | 'luxury' | 'sports' | 'taxi' | 'taxi2' | 'kei' | 'minivan' | 'keitruck';
+export type CarType = 'sedan' | 'luxury' | 'sports' | 'taxi' | 'taxi2' | 'kei' | 'minivan' | 'keitruck' | 'hatch' | 'rotary' | 'awd' | 'roadster';
 export type VehicleType = CarType | BikeType;
-export const CAR_TYPES2: readonly CarType[] = ['sedan', 'luxury', 'sports', 'taxi', 'taxi2', 'kei', 'minivan', 'keitruck'];
+export const CAR_TYPES2: readonly CarType[] = ['sedan', 'luxury', 'sports', 'taxi', 'taxi2', 'kei', 'minivan', 'keitruck', 'hatch', 'rotary', 'awd', 'roadster'];
+/** The cars you can own and race (the garage). */
+export const SPORT_TYPES: readonly CarType[] = ['sports', 'hatch', 'rotary', 'awd', 'roadster'];
 export const BIKE_TYPES: readonly BikeType[] = ['scooter', 'motorcycle', 'delivery'];
 export const VEHICLE_TYPES: readonly VehicleType[] = [...CAR_TYPES2, ...BIKE_TYPES];
 const isTaxi = (t: VehicleType): boolean => t === 'taxi' || t === 'taxi2';
@@ -63,6 +66,16 @@ interface Design {
   readonly bumper: 'body' | 'chrome' | 'black';
   /** Chrome strip along the beltline and window surround (luxury). */
   readonly chromeBelt?: boolean;
+  /** Pop-up headlamps, raised (the `head` lamps are then small bumper lamps). */
+  readonly popups?: boolean;
+  /** A rear spoiler: a lip at the top of the hatch, a low hoop wing, or a tall wing on posts. */
+  readonly wing?: 'lip' | 'hoop' | 'gt';
+  /** A dark vent in the bonnet. */
+  readonly hoodVent?: boolean;
+  /** A black fabric roof behind the windscreen (a roadster's hood, up). */
+  readonly softTop?: boolean;
+  /** Two-tone: ring segments below this take paint2 (the 80s "panda": a black lower body under the colour). */
+  readonly twoTone?: number;
 }
 
 const SEDAN: Design = {
@@ -164,7 +177,59 @@ const TAXI2: Design = {
   plateY: [0.42, 0.54], plate: 'green', bumper: 'body',
 };
 
-const DESIGNS: Record<CarType, Design> = { sedan: SEDAN, luxury: LUXURY, sports: SPORTS, taxi: TAXI, taxi2: TAXI2, kei: KEI, minivan: MINIVAN, keitruck: KEITRUCK };
+/** 80s light hatchback (the Hachi-roku): boxy wedge, pop-up lamps, a long hatch, black bumpers, panda two-tone. */
+const HATCH: Design = {
+  name: 'hatch', L: 4.2, W: 0.83, corner: 0.12, clear: 0.13, x0: 0,
+  top: [[0, 0.62], [0.05, 0.9], [0.14, 0.99], [0.4, 1.06], [1.1, 1.3], [1.35, 1.33], [2.45, 1.33], [2.98, 1.02], [3.2, 0.86], [4.05, 0.74], [4.2, 0.56]],
+  belt: [[0, 0.84], [4.2, 0.8]],
+  roofInset: 0.17,
+  windscreen: [2.47, 3.08], rearGlass: [0.42, 1.34], sideGlass: [1.2, 2.95], pillars: [[1.62, 1.74]], blackPillars: true,
+  wheelX: [0.72, 3.12], wheelR: 0.29, tyreW: 0.185, rims: 'alloy',
+  seams: [1.75, 2.98],
+  head: [0.44, 0.5, 0.42, 0.74], grille: [0.5, 0.57, 0, 0.34], grilleChrome: false, tail: [0.72, 0.87, 0.05, 0.8],
+  plateY: [0.3, 0.42], plate: 'white', bumper: 'black', popups: true, wing: 'lip', twoTone: 4,
+};
+
+/** Rotary coupe: low and curvy, a double-bubble roof, pop-up lamps, a wide mouth, a hoop wing on the tail. */
+const ROTARY: Design = {
+  name: 'rotary', L: 4.285, W: 0.88, corner: 0.32, clear: 0.11, x0: 0,
+  top: [[0, 0.66], [0.04, 0.86], [0.3, 0.9], [0.8, 0.93], [1.42, 1.17], [1.82, 1.23], [2.35, 1.23], [2.82, 1.02], [3.15, 0.8], [3.8, 0.69], [4.2, 0.58], [4.285, 0.42]],
+  belt: [[0, 0.84], [2.0, 0.82], [4.285, 0.66]],
+  roofInset: 0.26,
+  windscreen: [2.38, 3.12], rearGlass: [0.95, 1.78], sideGlass: [1.5, 2.95], pillars: [], blackPillars: true,
+  wheelX: [0.8, 3.225], wheelR: 0.32, tyreW: 0.235, rims: 'alloy',
+  seams: [1.55, 2.98],
+  head: [0.46, 0.51, 0.34, 0.76], grille: [0.24, 0.42, 0, 0.46], grilleChrome: false, tail: [0.72, 0.8, 0.22, 0.76],
+  plateY: [0.3, 0.42], plate: 'white', bumper: 'body', popups: true, wing: 'hoop',
+};
+
+/** Turbo all-wheel-drive coupe (the early-90s giant-killer): boxy and square-shouldered, a tall wing, a bonnet vent. */
+const AWD: Design = {
+  name: 'awd', L: 4.545, W: 0.88, corner: 0.14, clear: 0.13, x0: 0,
+  top: [[0, 0.7], [0.06, 0.95], [0.4, 1.0], [0.95, 1.02], [1.36, 1.3], [1.76, 1.34], [2.66, 1.34], [3.06, 1.17], [3.42, 0.95], [4.35, 0.84], [4.545, 0.6]],
+  belt: [[0, 0.95], [4.545, 0.88]],
+  roofInset: 0.19,
+  windscreen: [2.7, 3.42], rearGlass: [0.97, 1.74], sideGlass: [1.5, 3.2], pillars: [], blackPillars: true,
+  wheelX: [0.86, 3.475], wheelR: 0.33, tyreW: 0.245, rims: 'alloy',
+  seams: [1.55, 3.22],
+  head: [0.62, 0.73, 0.36, 0.82], grille: [0.62, 0.72, 0, 0.34], grilleChrome: false, tail: [0.78, 0.9, 0.28, 0.8],
+  plateY: [0.34, 0.46], plate: 'white', bumper: 'body', wing: 'gt', hoodVent: true,
+};
+
+/** Kei roadster (mid-engined, 660 cc): tiny, the black hood up, round lamps, yellow kei plates. */
+const ROADSTER: Design = {
+  name: 'roadster', L: 3.295, W: 0.698, corner: 0.2, clear: 0.12, x0: 0,
+  top: [[0, 0.64], [0.05, 0.8], [0.5, 0.85], [0.82, 0.87], [1.0, 1.14], [1.55, 1.17], [1.86, 1.0], [2.12, 0.8], [3.2, 0.67], [3.295, 0.5]],
+  belt: [[0, 0.78], [3.295, 0.72]],
+  roofInset: 0.12,
+  windscreen: [1.55, 2.12], rearGlass: [0.97, 1.06], sideGlass: [1.08, 2.02], pillars: [], blackPillars: true,
+  wheelX: [0.5, 2.78], wheelR: 0.27, tyreW: 0.165, rims: 'alloy',
+  seams: [1.1, 2.05],
+  head: [0.58, 0.68, 0.34, 0.6], grille: [0.36, 0.46, 0, 0.3], grilleChrome: false, tail: [0.6, 0.7, 0.22, 0.62],
+  plateY: [0.3, 0.42], plate: 'yellow', bumper: 'body', softTop: true,
+};
+
+const DESIGNS: Record<CarType, Design> = { sedan: SEDAN, luxury: LUXURY, sports: SPORTS, taxi: TAXI, taxi2: TAXI2, kei: KEI, minivan: MINIVAN, keitruck: KEITRUCK, hatch: HATCH, rotary: ROTARY, awd: AWD, roadster: ROADSTER };
 
 export const PAINTS: Record<VehicleType, readonly number[]> = {
   sedan: [0xe8e8e4, 0x121316, 0xb4b6ba, 0x1c2a44, 0x5a1a20],
@@ -175,6 +240,10 @@ export const PAINTS: Record<VehicleType, readonly number[]> = {
   kei: [0xe8e8e4, 0xa8d4bc, 0xd8c09a, 0xe0b0b8, 0x8ab0d0],
   minivan: [0xe8e8e4, 0x121316, 0xb4b6ba, 0x3a3e44],
   keitruck: [0xe8e8e4, 0xe8e8e4, 0xb4b6ba],
+  hatch: [0xf0f0ec, 0xc01818, 0x121316, 0xb4b6ba],
+  rotary: [0xe8c020, 0xc01818, 0x1c3a7a, 0xf0f0ec],
+  awd: [0x5a5e66, 0x121316, 0xf0f0ec, 0x1a2c5a],
+  roadster: [0xe8c020, 0xc01818, 0xf0f0ec, 0x3a8a5a],
   scooter: [0xe8e0c8, 0xa8d4bc, 0xe0b0b8, 0x8ab0d0, 0x121316],
   motorcycle: [0xb81818, 0x121316, 0x1c3a7a, 0xe8e8e4],
   delivery: [0xc81818, 0xe8e8e4],
@@ -320,7 +389,7 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
   const P = (x: number, y: number, z: number): V3 => [spec.x + f[0] * (x - half) + s[0] * z, y, spec.z + f[2] * (x - half) + s[2] * z];
   const N = (n: V3): V3 => [f[0] * n[0] + s[0] * n[2], n[1], f[2] * n[0] + s[2] * n[2]];
   const paint = lin(spec.paint);
-  const paint2 = lin(spec.paint2 ?? (spec.type === 'taxi' ? (spec.paint === 0xe0a818 ? 0x121316 : spec.paint === 0x1f5a36 ? 0xe07818 : spec.paint) : spec.paint));
+  const paint2 = lin(spec.paint2 ?? (spec.type === 'hatch' ? 0x121316 : spec.type === 'taxi' ? (spec.paint === 0xe0a818 ? 0x121316 : spec.paint === 0x1f5a36 ? 0xe07818 : spec.paint) : spec.paint));
   const wrap = spec.ad?.wrap !== undefined ? lin(spec.ad.wrap) : null;
   // The wrap covers the rear doors: between the first two door seams, from the sill to the beltline.
   const wrapX: Range = [d.seams[0] + 0.02, d.seams[1] - 0.02];
@@ -437,8 +506,17 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
       mb.color = CHROME;
       return;
     }
+    if (d.twoTone && k < d.twoTone) {
+      mb.color = paint2;
+      return;
+    }
     if (hood) return;
-    if (k >= 5) mb.color = paint2;
+    if (d.softTop && xm < d.windscreen[0] && k >= 6) {
+      mb.kind = k === 6 && within(xm, d.sideGlass) ? KIND.glass : KIND.plain;
+      if (mb.kind === KIND.plain) mb.color = [0.022, 0.022, 0.025];
+      return;
+    }
+    if (k >= 5 && !d.twoTone) mb.color = paint2;
     if (k === 6) {
       if (within(xm, d.sideGlass) && !d.pillars.some((p) => within(xm, p))) {
         mb.kind = KIND.glass;
@@ -703,6 +781,68 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     mb.color = CHROME;
     boxL(d.L - 0.02, d.L + 0.08, 0.33, 0.47, -(d.W - 0.06), d.W - 0.06);
     boxL(d.x0 - 0.08, d.x0 + 0.02, 0.35, 0.49, -(d.W - 0.06), d.W - 0.06);
+  }
+  if (d.popups) {
+    // Pop-up headlamps, raised: a pod each side at the nose, in the body colour, the lamp facing forward.
+    for (const sd of [-1, 1]) {
+      const x0 = d.L - 0.44;
+      const x1 = d.L - 0.2;
+      const z0 = sd * 0.4;
+      const z1 = sd * (d.W - 0.1);
+      const y = Math.min(top(x0), top(x1)) - 0.01;
+      mb.kind = KIND.gloss;
+      mb.color = paint;
+      boxL(x0, x1, y, y + 0.16, Math.min(z0, z1), Math.max(z0, z1));
+      mb.kind = KIND.gloss;
+      mb.color = TRIM;
+      boxL(x1, x1 + 0.006, y + 0.02, y + 0.145, Math.min(z0, z1) + 0.015, Math.max(z0, z1) - 0.015);
+      mb.kind = KIND.emit;
+      mb.style = [EMIT.lamp, 0, 0, 0];
+      mb.color = [0.95, 0.9, 0.8];
+      const n = N([1, 0, 0]);
+      const za = Math.min(z0, z1) + 0.04;
+      const zb = Math.max(z0, z1) - 0.04;
+      mb.quadN(P(x1 + 0.008, y + 0.04, za), P(x1 + 0.008, y + 0.04, zb), P(x1 + 0.008, y + 0.125, zb), P(x1 + 0.008, y + 0.125, za), n, n, n, n);
+      mb.style = [0, 0, 0, 0];
+    }
+  }
+  if (d.hoodVent) {
+    // A dark vent in the middle of the bonnet.
+    mb.kind = KIND.plain;
+    mb.color = TRIM;
+    const x0 = d.L - 1.25;
+    const x1 = d.L - 0.85;
+    const n = N([0, 1, 0]);
+    mb.quadN(P(x0, top(x0) + 0.006, -0.24), P(x0, top(x0) + 0.006, 0.24), P(x1, top(x1) + 0.006, 0.24), P(x1, top(x1) + 0.006, -0.24), n, n, n, n);
+  }
+  if (d.wing) {
+    mb.kind = KIND.gloss;
+    if (d.wing === 'lip') {
+      // A small visor at the top of the hatch, where the roof ends, standing out over the glass: level with
+      // the roof at its front edge, the glass falling away beneath it.
+      const x1 = d.rearGlass[1] - 0.04;
+      const y = top(x1) - 0.012;
+      mb.color = paint;
+      boxL(x1 - 0.24, x1, y, y + 0.022, -(d.W - d.roofInset - 0.08), d.W - d.roofInset - 0.08);
+    } else {
+      // A blade across the tail on two posts (tall), or on end legs sweeping down to the flanks (hoop).
+      const gt = d.wing === 'gt';
+      const x0 = 0.06;
+      const x1 = gt ? 0.36 : 0.32;
+      const deck = top(0.25);
+      const y = deck + (gt ? 0.2 : 0.09);
+      const zw = d.W - 0.05;
+      mb.color = paint;
+      boxL(x0, x1, y, y + 0.035, -zw, zw);
+      if (gt) {
+        mb.color = BLACK;
+        for (const zp of [-0.55, 0.55]) boxL(0.17, 0.25, deck - 0.02, y, zp - 0.02, zp + 0.02);
+        mb.color = paint;
+        for (const sd of [-1, 1]) boxL(x0 - 0.02, x1 + 0.02, y - 0.06, y + 0.07, sd * zw - 0.012, sd * zw + 0.012);
+      } else {
+        for (const sd of [-1, 1]) boxL(x0 + 0.02, x1 - 0.02, deck - 0.04, y + 0.02, sd * (zw - 0.05) - 0.03, sd * (zw - 0.05) + 0.03);
+      }
+    }
   }
   if (spec.type === 'minivan') {
     // Sliding-door rail along the rear quarter.

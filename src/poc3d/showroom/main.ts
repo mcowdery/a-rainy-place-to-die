@@ -134,14 +134,17 @@ const adSigns = {
 const NAMES: Record<VehicleType, string> = {
   sedan: 'sedan', luxury: 'luxury sedan', sports: 'sports coupe', taxi: 'taxi (classic)', taxi2: 'taxi (modern)', kei: 'kei tall-wagon',
   minivan: 'minivan', keitruck: 'kei truck', scooter: 'scooter', motorcycle: 'motorcycle', delivery: 'delivery scooter',
+  hatch: 'hatchback (80s)', rotary: 'rotary coupe', awd: 'turbo AWD coupe', roadster: 'kei roadster',
 };
 const PAINT_A: Record<VehicleType, number> = {
   sedan: 0xe8e8e4, luxury: 0x07070a, sports: 0xc01818, taxi: 0x121316, taxi2: 0x1c2240, kei: 0xa8d4bc, minivan: 0xb4b6ba, keitruck: 0xe8e8e4,
   scooter: 0xe8e0c8, motorcycle: 0xb81818, delivery: 0xc81818,
+  hatch: 0xf0f0ec, rotary: 0xe8c020, awd: 0x5a5e66, roadster: 0xe8c020,
 };
 const PAINT_B: Record<VehicleType, number> = {
   sedan: 0x1c2a44, luxury: 0xf0efe8, sports: 0xf0f0ec, taxi: 0xe0a818, taxi2: 0x121316, kei: 0xd8c09a, minivan: 0x121316, keitruck: 0xb4b6ba,
   scooter: 0x8ab0d0, motorcycle: 0x121316, delivery: 0x1c4a9a,
+  hatch: 0xc01818, rotary: 0xc01818, awd: 0x1a2c5a, roadster: 0xc01818,
 };
 const newCars = new MeshBuilder(1 << 17);
 const nightLights: Light[] = [];
