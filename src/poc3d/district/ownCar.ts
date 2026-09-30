@@ -6,10 +6,11 @@ import { buildCar, poseCar, turnWheels, type CarView } from '../../race/carView'
 import { Dents } from '../../race/dents';
 import { currentCar, loadProfile, saveProfile } from '../../race/profile';
 import { CarSound } from '../../race/sound';
-import { Car, ROAD_ASSISTS, type Assists, type Controls, type Ground } from '../../race/vehicle';
+import { Car, ROAD_ASSISTS, type Assists, type CarSpec, type Controls, type Ground } from '../../race/vehicle';
 import type { DrivenVehicle, TrafficSystem } from '../real/traffic';
 import type { Expressway } from './expressway';
 import { DRY, weatherAfter, weatherBefore, weatherGrip, type RoadWeather } from './roadGrip';
+import { assistsBy, loadTuning, tunedBy, type Tuning } from '../../race/tuning';
 import {
   DIRECT,
   impactDamage,
@@ -73,6 +74,13 @@ const WALL_FRICTION = 0.998;
 const DIRS = Array.from({ length: 16 }, (_, i) => [Math.cos((i / 16) * Math.PI * 2), Math.sin((i / 16) * Math.PI * 2)] as const);
 
 export class OwnCar {
+  /** The car's spec with its parts (before the driving tuning). */
+  readonly baseSpec: CarSpec;
+  /** A new driving tuning (race/tuning.ts): re-spec the car and its assists. */
+  retune(t: Tuning): void {
+    this.sim.spec = tunedBy(this.baseSpec, t);
+    this.sim.assists = assistsBy(CITY_ASSISTS, 'road', t);
+  }
   /** The weather on the road (main.ts sets it each frame; district/roadGrip.ts). */
   weather: RoadWeather = DRY;
   /** How much water the wheels are in now (0-1). */
@@ -126,7 +134,10 @@ export class OwnCar {
     this.parts = partsOf(mine);
     const m = model(mine.type);
     this.name = `${m.maker} ${m.name}`;
-    this.sim = new Car(tunedSpec(mine.type, mine.parts), CITY_ASSISTS);
+    // Its parts, and the driving tuning on top (race/tuning.ts; the debug menu's Car: tune driving).
+    this.baseSpec = tunedSpec(mine.type, mine.parts);
+    const tuning = loadTuning();
+    this.sim = new Car(tunedBy(this.baseSpec, tuning), assistsBy(CITY_ASSISTS, 'road', tuning));
     this.view = buildCar({ type: mine.type, paint: mine.paint, paint2: mine.paint2, livery: mine.livery, neon: mine.neonFitted ? mine.neon : null }, material);
     this.sound.configure(m.sound);
     const zs = wheelLayout(mine.type).spots.map((s) => s.z);

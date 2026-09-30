@@ -8,6 +8,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { cityMaterial, cityUniforms } from '../poc3d/real/city';
 import { DAMAGE, HEALTH, PAINT_PENALTY, RivalDriver, separateCars, type Arms } from './battle';
 import { CircuitRace, gridSlots } from './circuit';
+import { assistsBy, loadTuning, tunedBy, TuningPanel } from './tuning';
 import type { CarType } from '../poc3d/models/vehicles';
 import { addHeadlights, buildCar, CarMarks, hitVolumes, poseCar, turnWheels, type Part } from './carView';
 import { loadCourses } from './courses';
@@ -126,7 +127,11 @@ const gunSound = new GunSound();
 const AIM_ASSISTS: Assists = { ...DRIFT_ASSISTS, countersteer: 0.7 };
 addHeadlights(carObj);
 
-const car = new Car(tunedSpec(mine.type, mine.parts), DRIFT_ASSISTS);
+// Your car's spec with its parts, and the driving tuning on top (race/tuning.ts: the ` key's panel, for testing).
+const baseSpec = tunedSpec(mine.type, mine.parts);
+const car = new Car(tunedBy(baseSpec, loadTuning()), DRIFT_ASSISTS);
+const tuningPanel = new TuningPanel('drift', (t) => (car.spec = tunedBy(baseSpec, t)));
+const driftAssists = (): Assists => assistsBy(DRIFT_ASSISTS, 'drift', tuningPanel.tuning);
 const at = kind === 'gp' ? 'grid' : mode === 'free' ? (params.get('at') ?? 'lot') : 'grid';
 const placeAt = (where: string): void => {
   // (A circuit has no viewpoint: its "top" is the track.)
@@ -566,6 +571,13 @@ window.addEventListener('keydown', (e) => {
   if (mode !== 'free' && e.code === 'Enter') startTrial();
   if (kind === 'drift' && e.code === 'Enter') startAttack();
   if (kind === 'gp' && e.code === 'Enter') startGp();
+  if (e.code === 'Backquote') {
+    if (tuningPanel.open) tuningPanel.hide();
+    else {
+      if (document.pointerLockElement) document.exitPointerLock();
+      tuningPanel.show(car, baseSpec, DRIFT_ASSISTS);
+    }
+  }
   if (e.code === 'KeyM') showMenu(!menuOpen);
   if (e.code === 'KeyH') help = !help;
   if (e.code === 'KeyI') {
@@ -993,7 +1005,9 @@ function frame(now: number): void {
   /** The world's time step (the car, targets, shots, smoke); dt stays real for the camera and the clock. */
   const gdt = dt * (1 - 0.7 * slow);
   const c = menuOpen ? { throttle: 0, brake: 1, steer: 0, handbrake: false } : fight.youOut ? { throttle: 0, brake: 0.35, steer: 0, handbrake: false } : controls();
-  car.assists = aiming ? AIM_ASSISTS : DRIFT_ASSISTS;
+  const da = driftAssists();
+  car.assists = aiming ? { ...da, countersteer: Math.max(da.countersteer, AIM_ASSISTS.countersteer) } : da;
+  tuningPanel.tick();
   // Held on the grid through the countdown (the engine still revs).
   if ((!trial || trial.phase !== 'countdown') && !(attack && attack.phase === 'countdown') && !(gp && gp.race.phase === 'countdown')) car.update(gdt, c, ground);
   updateGp(dt, gdt);

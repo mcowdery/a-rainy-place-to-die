@@ -1,3 +1,4 @@
+import { TuningPanel } from '../../race/tuning';
 import { RacePath, RaceState, type RaceDef } from './cityRace';
 import { RaceHud } from './raceHud';
 import { RaceRival } from './raceRival';
@@ -48,7 +49,7 @@ import { interiorFor, type Interior } from '../real/interiors';
 import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem, type DrivenVehicle, setTrafficGround } from '../real/traffic';
 import { Driving } from './driving';
-import { OwnCar } from './ownCar';
+import { CITY_ASSISTS, OwnCar } from './ownCar';
 import { DamageHud } from './damageHud';
 import { SaveApp } from './saveApp';
 import { readSave, SAVE_VERSION, SLOTS, writeSave, type SaveGame, type Slot } from '../../save/save';
@@ -1638,6 +1639,8 @@ async function run(): Promise<void> {
     applyAtmosphere();
   };
   const minuteNow = (): number => Math.floor(clockTotal) % DAY;
+  // Driving tuning (race/tuning.ts): the debug menu's Car: tune driving; your car re-specced as you slide.
+  const tuningPanel = new TuningPanel('road', (t) => ownCar.retune(t));
   const debugMenu = import.meta.env.DEV || debug
     ? new DebugMenu([
         {
@@ -1706,6 +1709,7 @@ async function run(): Promise<void> {
           items: () => [
             { label: driving.car ? 'driving' : 'drive my car here', on: () => !!driving.car, run: () => void (driving.car || driveHere()) },
             { label: 'repair', run: () => ownCar.repair() },
+            { label: 'tune driving…', on: () => tuningPanel.open, run: () => (tuningPanel.open ? tuningPanel.hide() : tuningPanel.show(ownCar.sim, ownCar.baseSpec, CITY_ASSISTS)) },
           ],
         },
         {
@@ -2147,6 +2151,7 @@ async function run(): Promise<void> {
     refreshLitter(dt);
     const breeze = Math.min(1, windVec.length() / 3);
     drift.set(!outdoors ? 'none' : snowing ? 'snow' : season() === 'spring' ? 'petals' : season() === 'autumn' ? 'leaves' : 'none', snowing ? 0.75 : season() === 'spring' ? 0.1 + 0.1 * breeze : 0.07 + 0.2 * breeze);
+    tuningPanel.tick();
     drift.update(dt, camera.position, 0.12 + 0.5 * (1 - cityU.uLamps.value), windVec, groundAt(camera.position.x, camera.position.z));
     ssr.wet = wetness;
     ssr.rain = rainAmount;

@@ -170,7 +170,8 @@ export class Car {
   gripMul: [number, number] = [1, 1];
 
   constructor(
-    readonly spec: CarSpec = COUPE,
+    /** (Replaceable while driving: the tuning panel re-specs the car, race/tuning.ts.) */
+    public spec: CarSpec = COUPE,
     public assists: Assists = DRIFT_ASSISTS,
   ) {}
 
