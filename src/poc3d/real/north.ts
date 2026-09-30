@@ -5,6 +5,7 @@ import { Kit, neonText, text } from './kit';
 import type { Light } from './lightmap';
 import { localFrame, localRect, toWorld } from './localFrame';
 import { EMIT, KIND } from './meshBuilder';
+import { addTree } from '../models/trees';
 
 /**
  * The north's set pieces (the whole-city plan: docs/city-plan.md), registered with the kit landmarks (asagiri.ts),
@@ -25,6 +26,9 @@ type C3 = [number, number, number];
 
 /** The school kit's plan: the classroom block, the gym, the field. */
 const SCHOOL = { block: [4, 70, 3, 19], gym: [74, 100, 3, 27], field: [2, 98, 32, 98] } as const;
+/** The school's cherries: a row between the classroom block and the field's fence (u along it, clear of the gate). */
+const SCHOOL_CHERRIES = [8, 16, 24, 32, 40, 58, 66] as const;
+const SCHOOL_CHERRY_T = 27.5;
 
 export function northColliders(kind: NorthKind, b: Building3): Rect[] {
   const f = localFrame(b);
@@ -35,7 +39,7 @@ export function northColliders(kind: NorthKind, b: Building3): Rect[] {
     case 'school': {
       const [fu0, fu1, ft0, ft1] = SCHOOL.field;
       // The block and the gym; the field's fence all round but for its gate (u 44..54 on the near side).
-      return [R(SCHOOL.block[0], SCHOOL.block[1], SCHOOL.block[2], SCHOOL.block[3]), R(SCHOOL.gym[0], SCHOOL.gym[1], SCHOOL.gym[2], SCHOOL.gym[3]), R(fu0, 44, ft0 - 0.2, ft0 + 0.2), R(54, fu1, ft0 - 0.2, ft0 + 0.2), R(fu0, fu1, ft1 - 0.2, ft1 + 0.2), R(fu0 - 0.2, fu0 + 0.2, ft0, ft1), R(fu1 - 0.2, fu1 + 0.2, ft0, ft1)];
+      return [R(SCHOOL.block[0], SCHOOL.block[1], SCHOOL.block[2], SCHOOL.block[3]), R(SCHOOL.gym[0], SCHOOL.gym[1], SCHOOL.gym[2], SCHOOL.gym[3]), R(fu0, 44, ft0 - 0.2, ft0 + 0.2), R(54, fu1, ft0 - 0.2, ft0 + 0.2), R(fu0, fu1, ft1 - 0.2, ft1 + 0.2), R(fu0 - 0.2, fu0 + 0.2, ft0, ft1), R(fu1 - 0.2, fu1 + 0.2, ft0, ft1), ...SCHOOL_CHERRIES.map((u) => R(u - 0.3, u + 0.3, SCHOOL_CHERRY_T - 0.3, SCHOOL_CHERRY_T + 0.3))];
     }
     case 'dome': {
       // The ring, as a polygon of rects, open at the four gates.
@@ -244,6 +248,11 @@ export const NORTH_BUILDERS: Record<NorthKind, (k: Kit, id: string) => ((camera:
     netPlane(fu0, ft1, fu1, ft1);
     netPlane(fu0, ft0, fu0, ft1);
     netPlane(fu1, ft0, fu1, ft1);
+    // Cherries along the front of the field's fence, as every Japanese school has them.
+    for (const u of SCHOOL_CHERRIES) {
+      const [x, z] = toWorld(k.f, u, SCHOOL_CHERRY_T);
+      addTree(k.mb, { x, z, species: 'sakura', size: 0.7, seed: u });
+    }
     // Students: a few on the field, a pair at the gate.
     k.person(cu - 12, ct, 1, 0, { body: 'child', pose: 'walk', color: [0.8, 0.85, 1.0] });
     k.person(cu + 6, ct - 8, -1, 0, { body: 'child', pose: 'wave', color: [1.0, 0.85, 0.9], hair: 'long' });

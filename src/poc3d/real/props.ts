@@ -116,10 +116,17 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       const boulevard = width >= 14;
       const edgeRoad = q.x < cell.x || q.y < cell.y || q.x + q.w > cell.x + cell.w || q.y + q.h > cell.y + cell.h;
       // Keep the kerb clear where bus stops can stand (the middle of each cell edge) and of blade signs.
-      // One species along a whole street (keyed by its line, so both cells of an edge road agree): ginkgo
-      // and zelkova avenues, ginkgo and dogwood on narrower pavements.
-      const line = hash(Math.round(r.vertical ? q.x + q.w / 2 : q.y + q.h / 2), r.vertical ? 1 : 2, 0x5ee7) % 100;
-      const streetSpecies: TreeSpecies = boulevard ? (line < 55 ? 'ginkgo' : 'zelkova') : line < 40 ? 'ginkgo' : line < 85 ? 'dogwood' : 'dogwoodBloom';
+      // One species along a stretch of street (keyed by its line and a two-cell stretch of it, so both cells of an
+      // edge road agree), as Tokyo plants them: ginkgo and zelkova avenues, ginkgo and dogwood on narrower
+      // pavements, and here and there a sakura namiki, a street lined with cherries (more of them in the
+      // residential quarters).
+      const stretch = Math.floor((r.vertical ? plan.my : plan.mx) / 2);
+      const line = hash(Math.round(r.vertical ? q.x + q.w / 2 : q.y + q.h / 2), r.vertical ? 1 : 2, stretch, 0x5ee7) % 100;
+      // (Only a street within one cell leans on its own quarter's style: an edge road's two cells may differ.)
+      const homey = !edgeRoad && plan.buildings.some((b) => (b.zone?.look.homes ?? 0) > 0.3) ? 12 : 0;
+      const streetSpecies: TreeSpecies = boulevard
+        ? line < 45 ? 'ginkgo' : line < 78 - homey ? 'zelkova' : 'sakura'
+        : line < 32 - homey ? 'ginkgo' : line < 70 - homey ? 'dogwood' : 'sakura';
       const stopClear = (t: number): boolean => !edgeRoad || Math.abs((((t % CELL3) + CELL3) % CELL3) - CELL3 / 2) > 7;
       const bladeClear = (x: number, z: number, m: number): boolean => !plan.signs.some((g) => g.vertical && Math.hypot(g.x - x, g.z - z) < m);
       for (const side of [-1, 1]) {

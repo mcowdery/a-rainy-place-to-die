@@ -809,9 +809,10 @@ const surface = /* glsl */ `
     if (trk > 0.0) {
       // The tread: faint ribs across the track up close.
       float tread = 0.9 + 0.1 * step(0.5, fract(dot(vWPos.xz, vec2(0.7071)) * 9.0)) * (1.0 - smoothstep(0.02, 0.06, max(fwW.x, fwW.y)));
-      // Pressed snow a shade greyer, and the snow pushed up along its edges a shade brighter.
+      // Pressed, grey, half-melted snow (between clean snow and the dark slush of a busy road), and the snow
+      // pushed up along its edges a shade brighter.
       float ridge = clamp(trk * (1.0 - trk) * 4.0, 0.0, 1.0) * (1.0 - smoothstep(0.7, 1.0, trk));
-      albedo = mix(albedo, vec3(0.42, 0.44, 0.5) * tread, smoothstep(0.35, 1.0, trk) * 0.75);
+      albedo = mix(albedo, vec3(0.24, 0.26, 0.3) * tread, smoothstep(0.3, 1.0, trk) * 0.85);
       albedo = mix(albedo, vec3(0.7, 0.72, 0.76), ridge * 0.5 * uSnow);
       sRough = mix(sRough, 0.7, trk);
     }

@@ -129,7 +129,7 @@ class Layout {
 }
 
 const PLAZA_TREES = { zelkova: 40, camphor: 25, ginkgo: 20, sakura: 15 } as const;
-const PARK_TREES = { zelkova: 22, camphor: 18, sakura: 24, ginkgo: 12, pine: 8, dogwood: 10, dogwoodBloom: 6 } as const;
+const PARK_TREES = { zelkova: 18, camphor: 16, sakura: 34, ginkgo: 10, pine: 8, dogwood: 10, dogwoodBloom: 4 } as const;
 
 function pickWeighted<K extends string>(rnd: Rng, w: Readonly<Record<K, number>>): K {
   const entries = Object.entries(w) as [K, number][];
@@ -527,9 +527,11 @@ function park(L: Layout): void {
       if (!rnd.chance(0.72)) continue;
       if (px < q.x + 2 || pz < q.y + 2 || px > q.x + q.w - 2 || pz > q.y + q.h - 2) continue;
       if (keepOff.some((r) => px > r.x && px < r.x + r.w && pz > r.y && pz < r.y + r.h)) continue;
-      // Pines round the pond; the park's sakura are all in bloom or none are.
+      // Pines round the pond; cherries in rows along the paths, as parks plant them for hanami (the rest a
+      // mix, a third of it more cherries); the park's sakura are all in bloom or none are.
       const nearPond = pond && overlaps(pad({ x: px, y: pz, w: 0, h: 0 }, 9), pond);
-      let species: TreeSpecies = nearPond && rnd.chance(0.6) ? 'pine' : pickWeighted(rnd, PARK_TREES);
+      const byPath = paths.some((p) => overlaps(pad({ x: px, y: pz, w: 0, h: 0 }, 4.5), p));
+      let species: TreeSpecies = nearPond && rnd.chance(0.6) ? 'pine' : byPath && rnd.chance(0.85) ? 'sakura' : pickWeighted(rnd, PARK_TREES);
       if (species === 'sakura' && bloom) species = 'sakuraBloom';
       L.propW('tree', px, pz, 0, 1, { radius: 0.3, variant: hash(Math.round(px), Math.round(pz)) % 8, species, size: 0.75 + rnd.float() * 0.35, grate: false });
     }

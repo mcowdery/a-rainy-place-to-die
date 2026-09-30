@@ -5,6 +5,7 @@ import { separateCars } from '../../race/battle';
 import { FLAG_SEASON, isSeason, SEASON_NAMES, SEASONS, seasonFlag, seasonIndex, type Season } from './seasons';
 import { DebugMenu, type DebugHit } from './debugMenu';
 import { WaitPanel } from './waitPanel';
+import { forecastAt } from './forecast';
 import { blendAtmosphere } from './atmosphere';
 import { clockAt, clockLabel, DAY, lateAt, phaseAt, RATE, sleepUntil, START_MINUTE, sunDirAt, TIMES_OF_DAY, untilMinute, blendAt, type NamedTime } from './clock';
 import { buildEdges } from '../real/edges';
@@ -106,6 +107,8 @@ const debug = params.get('debug') === '1';
 const FLAG_LATE = 'world.late';
 /** Minutes since the story began (district/clock.ts). */
 const FLAG_CLOCK = 'world.clock';
+/** The weather stays as it is (the story's, a test's) instead of following the forecast. */
+const FLAG_WEATHER_HOLD = 'world.weather_hold';
 const START_SPAWN = 'kaburo_crossing.view';
 const SEED = 0x0c179090;
 const CELL_W = 8;
@@ -125,7 +128,10 @@ async function run(): Promise<void> {
     return byLook[params.get('time') ?? ''] ?? START_MINUTE;
   })();
   const startTotal = (Math.max(1, Number(params.get('day')) || 1) - 1) * DAY + startMinute;
-  const flags = new FlagStore({ [FLAG_CLOCK]: startTotal, [FLAG_TIME]: phaseAt(startMinute), [FLAG_WEATHER]: params.get('weather') ?? 'clear', [FLAG_LATE]: lateAt(startMinute), [FLAG_SEASON]: isSeason(params.get('season')) ? params.get('season')! : 'spring' });
+  const startSeason: Season = isSeason(params.get('season')) ? (params.get('season') as Season) : 'spring';
+  // The weather follows the forecast (district/forecast.ts) unless it's held: ?weather= (and the benchmark) hold it.
+  const holdWeather = params.has('weather') || bench;
+  const flags = new FlagStore({ [FLAG_CLOCK]: startTotal, [FLAG_TIME]: phaseAt(startMinute), [FLAG_WEATHER]: params.get('weather') ?? (bench ? 'clear' : forecastAt(startTotal, startSeason)), [FLAG_WEATHER_HOLD]: holdWeather, [FLAG_LATE]: lateAt(startMinute), [FLAG_SEASON]: startSeason });
   // ?load=<slot>: a saved game (save/save.ts). Its world's flags now; its character's car, money, place and phone
   // as each of those is set up below.
   const loadSlot = params.get('load') as Slot | null;
@@ -673,11 +679,18 @@ async function run(): Promise<void> {
   // up to date (the minute, the time of day's look, the last train); jumps for waiting, sleep, taxis and the story.
   let clockTotal = Number(flags.get(FLAG_CLOCK) ?? startTotal);
   let clockStopped = false;
+  // The forecast's weather last applied: a new spell changes the weather (so a change by hand lasts till then).
+  let lastForecast = forecastAt(Math.floor(clockTotal), season());
   const syncClockFlags = (): void => {
     const total = Math.floor(clockTotal);
     flags.set(FLAG_CLOCK, total);
     flags.set(FLAG_TIME, phaseAt(total % DAY));
     flags.set(FLAG_LATE, lateAt(total % DAY));
+    const w = forecastAt(total, season());
+    if (w !== lastForecast) {
+      lastForecast = w;
+      if (flags.get(FLAG_WEATHER_HOLD) !== true) flags.set(FLAG_WEATHER, w);
+    }
   };
   const advanceClock = (minutes: number): void => {
     clockTotal += Math.max(0, minutes);
@@ -1501,7 +1514,15 @@ async function run(): Promise<void> {
         {
           title: 'Weather',
           items: () => [
-            ...WEATHERS.map((w) => ({ label: w, on: () => weather() === w, run: () => flags.set(FLAG_WEATHER, w) })),
+            { label: 'auto (forecast)', on: () => flags.get(FLAG_WEATHER_HOLD) !== true, run: () => {
+              flags.set(FLAG_WEATHER_HOLD, false);
+              lastForecast = forecastAt(Math.floor(clockTotal), season());
+              flags.set(FLAG_WEATHER, lastForecast);
+            } },
+            ...WEATHERS.map((w) => ({ label: w, on: () => weather() === w, run: () => {
+              flags.set(FLAG_WEATHER_HOLD, true);
+              flags.set(FLAG_WEATHER, w);
+            } })),
             { label: 'snow cover 0', on: () => snowCover < 0.01, run: () => (snowCover = 0) },
             { label: 'snow cover full', on: () => snowCover > 0.99, run: () => (snowCover = 1) },
           ],
@@ -1726,7 +1747,11 @@ async function run(): Promise<void> {
         waitPanel.show();
       }
     }
-    if (e.code === 'KeyR') flags.set(FLAG_WEATHER, WEATHERS[(WEATHERS.indexOf(weather()) + 1) % WEATHERS.length]);
+    if (e.code === 'KeyR') {
+      // (By hand: held until the debug menu's 'auto weather'.)
+      flags.set(FLAG_WEATHER_HOLD, true);
+      flags.set(FLAG_WEATHER, WEATHERS[(WEATHERS.indexOf(weather()) + 1) % WEATHERS.length]);
+    }
     if (e.code === 'KeyF' && !driving.car) controls.fly = !controls.fly;
     if (e.code === 'KeyI') {
       setInvertY(!controls.invertY, true);
