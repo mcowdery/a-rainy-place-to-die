@@ -73,7 +73,7 @@ function balconyRects(p: HomePlan): { floor: R4 | null; rails: R4[] } {
 }
 
 /** A flat's layout: collision on its storey (the street's own below), its floor, and what counts as inside. */
-export function homeLayout(b: Building3, p: HomePlan, ground: readonly Rect[]): Omit<Interior, 'group'> {
+function flatLayout(b: Building3, p: HomePlan, ground: readonly Rect[]): Omit<Interior, 'group'> {
   const f = localFrame(b);
   const R = (r: R4): Rect => localRect(f, r[0], r[1], r[2], r[3]);
   const bal = balconyRects(p);
@@ -90,6 +90,31 @@ export function homeLayout(b: Building3, p: HomePlan, ground: readonly Rect[]): 
     floorAt: (x, z, current) => (current > p.y - 2 && within(x, z) ? p.y : null),
     contains: (x, z, y) => y > p.y && y < p.y + p.h + 0.4 && within(x, z),
   };
+}
+
+/** The layout of a building's flats together: each one's collision on its own storey, the street's below. */
+export function homeLayout(b: Building3, plans: readonly HomePlan[], ground: readonly Rect[]): Omit<Interior, 'group'> {
+  const flats = plans.map((p) => ({ p, l: flatLayout(b, p, []) }));
+  return {
+    colliders(floor) {
+      const on = flats.filter(({ p }) => Math.abs(floor - p.y) < 1.2);
+      return on.length ? on.flatMap(({ l }) => l.colliders(floor)) : Math.abs(floor) <= 1 ? ground : [];
+    },
+    floorAt(x, z, current) {
+      for (const { l } of flats) {
+        const y = l.floorAt(x, z, current);
+        if (y !== null) return y;
+      }
+      return null;
+    },
+    contains: (x, z, y) => flats.some(({ l }) => l.contains(x, z, y)),
+  };
+}
+
+export interface Flat {
+  readonly plan: HomePlan;
+  readonly look: { readonly wall: number; readonly ceiling: number; readonly floor?: number };
+  readonly furnish: (h: Home) => void;
 }
 
 /** Furniture over a Kit, in the flat's frame (u, t local; y above the flat's floor). */
@@ -284,9 +309,17 @@ export class Home {
   }
 }
 
-/** Builds a flat: its shell (floor, ceiling, outer walls with windows, door and balcony), then its furniture. */
-export function homeInterior(b: Building3, p: HomePlan, city: THREE.Material, ghost: THREE.Material, look: { wall: number; ceiling: number; floor?: number }, furnish: (h: Home) => void, ground: readonly Rect[]): Interior {
+/** Builds a building's flats (each: its shell, then its furniture) as one interior. */
+export function homeInterior(b: Building3, flats: readonly Flat[], city: THREE.Material, ghost: THREE.Material, ground: readonly Rect[]): Interior {
   const k = new Kit(b);
+  for (const fl of flats) buildFlat(k, fl.plan, fl.look, fl.furnish);
+  const group = k.finish(city, ghost);
+  group.visible = false;
+  return { group, ...homeLayout(b, flats.map((fl) => fl.plan), ground) };
+}
+
+/** A flat's shell (floor, ceiling, outer walls with windows, door and balcony), then its furniture. */
+function buildFlat(k: Kit, p: HomePlan, look: Flat['look'], furnish: (h: Home) => void): void {
   const h = new Home(k, p);
   const [u0, u1, t0, t1] = p.box;
   const H = p.h;
@@ -351,9 +384,6 @@ export function homeInterior(b: Building3, p: HomePlan, city: THREE.Material, gh
     for (const r of rails) h.box(0x8a8e92, r[0], r[1], r[2], r[3], 0, 1.1);
   }
   furnish(h);
-  const group = k.finish(city, ghost);
-  group.visible = false;
-  return { group, ...homeLayout(b, p, ground) };
 }
 
 /** A small printed sign for a home's walls (a calendar, a notice). */

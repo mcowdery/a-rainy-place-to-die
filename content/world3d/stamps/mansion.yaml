@@ -1,0 +1,15 @@
+# メゾン電光 Maison Denkō, a seven-storey マンション on Denkō-chō's back streets (real/residences.ts, kind mansion).
+# The idol manager lives in 603 (real/homesCast.ts): the entrance takes you up and in, the flat's door back down.
+id: mansion
+name: メゾン電光 Maison Denkō
+footprint: [20, 16]
+height: 22
+front: south
+landmark: mansion
+nodes:
+  front: { kind: spawn, name: Maison Denkō, at: [15.5, 7], facing: north, view: [0, 12] }
+  entrance: { kind: door, name: 603 (the idol manager's), at: [15.5, 0.6], returnSpawn: home, through: true }
+  home: { kind: spawn, name: Maison Denkō 603 (the idol manager's), at: [4.8, -8.6], floor: 15.5, facing: south, view: [180, -6] }
+  leave: { kind: door, name: Down to the street, at: [4.8, -9.9], floor: 15.5, returnSpawn: front, through: true }
+  schedule: { kind: hotspot, name: The girls' week (the whiteboard), at: [1.6, -5.2], floor: 15.5 }
+  laptop: { kind: hotspot, name: The laptop (mail from the agency), at: [2.2, -5.4], floor: 15.5 }

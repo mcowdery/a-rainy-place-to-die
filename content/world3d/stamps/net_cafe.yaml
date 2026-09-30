@@ -1,0 +1,15 @@
+# 漫画喫茶 月夜 Manga Café Tsukiyo, 24 hours, in Kaburo's back alleys (real/residences.ts, kind net_cafe): the MC's
+# bed for now, booth 17 (the first rung of the housing ladder; real/homesCast.ts). Walk in through the doors.
+id: net_cafe
+name: 漫画喫茶 月夜 Tsukiyo (24H)
+footprint: [16, 20]
+height: 8
+front: south
+landmark: net_cafe
+nodes:
+  front: { kind: spawn, name: Manga Café Tsukiyo, at: [8, 7], facing: north, view: [0, 10] }
+  door: { kind: door, name: Manga Café Tsukiyo 月夜, at: [8, 0.5], returnSpawn: home, through: true }
+  home: { kind: spawn, name: Manga Café Tsukiyo (inside), at: [8, -4.6], floor: 0.05, facing: north, view: [0, -4] }
+  leave: { kind: door, name: the street, at: [8, -2.0], floor: 0.05, returnSpawn: front, through: true }
+  booth_17: { kind: hotspot, name: Booth 17 (yours), at: [3.1, -14.4], floor: 0.05 }
+  clerk: { kind: npc, name: The night clerk, at: [12.3, -4.3], floor: 0.05, figure: { body: man, pose: stand, color: '#b8c8e8' } }

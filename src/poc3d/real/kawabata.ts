@@ -23,6 +23,9 @@ import { EMIT, KIND, lin } from './meshBuilder';
  * - river_walk: the riverside promenade on the embankment: paving, cherry trees, lanterns, food stalls (yatai)
  *   under red lanterns, and houseboats (yakatabune) moored in the river, their lanterns lit at night.
  */
+/** The apato kit's name plate, by placement (Kōpo Kawabata, and Kōpo Sakura in Sakuragaoka). */
+const APATO_NAMES: Readonly<Record<string, string>> = { kopo: 'コーポ川端', kopo_sakura: 'コーポ桜' };
+
 export const KAWABATA_KINDS = ['temple', 'tv_tower', 'yakuza_house', 'apato', 'river_walk'] as const;
 export type KawabataKind = (typeof KAWABATA_KINDS)[number];
 
@@ -349,7 +352,7 @@ export const KAWABATA_BUILDERS: Record<KawabataKind, (k: Kit, id: string, part: 
 
   // ---- コーポ川端: a worn two-storey wooden apartment block. The outside steel stair up the east end, the open
   // corridor along the front of the upper floor with four doors, washing machines, laundry on the rail, bicycles ----
-  apato(k) {
+  apato(k, id) {
     const WALL = 0xc8b8a0;
     k.facade(WALL, [4.5, 0.25, 1.1, 4], 256 + 128, 0, 18, 1.8, 12, 0, 5.8, true);
     k.box(0x5a5048, -0.3, 18.3, 1.5, 12.3, 5.8, 6.2);
@@ -372,7 +375,7 @@ export const KAWABATA_BUILDERS: Record<KawabataKind, (k: Kit, id: string, part: 
     plate(k, 3.2, 0.8, 9, 1.75, 5.2, (g, W, H) => {
       g.fillStyle = '#e8e0cc';
       g.fillRect(0, 0, W, H);
-      text(g, 'コーポ川端', W / 2, H * 0.6, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#3a2a1a');
+      text(g, APATO_NAMES[id] ?? 'コーポ', W / 2, H * 0.6, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#3a2a1a');
     });
     // Bicycles by the ground floor.
     for (const uu of [2, 3.2, 12]) {

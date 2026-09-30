@@ -298,3 +298,21 @@
   stamp: subway_s06
   cell: [11, 10]
   offset: [60, 10]
+# The cast's homes (real/homesCast.ts): the idol manager's マンション, the Stella dorm, Kōpo Sakura (the teacher's and the
+# MC's), the manga café where the MC starts.
+- id: manager_flat
+  stamp: mansion
+  cell: [35, 11]
+  offset: [40, 40]
+- id: stella_dorm
+  stamp: dorm
+  cell: [19, 9]
+  offset: [40, 40]
+- id: kopo_sakura
+  stamp: apato_sakura
+  cell: [17, 11]
+  offset: [50, 50]
+- id: tsukiyo
+  stamp: net_cafe
+  cell: [27, 9]
+  offset: [50, 50]

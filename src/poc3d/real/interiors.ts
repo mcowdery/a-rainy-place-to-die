@@ -277,6 +277,9 @@ export const INTERIORS: Readonly<Record<string, { build: (b: Building3, city: TH
   dept_store: { build: deptInterior, layout: deptLayout, range: 120 },
   residence: { build: penthouseInterior, layout: penthouseLayout, range: 60, hides: 'crown' },
   love_hotel: { build: rougeInterior, layout: rougeLayout, range: 60 },
-  apato: homeFor('apato'),
-  danchi: homeFor('danchi'),
 };
+
+/** A placement's interior: its home's flats (real/homesCast.ts) if it has any, else its landmark kind's. */
+export function interiorFor(p: { readonly id: string; readonly stamp: { readonly landmark: string | null } }): (typeof INTERIORS)[string] | null {
+  return homeFor(p.id) ?? (p.stamp.landmark ? INTERIORS[p.stamp.landmark] ?? null : null);
+}

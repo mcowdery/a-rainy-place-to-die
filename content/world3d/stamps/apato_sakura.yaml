@@ -1,0 +1,19 @@
+# コーポ桜 Kōpo Sakura, a wooden apato in Sakuragaoka (the apato kit, real/kawabata.ts). Two homes you walk into
+# (real/homesCast.ts): the teacher's 102 downstairs, and 203 upstairs, the MC's first proper room (the housing
+# ladder's second rung, docs/city-plan.md).
+id: apato_sakura
+name: コーポ桜 Kōpo Sakura
+footprint: [22, 12]
+height: 6.2
+front: north
+landmark: apato
+nodes:
+  front: { kind: spawn, name: Kōpo Sakura, at: [9, 6], facing: south, view: [180, 8] }
+  room_102: { kind: door, name: Room 102 (the teacher's), at: [6.25, 0.4], returnSpawn: teacher_home, through: true }
+  teacher_home: { kind: spawn, name: Kōpo Sakura 102 (the teacher's), at: [6.55, -3.4], floor: 0.3, facing: south, view: [180, -4] }
+  teacher_leave: { kind: door, name: the street, at: [6.25, -2.2], floor: 0.3, returnSpawn: front, through: true }
+  tests: { kind: hotspot, name: The tests to mark, at: [6.9, -7.0], floor: 0.3 }
+  room_203: { kind: door, name: Room 203 (yours), at: [10.55, 0.4], returnSpawn: mc_home, through: true }
+  mc_home: { kind: spawn, name: Kōpo Sakura 203 (yours), at: [10.95, -3.4], floor: 3, facing: south, view: [180, -4] }
+  mc_leave: { kind: door, name: the street, at: [10.55, -2.2], floor: 3, returnSpawn: front, through: true }
+  mailbox: { kind: hotspot, name: The mailboxes, at: [16, 0.6] }

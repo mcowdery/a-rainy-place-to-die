@@ -30,7 +30,7 @@ import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { SubwaySystem } from '../real/subway';
 import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../real/subwayStation';
 import { buildRotary, type RotaryBuilt } from '../real/rotary';
-import { INTERIORS, type Interior } from '../real/interiors';
+import { interiorFor, type Interior } from '../real/interiors';
 import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem, type DrivenVehicle, setTrafficGround } from '../real/traffic';
 import { Driving } from './driving';
@@ -368,9 +368,9 @@ async function run(): Promise<void> {
   // Built a slice at a time as you approach (a few ms a frame), all at once if you step in first. Escalators
   // carry a walker standing on them (dt > 0: the frame's time).
   const interiors = content.placed
-    .filter((p) => p.stamp.landmark && INTERIORS[p.stamp.landmark])
+    .filter((p) => interiorFor(p))
     .map((p) => {
-      const def = INTERIORS[p.stamp.landmark!];
+      const def = interiorFor(p)!;
       return { id: p.id, b: p.building, range: def.range, hides: def.hides, keep: !!def.keep, layout: def.layout(p.building), start: () => def.build(p.building, city, ghost), job: null as Generator<void, Interior> | null, built: null as Interior | null, active: false };
     });
   const inInterior = (): boolean => interiors.some((i) => i.active);

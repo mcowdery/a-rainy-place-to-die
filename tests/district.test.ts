@@ -16,7 +16,7 @@ import { addDistrictAds, type AdPlacement } from '../src/poc3d/real/districtAds'
 import { MeshBuilder } from '../src/poc3d/real/meshBuilder';
 import { tiers } from '../src/poc3d/real/buildings';
 import { SignBuilder } from '../src/poc3d/real/signs';
-import { INTERIORS } from '../src/poc3d/real/interiors';
+import { INTERIORS, interiorFor } from '../src/poc3d/real/interiors';
 import { parseStamp3, plazaRect, reservedRect } from '../src/poc3d/district/stamps';
 import { departsAt, lineSchedule, nextDepartures, parseSubway3, subwayRoute, trainAt } from '../src/poc3d/district/subway';
 
@@ -347,7 +347,7 @@ describe('Places you can walk into, and fast travel', () => {
     expect(names).toEqual(expect.arrayContaining(['Kaburo Crossing', 'Bar Kanpai', 'Yoru Mart', 'Yoru Mart (inside)', 'Kaburo Inari Shrine']));
     expect(dests.filter((d) => d.group === 'Zones')).toHaveLength(content.zones.zones.length);
     // Spots inside an interior are clear once you're inside it.
-    const inner = content.placed.filter((p) => p.stamp.landmark && INTERIORS[p.stamp.landmark]).map((p) => ({ id: p.id, l: INTERIORS[p.stamp.landmark!].layout(p.building) }));
+    const inner = content.placed.filter((p) => interiorFor(p)).map((p) => ({ id: p.id, l: interiorFor(p)!.layout(p.building) }));
     for (const d of dests) {
       const it = inner.find((i) => i.l.contains(d.x, d.z, d.floor + 1.7));
       if (it) district.setInterior(it.id, it.l);

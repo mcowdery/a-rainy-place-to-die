@@ -1,0 +1,15 @@
+# The Stella dorm: a plain white block in Sakuragaoka, across Asagiri-nishi-dori from Stella Production (real/residences.ts,
+# kind dorm). Its idols live upstairs; the lounge on the ground floor is where they come home to (real/homesCast.ts).
+id: dorm
+name: S寮 (the Stella dorm)
+footprint: [24, 16]
+height: 13
+front: south
+landmark: dorm
+nodes:
+  front: { kind: spawn, name: The Stella dorm, at: [10.5, 6], facing: north, view: [0, 8] }
+  door: { kind: door, name: The dorm (the lounge), at: [10.6, 0.5], returnSpawn: home, through: true }
+  home: { kind: spawn, name: The Stella dorm (the lounge), at: [10.6, -3.6], floor: 0.3, facing: north, view: [0, -4] }
+  leave: { kind: door, name: the street, at: [10.6, -2.1], floor: 0.3, returnSpawn: front, through: true }
+  rules: { kind: hotspot, name: The dorm rules, at: [12.3, -2.3], floor: 0.3 }
+  sofa: { kind: hotspot, name: The girls on the sofa, at: [4.4, -9.4], floor: 0.3 }

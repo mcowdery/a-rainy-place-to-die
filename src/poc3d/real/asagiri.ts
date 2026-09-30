@@ -1,3 +1,4 @@
+import { RESIDENCE_BUILDERS, RESIDENCE_KINDS, residenceColliders, residenceLights, type ResidenceKind } from './residences';
 import { SUBURB_BUILDERS, SUBURB_KINDS, suburbColliders, suburbFloor, suburbLights, suburbRaisedColliders, suburbShelters, type SuburbKind } from './suburbs';
 import { KAWABATA_BUILDERS, KAWABATA_KINDS, kawabataColliders, kawabataLights, kawabataShelters, type KawabataKind } from './kawabata';
 import { NORTH_BUILDERS, NORTH_KINDS, northColliders, northLights, northShelters, type NorthKind } from './north';
@@ -27,7 +28,7 @@ import type { ScreenLight } from './screenLight';
  * Each kind has a builder, collision rects and lightmap lights; city hall also has a raised floor.
  */
 // (The kit landmarks' registry: Tōto Port's set pieces live in port.ts and are registered here too.)
-export const ASAGIRI_KINDS = ['idol_agency', 'police_hq', 'residence', 'bank', 'law_firm', 'ad_agency', 'biz_hotel', 'members_club', 'city_hall', 'dept_store', 'sento', 'garage', ...PORT_KINDS, ...DENKO_KINDS, ...NORTH_KINDS, ...KAWABATA_KINDS, ...SUBURB_KINDS] as const;
+export const ASAGIRI_KINDS = ['idol_agency', 'police_hq', 'residence', 'bank', 'law_firm', 'ad_agency', 'biz_hotel', 'members_club', 'city_hall', 'dept_store', 'sento', 'garage', ...PORT_KINDS, ...DENKO_KINDS, ...NORTH_KINDS, ...KAWABATA_KINDS, ...SUBURB_KINDS, ...RESIDENCE_KINDS] as const;
 export type AsagiriKind = (typeof ASAGIRI_KINDS)[number];
 
 const art = import.meta.glob(
@@ -121,6 +122,7 @@ export function asagiriColliders(kind: AsagiriKind, b: Building3, floor: number)
       // Solid brick but for the open middle bay, where your car lives (you can drive or walk in).
       return [R(0, GARAGE.b0, 0.3, 14), R(GARAGE.b1, 20, 0.3, 14), R(GARAGE.b0, GARAGE.b1, GARAGE.depth, 14)];
     default:
+      if ((RESIDENCE_KINDS as readonly string[]).includes(kind)) return residenceColliders(kind as ResidenceKind, b);
       if ((SUBURB_KINDS as readonly string[]).includes(kind)) return suburbColliders(kind as SuburbKind, b);
       if ((KAWABATA_KINDS as readonly string[]).includes(kind)) return kawabataColliders(kind as KawabataKind, b);
       if ((NORTH_KINDS as readonly string[]).includes(kind)) return northColliders(kind as NorthKind, b);
@@ -148,6 +150,7 @@ export function asagiriShelters(kind: AsagiriKind, b: Building3): { rect: Rect; 
     case 'dept_store':
       return [R(0, DEPT.w, 1.2, DEPT.d, -6.5, DEPT.h, true), R(0, DEPT.w, -0.2, 1.2, 0, 6.5)];
     default:
+      if ((RESIDENCE_KINDS as readonly string[]).includes(kind)) return [];
       if ((SUBURB_KINDS as readonly string[]).includes(kind)) return suburbShelters(kind as SuburbKind, b);
       if ((KAWABATA_KINDS as readonly string[]).includes(kind)) return kawabataShelters(kind as KawabataKind, b);
       if ((NORTH_KINDS as readonly string[]).includes(kind)) return northShelters(kind as NorthKind, b);
@@ -190,6 +193,7 @@ export function asagiriLights(kind: AsagiriKind, b: Building3): Light[] {
     case 'garage':
       return [L(10, 3, 5, cool, 1.0), L(10, -2.5, 6, [1.0, 0.5, 0.8], 0.6)];
     default:
+      if ((RESIDENCE_KINDS as readonly string[]).includes(kind)) return residenceLights(kind as ResidenceKind, b);
       if ((SUBURB_KINDS as readonly string[]).includes(kind)) return suburbLights(kind as SuburbKind, b);
       if ((KAWABATA_KINDS as readonly string[]).includes(kind)) return kawabataLights(kind as KawabataKind, b);
       if ((NORTH_KINDS as readonly string[]).includes(kind)) return northLights(kind as NorthKind, b);
@@ -269,6 +273,7 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
   ...NORTH_BUILDERS,
   ...KAWABATA_BUILDERS,
   ...SUBURB_BUILDERS,
+  ...RESIDENCE_BUILDERS,
   // ---- SAKURA-YU (桜湯): the neighbourhood's public bath. A gabled entrance (plaster and dark wood, a tiled
   // roof with its gable to the street), the noren and a lit sign at the door, the tiled bath hall behind
   // with steamy high windows, and the tall chimney with the bath's name down it ----
