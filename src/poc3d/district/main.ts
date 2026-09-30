@@ -982,6 +982,14 @@ async function run(): Promise<void> {
     };
   }
   let inVn = false;
+  // What the game handles itself when you press E, rather than the story (the VN): your garage, sleeping, trains
+  // and elevators, plain doorways, a racer's challenge. The demo edition has no story, so only these can be used.
+  const gameplayNode = (n: Node3): boolean =>
+    n.id === 'city_garage.door' ||
+    (n.kind === 'hotspot' && !!n.sleep) ||
+    (n.kind === 'station' && !!n.returnSpawn) ||
+    (n.kind === 'door' && !!n.returnSpawn && !!n.through) ||
+    content.races.some((r) => r.host === n.id);
   const forward = new THREE.Vector3();
   const target = (): Node3 | null => {
     camera.getWorldDirection(forward);
@@ -990,6 +998,7 @@ async function run(): Promise<void> {
     const level = camAbove() - 1.7;
     for (const n of nodes) {
       if (n.trigger !== 'interact' || !visibleNode(n) || Math.abs(n.floor - level) > 2) continue;
+      if (!edition.narrative && !gameplayNode(n)) continue;
       const dx = n.x - camera.position.x;
       const dz = n.z - camera.position.z;
       const d = Math.hypot(dx, dz);
@@ -1814,6 +1823,7 @@ async function run(): Promise<void> {
       });
       return;
     }
+    if (!edition.narrative) return;
     inVn = true;
     document.exitPointerLock();
     // Turn to face whoever you're talking to (the scene plays over the paused city).

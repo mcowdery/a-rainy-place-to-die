@@ -48,6 +48,8 @@ to a spawn (`exit:<place>.<spawn>`) or where the player stood.
 - **Two editions.** The **standard** edition is censored and more family friendly, but still adult leaning:
   it's a noir game. The **uncensored** edition adds explicit images and sex scenes. One story: the same
   scenes, choices and flags in both; only what's shown differs.
+- **A gameplay demo** as well: no story at all and none of the revealing ads, for audiences who want none of
+  it. Nothing in the story needs writing for it.
 - Everyone in a sexual scene or image is **21 or older**, and it's **consensual**.
 - **Evil is chosen.** Villains are villains by what they and their organisations do, never by their race or
   nationality; every group in the story has good people in it too.

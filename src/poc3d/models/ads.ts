@@ -1,4 +1,5 @@
 import type { TaxiAd } from './vehicles';
+import { DEMO_HIDDEN_ART } from '../../edition/demoArt';
 
 /**
  * Taxi ad catalogue (all brands invented; some double as story hooks). `art` names the photo crops in
@@ -44,7 +45,8 @@ export interface DistrictAd {
 export const AD_CATEGORIES = ['mainstream', 'gaming', 'fun', 'food', 'host', 'hostess', 'adult', 'lovehotel', 'loan', 'street', 'lodging'] as const;
 export type AdCategory = (typeof AD_CATEGORIES)[number];
 
-export const DISTRICT_ADS: readonly DistrictAd[] = [
+/** Every district ad, in every edition's art. */
+export const ALL_DISTRICT_ADS: readonly DistrictAd[] = [
   { art: '10_club_adonis_hosts', format: 'billboard', cat: 'host', brand: 'CLUB ADONIS', copy: 'No.1 ホスト 今夜も君を待つ', accent: 0xe8c060, ink: 0xffffff, text: 'bottom' },
   { art: '12_hotel_rouge_julie', format: 'billboard', cat: 'lovehotel', brand: 'HOTEL ROUGE ホテル ルージュ', copy: '休憩 ¥3,800〜 / 宿泊 ¥7,500〜', accent: 0xff5070, ink: 0xffffff, text: 'left' },
   { art: '13_hotel_rouge', format: 'billboard', cat: 'lovehotel', brand: 'HOTEL ROUGE', copy: '休憩 ¥3,800〜 / 宿泊 ¥7,500〜', accent: 0xff5070, ink: 0xffffff, text: 'right' },
@@ -112,6 +114,13 @@ export const DISTRICT_ADS: readonly DistrictAd[] = [
   { art: '76_cash_one_poster', format: 'poster', cat: 'loan', brand: 'キャッシュ・ワン', copy: 'ブラックOK 即日', accent: 0x101010, ink: 0xffd040 },
   { art: '78_maruyoshi_pawn', format: 'poster', cat: 'loan', brand: '質 まるよし', copy: 'ブランド品・貴金属 高価買取', accent: 0x101010, ink: 0xe8c060 },
 ];
+
+/** The district ads an edition shows: the demo leaves out the revealing ones (src/edition/demoArt.ts). */
+export const districtAdsFor = (edition: string): readonly DistrictAd[] =>
+  edition === 'demo' ? ALL_DISTRICT_ADS.filter((a) => !DEMO_HIDDEN_ART.has(a.art)) : ALL_DISTRICT_ADS;
+
+/** This build's district ads (the chunk workers place them, the atlas draws them; indexes agree). */
+export const DISTRICT_ADS: readonly DistrictAd[] = districtAdsFor(__EDITION__);
 
 /** The Kaburo mega-sign's screen content (16:9, assets/ads/kaburo/mega/), cycled across its screens. */
 export interface MegaAd {

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { edition } from '@edition';
+import { kaburoArt } from '../src/edition/art';
+import { edition as demo } from '../src/edition/demo';
+import { DEMO_HIDDEN_ART } from '../src/edition/demoArt';
 import { applyPhoneOverlays } from '../src/edition/phoneOverlay';
 import { edition as uncensored } from '../src/edition/uncensored';
 import { applyVnOverlays } from '../src/edition/vnOverlay';
 import { parseContact } from '../src/phone/format';
 import { loadPhoneContent } from '../src/phone/content';
+import { ALL_DISTRICT_ADS, DISTRICT_ADS, districtAdsFor } from '../src/poc3d/models/ads';
 import { VnEngine, VnLibrary } from '../src/vn/engine';
-
-const vnScenes = import.meta.glob('../content/vn/*/scene.json', { eager: true, import: 'default' }) as Record<string, unknown>;
-const phoneMedia = import.meta.glob('../content/phone/media/*', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
-const byFolder = (files: Record<string, unknown>): Record<string, unknown> => Object.fromEntries(Object.entries(files).map(([p, v]) => [p.split('/').slice(-2, -1)[0], v]));
 
 const frame = (over: object = {}): object => ({ entry_point: null, image: null, video: null, size: null, title: '', bubbles: [], on_enter: { set: {} }, next: null, choices: [], hotspots: [], ...over });
 const bubble = (id: string, text: string): object => ({ id, text, kind: 'speech', x: 0.5, y: 0.8, show: 'enter', duration: 3 });
@@ -30,18 +30,38 @@ const base = (): Record<string, unknown> => ({
 });
 
 describe('editions', () => {
-  it('tests and the dev server run the standard edition, with nothing from adult/', () => {
+  it('tests and the dev server run the standard edition: the story, all the art, nothing from adult/', () => {
     expect(edition.name).toBe('standard');
-    expect(edition.vnScenes).toEqual({});
-    expect(edition.phoneFiles).toEqual({});
+    expect(edition.narrative).toBe(true);
+    expect(edition.overlay.vnScenes).toEqual({});
+    expect(edition.overlay.phoneFiles).toEqual({});
+    expect(Object.keys(edition.story.phoneFiles)).toContain('kaiwa.yaml');
+    expect(DISTRICT_ADS).toBe(ALL_DISTRICT_ADS);
   });
 
-  it('the uncensored edition\'s own overlays (adult/, if checked out) apply cleanly', () => {
-    const vn = applyVnOverlays(byFolder(vnScenes), uncensored.vnScenes);
-    expect(vn.errors).toEqual([]);
-    const contacts = loadPhoneContent().contacts;
-    const media = (p: string): boolean => p in uncensored.phoneMedia || `../content/phone/${p}` in phoneMedia;
-    expect(applyPhoneOverlays(contacts, uncensored.phoneFiles, media).errors).toEqual([]);
+  it("the uncensored edition's own overlays (adult/, if checked out) apply cleanly", () => {
+    const { story, overlay } = uncensored;
+    expect(applyVnOverlays(story.vnScenes, overlay.vnScenes).errors).toEqual([]);
+    const media = (p: string): boolean => p in overlay.phoneMedia || p in story.phoneMedia;
+    expect(applyPhoneOverlays(loadPhoneContent().contacts, overlay.phoneFiles, media).errors).toEqual([]);
+  });
+
+  it("the demo has no story: no scenes, and only KAIWA's welcome on the phone", () => {
+    expect(demo.narrative).toBe(false);
+    expect(demo.story.vnScenes).toEqual({});
+    expect(demo.story.vnAssets).toEqual({});
+    expect(Object.keys(demo.story.phoneFiles)).toEqual(['kaiwa.yaml']);
+    expect(demo.overlay.vnScenes).toEqual({});
+  });
+
+  it('the demo leaves out exactly the revealing ads, from its art and from the ad list', () => {
+    for (const name of DEMO_HIDDEN_ART) expect(kaburoArt[name], `${name} is a real file`).toBeTruthy();
+    const kept = Object.keys(kaburoArt).filter((n) => !DEMO_HIDDEN_ART.has(n)).sort();
+    expect(Object.keys(demo.kaburoArt).sort()).toEqual(kept);
+    const ads = districtAdsFor('demo');
+    expect(ads.some((a) => DEMO_HIDDEN_ART.has(a.art))).toBe(false);
+    expect(ads.length).toBe(ALL_DISTRICT_ADS.filter((a) => !DEMO_HIDDEN_ART.has(a.art)).length);
+    for (const a of ads) expect(demo.kaburoArt[a.art], a.art).toBeTruthy();
   });
 });
 

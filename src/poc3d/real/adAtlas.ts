@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { edition } from '@edition';
 import { DISTRICT_ADS, type AdDef, type DistrictAd } from '../models/ads';
 import { DISTRICT_ATLAS, districtAdRect } from './districtAds';
 import type { CityUniforms } from './city';
@@ -12,8 +13,8 @@ import type { CityUniforms } from './city';
 
 const art = import.meta.glob('../../../assets/ads/*.jpg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const artUrl = (name: string): string | undefined => Object.entries(art).find(([p]) => p.endsWith(`/${name}.jpg`))?.[1];
-const kaburoArt = import.meta.glob('../../../assets/ads/kaburo/*.jpg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
-const kaburoUrl = (name: string): string | undefined => Object.entries(kaburoArt).find(([p]) => p.endsWith(`/${name}.jpg`))?.[1];
+// Kaburo's ad art comes from the edition: the demo's leaves out the revealing ads (src/edition/demoArt.ts).
+const kaburoUrl = (name: string): string | undefined => edition.kaburoArt[name];
 
 const ROOF_W = 768;
 const ROOF_H = 256;

@@ -1,29 +1,53 @@
 /**
- * The two editions (story/style.md, Adult content): **standard** (censored) and **uncensored** (explicit
- * images and sex scenes). They're separate builds: `vite --mode uncensored` / `vite build --mode uncensored`
- * point the `@edition` alias (vite.config.ts) at uncensored.ts, everything else at standard.ts, so the standard
- * build never reads the explicit files at all.
+ * The three editions, each a separate build (vite.config.ts: `--mode uncensored`, `--mode demo`, else standard),
+ * which points the `@edition` alias at standard.ts, uncensored.ts or demo.ts, so a build bundles only its own
+ * edition's files:
+ *
+ * - **standard**: the story, censored (story/style.md, Adult content). Still adult leaning.
+ * - **uncensored**: the standard edition plus explicit images and sex scenes, laid over it from `adult/`.
+ * - **demo**: the gameplay only, for audiences who want none of it: no story (no scenes, no story chats, no story
+ *   nodes to use), and Kaburo's revealing ads left out (demoArt.ts). Driving, racing, the garage, the city.
  *
  * The uncensored edition's files live in `adult/` (git-ignored; its own repository), mirroring the main tree:
  *   adult/content/vn/<story>/scene.json    overlay on content/vn/<story>/ (format in vnOverlay.ts)
  *   adult/content/vn/<story>/assets/*      its stills; a file with a base still's name replaces it
  *   adult/content/phone/<contact>.yaml     overlay on a contact's beats (format in phoneOverlay.ts)
  *   adult/content/phone/media/*            its media; a file with a base file's name replaces it
- * An overlay only changes what's shown, never where the story goes or what it remembers, so both editions share
- * one story, one set of flags and saves.
+ * An overlay only changes what's shown, never where the story goes or what it remembers, so both story editions
+ * share one story, one set of flags and saves.
  */
-export type EditionName = 'standard' | 'uncensored';
+export type EditionName = 'standard' | 'uncensored' | 'demo';
+
+/** Story content, by the keys the loaders use. */
+export interface StoryFiles {
+  /** VN scene.json by story folder. */
+  readonly vnScenes: Readonly<Record<string, unknown>>;
+  /** VN entry_points.json by story folder. */
+  readonly vnEntries: Readonly<Record<string, unknown>>;
+  /** VN stills: URL by "<folder>/<path>" ("s12/assets/s12.fr05.jpg"). */
+  readonly vnAssets: Readonly<Record<string, string>>;
+  /** Phone contacts: YAML text by file name ("mika.yaml"). */
+  readonly phoneFiles: Readonly<Record<string, string>>;
+  /** Phone media: URL by path as contact files write it ("media/x.jpg"). */
+  readonly phoneMedia: Readonly<Record<string, string>>;
+}
+
+/** URL by name, from files keyed by path ("…/09_annaijo_girls.jpg" -> "09_annaijo_girls"). */
+export const byName = (glob: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(Object.entries(glob).map(([p, url]) => [p.slice(p.lastIndexOf('/') + 1).replace(/\.jpg$/, ''), url]));
+
+export const NO_STORY: StoryFiles = { vnScenes: {}, vnEntries: {}, vnAssets: {}, phoneFiles: {}, phoneMedia: {} };
 
 export interface Edition {
   readonly name: EditionName;
-  /** Before the district loads: the uncensored edition's age check; the standard edition goes straight on. */
+  /** Whether the story is in: its scenes, chats and nodes. False in the demo. */
+  readonly narrative: boolean;
+  /** Before the district loads: the uncensored edition's age check; the others go straight on. */
   readonly ageGate: () => Promise<void>;
-  /** VN overlays: scene.json by story folder. */
-  readonly vnScenes: Readonly<Record<string, unknown>>;
-  /** VN overlay assets: URL by "<folder>/<path>" ("s12/assets/s12.fr05.jpg"). */
-  readonly vnAssets: Readonly<Record<string, string>>;
-  /** Phone overlays: YAML text by file name ("mika.yaml"). */
-  readonly phoneFiles: Readonly<Record<string, string>>;
-  /** Phone overlay media: URL by path as contact files write it ("media/x.jpg"). */
-  readonly phoneMedia: Readonly<Record<string, string>>;
+  /** The story content (content/vn, content/phone). */
+  readonly story: StoryFiles;
+  /** The uncensored overlays on it (empty in the other editions). */
+  readonly overlay: StoryFiles;
+  /** Kaburo's ad art (assets/ads/kaburo/): URL by name ("09_annaijo_girls"). */
+  readonly kaburoArt: Readonly<Record<string, string>>;
 }

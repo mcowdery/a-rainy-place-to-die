@@ -1,4 +1,6 @@
-import type { Edition } from './types';
+import { kaburoArt } from './art';
+import { story } from './story';
+import { type Edition, NO_STORY } from './types';
 
-/** The standard (censored) edition: no overlays. What `@edition` is in every build but the uncensored one. */
-export const edition: Edition = { name: 'standard', ageGate: () => Promise.resolve(), vnScenes: {}, vnAssets: {}, phoneFiles: {}, phoneMedia: {} };
+/** The standard (censored) edition: the story, no overlays. What `@edition` is in dev, tests and `vite build`. */
+export const edition: Edition = { name: 'standard', narrative: true, ageGate: () => Promise.resolve(), story, overlay: NO_STORY, kaburoArt };

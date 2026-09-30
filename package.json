@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "dev:uncensored": "vite --mode uncensored",
+    "dev:demo": "vite --mode demo",
     "build": "tsc && vite build",
     "build:uncensored": "tsc && vite build --mode uncensored",
+    "build:demo": "tsc && vite build --mode demo",
     "typecheck": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
