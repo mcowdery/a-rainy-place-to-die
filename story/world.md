@@ -4,9 +4,8 @@ Tōto as the story sees it. For how the city is built, see [docs/city-plan.md](.
 CLAUDE.md; this file is about what each place means to the story.
 
 The **story nodes** under each district are every npc, story door and hotspot in the city today: the places
-a scene can start. Scenes marked "the prototype's" are test content ([prototype.md](prototype.md)).
-`npm run vn:keys` prints the live list (and each node's scene, if it has one). Walk-through
-doors and spawns aren't listed; spawns are where a scene can send you (`exit:`).
+a scene can start. `npm run vn:keys` prints the live list (and each node's scene, if it has one).
+Walk-through doors and spawns aren't listed; spawns are where a scene can send you (`exit:`).
 
 ## 東都 Tōto
 
@@ -34,10 +33,9 @@ the station edge. Where the story starts: the MC's bed is a manga café booth he
 
 | Node | Kind | Name | Scene |
 |---|---|---|---|
-| `bar_kanpai.mama` | npc | Mama-san | the prototype's |
-| `bar_kanpai.detective` | npc | Man in a trench coat (at night) | — (the prototype's character) |
+| `bar_kanpai.mama` | npc | Mama-san (the bar's mama) | — |
 | `bar_kanpai.door` | door | Bar Kanpai | — |
-| `hotel_rouge.room_303` | door | Room 303 · Rouge Suite (needs the prototype's `heard_room_303`) | the prototype's |
+| `hotel_rouge.room_303` | door | Room 303 · Rouge Suite | — |
 | `yokocho.kuroneko` | door | BAR 黒猫 | — |
 | `yokocho.mama` | npc | Kuroneko's mama | — |
 | `ryujin_kogyo.door` | door | Ryujin Kogyo | — |

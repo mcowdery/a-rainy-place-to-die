@@ -18,6 +18,7 @@ import { tiers } from '../src/poc3d/real/buildings';
 import { SignBuilder } from '../src/poc3d/real/signs';
 import { INTERIORS, interiorFor } from '../src/poc3d/real/interiors';
 import { parseStamp3, plazaRect, reservedRect } from '../src/poc3d/district/stamps';
+import { compileCondition } from '../src/core/condition';
 import { departsAt, lineSchedule, nextDepartures, parseSubway3, subwayRoute, trainAt } from '../src/poc3d/district/subway';
 
 const content = loadDistrictContent();
@@ -86,11 +87,19 @@ describe('3D stamps and atmosphere', () => {
   it('places Bar Kanpai with resolvable nodes', () => {
     const bar = content.placed.find((p) => p.id === 'bar_kanpai')!;
     const ids = bar.nodes.map((n) => n.id);
-    expect(ids).toEqual(expect.arrayContaining(['bar_kanpai.door', 'bar_kanpai.out', 'bar_kanpai.mama', 'bar_kanpai.detective']));
+    expect(ids).toEqual(expect.arrayContaining(['bar_kanpai.door', 'bar_kanpai.out', 'bar_kanpai.mama']));
     expect(bar.nodes.find((n) => n.id === 'bar_kanpai.door')!.returnSpawn).toBe('bar_kanpai.out');
-    const detective = bar.nodes.find((n) => n.id === 'bar_kanpai.detective')!;
-    expect(detective.condition!((k) => (k === 'world.time' ? 'night' : undefined))).toBe(true);
-    expect(detective.condition!((k) => (k === 'world.time' ? 'day' : undefined))).toBe(false);
+  });
+
+  it('gives a node a condition on the flags, and rejects a bad one', () => {
+    const errors: string[] = [];
+    const stamp = parseStamp3('night.yaml', 'id: night\nfootprint: [4, 4]\nheight: 5\nnodes:\n  guest: { kind: npc, at: [1, 1], condition: world.time == "night" }', errors);
+    expect(errors).toEqual([]);
+    const when = compileCondition(stamp!.nodes.find((n) => n.id === 'guest')!.condition!);
+    expect(when((k) => (k === 'world.time' ? 'night' : undefined))).toBe(true);
+    expect(when((k) => (k === 'world.time' ? 'day' : undefined))).toBe(false);
+    parseStamp3('bad.yaml', 'id: bad\nfootprint: [4, 4]\nheight: 5\nnodes:\n  guest: { kind: npc, at: [1, 1], condition: "world.time ==" }', errors);
+    expect(errors.join('\n')).toMatch(/condition/);
   });
 
   it('rejects malformed stamps', () => {

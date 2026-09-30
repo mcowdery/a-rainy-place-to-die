@@ -28,9 +28,3 @@ nodes:
     name: Mama-san
     at: [3.2, 1.6]
     handoff: {}
-  detective:
-    kind: npc
-    name: Man in a trench coat
-    at: [10.5, 2.2]
-    condition: world.time == "night"
-    handoff: {}

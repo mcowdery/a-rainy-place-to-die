@@ -20,7 +20,6 @@ It's plain Markdown in git, next to the content it points at (node ids in `conte
 | [threads/](threads/README.md) | Plot threads: what happens, the clues, the flags, the scenes |
 | [timeline.md](timeline.md) | Chapters (one per season), episodes, what happens when |
 | [flags.md](flags.md) | Every flag: what the engine owns, what the story sets, where each is set and read |
-| [prototype.md](prototype.md) | The test content the game ships (Mama-san, Room 303): not canon, replaced by the real story |
 
 ## Canon, proposals and open questions
 

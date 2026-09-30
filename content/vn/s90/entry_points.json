@@ -1,9 +1,0 @@
-{
-  "schema": 1,
-  "scope": "story",
-  "story_id": "s90",
-  "entry_points": {
-    "bar_kanpai.mama": { "story_id": "s90", "frame": "s90.fr01", "export_file": "vn-s90.zip" },
-    "hotel_rouge.room_303": { "story_id": "s90", "frame": "s90.fr20", "export_file": "vn-s90.zip" }
-  }
-}

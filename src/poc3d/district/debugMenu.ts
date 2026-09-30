@@ -67,7 +67,7 @@ export class DebugMenu {
 
     // A story flag: type its name, Enter toggles it.
     const fl = this.section('Story flag');
-    this.flagIn = this.input('flag name, Enter toggles (heard_room_303)');
+    this.flagIn = this.input('flag name, Enter toggles');
     this.flagOut = document.createElement('div');
     Object.assign(this.flagOut.style, { opacity: '0.7', marginTop: '4px', minHeight: '1em' });
     this.flagIn.addEventListener('input', () => this.showFlag());

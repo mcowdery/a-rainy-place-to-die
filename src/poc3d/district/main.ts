@@ -961,7 +961,7 @@ async function run(): Promise<void> {
   // The phone (Tab): the KAIWA messenger, conversations in content/phone/ that arrive as story flags come true.
   const phoneContent = loadPhoneContent();
   if (phoneContent.errors.length) console.error(`Phone content:\n${phoneContent.errors.join('\n')}`);
-  // ?debug=1&flags=met_mama,asked_detective: set story flags from the start (to try conversations).
+  // ?debug=1&flags=met_x,asked_y: set story flags from the start (to try conversations).
   if (debug) for (const f of (params.get('flags') ?? '').split(',').filter(Boolean)) flags.set(f, true);
   const phone = new Phone(phoneContent.contacts, { get: flags.get, set: (k, v) => flags.set(k, v) });
   if (me?.phone) phone.restore(me.phone);
@@ -2416,9 +2416,8 @@ function dressDoor(mb: MeshBuilder, n: Node3, r: C3, nn: C3, y = 0): void {
   }
 }
 
-/** The bar's NPCs as ghosts: Mama-san talking at the door, the detective hands in pockets under his hat. */
+/** An NPC as a ghost: its stamp's figure, else a woman talking (Bar Kanpai's mama at her door). */
 function npcSpec(n: Node3, facing: C3): FigureSpec {
-  const detective = n.id.endsWith('detective');
   const yaw = Math.atan2(facing[0], facing[2]);
   const f = n.figure;
   if (f) {
@@ -2441,15 +2440,15 @@ function npcSpec(n: Node3, facing: C3): FigureSpec {
   return {
     x: n.x,
     z: n.z,
-    yaw: detective ? yaw - 0.5 : yaw + 0.4,
-    body: detective ? 'man' : 'woman',
-    pose: detective ? 'pockets' : 'talk',
-    color: detective ? [0.9, 0.82, 0.62] : [1.0, 0.42, 0.72],
-    hair: detective ? 'hat' : 'bun',
+    yaw: yaw + 0.4,
+    body: 'woman',
+    pose: 'talk',
+    color: [1.0, 0.42, 0.72],
+    hair: 'bun',
     long: true,
     phase: 0,
     side: 1,
-    look: detective ? -0.4 : 0.3,
+    look: 0.3,
   };
 }
 

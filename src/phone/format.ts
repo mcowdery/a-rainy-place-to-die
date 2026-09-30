@@ -4,13 +4,13 @@ import { compileCondition, type Condition } from '../core/condition';
 /**
  * Phone conversations (the KAIWA messenger), one file per contact in content/phone/<contact>.yaml:
  *
- *   id: mama                          # [a-z0-9_], stable (the phone's state is keyed by it)
- *   name: Mama-san                    # shown in the chat list and the thread header
- *   avatar: media/mama_avatar.jpg     # optional (else the name's initial); media/ is content/phone/media/
+ *   id: aya                           # [a-z0-9_], stable (the phone's state is keyed by it)
+ *   name: Aya                         # shown in the chat list and the thread header
+ *   avatar: media/aya_avatar.jpg      # optional (else the name's initial); media/ is content/phone/media/
  *   status: スナックかんぱい 18:00-02:00  # optional, under the name
  *   beats:                            # bits of conversation, each arriving when its condition first holds
  *     - id: rain                      # [a-z0-9_], unique in the file, stable
- *       when: met_mama                # a condition on story flags (node condition syntax); omitted = from the start
+ *       when: met_aya                 # a condition on story flags (node condition syntax); omitted = from the start
  *       after: 40                     # seconds after `when` first holds (default 0)
  *       messages:                     # from the contact, one at a time with typing; `from: me` for yours
  *         - text: It's coming down harder.
@@ -18,9 +18,9 @@ import { compileCondition, type Condition } from '../core/condition';
  *         - sticker: 🍶               # a big emoji
  *       replies:                      # optional: you pick one (1-4 in the phone); it's sent as your message
  *         - text: On my way.
- *           set: { mama_invited: true }   # story flags (true/false)
+ *           set: { aya_invited: true }    # story flags (true/false)
  *           then: [ { text: I'll keep the kettle on. } ]
- *       set: { mama_texted: true }    # flags set when the beat's done (after a reply, if it has replies)
+ *       set: { aya_texted: true }     # flags set when the beat's done (after a reply, if it has replies)
  *
  * A beat with only replies is you writing first. A contact's beats play one at a time, in file order among
  * those ready; a beat waiting for your reply holds back the ones after it. Validation collects every problem.

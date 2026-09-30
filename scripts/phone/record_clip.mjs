@@ -1,7 +1,7 @@
 // Records a short clip from the game for the phone: the render canvas (no HUD) through MediaRecorder, as webm.
 //
 //   node scripts/phone/record_clip.mjs <out.webm> "<district query>" [seconds]
-//   e.g. node scripts/phone/record_clip.mjs content/phone/media/rouge_cam.webm "time=night&weather=rain&cam=3900,5,1412,0,-12" 8
+//   e.g. node scripts/phone/record_clip.mjs content/phone/media/clip.webm "time=night&weather=rain&cam=3900,5,1412,0,-12" 8
 //
 // Uses the installed Edge (like the benchmarks). The camera holds still; the city (rain, traffic, neon) moves.
 import fs from 'node:fs';

@@ -39,7 +39,7 @@ this list.
 
 ## Story flags
 
-None yet. The prototype's flags (`met_mama` and the rest) aren't story: [prototype.md](prototype.md).
+None yet.
 
 | Flag | Set in | Read in |
 |---|---|---|
