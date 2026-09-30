@@ -7,6 +7,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { cityMaterial, cityUniforms } from '../poc3d/real/city';
 import { DAMAGE, HEALTH, PAINT_PENALTY, RivalDriver, separateCars, type Arms } from './battle';
+import { CircuitRace, gridSlots } from './circuit';
+import type { CarType } from '../poc3d/models/vehicles';
 import { addHeadlights, buildCar, CarMarks, hitVolumes, poseCar, turnWheels, type Part } from './carView';
 import { loadCourses } from './courses';
 import { buildVenue } from './scene';
@@ -19,7 +21,7 @@ import { currentCar, earn, loadProfile, PAY, saveProfile, trialPay, yen } from '
 import { CarSound } from './sound';
 import { clock, GhostTrack, loadBest, medalFor, saveBest, Trial, trialPlan, type BestRun, type Dir, type Medal } from './trial';
 import { Targets } from './targets';
-import { Car, DRIFT_ASSISTS, type Assists, type Controls } from './vehicle';
+import { Car, DRIFT_ASSISTS, ROAD_ASSISTS, type Assists, type Controls } from './vehicle';
 
 /**
  * The racing venues (race.html): a venue (course.ts, scene.ts) in its own time of day, the coupe on the
@@ -46,11 +48,11 @@ const course = courses.get(venueId)!;
 const ground = course.ground;
 const modeParam = params.get('mode');
 /** Free drive, a time trial, or a battle against an armed rival (real guns or paintball; downhill unless ?dir=up). */
-const kind: 'free' | 'trial' | 'battle' | 'drift' = modeParam === 'up' || modeParam === 'down' ? 'trial' : modeParam === 'battle' ? 'battle' : modeParam === 'drift' && course.def.drift ? 'drift' : 'free';
+const kind: 'free' | 'trial' | 'battle' | 'drift' | 'gp' = modeParam === 'up' || modeParam === 'down' ? 'trial' : modeParam === 'battle' ? 'battle' : modeParam === 'drift' && course.def.drift ? 'drift' : modeParam === 'race' && course.def.circuit ? 'gp' : 'free';
 const arms: Arms = params.get('arms') === 'paint' ? 'paint' : 'gun';
 const dir: Dir = modeParam === 'up' || (modeParam === 'battle' && params.get('dir') === 'up') ? 'up' : 'down';
 /** 'free', or the direction a race (trial or battle) runs. */
-const mode: 'free' | Dir = kind === 'free' || kind === 'drift' ? 'free' : dir;
+const mode: 'free' | Dir = kind === 'free' || kind === 'drift' || kind === 'gp' ? 'free' : dir;
 const atmosphere = course.def.atmosphere;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -125,9 +127,16 @@ const AIM_ASSISTS: Assists = { ...DRIFT_ASSISTS, countersteer: 0.7 };
 addHeadlights(carObj);
 
 const car = new Car(tunedSpec(mine.type, mine.parts), DRIFT_ASSISTS);
-const at = mode === 'free' ? (params.get('at') ?? 'lot') : 'grid';
+const at = kind === 'gp' ? 'grid' : mode === 'free' ? (params.get('at') ?? 'lot') : 'grid';
 const placeAt = (where: string): void => {
-  if (where === 'grid' && trial) {
+  // (A circuit has no viewpoint: its "top" is the track.)
+  if (where === 'top' && course.loop) where = 'road';
+  if (where === 'grid' && gp) {
+    // The circuit's grid: your slot (at the back), facing the way the race goes.
+    const sl = gp.slots[0];
+    const i = sl.i;
+    car.place(course.x[i] + course.tz[i] * sl.lane, course.z[i] - course.tx[i] * sl.lane, Math.atan2(course.tx[i], course.tz[i]), ground);
+  } else if (where === 'grid' && trial) {
     // The trial's grid: on the road behind the line, facing the way the run goes.
     // In a battle you start in the left lane (Japan keeps left), the rival beside you on the right.
     const i = trial.plan.grid;
@@ -191,6 +200,87 @@ const startTrial = (): void => {
 // Real guns: each hit takes health (more through the glass); a tyre shot out or a round in the driver's head
 // is lethal. A car at none is out (it spins or coasts to a stop) and loses at once; otherwise the first down
 // wins. Shooting the rival's gunman silences his gun. Paintball: each hit you take adds PAINT_PENALTY seconds to your time; the lower total wins.
+// ---- A race round a circuit (race/circuit.ts): you at the back of the grid, the venue's rivals ahead of you
+// (each a car on the same handling model, stock, driven by RivalDriver taking a racing line and passing), a
+// standing start under the gantry's five red lights, laps, places, and what the places pay.
+interface GpRival { readonly name: string; readonly car: Car; readonly drv: RivalDriver; readonly view: ReturnType<typeof buildCar> }
+let gp: { race: CircuitRace; slots: ReturnType<typeof gridSlots>; rivals: GpRival[]; paid: boolean; result: { place: number; pay: number; bestLap: number | null; best: GpBest | null; newBest: boolean } | null } | null = null;
+interface GpBest { readonly place: number; readonly lap: number | null }
+const gpKey = `citypop.race.v1.${venueId}.gp`;
+const loadGpBest = (id = venueId): GpBest | null => {
+  try {
+    return JSON.parse(localStorage.getItem(`citypop.race.v1.${id}.gp`) ?? 'null') as GpBest | null;
+  } catch {
+    return null;
+  }
+};
+const startGp = (): void => {
+  const def = course.def.circuit;
+  if (!def) return;
+  if (gp) for (const r of gp.rivals) scene.remove(r.view.obj);
+  const slots = gridSlots(course, def.start, def.rivals.length + 1).reverse();
+  const rivals = def.rivals.map((r, k): GpRival => {
+    const c = new Car(tunedSpec(r.type as CarType, {}), ROAD_ASSISTS);
+    const sl = slots[k + 1];
+    c.place(course.x[sl.i] + course.tz[sl.i] * sl.lane, course.z[sl.i] - course.tx[sl.i] * sl.lane, Math.atan2(course.tx[sl.i], course.tz[sl.i]), ground);
+    const drv = new RivalDriver(c, course, 'up', r.skill, sl.lane);
+    drv.laneMax = course.half - 1.6;
+    drv.top = 70;
+    const view = buildCar({ type: r.type as CarType, paint: r.paint }, carMat);
+    scene.add(view.obj);
+    return { name: r.name, car: c, drv, view };
+  });
+  gp = { race: new CircuitRace(course, def.laps, def.start, ['You', ...def.rivals.map((r) => r.name)], slots), slots, rivals, paid: false, result: null };
+  placeAt('grid');
+};
+/** Each frame of a race: the rivals drive (held on the grid through the countdown), everyone knocks, laps count. */
+const updateGp = (dt: number, gdt: number): void => {
+  if (!gp) return;
+  const race = gp.race;
+  const all = [car, ...gp.rivals.map((r) => r.car)];
+  // (Rivals push a little when they're behind you, ease off when they're well ahead: a race stays a race.)
+  const mine = race.racers[0].dist;
+  gp.rivals.forEach((r, k) => {
+    const gap = race.racers[k + 1].dist - mine;
+    r.drv.push = gap > 180 ? 0.96 : gap < -60 ? 1.03 : 1;
+    if (race.phase !== 'countdown') r.car.update(gdt, r.drv.controls(gdt, all, false), ground);
+  });
+  for (let a = 0; a < all.length; a++) for (let b = a + 1; b < all.length; b++) separateCars(all[a], all[b]);
+  const was = race.phase;
+  for (const e of race.update(dt, all.map((c) => course.nearest(c.x, c.z).i), 0)) {
+    if (e.kind === 'go') venue.startLights?.(0);
+    if (e.kind === 'lap' && e.car === 0) {
+      splitEl.innerHTML = `LAP ${e.lap}/${race.laps}  ${clock(e.time)}${e.best ? '  <b class="ahead">FASTEST LAP</b>' : ''}  ·  P${race.placeOf(0)}`;
+      splitT = 3;
+    }
+  }
+  if (race.phase === 'countdown') venue.startLights?.(Math.min(5, Math.floor((3 - race.count) / 0.55) + 1));
+  if (was === 'racing' && race.phase === 'finished' && !gp.paid) {
+    gp.paid = true;
+    const place = race.placeOf(0);
+    const pay = course.def.circuit!.pay[place - 1] ?? 0;
+    const you = race.racers[0];
+    const laps = you.lapTimes.map((t, i) => t - (i ? you.lapTimes[i - 1] : 0));
+    const bestLap = laps.length ? Math.min(...laps) : null;
+    const best = loadGpBest();
+    const newBest = !best || place < best.place || (place === best.place && bestLap !== null && (best.lap === null || bestLap < best.lap));
+    if (newBest) {
+      try {
+        localStorage.setItem(gpKey, JSON.stringify({ place: best ? Math.min(place, best.place) : place, lap: bestLap !== null && best?.lap != null ? Math.min(bestLap, best.lap) : bestLap }));
+      } catch {
+        /* storage blocked */
+      }
+    }
+    gp.result = { place, pay, bestLap, best, newBest };
+    if (pay > 0) payout(pay, `P${place}`);
+  }
+  for (const r of gp.rivals) {
+    poseCar(r.view, r.car, ground);
+    turnWheels(r.view, r.car, gdt);
+  }
+};
+const ordinal = (n: number): string => `${n}${n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'}`;
+
 const inBattle = kind === 'battle';
 // The rival drives the same model as you, stock (your parts are your edge), in red (or black if you're red).
 const rivalCar = new Car(mineModel.spec, DRIFT_ASSISTS);
@@ -475,6 +565,7 @@ window.addEventListener('keydown', (e) => {
   if (mode === 'free' && e.code === 'Digit2') placeAt('top');
   if (mode !== 'free' && e.code === 'Enter') startTrial();
   if (kind === 'drift' && e.code === 'Enter') startAttack();
+  if (kind === 'gp' && e.code === 'Enter') startGp();
   if (e.code === 'KeyM') showMenu(!menuOpen);
   if (e.code === 'KeyH') help = !help;
   if (e.code === 'KeyI') {
@@ -517,7 +608,7 @@ let trigger = false;
 let pulled = false;
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 /** Trials are about the clock: no shooting. Free drive and battles shoot (targets where the venue has them). */
-const armed = kind !== 'trial';
+const armed = kind !== 'trial' && kind !== 'gp' && !course.loop;
 document.addEventListener('mousedown', (e) => {
   if (!document.pointerLockElement || !armed) return;
   if (e.button === 2) startAiming();
@@ -649,6 +740,11 @@ const showMenu = (open: boolean): void => {
           const m = b ? medalFor(b.time, c.def.trial[d]) : null;
           return `<a class="mode" href="?venue=${id}&mode=${d}">${label}<span>${b ? `${clock(b.time)} ${medalHtml(m)}` : `gold ${clock(c.def.trial[d][2])}`}</span></a>`;
         };
+        if (c.def.kind === 'circuit') {
+          const b = loadGpBest(id);
+          const ci = c.def.circuit!;
+          return `<div class="card${id === venueId ? ' here' : ''}"><div class="name">${c.def.name}</div><div class="meta">${c.def.atmosphere.label} · street circuit · ${(c.length / 1000).toFixed(2)} km</div><p>${c.def.blurb}</p><a class="mode battle" href="?venue=${id}&mode=race">🏁 Race, ${ci.laps} laps<span>${b ? `best ${ordinal(b.place)}${b.lap !== null ? ` · ${clock(b.lap)}` : ''}` : `against ${ci.rivals.length} rivals · 1st ${yen(ci.pay[0])}`}</span></a><a class="mode" href="?venue=${id}&mode=free&at=road">Free drive<span>learn the circuit</span></a></div>`;
+        }
         if (c.def.kind === 'wharf') {
           const b = loadAttackBest(id);
           return `<div class="card${id === venueId ? ' here' : ''}"><div class="name">${c.def.name}</div><div class="meta">${c.def.atmosphere.label} · harbour lot · ${c.def.drift?.zones.length ?? 0} zones</div><p>${c.def.blurb}</p><a class="mode" href="?venue=${id}&mode=drift">↻ Drift attack<span>${b ? `best ${b.score.toLocaleString()} (${b.rank})` : `S ${c.def.drift!.ranks[3].toLocaleString()}`}</span></a><a class="mode" href="?venue=${id}&mode=free">Free drive<span>the lot, drifting</span></a></div>`;
@@ -663,6 +759,28 @@ const showMenu = (open: boolean): void => {
 const drawTrialHud = (dt: number): void => {
   splitT = Math.max(0, splitT - dt);
   splitEl.style.opacity = Math.min(1, splitT * 2).toFixed(2);
+  if (gp) {
+    const race = gp.race;
+    const cd = race.phase === 'countdown' ? Math.ceil(race.count - 0.5) : 0;
+    countEl.textContent = cd > 0 ? String(cd) : race.phase === 'racing' && race.t < 0.8 ? 'GO' : '';
+    countEl.className = cd > 0 ? 'n' : 'go';
+    const you = race.racers[0];
+    const lapStart = you.lapTimes.length ? you.lapTimes[you.lapTimes.length - 1] : 0;
+    const fl = race.bestLap();
+    timerEl.textContent = race.phase === 'finished' ? `${ordinal(race.placeOf(0))}  ${clock(you.finished ?? race.t)}` : `P${race.placeOf(0)}/${race.racers.length}   LAP ${Math.min(race.laps, you.laps + 1)}/${race.laps}   ${clock(Math.max(0, race.t - lapStart))}${fl !== null ? `   fastest ${clock(fl)}` : ''}`;
+    resultsEl.style.display = gp.result ? 'block' : 'none';
+    if (gp.result) {
+      const r = gp.result;
+      const leader = race.racers[race.standings()[0]];
+      const rows = race.standings().map((k, i) => {
+        const q = race.racers[k];
+        const gap = q.finished !== null ? (i === 0 ? clock(q.finished) : `+${(q.finished - (leader.finished ?? 0)).toFixed(2)}`) : q.laps < race.laps - 1 ? `+${race.laps - q.laps} laps` : `+${Math.max(0, Math.round(leader.dist - q.dist))} m`;
+        return `<div${k === 0 ? ' class="you"' : ''}>${i + 1}. ${q.name}<span>${gap}</span></div>`;
+      }).join('');
+      resultsEl.innerHTML = `<div class="head">${course.def.name}  ${race.laps} LAPS</div><div class="time ${r.place === 1 ? 'win' : ''}">${ordinal(r.place).toUpperCase()}</div>${r.bestLap !== null ? `<div class="prev">your fastest lap ${clock(r.bestLap)}</div>` : ''}${r.newBest ? '<div class="best">NEW BEST</div>' : r.best ? `<div class="prev">best ${ordinal(r.best.place)}${r.best.lap !== null ? ` · ${clock(r.best.lap)}` : ''}</div>` : ''}<div class="splits">${rows}</div>${r.pay ? `<div class="prev">+ ${yen(r.pay)}</div>` : ''}<small>Enter  again · M  venues</small>`;
+    }
+    return;
+  }
   if (attack) {
     const cd = attack.phase === 'countdown' ? Math.ceil(attack.countdown - 0.5) : 0;
     countEl.textContent = cd > 0 ? String(cd) : attack.phase === 'running' && attack.t < 0.8 ? 'GO' : '';
@@ -856,6 +974,7 @@ const placeCamera = (dt: number, snap = false): void => {
 
 if (mode !== 'free') startTrial();
 if (kind === 'drift') startAttack();
+else if (kind === 'gp') startGp();
 else placeAt(at);
 if (!params.has('venue')) showMenu(true);
 
@@ -876,7 +995,8 @@ function frame(now: number): void {
   const c = menuOpen ? { throttle: 0, brake: 1, steer: 0, handbrake: false } : fight.youOut ? { throttle: 0, brake: 0.35, steer: 0, handbrake: false } : controls();
   car.assists = aiming ? AIM_ASSISTS : DRIFT_ASSISTS;
   // Held on the grid through the countdown (the engine still revs).
-  if ((!trial || trial.phase !== 'countdown') && !(attack && attack.phase === 'countdown')) car.update(gdt, c, ground);
+  if ((!trial || trial.phase !== 'countdown') && !(attack && attack.phase === 'countdown') && !(gp && gp.race.phase === 'countdown')) car.update(gdt, c, ground);
+  updateGp(dt, gdt);
   if (inBattle && trial) {
     if (trial.phase !== 'countdown') rivalCar.update(gdt, rivalDrv.controls(gdt, car, fight.themOut || fight.themTime !== null), ground);
     separateCars(car, rivalCar);
@@ -1077,7 +1197,7 @@ function frame(now: number): void {
   helpEl.style.display = help || toastT > 0 ? 'block' : 'none';
   if (toastT > 0) helpEl.textContent = toastText;
   else if (helpEl.textContent !== HELP) helpEl.textContent = HELP;
-  hud.textContent = `${course.def.name} · ${course.def.atmosphere.label} · ${kind === 'drift' ? 'drift attack · Enter to start again' : mode === 'free' ? `free drive · ${here === 'lot' ? (course.def.kind === 'wharf' ? 'the wharf' : 'practice lot') : here === 'top' ? 'the viewpoint' : 'the pass'}` : kind === 'battle' ? `⚔ battle, ${arms === 'gun' ? 'real guns' : 'paintball'} ${dir === 'up' ? '▲ uphill' : '▼ downhill'}` : `time trial ${mode === 'up' ? '▲ uphill' : '▼ downhill'}${best ? ` · best ${clock(best.time)}` : ''}`} · ${mineModel.name} · ${yen(profile.yen)} · M venues`;
+  hud.textContent = `${course.def.name} · ${course.def.atmosphere.label} · ${kind === 'gp' ? `race, ${course.def.circuit!.laps} laps · Enter to start again` : kind === 'drift' ? 'drift attack · Enter to start again' : mode === 'free' ? `free drive · ${here === 'lot' ? (course.def.kind === 'wharf' ? 'the wharf' : 'practice lot') : here === 'top' ? 'the viewpoint' : course.loop ? 'the circuit' : 'the pass'}` : kind === 'battle' ? `⚔ battle, ${arms === 'gun' ? 'real guns' : 'paintball'} ${dir === 'up' ? '▲ uphill' : '▼ downhill'}` : `time trial ${mode === 'up' ? '▲ uphill' : '▼ downhill'}${best ? ` · best ${clock(best.time)}` : ''}`} · ${mineModel.name} · ${yen(profile.yen)} · M venues`;
   composer.render(dt);
   snap.afterRender();
   requestAnimationFrame(frame);
@@ -1126,6 +1246,7 @@ window.addEventListener('resize', () => {
   },
   state: () => ({ aiming, slow, focus, hipT }),
   trial: () => trial,
+  gp: () => gp,
   battle: () => ({ fight, battleResult, rival: rivalCar, rivalTrial, rivalShooting }),
   trigger: (on: boolean): void => {
     trigger = on;

@@ -1,0 +1,74 @@
+# マニラ湾 Manila Bay Street Circuit (format: src/race/course.ts, kind circuit). A street circuit abroad: the
+# start straight is the bayside boulevard (palms, the sea wall, the sun setting over the bay), then the course
+# turns inland through the city's streets (tight corners between concrete walls, shopfronts, jeepneys parked out
+# of the way) and back down to the bay. Raced in laps against a field (race/circuit.ts); free drive to learn it.
+# World x east, z south, metres; the bay to the south.
+name: マニラ湾 Manila Bay Street Circuit
+blurb: A street circuit on the bay at sunset. The long boulevard by the sea wall, then the city's corners between the walls. Three laps against four rivals.
+kind: circuit
+atmosphere:
+  label: Sunset
+  sky: ['#26386a', '#7a5a8e', '#f08a5a', '#ffc478']
+  fog: { color: '#d8a07a', density: 0.0014 }
+  light: { color: '#ffb46c', intensity: 1.8, from: [-420, 70, 700] }
+  hemi: { sky: '#9a86b4', ground: '#4a3024', intensity: 0.85 }
+  stars: 0
+  sun: true
+  exposure: 1.0
+sea: { level: -1.5, shore: 62 }
+# (Circuits don't time-trial a pass: these are nominal.)
+trial:
+  up: [200, 190, 180]
+  down: [200, 190, 180]
+# The paddock: pit garages behind the start straight, joined to it.
+lot: { x: -330, z: -40, w: 170, h: 72 }
+road:
+  width: 12
+  shoulder: 1.4
+  slope: 0
+  rough: 0
+  loop: true
+  points:
+    # The boulevard, east along the bay (the start line in the middle of it).
+    - [-250, 40]
+    - [-60, 40]
+    - [150, 40]
+    - [360, 40]
+    # The hairpin at its end, and up into the city.
+    - [480, 34]
+    - [540, 0]
+    - [548, -60]
+    - [510, -118]
+    # A fast sweeper west, then a right-angle north.
+    - [420, -150]
+    - [320, -158]
+    - [284, -190]
+    - [280, -270]
+    # Behind the market: west along the back street, a chicane at the church.
+    - [240, -318]
+    - [150, -330]
+    - [90, -304]
+    - [52, -250]
+    - [0, -226]
+    - [-100, -232]
+    # North-west through the old town, the long left.
+    - [-190, -280]
+    - [-280, -346]
+    - [-400, -352]
+    - [-490, -310]
+    # Down the west side and back to the bay.
+    - [-540, -220]
+    - [-552, -110]
+    - [-520, -10]
+    - [-440, 34]
+circuit:
+  laps: 3
+  # The start line: metres along the road from its first point.
+  start: 120
+  rivals:
+    - { name: Rico "Bayani" Santos, type: awd, paint: 0x1a4ac8, skill: 1.0 }
+    - { name: Mika Tanabe, type: rotary, paint: 0xe0e0e0, skill: 0.97 }
+    - { name: Dante Reyes, type: sports, paint: 0xd8b020, skill: 0.94 }
+    - { name: Joaquin Lim, type: hatch, paint: 0x2aa060, skill: 0.92 }
+  # What the places pay (yen): 1st, 2nd, ... (the rest nothing).
+  pay: [180000, 90000, 45000, 15000, 5000]

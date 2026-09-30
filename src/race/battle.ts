@@ -86,10 +86,22 @@ export function separateCars(a: Car, b: Car): number {
  * centre), slowing for the bends ahead as a quick, tidy driver does (`skill` scales its pace), moving over to
  * pass you when you're in its way, and pushing harder when it's behind (and easing off when well ahead).
  */
+/** The sideways grip (m/s^2) the rival plans its circuit corners for. */
+const LAT = 5.6;
+
 export class RivalDriver {
   /** Metres left of the centre line, in the direction of travel (the lane it's in, and the one it wants). */
   lane: number;
   private want: number;
+  /**
+   * On a circuit (a loop): how far from the centre it may go (a racing line to the inside of each bend), its top
+   * speed (m/s), and a nudge to its pace from outside (the race's: pushing when behind the leader).
+   */
+  laneMax = 1.7;
+  top = 30;
+  push = 1;
+  /** Seconds left of a pass (it holds its line to the side until then). */
+  private passing = 0;
 
   constructor(
     readonly car: Car,
@@ -113,31 +125,55 @@ export class RivalDriver {
     return this.dir === 'up' ? i : this.course.x.length - 1 - i;
   }
 
-  controls(dt: number, other: Car | null, out: boolean): Controls {
+  controls(dt: number, others: Car | readonly Car[] | null, out: boolean): Controls {
     const c = this.course;
     const car = this.car;
     if (out) return { throttle: 0, brake: 0.35, steer: 0, handbrake: false };
     const s = this.dir === 'up' ? 1 : -1;
     const n = c.x.length;
+    const at = (k: number): number => (c.loop ? c.wrap(k) : Math.max(0, Math.min(n - 1, k)));
     const i = c.nearest(car.x, car.z).i;
     if (i < 0) return { throttle: 0, brake: 1, steer: 0, handbrake: false };
-    // Pace: pushing when behind you, easing off when well ahead.
-    let pace = this.skill;
-    if (other) {
-      const gap = this.progress(other) - this.progress(car);
+    let pace = this.skill * this.push;
+    const list = others === null ? [] : Array.isArray(others) ? (others as readonly Car[]) : [others as Car];
+    if (!c.loop && list[0]) {
+      // Pace on a pass: pushing when behind you, easing off when well ahead.
+      const gap = this.progress(list[0]) - this.progress(car);
       if (gap > 25) pace *= 1.06;
       else if (gap < -80) pace *= 0.95;
-      // Someone in its lane just ahead: pull out to the other side to pass.
-      const dx = other.x - car.x;
-      const dz = other.z - car.z;
+    }
+    this.passing = Math.max(0, this.passing - dt);
+    // On a circuit, the racing line: to the inside of the bend coming up (and back out after it).
+    if (c.loop && this.passing === 0) {
+      let turn = 0;
+      for (let k = 10; k <= 50; k += 10) {
+        const a = at(i + s * (k - 10));
+        const b = at(i + s * k);
+        turn += c.tz[a] * c.tx[b] - c.tx[a] * c.tz[b];
+      }
+      turn *= s;
+      if (Math.abs(turn) > 0.08) this.want = Math.sign(turn) * this.laneMax * 0.6;
+      else if (Math.abs(turn) < 0.03) this.want *= 0.98;
+    }
+    // Someone in its line just ahead (the nearest): pull out to the other side to pass.
+    let block: { ahead: number; across: number } | null = null;
+    for (const o of list) {
+      if (o === car) continue;
+      const dx = o.x - car.x;
+      const dz = o.z - car.z;
       const ahead = dx * Math.sin(car.h) + dz * Math.cos(car.h);
       const across = dx * Math.cos(car.h) - dz * Math.sin(car.h);
-      if (ahead > 0 && ahead < 16 && Math.abs(across - this.lane) < 1.9) this.want = across > 0 ? -1.7 : 1.7;
+      if (ahead > 0 && ahead < 16 && Math.abs(across - this.lane) < 1.9 && (!block || ahead < block.ahead)) block = { ahead, across };
+    }
+    if (block) {
+      const side = c.loop ? this.laneMax * 0.8 : 1.7;
+      this.want = block.across > 0 ? -side : side;
+      this.passing = 2.5;
     }
     this.lane += Math.max(-dt * 1.2, Math.min(dt * 1.2, this.want - this.lane));
     // Steer at a point ahead on its line (the centre plus its lane, to the left of the way it's going).
     const look = Math.round(6 + Math.abs(car.u) * 0.5);
-    const j = Math.max(0, Math.min(n - 1, i + s * look));
+    const j = at(i + s * look);
     const lx = c.tz[j] * s;
     const lz = -c.tx[j] * s;
     const tx = c.x[j] + lx * this.lane;
@@ -147,13 +183,36 @@ export class RivalDriver {
     const err = Math.atan2(dx * Math.cos(car.h) - dz * Math.sin(car.h), dx * Math.sin(car.h) + dz * Math.cos(car.h));
     // The bend ahead: the heading change over the next 35 m, as a radius, and a speed for it.
     let turn = 0;
-    for (let k = 5; k <= 35; k += 5) {
-      const a = Math.max(0, Math.min(n - 1, i + s * (k - 5)));
-      const b = Math.max(0, Math.min(n - 1, i + s * k));
-      turn = Math.max(turn, Math.acos(Math.min(1, c.tx[a] * c.tx[b] + c.tz[a] * c.tz[b])));
+    // (Further ahead the faster it goes, so it brakes in time.)
+    const reach = c.loop ? Math.max(35, Math.round(car.u * car.u / 12)) : 35;
+    for (let k = 5; k <= reach; k += 5) {
+      const a = at(i + s * (k - 5));
+      const b = at(i + s * k);
+      const bend = Math.acos(Math.min(1, c.tx[a] * c.tx[b] + c.tz[a] * c.tz[b]));
+      if (!c.loop) turn = Math.max(turn, bend);
+      else {
+        // The speed it could carry into that bend from here, braking at ~7 m/s^2 over the distance to it.
+        // (A little under what the tyres take: a street circuit's walls forgive nothing.)
+        // (A car with less steering lock, heavy and slow to turn in, takes them slower.)
+        const vb = Math.sqrt(LAT * Math.min(1, (car.spec.lock / 0.6) ** 2) * pace * pace * (5 / Math.max(bend, 1e-3)));
+        const v = Math.sqrt(vb * vb + 2 * 6.5 * Math.max(0, k - 5));
+        turn = Math.max(turn, 5 * 6.3 / (v * v));
+      }
     }
     const radius = 5 / Math.max(turn, 1e-3);
-    const want = Math.min(30, Math.max(7, Math.sqrt(6.3 * radius))) * pace;
+    // (On a circuit the pace is already in the bend speeds above.)
+    const want = c.loop ? Math.min(this.top, Math.max(7, Math.sqrt(6.3 * radius))) : Math.min(30, Math.max(7, Math.sqrt(6.3 * radius))) * pace;
+    // On a circuit, running wide toward a wall (understeer): near it and still heading for it, off the throttle
+    // and a touch of brake, so the front bites again.
+    if (c.loop && car.u > 15) {
+      const nr = c.nearest(car.x, car.z);
+      const j0 = c.wrap(nr.i);
+      // The car's heading across the road (+ toward the road's left).
+      const across = Math.sin(car.h) * c.tz[j0] - Math.cos(car.h) * c.tx[j0];
+      if (Math.abs(nr.d) > c.rail - 2.4 && Math.sign(across) === Math.sign(nr.d) && Math.abs(across) > 0.02) {
+        return { throttle: 0, brake: 0.35, steer: Math.max(-1, Math.min(1, err * 3)), handbrake: false };
+      }
+    }
     return { throttle: car.u < want ? 1 : 0, brake: car.u > want + 2 ? 1 : 0, steer: Math.max(-1, Math.min(1, err * 3)), handbrake: false };
   }
 }

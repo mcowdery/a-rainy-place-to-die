@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Course } from './course';
+import { buildCircuit } from './circuitScene';
 
 /**
  * The venue's scenery from its course: the hillside (coloured by slope: forest floor, rock, the gravel
@@ -10,6 +11,8 @@ import type { Course } from './course';
  */
 export interface VenueScene {
   readonly group: THREE.Group;
+  /** A circuit's start lights: how many of the five reds are lit, or all out for GO (race/circuitScene.ts). */
+  readonly startLights?: (lit: number) => void;
   /** Lights that stay on (floodlights, lamps): positions for the headlight-free glow. */
   readonly stars: THREE.Points;
 }
@@ -24,6 +27,7 @@ function rng(seed: number): () => number {
 }
 
 export function buildVenue(course: Course): VenueScene {
+  if (course.def.kind === 'circuit') return buildCircuit(course);
   const group = new THREE.Group();
   const wharf = course.def.kind === 'wharf';
   const n = course.x.length;
@@ -291,6 +295,16 @@ export function buildVenue(course: Course): VenueScene {
 
   if (wharf) group.add(wharfDressing(course));
 
+  const stars = addSky(course, group);
+  return { group, stars };
+}
+
+/**
+ * The sky's light (the moon, or the low sun at dusk), the sky's fill, the stars (dim at dusk), at dusk the sun's
+ * disc on the horizon (the stars and the sun ride with the camera: main.ts moves them), and the sea on a coastal
+ * venue. Every venue has these (circuits too: race/circuitScene.ts).
+ */
+export function addSky(course: Course, group: THREE.Group): THREE.Points {
   // ---- The sky's light (the moon, or the low sun at dusk), the sky's fill, the stars (dim at dusk), and at
   // dusk the sun's disc on the horizon; the stars and the sun ride with the camera (main.ts moves them).
   const at = course.def.atmosphere;
@@ -337,7 +351,7 @@ export function buildVenue(course: Course): VenueScene {
     water.position.set((b.minX + b.maxX) / 2, sea.level, sea.shore + 3900);
     group.add(water);
   }
-  return { group, stars };
+  return stars;
 }
 
 /**

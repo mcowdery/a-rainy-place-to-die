@@ -28,12 +28,28 @@ export interface CourseDef {
     readonly slope: number;
     readonly rough: number;
     readonly points: readonly (readonly [number, number])[];
+    /** A closed loop (a circuit): the road runs on from its last point back to its first. */
+    readonly loop?: boolean;
   };
-  readonly summit: { readonly r: number };
+  /** The viewpoint at the road's end (a pass; a circuit has none). */
+  readonly summit?: { readonly r: number };
   /** Shooting practice (race/shooting.ts): what stands where, facing which way. */
   readonly targets?: readonly TargetDef[];
-  /** A pass (a road up a hillside to a viewpoint) or a wharf (a harbour lot: containers and cranes, drift attack). */
-  readonly kind?: 'pass' | 'wharf';
+  /**
+   * A pass (a road up a hillside to a viewpoint), a wharf (a harbour lot: containers and cranes, drift attack) or a
+   * circuit (a street circuit: a closed loop on flat ground between walls, raced in laps against a field).
+   */
+  readonly kind?: 'pass' | 'wharf' | 'circuit';
+  /**
+   * A circuit's race (race/circuit.ts): laps, the start line (metres along the road from its first point), the
+   * rivals on the grid (name, car, paint, skill) and what the places pay.
+   */
+  readonly circuit?: {
+    readonly laps: number;
+    readonly start: number;
+    readonly rivals: readonly { readonly name: string; readonly type: string; readonly paint: number; readonly skill: number }[];
+    readonly pay: readonly number[];
+  };
   /** Solid blocks on the lot (container stacks: x, z, w, h in metres, and how high they stack). */
   readonly blocks?: readonly { readonly x: number; readonly z: number; readonly w: number; readonly h: number; readonly tiers?: number }[];
   /**
@@ -95,7 +111,7 @@ export function parseCourse(file: string, text: string, errors: string[]): Cours
     else road.points.forEach((p, i) => (!Array.isArray(p) || p.length !== 2 || !p.every(num)) && err(`road.points[${i}]: [x, z]`));
   }
   const summit = d?.summit as Record<string, unknown> | undefined;
-  if (!summit || !num(summit.r)) err('summit: { r }');
+  if (d?.kind !== 'circuit' && (!summit || !num(summit.r))) err('summit: { r }');
   if (typeof d?.blurb !== 'string') err('blurb: a line for the venue select screen');
   const col = (v: unknown): boolean => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
   const at = d?.atmosphere as Record<string, unknown> | undefined;
@@ -132,7 +148,13 @@ export function parseCourse(file: string, text: string, errors: string[]): Cours
       });
     }
   }
-  if (d?.kind !== undefined && d.kind !== 'pass' && d.kind !== 'wharf') err('kind: pass or wharf');
+  if (d?.kind !== undefined && d.kind !== 'pass' && d.kind !== 'wharf' && d.kind !== 'circuit') err('kind: pass, wharf or circuit');
+  if (d?.kind === 'circuit') {
+    if ((d.road as Record<string, unknown>)?.loop !== true) err('a circuit: road.loop: true');
+    const ci = d.circuit as Record<string, unknown> | undefined;
+    if (!ci || !num(ci.laps) || ci.laps < 1 || !num(ci.start) || !Array.isArray(ci.rivals) || ci.rivals.length < 1 || !Array.isArray(ci.pay) || !ci.pay.every(num)) err('circuit: { laps, start, rivals: [{ name, type, paint, skill }], pay: [first, second, ...] }');
+    else ci.rivals.forEach((r: Record<string, unknown>, i: number) => (typeof r?.name !== 'string' || typeof r?.type !== 'string' || !num(r?.paint) || !num(r?.skill)) && err(`circuit.rivals[${i}]: { name, type, paint, skill }`));
+  }
   if (d?.blocks !== undefined && (!Array.isArray(d.blocks) || !d.blocks.every((b: Record<string, unknown>) => ['x', 'z', 'w', 'h'].every((k) => num(b?.[k]))))) err('blocks: [{ x, z, w, h, tiers? }]');
   const dr = d?.drift as Record<string, unknown> | undefined;
   if (dr !== undefined) {
@@ -172,7 +194,7 @@ export class Course {
   /** The road sampled every metre: centre, heading (unit), height, distance. */
   readonly x: Float64Array;
   readonly z: Float64Array;
-  readonly y: Float64Array;
+  readonly y!: Float64Array;
   readonly tx: Float64Array;
   readonly tz: Float64Array;
   readonly length: number;
@@ -180,14 +202,18 @@ export class Course {
   private readonly grid = new Map<number, number[]>();
   readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   /** The first road sample inside the viewpoint (where an uphill run finishes and a downhill one starts). */
-  readonly summitStart: number;
+  readonly summitStart!: number;
+  /** A closed loop (a circuit): road samples wrap round (`wrap`), and its length runs back to the start. */
+  readonly loop: boolean;
 
   constructor(def: CourseDef) {
     this.def = def;
     this.half = def.road.width / 2;
-    // Centripetal Catmull-Rom through the points (the ends doubled), sampled finely, then evenly by length.
+    this.loop = def.road.loop === true;
+    // Centripetal Catmull-Rom through the points (the ends doubled, or wrapped round a loop), sampled finely,
+    // then evenly by length.
     const P = def.road.points;
-    const pts = [P[0], ...P, P[P.length - 1]];
+    const pts = this.loop ? [P[P.length - 1], ...P, P[0], P[1]] : [P[0], ...P, P[P.length - 1]];
     const fine: [number, number][] = [];
     for (let i = 1; i + 2 < pts.length; i++) {
       const [p0, p1, p2, p3] = [pts[i - 1], pts[i], pts[i + 1], pts[i + 2]];
@@ -211,7 +237,8 @@ export class Course {
         fine.push(L(B1, B2, t1, t2));
       }
     }
-    fine.push([P[P.length - 1][0], P[P.length - 1][1]]);
+    if (!this.loop) fine.push([P[P.length - 1][0], P[P.length - 1][1]]);
+    else fine.push([P[0][0], P[0][1]]);
     const xs: number[] = [fine[0][0]];
     const zs: number[] = [fine[0][1]];
     let carry = 0;
@@ -227,51 +254,63 @@ export class Course {
       }
       carry = seg - (at - SAMPLE);
     }
+    // (A loop's last sample lands within a metre of its first: dropped, so the samples wrap evenly.)
+    if (this.loop && xs.length > 2 && Math.hypot(xs[xs.length - 1] - xs[0], zs[xs.length - 1] - zs[0]) < SAMPLE * 0.6) {
+      xs.pop();
+      zs.pop();
+    }
     const n = xs.length;
     this.x = Float64Array.from(xs);
     this.z = Float64Array.from(zs);
-    this.length = (n - 1) * SAMPLE;
+    this.length = (this.loop ? n : n - 1) * SAMPLE;
     this.tx = new Float64Array(n);
     this.tz = new Float64Array(n);
     for (let i = 0; i < n; i++) {
-      const a = Math.max(0, i - 1);
-      const b = Math.min(n - 1, i + 1);
+      const a = this.loop ? (i - 1 + n) % n : Math.max(0, i - 1);
+      const b = this.loop ? (i + 1) % n : Math.min(n - 1, i + 1);
       const dx = xs[b] - xs[a];
       const dz = zs[b] - zs[a];
       const l = Math.hypot(dx, dz) || 1;
       this.tx[i] = dx / l;
       this.tz[i] = dz / l;
     }
+    if (this.loop) {
+      // A circuit lies flat (its ground is level; the course's slope is ignored), with no viewpoint.
+      this.y = new Float64Array(n);
+      this.summitStart = n - 1;
+    }
     // Heights: the hill under the road, smoothed along it (a 60 m window) for an even grade; flat at the lot.
     // Before the road starts is the lot, level at 0: it counts in the window, so the climb eases out of it.
-    const raw = xs.map((x, i) => this.hill(x, zs[i]));
-    const y = new Float64Array(n);
-    const W = 30;
-    for (let i = 0; i < n; i++) {
-      let s = 0;
-      let c = 0;
-      for (let k = i - W; k <= Math.min(n - 1, i + W); k++) {
-        s += k < 0 ? 0 : raw[k];
-        c++;
+    else {
+      const raw = xs.map((x, i) => this.hill(x, zs[i]));
+      const y = new Float64Array(n);
+      const W = 30;
+      for (let i = 0; i < n; i++) {
+        let s = 0;
+        let c = 0;
+        for (let k = i - W; k <= Math.min(n - 1, i + W); k++) {
+          s += k < 0 ? 0 : raw[k];
+          c++;
+        }
+        y[i] = s / c;
       }
-      y[i] = s / c;
+      // ...and it leaves the lot exactly level (the offset that leaves eased away over 40 m).
+      const y0 = y[0];
+      for (let i = 0; i < Math.min(n, 40); i++) y[i] -= y0 * (1 - smooth(0, 40, i));
+      // The viewpoint is level: the road rounds over (a parabola from its grade to flat over 20 m) as it
+      // enters, then stays at that height across it, so the disc, the ground and the car all agree.
+      let e = n - 1;
+      while (e > 0 && Math.hypot(xs[e - 1] - xs[n - 1], zs[e - 1] - zs[n - 1]) < (def.summit?.r ?? 0)) e--;
+      this.summitStart = e;
+      const s0 = Math.max(1, e - 20);
+      const g = y[s0] - y[s0 - 1];
+      const L = e - s0;
+      for (let i = s0; i < n; i++) {
+        const t = Math.min(i - s0, L);
+        y[i] = y[s0] + g * t - (g * t * t) / (2 * L);
+      }
+      this.y = y;
     }
-    // ...and it leaves the lot exactly level (the offset that leaves eased away over 40 m).
-    const y0 = y[0];
-    for (let i = 0; i < Math.min(n, 40); i++) y[i] -= y0 * (1 - smooth(0, 40, i));
-    // The viewpoint is level: the road rounds over (a parabola from its grade to flat over 20 m) as it
-    // enters, then stays at that height across it, so the disc, the ground and the car all agree.
-    let e = n - 1;
-    while (e > 0 && Math.hypot(xs[e - 1] - xs[n - 1], zs[e - 1] - zs[n - 1]) < def.summit.r) e--;
-    this.summitStart = e;
-    const s0 = Math.max(1, e - 20);
-    const g = y[s0] - y[s0 - 1];
-    const L = e - s0;
-    for (let i = s0; i < n; i++) {
-      const t = Math.min(i - s0, L);
-      y[i] = y[s0] + g * t - (g * t * t) / (2 * L);
-    }
-    this.y = y;
     for (let i = 0; i < n; i++) {
       const key = this.key(Math.floor(xs[i] / CELL), Math.floor(zs[i] / CELL));
       const l = this.grid.get(key);
@@ -292,8 +331,15 @@ export class Course {
     return (i + 4096) * 8192 + (j + 4096);
   }
 
-  /** The bare hillside (before the road is cut in). */
+  /** A road sample index wrapped round a loop (clamped to the ends on a pass). */
+  wrap(i: number): number {
+    const n = this.x.length;
+    return this.loop ? ((i % n) + n) % n : Math.max(0, Math.min(n - 1, i));
+  }
+
+  /** The bare hillside (before the road is cut in). A circuit's ground is flat. */
   hill(x: number, z: number): number {
+    if (this.loop) return 0;
     const r = this.def.road;
     const up = Math.max(0, -z + this.def.lot.z) * r.slope;
     return up + r.rough * noise(x / 70, z / 70) * Math.min(1, up / 6);
@@ -330,10 +376,11 @@ export class Course {
   /** The viewpoint at the top: its centre and height. */
   get summit(): { x: number; z: number; y: number; r: number } {
     const n = this.x.length - 1;
-    return { x: this.x[n], z: this.z[n], y: this.y[n], r: this.def.summit.r };
+    return { x: this.x[n], z: this.z[n], y: this.y[n], r: this.def.summit?.r ?? 0 };
   }
 
   inSummit(x: number, z: number, m = 0): boolean {
+    if (this.loop) return false;
     const s = this.summit;
     return Math.hypot(x - s.x, z - s.z) < s.r - m;
   }
@@ -441,7 +488,7 @@ export class Course {
       // Back into the viewpoint.
       const S = this.summit;
       const ds = Math.hypot(cx - S.x, cz - S.z);
-      if (ds > 0) {
+      if (ds > 0 && !this.loop) {
         const k = (S.r - 0.81 - ds) / ds;
         pushes.push([(cx - S.x) * k, (cz - S.z) * k]);
       }
