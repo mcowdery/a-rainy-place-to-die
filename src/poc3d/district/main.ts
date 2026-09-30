@@ -678,6 +678,8 @@ async function run(): Promise<void> {
     const from = clockTotal;
     for (let i = 1; i <= 20; i++) {
       clockTotal = from + (minutes * i) / 20;
+      // (The flag too, each step: the frame loop takes the flag's minute as the truth when they differ.)
+      syncClockFlags();
       toast(`${what}… ${clockNow()}`, 1.5);
       await new Promise((r) => setTimeout(r, 45));
     }
