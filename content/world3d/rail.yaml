@@ -1,9 +1,32 @@
-# The Toto Line (東都線): an elevated railway on a viaduct over the boulevard between Asagiri and Kaburo.
-# edge: the L0 column whose west edge it runs along (north-south); rows: [first, last] L0 rows it spans.
-# Stations are stamps with landmark: station, placed so their street face is 10 m from the line.
-id: toto
-name: 東都線
-nameEn: TOTO LINE
-color: '#10a060'
-edge: 26
-rows: [6, 16]
+# The elevated railways (format: src/poc3d/district/rail.ts). Each line runs along L0 grid lines through its points
+# (pts: [col, row] grid points; fractions allowed at the ends), its corners rounded (kind train: 90 m; monorail:
+# 45 m). Stations are stamps with landmark: station, their street face 10 m from the line on a straight stretch;
+# station: { jp, en, line } says which line (the first line if none). Station codes come from the letter and the
+# order along the line. Keep lines level (off the terraces) and crossing the expressway only at junctions.
+lines:
+  # The Toto Line (東都線): on a viaduct over Kōkashita-dōri between Asagiri and Kaburo, from Gakuenzaka down to
+  # Kasumi-chō.
+  - id: toto
+    name: 東都線
+    nameEn: TOTO LINE
+    letter: T
+    color: '#10a060'
+    kind: train
+    pts: [[26, 6], [26, 17]]
+  # The Kawabata Line (川端線): east from Kaburo's east side over Denkō-chō and across the river to the old town.
+  - id: kawabata
+    name: 川端線
+    nameEn: KAWABATA LINE
+    letter: K
+    color: '#f08a1a'
+    kind: train
+    pts: [[31.3, 11], [41.8, 11]]
+  # The Tōto Monorail (東都モノレール): from Kasumi-chō (the Toto Line) west along Kasumi-dōri, down Asagiri-nishi-dōri
+  # to the port, along the port, south over the water to Hanejima and along to the airport terminal's door.
+  - id: monorail
+    name: 東都モノレール
+    nameEn: TOTO MONORAIL
+    letter: M
+    color: '#2a8ad8'
+    kind: monorail
+    pts: [[25.86, 16], [21, 16], [21, 19], [11, 19], [11, 24], [8.3, 24]]

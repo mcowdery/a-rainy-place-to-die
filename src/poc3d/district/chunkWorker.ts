@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import { railReserved } from './rail';
 import type { DistrictId } from '../../gen/macro';
 import { rawTransfer } from '../real/rawGeometry';
 import { SignLayout } from '../real/signs';
@@ -24,7 +25,7 @@ self.onmessage = (e: MessageEvent<WorkerIn>) => {
   const m = e.data;
   if (m.type === 'init') {
     const content = loadDistrictContent();
-    const model = new DistrictModel(content.macro, m.kinds, content.placed, m.seed, content.zones, content.avenues, content.terrain);
+    const model = new DistrictModel(content.macro, m.kinds, content.placed, m.seed, content.zones, content.avenues, content.terrain, railReserved(content.rails));
     builder = new ChunkBuilder(model, new SignLayout(signTexts(m.words, content.placed)));
     self.postMessage({ type: 'ready' });
     return;

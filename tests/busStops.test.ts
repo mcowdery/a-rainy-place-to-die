@@ -25,7 +25,7 @@ describe('bus stops', () => {
         return false;
       };
       for (const b of content.traffic.buses) {
-        const route = routeFor(b.rect, false, (mx, my) => d.plan(mx, my), content.rail ? [content.rail] : []);
+        const route = routeFor(b.rect, false, (mx, my) => d.plan(mx, my), content.rails.flatMap((l) => l.segments));
         for (const e of route.edges) {
           const p = along(route, e.mid);
           const kl = Math.hypot(e.kerb[0], e.kerb[1]);

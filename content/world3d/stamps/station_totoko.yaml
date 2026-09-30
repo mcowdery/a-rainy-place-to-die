@@ -1,0 +1,29 @@
+# 東都港駅 Tōto-kō Station (monorail): a station landmark built by real/station.ts, its street face 10 m from the
+# line (see content/world3d/rail.yaml).
+id: station_totoko
+name: 東都港駅 Tōto-kō Station
+footprint: [60, 24]
+height: 16.6
+front: south
+landmark: station
+station: { jp: 東都港, en: TŌTO-KŌ, line: monorail }
+nodes:
+  exit:
+    kind: spawn
+    name: Tōto-kō Station
+    at: [30, 8]
+    facing: north
+    view: [20, 16]
+  platform:
+    kind: spawn
+    name: Tōto-kō Station (platform)
+    at: [44, 3.2]
+    floor: 9.1
+    facing: south
+    view: [180, 2]
+  board:
+    kind: station
+    name: Tōto Monorail 東都モノレール
+    at: [44, 5.4]
+    floor: 9.1
+    returnSpawn: airport_station.platform

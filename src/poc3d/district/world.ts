@@ -119,8 +119,10 @@ export class District {
     readonly bridges: readonly Bridge3[] = [],
     /** The lie of the land (terrain.ts). */
     readonly terrain: Terrain = Terrain.FLAT,
+    /** Ground kept clear under the rail lines' curves (rail.ts railReserved). */
+    reserved: readonly Rect[] = [],
   ) {
-    this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues, terrain);
+    this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues, terrain, reserved);
     this.nodes = placed.flatMap((p) => p.nodes);
     // Stamps collide as their footprint, or (landmarks you can walk into) as their walls and fixtures.
     const solid = (p: Placed3): Rect[] => [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }];

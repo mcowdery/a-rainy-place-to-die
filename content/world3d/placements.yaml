@@ -316,3 +316,32 @@
   stamp: net_cafe
   cell: [27, 9]
   offset: [50, 50]
+# The rail lines' stations (rail.yaml): the Toto Line's Kasumi-chō, the Kawabata Line, the Tōto Monorail.
+- id: kasumicho_station
+  stamp: station_kasumicho
+  cell: [26, 15]
+  offset: [10, 34]
+- id: kaburohigashi_station
+  stamp: station_kaburohigashi
+  cell: [32, 10]
+  offset: [30, 94]
+- id: denkocho_station
+  stamp: station_denkocho
+  cell: [35, 10]
+  offset: [34, 94]
+- id: kawabata_station
+  stamp: station_kawabata
+  cell: [40, 10]
+  offset: [34, 94]
+- id: mono_kasumicho_station
+  stamp: station_mono_kasumicho
+  cell: [25, 15]
+  offset: [30, 94]
+- id: totoko_station
+  stamp: station_totoko
+  cell: [17, 18]
+  offset: [34, 94]
+- id: airport_station
+  stamp: station_airport
+  cell: [8, 23]
+  offset: [50, 94]

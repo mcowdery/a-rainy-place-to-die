@@ -1,14 +1,16 @@
 import * as THREE from 'three';
-import type { RailLine3 } from '../district/rail';
+import type { RailKind, RailLine3 } from '../district/rail';
+import { leftOf } from '../district/rail';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
-import { PLATFORM_Y, RAIL_Y, type StationNames } from './station';
+import { PLATFORM_Y, RAIL_Y, STATION, type StationNames } from './station';
 
 /**
- * The Toto Line on the main thread: the viaduct (deck, parapets, track, piers, catenary) along the line,
- * skipping the stations (they build their own), and the trains: three-car stainless commuter sets with the
- * line's stripe, lit interiors you can see into, running a timetable in both directions and stopping at
- * every station. Trains keep right: at each station the near track (by the station building) runs toward
- * the other station. ride() puts the camera in a car for the trip between two stations.
+ * The elevated railways on the main thread (district/rail.ts lays them out): for each line its viaduct along the
+ * path (a train line: deck, parapets, two tracks, piers, catenary; a monorail: two concrete beams on T-piers),
+ * skipping the stations (they build their own), and its trains: three-car sets in the line's colours (stainless
+ * commuter cars, or white straddle monorail cars), lit interiors you can see into, running a timetable both ways
+ * and stopping at every station, each car following the curves. Trains keep left. startRide() puts the camera in
+ * a car for the trip between two stations of the line.
  */
 
 const DECK_TOP = 8.0;
@@ -17,75 +19,108 @@ const CAR = 18;
 const GAP = 0.4;
 const CARS = 3;
 const TRAIN_HALF = (CARS * CAR + (CARS - 1) * GAP) / 2;
-const V_MAX = 17;
+const V_MAX: Readonly<Record<RailKind, number>> = { train: 17, monorail: 20 };
 const ACCEL = 1.0;
 const DWELL = 16;
 const LAYOVER = 12;
+/** Piers stand this far apart along the line, and never in a junction (this near a grid corner). */
+const PIER_STEP: Readonly<Record<RailKind, number>> = { train: 24, monorail: 20 };
+const JUNCTION_CLEAR = 17;
 
 export interface RailStation {
   readonly id: string;
+  readonly line: string;
   readonly names: StationNames;
-  /** Centre of the platforms along the line. */
-  readonly z: number;
-  /** +1 if the station building is east of the line, -1 west. */
+  /** The platforms' centre along the line. */
+  readonly s: number;
+  /** +1 if the station building is left of the line's heading (increasing s), -1 right. */
   readonly side: number;
   /** Length along the line that the station builds itself (the viaduct skips it). */
-  readonly z0: number;
-  readonly z1: number;
+  readonly s0: number;
+  readonly s1: number;
 }
 
-/** The ground-level colliders of the viaduct's piers (the stations add their own). */
-export function viaductPiers(line: RailLine3, stations: readonly RailStation[]): { x: number; y: number; w: number; h: number }[] {
-  const out: { x: number; y: number; w: number; h: number }[] = [];
-  for (let z = line.z0 + 12; z < line.z1; z += 24) {
-    if (stations.some((s) => z > s.z0 - 2 && z < s.z1 + 2)) continue;
-    out.push({ x: line.x - 0.8, y: z - 1.2, w: 1.6, h: 2.4 });
+/** A station on its line: where it stands along it, and on which side. */
+export function railStation(line: RailLine3, id: string, names: StationNames, x: number, z: number): RailStation {
+  const { s } = line.path.project(x, z);
+  const h = line.path.at(s);
+  const [lx, lz] = leftOf(h);
+  const side = Math.sign((x - h.x) * lx + (z - h.z) * lz) || 1;
+  return { id, line: line.id, names, s, side, s0: s - STATION.fw / 2, s1: s + STATION.fw / 2 };
+}
+
+const nearJunction = (x: number, z: number): boolean => {
+  const dx = Math.abs(x - Math.round(x / 128) * 128);
+  const dz = Math.abs(z - Math.round(z / 128) * 128);
+  return dx < JUNCTION_CLEAR && dz < JUNCTION_CLEAR;
+};
+
+/** The piers' places along the line (s), outside the stations and junctions. */
+function pierPlaces(line: RailLine3, stations: readonly RailStation[]): number[] {
+  const out: number[] = [];
+  const step = PIER_STEP[line.kind];
+  for (let s = step / 2; s < line.path.length; s += step) {
+    if (stations.some((st) => s > st.s0 - 2 && s < st.s1 + 2)) continue;
+    const p = line.path.at(s);
+    if (!nearJunction(p.x, p.z)) out.push(s);
   }
   return out;
 }
 
+/** The ground-level colliders of a line's piers (the stations add their own). */
+export function viaductPiers(line: RailLine3, stations: readonly RailStation[]): { x: number; y: number; w: number; h: number }[] {
+  const half = line.kind === 'monorail' ? 0.7 : 1.2;
+  return pierPlaces(line, stations).map((s) => {
+    const p = line.path.at(s);
+    return { x: p.x - half, y: p.z - half, w: half * 2, h: half * 2 };
+  });
+}
+
 /** Distance covered after t seconds of a stop-to-stop run of length d, and the run's duration. */
-function run(d: number): { T: number; at: (t: number) => number } {
-  const tA = V_MAX / ACCEL;
-  const dA = (V_MAX * V_MAX) / (2 * ACCEL);
+function run(d: number, vmax: number): { T: number; at: (t: number) => number } {
+  const tA = vmax / ACCEL;
+  const dA = (vmax * vmax) / (2 * ACCEL);
   if (d <= 2 * dA) {
     const tp = Math.sqrt(d / ACCEL);
     return { T: 2 * tp, at: (t) => (t < tp ? 0.5 * ACCEL * t * t : d - 0.5 * ACCEL * (2 * tp - t) ** 2) };
   }
-  const tC = (d - 2 * dA) / V_MAX;
+  const tC = (d - 2 * dA) / vmax;
   return {
     T: 2 * tA + tC,
-    at: (t) => (t < tA ? 0.5 * ACCEL * t * t : t < tA + tC ? dA + V_MAX * (t - tA) : d - 0.5 * ACCEL * (2 * tA + tC - t) ** 2),
+    at: (t) => (t < tA ? 0.5 * ACCEL * t * t : t < tA + tC ? dA + vmax * (t - tA) : d - 0.5 * ACCEL * (2 * tA + tC - t) ** 2),
   };
 }
 
-type Leg = { kind: 'run'; from: number; to: number; T: number; at: (t: number) => number } | { kind: 'wait'; z: number; T: number; hidden?: boolean };
+type Leg = { kind: 'run'; from: number; to: number; T: number; at: (t: number) => number } | { kind: 'wait'; s: number; T: number; hidden?: boolean };
 
 /** A direction's schedule: layover (hidden) at the start, runs between stops with dwells, hidden at the end. */
-function schedule(stops: readonly number[]): { legs: Leg[]; period: number } {
-  const legs: Leg[] = [{ kind: 'wait', z: stops[0], T: LAYOVER, hidden: true }];
+function schedule(stops: readonly number[], vmax: number): { legs: Leg[]; period: number } {
+  const legs: Leg[] = [{ kind: 'wait', s: stops[0], T: LAYOVER, hidden: true }];
   for (let i = 0; i + 1 < stops.length; i++) {
-    const r = run(Math.abs(stops[i + 1] - stops[i]));
+    const r = run(Math.abs(stops[i + 1] - stops[i]), vmax);
     legs.push({ kind: 'run', from: stops[i], to: stops[i + 1], T: r.T, at: r.at });
-    if (i + 2 < stops.length) legs.push({ kind: 'wait', z: stops[i + 1], T: DWELL });
+    if (i + 2 < stops.length) legs.push({ kind: 'wait', s: stops[i + 1], T: DWELL });
   }
   return { legs, period: legs.reduce((t, l) => t + l.T, 0) };
 }
 
-function where(legs: readonly Leg[], t: number): { z: number; hidden: boolean } {
+function where(legs: readonly Leg[], t: number): { s: number; hidden: boolean } {
   for (const l of legs) {
     if (t < l.T) {
-      if (l.kind === 'wait') return { z: l.z, hidden: l.hidden === true };
-      return { z: l.from + Math.sign(l.to - l.from) * l.at(t), hidden: false };
+      if (l.kind === 'wait') return { s: l.s, hidden: l.hidden === true };
+      return { s: l.from + Math.sign(l.to - l.from) * l.at(t), hidden: false };
     }
     t -= l.T;
   }
   const last = legs[legs.length - 1];
-  return { z: last.kind === 'run' ? last.to : last.z, hidden: true };
+  return { s: last.kind === 'run' ? last.to : last.s, hidden: true };
 }
 
-/** One car at the origin, along +z, rail top at y 0. cab: a driving end at +z with lamps of this colour. */
-function buildCar(stripe: number, cab: [number, number, number] | null): { body: THREE.BufferGeometry; glass: THREE.BufferGeometry } {
+/**
+ * One car at the origin, along +z, rail top at y 0. cab: a driving end at +z with lamps of this colour. mono: a
+ * straddle monorail car (white, skirts down either side of the beam, a rounded nose).
+ */
+function buildCar(stripe: number, cab: [number, number, number] | null, mono = false): { body: THREE.BufferGeometry; glass: THREE.BufferGeometry } {
   const mb = new MeshBuilder();
   const gb = new MeshBuilder();
   mb.flags = 0;
@@ -112,7 +147,7 @@ function buildCar(stripe: number, cab: [number, number, number] | null): { body:
   };
   const paneX = (x: number, y0: number, y1: number, z0: number, z1: number): void => gb.quad([x, y0, z0], [0, 0, z1 - z0], [0, y1 - y0, 0]);
   const paneZ = (z: number, x0: number, x1: number, y0: number, y1: number): void => gb.quad([x0, y0, z], [x1 - x0, 0, 0], [0, y1 - y0, 0]);
-  const STEEL = 0xb4b8bc;
+  const STEEL = mono ? 0xeef0f2 : 0xb4b8bc;
   const H = CAR / 2;
   const W = 1.45;
   const FLOOR = 0.9;
@@ -122,8 +157,17 @@ function buildCar(stripe: number, cab: [number, number, number] | null): { body:
   const DOORS = [-6.9, -2.3, 2.3, 6.9];
 
   // Running gear and the floor.
-  for (const z of [-6.5, 6.5]) box(0x1a1a1c, -1.1, 1.1, 0.05, 0.75, z - 1.25, z + 1.25);
-  box(0x2a2a2c, -1.25, 1.25, 0.35, 0.75, -4.5, 4.5);
+  if (mono) {
+    // Skirts down either side of the beam (the bogies hidden inside), a stripe along their foot.
+    for (const s of [-1, 1]) {
+      box(STEEL, s * 0.55, s * W, -1.05, 0.75, -H + 0.4, H - 0.4);
+      box(stripe, s * W, s * (W + 0.012), -0.2, 0.05, -H + 0.4, H - 0.4);
+    }
+    box(0x2a2a2c, -0.55, 0.55, 0.2, 0.75, -H + 0.4, H - 0.4);
+  } else {
+    for (const z of [-6.5, 6.5]) box(0x1a1a1c, -1.1, 1.1, 0.05, 0.75, z - 1.25, z + 1.25);
+    box(0x2a2a2c, -1.25, 1.25, 0.35, 0.75, -4.5, 4.5);
+  }
   box(0x2a2a2c, -W, W, 0.75, FLOOR, -H, H);
   inner(0x8a7e70, -1.4, 1.4, FLOOR, FLOOR + 0.01, -H + 0.1, H - 0.1);
   // Side walls: sill band, head band, piers between windows and at the doors, the stripes.
@@ -209,86 +253,105 @@ function buildCar(stripe: number, cab: [number, number, number] | null): { body:
     paneZ(H + 0.2, -1.15, 1.15, 1.85, 2.9);
     for (const s of [-1, 1]) glow(cab, s * 1.15, s * 0.8, 1.2, 1.45, H + 0.25, H + 0.28);
     glow([1.4, 0.55, 0.1], -0.6, 0.6, 3.0, 3.28, H + 0.2, H + 0.23);
-    box(0x1a1a1c, -1.2, 1.2, 0.05, 0.6, H - 0.1, H + 0.3);
+    if (mono) {
+      // The rounded nose: stepped in over the skirts, the stripe round it.
+      for (let k = 0; k < 4; k++) box(STEEL, -W + k * 0.2, W - k * 0.2, -1.05 + k * 0.25, 1.85 - k * 0.15, H + 0.25 + k * 0.22, H + 0.47 + k * 0.22);
+      box(stripe, -W + 0.1, W - 0.1, 0.1, 0.35, H + 0.25, H + 0.72);
+    } else box(0x1a1a1c, -1.2, 1.2, 0.05, 0.6, H - 0.1, H + 0.3);
   }
   return { body: mb.build()!, glass: gb.build()! };
 }
 
 /** A three-car set on its own, rail top at y 0, pointing +z (for the showroom). */
-export function trainModel(color: number, city: THREE.Material): THREE.Group {
-  const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.18, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
-  const cars = [buildCar(color, [1.4, 0.1, 0.08]), buildCar(color, null), buildCar(color, [1.6, 1.55, 1.3])];
-  const g = new THREE.Group();
-  cars.forEach((c, i) => {
-    const car = new THREE.Group();
-    const gl = new THREE.Mesh(c.glass, glass);
-    gl.renderOrder = 3;
-    car.add(new THREE.Mesh(c.body, city), gl);
-    car.position.z = (i - 1) * (CAR + GAP);
-    if (i === 0) car.rotation.y = Math.PI;
-    g.add(car);
-  });
+export function trainModel(color: number, city: THREE.Material, mono = false): THREE.Group {
+  const g = carSet(color, city, mono)();
+  g.children.forEach((car, i) => (car.position.z = (i - 1) * (CAR + GAP)));
   return g;
 }
 
 /**
- * Makes three-car sets in a line's colour (the car geometry built once and shared): cars along +z, rail
- * top at y 0, the lead cab at +z.
+ * Makes three-car sets in a line's colour (the car geometry built once and shared): tail, middle and lead cars as
+ * the group's children, each along +z with its origin at the car's centre (the tail's cab faces back).
  */
-export function trainFactory(color: number, city: THREE.Material): () => THREE.Group {
+function carSet(color: number, city: THREE.Material, mono = false): () => THREE.Group {
   const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.18, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
-  const lead = buildCar(color, [1.6, 1.55, 1.3]);
-  const mid = buildCar(color, null);
-  const tail = buildCar(color, [1.4, 0.1, 0.08]);
+  const lead = buildCar(color, [1.6, 1.55, 1.3], mono);
+  const mid = buildCar(color, null, mono);
+  const tail = buildCar(color, [1.4, 0.1, 0.08], mono);
   return () => {
     const g = new THREE.Group();
     [tail, mid, lead].forEach((c, i) => {
       const car = new THREE.Group();
+      const inner = new THREE.Group();
       const body = new THREE.Mesh(c.body, city);
       body.castShadow = true;
       const gl = new THREE.Mesh(c.glass, glass);
       gl.renderOrder = 3;
-      car.add(body, gl);
-      car.position.z = (i - 1) * (CAR + GAP);
-      if (i === 0) car.rotation.y = Math.PI;
+      inner.add(body, gl);
+      if (i === 0) inner.rotation.y = Math.PI;
+      car.add(inner);
       g.add(car);
     });
     return g;
   };
 }
 
+/** Three-car sets for a straight line (the subway): cars along +z, rail top at y 0, the lead cab at +z. */
+export function trainFactory(color: number, city: THREE.Material): () => THREE.Group {
+  const set = carSet(color, city);
+  return () => {
+    const g = set();
+    g.children.forEach((car, i) => (car.position.z = (i - 1) * (CAR + GAP)));
+    return g;
+  };
+}
+
+/** An oriented box: along the heading from a0 to a1, across (left of it) from b0 to b1, from y0 to y1, about (x, z). */
+function obox(mb: MeshBuilder, x: number, z: number, hx: number, hz: number, a0: number, a1: number, b0: number, b1: number, y0: number, y1: number, bottom = y0 > 0.3): void {
+  const lx = hz;
+  const lz = -hx;
+  const P = (a: number, b: number, y: number): [number, number, number] => [x + hx * a + lx * b, y, z + hz * a + lz * b];
+  const T = (d: number): [number, number, number] => [hx * d, 0, hz * d];
+  const L = (d: number): [number, number, number] => [lx * d, 0, lz * d];
+  const up: [number, number, number] = [0, y1 - y0, 0];
+  mb.quad(P(a1, b0, y0), L(b1 - b0), up);
+  mb.quad(P(a0, b1, y0), L(b0 - b1), up);
+  mb.quad(P(a1, b1, y0), T(a0 - a1), up);
+  mb.quad(P(a0, b0, y0), T(a1 - a0), up);
+  mb.quad(P(a0, b0, y1), T(a1 - a0), L(b1 - b0));
+  if (bottom) mb.quad(P(a0, b0, y0), L(b1 - b0), T(a1 - a0));
+}
+
+type Train = { cars: THREE.Group; dir: number; legs: Leg[]; period: number; offset: number };
+
+/** One line's viaduct and trains. */
 export class TrainSystem {
   readonly group = new THREE.Group();
-  private readonly trains: { obj: THREE.Group; dir: number; x: number; legs: Leg[]; period: number; offset: number }[] = [];
+  private readonly trains: Train[] = [];
   private readonly rideTrain: THREE.Group;
   private time = 0;
-  private ride: { from: RailStation; to: RailStation; t: number; T: number; at: (t: number) => number; resolve: () => void; look: THREE.Vector3 } | null = null;
+  private ride: { from: RailStation; to: RailStation; t: number; T: number; at: (t: number) => number; resolve: () => void } | null = null;
 
   constructor(
-    private readonly line: RailLine3,
+    readonly line: RailLine3,
     private readonly stations: readonly RailStation[],
     city: THREE.Material,
   ) {
     this.group.add(this.buildViaduct(city));
-    const set = trainFactory(line.color, city);
-    const make = (): THREE.Group => {
-      const g = set();
-      g.position.y = RAIL_Y;
-      return g;
-    };
-    // Two trains each way, half a period apart. Northbound (-z) keeps right on the east track.
-    const byZ = [...stations].sort((a, b) => a.z - b.z);
-    for (const dir of [-1, 1]) {
-      const stops = [dir > 0 ? line.z0 + TRAIN_HALF : line.z1 - TRAIN_HALF, ...(dir > 0 ? byZ : [...byZ].reverse()).map((s) => s.z), dir > 0 ? line.z1 - TRAIN_HALF : line.z0 + TRAIN_HALF];
-      const { legs, period } = schedule(stops);
+    const set = carSet(line.color, city, line.kind === 'monorail');
+    // Two trains each way, half a period apart.
+    const byS = [...stations].sort((a, b) => a.s - b.s);
+    const L = line.path.length;
+    for (const dir of [1, -1]) {
+      const stops = [dir > 0 ? TRAIN_HALF : L - TRAIN_HALF, ...(dir > 0 ? byS : [...byS].reverse()).map((s) => s.s), dir > 0 ? L - TRAIN_HALF : TRAIN_HALF];
+      const { legs, period } = schedule(stops, V_MAX[line.kind]);
       for (const k of [0, 0.5]) {
-        const obj = make();
-        obj.rotation.y = dir > 0 ? 0 : Math.PI;
-        this.group.add(obj);
-        this.trains.push({ obj, dir, x: line.x - dir * TRACK, legs, period, offset: period * k + (dir > 0 ? 7 : 0) });
+        const cars = set();
+        this.group.add(cars);
+        this.trains.push({ cars, dir, legs, period, offset: period * k + (dir > 0 ? 7 : 0) });
       }
     }
-    this.rideTrain = make();
+    this.rideTrain = set();
     this.rideTrain.visible = false;
     this.group.add(this.rideTrain);
   }
@@ -305,15 +368,14 @@ export class TrainSystem {
     if (!this.ride) return null;
     const { to, t } = this.ride;
     const state = t < 0 ? 'doors closing' : t < this.ride.T ? 'next' : 'arriving at';
-    return `東都線 ${this.line.nameEn} · ${to.names.jp} 行き  ·  ${state}: ${to.names.jp} ${to.names.en}  ·  [E] skip`;
+    return `${this.line.name} ${this.line.nameEn} · ${to.names.jp} 行き  ·  ${state}: ${to.names.jp} ${to.names.en}  ·  [E] skip`;
   }
 
   /** Ride from one station to another with the camera in the middle car; resolves on arrival. */
   startRide(from: RailStation, to: RailStation, camera: THREE.Camera): Promise<void> {
-    const r = run(Math.abs(to.z - from.z));
+    const r = run(Math.abs(to.s - from.s), V_MAX[this.line.kind]);
     return new Promise((resolve) => {
-      // Look out of the far side, across the tracks, away from the departure station.
-      this.ride = { from, to, t: -3, T: r.T, at: r.at, resolve, look: new THREE.Vector3(-from.side, 0, 0) };
+      this.ride = { from, to, t: -3, T: r.T, at: r.at, resolve };
       this.rideTrain.visible = true;
       this.place(camera);
     });
@@ -323,19 +385,23 @@ export class TrainSystem {
     if (this.ride) this.ride.t = Math.max(this.ride.t, this.ride.T);
   }
 
-  /** The ride's view direction at the start (for the controls). */
+  /** Looking out of the far side, across the car, away from the departure station: the view's yaw now. */
   get rideYaw(): number {
-    return this.ride ? (this.ride.look.x < 0 ? 90 : -90) : 0;
+    if (!this.ride) return 0;
+    const h = this.line.path.at(this.rideS());
+    const [lx, lz] = leftOf(h);
+    const dx = -this.ride.from.side * lx;
+    const dz = -this.ride.from.side * lz;
+    return (Math.atan2(-dx, -dz) * 180) / Math.PI;
   }
 
   update(dt: number, camera: THREE.Camera): void {
     this.time += dt;
-    const rideDir = this.ride ? Math.sign(this.ride.to.z - this.ride.from.z) : 0;
+    const rideDir = this.ride ? Math.sign(this.ride.to.s - this.ride.from.s) : 0;
     for (const tr of this.trains) {
       const p = where(tr.legs, (this.time + tr.offset) % tr.period);
-      tr.obj.position.x = tr.x;
-      tr.obj.position.z = p.z;
-      tr.obj.visible = this.running && !p.hidden && !(this.ride && tr.dir === rideDir);
+      tr.cars.visible = this.running && !p.hidden && !(this.ride && tr.dir === rideDir);
+      if (tr.cars.visible) this.pose(tr.cars, p.s, tr.dir);
     }
     if (this.ride) {
       this.ride.t += dt;
@@ -349,61 +415,111 @@ export class TrainSystem {
     }
   }
 
+  /** Each car on the track at its own place along the line (so the set bends round the curves). */
+  private pose(cars: THREE.Group, s: number, dir: number): void {
+    cars.children.forEach((car, k) => {
+      const h = this.line.path.at(s + dir * (k - 1) * (CAR + GAP));
+      const [lx, lz] = leftOf(h);
+      car.position.set(h.x + dir * TRACK * lx, RAIL_Y, h.z + dir * TRACK * lz);
+      car.rotation.y = Math.atan2(dir * h.hx, dir * h.hz);
+    });
+  }
+
+  private rideS(): number {
+    const r = this.ride!;
+    const dir = Math.sign(r.to.s - r.from.s);
+    const d = r.t <= 0 ? 0 : r.t >= r.T ? Math.abs(r.to.s - r.from.s) : r.at(r.t);
+    return r.from.s + dir * d;
+  }
+
   private place(camera: THREE.Camera): void {
     const r = this.ride!;
-    const dir = Math.sign(r.to.z - r.from.z);
-    const d = r.t <= 0 ? 0 : r.t >= r.T ? Math.abs(r.to.z - r.from.z) : r.at(r.t);
-    const z = r.from.z + dir * d;
-    const x = this.line.x - dir * TRACK;
-    this.rideTrain.position.set(x, RAIL_Y, z);
-    this.rideTrain.rotation.y = dir > 0 ? 0 : Math.PI;
-    // Standing in the middle car by the near doors, looking across the car and out of the far windows.
-    camera.position.set(x - r.look.x * 0.7, PLATFORM_Y + 1.6, z + dir * 1.2);
+    const dir = Math.sign(r.to.s - r.from.s);
+    const s = this.rideS();
+    this.pose(this.rideTrain, s, dir);
+    // Standing in the middle car by the doors on the departure station's side, looking across the car.
+    const h = this.line.path.at(s);
+    const [lx, lz] = leftOf(h);
+    const x = h.x + dir * TRACK * lx + r.from.side * 0.7 * lx + h.hx * dir * 1.2;
+    const z = h.z + dir * TRACK * lz + r.from.side * 0.7 * lz + h.hz * dir * 1.2;
+    camera.position.set(x, PLATFORM_Y + 1.6, z);
   }
 
   private buildViaduct(city: THREE.Material): THREE.Mesh {
     const mb = new MeshBuilder();
     mb.flags = 0;
     mb.style = [0, 0, 0, 0];
-    const L = this.line;
-    const box = (hex: number, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): void => {
+    const path = this.line.path;
+    const mono = this.line.kind === 'monorail';
+    const set = (hex: number): void => {
       mb.kind = KIND.plain;
       mb.color = lin(hex);
-      mb.box((x0 + x1) / 2, (z0 + z1) / 2, y0, y1, x1 - x0, z1 - z0, KIND.plain, y0 > 0.3);
     };
-    // Spans of the line outside the stations.
-    const cuts = [...this.stations].sort((a, b) => a.z0 - b.z0);
-    const spans: [number, number][] = [];
-    let z = L.z0;
-    for (const s of cuts) {
-      if (s.z0 > z) spans.push([z, s.z0]);
-      z = Math.max(z, s.z1);
-    }
-    if (z < L.z1) spans.push([z, L.z1]);
-    for (const [a, b] of spans) {
-      box(0x8a8a86, L.x - 5, L.x + 5, 6.8, DECK_TOP, a, b);
-      for (const s of [-1, 1]) box(0x9a9894, L.x + s * 5 - (s > 0 ? 0.3 : 0), L.x + s * 5 + (s > 0 ? 0 : 0.3), DECK_TOP, DECK_TOP + 1.2, a, b);
-      for (const s of [-1, 1]) {
-        const tx = L.x + s * TRACK;
-        box(0x3a3a3c, tx - 1.3, tx + 1.3, DECK_TOP, DECK_TOP + 0.08, a, b);
-        for (const r of [-0.53, 0.53]) box(0xb0b0b4, tx + r - 0.035, tx + r + 0.035, DECK_TOP + 0.08, RAIL_Y, a, b);
-        for (let q = a + 0.3; q < b; q += 0.6) box(0x5a5a58, tx - 1.1, tx + 1.1, DECK_TOP + 0.08, DECK_TOP + 0.12, q, q + 0.24);
+    const inStation = (s: number): boolean => this.stations.some((st) => s > st.s0 && s < st.s1);
+    // The spans, in 3 m pieces (a hair longer, so they close over the curves).
+    const STEP = 3;
+    for (let s = 0; s < path.length; s += STEP) {
+      const len = Math.min(STEP, path.length - s);
+      const mid = s + len / 2;
+      if (inStation(mid)) continue;
+      const h = path.at(mid);
+      const a0 = -len / 2 - 0.05;
+      const a1 = len / 2 + 0.05;
+      if (mono) {
+        set(0xc8c4bc);
+        for (const b of [-TRACK, TRACK]) obox(mb, h.x, h.z, h.hx, h.hz, a0, a1, b - 0.43, b + 0.43, 6.9, RAIL_Y, true);
+        continue;
+      }
+      set(0x8a8a86);
+      obox(mb, h.x, h.z, h.hx, h.hz, a0, a1, -5, 5, 6.8, DECK_TOP, true);
+      set(0x9a9894);
+      for (const b of [-5, 4.7]) obox(mb, h.x, h.z, h.hx, h.hz, a0, a1, b, b + 0.3, DECK_TOP, DECK_TOP + 1.2);
+      for (const b of [-TRACK, TRACK]) {
+        set(0x3a3a3c);
+        obox(mb, h.x, h.z, h.hx, h.hz, a0, a1, b - 1.3, b + 1.3, DECK_TOP, DECK_TOP + 0.08);
+        set(0xb0b0b4);
+        for (const r of [-0.53, 0.53]) obox(mb, h.x, h.z, h.hx, h.hz, a0, a1, b + r - 0.035, b + r + 0.035, DECK_TOP + 0.08, RAIL_Y);
       }
     }
-    // Piers (with caps) and catenary masts, wires over both tracks.
-    for (const p of viaductPiers(L, this.stations)) {
-      box(0x9a9894, p.x, p.x + p.w, 0, 6.2, p.y, p.y + p.h);
-      box(0x9a9894, L.x - 4.5, L.x + 4.5, 6.2, 6.8, p.y - 0.2, p.y + p.h + 0.2);
+    // Sleepers (a train line), catenary masts and wires.
+    if (!mono) {
+      set(0x5a5a58);
+      for (let s = 0.4; s < path.length; s += 0.8) {
+        if (inStation(s)) continue;
+        const h = path.at(s);
+        for (const b of [-TRACK, TRACK]) obox(mb, h.x, h.z, h.hx, h.hz, -0.12, 0.12, b - 1.1, b + 1.1, DECK_TOP + 0.08, DECK_TOP + 0.12);
+      }
+      set(0x6a6e72);
+      for (let s = 24; s < path.length; s += 48) {
+        const h = path.at(s);
+        const st = inStation(s);
+        const top = st ? 12.3 : 13.8;
+        for (const b of [-5.3, 5.3]) obox(mb, h.x, h.z, h.hx, h.hz, -0.12, 0.12, b - 0.12, b + 0.12, st ? 12.3 : DECK_TOP, top);
+        if (!st) obox(mb, h.x, h.z, h.hx, h.hz, -0.08, 0.08, -5.4, 5.4, top - 0.2, top);
+      }
+      mb.kind = KIND.plain;
+      mb.color = lin(0x2a2a2a);
+      for (let s = 0; s < path.length; s += 6) {
+        const a = path.at(s);
+        const b = path.at(Math.min(path.length, s + 6));
+        const [la, lza] = leftOf(a);
+        const [lb, lzb] = leftOf(b);
+        for (const o of [-TRACK, TRACK]) mb.beam([a.x + la * o, 12.2, a.z + lza * o], [b.x + lb * o, 12.2, b.z + lzb * o], 0.03);
+      }
     }
-    for (let q = L.z0 + 24; q < L.z1; q += 48) {
-      const inStation = this.stations.some((s) => q > s.z0 && q < s.z1);
-      const top = inStation ? 12.3 : 13.8;
-      for (const s of [-1, 1]) box(0x6a6e72, L.x + s * 5.3 - 0.12, L.x + s * 5.3 + 0.12, inStation ? 12.3 : DECK_TOP, top, q - 0.12, q + 0.12);
-      if (!inStation) box(0x6a6e72, L.x - 5.4, L.x + 5.4, top - 0.2, top, q - 0.08, q + 0.08);
+    // Piers: a column and a cap (a train line); a column and a T-head under both beams (a monorail). They reach
+    // below the ground, into the water where the line crosses it.
+    set(0x9a9894);
+    for (const s of pierPlaces(this.line, this.stations)) {
+      const h = path.at(s);
+      if (mono) {
+        obox(mb, h.x, h.z, h.hx, h.hz, -0.65, 0.65, -0.65, 0.65, -3, 6.1);
+        obox(mb, h.x, h.z, h.hx, h.hz, -0.6, 0.6, -3.1, 3.1, 6.1, 6.9, true);
+      } else {
+        obox(mb, h.x, h.z, h.hx, h.hz, -1.2, 1.2, -0.8, 0.8, -3, 6.2);
+        obox(mb, h.x, h.z, h.hx, h.hz, -1.4, 1.4, -4.5, 4.5, 6.2, 6.8, true);
+      }
     }
-    mb.kind = KIND.plain;
-    mb.color = lin(0x2a2a2a);
-    for (const s of [-1, 1]) mb.beam([L.x + s * TRACK, 12.2, L.z0], [L.x + s * TRACK, 12.2, L.z1], 0.03);
     const mesh = new THREE.Mesh(mb.build()!, city);
     mesh.castShadow = mesh.receiveShadow = true;
     return mesh;

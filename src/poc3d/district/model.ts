@@ -35,6 +35,8 @@ export class DistrictModel {
     avenues: Avenues = new Map(),
     /** The lie of the land (terrain.ts): the chunk workers lift the geometry onto it. */
     readonly terrain: Terrain = Terrain.FLAT,
+    /** More ground to keep clear (under the rail lines' curves: rail.ts railReserved). */
+    private readonly extraReserved: readonly Rect[] = [],
   ) {
     for (const [k, v] of avenues) this.edges.set(k, v);
     const cells: [number, number][] = [];
@@ -79,7 +81,7 @@ export class DistrictModel {
     let p = this.plans.get(k);
     if (!p) {
       const cellRect: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
-      const reserved = this.placed.flatMap((q) => [reservedRect(q), plazaRect(q) ?? []].flat()).filter((r) => overlaps(r, cellRect));
+      const reserved = [...this.placed.flatMap((q) => [reservedRect(q), plazaRect(q) ?? []].flat()), ...this.extraReserved].filter((r) => overlaps(r, cellRect));
       p = planCell3(this.macro, mx, my, reserved, this.seed, this.zones.at(mx, my), this.edges)!;
       this.plans.set(k, p);
     }

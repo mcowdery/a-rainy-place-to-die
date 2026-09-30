@@ -92,7 +92,7 @@ export interface Stamp3 {
   readonly front: Side;
   readonly landmark: Landmark | null;
   /** A station's names (landmark station). */
-  readonly station: { readonly jp: string; readonly en: string } | null;
+  readonly station: { readonly jp: string; readonly en: string; readonly line?: string } | null;
   /** A subway station's concourse opens at this end (u0 / u1) onto an underground passage (real/rotary.ts). */
   readonly passage: 'u0' | 'u1' | null;
   /** Open ground kept free of lots, relative to the footprint's NW corner. */
@@ -167,8 +167,8 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
   if (landmark !== null && !LANDMARKS.includes(landmark)) err(`landmark must be one of ${LANDMARKS.join(', ')}`);
   if (doc.scramble !== undefined && !isPair(doc.scramble)) err('scramble must be [x, z] in metres from the footprint');
   const st = doc.station;
-  const stationNames = isObj(st) && typeof st.jp === 'string' && typeof st.en === 'string' ? { jp: st.jp, en: st.en } : null;
-  if (st !== undefined && !stationNames) err('station must be { jp, en }');
+  const stationNames = isObj(st) && typeof st.jp === 'string' && typeof st.en === 'string' ? { jp: st.jp, en: st.en, ...(typeof st.line === 'string' ? { line: st.line } : {}) } : null;
+  if (st !== undefined && !stationNames) err('station must be { jp, en, line? }');
   if ((landmark === 'station' || landmark === 'subway') && !stationNames) err(`a ${landmark} landmark needs station: { jp, en }`);
   if (doc.passage !== undefined && doc.passage !== 'u0' && doc.passage !== 'u1') err('passage must be u0 or u1 (the end of the concourse that opens onto a passage)');
   let plaza: Rect | null = null;

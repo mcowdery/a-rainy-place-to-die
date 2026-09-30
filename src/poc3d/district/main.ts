@@ -1,3 +1,4 @@
+import { railReserved } from './rail';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
@@ -26,7 +27,7 @@ import { buildRyujin } from '../real/ryujin';
 import { buildDiscount } from '../real/discount';
 import { buildStation } from '../real/station';
 import { ASAGIRI_KINDS, buildAsagiri, type AsagiriBuilt, type AsagiriKind } from '../real/asagiri';
-import { TrainSystem, viaductPiers, type RailStation } from '../real/rail';
+import { railStation, TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { SubwaySystem } from '../real/subway';
 import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../real/subwayStation';
 import { buildRotary, type RotaryBuilt } from '../real/rotary';
@@ -141,7 +142,7 @@ async function run(): Promise<void> {
 
   const cityU = cityUniforms();
   const city = cityMaterial(cityU);
-  const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones, content.avenues, content.bridges, content.terrain);
+  const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones, content.avenues, content.bridges, content.terrain, railReserved(content.rails));
   // The ground's height (terrain.ts): 0 but on the hills.
   const groundAt = (x: number, z: number): number => content.terrain.height(x, z);
   /** The camera's height over the ground there (so street level is the same on a hill). */
@@ -233,21 +234,22 @@ async function run(): Promise<void> {
   const glows = new ScreenGlows();
   scene.add(glows.group);
   // The Toto Line: its stations (station stamps) and the viaduct and trains between them.
-  const rail = content.rail;
-  const stationPlaced = content.placed.filter((p) => p.stamp.landmark === 'station');
-  const railStations: RailStation[] = stationPlaced.map((p) => ({
-    id: p.id,
-    names: p.stamp.station!,
-    z: p.building.z,
-    side: Math.sign(p.building.x - (rail?.x ?? 0)),
-    z0: p.building.z - p.building.d / 2,
-    z1: p.building.z + p.building.d / 2,
-  }));
-  const trains = rail ? new TrainSystem(rail, railStations, city) : null;
-  if (trains && rail) {
-    scene.add(trains.group);
-    district.addColliders(viaductPiers(rail, railStations));
+  const rails = content.rails;
+  // The station's line (station.line, or the first line).
+  const lineOfStation = (p: (typeof content.placed)[number]) => rails.find((l) => l.id === (p.stamp.station?.line ?? rails[0]?.id));
+  const railStations: RailStation[] = content.placed
+    .filter((p) => p.stamp.landmark === 'station')
+    .flatMap((p) => {
+      const l = lineOfStation(p);
+      return l ? [railStation(l, p.id, p.stamp.station!, p.building.x, p.building.z)] : [];
+    });
+  const trainLines = new Map(rails.map((l) => [l.id, new TrainSystem(l, railStations.filter((s) => s.line === l.id), city)]));
+  for (const t of trainLines.values()) {
+    scene.add(t.group);
+    district.addColliders(viaductPiers(t.line, railStations.filter((s) => s.line === t.line.id)));
   }
+  /** The line you're riding, if any. */
+  const trainRiding = (): TrainSystem | null => [...trainLines.values()].find((t) => t.riding) ?? null;
   // The subway: tunnels and trains below ground (shown only there), and its stations (landmarks, below).
   const subway = new SubwaySystem(content.subway, city);
   subway.group.visible = false;
@@ -261,7 +263,7 @@ async function run(): Promise<void> {
   // Everything on the surface, hidden below ground (the stations' own groups stay: they reach up to the street).
   const surface: THREE.Object3D[] = [];
   // Traffic: cars and taxis clockwise round their loops, buses anticlockwise round theirs.
-  const piers = rail ? [rail] : [];
+  const piers = rails.flatMap((l) => l.segments);
   const plan = (mx: number, my: number) => district.plan(mx, my);
   // Every grid-corner junction has signals; scramble crossings add a pedestrian phase.
   const scrambles = new Set(
@@ -297,7 +299,10 @@ async function run(): Promise<void> {
   const windTarget = new THREE.Vector2();
   let skyTime = 0;
   // The viaduct keeps the rain off the street under it.
-  if (rail) district.shelters.push({ rect: { x: rail.x - 5, y: rail.z0, w: 10, h: rail.z1 - rail.z0 }, y0: -1, y1: 7.8 });
+  for (const l of rails) {
+    if (l.kind !== 'train') continue;
+    for (const q of l.segments) district.shelters.push({ rect: { x: q.x0 - 5, y: q.z0 - 5, w: q.x1 - q.x0 + 10, h: q.z1 - q.z0 + 10 }, y0: -1, y1: 7.8 });
+  }
   district.addColliders(traffic.colliders);
   for (const placed of content.placed) {
     const lm = placed.stamp.landmark;
@@ -325,9 +330,10 @@ async function run(): Promise<void> {
       scene.add(r.group);
       rotaries.push({ r, x: placed.building.x, z: placed.building.z });
       landmarkUpdates.push(() => r.update(cityU));
-    } else if (lm === 'station' && rail) {
-      const other = railStations.find((s) => s.id !== placed.id)?.names ?? null;
-      scene.add(buildStation(placed.building, city, placed.stamp.station!, other, rail));
+    } else if (lm === 'station' && lineOfStation(placed)) {
+      const l = lineOfStation(placed)!;
+      const other = railStations.find((s) => s.line === l.id && s.id !== placed.id)?.names ?? null;
+      scene.add(buildStation(placed.building, city, placed.stamp.station!, other, l));
     } else if (lm === 'mega_sign') {
       const mega = buildMegaSign(cityU, city);
       mega.group.position.set(placed.building.x, 0, placed.building.z);
@@ -463,7 +469,6 @@ async function run(): Promise<void> {
   const mapLines: MapLine[] = [
     ...content.subway.lines.map((l) => ({ name: `${l.name} ${l.nameEn}`, color: l.color, letter: l.letter, stops: l.stops.map((s) => ({ x: s.x, z: s.z, code: s.code, name: `${s.jp} ${s.en}` })) })),
     // The Toto Line is in the subway network (as an elevated line) since the terminal; only add it here if not.
-    ...(rail && railStations.length >= 2 && !content.subway.lines.some((l) => l.letter === 'T') ? [{ name: `${rail.name} ${rail.nameEn}`, color: rail.color, letter: 'T', stops: [...railStations].sort((a, b) => a.z - b.z).map((s, i) => ({ x: rail.x, z: s.z, code: `T${String(i + 1).padStart(2, '0')}`, name: `${s.names.jp} ${s.names.en}` })) }] : []),
   ];
   const travel = new TravelMap(district, content.zones, allPlaces(), (d: Destination) => {
     const floor = d.floor + groundAt(d.x, d.z);
@@ -491,7 +496,7 @@ async function run(): Promise<void> {
   const LAST_TRAIN = '終電 · The last train has gone. Trains run again from 5:00.';
   const applyLate = (): void => {
     subway.running = !late();
-    if (trains) trains.running = !late();
+    for (const t of trainLines.values()) t.running = !late();
     for (const v of subwayViews) v.view.setClosed(late());
   };
   applyLate();
@@ -1055,7 +1060,7 @@ async function run(): Promise<void> {
   // ride or a scene (you'd load into a moving train); the autosave waits for those to end.
   const played0 = loaded?.played ?? 0;
   const t0 = performance.now();
-  const saveBlocked = (): string | null => (inVn ? 'Not during a scene.' : taxiRide || subway.riding || trains?.riding ? 'Not during a ride.' : null);
+  const saveBlocked = (): string | null => (inVn ? 'Not during a scene.' : taxiRide || subway.riding || trainRiding() ? 'Not during a ride.' : null);
   const gather = (): SaveGame => {
     const d = camera.getWorldDirection(new THREE.Vector3());
     const p = driving.car ? { x: driving.car.x, z: driving.car.z } : camera.position;
@@ -1211,11 +1216,12 @@ async function run(): Promise<void> {
       let done: Promise<void>;
       if (line.kind === 'elevated') {
         // The Toto Line: its own trains along the viaduct (real/rail.ts).
+        const tl = trainLines.get(line.id);
         const a = railStations.find((s) => s.id === line.stops[leg.from].key);
         const b = railStations.find((s) => s.id === line.stops[leg.to].key);
-        if (!trains || !a || !b) break;
-        done = trains.startRide(a, b, camera);
-        controls.setView(trains.rideYaw, 0);
+        if (!tl || !a || !b) break;
+        done = tl.startRide(a, b, camera);
+        controls.setView(tl.rideYaw, 0);
       } else {
         done = subway.startRide(leg.line, leg.from, leg.to, camera);
         controls.setView(subway.rideYaw, -3);
@@ -1235,8 +1241,9 @@ async function run(): Promise<void> {
   const direct: Record<string, OverlayPreset> = { Digit1: 'off', Digit2: 'vibe', Digit3: 'heavy', Digit4: 'ascii' };
   window.addEventListener('keydown', (e) => {
     if (bench || inVn) return;
-    if (trains?.riding) {
-      if (e.code === 'KeyE') trains.skip();
+    const riding = trainRiding();
+    if (riding) {
+      if (e.code === 'KeyE') riding.skip();
       return;
     }
     if (subway.riding) {
@@ -1386,7 +1393,7 @@ async function run(): Promise<void> {
     }
     if (bench) controls.update(0);
     for (const update of landmarkUpdates) update(camera.position, dt);
-    trains?.update(dt, camera);
+    for (const t of trainLines.values()) t.update(dt, camera);
     subway.update(dt, camera);
     updateInteriors(inVn ? 0 : dt);
     if (!bench) {
@@ -1479,14 +1486,14 @@ async function run(): Promise<void> {
     const lamps = (x: number, z: number, r: number) => district.lampsNear(x, z, r);
     // Riding the train, the car is the shelter.
     const shelters = district.sheltersNear(cp.x, cp.z, 45, 11);
-    if (trains?.riding) shelters.unshift({ rect: { x: cp.x - 1.6, y: cp.z - 30, w: 3.2, h: 60 }, y0: 0, y1: 20 });
+    if (trainRiding()) shelters.unshift({ rect: { x: cp.x - 1.6, y: cp.z - 30, w: 3.2, h: 60 }, y0: 0, y1: 20 });
     rain.update(tt, dt, cp, rainAmount, windVec, shelters);
     rainLayers.update(tt, cp, rainAmount, windVec, wetness, (scene.fog as THREE.Fog).far, base.horizon, shelters);
     streetWater.update(tt, cp, wetness, windVec, district.sheltersNear(cp.x, cp.z, 30, 24));
     district.umbrellas = rainAmount > 0.15;
     // Wet air spreads the glow round lights.
     bloom.radius = 0.45 + 0.35 * Math.min(1, rainAmount + (weather() === 'fog' ? 0.5 : 0));
-    const inside = trains?.riding || district.sheltered(cp.x, cp.z, cp.y);
+    const inside = !!trainRiding() || district.sheltered(cp.x, cp.z, cp.y);
     cones.update(cp, lamps, Math.max(atm.haze, rainAmount * 1.2) * atm.lamps * 0.05 * (1 - 0.3 * mood.darkness));
     lampShadows.update(cp, lamps, atm.lamps * 55);
     skyTime += dt * (1 + mood.wind * 30);
@@ -1529,7 +1536,7 @@ async function run(): Promise<void> {
     sky.uniforms.uCloudLit.value.copy(base.cloudLit);
     fitFog();
     // Sound follows the same weather: what's overhead, the wind, the nearest cars.
-    const cover = trains?.riding || subway.riding ? 'enclosed' : district.shelterAt(cp.x, cp.z, cp.y)?.enclosed ? 'enclosed' : inside ? 'roof' : 'open';
+    const cover = trainRiding() || subway.riding ? 'enclosed' : district.shelterAt(cp.x, cp.z, cp.y)?.enclosed ? 'enclosed' : inside ? 'roof' : 'open';
     stepCover = cover;
     audio.update({
       dt,
@@ -1537,7 +1544,7 @@ async function run(): Promise<void> {
       wind: mood.wind,
       gust,
       cover,
-      train: !!trains?.riding || subway.riding,
+      train: !!trainRiding() || subway.riding,
       volume: mood.volume,
       x: cp.x,
       z: cp.z,
@@ -1591,14 +1598,14 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        trains?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
+        trainRiding()?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
-        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (content.subway.stops.has(t.placementId) ? 'Take the subway' : isRailStation(t.placementId) ? 'Take the train' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : taxiHere() ? '[E] Get in the taxi' : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
+        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : taxiHere() ? '[E] Get in the taxi' : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
         `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · I invert mouse Y · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look`,
       ].join('\n');
       builtThisWindow = 0;

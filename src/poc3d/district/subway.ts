@@ -1,6 +1,7 @@
 import YAML from 'yaml';
 import { ID_PATTERN } from '../../content/stamps';
 import { frontPoint } from './plan';
+import type { RailLine3 } from './rail';
 import type { Placed3 } from './stamps';
 
 /**
@@ -82,16 +83,11 @@ export function stationAxis(p: Placed3): { along: 'x' | 'z'; at: number } {
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** The elevated line (rail.yaml) as a network line: its station landmarks in order along it. */
-export interface ElevatedLine {
-  readonly id: string;
-  readonly name: string;
-  readonly nameEn: string;
-  readonly color: number;
-  readonly x: number;
-}
-
-export function parseSubway3(file: string, text: string, placed: readonly Placed3[], errors: string[], elevated: ElevatedLine | null = null): SubwayNet3 {
+/**
+ * The elevated lines (rail.yaml) join the network: each one's station landmarks (station.line, or the first line)
+ * in order along it, numbered by its letter.
+ */
+export function parseSubway3(file: string, text: string, placed: readonly Placed3[], errors: string[], elevated: readonly RailLine3[] = []): SubwayNet3 {
   const err = (m: string): void => void errors.push(`${file}: ${m}`);
   let doc: unknown;
   try {
@@ -104,16 +100,27 @@ export function parseSubway3(file: string, text: string, placed: readonly Placed
   const byId = new Map(placed.map((p) => [p.id, p]));
   const lines: SubwayLine3[] = [];
   const stops = new Map<string, SubwayStop3>();
-  if (elevated) {
-    const st = placed.filter((p) => p.stamp.landmark === 'station').sort((a, b) => a.building.z - b.building.z);
-    if (st.length >= 2) {
-      const ls = st.map((p, k): SubwayStop3 => ({
-        key: p.id, line: elevated.id, index: k, code: `T${String(k + 1).padStart(2, '0')}`,
-        jp: p.stamp.station?.jp ?? p.id, en: p.stamp.station?.en ?? p.id, x: elevated.x, z: p.building.z, s: p.building.z,
-      }));
-      for (const s of ls) stops.set(s.key, s);
-      lines.push({ id: elevated.id, kind: 'elevated', name: elevated.name, nameEn: elevated.nameEn, letter: 'T', color: elevated.color, along: 'z', at: elevated.x, stops: ls });
+  const stations = placed.filter((p) => p.stamp.landmark === 'station');
+  for (const p of stations) {
+    const want = p.stamp.station?.line;
+    if (want !== undefined && !elevated.some((l) => l.id === want)) err(`station '${p.id}': no rail line '${want}'`);
+  }
+  for (const [li, el] of elevated.entries()) {
+    const mine = stations.filter((p) => (p.stamp.station?.line ?? elevated[0].id) === el.id);
+    const on = mine.map((p) => ({ p, at: el.path.project(p.building.x, p.building.z) }));
+    for (const { p, at } of on) if (at.d > 30) err(`station '${p.id}' is ${at.d.toFixed(0)} m from the ${el.id} line (its face must be 10 m from it)`);
+    on.sort((a, b) => a.at.s - b.at.s);
+    if (on.length < 2) {
+      if (li === 0 || on.length) err(`rail line '${el.id}' needs at least two stations`);
+      continue;
     }
+    const ls = on.map(({ p, at }, k): SubwayStop3 => {
+      const q = el.path.at(at.s);
+      return { key: p.id, line: el.id, index: k, code: `${el.letter}${String(k + 1).padStart(2, '0')}`, jp: p.stamp.station?.jp ?? p.id, en: p.stamp.station?.en ?? p.id, x: q.x, z: q.z, s: at.s };
+    });
+    for (const s of ls) stops.set(s.key, s);
+    const h = el.path.at(0);
+    lines.push({ id: el.id, kind: 'elevated', name: el.name, nameEn: el.nameEn, letter: el.letter, color: el.color, along: Math.abs(h.hx) > 0.5 ? 'x' : 'z', at: Math.abs(h.hx) > 0.5 ? h.z : h.x, stops: ls });
   }
   doc.lines.forEach((raw: unknown, i: number) => {
     const at = `line ${i}`;

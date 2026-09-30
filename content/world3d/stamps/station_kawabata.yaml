@@ -1,0 +1,29 @@
+# 川端駅 Kawabata Station (kawabata): a station landmark built by real/station.ts, its street face 10 m from the
+# line (see content/world3d/rail.yaml).
+id: station_kawabata
+name: 川端駅 Kawabata Station
+footprint: [60, 24]
+height: 16.6
+front: south
+landmark: station
+station: { jp: 川端, en: KAWABATA, line: kawabata }
+nodes:
+  exit:
+    kind: spawn
+    name: Kawabata Station
+    at: [30, 8]
+    facing: north
+    view: [20, 16]
+  platform:
+    kind: spawn
+    name: Kawabata Station (platform)
+    at: [44, 3.2]
+    floor: 9.1
+    facing: south
+    view: [180, 2]
+  board:
+    kind: station
+    name: Kawabata Line to Kaburo-higashi 歌舞路東
+    at: [44, 5.4]
+    floor: 9.1
+    returnSpawn: kaburohigashi_station.platform

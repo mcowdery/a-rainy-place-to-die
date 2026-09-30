@@ -1,0 +1,29 @@
+# 東都空港駅 Tōto Airport Station (monorail): a station landmark built by real/station.ts, its street face 10 m from the
+# line (see content/world3d/rail.yaml).
+id: station_airport
+name: 東都空港駅 Tōto Airport Station
+footprint: [60, 24]
+height: 16.6
+front: south
+landmark: station
+station: { jp: 東都空港, en: TŌTO AIRPORT, line: monorail }
+nodes:
+  exit:
+    kind: spawn
+    name: Tōto Airport Station
+    at: [30, 8]
+    facing: north
+    view: [20, 16]
+  platform:
+    kind: spawn
+    name: Tōto Airport Station (platform)
+    at: [44, 3.2]
+    floor: 9.1
+    facing: south
+    view: [180, 2]
+  board:
+    kind: station
+    name: Monorail to Kasumi-chō 霞町
+    at: [44, 5.4]
+    floor: 9.1
+    returnSpawn: mono_kasumicho_station.platform

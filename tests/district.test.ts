@@ -410,7 +410,7 @@ describe('Asagiri set pieces and traffic', () => {
 
   it('keeps every traffic lane clear of buildings, props and stops', { timeout: 30000 }, () => {
     for (const loop of [...carLoops(content.macro, content.traffic, plan).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {
-      const route = routeFor(loop[0], loop[1], plan, content.rail ? [content.rail] : []);
+      const route = routeFor(loop[0], loop[1], plan, content.rails.flatMap((l) => l.segments));
       for (let s = 0; s < route.length; s += 2) {
         const p = along(route, s);
         expect(district.blocked(p.x, p.z, 0.8), `${loop[0].join(',')} at ${s}`).toBe(false);
@@ -574,12 +574,13 @@ describe('Subway', () => {
   const placed = (id: string) => content.placed.find((p) => p.id === id)!;
 
   it('numbers the stations along two straight lines under the roads', () => {
-    expect(net.lines.map((l) => l.id)).toEqual(['toto', 'yako', 'wakaba', 'seiko']);
-    expect(net.lines[3].stops.map((s) => s.code)).toEqual(['S01', 'S02', 'S03', 'S04', 'S05', 'S06']);
-    expect(net.lines[0].stops.map((s) => `${s.code} ${s.en}`)).toEqual(['T01 GAKUENZAKA', 'T02 ASAGIRI', 'T03 TŌTO-CHŪŌ', 'T04 KABURO']);
-    expect(net.lines[1].stops.map((s) => s.code)).toEqual(['Y01', 'Y02', 'Y03', 'Y04', 'Y05']);
-    expect(net.lines[2].stops.map((s) => s.code)).toEqual(['W01', 'W02', 'W03']);
-    for (const l of net.lines) {
+    expect(net.lines.map((l) => l.id)).toEqual(['toto', 'kawabata', 'monorail', 'yako', 'wakaba', 'seiko']);
+    const codes = (id: string) => net.lines.find((l) => l.id === id)!.stops.map((s) => s.code);
+    expect(codes('seiko')).toEqual(['S01', 'S02', 'S03', 'S04', 'S05', 'S06']);
+    expect(codes('yako')).toEqual(['Y01', 'Y02', 'Y03', 'Y04', 'Y05']);
+    expect(codes('wakaba')).toEqual(['W01', 'W02', 'W03']);
+    // (The elevated lines, the monorail with its corners, are tests/rail.test.ts.)
+    for (const l of net.lines.filter((q) => q.id !== 'monorail')) {
       // Each line runs along a cell edge (a road), its platforms on it.
       expect(l.at % CELL).toBe(0);
       for (const s of l.stops) expect(l.along === 'x' ? s.z : s.x).toBeCloseTo(l.at, 3);

@@ -1,0 +1,29 @@
+# 霞町駅 Kasumi-chō Station (toto): a station landmark built by real/station.ts, its street face 10 m from the
+# line (see content/world3d/rail.yaml).
+id: station_kasumicho
+name: 霞町駅 Kasumi-chō Station
+footprint: [24, 60]
+height: 16.6
+front: west
+landmark: station
+station: { jp: 霞町, en: KASUMI-CHŌ, line: toto }
+nodes:
+  exit:
+    kind: spawn
+    name: Kasumi-chō Station
+    at: [30, 8]
+    facing: east
+    view: [-110, 16]
+  platform:
+    kind: spawn
+    name: Kasumi-chō Station (platform)
+    at: [44, 3.2]
+    floor: 9.1
+    facing: west
+    view: [90, 2]
+  board:
+    kind: station
+    name: Toto Line to Kaburo 歌舞路
+    at: [44, 5.4]
+    floor: 9.1
+    returnSpawn: kaburo_station.platform

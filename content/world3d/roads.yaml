@@ -54,6 +54,10 @@ avenues:
   - { name: 外環通り GAIKAN-DŌRI, row: 4, from: 10, to: 21, width: 24, median: 0 }
   - { name: 朝霧西通り ASAGIRI-NISHI-DŌRI, col: 21, from: 4, to: 8, width: 24, median: 0 }
   - { name: 北大通り KITA-ŌDŌRI, row: 6, from: 10, to: 21, width: 20, median: 0 }
+  # Under the Kawabata Line's viaduct (rail.yaml), either side of the river: a 16 m street like Kōkashita-dōri, so
+  # the deck is over the road and not the old town's roofs.
+  - { name: 川端高架下通り KAWABATA-KŌKASHITA, row: 11, from: 31, to: 37, width: 16, median: 0 }
+  - { name: 川端高架下通り KAWABATA-KŌKASHITA, row: 11, from: 38, to: 42, width: 16, median: 0 }
 
 # Street bridges over the water (roads.ts parseBridges): along a grid line, across the water cells from..to; the
 # cell-edge roads either side carry on over it. The Shiomi bridge's upper deck is the expressway's (expressway.yaml).

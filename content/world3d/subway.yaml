@@ -26,3 +26,6 @@ transfers:
   - [y04_station, w02_station]
   - [totochuo_station, y03_station]
   - [s01_station, totochuo_station]
+  # The Kawabata Line from Kaburo Crossing's station; the monorail from the Toto Line at Kasumi-chō.
+  - [kaburohigashi_station, y05_station]
+  - [mono_kasumicho_station, kasumicho_station]

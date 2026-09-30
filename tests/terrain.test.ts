@@ -36,7 +36,10 @@ describe('the terraces', () => {
       const b = p.building;
       for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) expect(T.height(b.x + (dx * b.w) / 2, b.z + (dz * b.d) / 2), p.id).toBe(0);
     }
-    if (content.rail) for (let z = content.rail.z0; z <= content.rail.z1; z += 8) expect(T.height(content.rail.x, z)).toBe(0);
+    for (const l of content.rails) for (let s = 0; s <= l.path.length; s += 8) {
+      const q = l.path.at(s);
+      expect(T.height(q.x, q.z), `${l.id} at ${s.toFixed(0)}`).toBe(0);
+    }
   });
 
   it('raises Takanodai in two steps: the lookout and the house on the summit, the ryokan on the upper plateau', () => {

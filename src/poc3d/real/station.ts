@@ -98,7 +98,7 @@ export interface StationNames {
   readonly en: string;
 }
 
-export function buildStation(b: Building3, city: THREE.Material, names: StationNames, other: StationNames | null, line: { name: string; nameEn: string; color: number }): THREE.Group {
+export function buildStation(b: Building3, city: THREE.Material, names: StationNames, other: StationNames | null, line: { name: string; nameEn: string; color: number; kind?: 'train' | 'monorail'; letter?: string }): THREE.Group {
   const f = localFrame(b);
   const group = new THREE.Group();
   const mb = new MeshBuilder();
@@ -209,13 +209,19 @@ export function buildStation(b: Building3, city: THREE.Material, names: StationN
   box(0x2a7a50, 52, 57, 8, 11, PLATFORM_Y, PLATFORM_Y + 1.1);
   glow([1.0, 0.9, 0.7], 52, 57, 7.98, 8, PLATFORM_Y + 0.4, PLATFORM_Y + 1.0);
 
-  // The viaduct deck under the station, its piers, and the track beds for both tracks.
-  box(0x8a8a86, 0, fw, FAR_EDGE - 1.5, 0, 6.8, DECK_Y, true);
+  // The viaduct deck under the station, its piers, and the track beds for both tracks (a monorail: the deck only
+  // under the platforms, the two beams running through the open trench between them).
+  const mono = line.kind === 'monorail';
+  if (mono) {
+    box(0x8a8a86, 0, fw, FAR_EDGE - 1.5, FAR_EDGE, 6.8, DECK_Y, true);
+    box(0x8a8a86, 0, fw, EDGE, 0, 6.8, DECK_Y, true);
+    for (const tc of [NEAR, FAR]) box(0xc8c4bc, 0, fw, tc - 0.43, tc + 0.43, 6.2, RAIL_Y, true);
+  } else box(0x8a8a86, 0, fw, FAR_EDGE - 1.5, 0, 6.8, DECK_Y, true);
   for (const u of [6, 18, 30, 42, 54]) {
     box(0x9a9894, u - 1.2, u + 1.2, STATION.line - 0.8, STATION.line + 0.8, 0, 6.2);
     box(0x9a9894, u - 1.4, u + 1.4, FAR_EDGE - 1.2, 0, 6.2, 6.8, true);
   }
-  for (const tc of [NEAR, FAR]) {
+  for (const tc of mono ? [] : [NEAR, FAR]) {
     box(0x3a3a3c, 0, fw, tc - 1.3, tc + 1.3, DECK_Y, DECK_Y + 0.08);
     for (const s of [-0.53, 0.53]) box(0xb0b0b4, 0, fw, tc + s - 0.035, tc + s + 0.035, DECK_Y + 0.08, RAIL_Y);
     for (let u = 0.3; u < fw; u += 0.6) box(0x5a5a58, u, u + 0.24, tc - 1.1, tc + 1.1, DECK_Y + 0.08, DECK_Y + 0.12);
@@ -299,7 +305,13 @@ export function buildStation(b: Building3, city: THREE.Material, names: StationN
     g.beginPath();
     g.arc(x, y, r * 0.62, 0, Math.PI * 2);
     g.fill();
-    text(g, 'T', x, y + r * 0.05, `900 ${Math.round(r)}px 'Arial Black', 'Arial', sans-serif`, lineHex);
+    text(g, line.letter ?? 'T', x, y + r * 0.05, `900 ${Math.round(r)}px 'Arial Black', 'Arial', sans-serif`, lineHex);
+  };
+  /** Text at up to size px, shrunk to fit maxW (long names, long line names). */
+  const fit = (g: CanvasRenderingContext2D, str: string, x: number, y: number, size: number, family: string, fill: string, maxW: number, align: CanvasTextAlign = 'center'): void => {
+    g.font = family.replace('{px}', `${size}px`);
+    const k = Math.min(1, maxW / Math.max(1, g.measureText(str).width));
+    text(g, str, x, y, family.replace('{px}', `${Math.floor(size * k)}px`), fill, align);
   };
   // On the building above the canopy.
   plane(canvas(1600, 260, (g) => {
@@ -308,16 +320,16 @@ export function buildStation(b: Building3, city: THREE.Material, names: StationN
     g.fillStyle = lineHex;
     g.fillRect(0, 220, 1600, 40);
     logo(g, 130, 110, 80);
-    text(g, `${names.jp}駅`, 520, 110, "900 150px 'Yu Gothic', 'Meiryo', sans-serif", '#1a1a1a');
-    text(g, `${names.en} STATION`, 1180, 115, "bold 86px 'Arial', sans-serif", '#2a2a2a');
+    fit(g, `${names.jp}駅`, 540, 110, 150, "900 {px} 'Yu Gothic', 'Meiryo', sans-serif", '#1a1a1a', 560);
+    fit(g, `${names.en} STATION`, 1210, 115, 86, "bold {px} 'Arial', sans-serif", '#2a2a2a', 700);
   }), 20, 3.25, 30, -0.02, 14.4, 'out');
   // The entrance, under the tracks.
   plane(canvas(1000, 160, (g) => {
     g.fillStyle = '#1a1a1c';
     g.fillRect(0, 0, 1000, 160);
     logo(g, 80, 80, 56);
-    text(g, `${names.jp}駅`, 220, 80, "900 90px 'Yu Gothic', 'Meiryo', sans-serif", '#ffffff', 'left');
-    text(g, `${line.nameEn} · ${line.name}`, 960, 80, "bold 50px 'Arial', 'Yu Gothic', sans-serif", '#ffffff', 'right');
+    fit(g, `${names.jp}駅`, 160, 80, 90, "900 {px} 'Yu Gothic', 'Meiryo', sans-serif", '#ffffff', 360, 'left');
+    fit(g, `${line.nameEn} · ${line.name}`, 960, 80, 50, "bold {px} 'Arial', 'Yu Gothic', sans-serif", '#ffffff', 400, 'right');
   }), 10, 1.6, 23, -0.02, 4.4, 'out', 1.3);
   // Station name boards (駅名標) on both platforms, facing the tracks.
   const board = canvas(900, 400, (g) => {
@@ -328,7 +340,7 @@ export function buildStation(b: Building3, city: THREE.Material, names: StationN
     g.fillStyle = lineHex;
     g.fillRect(0, 290, 900, 110);
     logo(g, 450, 345, 44);
-    if (other) text(g, `← ${other.jp} ${other.en}`, 60, 345, "bold 44px 'Yu Gothic', 'Meiryo', sans-serif", '#ffffff', 'left');
+    if (other) fit(g, `← ${other.jp} ${other.en}`, 40, 345, 44, "bold {px} 'Yu Gothic', 'Meiryo', sans-serif", '#ffffff', 340, 'left');
   });
   for (const u of [18, 44]) {
     box(0x6a6e72, u - 1.6, u + 1.6, -1.6, -1.5, PLATFORM_Y + 1.6, PLATFORM_Y + 3.4);
