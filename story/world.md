@@ -33,7 +33,7 @@ the station edge. Where the story starts: the MC's bed is a manga café booth he
 
 | Node | Kind | Name | Scene |
 |---|---|---|---|
-| `bar_kanpai.mama` | npc | Mama-san (the bar's mama) | — |
+| `bar_kanpai.mama` | npc | Mama-san (the bar's mama) | s90, a VN prototype kept as an example (not canon) |
 | `bar_kanpai.door` | door | Bar Kanpai | — |
 | `hotel_rouge.room_303` | door | Room 303 · Rouge Suite | — |
 | `yokocho.kuroneko` | door | BAR 黒猫 | — |
