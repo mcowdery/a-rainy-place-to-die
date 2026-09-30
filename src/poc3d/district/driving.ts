@@ -28,6 +28,8 @@ export class Driving {
   car: DrivenVehicle | null = null;
   /** Your own car, when it's the one you're driving (the racing model). */
   own: OwnCar | null = null;
+  /** Held at the line (a race's countdown): the car kept still, the throttle ignored. */
+  hold = false;
   /** 'chase' behind the car, or 'bumper': low at the front looking out, the body hidden (no interior yet). */
   view: 'chase' | 'bumper' = 'chase';
   /** A knock this frame (speed of the impact, m/s), for a sound and a shake; 0 if none. */
@@ -144,7 +146,9 @@ export class Driving {
     const turn = Number(k.has('KeyD') || k.has('ArrowRight')) - Number(k.has('KeyA') || k.has('ArrowLeft'));
     if (this.own) {
       // Your car: the racing model does it all (it collides, slides and knocks by itself).
-      this.own.drive(dt, { throttle: gas ? 1 : 0, brake: brake ? 1 : 0, steer: -turn, handbrake: hand });
+      this.own.drive(dt, this.hold ? { throttle: 0, brake: 0, steer: -turn, handbrake: false } : { throttle: gas ? 1 : 0, brake: brake ? 1 : 0, steer: -turn, handbrake: hand });
+      // Held at the line: still (the brake at a standstill would engage reverse).
+      if (this.hold) this.own.sim.u = this.own.sim.w = this.own.sim.r = 0;
       const knock = this.own.knock;
       if (knock > 1.5) {
         this.bump = knock;

@@ -1,3 +1,4 @@
+import { parseRaces, type RaceDef } from './cityRace';
 import { ContentError } from '../../content/load';
 import { parseMacroMap, type MacroMap } from '../../gen/macro';
 import { parseAtmosphere3, type AtmosphereTable3 } from './atmosphere';
@@ -16,6 +17,7 @@ import atmosphereText from '../../../content/world3d/atmosphere.yaml?raw';
 import railText from '../../../content/world3d/rail.yaml?raw';
 import trafficText from '../../../content/world3d/traffic.yaml?raw';
 import subwayText from '../../../content/world3d/subway.yaml?raw';
+import racesText from '../../../content/world3d/races.yaml?raw';
 
 export interface DistrictContent {
   readonly macro: MacroMap;
@@ -24,6 +26,8 @@ export interface DistrictContent {
   readonly zones: ZoneMap;
   /** The elevated lines (rail.yaml): the Toto Line first. */
   readonly rails: readonly RailLine3[];
+  /** Races on the expressway (races.yaml, district/cityRace.ts). */
+  readonly races: readonly RaceDef[];
   readonly traffic: TrafficContent;
   readonly subway: SubwayNet3;
   readonly avenues: Avenues;
@@ -50,11 +54,13 @@ export function loadDistrictContent(): DistrictContent {
   const rails = macro ? parseRails3('content/world3d/rail.yaml', railText, macro, errors) : [];
   const traffic = macro ? parseTraffic3('content/world3d/traffic.yaml', trafficText, macro, errors) : { cars: [], buses: [], auto: null };
   const subway = parseSubway3('content/world3d/subway.yaml', subwayText, placed, errors, rails);
+  const races = parseRaces('content/world3d/races.yaml', racesText, errors);
+  for (const r of races) if (!placed.some((p) => p.nodes.some((n) => n.id === r.host))) errors.push(`content/world3d/races.yaml: race ${r.id}: no node '${r.host}'`);
   const avenues = macro ? parseRoads3('content/world3d/roads.yaml', roadsText, macro, errors) : new Map();
   const bridges = macro ? parseBridges('content/world3d/roads.yaml', roadsText, macro, errors) : [];
   const terrain = macro ? parseTerrain('content/world3d/terrain.yaml', terrainText, macro, errors) : Terrain.FLAT;
   const ids = zones.zones.map((z) => z.id);
   if (new Set(ids).size !== ids.length) errors.push('content/world3d/zones: zone ids must be unique across districts');
   if (errors.length > 0 || !macro || !atmosphere) throw new ContentError(errors);
-  return { macro, placed, atmosphere, zones, rails, traffic, subway, avenues, bridges, terrain };
+  return { macro, placed, atmosphere, zones, rails, traffic, subway, avenues, bridges, terrain, races };
 }

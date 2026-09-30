@@ -528,8 +528,17 @@ export class ExpresswayTraffic {
     });
   }
 
-  /** You on the loop: your place along it (samples), your lane offset and speed; null off it. */
-  update(dt: number, you: { i: number; lateral: number; v: number } | null): void {
+  /** Clears the loop round sample i (a race's grid): the cars there move on half a lap. */
+  clearAround(i: number, range = 90): void {
+    const L = this.L;
+    for (const c of this.cars) {
+      const d = Math.abs(((c.s - i + L / 2) % L) - L / 2);
+      if (d < range) c.s = (c.s + L / 2) % L;
+    }
+  }
+
+  /** You on the loop: your place along it (samples), your lane offset and speed; null off it. Others: more cars they must mind (a race's rival). */
+  update(dt: number, you: { i: number; lateral: number; v: number } | null, others: readonly { i: number; lateral: number; v: number }[] = []): void {
     const loop = this.ex.loop;
     const L = this.L;
     const ahead = (a: number, b: number): number => (((b - a) % L) + L) % L;
@@ -542,9 +551,10 @@ export class ExpresswayTraffic {
         const d = ahead(c.s, o.s);
         if (d > 0 && d < gap) [gap, lead] = [d, o.v];
       }
-      if (you && Math.abs(you.lateral - c.lane) < 2.2) {
-        const d = ahead(c.s, you.i);
-        if (d > 0 && d < gap) [gap, lead] = [d, Math.max(0, you.v)];
+      for (const y of you ? [you, ...others] : others) {
+        if (Math.abs(y.lateral - c.lane) >= 2.2) continue;
+        const d = ahead(c.s, y.i);
+        if (d > 0 && d < gap) [gap, lead] = [d, Math.max(0, y.v)];
       }
       gap -= 4.6;
       // A comfortable speed for the bend ahead, and the IDM toward it and the leader.

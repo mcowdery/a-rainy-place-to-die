@@ -1,0 +1,23 @@
+# Races in the city (format: src/poc3d/district/cityRace.ts): battles on the Tōto Expressway against a rival, set up
+# by a racer at a PA (E on the host npc). A race runs along one expressway road from a start (metres along it) for
+# a length (metres) or laps of a loop; first to the line wins. Only the inner loop has traffic so far.
+races:
+  - id: c1_lap
+    name: 都心環状 C1 ONE LAP
+    blurb: One lap of the inner loop from the Asagiri side, through the traffic. Tight corners, no room.
+    host: ebisu_pa.racer
+    road: c1
+    start: 300
+    length: lap
+    laps: 1
+    rival: { name: The white rotary, type: rotary, paint: '#e8e8e4', skill: 0.9, parts: { engine: 1, tyres: 1 } }
+    pay: { win: 40000, lose: 4000 }
+  - id: wangan_sprint
+    name: 湾岸スプリント WANGAN SPRINT
+    blurb: East along the Wangan from Ebisu-jima to the fish market, flat out. Two kilometres of open road.
+    host: ebisu_pa.racer
+    road: wangan_e
+    start: 1350
+    length: 2050
+    rival: { name: The black GT-4, type: awd, paint: '#16161c', skill: 0.95, parts: { engine: 1 } }
+    pay: { win: 35000, lose: 3000 }

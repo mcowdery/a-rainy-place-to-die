@@ -1,3 +1,7 @@
+import { RacePath, RaceState, type RaceDef } from './cityRace';
+import { RaceHud } from './raceHud';
+import { RaceRival } from './raceRival';
+import { separateCars } from '../../race/battle';
 import { FLAG_SEASON, isSeason, SEASON_NAMES, seasonFlag, seasonIndex, type Season } from './seasons';
 import { WaitPanel } from './waitPanel';
 import { blendAtmosphere } from './atmosphere';
@@ -46,7 +50,7 @@ import { SaveApp } from './saveApp';
 import { readSave, SAVE_VERSION, SLOTS, writeSave, type SaveGame, type Slot } from '../../save/save';
 import { installSnap } from '../../debug/snap';
 import { fare, rideMetres, TaxiPicker } from './taxi';
-import { loadProfile, saveProfile } from '../../race/profile';
+import { earn, loadProfile, saveProfile } from '../../race/profile';
 import { Expressway, parseExpressway } from './expressway';
 import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
 import { buildSea } from '../real/sea';
@@ -1087,6 +1091,66 @@ async function run(): Promise<void> {
     await fadeTo(0);
     toast('Your car was towed to your garage. It needs repairing before you can drive it (the garage: E at its door).', 7);
   };
+  // Races in the city (district/cityRace.ts, races.yaml): a host at a PA offers them; you and a rival on the
+  // expressway through its traffic; first to the line wins (and pays).
+  const raceHud = new RaceHud();
+  let race: { st: RaceState; path: RacePath; rival: RaceRival; you: number; paid: boolean } | null = null;
+  const startRace = async (def: RaceDef): Promise<void> => {
+    inVn = true;
+    await fadeTo(1);
+    const path = new RacePath(def, expressway);
+    // The grid: you in the left lane (keep left), the rival beside you; the loop's traffic cleared from round it.
+    const g = path.at(0, 1.8);
+    ownCar.place(g.x, g.z, Math.atan2(g.tx, g.tz), g.y);
+    if (!driving.car) enterCar(ownCar.vehicle);
+    if (path.road === expressway.loop) exTraffic.clearAround(path.index(0));
+    const rival = new RaceRival(path, expressway, city, def.rival.skill, def.rival);
+    rival.place(0, -1.8);
+    scene.add(rival.view.obj);
+    rival.sound.start();
+    race = { st: new RaceState(path), path, rival, you: 0, paid: false };
+    driving.hold = true;
+    await new Promise((r) => setTimeout(r, 400));
+    await fadeTo(0);
+    inVn = false;
+  };
+  if (debug) (window as unknown as { __race: unknown }).__race = { start: (id: string) => startRace(content.races.find((r) => r.id === id)!), state: () => race && { phase: race.st.phase, t: race.st.t, you: race.you, rival: race.rival.s, result: race.st.result } };
+  const endRace = (): void => {
+    if (!race) return;
+    race.rival.stop();
+    scene.remove(race.rival.view.obj);
+    driving.hold = false;
+    race = null;
+  };
+  /** Each frame: the rival drives, both cars' progress, knocks between them, the splits, and how it ends. */
+  const updateRace = (dt: number): void => {
+    if (!race) return;
+    const { st, path, rival } = race;
+    const pr = path.progress(ownCar.sim.x, ownCar.sim.z, race.you);
+    if (pr.off < 14) race.you = pr.s;
+    const others = [...exTraffic.obstacles.map((o) => ({ x: o.x, z: o.z, vx: o.vx, vz: o.vz })), { x: ownCar.sim.x, z: ownCar.sim.z, vx: Math.sin(ownCar.sim.h) * ownCar.sim.u, vz: Math.cos(ownCar.sim.h) * ownCar.sim.u }];
+    rival.update(inVn ? 0 : dt, others, race.you - rival.s, st.phase === 'countdown', camera.position);
+    separateCars(ownCar.sim, rival.car);
+    driving.hold = st.phase === 'countdown';
+    const split = st.update(inVn ? 0 : dt, race.you, rival.s);
+    if (split && split.cp < 3) raceHud.flash(split.gap === null ? `CHECKPOINT ${split.cp + 1} · LEADING` : `CHECKPOINT ${split.cp + 1} · +${split.gap.toFixed(2)} s`, split.gap === null ? '#7cffb0' : '#ff9a9a');
+    if (st.phase === 'racing') {
+      if (!driving.own) st.finish(false, 'You got out of the car.');
+      else if (ownCar.totaled) st.finish(false, 'Your car is wrecked.');
+      else if (pr.off > 40) st.finish(false, 'You left the route.');
+      else if (rival.s - race.you > 700) st.finish(false, 'Left far behind.');
+    }
+    if (st.phase === 'finished' && !race.paid) {
+      race.paid = true;
+      const def = path.def;
+      const pay = st.result!.won ? def.pay.win : def.pay.lose;
+      const profile = loadProfile();
+      earn(profile, pay);
+      saveProfile(profile);
+      raceHud.result(st, pay, def.rival.name, () => endRace());
+    }
+  };
+
   const enterCar = (car: DrivenVehicle): void => {
     if (car === ownCar.vehicle && ownCar.totaled) {
       toast('It won’t start: totalled. Repair it at your garage.', 4);
@@ -1240,7 +1304,7 @@ async function run(): Promise<void> {
   // ride or a scene (you'd load into a moving train); the autosave waits for those to end.
   const played0 = loaded?.played ?? 0;
   const t0 = performance.now();
-  const saveBlocked = (): string | null => (inVn ? 'Not during a scene.' : taxiRide || subway.riding || trainRiding() ? 'Not during a ride.' : null);
+  const saveBlocked = (): string | null => (inVn ? 'Not during a scene.' : taxiRide || subway.riding || trainRiding() ? 'Not during a ride.' : race ? 'Not during a race.' : null);
   const gather = (): SaveGame => {
     const d = camera.getWorldDirection(new THREE.Vector3());
     const p = driving.car ? { x: driving.car.x, z: driving.car.z } : camera.position;
@@ -1353,6 +1417,15 @@ async function run(): Promise<void> {
       await new Promise((r) => setTimeout(r, 150));
       await fadeTo(0);
       inVn = false;
+      return;
+    }
+    const offered = content.races.filter((r) => r.host === n.id);
+    if (offered.length && !race) {
+      document.exitPointerLock();
+      raceHud.challenge(n.name ?? 'A racer', offered, ownCar.name, ownCar.totaled, (r) => {
+        controls.lock();
+        void startRace(r);
+      });
       return;
     }
     inVn = true;
@@ -1610,7 +1683,10 @@ async function run(): Promise<void> {
     // The expressway: its traffic (slowing for you in its lane), the sodium lamps' light at night, and the
     // tunnels at the end of the exits (drive in: you're at that pass).
     const onLoop = ownCar.onExpressway() ? expressway.at(ownCar.sim.x, ownCar.sim.z, ownCar.sim.y) : null;
-    exTraffic.update(inVn ? 0 : dt, onLoop && onLoop.road === expressway.loop ? { i: onLoop.i, lateral: onLoop.lateral, v: ownCar.sim.u } : null);
+    const rivalOn = race ? expressway.at(race.rival.car.x, race.rival.car.z, race.rival.car.y) : null;
+    exTraffic.update(inVn ? 0 : dt, onLoop && onLoop.road === expressway.loop ? { i: onLoop.i, lateral: onLoop.lateral, v: ownCar.sim.u } : null, rivalOn && rivalOn.road === expressway.loop ? [{ i: rivalOn.i, lateral: rivalOn.lateral, v: race!.rival.car.u }] : []);
+    updateRace(dt);
+    raceHud.update(dt, race?.st ?? null, race?.path.def.name ?? '');
     airport.update(inVn ? 0 : dt, time() === 'night' || time() === 'dusk');
     (sodium.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
     sodium.visible = cityU.uLamps.value > 0.05;
