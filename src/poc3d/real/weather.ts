@@ -854,11 +854,15 @@ export class LampCones {
 
 /**
  * Shadow-casting street lamps: a fixed pool of spot lights moved to the lamps nearest the camera. The pool
- * size is a setting (changing it recompiles the city's shaders once); each light renders a shadow map.
+ * size is a setting (changing it recompiles the city's shaders once); each light renders a shadow map, but only
+ * when it has to: when it's moved to a new lamp, and otherwise a quarter of them each frame in turn (the lamps and
+ * the buildings stand still; the cars and people under them update at a quarter of the frame rate), and none while
+ * the lamps are off.
  */
 export class LampShadows {
   readonly group = new THREE.Group();
   private lights: THREE.SpotLight[] = [];
+  private tick = 0;
   private last = new THREE.Vector3(1e9, 0, 0);
   private heads: readonly LampHead[] = [];
 
@@ -881,6 +885,8 @@ export class LampShadows {
       l.shadow.normalBias = 0.05;
       l.shadow.camera.near = 0.5;
       l.shadow.camera.far = 22;
+      l.shadow.autoUpdate = false;
+      l.shadow.needsUpdate = true;
       this.group.add(l, l.target);
       this.lights.push(l);
     }
@@ -896,10 +902,14 @@ export class LampShadows {
     const moved = camera.distanceToSquared(this.last) >= 9;
     if (moved) this.last.copy(camera);
     const heads = moved ? (this.heads = lamps(camera.x, camera.z, 60)) : this.heads;
+    const on = intensity > 0.01;
+    this.tick++;
     this.lights.forEach((l, i) => {
       const h = heads[i];
       l.intensity = h ? intensity : 0;
+      if (on && h && (i + this.tick) % 4 === 0) l.shadow.needsUpdate = true;
       if (!h || !moved) return;
+      if (l.position.x !== h.x || l.position.z !== h.z) l.shadow.needsUpdate = on;
       l.position.set(h.x, h.y - 0.1, h.z);
       l.target.position.set(h.x, 0, h.z);
       l.target.updateMatrixWorld();

@@ -42,9 +42,14 @@ export interface MoodSettings {
   cycle: boolean;
   /** 0-1 master volume (0 mutes). */
   volume: number;
+  /** Render resolution: auto (lowered while frames are slow, raised again when there's room) or a fixed share. */
+  resolution: Resolution;
 }
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7 };
+export const RESOLUTIONS = ['auto', '100', '85', '70', '55'] as const;
+export type Resolution = (typeof RESOLUTIONS)[number];
+
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, resolution: 'auto' };
 const SHADOW_COUNTS = [0, 2, 4, 8];
 const SAVED_KEY = 'city-popper.district.mood';
 
@@ -79,6 +84,8 @@ function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettin
   if (c === '1' || c === '0') m.cycle = c === '1';
   const g = params.get('grade') as GradeName | null;
   if (g && GRADE_NAMES.includes(g)) m.grade = g;
+  const r = params.get('res') as Resolution | null;
+  if (r && RESOLUTIONS.includes(r)) m.resolution = r;
   return m;
 }
 
@@ -101,6 +108,7 @@ function moodParams(m: MoodSettings, base: MoodSettings, into = new URLSearchPar
   set('grade', m.grade, base.grade);
   set('volume', f(m.volume), f(base.volume));
   set('cycle', m.cycle ? '1' : '0', base.cycle ? '1' : '0');
+  set('res', m.resolution, base.resolution);
   return into;
 }
 
@@ -169,6 +177,7 @@ export class MoodPanel {
     this.slider('focus', 'Focus', 0, 1, 0.005, () => (s.focus === null ? -1 : fromM(s.focus)), (v) => (s.focus = toM(v)), (v) => (v < 0 ? 'auto (centre of view)' : `${toM(v) < 10 ? toM(v).toFixed(1) : Math.round(toM(v))} m`), () => (s.focus = null));
     this.choice('shadows', 'Lamp shadows', SHADOW_COUNTS.map(String), () => String(s.shadows), (v) => (s.shadows = Number(v)));
     this.choice('grade', 'Grade', GRADE_NAMES, () => s.grade, (v) => (s.grade = v as GradeName));
+    this.choice('res', 'Resolution %', RESOLUTIONS, () => s.resolution, (v) => (s.resolution = v as Resolution));
 
     const buttons = document.createElement('div');
     Object.assign(buttons.style, { display: 'flex', gap: '8px', marginTop: '12px' });
@@ -225,7 +234,7 @@ export class MoodPanel {
     this.root.append(this.savedLine);
     this.showSaved();
     const note = document.createElement('div');
-    note.textContent = 'Lamp shadows render the nearby scene once per lamp: 4 costs ~2 ms a frame, 8 (the default) about 12 ms. Changing the count recompiles shaders (a short pause).';
+    note.textContent = 'Lamp shadows: each lamp costs ~1.5 ms a frame at night (its shadow map redraws in turn, not every frame; none by day). Changing the count recompiles shaders (a short pause). Resolution auto lowers the render resolution while frames run slow.';
     Object.assign(note.style, { color: '#8a88a0', marginTop: '10px', lineHeight: '1.4' });
     this.root.append(note);
     document.body.append(this.root);

@@ -32,6 +32,8 @@ export function setTrafficGround(f: (x: number, z: number) => number): void {
 export const SIM = 900;
 /** The spatial grid for finding the vehicle ahead (m a square). */
 const BUCKET = 40;
+/** Beyond this (m, along x plus along z), traffic decides its acceleration every third frame. */
+const FAR_DECIDE = 380;
 /** The sideways pull drivers take a turn at (m/s^2): turning speed = sqrt(pull * radius). */
 const TURN_PULL = 2.6;
 
@@ -416,6 +418,7 @@ export class TrafficSystem {
   hail: Hail | null = null;
   private readonly wheels: Wheels;
   private time = 0;
+  private frame = 0;
 
   constructor(
     cars: readonly { route: Route; spacing: number }[],
@@ -553,7 +556,15 @@ export class TrafficSystem {
       for (const f of [-0.6, 0, 0.6]) others.push({ x: o.x + o.dx * o.half * f, z: o.z + o.dz * o.half * f, vx: o.dx * o.v, vz: o.dz * o.v, r: o.width / 2 + 0.2 });
     }
     this.bucket();
-    for (const v of V) if (v.mode === 'traffic' && v.live) v.acc = this.accel(v, dt, others, camera);
+    // Driving decisions: every frame near the camera; beyond FAR_DECIDE (out where you can't tell), every third frame
+    // in turn, each keeping its last acceleration between (the motion itself still integrates every frame).
+    this.frame++;
+    V.forEach((v, i) => {
+      if (v.mode !== 'traffic' || !v.live) return;
+      const far = Math.abs(v.x - camera.x) + Math.abs(v.z - camera.z) > FAR_DECIDE;
+      if (far && (i + this.frame) % 3 !== 0) return;
+      v.acc = this.accel(v, far ? dt * 3 : dt, others, camera);
+    });
     this.wheels.begin();
     for (const v of V) {
       if (!v.live) {

@@ -207,6 +207,8 @@ export interface AsagiriBuilt {
   readonly parts: Readonly<Record<string, THREE.Object3D>>;
   /** Screens that light their surroundings. */
   readonly lights: ScreenLight[];
+  /** Whether anything in it moves (its builder returned an update: a wheel turning, a coaster running). */
+  readonly moves: boolean;
   update(camera: THREE.Vector3, dt: number): void;
 }
 
@@ -222,6 +224,7 @@ export function buildAsagiri(kind: AsagiriKind, b: Building3, id: string, city: 
     group,
     parts,
     lights: k.lights,
+    moves: !!extra,
     update(camera, dt) {
       k.update(u);
       extra?.(camera, dt);

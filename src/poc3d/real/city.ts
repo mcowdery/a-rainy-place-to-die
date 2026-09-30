@@ -593,10 +593,30 @@ const surface = /* glsl */ `
   totalEmissiveRadiance += sEmit;
 `;
 
+/**
+ * three's lighting loop with the spot lights (the shadow-casting street lamps, weather.ts LampShadows) skipped where
+ * they don't reach: out of a lamp's cone or range a pixel neither samples its shadow map nor runs the BRDF (three
+ * picks the shadow with a ternary, which the GPU runs both sides of, so every pixel paid for every lamp).
+ */
+function lightsSkippingSpots(): string {
+  const chunk = THREE.ShaderChunk.lights_fragment_begin;
+  const a = chunk.indexOf('#if ( NUM_SPOT_LIGHTS > 0 )');
+  const b = chunk.indexOf('#if ( NUM_SUN_LIGHTS > 0 )', a);
+  if (a < 0 || b < 0) return chunk;
+  let spot = chunk.slice(a, b);
+  const shadow = /directLight\.color \*= \( directLight\.visible && receiveShadow \) \? (getShadow\([^;]*\)) : 1\.0;/;
+  const direct = /(\n\s*)(RE_Direct\( directLight[^;]*;)/;
+  if (!shadow.test(spot) || !direct.test(spot)) return chunk;
+  spot = spot.replace(shadow, 'if ( directLight.visible && receiveShadow ) directLight.color *= $1;').replace(direct, '$1if ( directLight.visible ) $2');
+  return chunk.slice(0, a) + spot + chunk.slice(b);
+}
+const LIGHTS_BEGIN = lightsSkippingSpots();
+
 export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, u);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_begin>', LIGHTS_BEGIN);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec4 aFacade;

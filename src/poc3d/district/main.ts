@@ -205,11 +205,51 @@ async function run(): Promise<void> {
   const grade = new GradePass();
   // Weather and light settings on top of the atmosphere (K opens the panel; also from the URL).
   const mood = moodFromUrl(params);
+  // Render resolution (K panel, ?res=): fixed, or auto: stepped down a tenth while frames run slow (over ~24 ms for
+  // 1.5 s) and back up after 3 s of room (under ~17.5 ms), never back up for 20 s after a step down, between 60%
+  // and 100% of the display's. The benchmark keeps it at 100%.
+  let resScale = 1;
+  const setRes = (s: number): void => {
+    resScale = s;
+    renderer.setPixelRatio(dpr * s);
+    composer.setPixelRatio(dpr * s);
+  };
+  const resFixed = (): number | null => (bench && !params.has('res') ? 1 : mood.resolution === 'auto' ? null : Number(mood.resolution) / 100);
+  const resAuto = { slow: 0, room: 0, hold: 0 };
+  const adaptRes = (frameMs: number, windowS: number): void => {
+    resAuto.hold = Math.max(0, resAuto.hold - windowS);
+    if (frameMs > 24) {
+      resAuto.room = 0;
+      if (++resAuto.slow >= 3 && resScale > 0.61) {
+        setRes(Math.max(0.6, resScale - 0.1));
+        resAuto.slow = 0;
+        resAuto.hold = 20;
+      }
+    } else if (frameMs < 17.5) {
+      resAuto.slow = 0;
+      if (++resAuto.room >= 6 && resAuto.hold === 0 && resScale < 0.99) {
+        setRes(Math.min(1, resScale + 0.1));
+        resAuto.room = 0;
+      }
+    } else resAuto.slow = resAuto.room = 0;
+  };
   grade.grade = mood.grade;
   composer.addPass(grade);
 
   // Stamp dressing (door, noren, lanterns) and NPCs as ghosts (visibility follows their conditions).
   const nodes = district.nodes;
+  /**
+   * Things that never move: their matrices computed once, and the per-frame update skips them (three otherwise
+   * recomposes every object's matrix every frame; most of the city stands still). Only matrices: visibility,
+   * materials and textures still change.
+   */
+  const frozen = new Set<THREE.Object3D>();
+  const freeze = (o: THREE.Object3D): void => {
+    o.updateMatrixWorld(true);
+    o.traverse((x) => (x.matrixAutoUpdate = false));
+    o.matrixWorldAutoUpdate = false;
+    frozen.add(o);
+  };
   const npcMeshes = new Map<string, THREE.Object3D>();
   const dressing = new MeshBuilder();
   for (const placed of content.placed) {
@@ -223,11 +263,16 @@ async function run(): Promise<void> {
       const mesh = new THREE.Mesh(gb.build(0, 0)!, ghost);
       mesh.renderOrder = 2;
       scene.add(mesh);
+      freeze(mesh);
       npcMeshes.set(n.id, mesh);
     }
   }
   const dressingGeo = dressing.build();
-  if (dressingGeo) scene.add(new THREE.Mesh(dressingGeo, city));
+  if (dressingGeo) {
+    const m = new THREE.Mesh(dressingGeo, city);
+    scene.add(m);
+    freeze(m);
+  }
   // Landmarks: built here rather than by the chunk workers (their own shaders and animation), always shown.
   const landmarkUpdates: ((camera: THREE.Vector3, dt: number) => void)[] = [];
   // Big screens light their surroundings in the colours they show.
@@ -247,6 +292,9 @@ async function run(): Promise<void> {
   const trainLines = new Map(rails.map((l) => [l.id, new TrainSystem(l, railStations.filter((s) => s.line === l.id), city)]));
   for (const t of trainLines.values()) {
     scene.add(t.group);
+    // (The viaduct stands still; the trains in the same group move.)
+    t.group.children[0].updateMatrixWorld(true);
+    t.group.children[0].matrixAutoUpdate = false;
     district.addColliders(viaductPiers(t.line, railStations.filter((s) => s.line === t.line.id)));
   }
   /** The line you're riding, if any. */
@@ -309,6 +357,8 @@ async function run(): Promise<void> {
     const lm = placed.stamp.landmark;
     // On a hill, the landmark stands level at its footing (everything it adds to the scene lifted with it).
     const sceneBefore = scene.children.length;
+    const updatesBefore = landmarkUpdates.length;
+    let still = true;
     const b0 = placed.building;
     const footing = content.terrain.footing(b0.x, b0.z, b0.w, b0.d);
     if (lm && (ASAGIRI_KINDS as readonly string[]).includes(lm)) {
@@ -318,6 +368,7 @@ async function run(): Promise<void> {
       screens.add(...a.lights);
       glows.add(...a.lights);
       landmarkUpdates.push(a.update);
+      still = !a.moves;
     } else if (lm === 'subway') {
       const stop = content.subway.stops.get(placed.id);
       const line = stop && content.subway.lines.find((l) => l.id === stop.line);
@@ -367,6 +418,8 @@ async function run(): Promise<void> {
       landmarkUpdates.push(h.update);
     }
     if (footing) for (let i = sceneBefore; i < scene.children.length; i++) scene.children[i].position.y += footing;
+    // A landmark with nothing that moves (no update of its own, or a kit one only lighting its neon) stays put.
+    if (still && (landmarkUpdates.length === updatesBefore || (lm && (ASAGIRI_KINDS as readonly string[]).includes(lm)))) for (let i = sceneBefore; i < scene.children.length; i++) freeze(scene.children[i]);
   }
   // The surface: the city, traffic, weather and the other landmarks (everything but the subway's own).
   for (const o of scene.children) if (o !== subway.group && !subwayViews.some((v) => v.view.group === o) && !rotaries.some((v) => v.r.group === o) && !(o instanceof THREE.Light) && o !== sky.mesh) surface.push(o);
@@ -506,9 +559,32 @@ async function run(): Promise<void> {
   });
   // Station sounds on a ride: the departure melody (each station its own), the door chime on arrival.
   subway.onEvent = (kind, stop) => (kind === 'depart' ? audio.melody(hash(stop.key.length, stop.s | 0, 0x5eed)) : audio.chime());
-  if (params.get('diag') === '1') Object.assign(window, { __renderer: renderer, __dof: dof, __audio: audio, __city: cityU, __traffic: traffic, __strike: () => {
+  if (params.get('diag') === '1') Object.assign(window, { __scene: scene, __renderer: renderer, __dof: dof, __audio: audio, __city: cityU, __traffic: traffic, __strike: () => {
     const d = camera.getWorldDirection(new THREE.Vector3());
     lightning.strikeNow(camera.position, { x: d.x, z: d.z });
+  },
+  // What the GPU is sent from here: triangles and draws in view (visible and in the frustum) by top-level group.
+  __tris: () => {
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    const out: Record<string, { tris: number; draws: number }> = {};
+    const sphere = new THREE.Sphere();
+    for (const top of scene.children) {
+      const name = top.name || top.type + (top.children.length ? `(${top.children.length})` : '');
+      const acc = (out[name] ??= { tris: 0, draws: 0 });
+      top.traverseVisible((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || !m.geometry) return;
+        const g = m.geometry;
+        if (m.frustumCulled) {
+          const bs = (m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).boundingSphere : g.boundingSphere ?? (g.computeBoundingSphere(), g.boundingSphere);
+          if (bs && !frustum.intersectsSphere(sphere.copy(bs).applyMatrix4(m.matrixWorld))) return;
+        }
+        const n = (g.index ? g.index.count : g.attributes.position.count) / 3;
+        acc.tris += n * ((m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).count : 1);
+        acc.draws++;
+      });
+    }
+    return Object.entries(out).filter(([, v]) => v.tris > 0).sort((a, b) => b[1].tris - a[1].tris).map(([k, v]) => `${k}: ${Math.round(v.tris / 1000)}k tris, ${v.draws} draws`);
   } });
   // Review hook for screenshot scripts: point the view (yaw, pitch in degrees).
   (window as unknown as { __look: (y: number, p: number) => void }).__look = (y, p) => controls.setView(y, p);
@@ -760,16 +836,19 @@ async function run(): Promise<void> {
   const airport = buildAirport();
   scene.add(airport.group);
   scene.add(sea.group);
+  freeze(sea.group);
   // The city's edges (real/edges.ts): forest over the hills, a fringe of houses at their foot; the mountains beyond
   // are in the sky.
   const edges = buildEdges(content.macro, CELL, content.terrain, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my));
   scene.add(edges.group);
+  freeze(edges.group);
   surface.push(edges.group);
   sky.uniforms.uMountains.value = 1;
   if (debug) (window as unknown as { __sea: unknown }).__sea = { sea, renderer, horizon: cityU.uHorizon };
   const exView = buildExpressway(expressway, city);
   const exTraffic = new ExpresswayTraffic(expressway, city);
   scene.add(exView.group, exTraffic.group);
+  freeze(exView.group);
   const sodium = exView.group.getObjectByName('sodium') as THREE.Mesh;
   const bay = nodeById.get('city_garage.bay');
   if (me?.profile) saveProfile(me.profile);
@@ -1582,6 +1661,9 @@ async function run(): Promise<void> {
     cityU.uTime.value = now / 1000;
     overlay.setRain(rainAmount * 0.11 * (inside ? 0 : 1), now / 1000);
     renderer.info.reset();
+    // Hidden groups (the subway above ground, interiors you're not in, the surface below ground) skip the matrix
+    // update too; the frozen ones always do.
+    for (const o of scene.children) o.matrixWorldAutoUpdate = o.visible && !frozen.has(o);
     composer.render(dt);
     shot.afterRender();
     if (bench) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
@@ -1597,6 +1679,10 @@ async function run(): Promise<void> {
     workSum += frameMs;
     if (now - windowStart >= 500) {
       fps = Math.round((frames * 1000) / (now - windowStart));
+      const fixedRes = resFixed();
+      if (fixedRes !== null) {
+        if (Math.abs(resScale - fixedRes) > 0.001) setRes(fixedRes);
+      } else if (!inVn && document.visibilityState === 'visible') adaptRes((now - windowStart) / Math.max(1, frames), (now - windowStart) / 1000);
       work = workSum / frames;
       frames = 0;
       workSum = 0;
@@ -1607,7 +1693,7 @@ async function run(): Promise<void> {
       const s = district.stats;
       $('hud').textContent = [
         trainRiding()?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
-        `${fps} fps · ${work.toFixed(2)} ms/frame · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
+        `${fps} fps · ${work.toFixed(2)} ms/frame · res ${Math.round(resScale * 100)}%${resFixed() === null ? ' (auto)' : ''} · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
