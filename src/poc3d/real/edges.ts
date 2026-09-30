@@ -56,13 +56,15 @@ export interface Edges {
   readonly group: THREE.Group;
   /** Show the blocks near the camera; windows lit when the lamps are (0-1). */
   update(camera: THREE.Vector3, lamps: number): void;
+  /** The forest by the season (0 spring, 1 summer, 2 autumn, 3 winter): some of it deciduous. */
+  setSeason(season: number): void;
 }
 
 export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, built: (mx: number, my: number) => boolean): Edges {
   const group = new THREE.Group();
   group.name = 'edges';
   const hills = terrain.hills;
-  if (!hills) return { group, update: () => undefined };
+  if (!hills) return { group, update: () => undefined, setSeason: () => undefined };
   const pad = hills.pad;
   const kind = (mx: number, my: number) => macro.kindAt(Math.max(0, Math.min(macro.cols - 1, mx)), Math.max(0, Math.min(macro.rows - 1, my)));
   const treeGeo = new THREE.IcosahedronGeometry(1, 1);
@@ -72,6 +74,7 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
   const windowGeo = new THREE.PlaneGeometry(1.3, 0.9);
   const windowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.15, 0.65), fog: true });
   const blocks: { g: THREE.Group; x: number; z: number; windows: THREE.InstancedMesh | null }[] = [];
+  const forests: { im: THREE.InstancedMesh; base: number[]; x: number[] }[] = [];
   const TREES = [0x28361f, 0x2f4024, 0x243020, 0x34452a, 0x2c3a1e];
   const WALLS = [0xc8c0b0, 0xb8b0a0, 0xd8d0c0, 0xa8a49a, 0x9aa0a8, 0xc0b49c];
   const m4 = new THREE.Matrix4();
@@ -138,6 +141,7 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
         im.computeBoundingSphere();
         im.receiveShadow = true;
         g.add(im);
+        forests.push({ im, base: trees.map((t) => t.col), x: trees.map((t) => t.x * 31 + t.z) });
       }
       if (houses.length) {
         const im = new THREE.InstancedMesh(houseGeo, houseMat, houses.length);
@@ -176,8 +180,23 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
     }
   }
   const reach = SHOW + (BLOCK * cell) / 2;
+  const AUTUMN = [0xa8561e, 0xc88a1a, 0x8a2a1a, 0xb8741e];
   return {
     group,
+    setSeason(season) {
+      for (const f of forests) {
+        f.base.forEach((col, i) => {
+          const r = rnd(f.x[i] | 0, i, 0x5ea5);
+          const deciduous = r < 0.45;
+          let hex = col;
+          if (season === 0) hex = deciduous ? (r < 0.07 ? 0xe8c0d0 : 0x5a7a34) : col;
+          else if (season === 2) hex = deciduous ? AUTUMN[Math.floor(r * 97) % AUTUMN.length] : col;
+          else if (season === 3) hex = deciduous ? 0x4a4038 : 0x22301e;
+          f.im.setColorAt(i, c.setHex(hex));
+        });
+        if (f.im.instanceColor) f.im.instanceColor.needsUpdate = true;
+      }
+    },
     update(camera, lamps) {
       const far = reach + Math.max(0, camera.y) * 4;
       for (const b of blocks) {

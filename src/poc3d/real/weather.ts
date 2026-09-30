@@ -916,3 +916,111 @@ export class LampShadows {
     });
   }
 }
+
+/**
+ * Things drifting down round the camera: snow in winter weather, cherry petals in spring, leaves in autumn
+ * (main.ts picks by the season and the weather). Points in a box that follows the camera, each falling at its own
+ * pace and swaying, lit by the street light (the lightmap) and the sky.
+ */
+export class Drift {
+  readonly points: THREE.Points;
+  private readonly u = {
+    uTime: { value: 0 },
+    uCam: { value: new THREE.Vector3() },
+    uAmount: { value: 0 },
+    uColor: { value: new THREE.Color(1, 1, 1) },
+    uColor2: { value: new THREE.Color(1, 1, 1) },
+    /** Fall speed (m/s), sway (m), size (m). */
+    uFall: { value: 1 },
+    uSway: { value: 0.4 },
+    uSize: { value: 0.03 },
+    uAmbient: { value: 0.3 },
+  };
+
+  constructor(city: CityUniforms) {
+    const N = 9000;
+    const seed = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) seed.set([Math.random(), Math.random(), Math.random(), Math.random()], i * 4);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(N * 3), 3));
+    g.setAttribute('aSeed', new THREE.Float32BufferAttribute(seed, 4));
+    this.points = new THREE.Points(g, new THREE.ShaderMaterial({
+      uniforms: { ...this.u, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain },
+      transparent: true,
+      depthWrite: false,
+      vertexShader: /* glsl */ `
+        attribute vec4 aSeed;
+        uniform float uTime;
+        uniform vec3 uCam;
+        uniform float uAmount;
+        uniform float uFall;
+        uniform float uSway;
+        uniform float uSize;
+        uniform float uAmbient;
+        uniform vec3 uColor;
+        uniform vec3 uColor2;
+        ${lightmapGlsl}
+        varying vec3 vCol;
+        varying float vA;
+        void main() {
+          vec3 box = vec3(44.0, 24.0, 44.0);
+          float speed = uFall * (0.7 + aSeed.w * 0.6);
+          vec3 p = aSeed.xyz * box;
+          p.y -= uTime * speed;
+          p.x += sin(uTime * (0.6 + aSeed.w) + aSeed.z * 20.0) * uSway;
+          p.z += cos(uTime * (0.5 + aSeed.x) + aSeed.y * 20.0) * uSway;
+          p = mod(p - uCam + box * 0.5, box) + uCam - box * 0.5;
+          float live = step(aSeed.w, uAmount);
+          vec4 mv = viewMatrix * vec4(p, 1.0);
+          float d = -mv.z;
+          vA = live * smoothstep(0.4, 1.5, d) * (1.0 - smoothstep(14.0, 21.0, length(p - uCam))) * step(0.0, p.y);
+          vCol = mix(uColor, uColor2, step(0.5, fract(aSeed.x * 7.0))) * (uAmbient + lightAt(p.xz) * 0.8);
+          gl_Position = projectionMatrix * mv;
+          gl_PointSize = min(uSize * 900.0 / max(d, 0.3), 6.0) * step(0.01, vA);
+        }`,
+      fragmentShader: /* glsl */ `
+        varying vec3 vCol;
+        varying float vA;
+        void main() {
+          vec2 q = gl_PointCoord - 0.5;
+          float r = dot(q, q);
+          if (r > 0.25 || vA < 0.01) discard;
+          gl_FragColor = vec4(vCol, vA * (1.0 - r * 3.0));
+        }`,
+    }));
+    this.points.frustumCulled = false;
+    this.points.renderOrder = 5;
+  }
+
+  /** kind: what's drifting (or none); amount 0-1. */
+  set(kind: 'none' | 'snow' | 'petals' | 'leaves', amount: number): void {
+    const u = this.u;
+    u.uAmount.value = kind === 'none' ? 0 : amount;
+    this.points.visible = kind !== 'none' && amount > 0;
+    if (kind === 'snow') {
+      u.uColor.value.setRGB(0.95, 0.96, 1.0);
+      u.uColor2.value.setRGB(0.88, 0.9, 0.96);
+      u.uFall.value = 1.1;
+      u.uSway.value = 0.5;
+      u.uSize.value = 0.028;
+    } else if (kind === 'petals') {
+      u.uColor.value.setRGB(1.0, 0.78, 0.86);
+      u.uColor2.value.setRGB(0.98, 0.9, 0.93);
+      u.uFall.value = 0.6;
+      u.uSway.value = 1.1;
+      u.uSize.value = 0.02;
+    } else if (kind === 'leaves') {
+      u.uColor.value.setRGB(0.85, 0.5, 0.12);
+      u.uColor2.value.setRGB(0.75, 0.22, 0.1);
+      u.uFall.value = 1.3;
+      u.uSway.value = 0.9;
+      u.uSize.value = 0.04;
+    }
+  }
+
+  update(dt: number, camera: THREE.Vector3, ambient: number): void {
+    this.u.uTime.value += dt;
+    this.u.uCam.value.copy(camera);
+    this.u.uAmbient.value = ambient;
+  }
+}

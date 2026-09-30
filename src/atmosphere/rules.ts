@@ -5,7 +5,7 @@
  */
 
 export const TIMES = ['dawn', 'day', 'dusk', 'night'] as const;
-export const WEATHERS = ['clear', 'rain', 'fog'] as const;
+export const WEATHERS = ['clear', 'rain', 'fog', 'snow'] as const;
 export type TimeOfDay = (typeof TIMES)[number];
 export type Weather = (typeof WEATHERS)[number];
 

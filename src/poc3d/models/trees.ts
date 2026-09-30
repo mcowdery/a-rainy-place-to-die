@@ -66,8 +66,18 @@ const DOGWOOD_BRACTS = [0xd98aa8, 0xe2a2ba, 0xcf7f9f] as const;
 function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: number, hex: number, n = 5): void {
   mb.color = lin(hex);
   y += LIFT;
+  // Crowns are tagged with their species (style.x = FOLIAGE_TAG + index), so the city shader can colour them by
+  // the season (blossom, summer green, autumn colour, bare in winter) without rebuilding anything.
+  const style = mb.style;
+  mb.style = [FOLIAGE_TAG + SPECIES, 0, 0, 0];
   mb.lathe(x, z, [[y - ry, rx * 0.15], [y - ry * 0.4, rx * 0.95], [y + ry * 0.35, rx * 0.88], [y + ry, rx * 0.12]], n);
+  mb.style = style;
 }
+
+/** A crown's style tag: FOLIAGE_TAG plus its species' index in TREE_SPECIES (real/city.ts reads it). */
+export const FOLIAGE_TAG = 20;
+/** The species of the tree being built (for its crowns' tag). */
+let SPECIES = 0;
 
 /** A tapered trunk from y0 to y1. */
 function trunk(mb: MeshBuilder, x: number, z: number, y0: number, y1: number, r0: number, r1: number, hex: number): void {
@@ -83,6 +93,7 @@ function limb(mb: MeshBuilder, a: C3, b: C3, t: number, hex: number): void {
 
 export function addTree(mb: MeshBuilder, t: TreeSpec): void {
   const k = t.size ?? 1;
+  SPECIES = TREE_SPECIES.indexOf(t.species);
   const rnd = rng(hash(t.seed ?? 0, Math.round(t.x * 8), Math.round(t.z * 8), 0x7ee5));
   // The crown's trunk stands at (x, z), lifted; a stem leans to it from the foot.
   const [lx, lz] = t.lean ?? [0, 0];

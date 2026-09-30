@@ -28,6 +28,8 @@ export class Sky {
     uCloudDark: { value: new THREE.Color() },
     /** The mountains on the horizon (the city's page; 0 elsewhere). */
     uMountains: { value: 0 },
+    /** Winter: snow on the ranges' tops as well as the cone (0-1). */
+    uWinter: { value: 0 },
   };
 
   constructor() {
@@ -58,6 +60,7 @@ export class Sky {
         uniform vec3 uCloudLit;
         uniform vec3 uCloudDark;
         uniform float uMountains;
+        uniform float uWinter;
         varying vec3 vDir;
         float h3(vec3 p3) { p3 = fract(p3 * 0.1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y) * p3.z); }
         float h2(vec2 p) { return h3(vec3(p, 1.7)); }
@@ -115,13 +118,15 @@ export class Sky {
               if (cone > far && e < cone) {
                 m = mix(uHorizon, mix(hazeCol, nearCol, 0.35), feet);
                 // The snow cap, catching the sky's light.
-                float snow = smoothstep(0.052, 0.06, e) * smoothstep(0.0, 0.02, cone);
+                float snow = smoothstep(0.052 - 0.02 * uWinter, 0.06 - 0.02 * uWinter, e) * smoothstep(0.0, 0.02, cone);
                 vec3 snowCol = uHorizon * 1.25 + vec3(0.05) + vec3(0.35) * clamp(skyLum * 3.0, 0.0, 1.0);
                 m = mix(m, snowCol, snow * 0.75);
               }
               col = m;
             }
             if (e < near) col = mix(uHorizon, nearCol, 0.25 + 0.75 * feet);
+            // Winter: snow along the ranges' tops.
+            if (uWinter > 0.0 && e < max(near, far) && e > max(near, far) * 0.72) col = mix(col, uHorizon * 1.2 + vec3(0.06) + vec3(0.3) * clamp(skyLum * 3.0, 0.0, 1.0), 0.55 * uWinter);
           }
           // And the sky itself glows toward the strike.
           col += vec3(0.55, 0.6, 0.85) * uFlash * (0.04 + 0.6 * pow(max(dot(d, uFlashDir), 0.0), 8.0)) * smoothstep(-0.05, 0.1, d.y);

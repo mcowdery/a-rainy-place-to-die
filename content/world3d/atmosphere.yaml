@@ -1,6 +1,6 @@
 # (district, time, weather) -> 3D lighting and effects. Same layering as the 2D table: more specific
 # rules override less specific ones; ties go to file order. The base rule must set every key.
-# time: dawn | day | dusk | night    weather: clear | rain | fog
+# time: dawn | day | dusk | night    weather: clear | rain | fog | snow
 # Colours are sRGB; sun/hemi are light intensities; lamps 0-1 switches street lighting (and the shop and
 # sign glow on the pavement); exposure feeds the tone mapper.
 rules:
@@ -77,6 +77,20 @@ rules:
 
   - match: { time: dawn, weather: fog }
     set: { sky: '#706878', horizon: '#a08890', fog: '#8a8088', sun: 0.6 }
+
+  # Snow (winter weather): a pale overcast by day, and at night the low cloud glowing with the city's light, the
+  # air thick with it; snow settles on what faces up (real/city.ts uSnow) and falls round you (weather.ts Drift).
+  - match: { weather: snow }
+    set: { rain: 0, fogNear: 30, fogFar: 300, sky: '#9aa2aa', horizon: '#b8bec4', fog: '#aab0b6', sun: 0.45, hemi: 1.25, exposure: 1.05, clouds: 1, cloudLit: '#c0c6cc', cloudDark: '#8a9098', haze: 0.6 }
+
+  - match: { time: night, weather: snow }
+    set: { sky: '#141620', horizon: '#4a4250', fog: '#2e2c36', sun: 0.02, hemi: 0.32, exposure: 1.15, cloudLit: '#6a5a68', cloudDark: '#1a1820', haze: 1.1 }
+
+  - match: { time: dusk, weather: snow }
+    set: { sky: '#3a3e4c', horizon: '#7a6a72', fog: '#5a5460', sun: 0.3, hemi: 0.5, exposure: 1.2, cloudLit: '#8a7a82', cloudDark: '#3a3844' }
+
+  - match: { time: dawn, weather: snow }
+    set: { sky: '#5a6070', horizon: '#9a9098', fog: '#7a7680', sun: 0.35, hemi: 0.6, exposure: 1.15, cloudLit: '#9a9098', cloudDark: '#4a4a58' }
 
   # Kaburo never really sleeps.
   - match: { district: neon, time: night }

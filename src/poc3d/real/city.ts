@@ -28,6 +28,10 @@ export interface CityUniforms extends ScreenUniforms {
   uNeon: { value: number };
   uFlicker: { value: number };
   uWet: { value: number };
+  /** The season (district/seasons.ts): 0 spring, 1 summer, 2 autumn, 3 winter: tree crowns and lawns follow it. */
+  uSeason: { value: number };
+  /** Snow lying on what faces up (0 none, 1 covered). */
+  uSnow: { value: number };
   /** 0-1: street light pools under its sources and falls off to black between them. */
   uDark: { value: number };
   /** Moving cars' headlights near the camera: (x, z, dx, dz) per car, and how many; uHeadlights 0-1 switches them. */
@@ -54,6 +58,8 @@ export function cityUniforms(): CityUniforms {
     uNeon: { value: 1 },
     uFlicker: { value: 0 },
     uWet: { value: 0 },
+    uSeason: { value: 0 },
+    uSnow: { value: 0 },
     uDark: { value: 0 },
     uCars: { value: Array.from({ length: CAR_LIGHTS }, () => new THREE.Vector4()) },
     uCarCount: { value: 0 },
@@ -76,6 +82,8 @@ const common = /* glsl */ `
   uniform float uNeon;
   uniform float uFlicker;
   uniform float uWet;
+  uniform float uSeason;
+  uniform float uSnow;
   uniform float uDark;
   uniform vec4 uCars[${CAR_LIGHTS}];
   uniform int uCarCount;
@@ -195,6 +203,29 @@ const surface = /* glsl */ `
 
   if (kindF < 0.5) {
     albedo *= 0.88 + 0.24 * vnoise(vWPos.xz * 1.3 + vWPos.y * 0.7);
+    // Tree crowns (models/trees.ts tags them FOLIAGE_TAG + species): coloured by the season. Groups: zelkova,
+    // ginkgo, cherry, the evergreens (pine, camphor, azalea, box: their own colours) and dogwood.
+    if (vStyle.x > 19.5) {
+      float sp = vStyle.x - 20.0;
+      float grp = sp < 0.5 ? 0.0 : sp < 2.5 ? 1.0 : sp < 4.5 ? 2.0 : (sp > 6.5 && sp < 8.5) ? 4.0 : 3.0;
+      float shade = 0.8 + 0.4 * h1(floor(vWPos.x * 0.8) * 7.0 + floor(vWPos.y * 0.8) * 13.0 + floor(vWPos.z * 0.8) * 3.0);
+      vec3 c;
+      if (uSeason < 0.5) c = grp < 0.5 ? vec3(0.46, 0.63, 0.28) : grp < 1.5 ? vec3(0.56, 0.7, 0.26) : grp < 2.5 ? vec3(0.97, 0.8, 0.87) : vec3(0.95, 0.93, 0.9);
+      else if (uSeason < 1.5) c = grp < 0.5 ? vec3(0.22, 0.36, 0.14) : grp < 1.5 ? vec3(0.3, 0.45, 0.15) : grp < 2.5 ? vec3(0.26, 0.4, 0.16) : vec3(0.24, 0.38, 0.16);
+      else c = grp < 0.5 ? vec3(0.64, 0.36, 0.14) : grp < 1.5 ? vec3(0.9, 0.72, 0.12) : grp < 2.5 ? vec3(0.74, 0.3, 0.14) : vec3(0.6, 0.13, 0.12);
+      if (grp > 2.5 && grp < 3.5) {
+        // Evergreens keep their own greens (azaleas flower in spring); duller in winter.
+        c = vColor.rgb / max(0.001, shade) * (uSeason > 2.5 ? 0.78 : 1.0);
+        if (sp > 8.5 && sp < 9.5 && uSeason < 0.5) c = vec3(0.85, 0.35, 0.6);
+        albedo = c * shade;
+      } else if (uSeason > 2.5) {
+        // Bare in winter: a sparse lace of twigs where the crown was.
+        if (vnoise(vWPos.xz * 2.7 + vWPos.y * 1.9) < 0.72) discard;
+        albedo = vec3(0.07, 0.055, 0.045);
+      } else {
+        albedo = pow(c, vec3(2.2)) * shade;
+      }
+    }
   } else if (kindF < 1.5) {
     float u = vFacade.x, v = vFacade.y, faceW = vFacade.z;
     float bay = vStyle.x, ratio = vStyle.y, winH = vStyle.z;
@@ -547,6 +578,11 @@ const surface = /* glsl */ `
       // Grass: patchy lawn, blades up close.
       float blades = mix(0.5, h2(floor(p * 9.0)), fine);
       albedo = vColor.rgb * (0.7 + 0.45 * gn) * (0.8 + 0.4 * blades) * mix(vec3(1.0), vec3(1.15, 1.05, 0.7), smoothstep(0.55, 0.8, vnoise(p * 0.12)));
+      // The season: fresh in spring, deep in summer, going gold in autumn, straw in winter.
+      if (uSeason < 0.5) albedo *= vec3(1.08, 1.12, 0.9);
+      else if (uSeason < 1.5) albedo *= vec3(0.88, 1.02, 0.78);
+      else if (uSeason < 2.5) albedo = mix(albedo * vec3(1.2, 1.05, 0.6), vec3(0.2, 0.15, 0.05) * (0.8 + 0.4 * gn), 0.35);
+      else albedo = mix(albedo, vec3(0.2, 0.16, 0.09) * (0.75 + 0.5 * gn), 0.65);
       sRough = 0.97;
     } else if (kindF < 12.5) {
       // Earth and gravel: speckled stones on packed ground.
@@ -588,6 +624,15 @@ const surface = /* glsl */ `
     sEmit += albedo * cl;
     // A wet road throws the headlights back at you: a glare stretched toward the viewer.
     if (groundKind && uWet > 0.0) sEmit += cl * 0.05 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * 2.0 * uWet;
+  }
+  // Snow on what faces up (roofs, pavements, lawns, the tops of things), patchy as it starts; roads keep less of it.
+  if (uSnow > 0.0 && !(kindF > 2.5 && kindF < 3.5) && !(kindF > 12.5)) {
+    float up = smoothstep(0.55, 0.9, Nw.y);
+    float patchy = smoothstep(0.3, 0.7, vnoise(vWPos.xz * 0.45) * 0.55 + uSnow * 0.75);
+    float road = kindF > 6.5 && kindF < 7.5 ? 0.45 : 1.0;
+    float sn = up * patchy * road * uSnow;
+    albedo = mix(albedo, vec3(0.62, 0.64, 0.68), sn);
+    sRough = mix(sRough, 0.92, sn);
   }
   diffuseColor.rgb = albedo;
   totalEmissiveRadiance += sEmit;

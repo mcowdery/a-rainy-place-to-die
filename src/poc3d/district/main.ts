@@ -1,3 +1,4 @@
+import { FLAG_SEASON, isSeason, SEASON_NAMES, seasonFlag, seasonIndex, type Season } from './seasons';
 import { WaitPanel } from './waitPanel';
 import { blendAtmosphere } from './atmosphere';
 import { clockAt, clockLabel, DAY, lateAt, phaseAt, RATE, sleepUntil, START_MINUTE, sunDirAt, TIMES_OF_DAY, untilMinute, blendAt, type NamedTime } from './clock';
@@ -61,7 +62,7 @@ import { GRADE_NAMES, GradePass } from '../real/grade';
 import { DofPass } from '../real/dof';
 import { SsrPass } from '../real/ssr';
 import { CityAudio } from '../real/audio';
-import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater } from '../real/weather';
+import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater, Drift } from '../real/weather';
 import { moodFromUrl, MoodPanel } from './moodPanel';
 import { carLoops, routeFor, Signals } from './traffic';
 import { destinations, TravelMap, type Destination, type MapLine } from './travel';
@@ -116,7 +117,7 @@ async function run(): Promise<void> {
     return byLook[params.get('time') ?? ''] ?? START_MINUTE;
   })();
   const startTotal = (Math.max(1, Number(params.get('day')) || 1) - 1) * DAY + startMinute;
-  const flags = new FlagStore({ [FLAG_CLOCK]: startTotal, [FLAG_TIME]: phaseAt(startMinute), [FLAG_WEATHER]: params.get('weather') ?? 'clear', [FLAG_LATE]: lateAt(startMinute) });
+  const flags = new FlagStore({ [FLAG_CLOCK]: startTotal, [FLAG_TIME]: phaseAt(startMinute), [FLAG_WEATHER]: params.get('weather') ?? 'clear', [FLAG_LATE]: lateAt(startMinute), [FLAG_SEASON]: isSeason(params.get('season')) ? params.get('season')! : 'spring' });
   // ?load=<slot>: a saved game (save/save.ts). Its world's flags now; its character's car, money, place and phone
   // as each of those is set up below.
   const loadSlot = params.get('load') as Slot | null;
@@ -126,6 +127,7 @@ async function run(): Promise<void> {
   const late = (): boolean => flags.get(FLAG_LATE) === true;
   const time = (): TimeOfDay => flags.get(FLAG_TIME) as TimeOfDay;
   const weather = (): Weather => flags.get(FLAG_WEATHER) as Weather;
+  const season = (): Season => (isSeason(flags.get(FLAG_SEASON)) ? (flags.get(FLAG_SEASON) as Season) : 'spring');
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   const dpr = Math.min(window.devicePixelRatio, 1.5);
@@ -359,7 +361,9 @@ async function run(): Promise<void> {
     audio.thunder(s.cloudOnly ? s.distance * 1.3 : s.distance, s.dirX * Math.cos(yaw) - s.dirZ * Math.sin(yaw));
   };
   scene.add(lightning.bolt, lightning.light, lightning.light.target);
-  scene.add(rain.group, rainLayers.group, streetWater.group, cones.mesh, lampShadows.group);
+  // What drifts down: snow in snowy weather, petals in spring, leaves in autumn.
+  const drift = new Drift(cityU);
+  scene.add(rain.group, rainLayers.group, streetWater.group, cones.mesh, lampShadows.group, drift.points);
   const windVec = new THREE.Vector2();
   const windTarget = new THREE.Vector2();
   let skyTime = 0;
@@ -720,6 +724,8 @@ async function run(): Promise<void> {
     const sunShadow = clear ? Math.max(0, Math.min(1, (atm.sun - 0.8) / 0.4)) : 0;
     sun.shadow.intensity = sunShadow;
     sun.shadow.autoUpdate = sunShadow > 0;
+    // (Drawn at least once, so the map exists for the shaders that read it: a night start never draws it otherwise.)
+    if (!sun.shadow.map) sun.shadow.needsUpdate = true;
     const d = sunDirAt(minute);
     sky.uniforms.uSunDir.value.set(d[0], d[1], d[2]).normalize();
     sky.uniforms.uZenith.value.setHex(atm.sky);
@@ -912,6 +918,24 @@ async function run(): Promise<void> {
   freeze(edges.group);
   surface.push(edges.group);
   sky.uniforms.uMountains.value = 1;
+  // The season (district/seasons.ts): the trees, the lawns, the forest on the hills, snow on the mountains. The story
+  // moves it by flag (season_spring ... season_winter).
+  const applySeason = (): void => {
+    const i = seasonIndex(season());
+    cityU.uSeason.value = i;
+    edges.setSeason(i);
+    sky.uniforms.uWinter.value = season() === 'winter' ? 1 : 0;
+  };
+  applySeason();
+  flags.subscribe((k) => {
+    const want = seasonFlag(k);
+    if (want && flags.get(k) === true) {
+      flags.set(k, false);
+      flags.set(FLAG_SEASON, want);
+    }
+    if (k === FLAG_SEASON) applySeason();
+  });
+  let snowCover = params.has('snowcover') ? Math.max(0, Math.min(1, Number(params.get('snowcover')))) : weather() === 'snow' ? 0.8 : 0;
   if (debug) (window as unknown as { __sea: unknown }).__sea = { sea, renderer, horizon: cityU.uHorizon };
   const exView = buildExpressway(expressway, city);
   const exTraffic = new ExpresswayTraffic(expressway, city);
@@ -1634,6 +1658,13 @@ async function run(): Promise<void> {
     const wetRate = mood.wetness !== null ? 2 : wetTarget > wetness ? 0.015 + 0.05 * rainAmount : 0.006;
     wetness += Math.max(-wetRate * dt, Math.min(wetRate * dt, wetTarget - wetness));
     cityU.uWet.value = wetness;
+    // Snow settles over a minute or two of snowfall and melts over several once it stops.
+    const snowing = weather() === 'snow';
+    snowCover = Math.max(0, Math.min(1, snowCover + (snowing ? dt / 80 : -dt / 400)));
+    cityU.uSnow.value = snowCover;
+    const outdoors = !inInterior() && camera.position.y > -2.6 && !trainRiding() && !subway.riding;
+    drift.set(!outdoors ? 'none' : snowing ? 'snow' : season() === 'spring' ? 'petals' : season() === 'autumn' ? 'leaves' : 'none', snowing ? 0.75 : 0.1);
+    drift.update(dt, camera.position, 0.12 + 0.5 * (1 - cityU.uLamps.value));
     ssr.wet = wetness;
     ssr.rain = rainAmount;
     cityU.uCarCount.value = traffic.fillLights(camera.position, cityU.uCars.value);
@@ -1780,7 +1811,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        trainRiding()?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
+        trainRiding()?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${SEASON_NAMES[season()]} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · res ${Math.round(resScale * 100)}%${resFixed() === null ? ' (auto)' : ''} · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
