@@ -1,4 +1,4 @@
-# The story bible
+# The story guide
 
 Everything the story needs that the code doesn't hold: the premise and tone, the world as the story sees it,
 the factions, the cast, the plot threads, the calendar, and the flags that tie them to the game. Writers (you,
@@ -28,13 +28,13 @@ It's plain Markdown in git, next to the content it points at (node ids in `conte
   by deleting the line.
 - **Open:** marks a question nobody has answered yet. The open questions in each file are the to-do list.
 
-When a scene is written, what it establishes moves into the bible as canon (a character's history, a new flag,
+When a scene is written, what it establishes moves into the guide as canon (a character's history, a new flag,
 a clue) in the same change.
 
 ## How the pieces fit
 
 ```
-story/            the bible (this folder): decisions, in prose
+story/            the story guide (this folder): decisions, in prose
   ↓ written from it
 scripts           (not built yet) scenes and chats as text, compiled to the formats below
   ↓
