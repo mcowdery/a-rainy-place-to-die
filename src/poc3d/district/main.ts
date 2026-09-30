@@ -2,7 +2,8 @@ import { RacePath, RaceState, type RaceDef } from './cityRace';
 import { RaceHud } from './raceHud';
 import { RaceRival } from './raceRival';
 import { separateCars } from '../../race/battle';
-import { FLAG_SEASON, isSeason, SEASON_NAMES, seasonFlag, seasonIndex, type Season } from './seasons';
+import { FLAG_SEASON, isSeason, SEASON_NAMES, SEASONS, seasonFlag, seasonIndex, type Season } from './seasons';
+import { DebugMenu, type DebugHit } from './debugMenu';
 import { WaitPanel } from './waitPanel';
 import { blendAtmosphere } from './atmosphere';
 import { clockAt, clockLabel, DAY, lateAt, phaseAt, RATE, sleepUntil, START_MINUTE, sunDirAt, TIMES_OF_DAY, untilMinute, blendAt, type NamedTime } from './clock';
@@ -548,7 +549,7 @@ async function run(): Promise<void> {
     ...content.subway.lines.map((l) => ({ name: `${l.name} ${l.nameEn}`, color: l.color, letter: l.letter, stops: l.stops.map((s) => ({ x: s.x, z: s.z, code: s.code, name: `${s.jp} ${s.en}` })) })),
     // The Toto Line is in the subway network (as an elevated line) since the terminal; only add it here if not.
   ];
-  const travel = new TravelMap(district, content.zones, allPlaces(), (d: Destination) => {
+  const goPlace = (d: Destination): void => {
     const floor = d.floor + groundAt(d.x, d.z);
     camera.position.set(d.x, floor + 1.7, d.z);
     updateInteriors();
@@ -556,6 +557,9 @@ async function run(): Promise<void> {
     camera.position.set(d.x, controls.fly ? Math.max(camera.position.y, 1.7) : level + 1.7, d.z);
     controls.setLevel(level);
     controls.setView(d.yaw, d.pitch);
+  };
+  const travel = new TravelMap(district, content.zones, allPlaces(), (d: Destination) => {
+    goPlace(d);
     travel.hide();
     controls.lock();
   }, { travel: debug, lines: mapLines, mark: (m) => setGps(m), expressway: expressway.roads });
@@ -659,6 +663,7 @@ async function run(): Promise<void> {
   // The clock: running (half a game minute a real second) except in scenes, menus and the benchmark; its flags kept
   // up to date (the minute, the time of day's look, the last train); jumps for waiting, sleep, taxis and the story.
   let clockTotal = Number(flags.get(FLAG_CLOCK) ?? startTotal);
+  let clockStopped = false;
   const syncClockFlags = (): void => {
     const total = Math.floor(clockTotal);
     flags.set(FLAG_CLOCK, total);
@@ -1190,12 +1195,13 @@ async function run(): Promise<void> {
   };
   // ?debug=1: window.__drive() takes the wheel of your car (bringing it to where you stand, facing your way,
   // if it's more than 15 m off).
-  if (debug) (window as unknown as { __drive: () => string; __own: OwnCar }).__drive = () => {
+  const driveHere = (): string => {
     const yaw = (lookYaw() * Math.PI) / 180;
     if (Math.hypot(ownCar.sim.x - camera.position.x, ownCar.sim.z - camera.position.z) > 15) ownCar.place(camera.position.x, camera.position.z, Math.atan2(-Math.sin(yaw), -Math.cos(yaw)));
     enterCar(ownCar.vehicle);
     return ownCar.name;
   };
+  if (debug) (window as unknown as { __drive: () => string; __own: OwnCar }).__drive = driveHere;
   if (exitRoad) enterCar(ownCar.vehicle);
   if (me?.driving && !exitRoad) enterCar(ownCar.vehicle);
   if (debug) (window as unknown as { __own: OwnCar; __ex: Expressway }).__own = ownCar;
@@ -1360,6 +1366,77 @@ async function run(): Promise<void> {
     return !!guide.route;
   };
   if (debug) (window as unknown as { __guide: Guide }).__guide = guide;
+
+  // The debug menu (` backquote, district/debugMenu.ts): on the dev server, or with ?debug=1.
+  const setClockTo = (minute: number): void => {
+    clockTotal = Math.floor(clockTotal / DAY) * DAY + minute;
+    syncClockFlags();
+    applyAtmosphere();
+  };
+  const shiftClock = (minutes: number): void => {
+    clockTotal = Math.max(0, clockTotal + minutes);
+    syncClockFlags();
+    applyAtmosphere();
+  };
+  const minuteNow = (): number => Math.floor(clockTotal) % DAY;
+  const debugMenu = import.meta.env.DEV || debug
+    ? new DebugMenu([
+        { title: 'Season', items: () => SEASONS.map((x) => ({ label: SEASON_NAMES[x], on: () => season() === x, run: () => flags.set(FLAG_SEASON, x) })) },
+        {
+          title: () => `Time · ${clockNow()}${clockStopped ? ' · stopped' : ''}`,
+          items: () => [
+            ...(Object.entries(TIMES_OF_DAY) as [NamedTime, number][]).map(([k, m]) => ({ label: `${k} ${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`, on: () => minuteNow() === m, run: () => setClockTo(m) })),
+            { label: 'dawn 05:45', on: () => minuteNow() === 345, run: () => setClockTo(345) },
+            { label: '−1 h', run: () => shiftClock(-60) },
+            { label: '+1 h', run: () => shiftClock(60) },
+            { label: '+1 day', run: () => shiftClock(DAY) },
+            { label: clockStopped ? 'start clock' : 'stop clock', on: () => clockStopped, run: () => (clockStopped = !clockStopped) },
+          ],
+        },
+        {
+          title: 'Weather',
+          items: () => [
+            ...WEATHERS.map((w) => ({ label: w, on: () => weather() === w, run: () => flags.set(FLAG_WEATHER, w) })),
+            { label: 'snow cover 0', on: () => snowCover < 0.01, run: () => (snowCover = 0) },
+            { label: 'snow cover full', on: () => snowCover > 0.99, run: () => (snowCover = 1) },
+          ],
+        },
+        {
+          title: 'Car',
+          items: () => [
+            { label: driving.car ? 'driving' : 'drive my car here', on: () => !!driving.car, run: () => void (driving.car || driveHere()) },
+            { label: 'repair', run: () => ownCar.repair() },
+          ],
+        },
+        {
+          title: 'Races',
+          items: () => [
+            ...content.races.map((r) => ({ label: r.name, on: () => race?.path.def.id === r.id, run: () => void (race ? toast('A race is on.') : startRace(r)) })),
+            ...(race ? [{ label: 'end race', run: () => endRace() }] : []),
+          ],
+        },
+        { title: 'Moving', items: () => [{ label: 'fly (F)', on: () => controls.fly, run: () => (controls.fly = !controls.fly) }] },
+      ], {
+        find: (q): DebugHit[] => {
+          const t = q.toLowerCase();
+          const score = (s: string): number => (s.toLowerCase().startsWith(t) ? 0 : s.toLowerCase().includes(t) ? 1 : -1);
+          const places = allPlaces()
+            .map((d) => ({ d, k: Math.min(...[score(d.name), score(d.id)].map((v) => (v < 0 ? 9 : v))) }))
+            .filter((x) => x.k < 9)
+            .map((x) => ({ k: x.k, hit: { label: x.d.name, detail: x.d.group, go: () => goPlace(x.d) } }));
+          const byNode = nodes
+            .map((n) => ({ n, k: score(n.id) }))
+            .filter((x) => x.k >= 0)
+            .map((x) => ({ k: x.k, hit: { label: x.n.id, detail: x.n.kind, go: () => (x.n.kind === 'spawn' ? teleport(x.n.id) : standBy(x.n)) } }));
+          return [...places, ...byNode].sort((a, b) => a.k - b.k).map((x) => x.hit);
+        },
+        flag: { get: (k) => flags.get(k), set: (k, v) => flags.set(k, v) },
+        onOpen: () => document.exitPointerLock(),
+        onClose: () => {
+          if (!inVn) controls.lock();
+        },
+      })
+    : null;
   // The dashboard: speed and gear, while driving.
   const dash = document.createElement('div');
   Object.assign(dash.style, { position: 'fixed', left: '24px', bottom: '22px', zIndex: '16', padding: '8px 14px', background: 'rgba(8,8,14,0.72)', border: '1px solid #3a3850', color: '#e8e6f0', font: "bold 26px 'Consolas', monospace", display: 'none', pointerEvents: 'none' });
@@ -1571,7 +1648,7 @@ async function run(): Promise<void> {
   });
   document.body.addEventListener('click', () => {
     audio.start();
-    if (!bench && !inVn && !travel.open && !panel.open && !picker.open && !taxiPicker.open) controls.lock();
+    if (!bench && !inVn && !travel.open && !panel.open && !picker.open && !taxiPicker.open && !debugMenu?.open) controls.lock();
   });
   controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
   controls.look.addEventListener('unlock', () => ($('overlay').hidden = bench));
@@ -1663,7 +1740,7 @@ async function run(): Promise<void> {
     subway.update(dt, camera);
     updateInteriors(inVn ? 0 : dt);
     if (Number(flags.get(FLAG_CLOCK)) !== Math.floor(clockTotal)) clockTotal = Number(flags.get(FLAG_CLOCK)) || clockTotal;
-    if (!bench && !inVn && !travel.open && !waitPanel.open) {
+    if (!bench && !inVn && !travel.open && !waitPanel.open && !clockStopped) {
       const before = Math.floor(clockTotal);
       clockTotal += dt * RATE;
       if (Math.floor(clockTotal) !== before) syncClockFlags();
@@ -1897,7 +1974,7 @@ async function run(): Promise<void> {
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? (t.sleep ? 'Sleep until morning' : 'Look') : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : taxiHere() ? '[E] Get in the taxi' : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
-        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · I invert mouse Y · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look`,
+        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · I invert mouse Y · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look${debugMenu ? ' · ` debug menu' : ''}`,
       ].join('\n');
       builtThisWindow = 0;
     }
