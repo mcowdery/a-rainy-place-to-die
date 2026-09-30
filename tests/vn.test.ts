@@ -46,6 +46,62 @@ describe('VN library (the exports in content/vn)', () => {
   });
 });
 
+describe('VN branch frames (schema 3)', () => {
+  const frame = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    entry_point: null, image: 'assets/x.png', video: null, size: [4, 4], title: '', bubbles: [], on_enter: { set: {} },
+    next: null, choices: [], hotspots: [], branches: [], ...over,
+  });
+  const scene = (frames: Record<string, unknown>, entry: Record<string, string> = {}, flags: string[] = []): Record<string, unknown> => ({
+    schema: 3, story: { id: 's70', name: 'branches' }, start: Object.keys(frames)[0], flags_referenced: flags, entry_points: entry, frames,
+  });
+  const router = frame({
+    entry_point: 'bar.mama', image: null, size: null, title: 'By flags', next: 's70.fr02', on_enter: { set: { visited: true } },
+    branches: [
+      { id: 'r01', requires: ['julie', '!angry'], target: 's70.fr03' },
+      { id: 'r02', requires: ['angry'], target: 'exit:bar.out' },
+    ],
+  });
+  const branching = scene({ 's70.fr01': router, 's70.fr02': frame(), 's70.fr03': frame() }, { 'bar.mama': 's70.fr01' }, ['angry', 'julie', 'visited']);
+  const library = (sc: Record<string, unknown>): VnLibrary =>
+    new VnLibrary({ a: sc }, { a: { schema: 1, entry_points: { 'bar.mama': { story_id: 's70', frame: 's70.fr01' } } } });
+
+  it('goes to the first row whose flags hold, else to next, and never stops on the branch frame', () => {
+    const lib3 = library(branching);
+    expect(lib3.errors).toEqual([]);
+    const flags = flagStore();
+    const vn = new VnEngine(lib3, flags);
+    expect(vn.enter('bar.mama')).toEqual({ kind: 'frame', key: 's70.fr02' });
+    expect(flags.all.get('visited')).toBe(true);
+    flags.set('julie', true);
+    expect(vn.enter('bar.mama')).toEqual({ kind: 'frame', key: 's70.fr03' });
+    flags.set('angry', true);
+    expect(vn.enter('bar.mama')).toEqual({ kind: 'exit', to: 'bar.out' });
+  });
+
+  it('stops a loop of branch frames instead of hanging', () => {
+    const loop = scene(
+      {
+        's70.fr01': frame({ entry_point: 'bar.mama', image: null, size: null, next: 's70.fr02', branches: [{ id: 'r01', requires: [], target: 's70.fr02' }] }),
+        's70.fr02': frame({ image: null, size: null, branches: [{ id: 'r01', requires: [], target: 's70.fr01' }] }),
+      },
+      { 'bar.mama': 's70.fr01' },
+    );
+    const vn = new VnEngine(library(loop), flagStore());
+    expect(vn.enter('bar.mama')).toEqual({ kind: 'end' });
+    expect(vn.key).toBe(null);
+  });
+
+  it('validates branches: targets, flags, and flags_referenced', () => {
+    expect(validateScene('ok', branching)).toEqual([]);
+    const bad = scene({ 's70.fr01': frame({ branches: [{ id: 'r01', requires: ['Not A Flag'], target: null }] }) });
+    const problems = validateScene('bad', bad);
+    expect(problems.some((p) => p.includes('needs a target'))).toBe(true);
+    expect(problems.some((p) => p.includes('bad flag'))).toBe(true);
+    const unlisted = scene({ 's70.fr01': frame({ branches: [{ id: 'r01', requires: ['julie'], target: 's70.fr01' }] }) });
+    expect(validateScene('unlisted', unlisted).some((p) => p.includes('flags_referenced'))).toBe(true);
+  });
+});
+
 describe('VN engine: Mama-san and Room 303', () => {
   it('plays the talk, gates the choices on flags, and exits to the bar', () => {
     const flags = flagStore();

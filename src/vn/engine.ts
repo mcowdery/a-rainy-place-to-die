@@ -70,6 +70,9 @@ export type Step = { readonly kind: 'frame'; readonly key: FrameKey } | { readon
 /** Using a hotspot: a step (go), or something to read (inspect). */
 export type Use = Step | { readonly kind: 'inspect'; readonly text: string; readonly bubble: string | null; readonly box: readonly [number, number, number, number] };
 
+/** Branch frames in a row before the engine gives up (Studio refuses loops; this guards stale exports). */
+export const MAX_BRANCH_HOPS = 16;
+
 export class VnEngine {
   key: FrameKey | null = null;
 
@@ -97,8 +100,11 @@ export class VnEngine {
     return key ? this.go(key) : null;
   }
 
-  /** Follow a target: enter a frame (applying its on_enter flags), or leave. */
-  go(target: Target): Step {
+  /**
+   * Follow a target: enter a frame (applying its on_enter flags), or leave. A branch frame (schema 3) is
+   * never shown: after its on_enter it goes on to the first branch whose flags hold, else to its next.
+   */
+  go(target: Target, hops = 0): Step {
     if (target === null) {
       this.key = null;
       return { kind: 'end' };
@@ -115,6 +121,15 @@ export class VnEngine {
     }
     this.key = target;
     this.apply(f.on_enter.set);
+    const branches = f.branches ?? [];
+    if (branches.length) {
+      if (hops >= MAX_BRANCH_HOPS) {
+        this.key = null;
+        return { kind: 'end' };
+      }
+      const pick = branches.find((b) => this.holds(b.requires));
+      return this.go(pick ? pick.target : f.next, hops + 1);
+    }
     return { kind: 'frame', key: target };
   }
 

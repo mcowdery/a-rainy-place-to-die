@@ -1,7 +1,8 @@
 /**
- * The VN export format (schema 2), the contract with the VN asset generator (Krea Studio): see its
+ * The VN export format (schema 2 or 3), the contract with the VN asset generator (Krea Studio): see its
  * docs/vn-export-format.md. One export is one story: scene.json (frames keyed "<story>.<frame>", bubbles,
- * choices, hotspots, flags) and entry_points.json (the arrival frames it declares), plus assets/.
+ * choices, hotspots, flags; schema 3 adds branch frames) and entry_points.json (the arrival frames it
+ * declares), plus assets/.
  * This file holds the types and a validator that collects every problem (like the content loader does).
  */
 
@@ -40,6 +41,13 @@ export interface Hotspot {
   readonly bubble?: string | null;
 }
 
+/** A branch frame's row (schema 3): the first whose flags all hold decides where to go. */
+export interface Branch {
+  readonly id: string;
+  readonly requires: readonly string[];
+  readonly target: Target;
+}
+
 export interface Frame {
   readonly entry_point: string | null;
   readonly image: string | null;
@@ -51,6 +59,8 @@ export interface Frame {
   readonly next: Target;
   readonly choices: readonly Choice[];
   readonly hotspots: readonly Hotspot[];
+  /** Schema 3: non-empty on a branch frame, which is never shown (see VnEngine.go). Absent before schema 3. */
+  readonly branches?: readonly Branch[];
 }
 
 export interface SceneFile {
@@ -78,7 +88,7 @@ const ENTRY = /^[a-z0-9_]+\.[a-z0-9_]+$/;
 const isTarget = (t: unknown): t is Target => t === null || (typeof t === 'string' && (KEY.test(t) || EXIT.test(t)));
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-/** Check a scene.json against schema 2; returns every problem found (empty if it's fine). */
+/** Check a scene.json against schema 2 or 3; returns every problem found (empty if it's fine). */
 export function validateScene(file: string, s: unknown): string[] {
   const errs: string[] = [];
   const err = (msg: string): void => void errs.push(`${file}: ${msg}`);
@@ -133,6 +143,13 @@ export function validateScene(file: string, s: unknown): string[] {
       if (h.action === 'inspect' && h.bubble && !f.bubbles.some((b) => b.id === h.bubble)) err(`${key}.${h.id}: bubble ${h.bubble} is not on the frame`);
       checkTarget(`${key}.${h.id}`, h.target);
       checkFlags(`${key}.${h.id}`, h.requires, h.set);
+    }
+    if (f.branches !== undefined && !Array.isArray(f.branches)) err(`${key}: branches must be a list`);
+    for (const b of f.branches ?? []) {
+      if (typeof b.id !== 'string') err(`${key}: branch needs an id`);
+      if (b.target === null) err(`${key}.${b.id}: a branch needs a target`);
+      checkTarget(`${key}.${b.id}`, b.target);
+      checkFlags(`${key}.${b.id}`, b.requires, {});
     }
   }
   for (const [entry, key] of Object.entries(sc.entry_points ?? {})) {
