@@ -91,8 +91,19 @@ function limb(mb: MeshBuilder, a: C3, b: C3, t: number, hex: number): void {
   mb.beam([a[0], a[1] + LIFT, a[2]], [b[0], b[1] + LIFT, b[2]], t);
 }
 
+/**
+ * Where trees are built, for whoever's listening (the district collects the landmarks' trees this way, for the
+ * petals and leaves that fall under them): a tree's foot, its species and how far its crown reaches.
+ */
+export type TreeSink = (t: { x: number; z: number; species: TreeSpecies; reach: number }) => void;
+let sink: TreeSink | null = null;
+export function setTreeSink(s: TreeSink | null): void {
+  sink = s;
+}
+
 export function addTree(mb: MeshBuilder, t: TreeSpec): void {
   const k = t.size ?? 1;
+  sink?.({ x: t.x + (t.lean?.[0] ?? 0), z: t.z + (t.lean?.[1] ?? 0), species: t.species, reach: TREE_REACH[t.species] * k });
   SPECIES = TREE_SPECIES.indexOf(t.species);
   const rnd = rng(hash(t.seed ?? 0, Math.round(t.x * 8), Math.round(t.z * 8), 0x7ee5));
   // The crown's trunk stands at (x, z), lifted; a stem leans to it from the foot.

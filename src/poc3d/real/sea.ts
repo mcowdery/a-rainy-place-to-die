@@ -19,6 +19,8 @@ const BEYOND = 12000;
 export interface Sea {
   readonly group: THREE.Group;
   readonly material: THREE.MeshStandardMaterial;
+  /** Snow lying on the land round the city (0-1, as the city's uSnow). */
+  setSnow(amount: number): void;
 }
 
 /**
@@ -185,7 +187,18 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
   ground.frustumCulled = false;
   group.add(ground);
   for (const b of bridges) group.add(bridgeDeck(b));
-  return { group, material };
+  const bare = new THREE.Color(0x2e3228);
+  const white = new THREE.Color(0xa4a8b0);
+  let snow = -1;
+  return {
+    group,
+    material,
+    setSnow(amount) {
+      if (Math.abs(amount - snow) < 0.01) return;
+      snow = amount;
+      landMat.color.copy(bare).lerp(white, amount);
+    },
+  };
 }
 
 /**

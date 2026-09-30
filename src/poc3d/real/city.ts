@@ -3,6 +3,10 @@ import { screenLightGlsl, screenUniforms, type ScreenUniforms } from './screenLi
 
 /** Cars whose headlights light the city (the nearest to the camera). */
 export const CAR_LIGHTS = 16;
+/** Moving cars near the camera whose wipers clear their windscreens of snow. */
+export const WIPERS = 8;
+/** Trees near the camera dropping petals or leaves (on the ground under them; weather.ts Drift has them falling). */
+export const LITTER = 32;
 
 /**
  * The city material: one MeshStandardMaterial (so sun, sky light, shadows and fog all work) patched to draw
@@ -38,6 +42,22 @@ export interface CityUniforms extends ScreenUniforms {
   uCars: { value: THREE.Vector4[] };
   uCarCount: { value: number };
   uHeadlights: { value: number };
+  /** Moving cars whose wipers are going: (x, z, heading, ground y), and how many (snow off their windscreens). */
+  uWipers: { value: THREE.Vector4[] };
+  uWiperCount: { value: number };
+  /**
+   * Tyre tracks in the snow (tracks.ts): a texture wrapped round a window about the camera, R the track, G its
+   * height / 64 m; uTrackRect is the window (x0, z0, size, on).
+   */
+  tTracks: { value: THREE.Texture | null };
+  uTrackRect: { value: THREE.Vector4 };
+  /**
+   * Trees dropping petals (spring) or leaves (autumn) near the camera: (x, z, reach, code + 8 * round(2 * ground y)),
+   * code 0 zelkova, 1 ginkgo, 2 cherry, 3 dogwood; how many; and the distance their litter fades out by.
+   */
+  uLitter: { value: THREE.Vector4[] };
+  uLitterCount: { value: number };
+  uLitterReach: { value: number };
   uZenith: { value: THREE.Color };
   uHorizon: { value: THREE.Color };
   /** Daylight reaching room interiors (unlit rooms read as dim by day, black by night). */
@@ -64,6 +84,13 @@ export function cityUniforms(): CityUniforms {
     uCars: { value: Array.from({ length: CAR_LIGHTS }, () => new THREE.Vector4()) },
     uCarCount: { value: 0 },
     uHeadlights: { value: 0 },
+    uWipers: { value: Array.from({ length: WIPERS }, () => new THREE.Vector4()) },
+    uWiperCount: { value: 0 },
+    tTracks: { value: null },
+    uTrackRect: { value: new THREE.Vector4(0, 0, 1, 0) },
+    uLitter: { value: Array.from({ length: LITTER }, () => new THREE.Vector4()) },
+    uLitterCount: { value: 0 },
+    uLitterReach: { value: 60 },
     uZenith: { value: new THREE.Color(0x0a0e18) },
     uHorizon: { value: new THREE.Color(0x2a2230) },
     uRoomAmbient: { value: new THREE.Color(0x000000) },
@@ -88,7 +115,15 @@ const common = /* glsl */ `
   uniform vec4 uCars[${CAR_LIGHTS}];
   uniform int uCarCount;
   uniform float uHeadlights;
+  uniform vec4 uWipers[${WIPERS}];
+  uniform int uWiperCount;
+  uniform sampler2D tTracks;
+  uniform vec4 uTrackRect;
+  uniform vec4 uLitter[${LITTER}];
+  uniform int uLitterCount;
+  uniform float uLitterReach;
   ${screenLightGlsl}
+
   // Headlights and tail lights of the cars near the camera, as light on the surfaces round them (no
   // volumes): two beams ahead that spread and fade over ~35 m, low down; a short red glow behind.
   vec3 carLights(vec3 wp, vec3 n, bool ground) {
@@ -159,6 +194,69 @@ const common = /* glsl */ `
     return r.y > 0.0 ? mix(uHorizon, uZenith, sqrt(r.y)) : uHorizon * 0.3;
   }
   float fresnel(float cosT) { return 0.04 + 0.96 * pow(1.0 - cosT, 5.0); }
+  // How much of a windscreen the wipers have cleared: glass facing forward on a moving car near the camera, two
+  // fans pivoting at the foot of the screen (the corners and the wedge between them keep their snow).
+  float wiped(vec3 wp, vec3 n) {
+    float w = 0.0;
+    for (int i = 0; i < ${WIPERS}; i++) {
+      if (i >= uWiperCount) break;
+      vec4 c = uWipers[i];
+      vec2 rel = wp.xz - c.xy;
+      if (dot(rel, rel) > 9.0) continue;
+      vec2 d = vec2(sin(c.z), cos(c.z));
+      if (dot(n.xz, d) < 0.12 || dot(rel, d) < 0.0) continue;
+      float lat = dot(rel, vec2(-d.y, d.x));
+      float h = wp.y - c.w;
+      float edge = 0.04 * vnoise(wp.xz * 23.0 + wp.y * 17.0);
+      for (int k = -1; k <= 1; k += 2) {
+        vec2 q = vec2(lat - float(k) * 0.33, (h - 0.9) * 1.7);
+        w = max(w, step(-0.03, q.y) * smoothstep(0.64 + edge, 0.58 + edge, length(q)));
+      }
+    }
+    return w;
+  }
+  // Tyre tracks under a point on the ground (0 none, 1 a fresh track), at about that height.
+  float trackAt(vec3 wp) {
+    if (uTrackRect.w < 0.5) return 0.0;
+    vec2 q = wp.xz - uTrackRect.xy;
+    if (q.x < 0.0 || q.y < 0.0 || q.x > uTrackRect.z || q.y > uTrackRect.z) return 0.0;
+    vec4 t = texture2D(tTracks, fract(wp.xz / uTrackRect.z));
+    return t.r * (1.0 - smoothstep(0.8, 1.6, abs(wp.y - t.g * 64.0)));
+  }
+  // Fallen petals (spring) or leaves (autumn) round the feet of the trees near the camera: speckles up close, a
+  // wash of their colour further off. Returns the colour (linear) in rgb and the cover in a.
+  vec4 litterAt(vec3 wp, float fine) {
+    if (uLitterCount == 0) return vec4(0.0);
+    float camD = length(wp.xz - cameraPosition.xz);
+    if (camD > uLitterReach) return vec4(0.0);
+    vec4 best = vec4(0.0);
+    for (int i = 0; i < ${LITTER}; i++) {
+      if (i >= uLitterCount) break;
+      vec4 t = uLitter[i];
+      vec2 rel = wp.xz - t.xy;
+      float r = t.z;
+      float d2 = dot(rel, rel);
+      if (d2 > r * r * 1.7) continue;
+      float code = mod(t.w, 8.0);
+      float gy = floor(t.w / 8.0) * 0.5;
+      if (abs(wp.y - gy) > 1.5) continue;
+      float dens = (1.0 - smoothstep(r * 0.35, r * 1.3, sqrt(d2))) * (0.55 + 0.45 * vnoise(wp.xz * 0.9 + t.xy));
+      if (dens <= best.a) continue;
+      vec3 c;
+      if (uSeason < 0.5) c = code > 2.5 ? vec3(0.96, 0.9, 0.9) : vec3(0.96, 0.66, 0.78);
+      else c = code < 0.5 ? vec3(0.64, 0.36, 0.14) : code < 1.5 ? vec3(0.9, 0.72, 0.12) : code < 2.5 ? vec3(0.74, 0.3, 0.14) : vec3(0.6, 0.13, 0.12);
+      best = vec4(pow(c, vec3(2.2)), dens);
+    }
+    if (best.a <= 0.0) return vec4(0.0);
+    // Petals are small and sparse, leaves bigger and thicker on the ground.
+    float scale = uSeason < 0.5 ? 11.0 : 6.0;
+    vec2 cellP = floor(wp.xz * scale);
+    vec2 jit = vec2(h2(cellP + 3.1), h2(cellP + 5.7)) - 0.5;
+    float spot = step(1.0 - best.a * (uSeason < 0.5 ? 0.85 : 0.95), h2(cellP)) * smoothstep(0.42, 0.3, length(fract(wp.xz * scale) - 0.5 - jit * 0.3));
+    float cover = mix(best.a * (uSeason < 0.5 ? 0.4 : 0.55), spot, fine);
+    vec3 col = best.rgb * (0.8 + 0.4 * h2(cellP + 7.0));
+    return vec4(col, cover * (1.0 - smoothstep(uLitterReach * 0.75, uLitterReach, camD)));
+  }
 
   // Interior mapping: trace a ray into an axis-aligned room [0, rw] x [0, ch] x [-depth, 0] (x along the
   // facade, y up, z out of the wall) from ro on the glass. Returns the hit point; face: 0 back, 1 side,
@@ -625,14 +723,29 @@ const surface = /* glsl */ `
     // A wet road throws the headlights back at you: a glare stretched toward the viewer.
     if (groundKind && uWet > 0.0) sEmit += cl * 0.05 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * 2.0 * uWet;
   }
+  // Fallen petals and leaves round the feet of the trees (spring, autumn): on the ground and whatever else lies
+  // flat at its level (a landmark's paving), not on paint, glass, lights, water or the crowns themselves.
+  if (Nw.y > 0.7 && (uSeason < 0.5 || (uSeason > 1.5 && uSeason < 2.5)) && kindF < 12.5 && !(kindF > 2.5 && kindF < 6.5) && vStyle.x < 19.5) {
+    vec4 lit = litterAt(vWPos, 1.0 - smoothstep(0.02, 0.06, max(fwW.x, fwW.y)));
+    albedo = mix(albedo, lit.rgb, lit.a);
+    sRough = mix(sRough, 0.8, lit.a);
+  }
   // Snow on what faces up (roofs, pavements, lawns, the tops of things), patchy as it starts; roads keep less of it.
   if (uSnow > 0.0 && !(kindF > 2.5 && kindF < 3.5) && !(kindF > 12.5)) {
     float up = smoothstep(0.55, 0.9, Nw.y);
     float patchy = smoothstep(0.3, 0.7, vnoise(vWPos.xz * 0.45) * 0.55 + uSnow * 0.75);
-    float road = kindF > 6.5 && kindF < 7.5 ? 0.45 : 1.0;
+    float road = kindF > 6.5 && kindF < 7.5 ? 0.8 : 1.0;
     float sn = up * patchy * road * uSnow;
+    // Moving cars have their wipers going; tyres press tracks into it (slush, dark and wet, in them).
+    if (kindF > 4.5 && kindF < 5.5 && uWiperCount > 0) sn *= 1.0 - wiped(vWPos, Nw);
+    float trk = groundKind ? trackAt(vWPos) * uSnow : 0.0;
+    sn *= 1.0 - 0.8 * trk;
     albedo = mix(albedo, vec3(0.62, 0.64, 0.68), sn);
     sRough = mix(sRough, 0.92, sn);
+    if (trk > 0.0) {
+      albedo = mix(albedo, albedo * 0.55 + vec3(0.02, 0.022, 0.026), trk);
+      sRough = mix(sRough, 0.3, trk);
+    }
   }
   diffuseColor.rgb = albedo;
   totalEmissiveRadiance += sEmit;

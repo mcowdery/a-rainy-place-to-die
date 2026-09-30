@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { CityUniforms } from './city';
+import { LITTER, type CityUniforms } from './city';
 import { screenLightGlsl } from './screenLight';
 
 /**
@@ -918,9 +918,11 @@ export class LampShadows {
 }
 
 /**
- * Things drifting down round the camera: snow in winter weather, cherry petals in spring, leaves in autumn
- * (main.ts picks by the season and the weather). Points in a box that follows the camera, each falling at its own
- * pace and swaying, lit by the street light (the lightmap) and the sky.
+ * Things drifting down: snow in winter weather, in a box that follows the camera; petals in spring and leaves in
+ * autumn only from the trees dropping them near the camera (the city's uLitter list: each point belongs to one of
+ * its slots and falls from under that tree's crown to its foot, over and over, drifting a little downwind; the
+ * ground under them has the fallen ones, city.ts litterAt). main.ts picks by the season and the weather. Each point
+ * falls at its own pace and sways, lit by the street light (the lightmap) and the sky.
  */
 export class Drift {
   readonly points: THREE.Points;
@@ -935,6 +937,10 @@ export class Drift {
     uSway: { value: 0.4 },
     uSize: { value: 0.03 },
     uAmbient: { value: 0.3 },
+    /** 0: the box round the camera (snow); 1: under the trees (petals, leaves). */
+    uMode: { value: 0 },
+    uSeason: { value: 0 },
+    uWind: { value: new THREE.Vector2(0.3, 0.1) },
   };
 
   constructor(city: CityUniforms) {
@@ -945,7 +951,7 @@ export class Drift {
     g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(N * 3), 3));
     g.setAttribute('aSeed', new THREE.Float32BufferAttribute(seed, 4));
     this.points = new THREE.Points(g, new THREE.ShaderMaterial({
-      uniforms: { ...this.u, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain },
+      uniforms: { ...this.u, uTrees: city.uLitter, uTreeCount: city.uLitterCount, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain },
       transparent: true,
       depthWrite: false,
       vertexShader: /* glsl */ `
@@ -959,10 +965,44 @@ export class Drift {
         uniform float uAmbient;
         uniform vec3 uColor;
         uniform vec3 uColor2;
+        uniform float uMode;
+        uniform float uSeason;
+        uniform vec4 uTrees[${LITTER}];
+        uniform int uTreeCount;
+        uniform vec2 uWind;
         ${lightmapGlsl}
         varying vec3 vCol;
         varying float vA;
         void main() {
+          if (uMode > 0.5) {
+            // Under a tree: its slot, a spot under its crown, and a fall from the crown to the ground.
+            int slot = int(floor(aSeed.x * ${LITTER}.0));
+            vec4 T = uTrees[slot < ${LITTER} ? slot : 0];
+            float live = (slot < uTreeCount && T.z > 0.01 && fract(aSeed.x * 97.0) < uAmount) ? 1.0 : 0.0;
+            float code = mod(T.w, 8.0);
+            float gy = floor(T.w / 8.0) * 0.5;
+            float r = T.z;
+            float top = 2.2 + r * 0.9;
+            float speed = uFall * (0.7 + aSeed.w * 0.6);
+            float cyc = top / speed;
+            float t = mod(uTime + aSeed.y * cyc * 7.0, cyc);
+            float a = aSeed.z * 6.2832;
+            vec2 at = T.xy + vec2(cos(a), sin(a)) * sqrt(fract(aSeed.w * 13.0)) * r * 0.85;
+            vec3 p = vec3(at.x, gy + top - t * speed, at.y);
+            p.xz += uWind * t;
+            p.x += sin(uTime * (0.6 + aSeed.w) + aSeed.z * 20.0) * uSway;
+            p.z += cos(uTime * (0.5 + aSeed.x) + aSeed.y * 20.0) * uSway;
+            vec4 mv = viewMatrix * vec4(p, 1.0);
+            float d = -mv.z;
+            vA = live * smoothstep(0.4, 1.5, d) * (1.0 - smoothstep(38.0, 50.0, length(p - uCam))) * smoothstep(0.0, 0.4, t) * smoothstep(0.0, 0.3, p.y - gy);
+            vec3 c;
+            if (uSeason < 0.5) c = code > 2.5 ? vec3(0.98, 0.95, 0.92) : vec3(1.0, 0.78, 0.86);
+            else c = code < 0.5 ? vec3(0.64, 0.36, 0.14) : code < 1.5 ? vec3(0.95, 0.76, 0.14) : code < 2.5 ? vec3(0.78, 0.3, 0.12) : vec3(0.66, 0.13, 0.12);
+            vCol = c * (0.9 + 0.2 * fract(aSeed.y * 31.0)) * (uAmbient + lightAt(p.xz) * 0.8);
+            gl_Position = projectionMatrix * mv;
+            gl_PointSize = min(uSize * 900.0 / max(d, 0.3), 6.0) * step(0.01, vA);
+            return;
+          }
           vec3 box = vec3(44.0, 24.0, 44.0);
           float speed = uFall * (0.7 + aSeed.w * 0.6);
           vec3 p = aSeed.xyz * box;
@@ -992,11 +1032,16 @@ export class Drift {
     this.points.renderOrder = 5;
   }
 
-  /** kind: what's drifting (or none); amount 0-1. */
-  set(kind: 'none' | 'snow' | 'petals' | 'leaves', amount: number): void {
+  /**
+   * kind: what's drifting (or none); amount 0-1 (for petals and leaves, the share of each tree's points in the air).
+   * Petals and leaves fall only under the trees in the city's litter list.
+   */
+  set(kind: 'none' | 'snow' | 'petals' | 'leaves', amount: number, trees = 1): void {
     const u = this.u;
     u.uAmount.value = kind === 'none' ? 0 : amount;
-    this.points.visible = kind !== 'none' && amount > 0;
+    u.uMode.value = kind === 'petals' || kind === 'leaves' ? 1 : 0;
+    u.uSeason.value = kind === 'petals' ? 0 : 2;
+    this.points.visible = kind !== 'none' && amount > 0 && (kind === 'snow' || trees > 0);
     if (kind === 'snow') {
       u.uColor.value.setRGB(0.95, 0.96, 1.0);
       u.uColor2.value.setRGB(0.88, 0.9, 0.96);
@@ -1018,8 +1063,9 @@ export class Drift {
     }
   }
 
-  update(dt: number, camera: THREE.Vector3, ambient: number): void {
+  update(dt: number, camera: THREE.Vector3, ambient: number, wind?: THREE.Vector2): void {
     this.u.uTime.value += dt;
+    if (wind) this.u.uWind.value.copy(wind).multiplyScalar(0.25);
     this.u.uCam.value.copy(camera);
     this.u.uAmbient.value = ambient;
   }

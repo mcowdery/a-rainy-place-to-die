@@ -58,19 +58,38 @@ export interface Edges {
   update(camera: THREE.Vector3, lamps: number): void;
   /** The forest by the season (0 spring, 1 summer, 2 autumn, 3 winter): some of it deciduous. */
   setSeason(season: number): void;
+  /** Snow lying on the forest's crowns and the houses' roofs (0-1, as the city's uSnow). */
+  setSnow(amount: number): void;
+}
+
+/** Snow on what faces up, for the edges' own materials (flat-shaded crowns, the houses' roofs). */
+function snowy(m: THREE.MeshStandardMaterial, snow: { value: number }): void {
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uSnow = snow;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uSnow;')
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        if (uSnow > 0.0) {
+          float upF = dot(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.64, 0.68), smoothstep(0.15, 0.6, upF) * uSnow);
+        }`);
+  };
 }
 
 export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, built: (mx: number, my: number) => boolean): Edges {
   const group = new THREE.Group();
   group.name = 'edges';
   const hills = terrain.hills;
-  if (!hills) return { group, update: () => undefined, setSeason: () => undefined };
+  if (!hills) return { group, update: () => undefined, setSeason: () => undefined, setSnow: () => undefined };
   const pad = hills.pad;
   const kind = (mx: number, my: number) => macro.kindAt(Math.max(0, Math.min(macro.cols - 1, mx)), Math.max(0, Math.min(macro.rows - 1, my)));
   const treeGeo = new THREE.IcosahedronGeometry(1, 1);
   const treeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true });
   const houseGeo = houseGeometry();
   const houseMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, vertexColors: true });
+  const snow = { value: 0 };
+  snowy(treeMat, snow);
+  snowy(houseMat, snow);
   const windowGeo = new THREE.PlaneGeometry(1.3, 0.9);
   const windowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.15, 0.65), fog: true });
   const blocks: { g: THREE.Group; x: number; z: number; windows: THREE.InstancedMesh | null }[] = [];
@@ -196,6 +215,9 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
         });
         if (f.im.instanceColor) f.im.instanceColor.needsUpdate = true;
       }
+    },
+    setSnow(amount) {
+      snow.value = amount;
     },
     update(camera, lamps) {
       const far = reach + Math.max(0, camera.y) * 4;

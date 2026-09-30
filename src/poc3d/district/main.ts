@@ -68,6 +68,9 @@ import { DofPass } from '../real/dof';
 import { SsrPass } from '../real/ssr';
 import { CityAudio } from '../real/audio';
 import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater, Drift } from '../real/weather';
+import { TrackMap, type Wheel } from '../real/tracks';
+import { setTreeSink, TREE_REACH, type TreeSpecies } from '../models/trees';
+import { LITTER, WIPERS } from '../real/city';
 import { moodFromUrl, MoodPanel } from './moodPanel';
 import { carLoops, routeFor, Signals } from './traffic';
 import { destinations, TravelMap, type Destination, type MapLine } from './travel';
@@ -378,6 +381,10 @@ async function run(): Promise<void> {
     for (const q of l.segments) district.shelters.push({ rect: { x: q.x0 - 5, y: q.z0 - 5, w: q.x1 - q.x0 + 10, h: q.z1 - q.z0 + 10 }, y0: -1, y1: 7.8 });
   }
   district.addColliders(traffic.colliders);
+  // The landmarks' trees (for the petals and leaves falling under them), recorded as they're built.
+  const landmarkTrees: { x: number; z: number; y: number; species: TreeSpecies; reach: number }[] = [];
+  let treeY = 0;
+  setTreeSink((t) => landmarkTrees.push({ ...t, y: treeY }));
   for (const placed of content.placed) {
     const lm = placed.stamp.landmark;
     // On a hill, the landmark stands level at its footing (everything it adds to the scene lifted with it).
@@ -386,6 +393,7 @@ async function run(): Promise<void> {
     let still = true;
     const b0 = placed.building;
     const footing = content.terrain.footing(b0.x, b0.z, b0.w, b0.d);
+    treeY = footing ?? 0;
     if (lm && (ASAGIRI_KINDS as readonly string[]).includes(lm)) {
       const a = buildAsagiri(lm as AsagiriKind, placed.building, placed.id, city, ghost, cityU);
       scene.add(a.group);
@@ -446,6 +454,7 @@ async function run(): Promise<void> {
     // A landmark with nothing that moves (no update of its own, or a kit one only lighting its neon) stays put.
     if (still && (landmarkUpdates.length === updatesBefore || (lm && (ASAGIRI_KINDS as readonly string[]).includes(lm)))) for (let i = sceneBefore; i < scene.children.length; i++) freeze(scene.children[i]);
   }
+  setTreeSink(null);
   // The surface: the city, traffic, weather and the other landmarks (everything but the subway's own).
   for (const o of scene.children) if (o !== subway.group && !subwayViews.some((v) => v.view.group === o) && !rotaries.some((v) => v.r.group === o) && !(o instanceof THREE.Light) && o !== sky.mesh) surface.push(o);
   // Door-entered interiors (real/interiors.ts), at their buildings' true positions: built as you approach,
@@ -946,6 +955,97 @@ async function run(): Promise<void> {
     }
     if (k === FLAG_SEASON) applySeason();
   });
+  // Snow and the traffic (real/tracks.ts, city.ts): the moving cars nearest you have their wipers going, and every
+  // wheel on the street near you presses a track into the snow.
+  const tracks = new TrackMap(cityU);
+  const wheelMap = new Map<unknown, Wheel[]>();
+  if (debug) (window as unknown as { __tracks: unknown }).__tracks = { tracks, wheelMap, rect: cityU.uTrackRect.value, wipers: cityU.uWiperCount, litter: cityU.uLitter, litterCount: cityU.uLitterCount, reach: cityU.uLitterReach };
+  const wheelsOf = (x: number, z: number, y: number, dx: number, dz: number, half: number, width: number): Wheel[] => {
+    const f = Math.max(0.6, half - 0.8);
+    const w = width / 2 - 0.2;
+    return [[f, w], [f, -w], [-f, w], [-f, -w]].map(([a, b]) => ({ x: x + dx * a + dz * b, z: z + dz * a - dx * b, y }));
+  };
+  const updateSnowTraffic = (dt: number, snowing: boolean): void => {
+    const moving = snowCover > 0.02 ? traffic.movingNear(camera.position, 130) : [];
+    const own = driving.own && !ownCar.aloft() ? ownCar.sim : null;
+    const wipers = cityU.uWipers.value;
+    let n = 0;
+    if (own && n < WIPERS) wipers[n++].set(own.x, own.z, own.h, own.y);
+    for (const v of moving) {
+      if (n >= WIPERS) break;
+      if (!v.bus) wipers[n++].set(v.x, v.z, Math.atan2(v.dx, v.dz), v.y);
+    }
+    cityU.uWiperCount.value = snowCover > 0.02 ? n : 0;
+    wheelMap.clear();
+    for (const v of moving) wheelMap.set(v.key, wheelsOf(v.x, v.z, v.y, v.dx, v.dz, v.half, v.width));
+    if (own) wheelMap.set(ownCar, wheelsOf(own.x, own.z, own.y, Math.sin(own.h), Math.cos(own.h), 2.1, 1.75));
+    tracks.update(renderer, dt, camera.position, snowCover, snowing, wheelMap);
+  };
+  // Petals (spring) and leaves (autumn) under the trees near you: the cherries and dogwoods in spring, the
+  // deciduous trees in autumn, on the ground under them (city.ts litterAt) and falling (Drift). Slots stay put while
+  // their tree stays near, so the falling points don't jump from tree to tree.
+  const litterCode = (sp: TreeSpecies, s: Season): number => {
+    const g = sp === 'zelkova' ? 0 : sp.startsWith('ginkgo') ? 1 : sp.startsWith('sakura') ? 2 : sp.startsWith('dogwood') ? 3 : -1;
+    return s === 'spring' ? (g === 2 || g === 3 ? g : -1) : s === 'autumn' ? g : -1;
+  };
+  const litterSlots: (string | null)[] = new Array(LITTER).fill(null);
+  let litterT = 1;
+  const litterAt = new THREE.Vector3(1e9, 0, 0);
+  let litterSeason = '';
+  const refreshLitter = (dt: number): void => {
+    litterT += dt;
+    const cp = camera.position;
+    if (litterSeason === season() && (litterT < 1 || cp.distanceToSquared(litterAt) < 16)) return;
+    litterT = 0;
+    litterAt.copy(cp);
+    litterSeason = season();
+    const s = season();
+    const cand: { key: string; x: number; z: number; y: number; r: number; code: number; d: number }[] = [];
+    const add = (x: number, z: number, y: number, species: TreeSpecies, reach: number): void => {
+      const code = litterCode(species, s);
+      const d = Math.hypot(x - cp.x, z - cp.z);
+      if (code >= 0 && d < 95) cand.push({ key: `${Math.round(x * 4)},${Math.round(z * 4)}`, x, z, y, r: reach, code, d });
+    };
+    if (s === 'spring' || s === 'autumn') {
+      const mx0 = Math.floor(cp.x / CELL);
+      const my0 = Math.floor(cp.z / CELL);
+      for (let my = my0 - 1; my <= my0 + 1; my++) {
+        for (let mx = mx0 - 1; mx <= mx0 + 1; mx++) {
+          const d = district.model.detail(mx, my);
+          if (!d) continue;
+          for (const list of [d.props, ...d.open.map((o) => o.props)]) {
+            for (const p of list) {
+              if (p.kind !== 'tree' || !p.species) continue;
+              const k = p.size ?? 1;
+              const lean = p.lean ?? 0;
+              add(p.x + p.nx * lean, p.z + p.nz * lean, groundAt(p.x, p.z), p.species, TREE_REACH[p.species] * k);
+            }
+          }
+        }
+      }
+      for (const t of landmarkTrees) add(t.x, t.z, t.y, t.species, t.reach);
+    }
+    cand.sort((a, b) => a.d - b.d);
+    const chosen = cand.slice(0, LITTER);
+    const byKey = new Map(chosen.map((c) => [c.key, c]));
+    // Keep the slots of trees still chosen; the rest go to the new ones.
+    for (let i = 0; i < LITTER; i++) if (litterSlots[i] && !byKey.has(litterSlots[i]!)) litterSlots[i] = null;
+    const placed = new Set(litterSlots.filter(Boolean));
+    for (const c of chosen) {
+      if (placed.has(c.key)) continue;
+      const free = litterSlots.indexOf(null);
+      if (free < 0) break;
+      litterSlots[free] = c.key;
+    }
+    let count = 0;
+    litterSlots.forEach((key, i) => {
+      const c = key ? byKey.get(key) : undefined;
+      cityU.uLitter.value[i].set(c ? c.x : 0, c ? c.z : 0, c ? c.r : 0, c ? c.code + 8 * Math.max(0, Math.round(c.y * 2)) : 0);
+      if (c) count = i + 1;
+    });
+    cityU.uLitterCount.value = count;
+    cityU.uLitterReach.value = cand.length > LITTER ? Math.max(30, chosen[chosen.length - 1].d) : 95;
+  };
   let snowCover = params.has('snowcover') ? Math.max(0, Math.min(1, Number(params.get('snowcover')))) : weather() === 'snow' ? 0.8 : 0;
   if (debug) (window as unknown as { __sea: unknown }).__sea = { sea, renderer, horizon: cityU.uHorizon };
   const exView = buildExpressway(expressway, city);
@@ -1817,9 +1917,13 @@ async function run(): Promise<void> {
     const snowing = weather() === 'snow';
     snowCover = Math.max(0, Math.min(1, snowCover + (snowing ? dt / 80 : -dt / 400)));
     cityU.uSnow.value = snowCover;
+    edges.setSnow(snowCover);
+    sea.setSnow(snowCover);
+    updateSnowTraffic(dt, snowing);
     const outdoors = !inInterior() && camera.position.y > -2.6 && !trainRiding() && !subway.riding;
-    drift.set(!outdoors ? 'none' : snowing ? 'snow' : season() === 'spring' ? 'petals' : season() === 'autumn' ? 'leaves' : 'none', snowing ? 0.75 : 0.1);
-    drift.update(dt, camera.position, 0.12 + 0.5 * (1 - cityU.uLamps.value));
+    refreshLitter(dt);
+    drift.set(!outdoors ? 'none' : snowing ? 'snow' : season() === 'spring' ? 'petals' : season() === 'autumn' ? 'leaves' : 'none', snowing ? 0.75 : season() === 'spring' ? 0.35 : 0.2, cityU.uLitterCount.value);
+    drift.update(dt, camera.position, 0.12 + 0.5 * (1 - cityU.uLamps.value), windVec);
     ssr.wet = wetness;
     ssr.rain = rainAmount;
     cityU.uCarCount.value = traffic.fillLights(camera.position, cityU.uCars.value);
