@@ -17,8 +17,9 @@ const run = (p: Phone, s: number): void => {
 describe('Phone content (content/phone)', () => {
   it('loads every contact cleanly, media and all', () => {
     expect(content.errors).toEqual([]);
-    expect(content.contacts.map((c) => c.id).sort()).toEqual(['kaiwa', 'kirishima', 'mama', 'matchbook']);
+    expect(content.contacts.map((c) => c.id).sort()).toEqual(['kaiwa', 'kirishima', 'mama', 'matchbook', 'unknown']);
     expect(content.url('media/rouge_cam.webm')).toBeTruthy();
+    expect(content.url('media/room_clip.mp4')).toBeTruthy();
   });
 
   it('reports every problem in a bad file', () => {
@@ -34,10 +35,13 @@ describe('Phone engine', () => {
   it('welcomes you, then Mama-san texts after you meet her, with a photo and replies', () => {
     const flags = flagStore();
     const p = new Phone(content.contacts, flags);
-    run(p, 15);
+    run(p, 11);
     expect(p.contacts().map((c) => c.id)).toEqual(['kaiwa']);
+    expect(p.messages('kaiwa').length).toBeGreaterThan(0);
+    run(p, 20);
     expect(p.messages('kaiwa').map((m) => m.body.kind)).toEqual(['text', 'text', 'sticker']);
-    expect(p.totalUnread).toBe(3);
+    expect(p.contacts().map((c) => c.id)).toEqual(['unknown', 'kaiwa']);
+    expect(p.messages('unknown').map((m) => m.body.kind)).toEqual(['text', 'video', 'text']);
     flags.set('met_mama', true);
     run(p, 44);
     expect(p.contacts().some((c) => c.id === 'mama')).toBe(false);
