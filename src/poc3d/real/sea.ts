@@ -186,7 +186,9 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
   ground.receiveShadow = true;
   ground.frustumCulled = false;
   group.add(ground);
-  for (const b of bridges) group.add(bridgeDeck(b));
+  // The bridges' decks take snow on what faces up, as the city's streets do.
+  const deckSnow = { value: 0 };
+  for (const b of bridges) group.add(bridgeDeck(b, deckSnow));
   const bare = new THREE.Color(0x2e3228);
   const white = new THREE.Color(0xa4a8b0);
   let snow = -1;
@@ -197,6 +199,7 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
       if (Math.abs(amount - snow) < 0.01) return;
       snow = amount;
       landMat.color.copy(bare).lerp(white, amount);
+      deckSnow.value = amount;
     },
   };
 }
@@ -205,7 +208,21 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
  * A street bridge's deck (roads.ts Bridge3): the carriageway at street level on a deep girder, raised pavements
  * either side, a planted median if it has one, lane paint, parapets with a rail, and lamps along the pavements.
  */
-function bridgeDeck(b: Bridge3): THREE.Group {
+/** Snow on what faces up (a deck's carriageway, pavements, parapet tops), the amount shared. */
+function snowy(m: THREE.MeshStandardMaterial, snow: { value: number }, keep: number): void {
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uSnow = snow;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uSnow;')
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        if (uSnow > 0.0) {
+          float upF = dot(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.64, 0.68), smoothstep(0.55, 0.9, upF) * uSnow * ${keep.toFixed(2)});
+        }`);
+  };
+}
+
+function bridgeDeck(b: Bridge3, snow: { value: number }): THREE.Group {
   const g = new THREE.Group();
   const r = b.road;
   const q = r.rect;
@@ -218,7 +235,10 @@ function bridgeDeck(b: Bridge3): THREE.Group {
     const cz = v ? q.y + (a0 + a1) / 2 : q.y + W / 2 + (c0 + c1) / 2;
     const sx = v ? c1 - c0 : a1 - a0;
     const sz = v ? a1 - a0 : c1 - c0;
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, y1 - y0, sz), new THREE.MeshStandardMaterial({ color, roughness: 0.85, emissive: emissive ? color : 0x000000, emissiveIntensity: emissive }));
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85, emissive: emissive ? color : 0x000000, emissiveIntensity: emissive });
+    // (The carriageway keeps a little less, as the streets do: city.ts.)
+    if (!emissive) snowy(mat, snow, color === 0x26262a ? 0.8 : 1);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, y1 - y0, sz), mat);
     m.position.set(cx, (y0 + y1) / 2, cz);
     m.receiveShadow = true;
     g.add(m);

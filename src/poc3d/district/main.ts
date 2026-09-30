@@ -147,7 +147,7 @@ async function run(): Promise<void> {
     return byLook[params.get('time') ?? ''] ?? START_MINUTE;
   })();
   const startTotal = (Math.max(1, Number(params.get('day')) || 1) - 1) * DAY + startMinute;
-  const startSeason: Season = isSeason(params.get('season')) ? (params.get('season') as Season) : 'spring';
+  const startSeason: Season = isSeason(params.get('season')) ? (params.get('season') as Season) : params.get('weather') === 'snow' ? 'winter' : 'spring';
   // The weather follows the forecast (district/forecast.ts) unless it's held: ?weather= (and the benchmark) hold it.
   const holdWeather = params.has('weather') || bench;
   const flags = new FlagStore({ [FLAG_CLOCK]: startTotal, [FLAG_TIME]: phaseAt(startMinute), [FLAG_WEATHER]: params.get('weather') ?? (bench ? 'clear' : outlookAt(startTotal, startSeason).weather), [FLAG_WEATHER_HOLD]: holdWeather, [FLAG_RAIN_AMOUNT]: bench || params.has('weather') ? 0.45 : outlookAt(startTotal, startSeason).amount || 0.45, [FLAG_SEASON_START]: 0, [FLAG_LATE]: lateAt(startMinute), [FLAG_SEASON]: startSeason });
@@ -1048,6 +1048,9 @@ async function run(): Promise<void> {
       flags.set(FLAG_SEASON_START, Math.floor(clockTotal));
       applySeason();
     }
+    // Snow means winter (the forecast only snows then; snow set by hand, from R, the debug menu or the story,
+    // brings the winter with it: bare trees, the snowy mountains).
+    if (k === FLAG_WEATHER && weather() === 'snow' && season() !== 'winter') flags.set(FLAG_SEASON, 'winter');
   });
   // Snow and the traffic (real/tracks.ts, city.ts): the moving cars nearest you have their wipers going, and every
   // wheel on the street near you presses a track into the snow.
