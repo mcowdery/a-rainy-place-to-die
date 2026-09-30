@@ -1,3 +1,4 @@
+import { ATTACK_PAY, DriftAttack, loadAttackBest, rankFor, saveAttackBest, type Rank } from './driftAttack';
 import { installSnap } from '../debug/snap';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -45,11 +46,11 @@ const course = courses.get(venueId)!;
 const ground = course.ground;
 const modeParam = params.get('mode');
 /** Free drive, a time trial, or a battle against an armed rival (real guns or paintball; downhill unless ?dir=up). */
-const kind: 'free' | 'trial' | 'battle' = modeParam === 'up' || modeParam === 'down' ? 'trial' : modeParam === 'battle' ? 'battle' : 'free';
+const kind: 'free' | 'trial' | 'battle' | 'drift' = modeParam === 'up' || modeParam === 'down' ? 'trial' : modeParam === 'battle' ? 'battle' : modeParam === 'drift' && course.def.drift ? 'drift' : 'free';
 const arms: Arms = params.get('arms') === 'paint' ? 'paint' : 'gun';
 const dir: Dir = modeParam === 'up' || (modeParam === 'battle' && params.get('dir') === 'up') ? 'up' : 'down';
 /** 'free', or the direction a race (trial or battle) runs. */
-const mode: 'free' | Dir = kind === 'free' ? 'free' : dir;
+const mode: 'free' | Dir = kind === 'free' || kind === 'drift' ? 'free' : dir;
 const atmosphere = course.def.atmosphere;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -160,6 +161,23 @@ let result: { time: number; medal: Medal | null; newBest: boolean; prev: number 
 const ghost = new THREE.Mesh(body.geometry, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.45, 0.85, 1.4), transparent: true, opacity: 0.22, depthWrite: false }));
 ghost.visible = false;
 scene.add(ghost);
+// ---- Drift attack (a wharf's scored run, race/driftAttack.ts): the zones on the ground, the run, its result.
+let attack: DriftAttack | null = null;
+let attackResult: { score: number; rank: Rank; best: { score: number; rank: Rank } | null; newBest: boolean; zones: number[] } | null = null;
+const zoneRings = (course.def.drift?.zones ?? []).map((zn) => {
+  const m = new THREE.Mesh(new THREE.RingGeometry(zn.r - 0.6, zn.r, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff4fa8, transparent: true, opacity: 0.8, depthWrite: false }));
+  m.position.set(zn.at[0], course.height(zn.at[0], zn.at[1]) + 0.05, zn.at[1]);
+  m.visible = kind === 'drift';
+  scene.add(m);
+  return m;
+});
+const startAttack = (): void => {
+  if (!course.def.drift) return;
+  attack = new DriftAttack(course.def.drift);
+  attackResult = null;
+  placeAt('lot');
+};
+
 const startTrial = (): void => {
   if (mode === 'free') return;
   trial = new Trial(trialPlan(course, mode));
@@ -456,6 +474,7 @@ window.addEventListener('keydown', (e) => {
   if (mode === 'free' && e.code === 'Digit1') placeAt('lot');
   if (mode === 'free' && e.code === 'Digit2') placeAt('top');
   if (mode !== 'free' && e.code === 'Enter') startTrial();
+  if (kind === 'drift' && e.code === 'Enter') startAttack();
   if (e.code === 'KeyM') showMenu(!menuOpen);
   if (e.code === 'KeyH') help = !help;
   if (e.code === 'KeyI') {
@@ -630,6 +649,10 @@ const showMenu = (open: boolean): void => {
           const m = b ? medalFor(b.time, c.def.trial[d]) : null;
           return `<a class="mode" href="?venue=${id}&mode=${d}">${label}<span>${b ? `${clock(b.time)} ${medalHtml(m)}` : `gold ${clock(c.def.trial[d][2])}`}</span></a>`;
         };
+        if (c.def.kind === 'wharf') {
+          const b = loadAttackBest(id);
+          return `<div class="card${id === venueId ? ' here' : ''}"><div class="name">${c.def.name}</div><div class="meta">${c.def.atmosphere.label} · harbour lot · ${c.def.drift?.zones.length ?? 0} zones</div><p>${c.def.blurb}</p><a class="mode" href="?venue=${id}&mode=drift">↻ Drift attack<span>${b ? `best ${b.score.toLocaleString()} (${b.rank})` : `S ${c.def.drift!.ranks[3].toLocaleString()}`}</span></a><a class="mode" href="?venue=${id}&mode=free">Free drive<span>the lot, drifting</span></a></div>`;
+        }
         return `<div class="card${id === venueId ? ' here' : ''}"><div class="name">${c.def.name}</div><div class="meta">${c.def.atmosphere.label} · ${(c.length / 1000).toFixed(1)} km · ${Math.round(c.summit.y)} m climb</div><p>${c.def.blurb}</p>${row('up', '▲ Time trial, uphill')}${row('down', '▼ Time trial, downhill')}<a class="mode battle" href="?venue=${id}&mode=battle&arms=gun">⚔ Battle, real guns<span>▼ against a rival</span></a><a class="mode battle" href="?venue=${id}&mode=battle&arms=paint">⚔ Battle, paintball<span>▼ +${PAINT_PENALTY} s a hit</span></a><a class="mode" href="?venue=${id}&mode=free">Free drive<span>the lot, drifting${c.def.targets?.length ? ', shooting' : ''}</span></a></div>`;
       })
       .join('')}</div><small>${params.has('venue') ? 'M closes this · ' : ''}Times are kept in this browser.</small>`;
@@ -640,6 +663,19 @@ const showMenu = (open: boolean): void => {
 const drawTrialHud = (dt: number): void => {
   splitT = Math.max(0, splitT - dt);
   splitEl.style.opacity = Math.min(1, splitT * 2).toFixed(2);
+  if (attack) {
+    const cd = attack.phase === 'countdown' ? Math.ceil(attack.countdown - 0.5) : 0;
+    countEl.textContent = cd > 0 ? String(cd) : attack.phase === 'running' && attack.t < 0.8 ? 'GO' : '';
+    countEl.className = cd > 0 ? 'n' : 'go';
+    timerEl.textContent = `DRIFT ATTACK  ${clock(attack.timeLeft)}  ·  ZONE ${Math.min(attack.zone + 1, attack.def.zones.length)}/${attack.def.zones.length}  ·  ${attack.score.toLocaleString()}`;
+    resultsEl.style.display = attackResult ? 'block' : 'none';
+    if (attackResult) {
+      const r = attackResult;
+      const zones = r.zones.map((p, i) => `<div>Zone ${i + 1} ×${attack!.def.zones[i].mult}<span>${p.toLocaleString()}</span></div>`).join('');
+      resultsEl.innerHTML = `<div class="head">${course.def.name}  DRIFT ATTACK</div><div class="time">${r.score.toLocaleString()}</div><div class="medal">${r.rank} RANK</div>${r.newBest ? '<div class="best">NEW BEST</div>' : `<div class="prev">best ${r.best!.score.toLocaleString()} (${r.best!.rank})</div>`}<div class="splits">${zones}</div><div class="medals">S ${attack.def.ranks[3].toLocaleString()} · A ${attack.def.ranks[2].toLocaleString()} · B ${attack.def.ranks[1].toLocaleString()} · C ${attack.def.ranks[0].toLocaleString()}</div><small>Enter  again · M  venues</small>`;
+    }
+    return;
+  }
   if (!trial) {
     timerEl.textContent = '';
     countEl.textContent = '';
@@ -819,6 +855,7 @@ const placeCamera = (dt: number, snap = false): void => {
 };
 
 if (mode !== 'free') startTrial();
+if (kind === 'drift') startAttack();
 else placeAt(at);
 if (!params.has('venue')) showMenu(true);
 
@@ -839,7 +876,7 @@ function frame(now: number): void {
   const c = menuOpen ? { throttle: 0, brake: 1, steer: 0, handbrake: false } : fight.youOut ? { throttle: 0, brake: 0.35, steer: 0, handbrake: false } : controls();
   car.assists = aiming ? AIM_ASSISTS : DRIFT_ASSISTS;
   // Held on the grid through the countdown (the engine still revs).
-  if (!trial || trial.phase !== 'countdown') car.update(gdt, c, ground);
+  if ((!trial || trial.phase !== 'countdown') && !(attack && attack.phase === 'countdown')) car.update(gdt, c, ground);
   if (inBattle && trial) {
     if (trial.phase !== 'countdown') rivalCar.update(gdt, rivalDrv.controls(gdt, car, fight.themOut || fight.themTime !== null), ground);
     separateCars(car, rivalCar);
@@ -902,6 +939,31 @@ function frame(now: number): void {
     chain = 0;
     chainT = 0;
     lostFlash = 1.2;
+  }
+  if (attack) {
+    const was = attack.phase;
+    const pts = drifting ? ((ang * 180) / Math.PI) * car.u * gdt * 0.6 : 0;
+    const done = attack.update(dt, car.x, car.z, pts);
+    if (done) {
+      splitEl.textContent = `ZONE ${done.zone + 1}  +${done.points.toLocaleString()}`;
+      splitEl.className = done.points > 0 ? 'ahead' : 'behind';
+      splitT = 2;
+    }
+    zoneRings.forEach((m, k) => {
+      const mat = m.material as THREE.MeshBasicMaterial;
+      m.visible = k >= attack!.zone || attack!.phase === 'finished';
+      mat.color.setHex(k === attack!.zone ? 0xff4fa8 : k < attack!.zone ? 0x4fffa0 : 0x6a5a8a);
+      mat.opacity = k === attack!.zone ? 0.6 + 0.35 * Math.sin(performance.now() / 180) : 0.45;
+    });
+    if (was === 'running' && attack.phase === 'finished') {
+      const score = attack.score;
+      const rank = rankFor(score, attack.def.ranks);
+      const best = loadAttackBest(venueId);
+      const newBest = !best || score > best.score;
+      if (newBest) saveAttackBest(venueId, { score, rank });
+      attackResult = { score, rank, best, newBest, zones: attack.points.map(Math.round) };
+      payout(ATTACK_PAY[rank], `drift attack ${rank}`);
+    }
   }
   lostFlash = Math.max(0, lostFlash - dt);
   // The car on the ground. In the driver's-eye view the lean is damped to a third (a driver holds their head
@@ -1015,7 +1077,7 @@ function frame(now: number): void {
   helpEl.style.display = help || toastT > 0 ? 'block' : 'none';
   if (toastT > 0) helpEl.textContent = toastText;
   else if (helpEl.textContent !== HELP) helpEl.textContent = HELP;
-  hud.textContent = `${course.def.name} · ${course.def.atmosphere.label} · ${mode === 'free' ? `free drive · ${here === 'lot' ? 'practice lot' : here === 'top' ? 'the viewpoint' : 'the pass'}` : kind === 'battle' ? `⚔ battle, ${arms === 'gun' ? 'real guns' : 'paintball'} ${dir === 'up' ? '▲ uphill' : '▼ downhill'}` : `time trial ${mode === 'up' ? '▲ uphill' : '▼ downhill'}${best ? ` · best ${clock(best.time)}` : ''}`} · ${mineModel.name} · ${yen(profile.yen)} · M venues`;
+  hud.textContent = `${course.def.name} · ${course.def.atmosphere.label} · ${kind === 'drift' ? 'drift attack · Enter to start again' : mode === 'free' ? `free drive · ${here === 'lot' ? (course.def.kind === 'wharf' ? 'the wharf' : 'practice lot') : here === 'top' ? 'the viewpoint' : 'the pass'}` : kind === 'battle' ? `⚔ battle, ${arms === 'gun' ? 'real guns' : 'paintball'} ${dir === 'up' ? '▲ uphill' : '▼ downhill'}` : `time trial ${mode === 'up' ? '▲ uphill' : '▼ downhill'}${best ? ` · best ${clock(best.time)}` : ''}`} · ${mineModel.name} · ${yen(profile.yen)} · M venues`;
   composer.render(dt);
   snap.afterRender();
   requestAnimationFrame(frame);

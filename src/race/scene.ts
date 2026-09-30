@@ -25,6 +25,7 @@ function rng(seed: number): () => number {
 
 export function buildVenue(course: Course): VenueScene {
   const group = new THREE.Group();
+  const wharf = course.def.kind === 'wharf';
   const n = course.x.length;
   const half = course.half;
   const rail = course.rail;
@@ -53,7 +54,8 @@ export function buildVenue(course: Course): VenueScene {
       const steep = 1 - ny;
       const near = course.nearest(x, z);
       const onEdge = near.i >= 0 && Math.abs(near.d) < rail + 2.5;
-      if (course.inLot(x, z)) c.setHex(0x1e1e22);
+      if (wharf) c.setRGB(0.1 + rand() * 0.015, 0.1 + rand() * 0.015, 0.11 + rand() * 0.015);
+      else if (course.inLot(x, z)) c.setHex(0x1e1e22);
       else if (onEdge) c.copy(SHOULDER);
       else if (steep > 0.2) c.setRGB(0.2, 0.19, 0.18);
       else c.setRGB(0.07 + rand() * 0.03, 0.1 + rand() * 0.04, 0.06);
@@ -175,13 +177,13 @@ export function buildVenue(course: Course): VenueScene {
   for (let x = lot.x + 6; x < lot.x + 60; x += 3) line(x, lot.z + lot.h - 12, x, lot.z + lot.h - 2);
   const ring = new THREE.Mesh(new THREE.RingGeometry(17.8, 18.2, 96).rotateX(-Math.PI / 2), paint(0xe8e8e0, 0.15));
   ring.position.set(lot.x + lot.w * 0.68, 0.012, lot.z + lot.h * 0.55);
-  lines.add(ring);
+  if (!wharf) lines.add(ring);
   group.add(lines);
   const coneGeo = new THREE.ConeGeometry(0.22, 0.7, 12).translate(0, 0.35, 0);
   const cones = new THREE.InstancedMesh(coneGeo, new THREE.MeshStandardMaterial({ color: 0xff5a1a, roughness: 0.6, emissive: 0x401000 }), 40);
   let cn = 0;
-  for (let k = 0; k < 8; k++) cones.setMatrixAt(cn++, m4.makeTranslation(lot.x + 20 + k * 11, 0, lot.z + lot.h * 0.3));
-  for (let k = 0; k < 12; k++) {
+  for (let k = 0; k < (wharf ? 0 : 8); k++) cones.setMatrixAt(cn++, m4.makeTranslation(lot.x + 20 + k * 11, 0, lot.z + lot.h * 0.3));
+  for (let k = 0; k < (wharf ? 0 : 12); k++) {
     const a = (k / 12) * Math.PI * 2;
     cones.setMatrixAt(cn++, m4.makeTranslation(ring.position.x + Math.cos(a) * 6, 0, ring.position.z + Math.sin(a) * 6));
   }
@@ -222,6 +224,8 @@ export function buildVenue(course: Course): VenueScene {
   lamp(lot.x + 8, lot.z + lot.h / 2, 0, 12, 430);
   lamp(lot.x + lot.w - 8, lot.z + lot.h / 2 - 10, 0, 12, 430);
   lamp(lot.x + lot.w / 2 - 25, lot.z + 8, 0, 12, 370);
+  // A wharf: tall sodium masts across the whole lot.
+  if (wharf) for (const fx of [0.2, 0.5, 0.8]) for (const fz of [0.3, 0.75]) lamp(lot.x + lot.w * fx, lot.z + lot.h * fz, 0, 24, 800, 0xffa860);
 
   // ---- The viewpoint: a disc of tarmac, a rim rail, a vending machine, a lamp.
   const sm = course.summit;
@@ -260,7 +264,7 @@ export function buildVenue(course: Course): VenueScene {
   const crowns = new THREE.InstancedMesh(crownGeo, new THREE.MeshStandardMaterial({ color: 0x1a2a1c, roughness: 1 }), TREES);
   const tr = rng(99);
   let tc = 0;
-  for (let k = 0; k < TREES * 3 && tc < TREES; k++) {
+  for (let k = 0; k < (wharf ? 0 : TREES * 3) && tc < TREES; k++) {
     const x = b.minX + tr() * (b.maxX - b.minX);
     const z = b.minZ + tr() * (b.maxZ - b.minZ);
     if (course.inLot(x, z, -6) || course.inSummit(x, z, -8)) continue;
@@ -284,6 +288,8 @@ export function buildVenue(course: Course): VenueScene {
   trunks.count = crowns.count = tc;
   crowns.castShadow = true;
   group.add(trunks, crowns);
+
+  if (wharf) group.add(wharfDressing(course));
 
   // ---- The sky's light (the moon, or the low sun at dusk), the sky's fill, the stars (dim at dusk), and at
   // dusk the sun's disc on the horizon; the stars and the sun ride with the camera (main.ts moves them).
@@ -332,4 +338,68 @@ export function buildVenue(course: Course): VenueScene {
     group.add(water);
   }
   return { group, stars };
+}
+
+/**
+ * A wharf's dressing: the container stacks (the course's blocks, filled with 12 m boxes in the shipping lines'
+ * colours, stacked to their tiers), the gantry cranes along the quay with their booms out over the water and the
+ * red lights on top, bollards along the edge.
+ */
+function wharfDressing(course: Course): THREE.Group {
+  const g = new THREE.Group();
+  const r = rng(11);
+  const COLORS = [0xb83a2a, 0x2a5a8a, 0x3a7a4a, 0xc8a030, 0x7a7a7e, 0xd06a20, 0x2a2a30, 0x8a3a6a];
+  const box = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  const boxes: { x: number; z: number; w: number; d: number; y: number; c: number }[] = [];
+  for (const b of course.def.blocks ?? []) {
+    const alongX = b.w >= b.h;
+    const L = alongX ? b.w : b.h;
+    const D = alongX ? b.h : b.w;
+    const rows = Math.max(1, Math.round(D / 2.5));
+    const n = Math.max(1, Math.floor(L / 12.2));
+    for (let row = 0; row < rows; row++) {
+      for (let i = 0; i < n; i++) {
+        for (let t = 0; t < (b.tiers ?? 2); t++) {
+          if (t > 0 && r() < 0.18) break;
+          const a = (i + 0.5) * (L / n);
+          const c = (row + 0.5) * (D / rows);
+          boxes.push({ x: b.x + (alongX ? a : c), z: b.z + (alongX ? c : a), w: alongX ? L / n - 0.3 : D / rows - 0.2, d: alongX ? D / rows - 0.2 : L / n - 0.3, y: t * 2.6, c: COLORS[Math.floor(r() * COLORS.length)] });
+        }
+      }
+    }
+  }
+  const mesh = new THREE.InstancedMesh(box, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75, metalness: 0.2 }), boxes.length);
+  const m4 = new THREE.Matrix4();
+  const col = new THREE.Color();
+  boxes.forEach((b, i) => {
+    mesh.setMatrixAt(i, m4.makeScale(b.w, 2.55, b.d).setPosition(b.x, b.y, b.z));
+    mesh.setColorAt(i, col.setHex(b.c));
+  });
+  g.add(mesh);
+  // The cranes along the quay: two legs a side, the portal beam, the boom out over the water, a light on top.
+  const shore = course.def.sea?.shore ?? 130;
+  const steel = new THREE.MeshStandardMaterial({ color: 0xc83a2a, roughness: 0.6, metalness: 0.3 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xd8d8d4, roughness: 0.6, metalness: 0.3 });
+  const part = (w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material): void => {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    p.position.set(x, y, z);
+    g.add(p);
+  };
+  for (const cx of [-90, 0, 90]) {
+    for (const dx of [-8, 8]) for (const dz of [-12, 12]) part(1.4, 38, 1.4, cx + dx, 19, shore - 6 + dz, steel);
+    part(18, 3, 26, cx, 39, shore - 6, white);
+    part(6, 3, 70, cx, 43, shore + 10, steel);
+    part(6, 6, 10, cx, 45, shore - 20, white);
+    const light = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 0.2, 0.1) }));
+    light.position.set(cx, 47, shore - 6);
+    g.add(light);
+  }
+  // Bollards along the quay's edge.
+  const bollard = new THREE.CylinderGeometry(0.3, 0.35, 0.8, 10).translate(0, 0.4, 0);
+  const bm = new THREE.InstancedMesh(bollard, new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.8 }), 40);
+  let k = 0;
+  for (let x = course.def.lot.x + 10; x < course.def.lot.x + course.def.lot.w - 5 && k < 40; x += 12) bm.setMatrixAt(k++, m4.makeTranslation(x, 0, shore - 1.5));
+  bm.count = k;
+  g.add(bm);
+  return g;
 }

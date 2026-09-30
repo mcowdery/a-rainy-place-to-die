@@ -32,6 +32,15 @@ export interface CourseDef {
   readonly summit: { readonly r: number };
   /** Shooting practice (race/shooting.ts): what stands where, facing which way. */
   readonly targets?: readonly TargetDef[];
+  /** A pass (a road up a hillside to a viewpoint) or a wharf (a harbour lot: containers and cranes, drift attack). */
+  readonly kind?: 'pass' | 'wharf';
+  /** Solid blocks on the lot (container stacks: x, z, w, h in metres, and how high they stack). */
+  readonly blocks?: readonly { readonly x: number; readonly z: number; readonly w: number; readonly h: number; readonly tiers?: number }[];
+  /**
+   * Drift attack (race/driftAttack.ts): zones to drift through in order (centre, radius, the points' multiplier),
+   * the time allowed (s) and the score for each rank [C, B, A, S].
+   */
+  readonly drift?: { readonly time: number; readonly zones: readonly { readonly at: readonly [number, number]; readonly r: number; readonly mult: number }[]; readonly ranks: readonly [number, number, number, number] };
 }
 
 /**
@@ -122,6 +131,14 @@ export function parseCourse(file: string, text: string, errors: string[]): Cours
         if (t?.kind === 'mover' && (!xz(t.to) || !(num(t.speed) && t.speed > 0))) err(`${at}: a mover needs to: [x, z] and speed`);
       });
     }
+  }
+  if (d?.kind !== undefined && d.kind !== 'pass' && d.kind !== 'wharf') err('kind: pass or wharf');
+  if (d?.blocks !== undefined && (!Array.isArray(d.blocks) || !d.blocks.every((b: Record<string, unknown>) => ['x', 'z', 'w', 'h'].every((k) => num(b?.[k]))))) err('blocks: [{ x, z, w, h, tiers? }]');
+  const dr = d?.drift as Record<string, unknown> | undefined;
+  if (dr !== undefined) {
+    if (!num(dr.time) || !Array.isArray(dr.zones) || dr.zones.length < 2) err('drift: { time, zones: [{ at: [x, z], r, mult }], ranks: [C, B, A, S] }');
+    else dr.zones.forEach((zn: Record<string, unknown>, i: number) => (!xz(zn?.at) || !num(zn?.r) || !num(zn?.mult)) && err(`drift.zones[${i}]: { at: [x, z], r, mult }`));
+    if (!Array.isArray(dr.ranks) || dr.ranks.length !== 4 || !dr.ranks.every(num)) err('drift.ranks: [C, B, A, S] scores');
   }
   if (errors.length > before) return null;
   return d as unknown as CourseDef;
@@ -363,8 +380,15 @@ export class Course {
     return a <= this.half ? 1 : a <= this.half + this.def.road.shoulder ? 0.7 : 0.55;
   }
 
-  /** Whether a point is inside the walls: on the lot, the viewpoint, or between the road's guardrails. */
+  /** The solid block a point is in (a container stack on a wharf), if any. */
+  blockAt(x: number, z: number, m = 0.25): { x: number; z: number; w: number; h: number } | null {
+    for (const b of this.def.blocks ?? []) if (x > b.x - m && x < b.x + b.w + m && z > b.z - m && z < b.z + b.h + m) return b;
+    return null;
+  }
+
+  /** Whether a point is inside the walls: on the lot, the viewpoint, or between the road's guardrails (not in a block). */
   inside(x: number, z: number): boolean {
+    if (this.blockAt(x, z)) return false;
     if (this.inLot(x, z, 0.5) || this.inSummit(x, z, 0.8)) return true;
     const n = this.nearest(x, z);
     return n.i >= 0 && Math.abs(n.d) < this.rail;
@@ -390,6 +414,17 @@ export class Course {
       const cz = z + fz * a + lz * b;
       if (this.inside(cx, cz)) continue;
       const pushes: [number, number][] = [];
+      // Out of a block the shortest way.
+      const blk = this.blockAt(cx, cz);
+      if (blk) {
+        const m = 0.26;
+        const out: [number, number][] = [[blk.x - m - cx, 0], [blk.x + blk.w + m - cx, 0], [0, blk.z - m - cz], [0, blk.z + blk.h + m - cz]];
+        let b = out[0];
+        for (const o of out) if (Math.hypot(o[0], o[1]) < Math.hypot(b[0], b[1])) b = o;
+        const d = Math.hypot(b[0], b[1]);
+        if (!worst || d > worst.d) worst = { px: b[0], pz: b[1], nx: b[0] / (d || 1), nz: b[1] / (d || 1), d };
+        continue;
+      }
       // Back between the rails.
       const n = this.nearest(cx, cz);
       if (n.i >= 0) {

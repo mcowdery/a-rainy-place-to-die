@@ -27,7 +27,7 @@ describe('battles', () => {
     expect(separateCars(a, c)).toBe(0);
   });
 
-  for (const [name, course] of courses) {
+  for (const [name, course] of [...courses].filter(([, x]) => (x.def.kind ?? 'pass') === 'pass')) {
     for (const dir of ['up', 'down'] as const) {
       it(`${name} ${dir}: the rival drives the run cleanly on its own`, () => {
         const plan = trialPlan(course, dir);

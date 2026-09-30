@@ -42,7 +42,8 @@ it('loads the venues', () => {
   expect(courses.size).toBeGreaterThanOrEqual(2);
 });
 
-describe.each([...courses.keys()])('course %s', (name) => {
+// (The passes: a wharf has no pass, tests/driftAttack.test.ts covers it.)
+describe.each([...courses.keys()].filter((k) => (courses.get(k)!.def.kind ?? 'pass') === 'pass'))('course %s', (name) => {
   const course = courses.get(name)!;
   it('loads, and the road climbs from the lot to the summit on an even grade', () => {
     expect(errors).toEqual([]);

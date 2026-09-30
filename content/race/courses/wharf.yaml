@@ -1,0 +1,52 @@
+# 東都埠頭 Tōto Wharf (the harbour drift lot). Format: src/race/course.ts, kind wharf.
+# A container terminal's back lot at night, closed off: stacks of containers to drift round, the gantry cranes
+# along the quay, sodium floodlights, the black water beyond. Drift attack: six zones round the stacks against the
+# clock (race/driftAttack.ts); free drive to practise. World x east, z south, metres; the sea to the south.
+name: 東都埠頭 Tōto Wharf
+blurb: The container terminal's back lot after dark. Drift the zones round the stacks against the clock, under the cranes.
+kind: wharf
+atmosphere:
+  label: Night
+  sky: ['#05060c', '#0c1020', '#1e1a2c', '#4a2e38']
+  fog: { color: '#141220', density: 0.0035 }
+  light: { color: '#ffb070', intensity: 0.28, from: [200, 300, 300] }
+  hemi: { sky: '#2a2a44', ground: '#140c08', intensity: 0.5 }
+  stars: 0.4
+  sun: false
+  exposure: 1.15
+sea: { level: -2.5, shore: 132 }
+# (No pass here: the times are for its short service road, which trials don't use.)
+trial:
+  up: [30, 25, 20]
+  down: [30, 25, 20]
+lot: { x: -160, z: -110, w: 320, h: 240 }
+road:
+  width: 9
+  shoulder: 1
+  slope: 0
+  rough: 0
+  points:
+    - [0, -110]
+    - [0, -140]
+    - [0, -170]
+    - [0, -200]
+summit: { r: 22 }
+# Container stacks on the lot (they're solid): x, z, width, depth, and how high they stack.
+blocks:
+  - { x: -110, z: -60, w: 60, h: 14, tiers: 3 }
+  - { x: -20, z: -60, w: 40, h: 14, tiers: 2 }
+  - { x: 60, z: -60, w: 60, h: 14, tiers: 3 }
+  - { x: -70, z: 20, w: 44, h: 14, tiers: 4 }
+  - { x: 40, z: 20, w: 44, h: 14, tiers: 2 }
+  - { x: -140, z: 80, w: 30, h: 14, tiers: 1 }
+drift:
+  time: 80
+  # Clockwise round the stacks: out along the north, down the east, the long sweep along the quay, back up.
+  zones:
+    - { at: [-100, -85], r: 16, mult: 1 }
+    - { at: [30, -85], r: 16, mult: 1.2 }
+    - { at: [130, -20], r: 18, mult: 1.5 }
+    - { at: [100, 60], r: 16, mult: 1.2 }
+    - { at: [0, 95], r: 18, mult: 1.5 }
+    - { at: [-110, 50], r: 16, mult: 2 }
+  ranks: [3000, 7000, 12000, 18000]

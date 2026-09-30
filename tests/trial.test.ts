@@ -5,7 +5,7 @@ import { clock, GhostTrack, medalFor, Trial, trialPlan } from '../src/race/trial
 const { courses } = loadCourses();
 
 describe('time trials', () => {
-  for (const [name, c] of courses) {
+  for (const [name, c] of [...courses].filter(([, x]) => (x.def.kind ?? 'pass') === 'pass')) {
     it(`${name}: plans a run each way with checkpoints in order`, () => {
       const up = trialPlan(c, 'up');
       expect(up.grid).toBeLessThan(up.checkpoints[0]);
