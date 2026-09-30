@@ -54,6 +54,8 @@ const fragment = /* glsl */ `
   uniform float uHalation;
   uniform vec3 uHalColor;
   uniform float uRain;
+  uniform float uHeat;
+  uniform float uHorizonY;
   varying vec2 vUv;
 
   float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -92,6 +94,15 @@ const fragment = /* glsl */ `
     vec2 uv = vUv;
     vec3 lens = uRain > 0.0 ? drops(uv, uTime) * uRain : vec3(0.0);
     uv += lens.xy;
+    // Heat shimmer (a heat wave by day): the air over the hot ground wavers, strongest in a band along the horizon
+    // (the distant road and what stands on it), rising, in patches.
+    if (uHeat > 0.0) {
+      float band = exp(-pow((uv.y - uHorizonY + 0.03) / 0.09, 2.0));
+      float patch_ = 0.5 + 0.5 * sin(uv.x * 7.0 + uTime * 0.7) * sin(uv.x * 13.0 - uTime * 0.4 + 1.3);
+      float px = uHeat * band * (0.4 + 0.6 * patch_) * 1.8;
+      float ph = uv.y * uRes.y * 0.23 - uTime * 7.0 + sin(uv.x * uRes.x * 0.04 + uTime * 1.7) * 1.5;
+      uv += vec2(sin(ph), 0.4 * cos(ph * 1.3)) * px / uRes;
+    }
     // Lens fringing grows toward the edges.
     vec2 off = (uv - 0.5) * uFringe * length(uv - 0.5) * 2.0;
     vec3 c = vec3(texture2D(tDiffuse, uv + off).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - off).b);
@@ -162,6 +173,8 @@ export class GradePass extends Pass {
         uHalation: { value: 0 },
         uHalColor: { value: new THREE.Vector3(1, 0.4, 0.2) },
         uRain: { value: 0 },
+        uHeat: { value: 0 },
+        uHorizonY: { value: 0.5 },
       },
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: fragment,
@@ -192,6 +205,12 @@ export class GradePass extends Pass {
     u.uFringe.value = p.fringe;
     u.uHalation.value = p.halation;
     (u.uHalColor.value as THREE.Vector3).set(...p.halColor);
+  }
+
+  /** A heat wave's shimmer (0-1), and where the horizon is on the screen (0 bottom, 1 top). */
+  heat(amount: number, horizonY: number): void {
+    this.material.uniforms.uHeat.value = amount;
+    this.material.uniforms.uHorizonY.value = horizonY;
   }
 
   /** time: seconds (grain and drops move); rain: 0-1, drops on the lens. */

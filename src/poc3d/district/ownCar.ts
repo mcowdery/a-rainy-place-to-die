@@ -9,6 +9,7 @@ import { CarSound } from '../../race/sound';
 import { Car, ROAD_ASSISTS, type Assists, type Controls, type Ground } from '../../race/vehicle';
 import type { DrivenVehicle, TrafficSystem } from '../real/traffic';
 import type { Expressway } from './expressway';
+import { DRY, weatherAfter, weatherBefore, weatherGrip, type RoadWeather } from './roadGrip';
 import {
   DIRECT,
   impactDamage,
@@ -72,6 +73,10 @@ const WALL_FRICTION = 0.998;
 const DIRS = Array.from({ length: 16 }, (_, i) => [Math.cos((i / 16) * Math.PI * 2), Math.sin((i / 16) * Math.PI * 2)] as const);
 
 export class OwnCar {
+  /** The weather on the road (main.ts sets it each frame; district/roadGrip.ts). */
+  weather: RoadWeather = DRY;
+  /** How much water the wheels are in now (0-1). */
+  water = 0;
   readonly sim: Car;
   readonly view: CarView;
   readonly vehicle: DrivenVehicle;
@@ -136,7 +141,7 @@ export class OwnCar {
         const n = new THREE.Vector3(-hx / (2 * e), 1, -hz / (2 * e)).normalize();
         return [n.x, n.y, n.z];
       },
-      grip: () => 1,
+      grip: () => weatherGrip(this.weather),
       collide: (x, z, h, hl, hw) => this.collide(x, z, h, hl, hw),
     };
     let at = home;
@@ -289,12 +294,16 @@ export class OwnCar {
     const P = this.parts;
     const wasTotaled = this.totaled;
     // A smashed front limps, damaged tyres grip less and pull; a totalled car won't go.
-    this.sim.gripMul = tyreGrip(P);
+    // The weather on the road (district/roadGrip.ts): puddles under the wheels take grip before the step; their
+    // drag, the pull toward one side and the crosswind after it.
+    const water = weatherBefore(this.sim, this.weather, tyreGrip(P), this.wheelAlong[1], this.wheelAlong[0]);
     c = wasTotaled
       ? { throttle: 0, brake: 0.6, steer: c.steer, handbrake: c.handbrake }
       : { ...c, throttle: c.throttle * powerLeft(P), steer: Math.max(-1, Math.min(1, c.steer + tyrePull(P))) };
     this.contact = null;
     this.sim.update(dt, c, this.ground);
+    weatherAfter(this.sim, dt, water, this.weather);
+    this.water = water.splash;
     this.knock = 0;
     const hit = this.contact as { kind: HitKind; along: number; across: number; nx: number; nz: number } | null;
     if (hit?.kind === 'wall') this.glance(dt, hit.nx, hit.nz);

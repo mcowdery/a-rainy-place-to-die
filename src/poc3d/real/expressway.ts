@@ -480,6 +480,12 @@ export class ExpresswayTraffic {
   private readonly L: number;
   /** Curvature (rad per m) of the loop at each sample, smoothed over 30 m ahead (for slowing down). */
   private readonly bend: Float32Array;
+  /**
+   * How the weather has the drivers drive (main.ts from district/roadGrip.ts): their speed (1 dry; less in rain,
+   * fog and snow), their gaps (longer), and the grip they trust for braking and corners.
+   */
+  conditions = { speed: 1, gap: 1, grip: 1 };
+
 
   constructor(
     private readonly ex: Expressway,
@@ -559,11 +565,12 @@ export class ExpresswayTraffic {
       gap -= 4.6;
       // A comfortable speed for the bend ahead, and the IDM toward it and the leader.
       const b = this.bend[Math.floor(c.s) % L];
-      const vBend = b > 0.004 ? Math.sqrt(4.5 / b) : 99;
-      const v0 = Math.min(c.v0, vBend);
+      const k = this.conditions;
+      const vBend = b > 0.004 ? Math.sqrt((4.5 * k.grip) / b) : 99;
+      const v0 = Math.min(c.v0 * k.speed, vBend);
       const a = 2.0;
-      const bb = 3.0;
-      const sStar = 2.5 + Math.max(0, c.v * 1.3 + (c.v * (c.v - lead)) / (2 * Math.sqrt(a * bb)));
+      const bb = 3.0 * k.grip;
+      const sStar = 2.5 * k.gap + Math.max(0, c.v * 1.3 * k.gap + (c.v * (c.v - lead)) / (2 * Math.sqrt(a * bb)));
       const acc = a * (1 - (c.v / Math.max(v0, 1)) ** 4 - (gap === Infinity - 4.6 ? 0 : (sStar / Math.max(gap, 0.3)) ** 2));
       c.v = Math.max(0, c.v + Math.max(-9, acc) * dt);
       c.s = (c.s + c.v * dt) % L;

@@ -488,6 +488,11 @@ export class TrafficSystem {
     this.colliders.push(...stops.colliders);
   }
 
+  /**
+   * How the weather has the drivers drive (main.ts from district/roadGrip.ts): their speed (1 dry; less in rain,
+   * fog and snow), their gaps (longer), and the grip they trust for braking and corners.
+   */
+  conditions = { speed: 1, gap: 1, grip: 1 };
   /** The live vehicles by square of the spatial grid (rebuilt each frame). */
   private readonly grid = new Map<number, Vehicle[]>();
 
@@ -610,7 +615,9 @@ export class TrafficSystem {
 
   /** The vehicle's acceleration this frame: the most cautious of free driving and every obstacle. */
   private accel(v: Vehicle, dt: number, people: readonly Walker[], camera: THREE.Vector3): number {
-    const d = v.driver;
+    const c = this.conditions;
+    const d = c.speed === 1 && c.gap === 1 && c.grip === 1 ? v.driver : { ...v.driver, v0: v.driver.v0 * c.speed, T: v.driver.T * c.gap, b: v.driver.b * c.grip, s0: v.driver.s0 * (0.5 + 0.5 * c.gap) };
+    const pull = TURN_PULL * c.grip;
     const L = v.route.length;
     let v0 = d.v0;
     // Corners: slow in time to the speed the turn allows (a comfortable sideways pull at its tightest).
@@ -619,11 +626,11 @@ export class TrafficSystem {
       const half = (TURN.len * j.radius) / 2;
       if (ahead(j.s, v.s, L) < half) {
         // Coming out of it: speed up as the wheel unwinds (the pull the curvature here allows).
-        v0 = Math.min(v0, Math.sqrt(TURN_PULL / Math.max(Math.abs(along(v.route, v.s).k), 1e-3)));
+        v0 = Math.min(v0, Math.sqrt(pull / Math.max(Math.abs(along(v.route, v.s).k), 1e-3)));
         continue;
       }
       const dist = Math.max(0, ahead(v.s, j.s, L) - half - 1);
-      if (dist < 60) v0 = Math.min(v0, Math.sqrt(TURN_PULL * j.radius + 2 * d.b * 0.6 * dist));
+      if (dist < 60) v0 = Math.min(v0, Math.sqrt(pull * j.radius + 2 * d.b * 0.6 * dist));
     }
     let a = idm(d, v.v, v0, Infinity, 0);
     const obstacle = (gap: number, speed: number): void => {

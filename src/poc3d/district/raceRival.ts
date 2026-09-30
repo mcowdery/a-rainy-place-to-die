@@ -5,6 +5,7 @@ import { CarSound } from '../../race/sound';
 import { Car, type Controls, type Ground } from '../../race/vehicle';
 import type { RacePath } from './cityRace';
 import type { Expressway } from './expressway';
+import { DRY, weatherAfter, weatherBefore, weatherGrip, type RoadWeather } from './roadGrip';
 import { CITY_ASSISTS } from './ownCar';
 
 /**
@@ -30,6 +31,8 @@ export class RaceRival {
   readonly sound = new CarSound();
   /** Progress along the race (metres). */
   s = 0;
+  /** The weather on the road (district/roadGrip.ts), as for your car. */
+  weather: RoadWeather = DRY;
   private lane: number = LANES[1];
   private want: number = LANES[1];
   private throttle = 0;
@@ -53,7 +56,7 @@ export class RaceRival {
         const n = new THREE.Vector3(-(height(x + e, z) - height(x - e, z)) / (2 * e), 1, -(height(x, z + e) - height(x, z - e)) / (2 * e)).normalize();
         return [n.x, n.y, n.z];
       },
-      grip: () => 1,
+      grip: () => weatherGrip(this.weather),
       collide: (x, z, h, hl, hw) => {
         const fx = Math.sin(h);
         const fz = Math.cos(h);
@@ -121,7 +124,9 @@ export class RaceRival {
     let pace = this.skill;
     if (behind > 60) pace *= 1.06;
     else if (behind < -120) pace *= 0.9;
-    const want = Math.min(90, path.safeSpeed(this.s, 160, 8.0 * pace * pace, 7.5 * pace), limit);
+    // (A driver who knows the road's slippery takes the bends and brakes for them by the grip there is.)
+    const g = weatherGrip(this.weather);
+    const want = Math.min(90, path.safeSpeed(this.s, 160, 8.0 * pace * pace * g, 7.5 * pace * g), limit);
     // Steer at a point ahead on the lane.
     const look = 9 + Math.abs(car.u) * 0.55;
     const t = path.at(this.s + look, this.lane);
@@ -138,7 +143,9 @@ export class RaceRival {
   update(dt: number, others: readonly Obstacle[], behind: number, held: boolean, camera: THREE.Vector3): void {
     const c = this.controls(dt, others, behind, held);
     this.throttle = c.throttle;
+    const water = weatherBefore(this.car, this.weather, [1, 1], 1.3, -1.25);
     this.car.update(dt, c, this.ground);
+    weatherAfter(this.car, dt, water, this.weather);
     if (held) this.car.u = this.car.w = this.car.r = 0;
     this.s = this.path.progress(this.car.x, this.car.z, this.s).s;
     this.pose(dt);
