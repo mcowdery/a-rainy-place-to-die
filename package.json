@@ -10,6 +10,7 @@
     "build": "tsc && vite build",
     "build:uncensored": "tsc && vite build --mode uncensored",
     "build:demo": "tsc && vite build --mode demo",
+    "build:all": "node scripts/buildAll.mjs",
     "typecheck": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
