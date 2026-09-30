@@ -65,8 +65,11 @@ const FLAG = /^[a-z0-9_.]{1,64}$/;
 type Raw = Record<string, unknown>;
 const isObj = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** Parse one contact file; problems go to `errors` (file: message). hasMedia checks a media path exists. */
-export function parseContact(file: string, text: string, errors: string[], hasMedia: (path: string) => boolean): Contact | null {
+/**
+ * Parse one contact file; problems go to `errors` (file: message). hasMedia checks a media path exists. An
+ * uncensored overlay (src/edition/phoneOverlay.ts) is parsed the same way but needs no name.
+ */
+export function parseContact(file: string, text: string, errors: string[], hasMedia: (path: string) => boolean, overlay = false): Contact | null {
   const before = errors.length;
   const err = (msg: string): void => void errors.push(`${file}: ${msg}`);
   let doc: unknown;
@@ -82,7 +85,7 @@ export function parseContact(file: string, text: string, errors: string[], hasMe
   }
   const id = String(doc.id ?? '');
   if (!ID.test(id)) err(`id must match [a-z0-9_]+ (got "${id}")`);
-  if (typeof doc.name !== 'string' || !doc.name) err('name is required');
+  if (!overlay && (typeof doc.name !== 'string' || !doc.name)) err('name is required');
   const media = (where: string, v: unknown): string | null => {
     if (v === undefined || v === null) return null;
     const p = String(v);
@@ -180,7 +183,7 @@ export function parseContact(file: string, text: string, errors: string[], hasMe
   if (errors.length > before) return null;
   return {
     id,
-    name: String(doc.name),
+    name: String(doc.name ?? ''),
     avatar: media('avatar', doc.avatar),
     status: doc.status === undefined ? null : String(doc.status),
     beats,

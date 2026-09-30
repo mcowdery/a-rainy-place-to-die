@@ -25,6 +25,7 @@ import { PlaceholderVnBridge } from '../../game/bridge';
 import { loadVnLibrary } from '../../vn/content';
 import { VnPlayer } from '../../vn/player';
 import { loadPhoneContent } from '../../phone/content';
+import { edition } from '@edition';
 import { Phone } from '../../phone/engine';
 import { PhoneUI } from '../../phone/ui';
 import { FirstPerson } from '../controls';
@@ -137,6 +138,8 @@ const CELL_H = 14;
 type C3 = [number, number, number];
 
 async function run(): Promise<void> {
+  // The uncensored edition asks your age first (src/edition/ageGate.ts); the standard edition goes straight on.
+  await edition.ageGate();
   const content = loadDistrictContent();
   // The clock (district/clock.ts): minutes since the story began, in the flags so saves carry it. ?clock=HH:MM and
   // ?day= set it; ?time= (dawn, day, dusk, night) picks a time in that look; ?late=1 starts after the last train.

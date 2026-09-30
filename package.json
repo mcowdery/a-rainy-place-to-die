@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:uncensored": "vite --mode uncensored",
     "build": "tsc && vite build",
+    "build:uncensored": "tsc && vite build --mode uncensored",
     "typecheck": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",

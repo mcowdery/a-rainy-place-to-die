@@ -1,6 +1,11 @@
+import { edition } from '@edition';
+import { applyPhoneOverlays } from '../edition/phoneOverlay';
 import { type Contact, parseContact } from './format';
 
-/** The phone's contacts (content/phone/*.yaml) and their media (content/phone/media/), bundled by Vite. */
+/**
+ * The phone's contacts (content/phone/*.yaml) and their media (content/phone/media/), bundled by Vite. The uncensored
+ * edition lays its overlays (adult/content/phone/, src/edition/phoneOverlay.ts) over them; its media come first.
+ */
 const files = import.meta.glob('../../content/phone/*.yaml', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const media = import.meta.glob('../../content/phone/media/*', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
 
@@ -25,5 +30,7 @@ export function loadPhoneContent(): PhoneContent {
     ids.add(c.id);
     contacts.push(c);
   }
-  return { contacts, errors, url: (p) => media[mediaKey(p)] ?? '' };
+  const overlaid = applyPhoneOverlays(contacts, edition.phoneFiles, (p) => p in edition.phoneMedia || mediaKey(p) in media);
+  errors.push(...overlaid.errors);
+  return { contacts: overlaid.contacts, errors, url: (p) => edition.phoneMedia[p] ?? media[mediaKey(p)] ?? '' };
 }

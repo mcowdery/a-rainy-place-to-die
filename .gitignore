@@ -1,5 +1,8 @@
 node_modules/
 dist/
+dist-uncensored/
+# The uncensored edition's files (src/edition/types.ts): its own repository, never this one
+adult/
 *.log
 
 # Krea Studio client: cached session cookie and optional local credentials (never commit)

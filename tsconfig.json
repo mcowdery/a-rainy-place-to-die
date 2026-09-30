@@ -12,7 +12,9 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    // The edition (src/edition/types.ts): Vite points this at standard.ts or uncensored.ts; both have one type.
+    "paths": { "@edition": ["./src/edition/standard.ts"] }
   },
   "include": ["src", "tests", "vite.config.ts"]
 }
