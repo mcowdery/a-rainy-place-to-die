@@ -73,7 +73,7 @@ const DOGWOOD_BRACTS = [0xd98aa8, 0xe2a2ba, 0xcf7f9f] as const;
  * The shading (leaf clusters, the season's colours) is the same for all (real/city.ts).
  */
 export const FOLIAGE_VARIANTS = ['puffs', 'tufts', 'cards', 'airy'] as const;
-let VARIANT = 0;
+let VARIANT = 3;
 /** The variant for the foliage built from now on. */
 export function setFoliageVariant(v: number): void {
   VARIANT = v;

@@ -28,7 +28,7 @@ import { Phone } from '../../phone/engine';
 import { PhoneUI } from '../../phone/ui';
 import { FirstPerson } from '../controls';
 import { frontFrame } from '../real/buildings';
-import { cityMaterial, cityUniforms } from '../real/city';
+import { cityDepthMaterial, cityMaterial, cityUniforms } from '../real/city';
 import { Lightmap } from '../real/lightmap';
 import { buildMegaSign } from '../real/megaSign';
 import { buildKonbini } from '../real/konbini';
@@ -227,7 +227,8 @@ async function run(): Promise<void> {
   cityU.uLightFade.value.set(...lightmap.fade);
   const ghost = ghostMaterial();
   const ads = adMaterial(cityU, new DistrictAdAtlas());
-  district.setKit({ city, signs: signMaterial(cityU, atlas), ghost, ads, atlas, lightmap, words });
+  const cityDepth = cityDepthMaterial(cityU);
+  district.setKit({ city, cityDepth, signs: signMaterial(cityU, atlas), ghost, ads, atlas, lightmap, words });
   scene.add(district.root);
 
   // Post: HDR scene with MSAA and a depth texture -> ASCII overlay -> bloom -> tone mapping + sRGB.
@@ -483,6 +484,11 @@ async function run(): Promise<void> {
     if (still && (landmarkUpdates.length === updatesBefore || (lm && (ASAGIRI_KINDS as readonly string[]).includes(lm)))) for (let i = sceneBefore; i < scene.children.length; i++) freeze(scene.children[i]);
   }
   setTreeSink(null);
+  // (Landmarks on the city material cast their shadows through its caster too: their trees' leaf cards.)
+  scene.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && m.material === city && m.castShadow) m.customDepthMaterial = cityDepth;
+  });
   // The surface: the city, traffic, weather and the other landmarks (everything but the subway's own).
   for (const o of scene.children) if (o !== subway.group && !subwayViews.some((v) => v.view.group === o) && !rotaries.some((v) => v.r.group === o) && !(o instanceof THREE.Light) && o !== sky.mesh) surface.push(o);
   // Door-entered interiors (real/interiors.ts), at their buildings' true positions: built as you approach,

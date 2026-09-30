@@ -42,6 +42,8 @@ const IN_FLIGHT_PER_WORKER = 2;
 /** What the district renders with (created by the page once it has a renderer). */
 export interface DistrictKit {
   readonly city: THREE.Material;
+  /** The city material's shadow caster (real/city.ts cityDepthMaterial: leaf cards cast only their leaves). */
+  readonly cityDepth?: THREE.Material;
   readonly signs: THREE.Material;
   /** Translucent material for people. */
   readonly ghost: THREE.Material;
@@ -577,7 +579,10 @@ export class District {
       const base = new THREE.Mesh(toGeometry(r.meshes.base!), kit.city);
       base.receiveShadow = true;
       const far = r.meshes.far ? new THREE.Mesh(toGeometry(r.meshes.far), kit.city) : null;
-      if (far) far.castShadow = far.receiveShadow = true;
+      if (far) {
+        far.castShadow = far.receiveShadow = true;
+        if (kit.cityDepth) far.customDepthMaterial = kit.cityDepth;
+      }
       const group = new THREE.Group();
       group.position.set(cx, 0, cz);
       group.add(base);
@@ -597,6 +602,7 @@ export class District {
       if (r.meshes.near) {
         const m = new THREE.Mesh(toGeometry(r.meshes.near), kit.city);
         m.castShadow = m.receiveShadow = true;
+        if (kit.cityDepth) m.customDepthMaterial = kit.cityDepth;
         near.add(m);
       }
       if (r.meshes.signs) {

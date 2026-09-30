@@ -365,7 +365,7 @@ const VARIANT_ROW: [TreeSpecies, number][] = [['zelkova', 0], ['ginkgo', 11], ['
     genItems.new.push({ name: `${v + 1} ${name}: close`, group: 'Foliage', at: new THREE.Vector3(GARDEN_X + 22, 5, z), size: 7, view: new THREE.Vector3(0.3, 0.15, 1).normalize() });
     genItems.new.push({ name: `${v + 1} ${name}: shrubs`, group: 'Foliage', at: new THREE.Vector3(GARDEN_X + 76, 0.8, z + 3), size: 9, view: new THREE.Vector3(0.2, 0.4, 1).normalize() });
   });
-  setFoliageVariant(0);
+  setFoliageVariant(3);
   genRoot.new.add(new THREE.Mesh(pad.build()!, city));
   const m = new THREE.Mesh(mb.build()!, city);
   m.castShadow = m.receiveShadow = true;

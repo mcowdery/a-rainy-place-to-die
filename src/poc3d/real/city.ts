@@ -395,42 +395,54 @@ const surface = /* glsl */ `
       float grp = sp < 0.5 ? 0.0 : sp < 2.5 ? 1.0 : sp < 4.5 ? 2.0 : (sp > 6.5 && sp < 8.5) ? 4.0 : 3.0;
       float shade = 0.85 + 0.3 * h1(floor(vWPos.x * 0.8) * 7.0 + floor(vWPos.y * 0.8) * 13.0 + floor(vWPos.z * 0.8) * 3.0);
       vec3 lp = vWPos;
-      float n1 = vnoise3(lp * 2.3);
-      float n2 = vnoise3(lp * 6.1 + 17.0);
-      float n3 = vnoise3(lp * 0.55 + 5.0);
-      // The leaves themselves (or florets), a few centimetres across, only where they're bigger than a pixel.
-      float n4 = vnoise3(lp * 17.0 + 3.0);
       float closeL = 1.0 - smoothstep(0.02, 0.07, max(fwW.x, fwW.y));
-      float closeF = 1.0 - smoothstep(0.006, 0.025, max(fwW.x, fwW.y));
-      float clump = mix(0.55, smoothstep(0.25, 0.8, n1 * 0.6 + n2 * 0.4), 0.25 + 0.75 * closeL);
-      float blossom = uSeason < 0.5 && (grp > 1.5 && grp < 2.5 || grp > 3.5) ? 1.0 : 0.0;
-      // Petals let the light through: a blossoming crown is lighter underneath and between its clusters.
-      float ao = mix(mix(0.42, 0.7, blossom), 1.0, smoothstep(-0.75, 0.55, Nw.y));
-      float lightK = mix(mix(0.62, 0.82, blossom), mix(1.18, 1.08, blossom), clump) * ao * mix(1.0, mix(0.78, 1.14, smoothstep(0.3, 0.75, n4)), closeF);
       bool bare = uSeason > 2.5 && !(grp > 2.5 && grp < 3.5);
-      float rim = 1.0 - abs(dot(Nw, Vw));
       // The part (models/trees.ts): 0 foliage, 1 a card crown's dark core, 2 a leaf card, whose leaves are cut out
-      // of it here: a ragged cluster of leaves, thinning toward its edges, each leaf a shade of its own.
+      // of it first (before any of the shading below, which the cut-away pixels never pay for): a ragged cluster of
+      // leaves, thinning toward its edges, each leaf a shade of its own.
       float part = vStyle.y;
       float leafShade = 1.0;
       float bumpK = 1.2;
       vec3 tint = vec3(1.0);
+      float n1, n2, n4;
+      float n3 = vnoise3(lp * 0.55 + 5.0);
       if (part > 1.5) {
+        if (bare) discard;
         vec2 q = vFacade.xy;
         float seed = vFacade.z * 37.0;
         float d = length(q - 0.5) * 2.0;
+        float edgeOn = abs(dot(geoN, Vw));
+        float keep = (1.0 - d) * 1.4 + (vnoise(q * 4.0 + seed) - 0.5) * 0.9 - (1.0 - smoothstep(0.12, 0.45, edgeOn)) * 0.9;
+        if (keep < 0.25) discard;
         vec2 lq = q * 11.0 + seed;
         vec2 cell = floor(lq);
         // A leaf per cell: a pointed ellipse, turned at random, in the cell's middle.
         vec2 f = fract(lq) - 0.5 - (vec2(h2(cell), h2(cell + 3.7)) - 0.5) * 0.35;
         float ang = h2(cell + 9.1) * 6.2832;
         vec2 rq = vec2(cos(ang) * f.x + sin(ang) * f.y, -sin(ang) * f.x + cos(ang) * f.y);
-        float leaf = 1.0 - smoothstep(0.85, 1.0, length(rq / vec2(0.46, 0.24)));
-        float edgeOn = abs(dot(geoN, Vw));
-        float keep = (1.0 - d) * 1.4 + (vnoise(q * 4.0 + seed) - 0.5) * 0.9 - (1.0 - smoothstep(0.12, 0.45, edgeOn)) * 0.9;
-        if (bare || keep < 0.25 || (closeL > 0.2 && leaf < 0.5 && h2(cell + 1.3) > 0.25)) discard;
+        float leaf = 1.0 - smoothstep(0.85, 1.0, length(rq / vec2(0.54, 0.3)));
+        if (closeL > 0.2 && leaf < 0.5) discard;
         leafShade = mix(0.72, 1.18, h2(cell + 5.3)) * mix(0.8, 1.0, 1.0 - d * 0.5);
         bumpK = 0.6;
+        // (A card's clusters and leaves come from its cells, not the 3D noise.)
+        n1 = h2(cell + 7.7);
+        n2 = h2(cell + 2.9);
+        n4 = h2(cell + 4.1);
+      } else {
+        n1 = vnoise3(lp * 2.3);
+        n2 = vnoise3(lp * 6.1 + 17.0);
+        // The leaves themselves (or florets), a few centimetres across, only where they're bigger than a pixel.
+        n4 = vnoise3(lp * 17.0 + 3.0);
+      }
+      float closeF = 1.0 - smoothstep(0.006, 0.025, max(fwW.x, fwW.y));
+      float clump = mix(0.55, smoothstep(0.25, 0.8, n1 * 0.6 + n2 * 0.4), 0.25 + 0.75 * closeL);
+      float blossom = uSeason < 0.5 && (grp > 1.5 && grp < 2.5 || grp > 3.5) ? 1.0 : 0.0;
+      // Petals let the light through: a blossoming crown is lighter underneath and between its clusters.
+      float ao = mix(mix(0.42, 0.7, blossom), 1.0, smoothstep(-0.75, 0.55, Nw.y));
+      float lightK = mix(mix(0.62, 0.82, blossom), mix(1.18, 1.08, blossom), clump) * ao * mix(1.0, mix(0.78, 1.14, smoothstep(0.3, 0.75, n4)), closeF);
+      float rim = 1.0 - abs(dot(Nw, Vw));
+      if (part > 1.5) {
+        // (Cut out above.)
       } else if (part > 0.5) {
         // The core behind the cards: dark, in their shade.
         leafShade = mix(0.38, 0.7, blossom);
@@ -930,6 +942,52 @@ function lightsSkippingSpots(): string {
   return chunk.slice(0, a) + spot + chunk.slice(b);
 }
 const LIGHTS_BEGIN = lightsSkippingSpots();
+
+/**
+ * The city material's shadow caster (a mesh's customDepthMaterial): plain depth, except that leaf cards (tree
+ * crowns, models/trees.ts) cast only their leaves, as the city shader cuts them out, and none when their tree is
+ * bare in winter. For the sun's and the lamps' shadow maps.
+ */
+export function cityDepthMaterial(u: CityUniforms): THREE.MeshDepthMaterial {
+  const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uSeason = u.uSeason;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        attribute vec4 aFacade;
+        attribute vec4 aStyle;
+        varying vec4 vFacade;
+        flat varying vec4 vStyle;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vFacade = aFacade;
+        vStyle = aStyle;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float uSeason;
+        varying vec4 vFacade;
+        flat varying vec4 vStyle;
+        float h2(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        float vnoise(vec2 p) {
+          vec2 i = floor(p), f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
+        }`)
+      .replace('void main() {', `void main() {
+        if (vStyle.x > 19.5 && vStyle.y > 1.5) {
+          float sp = vStyle.x - 20.0;
+          bool evergreen = !(sp < 4.5 || (sp > 6.5 && sp < 8.5));
+          if (uSeason > 2.5 && !evergreen) discard;
+          vec2 q = vFacade.xy;
+          float seed = vFacade.z * 37.0;
+          float d = length(q - 0.5) * 2.0;
+          float keep = (1.0 - d) * 1.4 + (vnoise(q * 4.0 + seed) - 0.5) * 0.9;
+          if (keep < 0.35) discard;
+          // (Dappled: some of the leaves let the light through.)
+          if (h2(floor(q * 11.0 + seed) + 1.3) > 0.72) discard;
+        }`);
+  };
+  return m;
+}
 
 export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
