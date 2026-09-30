@@ -190,6 +190,20 @@ const common = /* glsl */ `
     float b = mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), f.x), mix(h3(i + vec3(0, 1, 1)), h3(i + vec3(1, 1, 1)), f.x), f.y);
     return mix(a, b, f.z);
   }
+  // Cellular noise: the distances to the nearest two cell points and the nearest cell's id (its hash).
+  vec3 worley3(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    float d1 = 8.0, d2 = 8.0, id = 0.0;
+    for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++) {
+      vec3 g = vec3(float(x), float(y), float(z));
+      vec3 c = i + g;
+      vec3 r = g + vec3(h3(c), h3(c + 11.3), h3(c + 27.1)) - f;
+      float d = dot(r, r);
+      if (d < d1) { d2 = d1; d1 = d; id = h3(c + 5.7); }
+      else if (d < d2) d2 = d;
+    }
+    return vec3(sqrt(d1), sqrt(d2), id);
+  }
   float vnoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
@@ -406,9 +420,40 @@ const surface = /* glsl */ `
       float ao = mix(mix(0.42, 0.7, blossom), 1.0, smoothstep(-0.75, 0.55, Nw.y));
       float lightK = mix(mix(0.62, 0.82, blossom), mix(1.18, 1.08, blossom), clump) * ao * mix(1.0, mix(0.78, 1.14, smoothstep(0.3, 0.75, n4)), closeF);
       bool bare = uSeason > 2.5 && !(grp > 2.5 && grp < 3.5);
-      // A ragged edge, leaves against the sky (only up close, where a leaf is bigger than a pixel).
       float rim = 1.0 - abs(dot(Nw, Vw));
-      if (!bare && closeL > 0.3 && rim > 0.55 && mix(n2, n4, 0.55) < (rim - 0.55) * 2.4) discard;
+      // The variant (models/trees.ts FOLIAGE_VARIANTS): 0 clusters, 1 clumps, 2 painted, 3 leaves; and a leaves
+      // core (darker, behind the shell).
+      float fv = vStyle.z;
+      bool core = vStyle.y > 0.5;
+      float leafShade = 1.0;
+      float bumpK = 1.2;
+      vec3 tint = vec3(1.0);
+      if (fv < 0.5) {
+        // A ragged edge, leaves against the sky (only up close, where a leaf is bigger than a pixel).
+        if (!bare && closeL > 0.3 && rim > 0.55 && mix(n2, n4, 0.55) < (rim - 0.55) * 2.4) discard;
+      } else if (fv < 1.5) {
+        // Clumps: the round clumps carry the shape; broad soft light over them, a little texture up close.
+        lightK = mix(0.7, 1.1, smoothstep(0.2, 0.85, n1 * 0.7 + n3 * 0.3)) * ao * mix(1.0, mix(0.88, 1.08, n4), closeF);
+        bumpK = 0.45;
+      } else if (fv < 2.5) {
+        // Painted: soft bands of light (by the sun), cool in the shadow, warm in the light, a rim of sky.
+        float ndl = dot(Nw, uSunDir) + 0.25 * (n1 - 0.5);
+        float band = smoothstep(-0.05, 0.05, ndl) * 0.55 + smoothstep(0.45, 0.52, ndl) * 0.45;
+        lightK = mix(0.52, 1.1, band) * mix(0.85, 1.0, ao);
+        tint = mix(vec3(0.82, 0.9, 1.08), vec3(1.08, 1.04, 0.88), band);
+        bumpK = 0.0;
+        sEmit += pow(rim, 4.0) * uHorizon * 0.05 * band;
+      } else {
+        // Leaves: each cell a leaf of its own shade, gaps between them (up close) where the dark core shows.
+        // (Cells a little long and irregular, like leaves; brighter at their middles, so each reads as a curved leaf.)
+        vec3 w = worley3(lp * vec3(5.5, 8.0, 5.5) + n1 * 0.8);
+        float gap = w.y - w.x;
+        if (!core && !bare && closeL > 0.25 && gap < 0.03 && n1 > 0.58) discard;
+        leafShade = core ? 0.35 : mix(1.0, mix(0.74, 1.2, w.z) * (1.1 - 0.35 * w.x) * (0.93 + 0.07 * smoothstep(0.0, 0.08, gap)), closeL);
+        lightK = mix(0.66, 1.12, clump) * ao;
+        bumpK = 0.8;
+        if (!core && !bare && closeL > 0.3 && rim > 0.6 && w.z < (rim - 0.6) * 2.0) discard;
+      }
       vec3 c;
       if (uSeason < 0.5) {
         if (grp < 0.5) c = mix(vec3(0.46, 0.63, 0.28), vec3(0.64, 0.76, 0.3), n3);
@@ -433,18 +478,18 @@ const surface = /* glsl */ `
         // Evergreens keep their own greens (azaleas flower in spring); duller in winter.
         c = vColor.rgb * mix(0.85, 1.15, n3) * (uSeason > 2.5 ? 0.78 : 1.0);
         if (sp > 8.5 && sp < 9.5 && uSeason < 0.5) c = pow(mix(vec3(0.85, 0.35, 0.6), vec3(0.95, 0.55, 0.75), n2), vec3(2.2));
-        albedo = c * shade * lightK;
+        albedo = c * shade * lightK * leafShade * tint;
         leafy = 1.0;
       } else if (bare) {
         // Bare in winter: a sparse lace of twigs where the crown was.
         if (vnoise(vWPos.xz * 2.7 + vWPos.y * 1.9) < 0.72) discard;
         albedo = vec3(0.07, 0.055, 0.045);
       } else {
-        albedo = pow(c, vec3(2.2)) * shade * lightK;
+        albedo = pow(c, vec3(2.2)) * shade * lightK * leafShade * tint;
         leafy = 1.0;
       }
       if (leafy > 0.5) {
-        leafBump = vec3(n2 - 0.5, 0.35 * (n1 - 0.5), vnoise3(lp * 3.1 + 9.0) - 0.5) * 1.2 * closeL;
+        leafBump = vec3(n2 - 0.5, 0.35 * (n1 - 0.5), vnoise3(lp * 3.1 + 9.0) - 0.5) * bumpK * closeL;
         // The sun through the leaves: a glow looking toward it through a crown.
         sEmit += albedo * uSunCol * pow(max(dot(Vw, uSunDir), 0.0), 5.0) * 0.3 * (0.3 + 0.7 * clump);
       }

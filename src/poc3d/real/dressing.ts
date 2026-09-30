@@ -1,6 +1,7 @@
 import { hash, rng } from '../../core/hash';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
 import type { Prop } from './props';
+import { FOLIAGE_TAG, foliageVariant, shrubMass, TREE_SPECIES } from '../models/trees';
 
 /**
  * Geometry for greenery and the furniture of open ground (props.ts Prop kinds hedge to cones): kerb
@@ -33,23 +34,20 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
         mb.color = lin(0x8a867e);
         mb.frameBox(o, r, n, -half, half, 0.15, base, -0.35, 0.35);
       }
-      mb.color = lin(rnd.pick(SHRUB));
+      // Clipped foliage (the leaves' shading in real/city.ts: tagged as box, or azalea on half the kerb hedges,
+      // which flower in spring): a body a little inside the planter, rounded over by a run of soft clumps along
+      // its top so its edges aren't a box's.
+      const hex = rnd.pick(SHRUB);
+      const flowering = !park && rnd.chance(0.5);
+      const sp = flowering ? 'azalea' : 'box';
       const top = base + (park ? 0.8 : 0.45);
-      mb.frameBox(o, r, n, -half + 0.05, half - 0.05, base, top, -0.3, 0.3);
-      // Lumps along the top so it doesn't read as a green box.
-      for (let u = -half + 0.6; u < half - 0.4; u += 1.5 + rnd.float() * 0.6) {
-        const c = at(u, (rnd.float() - 0.5) * 0.2);
-        mb.color = lin(rnd.pick(SHRUB));
-        mb.lathe(c[0], c[2], [[top - 0.05, 0.32], [top + 0.18, 0.05]], 5);
-      }
-      if (!park && rnd.chance(0.5)) {
-        // Azaleas in flower: a few blossom-coloured lumps along the top.
-        const bloom = rnd.pick([0xd04a8a, 0xe06aa0, 0xe8e0e8]);
-        for (let u = -half + 1.1; u < half - 0.5; u += 1.8 + rnd.float()) {
-          const c = at(u, (rnd.float() - 0.5) * 0.3);
-          mb.color = lin(bloom);
-          mb.lathe(c[0], c[2], [[top - 0.02, 0.26], [top + 0.14, 0.04]], 5);
-        }
+      mb.color = lin(hex);
+      mb.style = [FOLIAGE_TAG + TREE_SPECIES.indexOf(sp), 0, foliageVariant(), 0];
+      mb.frameBox(o, r, n, -half + 0.1, half - 0.1, base, top - 0.12, -0.26, 0.26);
+      mb.style = [0, 0, 0, 0];
+      for (let u = -half + 0.3; u <= half - 0.3 + 1e-3; u += 0.62) {
+        const c = at(u, (rnd.float() - 0.5) * 0.06);
+        shrubMass(mb, c[0], top - 0.2, c[2], 0.4 + rnd.float() * 0.05, 0.24 + rnd.float() * 0.05, rnd.chance(0.3) ? rnd.pick(SHRUB) : hex, sp);
       }
       break;
     }
@@ -61,11 +59,10 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
         const ph = 0.2 + rnd.float() * 0.25 + (rnd.chance(0.2) ? 0.3 : 0);
         mb.color = lin(rnd.pick(POTS));
         mb.lathe(c[0], c[2], [[0, pr * 0.75], [ph, pr]], 5);
-        mb.color = lin(rnd.pick(SHRUB));
         const leaf = pr * (1.3 + rnd.float());
-        mb.lathe(c[0], c[2], rnd.chance(0.25)
-          ? [[ph, 0.03], [ph + 0.5, leaf], [ph + 1.25, 0.03]]
-          : [[ph - 0.02, pr * 0.8], [ph + leaf * 0.6, leaf], [ph + leaf * 1.3, 0.04]], 4);
+        // A tall plant (an upright clump) or a round bush spilling over the pot.
+        if (rnd.chance(0.25)) shrubMass(mb, c[0], ph + 0.62, c[2], leaf * 0.7, 0.62, rnd.pick(SHRUB), 'camphor', 5);
+        else shrubMass(mb, c[0], ph + leaf * 0.55, c[2], leaf, leaf * 0.65, rnd.pick(SHRUB), rnd.chance(0.3) ? 'azalea' : 'box', 5);
       }
       break;
     }
@@ -82,8 +79,7 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
         const sx = p.x + (rnd.float() - 0.5) * (s - 0.9);
         const sz = p.z + (rnd.float() - 0.5) * (s - 0.9);
         const rr = 0.35 + rnd.float() * 0.3;
-        mb.color = lin(rnd.pick(SHRUB));
-        mb.lathe(sx, sz, [[0.7, rr * 0.7], [0.7 + rr * 0.8, rr], [0.7 + rr * 1.7, 0.05]], 6);
+        shrubMass(mb, sx, 0.7 + rr * 0.8, sz, rr * 1.05, rr * 0.85, rnd.pick(SHRUB), i === 0 ? 'azalea' : 'box', 6);
       }
       break;
     }

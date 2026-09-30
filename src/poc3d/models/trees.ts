@@ -62,17 +62,75 @@ const GREENS: Record<string, readonly number[]> = {
 /** Flowering dogwood's bracts: three pinks (a tree is one of them; cream ones read as a pale ball under a lamp). */
 const DOGWOOD_BRACTS = [0xd98aa8, 0xe2a2ba, 0xcf7f9f] as const;
 
-/** A lumpy foliage mass: an ellipsoid-ish lathe, radius rx, half-height ry, centred at (x, y, z); 15 quads. */
+/**
+ * How foliage is built and shaded (under review in the showroom; each is kept in the vertices, style.z, so the
+ * variants can stand side by side):
+ * - 0 clusters: one smooth mass, leaf clusters in noise, a ragged leafy edge up close (the district's now).
+ * - 1 clumps: each mass a cluster of smaller round clumps (a lumpier silhouette), softly shaded.
+ * - 2 painted: one smooth mass, shaded in soft bands, cool in the shadows and warm in the light, like an anime
+ *   background.
+ * - 3 leaves: a shell of leaves (cells of their own shade, gaps between them) over a darker core.
+ */
+export const FOLIAGE_VARIANTS = ['clusters', 'clumps', 'painted', 'leaves'] as const;
+let VARIANT = 0;
+/** The variant for the foliage built from now on. */
+export function setFoliageVariant(v: number): void {
+  VARIANT = v;
+}
+export const foliageVariant = (): number => VARIANT;
+
+function blob(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: number, n: number, part = 0): void {
+  const style = mb.style;
+  mb.style = [FOLIAGE_TAG + SPECIES, part, VARIANT, 0];
+  // (Clumps are rounder: more sides and rings, as their silhouette is the look.)
+  const rings: [number, number][] = VARIANT === 1
+    ? [[y - ry, rx * 0.2], [y - ry * 0.7, rx * 0.72], [y - ry * 0.2, rx * 0.98], [y + ry * 0.35, rx * 0.9], [y + ry * 0.78, rx * 0.55], [y + ry, rx * 0.12]]
+    : [[y - ry, rx * 0.15], [y - ry * 0.4, rx * 0.95], [y + ry * 0.35, rx * 0.88], [y + ry, rx * 0.12]];
+  mb.latheSmooth(x, y, z, rx, ry, rings, VARIANT === 1 ? Math.max(n, 7) : n);
+  mb.style = style;
+}
+
+/**
+ * A lumpy foliage mass: radius rx, half-height ry, centred at (x, y, z), built by the variant. Crowns are tagged
+ * with their species (style.x = FOLIAGE_TAG + index), so the city shader colours them by the season (blossom,
+ * summer green, autumn colour, bare in winter) without rebuilding anything; style.y marks a core (1), style.z the
+ * variant.
+ */
 function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: number, hex: number, n = 5): void {
   mb.color = lin(hex);
   y += LIFT;
-  // Crowns are tagged with their species (style.x = FOLIAGE_TAG + index), so the city shader can colour them by
-  // the season (blossom, summer green, autumn colour, bare in winter) without rebuilding anything.
-  const style = mb.style;
-  mb.style = [FOLIAGE_TAG + SPECIES, 0, 0, 0];
-  // (Smooth normals: the shader's leaf clusters, bump and ragged edge do the rest: real/city.ts.)
-  mb.latheSmooth(x, y, z, rx, ry, [[y - ry, rx * 0.15], [y - ry * 0.4, rx * 0.95], [y + ry * 0.35, rx * 0.88], [y + ry, rx * 0.12]], n);
-  mb.style = style;
+  if (VARIANT === 1) {
+    // Clumps: one in the middle and three round it, a little lower, each turned by the mass's place.
+    blob(mb, x, y + ry * 0.2, z, rx * 0.66, ry * 0.72, n);
+    const a0 = (x * 1.7 + z * 2.3) % (Math.PI * 2);
+    for (let i = 0; i < 3; i++) {
+      const a = a0 + (i / 3) * Math.PI * 2;
+      blob(mb, x + Math.cos(a) * rx * 0.46, y - ry * 0.18, z + Math.sin(a) * rx * 0.46, rx * 0.56, ry * 0.62, 5);
+    }
+    return;
+  }
+  if (VARIANT === 3) {
+    // Leaves over a core: the shell has gaps between its leaves; the core behind them is dark.
+    blob(mb, x, y, z, rx * 0.8, ry * 0.8, n, 1);
+  }
+  blob(mb, x, y, z, rx, ry, n);
+}
+
+/**
+ * Foliage for shrubs and hedges (real/dressing.ts), the same as a tree's: a mass of the species' tag (box for
+ * clipped evergreens, azalea for flowering shrubs, camphor for the rest).
+ */
+export function shrubMass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: number, hex: number, species: TreeSpecies, n = 5): void {
+  const was = SPECIES;
+  SPECIES = TREE_SPECIES.indexOf(species);
+  const lift = LIFT;
+  LIFT = 0;
+  const kind = mb.kind;
+  mb.kind = KIND.plain;
+  mass(mb, x, y, z, rx, ry, hex, n);
+  mb.kind = kind;
+  LIFT = lift;
+  SPECIES = was;
 }
 
 /** A crown's style tag: FOLIAGE_TAG plus its species' index in TREE_SPECIES (real/city.ts reads it). */

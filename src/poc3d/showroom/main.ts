@@ -16,7 +16,7 @@ import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { buildMegaSign } from '../real/megaSign';
 import { trainModel } from '../real/rail';
 import { addProps, type Prop } from '../real/props';
-import { addTree, type TreeSpecies } from '../models/trees';
+import { addTree, FOLIAGE_VARIANTS, setFoliageVariant, type TreeSpecies } from '../models/trees';
 import { TAXI_ADS } from '../models/ads';
 import { SignAtlas, SignBuilder, signBox, signMaterial } from '../real/signs';
 import { BILLBOARDS, DISTRICT_BLANK, districtAdUv, POSTERS } from '../real/districtAds';
@@ -335,6 +335,42 @@ const GARDEN_X = -8;
   furnMesh.castShadow = furnMesh.receiveShadow = true;
   genRoot.new.add(furnMesh);
 }
+// Foliage variants (models/trees.ts FOLIAGE_VARIANTS), side by side for review: each row the same trees, shrubs and
+// hedges built and shaded one way. The season buttons (the panel's Foliage) turn them all.
+const VARIANT_Z = 150;
+const VARIANT_ROW: [TreeSpecies, number][] = [['zelkova', 0], ['ginkgo', 11], ['sakura', 21], ['camphor', 33], ['pine', 45], ['dogwood', 54]];
+{
+  const pad = new MeshBuilder();
+  const mb = new MeshBuilder(1 << 17);
+  FOLIAGE_VARIANTS.forEach((name, v) => {
+    const z = VARIANT_Z + v * 34;
+    pad.kind = KIND.grass;
+    pad.color = lin(0x3e5a30);
+    pad.box(GARDEN_X + 42, z + 4, -0.2, 0.1, 110, 26, KIND.grass);
+    pad.kind = KIND.plain;
+    pad.color = lin(0x8a867e);
+    pad.box(GARDEN_X + 78, z + 4, -0.2, 0.15, 30, 26, KIND.sidewalk);
+    setFoliageVariant(v);
+    for (const [sp, dx] of VARIANT_ROW) addTree(mb, { x: GARDEN_X + dx, z, species: sp, seed: dx + 1 });
+    const P = (kind: Prop['kind'], x: number, dz: number, extra: Partial<Prop> = {}): Prop => ({ kind, x, z: z + dz, nx: 0, nz: 1, radius: 0.3, variant: 0, ...extra });
+    addTree(mb, { x: GARDEN_X + 62, z: z + 2, species: 'azalea', seed: 3 });
+    addTree(mb, { x: GARDEN_X + 65, z: z + 2, species: 'azalea', seed: 4 });
+    addTree(mb, { x: GARDEN_X + 68, z: z + 2, species: 'box', seed: 5 });
+    addProps(mb, {
+      props: [P('hedge', GARDEN_X + 76, 2, { half: 3 }), P('hedge', GARDEN_X + 76, 7, { half: 3, variant: 1 }), P('pots', GARDEN_X + 83, 2, { half: 1.3, variant: 7 }), P('planter', GARDEN_X + 88, 3, { size: 2.4, variant: 2 })],
+      wires: [], lights: [], open: [], solids: [],
+    });
+    label('new', `${v + 1} · ${name}`, GARDEN_X - 8, 3, z);
+    genItems.new.push({ name: `${v + 1} ${name}: trees`, group: 'Foliage', at: new THREE.Vector3(GARDEN_X + 26, 4, z), size: 30, view: new THREE.Vector3(0.1, 0.25, 1).normalize() });
+    genItems.new.push({ name: `${v + 1} ${name}: close`, group: 'Foliage', at: new THREE.Vector3(GARDEN_X + 22, 5, z), size: 7, view: new THREE.Vector3(0.3, 0.15, 1).normalize() });
+    genItems.new.push({ name: `${v + 1} ${name}: shrubs`, group: 'Foliage', at: new THREE.Vector3(GARDEN_X + 76, 0.8, z + 3), size: 9, view: new THREE.Vector3(0.2, 0.4, 1).normalize() });
+  });
+  setFoliageVariant(0);
+  genRoot.new.add(new THREE.Mesh(pad.build()!, city));
+  const m = new THREE.Mesh(mb.build()!, city);
+  m.castShadow = m.receiveShadow = true;
+  genRoot.new.add(m);
+}
 const tCars = performance.now() - t0;
 
 const ghostCache = new Map<number, ReturnType<typeof ghostMaterials2>>();
@@ -507,6 +543,8 @@ const applyMode = (m: Mode): void => {
   cityU.uLamps.value = L.lamps;
   cityU.uLightGain.value = 1.4 * L.lamps;
   cityU.uNeon.value = m === 'day' ? 0 : 1;
+  cityU.uSunDir.value.copy(key.position).normalize();
+  cityU.uSunCol.value.copy(key.color).multiplyScalar(key.intensity);
   renderPanel();
 };
 
@@ -544,6 +582,10 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   const at = person ? m.position.clone().add(new THREE.Vector3(0, 0.95, 0)) : hit.point.clone().setY(0.8);
   focus({ name: '', group: '', at, size: person ? 2.2 : 4.2 });
 });
+(window as unknown as { __season: (i: number) => void }).__season = (i) => {
+  cityU.uSeason.value = i;
+  renderPanel();
+};
 (window as unknown as { __focusAt: (x: number, y: number, z: number, size: number, vx: number, vy: number, vz: number) => void }).__focusAt = (x, y, z, size, vx, vy, vz) =>
   focus({ name: '', group: '', at: new THREE.Vector3(x, y, z), size, view: new THREE.Vector3(vx, vy, vz).normalize() });
 
@@ -567,7 +609,12 @@ function renderPanel(): void {
   button('previous (in the district)', gen === 'previous', () => applyGen('previous'));
   section('Lighting');
   for (const m of ['studio', 'night', 'day'] as const) button(m, mode === m, () => applyMode(m));
-  for (const g of ['Transit', 'Mega-sign', 'Cars', 'Billboards', 'Posters', 'People']) {
+  section('Foliage season');
+  (['spring', 'summer', 'autumn', 'winter'] as const).forEach((sn, i) => button(sn, cityU.uSeason.value === i, () => {
+    cityU.uSeason.value = i;
+    renderPanel();
+  }));
+  for (const g of ['Foliage', 'Transit', 'Mega-sign', 'Cars', 'Billboards', 'Posters', 'People']) {
     section(g);
     for (const it of genItems[gen].filter((i) => i.group === g)) button(it.name, false, () => focus(it));
   }
