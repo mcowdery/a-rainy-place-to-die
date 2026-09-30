@@ -63,15 +63,16 @@ const GREENS: Record<string, readonly number[]> = {
 const DOGWOOD_BRACTS = [0xd98aa8, 0xe2a2ba, 0xcf7f9f] as const;
 
 /**
- * How foliage is built and shaded (under review in the showroom; each is kept in the vertices, style.z, so the
- * variants can stand side by side):
- * - 0 clusters: one smooth mass, leaf clusters in noise, a ragged leafy edge up close (the district's now).
- * - 1 clumps: each mass a cluster of smaller round clumps (a lumpier silhouette), softly shaded.
- * - 2 painted: one smooth mass, shaded in soft bands, cool in the shadows and warm in the light, like an anime
- *   background.
- * - 3 leaves: a shell of leaves (cells of their own shade, gaps between them) over a darker core.
+ * How a crown's foliage is built (under review in the showroom; each is kept in the vertices, style.z, so the
+ * variants stand side by side). Every species lays its crown out as a few masses (its vase, cone, flat top...);
+ * the variant fills each mass:
+ * - 0 puffs: one smooth round mass (the district's now).
+ * - 1 tufts: many small irregular tufts on twigs, so the outline breaks up and the sky shows between them.
+ * - 2 cards: leaf cards (clusters of leaves cut out of two-sided cards by the shader) round a dark core.
+ * - 3 airy: leaf cards only, fewer, on twigs you can see through them.
+ * The shading (leaf clusters, the season's colours) is the same for all (real/city.ts).
  */
-export const FOLIAGE_VARIANTS = ['clusters', 'clumps', 'painted', 'leaves'] as const;
+export const FOLIAGE_VARIANTS = ['puffs', 'tufts', 'cards', 'airy'] as const;
 let VARIANT = 0;
 /** The variant for the foliage built from now on. */
 export function setFoliageVariant(v: number): void {
@@ -79,41 +80,102 @@ export function setFoliageVariant(v: number): void {
 }
 export const foliageVariant = (): number => VARIANT;
 
+/** A smooth mass; part 1 is a leaf-card crown's dark core. */
 function blob(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: number, n: number, part = 0): void {
   const style = mb.style;
   mb.style = [FOLIAGE_TAG + SPECIES, part, VARIANT, 0];
-  // (Clumps are rounder: more sides and rings, as their silhouette is the look.)
-  const rings: [number, number][] = VARIANT === 1
-    ? [[y - ry, rx * 0.2], [y - ry * 0.7, rx * 0.72], [y - ry * 0.2, rx * 0.98], [y + ry * 0.35, rx * 0.9], [y + ry * 0.78, rx * 0.55], [y + ry, rx * 0.12]]
-    : [[y - ry, rx * 0.15], [y - ry * 0.4, rx * 0.95], [y + ry * 0.35, rx * 0.88], [y + ry, rx * 0.12]];
-  mb.latheSmooth(x, y, z, rx, ry, rings, VARIANT === 1 ? Math.max(n, 7) : n);
+  mb.latheSmooth(x, y, z, rx, ry, [[y - ry, rx * 0.15], [y - ry * 0.4, rx * 0.95], [y + ry * 0.35, rx * 0.88], [y + ry, rx * 0.12]], n);
   mb.style = style;
 }
 
+/** A random point in an ellipsoid's outer shell (from `inner` of the way out), a little more on top. */
+function shellPoint(r: Rng, inner: number): [number, number, number] {
+  const u = r.float() * 2 - 1;
+  const a = r.float() * Math.PI * 2;
+  const up = Math.min(1, u + 0.25);
+  const s = Math.sqrt(Math.max(0, 1 - up * up));
+  const k = inner + (1 - inner) * Math.sqrt(r.float());
+  return [Math.cos(a) * s * k, up * k, Math.sin(a) * s * k];
+}
+
 /**
- * A lumpy foliage mass: radius rx, half-height ry, centred at (x, y, z), built by the variant. Crowns are tagged
- * with their species (style.x = FOLIAGE_TAG + index), so the city shader colours them by the season (blossom,
- * summer green, autumn colour, bare in winter) without rebuilding anything; style.y marks a core (1), style.z the
- * variant.
+ * A foliage mass: radius rx, half-height ry, centred at (x, y, z), built by the variant. Crowns are tagged with
+ * their species (style.x = FOLIAGE_TAG + index), so the city shader colours them by the season (blossom, summer
+ * green, autumn colour, bare in winter) without rebuilding anything; style.y marks the part (0 foliage, 1 a card
+ * crown's core, 2 a leaf card), style.z the variant.
  */
 function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: number, hex: number, n = 5): void {
   mb.color = lin(hex);
   y += LIFT;
+  if (VARIANT === 0) return blob(mb, x, y, z, rx, ry, n);
+  const r = rng(hash(Math.round(x * 16), Math.round(y * 16), Math.round(z * 16), 0x7f1a));
+  const twig = (px: number, py: number, pz: number, t: number): void => {
+    const style = mb.style;
+    const col = mb.color;
+    mb.style = [0, 0, 0, 0];
+    mb.color = lin(0x4a3a2c);
+    mb.beam([x, y - ry * 0.55, z], [px, py, pz], t);
+    mb.color = col;
+    mb.style = style;
+  };
   if (VARIANT === 1) {
-    // Clumps: one in the middle and three round it, a little lower, each turned by the mass's place.
-    blob(mb, x, y + ry * 0.2, z, rx * 0.66, ry * 0.72, n);
-    const a0 = (x * 1.7 + z * 2.3) % (Math.PI * 2);
-    for (let i = 0; i < 3; i++) {
-      const a = a0 + (i / 3) * Math.PI * 2;
-      blob(mb, x + Math.cos(a) * rx * 0.46, y - ry * 0.18, z + Math.sin(a) * rx * 0.46, rx * 0.56, ry * 0.62, 5);
+    // Tufts: small uneven lumps in the mass's shell, each on its twig.
+    const count = Math.max(5, Math.min(22, Math.round(5 + 5 * rx * ry)));
+    for (let i = 0; i < count; i++) {
+      const [px, py, pz] = shellPoint(r, 0.45);
+      const tx = x + px * rx * 0.8;
+      const ty = y + py * ry * 0.8;
+      const tz = z + pz * rx * 0.8;
+      const tr = Math.max(0.22, rx * (0.26 + 0.16 * r.float()));
+      if (i % 2 === 0) twig(tx, ty, tz, Math.max(0.03, rx * 0.025));
+      const style = mb.style;
+      mb.style = [FOLIAGE_TAG + SPECIES, 0, VARIANT, 0];
+      const j = (): number => 0.75 + 0.5 * r.float();
+      mb.latheSmooth(tx, ty, tz, tr, tr * 0.8, [[ty - tr * 0.8, tr * 0.2 * j()], [ty - tr * 0.3, tr * 0.95 * j()], [ty + tr * 0.35, tr * 0.8 * j()], [ty + tr * 0.8, tr * 0.12]], 5);
+      mb.style = style;
     }
     return;
   }
-  if (VARIANT === 3) {
-    // Leaves over a core: the shell has gaps between its leaves; the core behind them is dark.
-    blob(mb, x, y, z, rx * 0.8, ry * 0.8, n, 1);
+  // Leaf cards: clusters of leaves on cards facing out of the mass (lit as the mass's round surface), over a dark
+  // core (cards) or on twigs alone (airy).
+  const airy = VARIANT === 3;
+  if (!airy) blob(mb, x, y, z, rx * 0.72, ry * 0.72, n, 1);
+  const count = Math.max(8, Math.min(56, Math.round((airy ? 8 : 9) + (airy ? 11 : 12) * rx * ry)));
+  const style = mb.style;
+  for (let i = 0; i < count; i++) {
+    const [px, py, pz] = shellPoint(r, airy ? 0.3 : 0.6);
+    const c: [number, number, number] = [x + px * rx, y + py * ry, z + pz * rx];
+    if (airy && i % 3 === 0) twig(c[0], c[1], c[2], Math.max(0.025, rx * 0.02));
+    // Outward, tipped at random; the card's plane across it, turned at random in its plane.
+    const l = Math.hypot(px, py, pz) || 1;
+    let nx = px / l + (r.float() - 0.5) * 0.9;
+    let ny = py / l + (r.float() - 0.5) * 0.9 + 0.2;
+    let nz = pz / l + (r.float() - 0.5) * 0.9;
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    nx /= nl;
+    ny /= nl;
+    nz /= nl;
+    const ref: [number, number, number] = Math.abs(ny) > 0.9 ? [1, 0, 0] : [0, 1, 0];
+    let ax = ref[1] * nz - ref[2] * ny;
+    let ay = ref[2] * nx - ref[0] * nz;
+    let az = ref[0] * ny - ref[1] * nx;
+    const al = Math.hypot(ax, ay, az) || 1;
+    ax /= al;
+    ay /= al;
+    az /= al;
+    const bx = ny * az - nz * ay;
+    const by = nz * ax - nx * az;
+    const bz = nx * ay - ny * ax;
+    const t = r.float() * Math.PI;
+    const ct = Math.cos(t);
+    const st = Math.sin(t);
+    const size = Math.max(0.5, Math.min(rx, ry * 1.4) * (0.42 + 0.22 * r.float()));
+    const R: [number, number, number] = [(ax * ct + bx * st) * size, (ay * ct + by * st) * size, (az * ct + bz * st) * size];
+    const U: [number, number, number] = [(bx * ct - ax * st) * size, (by * ct - ay * st) * size, (bz * ct - az * st) * size];
+    mb.style = [FOLIAGE_TAG + SPECIES, 2, VARIANT, 0];
+    mb.card(c, R, U, [px / l, py / l, pz / l], 1 + r.float());
   }
-  blob(mb, x, y, z, rx, ry, n);
+  mb.style = style;
 }
 
 /**

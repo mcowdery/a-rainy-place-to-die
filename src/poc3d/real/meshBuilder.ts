@@ -327,6 +327,30 @@ export class MeshBuilder {
   }
 
   /**
+   * A two-sided card (a leaf card): centre c, half-extents r and u (in its plane), lit as if it faced n (a crown's
+   * outward normal, so its cards shade as one round mass). The facade attribute carries the card's own (u, v) in
+   * 0-1 and a seed in its third slot (the shader cuts the leaves out of it: real/city.ts).
+   */
+  card(c: V3, r: V3, u: V3, n: V3, seed: number): void {
+    const k = this.kind;
+    this.grow(8, 12);
+    const s = this.nv;
+    const P = (a: number, b: number): [number, number, number] => [c[0] + r[0] * a + u[0] * b, c[1] + r[1] * a + u[1] * b, c[2] + r[2] * a + u[2] * b];
+    for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const q = P(a, b);
+      this.vert(q[0], q[1], q[2], n, (a + 1) / 2, (b + 1) / 2, seed, k);
+    }
+    for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const q = P(a, b);
+      this.vert(q[0], q[1], q[2], n, (a + 1) / 2, (b + 1) / 2, seed, k);
+    }
+    const I = this.idx;
+    const i = this.ni;
+    I.set([s, s + 1, s + 2, s, s + 2, s + 3, s + 4, s + 6, s + 5, s + 4, s + 7, s + 6], i);
+    this.ni += 12;
+  }
+
+  /**
    * A lathe (as `lathe`) with smooth normals: each vertex takes the normal of the ellipsoid about (cx, cy, cz) with
    * radii (rx, ry), so a low-poly mass (a tree's crown) shades round rather than faceted. Same triangles.
    */

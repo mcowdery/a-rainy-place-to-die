@@ -190,20 +190,6 @@ const common = /* glsl */ `
     float b = mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), f.x), mix(h3(i + vec3(0, 1, 1)), h3(i + vec3(1, 1, 1)), f.x), f.y);
     return mix(a, b, f.z);
   }
-  // Cellular noise: the distances to the nearest two cell points and the nearest cell's id (its hash).
-  vec3 worley3(vec3 p) {
-    vec3 i = floor(p), f = fract(p);
-    float d1 = 8.0, d2 = 8.0, id = 0.0;
-    for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++) {
-      vec3 g = vec3(float(x), float(y), float(z));
-      vec3 c = i + g;
-      vec3 r = g + vec3(h3(c), h3(c + 11.3), h3(c + 27.1)) - f;
-      float d = dot(r, r);
-      if (d < d1) { d2 = d1; d1 = d; id = h3(c + 5.7); }
-      else if (d < d2) d2 = d;
-    }
-    return vec3(sqrt(d1), sqrt(d2), id);
-  }
   float vnoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
@@ -380,6 +366,8 @@ const surface = /* glsl */ `
   // Derivatives first, in uniform control flow.
   vec2 fwUV = max(fwidth(vFacade.xy), vec2(1e-4));
   vec2 fwW = max(fwidth(vWPos.xz), vec2(1e-4));
+  // The surface's true facing (leaf cards are lit as their crown's round surface, but fade when seen edge-on).
+  vec3 geoN = normalize(cross(dFdx(vWPos), dFdy(vWPos)));
   float kindF = mod(floor(vFacade.w + 0.5), 16.0);
   bool isFront = vFacade.w > 15.5;
   vec3 albedo = vColor.rgb;
@@ -421,38 +409,35 @@ const surface = /* glsl */ `
       float lightK = mix(mix(0.62, 0.82, blossom), mix(1.18, 1.08, blossom), clump) * ao * mix(1.0, mix(0.78, 1.14, smoothstep(0.3, 0.75, n4)), closeF);
       bool bare = uSeason > 2.5 && !(grp > 2.5 && grp < 3.5);
       float rim = 1.0 - abs(dot(Nw, Vw));
-      // The variant (models/trees.ts FOLIAGE_VARIANTS): 0 clusters, 1 clumps, 2 painted, 3 leaves; and a leaves
-      // core (darker, behind the shell).
-      float fv = vStyle.z;
-      bool core = vStyle.y > 0.5;
+      // The part (models/trees.ts): 0 foliage, 1 a card crown's dark core, 2 a leaf card, whose leaves are cut out
+      // of it here: a ragged cluster of leaves, thinning toward its edges, each leaf a shade of its own.
+      float part = vStyle.y;
       float leafShade = 1.0;
       float bumpK = 1.2;
       vec3 tint = vec3(1.0);
-      if (fv < 0.5) {
+      if (part > 1.5) {
+        vec2 q = vFacade.xy;
+        float seed = vFacade.z * 37.0;
+        float d = length(q - 0.5) * 2.0;
+        vec2 lq = q * 11.0 + seed;
+        vec2 cell = floor(lq);
+        // A leaf per cell: a pointed ellipse, turned at random, in the cell's middle.
+        vec2 f = fract(lq) - 0.5 - (vec2(h2(cell), h2(cell + 3.7)) - 0.5) * 0.35;
+        float ang = h2(cell + 9.1) * 6.2832;
+        vec2 rq = vec2(cos(ang) * f.x + sin(ang) * f.y, -sin(ang) * f.x + cos(ang) * f.y);
+        float leaf = 1.0 - smoothstep(0.85, 1.0, length(rq / vec2(0.46, 0.24)));
+        float edgeOn = abs(dot(geoN, Vw));
+        float keep = (1.0 - d) * 1.4 + (vnoise(q * 4.0 + seed) - 0.5) * 0.9 - (1.0 - smoothstep(0.12, 0.45, edgeOn)) * 0.9;
+        if (bare || keep < 0.25 || (closeL > 0.2 && leaf < 0.5 && h2(cell + 1.3) > 0.25)) discard;
+        leafShade = mix(0.72, 1.18, h2(cell + 5.3)) * mix(0.8, 1.0, 1.0 - d * 0.5);
+        bumpK = 0.6;
+      } else if (part > 0.5) {
+        // The core behind the cards: dark, in their shade.
+        leafShade = mix(0.38, 0.7, blossom);
+        bumpK = 0.4;
+      } else if (!bare && closeL > 0.3 && rim > 0.55 && mix(n2, n4, 0.55) < (rim - 0.55) * 2.4) {
         // A ragged edge, leaves against the sky (only up close, where a leaf is bigger than a pixel).
-        if (!bare && closeL > 0.3 && rim > 0.55 && mix(n2, n4, 0.55) < (rim - 0.55) * 2.4) discard;
-      } else if (fv < 1.5) {
-        // Clumps: the round clumps carry the shape; broad soft light over them, a little texture up close.
-        lightK = mix(0.7, 1.1, smoothstep(0.2, 0.85, n1 * 0.7 + n3 * 0.3)) * ao * mix(1.0, mix(0.88, 1.08, n4), closeF);
-        bumpK = 0.45;
-      } else if (fv < 2.5) {
-        // Painted: soft bands of light (by the sun), cool in the shadow, warm in the light, a rim of sky.
-        float ndl = dot(Nw, uSunDir) + 0.25 * (n1 - 0.5);
-        float band = smoothstep(-0.05, 0.05, ndl) * 0.55 + smoothstep(0.45, 0.52, ndl) * 0.45;
-        lightK = mix(0.52, 1.1, band) * mix(0.85, 1.0, ao);
-        tint = mix(vec3(0.82, 0.9, 1.08), vec3(1.08, 1.04, 0.88), band);
-        bumpK = 0.0;
-        sEmit += pow(rim, 4.0) * uHorizon * 0.05 * band;
-      } else {
-        // Leaves: each cell a leaf of its own shade, gaps between them (up close) where the dark core shows.
-        // (Cells a little long and irregular, like leaves; brighter at their middles, so each reads as a curved leaf.)
-        vec3 w = worley3(lp * vec3(5.5, 8.0, 5.5) + n1 * 0.8);
-        float gap = w.y - w.x;
-        if (!core && !bare && closeL > 0.25 && gap < 0.03 && n1 > 0.58) discard;
-        leafShade = core ? 0.35 : mix(1.0, mix(0.74, 1.2, w.z) * (1.1 - 0.35 * w.x) * (0.93 + 0.07 * smoothstep(0.0, 0.08, gap)), closeL);
-        lightK = mix(0.66, 1.12, clump) * ao;
-        bumpK = 0.8;
-        if (!core && !bare && closeL > 0.3 && rim > 0.6 && w.z < (rim - 0.6) * 2.0) discard;
+        discard;
       }
       vec3 c;
       if (uSeason < 0.5) {
