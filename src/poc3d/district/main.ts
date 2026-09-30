@@ -506,8 +506,28 @@ async function run(): Promise<void> {
   } });
   // Review hook for screenshot scripts: point the view (yaw, pitch in degrees).
   (window as unknown as { __look: (y: number, p: number) => void }).__look = (y, p) => controls.setView(y, p);
+  // ?spawn= takes any node: a spawn puts you there; a door, hotspot, npc or station stands you just in front of it,
+  // facing it (stepping back less where something's in the way).
+  const standBy = (n: Node3): void => {
+    for (const step of [1.4, 1.0, 0.6, 0]) {
+      const x = n.x + n.nx * step;
+      const z = n.z + n.nz * step;
+      const floor = n.floor + groundAt(x, z);
+      camera.position.set(x, floor + 1.7, z);
+      updateInteriors();
+      const level = district.floorAt(x, z, floor);
+      if (step > 0 && district.blocked(x, z, 0.3, level)) continue;
+      camera.position.y = level + 1.7;
+      controls.setLevel(level);
+      controls.setView(step > 0 ? (Math.atan2(n.nx, n.nz) * 180) / Math.PI : YAW[n.facing ?? 'north'], -8);
+      return;
+    }
+  };
   const spawnParam = params.get('spawn');
-  teleport(spawnParam && nodeById.get(spawnParam)?.kind === 'spawn' ? spawnParam : START_SPAWN);
+  const spawnNode = spawnParam ? nodeById.get(spawnParam) : undefined;
+  if (spawnParam && !spawnNode) toast(`?spawn=${spawnParam}: no such node`);
+  if (spawnNode && spawnNode.kind !== 'spawn') standBy(spawnNode);
+  else teleport(spawnNode ? spawnNode.id : START_SPAWN);
   const cam = params.get('cam')?.split(',').map(Number);
   if (cam && cam.length === 5 && cam.every(Number.isFinite)) {
     camera.position.set(cam[0], cam[1], cam[2]);
