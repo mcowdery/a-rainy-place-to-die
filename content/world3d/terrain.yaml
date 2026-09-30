@@ -3,6 +3,10 @@
 # terraces are flat plateaus and the cells round them hillsides whose streets climb (the whole-city plan:
 # docs/city-plan.md). Keep them clear of the rail viaducts, subway stations and the expressway, which stand on level
 # ground.
+# The hills round the city: the land outside it rises this much a cell (128 m) further out, to max, and on past the
+# map's edge for pad cells (the river and the sea stay at sea level, their banks with them). Real/edges.ts covers
+# them in forest, a fringe of houses along their foot.
+hills: { rise: 11, max: 62, pad: 14 }
 terraces:
   # 学園坂: the university's upper campus; the slope (the "zaka") runs down the next row to Kita-ōdōri.
   - { name: Gakuenzaka, cells: [22, 3, 30, 5], level: 12 }

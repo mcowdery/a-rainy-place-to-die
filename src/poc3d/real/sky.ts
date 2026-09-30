@@ -3,7 +3,10 @@ import * as THREE from 'three';
 /**
  * Sky dome: zenith-to-horizon gradient (the horizon carries the city's light-pollution glow at night), a
  * sun or moon disc with a halo, stars on clear nights, and a drifting cloud layer: lit by the sun by day and
- * from below by the city's glow at night, thin and broken when clear, a low overcast in rain.
+ * from below by the city's glow at night, thin and broken when clear, a low overcast in rain. With uMountains, the
+ * mountains round the city on the horizon (north and west, the bay open to the south): a near range and a paler
+ * one behind, and to the west-south-west a lone snow-capped cone (a Fuji); hazy at their feet, dark against the
+ * city's glow at night, in front of the setting sun.
  * Follows the camera; drawn first, no depth.
  */
 export class Sky {
@@ -23,6 +26,8 @@ export class Sky {
     uFlashDir: { value: new THREE.Vector3(1, 0.3, 0).normalize() },
     uCloudLit: { value: new THREE.Color() },
     uCloudDark: { value: new THREE.Color() },
+    /** The mountains on the horizon (the city's page; 0 elsewhere). */
+    uMountains: { value: 0 },
   };
 
   constructor() {
@@ -52,6 +57,7 @@ export class Sky {
         uniform vec3 uFlashDir;
         uniform vec3 uCloudLit;
         uniform vec3 uCloudDark;
+        uniform float uMountains;
         varying vec3 vDir;
         float h3(vec3 p3) { p3 = fract(p3 * 0.1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y) * p3.z); }
         float h2(vec2 p) { return h3(vec3(p, 1.7)); }
@@ -88,6 +94,34 @@ export class Sky {
             cloud += vec3(0.8, 0.84, 1.0) * uFlash * (0.25 + 3.5 * pow(max(dot(d, uFlashDir), 0.0), 5.0)) * (0.3 + 0.7 * under);
             float fade = smoothstep(0.0, 0.18, d.y);
             col = mix(col, cloud, dens * fade * 0.92);
+          }
+          // The mountains: ridges by azimuth (0 north, east +), the height of each in radians above the horizon.
+          if (uMountains > 0.5 && d.y < 0.12) {
+            float az = atan(d.x, -d.z);
+            float e = asin(clamp(d.y, -1.0, 1.0));
+            float sector = smoothstep(-2.6, -2.25, az) * (1.0 - smoothstep(0.85, 1.25, az));
+            // (Above the wooded hills round the city, which stand about a degree up from the streets.)
+            float near = sector * (0.022 + 0.026 * fbm(vec2(az * 7.0, 3.1)) + 0.006 * vn(vec2(az * 40.0, 7.7)));
+            float far = sector * (0.034 + 0.034 * fbm(vec2(az * 3.3 + 11.0, 1.3)));
+            float df = abs(az + 1.95) / 0.3;
+            float cone = 0.092 * pow(max(0.0, 1.0 - df), 1.7);
+            cone = min(cone, 0.083);
+            float skyLum = dot(uZenith, vec3(0.3, 0.55, 0.15));
+            vec3 hazeCol = mix(uHorizon, uZenith, 0.5) * 0.82;
+            vec3 nearCol = mix(uHorizon, uZenith, 0.72) * 0.6;
+            float feet = smoothstep(-0.03, 0.012, e);
+            if (e < max(far, cone)) {
+              vec3 m = mix(uHorizon, hazeCol, 0.8 * feet);
+              if (cone > far && e < cone) {
+                m = mix(uHorizon, mix(hazeCol, nearCol, 0.35), feet);
+                // The snow cap, catching the sky's light.
+                float snow = smoothstep(0.052, 0.06, e) * smoothstep(0.0, 0.02, cone);
+                vec3 snowCol = uHorizon * 1.25 + vec3(0.05) + vec3(0.35) * clamp(skyLum * 3.0, 0.0, 1.0);
+                m = mix(m, snowCol, snow * 0.75);
+              }
+              col = m;
+            }
+            if (e < near) col = mix(uHorizon, nearCol, 0.25 + 0.75 * feet);
           }
           // And the sky itself glows toward the strike.
           col += vec3(0.55, 0.6, 0.85) * uFlash * (0.04 + 0.6 * pow(max(dot(d, uFlashDir), 0.0), 8.0)) * smoothstep(-0.05, 0.1, d.y);

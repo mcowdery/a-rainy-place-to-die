@@ -1,3 +1,4 @@
+import { buildEdges } from '../real/edges';
 import { railReserved } from './rail';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -759,6 +760,12 @@ async function run(): Promise<void> {
   const airport = buildAirport();
   scene.add(airport.group);
   scene.add(sea.group);
+  // The city's edges (real/edges.ts): forest over the hills, a fringe of houses at their foot; the mountains beyond
+  // are in the sky.
+  const edges = buildEdges(content.macro, CELL, content.terrain, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my));
+  scene.add(edges.group);
+  surface.push(edges.group);
+  sky.uniforms.uMountains.value = 1;
   if (debug) (window as unknown as { __sea: unknown }).__sea = { sea, renderer, horizon: cityU.uHorizon };
   const exView = buildExpressway(expressway, city);
   const exTraffic = new ExpresswayTraffic(expressway, city);
@@ -1416,6 +1423,7 @@ async function run(): Promise<void> {
     airport.update(inVn ? 0 : dt, time() === 'night' || time() === 'dusk');
     (sodium.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
     sodium.visible = cityU.uLamps.value > 0.05;
+    edges.update(camera.position, cityU.uLamps.value);
     const tunnel = driving.own ? expressway.portal(ownCar.sim.x, ownCar.sim.z, ownCar.sim.y) : null;
     if (tunnel && !leavingFor) {
       leavingFor = tunnel.venue!;

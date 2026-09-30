@@ -76,6 +76,10 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
   const W = macro.cols * cell;
   const H = macro.rows * cell;
   if (Array.from({ length: macro.cols }, (_, mx) => water(mx, macro.rows - 1)).some(Boolean)) quad(-BEYOND, H, W + BEYOND, H + BEYOND);
+  // With hills round the city, the river runs on north past the map between them.
+  const hills = terrain?.hills;
+  const kindOut = (mx: number, my: number) => macro.kindAt(Math.max(0, Math.min(macro.cols - 1, mx)), Math.max(0, Math.min(macro.rows - 1, my)));
+  if (hills) for (let my = -hills.pad; my < 0; my++) for (let mx = 0; mx < macro.cols; mx++) if (kindOut(mx, my) === 'water') quad(mx * cell, my * cell, (mx + 1) * cell, (my + 1) * cell);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.computeVertexNormals();
@@ -128,7 +132,30 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
     land.push(x0, -0.03, z0, x0, -0.03, z1, x1, -0.03, z1, x0, -0.03, z0, x1, -0.03, z1, x1, -0.03, z0);
   };
   const unbuilt = (mx: number, my: number): boolean => !water(mx, my) && !built(mx, my);
-  for (let my = 0; my < macro.rows; my++) {
+  const onTerrain = (mx: number, my: number): void => {
+    const [x0, z0, x1, z1] = [mx * cell, my * cell, (mx + 1) * cell, (my + 1) * cell];
+    const h = (gx: number, gy: number): number => terrain!.junction(gx, gy) - 0.03;
+    land.push(x0, h(mx, my), z0, x0, h(mx, my + 1), z1, x1, h(mx + 1, my + 1), z1, x0, h(mx, my), z0, x1, h(mx + 1, my + 1), z1, x1, h(mx + 1, my), z0);
+  };
+  if (hills) {
+    // The hills: every unbuilt cell on the terrain, in the map and on past it, then level ground at the hills' top
+    // out to the horizon (the mountains beyond are in the sky, real/sky.ts).
+    const pad = hills.pad;
+    for (let my = -pad; my < macro.rows + pad; my++) {
+      for (let mx = -pad; mx < macro.cols + pad; mx++) {
+        const inMap = mx >= 0 && my >= 0 && mx < macro.cols && my < macro.rows;
+        if (inMap ? !unbuilt(mx, my) : kindOut(mx, my) === 'water' || my >= macro.rows) continue;
+        onTerrain(mx, my);
+      }
+    }
+    const top = hills.max - 0.03;
+    const at = (x0: number, z0: number, x1: number, z1: number): void => void land.push(x0, top, z0, x0, top, z1, x1, top, z1, x0, top, z0, x1, top, z1, x1, top, z0);
+    at(-BEYOND, -BEYOND, W + BEYOND, -pad * cell);
+    for (let my = -pad; my < macro.rows; my++) {
+      if (kindOut(-1, my) !== 'water') at(-BEYOND, my * cell, -pad * cell, (my + 1) * cell);
+      if (kindOut(macro.cols, my) !== 'water') at(W + pad * cell, my * cell, W + BEYOND, (my + 1) * cell);
+    }
+  } else for (let my = 0; my < macro.rows; my++) {
     for (let mx = 0; mx < macro.cols; ) {
       if (!unbuilt(mx, my)) {
         mx++;
@@ -147,7 +174,7 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
       flat(start === 0 ? -BEYOND : start * cell, my * cell, mx === macro.cols ? W + BEYOND : mx * cell, (my + 1) * cell);
     }
   }
-  flat(-BEYOND, -BEYOND, W + BEYOND, 0);
+  if (!hills) flat(-BEYOND, -BEYOND, W + BEYOND, 0);
   const landGeo = new THREE.BufferGeometry();
   landGeo.setAttribute('position', new THREE.Float32BufferAttribute(land, 3));
   landGeo.computeVertexNormals();

@@ -51,9 +51,9 @@ describe('the terraces', () => {
     expect(at('takanodai_villa')).toBeCloseTo(22, 5);
     expect(at('takanoyu')).toBeCloseTo(10, 5);
     expect(at('flood_shaft')).toBeCloseTo(10, 5);
-    // Nishihara, below, is flat.
+    // Nishihara, below, is flat (Dreamland, at the city's edge, a little up the first of the hills).
     expect(at('nishihara_danchi')).toBe(0);
-    expect(at('dreamland')).toBe(0);
+    expect(at('dreamland')).toBeLessThan(1);
   });
 
   it('walks up the hill: the floor follows the ground, and street level on the plateau is still street level', () => {
