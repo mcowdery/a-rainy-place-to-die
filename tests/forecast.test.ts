@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BLOCK, forecastAt, ODDS, outlookAt, TSUYU_DAYS } from '../src/poc3d/district/forecast';
+import { BLOCK, forecastAt, ODDS, outlookAt, TSUYU_DAYS, TYPHOON_HOURS } from '../src/poc3d/district/forecast';
 import { SEASONS } from '../src/poc3d/district/seasons';
 
 const DAY = 24 * 60;
@@ -93,5 +93,42 @@ describe('forecast', () => {
     }
     expect(fog).toBeGreaterThan(20);
     expect(outlookAt(12345, 'spring')).toEqual(outlookAt(12345, 'spring'));
+  });
+
+  it('brings typhoons in late summer and early autumn: they build, blow and pass, then clear', () => {
+    const count = (season: (typeof SEASONS)[number], start: number): number => {
+      let n = 0;
+      let was = false;
+      for (let t = 0; t < 400 * DAY; t += 60) {
+        const on = outlookAt(t, season, start).typhoon > 0;
+        if (on && !was) n++;
+        was = on;
+      }
+      return n;
+    };
+    expect(count('summer', LATE)).toBeGreaterThan(5);
+    expect(count('spring', LATE)).toBe(0);
+    expect(count('winter', LATE)).toBe(0);
+    // Past its first weeks, autumn has none.
+    expect(count('autumn', LATE)).toBe(0);
+    // One forced at a minute: the wind rises to a storm with a downpour, turns, and after it the sky clears.
+    const at = 1000 * DAY;
+    const o = (h: number) => outlookAt(at + h * 60, 'spring', 0, { typhoonAt: at });
+    expect(o(1).wind).toBeLessThan(0.4);
+    const peak = o(TYPHOON_HOURS * 0.55);
+    expect(peak.typhoon).toBeGreaterThan(0.9);
+    expect(peak.wind).toBeGreaterThan(1);
+    expect(peak.weather).toBe('rain');
+    expect(peak.amount).toBeGreaterThan(0.9);
+    expect(o(2).turn).toBeLessThan(o(TYPHOON_HOURS - 2).turn);
+    const after = o(TYPHOON_HOURS + 3);
+    expect(after.after).toBe(true);
+    expect(after.weather).toBe('clear');
+    expect(o(TYPHOON_HOURS * 2).typhoon).toBe(0);
+  });
+
+  it('keeps a heat wave going when told to', () => {
+    const t = 5000 * DAY + 14 * 60;
+    expect(outlookAt(t, 'summer', LATE, { heatUntil: t + DAY }).heat).toBe(true);
   });
 });

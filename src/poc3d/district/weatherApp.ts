@@ -31,16 +31,20 @@ const LABEL: Record<string, [string, string]> = {
   snow: ['雪', 'Snow'],
   fog: ['霧', 'Fog'],
   hot: ['猛暑', 'Hot'],
+  typhoon: ['台風', 'Typhoon'],
+  after: ['台風一過', 'Clear after the typhoon'],
 };
-const ICON: Record<string, string> = { clear: '☀️', night: '🌙', cloudy: '☁️', shower: '🌦️', drizzle: '🌧️', rain: '🌧️', heavy: '⛈️', snow: '❄️', fog: '☁️', hot: '🥵' };
+const ICON: Record<string, string> = { clear: '☀️', night: '🌙', cloudy: '☁️', shower: '🌦️', drizzle: '🌧️', rain: '🌧️', heavy: '⛈️', snow: '❄️', fog: '☁️', hot: '🥵', typhoon: '🌀', after: '☀️' };
 
 /** What to call a forecast minute. */
 function kind(o: Outlook, minute: number, weather: Weather = o.weather, amount = o.amount): string {
   const night = minute < 5 * 60 || minute >= 18 * 60 + 30;
+  if (o.typhoon > 0.3) return 'typhoon';
   if (weather === 'snow') return 'snow';
   if (weather === 'fog') return 'fog';
   if (weather === 'rain') return o.shower ? 'shower' : amount < 0.3 ? 'drizzle' : amount > 0.7 ? 'heavy' : 'rain';
   if (o.tsuyu) return 'cloudy';
+  if (o.after && !night) return 'after';
   if (o.heat && !night && o.temp >= 33) return 'hot';
   return night ? 'night' : 'clear';
 }
@@ -86,6 +90,10 @@ export class WeatherApp implements PhoneApp {
     if (o.tsuyu) tags.push('<span class="wx-tag wx-tsuyu">梅雨 rainy season</span>');
     if (o.heat) tags.push('<span class="wx-tag wx-heat">猛暑 heat wave</span>');
     if (o.heat && o.temp >= 31) tags.push('<span class="wx-tag wx-warn">熱中症警戒 heatstroke alert</span>');
+    if (o.typhoon > 0) tags.push('<span class="wx-tag">台風 typhoon</span>');
+    if (o.typhoon > 0.45) tags.push('<span class="wx-tag wx-warn">暴風警報 storm warning</span>');
+    // A typhoon on its way in the next day.
+    if (o.typhoon === 0 && [...Array(24).keys()].some((h) => this.src.at(now + h * 60).typhoon > 0.3)) tags.push('<span class="wx-tag wx-warn">台風接近 typhoon approaching</span>');
     // The next 24 hours.
     const hours: string[] = [];
     for (let h = 1; h <= 24; h++) {
@@ -109,11 +117,13 @@ export class WeatherApp implements PhoneApp {
       let fogs = 0;
       let hot = false;
       let tsuyu = false;
+      let storm = false;
       for (let h = 0; h < 24; h++) {
         const q = this.src.at(base + h * 60 + 30);
         hi = Math.max(hi, q.temp);
         lo = Math.min(lo, q.temp);
         tsuyu ||= q.tsuyu;
+        storm ||= q.typhoon > 0.3;
         hot ||= q.heat && q.temp >= 33;
         if (h >= 6 && h < 21) {
           if (q.weather === 'rain') wet++;
@@ -122,7 +132,7 @@ export class WeatherApp implements PhoneApp {
         }
       }
       const chance = Math.min(100, Math.round(((wet + snow) / 15) * 100 / 10) * 10 + (wet + snow > 0 ? 10 : 0));
-      const dk = snow > 2 ? 'snow' : wet > 6 ? 'rain' : wet > 0 ? 'shower' : fogs > 2 ? 'fog' : tsuyu ? 'cloudy' : hot ? 'hot' : 'clear';
+      const dk = storm ? 'typhoon' : snow > 2 ? 'snow' : wet > 6 ? 'rain' : wet > 0 ? 'shower' : fogs > 2 ? 'fog' : tsuyu ? 'cloudy' : hot ? 'hot' : 'clear';
       const wd = weekdayOf(today + d + 1);
       const name = d === 0 ? '今日 Today' : d === 1 ? '明日 Tomorrow' : `${WEEKDAYS[wd]} ${WEEKDAYS_EN[wd]}`;
       days.push(`<div class="wx-day"><div class="wx-dn">${name}</div><div class="wx-di">${ICON[dk]}</div><div class="wx-dl">${LABEL[dk][0]}</div><div class="wx-dt"><b>${Math.round(hi)}°</b> ${Math.round(lo)}°</div><div class="wx-dc">☂ ${chance}%</div></div>`);
@@ -154,6 +164,7 @@ function injectStyle(): void {
   .wx-now.wx-rain, .wx-now.wx-drizzle, .wx-now.wx-shower, .wx-now.wx-heavy { background: linear-gradient(180deg, #45566e, #26303e); }
   .wx-now.wx-snow { background: linear-gradient(180deg, #8aa0bc, #52627a); }
   .wx-now.wx-hot { background: linear-gradient(180deg, #e0782a, #a8401e); }
+  .wx-now.wx-typhoon { background: linear-gradient(180deg, #3a4458, #151a26); }
   .wx-place { font-size: 11.5px; opacity: 0.85; letter-spacing: 0.5px; }
   .wx-big { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
   .wx-icon { font-size: 44px; }

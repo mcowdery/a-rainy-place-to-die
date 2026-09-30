@@ -1092,3 +1092,113 @@ export class Drift {
     u.uGround.value = ground;
   }
 }
+
+/**
+ * Water thrown up by tyres through puddles (main.ts emits it for your car and the traffic near you): drops flung out
+ * to the side and up from the wheel, carried a little with the car, falling back to the road, lit by the street
+ * light (the lightmap) and the sky. A small pool of points simulated here.
+ */
+export class Splashes {
+  readonly points: THREE.Points;
+  private static readonly N = 2400;
+  private readonly pos = new Float32Array(Splashes.N * 3);
+  private readonly vel = new Float32Array(Splashes.N * 3);
+  private readonly life = new Float32Array(Splashes.N);
+  private readonly max = new Float32Array(Splashes.N);
+  private readonly floor = new Float32Array(Splashes.N);
+  private next = 0;
+  private live = 0;
+  private readonly u = { uAmbient: { value: 0.3 } };
+
+  constructor(city: CityUniforms) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('aLife', new THREE.BufferAttribute(new Float32Array(Splashes.N), 1).setUsage(THREE.DynamicDrawUsage));
+    this.points = new THREE.Points(g, new THREE.ShaderMaterial({
+      uniforms: { ...this.u, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain },
+      transparent: true,
+      depthWrite: false,
+      vertexShader: /* glsl */ `
+        attribute float aLife;
+        uniform float uAmbient;
+        ${lightmapGlsl}
+        varying vec3 vCol;
+        varying float vA;
+        void main() {
+          vec4 mv = viewMatrix * vec4(position, 1.0);
+          float d = -mv.z;
+          vA = aLife * smoothstep(0.3, 1.2, d) * (1.0 - smoothstep(45.0, 60.0, d));
+          vCol = vec3(0.72, 0.78, 0.84) * (uAmbient + lightAt(position.xz) * 0.9);
+          gl_Position = projectionMatrix * mv;
+          gl_PointSize = min(0.07 * 900.0 / max(d, 0.3), 12.0) * step(0.01, vA);
+        }`,
+      fragmentShader: /* glsl */ `
+        varying vec3 vCol;
+        varying float vA;
+        void main() {
+          vec2 q = gl_PointCoord - 0.5;
+          float r = dot(q, q);
+          if (r > 0.25 || vA < 0.01) discard;
+          gl_FragColor = vec4(vCol, vA * 0.85 * (1.0 - r * 3.0));
+        }`,
+    }));
+    this.points.frustumCulled = false;
+    this.points.renderOrder = 5;
+  }
+
+  /**
+   * Water from a wheel at (x, y, z) through a puddle: the car's heading (fx, fz), the side of the car it's on (+1
+   * left, -1 right), its speed (m/s), how deep the water (0-1) and the time step (s).
+   */
+  emit(x: number, y: number, z: number, fx: number, fz: number, side: number, speed: number, depth: number, dt: number): void {
+    const s = Math.min(Math.abs(speed), 30);
+    let n = depth * s * 55 * dt;
+    // (A fraction left over: sometimes one more.)
+    n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0);
+    const lx = fz * side;
+    const lz = -fx * side;
+    for (let k = 0; k < n; k++) {
+      const i = this.next;
+      this.next = (this.next + 1) % Splashes.N;
+      const out = (1.2 + s * 0.13) * (0.4 + Math.random());
+      const up = (0.8 + s * 0.12) * (0.3 + Math.random());
+      const carry = Math.sign(speed) * s * (0.25 + 0.5 * Math.random());
+      this.pos[i * 3] = x + lx * 0.1 + (Math.random() - 0.5) * 0.3;
+      this.pos[i * 3 + 1] = y + 0.05;
+      this.pos[i * 3 + 2] = z + lz * 0.1 + (Math.random() - 0.5) * 0.3;
+      this.vel[i * 3] = lx * out + fx * carry;
+      this.vel[i * 3 + 1] = up;
+      this.vel[i * 3 + 2] = lz * out + fz * carry;
+      this.max[i] = this.life[i] = 0.45 + 0.5 * Math.random();
+      this.floor[i] = y;
+    }
+    this.live = Math.max(this.live, 1);
+  }
+
+  update(dt: number, ambient: number): void {
+    this.u.uAmbient.value = ambient;
+    if (!this.live) return;
+    const life = (this.points.geometry.getAttribute('aLife') as THREE.BufferAttribute).array as Float32Array;
+    let any = 0;
+    const drag = Math.exp(-1.8 * dt);
+    for (let i = 0; i < Splashes.N; i++) {
+      if (this.life[i] <= 0) {
+        life[i] = 0;
+        continue;
+      }
+      any++;
+      this.life[i] -= dt;
+      this.vel[i * 3] *= drag;
+      this.vel[i * 3 + 2] *= drag;
+      this.vel[i * 3 + 1] -= 9.8 * dt;
+      this.pos[i * 3] += this.vel[i * 3] * dt;
+      this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
+      this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
+      if (this.pos[i * 3 + 1] < this.floor[i]) this.life[i] = 0;
+      life[i] = Math.max(0, this.life[i] / this.max[i]);
+    }
+    this.live = any;
+    this.points.geometry.getAttribute('position').needsUpdate = true;
+    this.points.geometry.getAttribute('aLife').needsUpdate = true;
+  }
+}

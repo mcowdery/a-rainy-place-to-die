@@ -38,7 +38,11 @@ export type GradeName = keyof typeof GRADES;
 export const GRADE_NAMES = Object.keys(GRADES) as GradeName[];
 
 const fragment = /* glsl */ `
+  #include <packing>
   uniform sampler2D tDiffuse;
+  uniform sampler2D tDepth;
+  uniform float uNear;
+  uniform float uFar;
   uniform vec2 uRes;
   uniform float uTime;
   uniform float uSat;
@@ -56,6 +60,8 @@ const fragment = /* glsl */ `
   uniform float uRain;
   uniform float uHeat;
   uniform float uHorizonY;
+  uniform float uGlare;
+  uniform vec2 uSunPos;
   varying vec2 vUv;
 
   float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -97,7 +103,10 @@ const fragment = /* glsl */ `
     // Heat shimmer (a heat wave by day): the air over the hot ground wavers, strongest in a band along the horizon
     // (the distant road and what stands on it), rising, in patches.
     if (uHeat > 0.0) {
-      float band = exp(-pow((uv.y - uHorizonY + 0.03) / 0.09, 2.0));
+      // Only what's far off (the scene's depth): the near buildings stay still.
+      float dz = texture2D(tDepth, uv).x;
+      float far = dz >= 0.999999 ? 1.0 : smoothstep(80.0, 220.0, -perspectiveDepthToViewZ(dz, uNear, uFar));
+      float band = exp(-pow((uv.y - uHorizonY + 0.03) / 0.09, 2.0)) * far;
       float patch_ = 0.5 + 0.5 * sin(uv.x * 7.0 + uTime * 0.7) * sin(uv.x * 13.0 - uTime * 0.4 + 1.3);
       float px = uHeat * band * (0.4 + 0.6 * patch_) * 1.8;
       float ph = uv.y * uRes.y * 0.23 - uTime * 7.0 + sin(uv.x * uRes.x * 0.04 + uTime * 1.7) * 1.5;
@@ -106,6 +115,33 @@ const fragment = /* glsl */ `
     // Lens fringing grows toward the edges.
     vec2 off = (uv - 0.5) * uFringe * length(uv - 0.5) * 2.0;
     vec3 c = vec3(texture2D(tDiffuse, uv + off).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - off).b);
+    // A heat wave: a touch warmer.
+    if (uHeat > 0.0) c = mix(c, c * vec3(1.05, 1.0, 0.9), uHeat * 0.6);
+    // The sun's glare: a halo and a horizontal streak round it and a few faint ghosts across the lens, as much as
+    // the sun itself shows (its disc's brightness in the image, so buildings in front put it out).
+    if (uGlare > 0.0) {
+      float lum = 0.0;
+      for (int i = 0; i < 5; i++) {
+        vec2 o = vec2(float(i - 2) * 0.004, float((i * 3) % 5 - 2) * 0.004);
+        lum += dot(texture2D(tDiffuse, clamp(uSunPos + o, 0.001, 0.999)).rgb, vec3(0.3, 0.55, 0.15));
+      }
+      float vis = smoothstep(0.82, 0.97, lum / 5.0) * uGlare * step(-0.2, uSunPos.x) * step(uSunPos.x, 1.2) * step(-0.2, uSunPos.y) * step(uSunPos.y, 1.2);
+      if (vis > 0.0) {
+        vec2 asp = vec2(uRes.x / uRes.y, 1.0);
+        vec2 dv = (uv - uSunPos) * asp;
+        float r = length(dv);
+        float glow = exp(-r * 7.0) * 0.45 + exp(-r * 2.2) * 0.14;
+        float streak = exp(-abs(dv.y) * 70.0) * exp(-abs(dv.x) * 2.2) * 0.3;
+        vec3 g = vec3(1.0, 0.93, 0.8) * (glow + streak);
+        for (int k = 1; k <= 3; k++) {
+          vec2 gp = uSunPos + (vec2(0.5) - uSunPos) * (0.55 + 0.45 * float(k));
+          float gr = length((uv - gp) * asp);
+          float size = 0.025 + 0.02 * float(k);
+          g += vec3(0.5 + 0.2 * float(k), 0.8, 1.0 - 0.15 * float(k)) * smoothstep(size, size * 0.6, gr) * 0.035;
+        }
+        c += g * vis;
+      }
+    }
     // A drop is a little blurred and brighter at its rim.
     if (lens.z > 0.0) {
       vec3 b = vec3(0.0);
@@ -175,6 +211,11 @@ export class GradePass extends Pass {
         uRain: { value: 0 },
         uHeat: { value: 0 },
         uHorizonY: { value: 0.5 },
+        uGlare: { value: 0 },
+        tDepth: { value: null },
+        uNear: { value: 0.1 },
+        uFar: { value: 1000 },
+        uSunPos: { value: new THREE.Vector2(0.5, 0.5) },
       },
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: fragment,
@@ -207,10 +248,21 @@ export class GradePass extends Pass {
     (u.uHalColor.value as THREE.Vector3).set(...p.halColor);
   }
 
-  /** A heat wave's shimmer (0-1), and where the horizon is on the screen (0 bottom, 1 top). */
-  heat(amount: number, horizonY: number): void {
+  /** A heat wave's shimmer (0-1), and where the horizon is on the screen (0 bottom, 1 top); the scene's depth (and
+   * the camera's range) so it bends only what's far off. */
+  heat(amount: number, horizonY: number, depth?: THREE.Texture | null, near = 0.1, far = 1000): void {
+    this.material.uniforms.tDepth.value = depth ?? null;
+    this.material.uniforms.uNear.value = near;
+    this.material.uniforms.uFar.value = far;
+    if (!depth) amount = 0;
     this.material.uniforms.uHeat.value = amount;
     this.material.uniforms.uHorizonY.value = horizonY;
+  }
+
+  /** The sun's glare (0-1) and where the sun is on the screen (0-1 both ways; off screen is fine). */
+  glare(amount: number, x: number, y: number): void {
+    this.material.uniforms.uGlare.value = amount;
+    (this.material.uniforms.uSunPos.value as THREE.Vector2).set(x, y);
   }
 
   /** time: seconds (grain and drops move); rain: 0-1, drops on the lens. */

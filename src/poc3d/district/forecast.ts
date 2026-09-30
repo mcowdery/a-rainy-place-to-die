@@ -14,11 +14,20 @@ import { seasonIndex, type Season } from './seasons';
  * - Summer opens with the rainy season (梅雨 tsuyu: its first TSUYU_DAYS days, grey, steady light rain), then
  *   turns hot: heat waves (猛暑) come in runs of days, clear and baking, with an evening downpour now and then
  *   (夕立 yūdachi).
+ * - Typhoons (台風) in late summer and early autumn (its first TYPHOON_AUTUMN_DAYS days): now and then one passes
+ *   over, about TYPHOON_HOURS long: outer rain bands and a rising wind as it comes, a downpour and a storm-force
+ *   wind at its height (lightning with it), the wind swinging round as it goes, then the clear blue sky after it
+ *   (台風一過) with a breeze.
  * - Autumn has its rain and its morning fogs; winter snows sometimes.
  * main.ts follows it unless the weather is held (world.weather_hold: ?weather=, R, the debug menu's picks, the story).
  */
 export const BLOCK = 3 * 60;
 export const TSUYU_DAYS = 6;
+export const TYPHOON_HOURS = 30;
+export const TYPHOON_AUTUMN_DAYS = 14;
+/** One typhoon window every this many days; the chance one comes in it. */
+const TYPHOON_WINDOW = 6;
+const TYPHOON_CHANCE = 0.35;
 
 interface Odds {
   /** Chance of a spell of rain, of snow, of a shower in a dry spell; how hard the rain is (lightest, heaviest). */
@@ -53,28 +62,76 @@ export interface Outlook {
   readonly heat: boolean;
   /** The air temperature (°C). */
   readonly temp: number;
+  /** A typhoon passing: how strong it is here now (0-1), the wind it brings (0-1+, added to the setting's) and how
+   * far it has turned the wind (degrees); after (台風一過). */
+  readonly typhoon: number;
+  readonly wind: number;
+  readonly turn: number;
+  readonly after: boolean;
+}
+
+/** The story's (or the debug menu's) say: a typhoon that began at this minute, a heat wave until this minute. */
+export interface ForecastForce {
+  readonly typhoonAt?: number | null;
+  readonly heatUntil?: number | null;
+}
+
+/** When the typhoon over this minute began, if one is (or just was) passing: its start minute. */
+function typhoonStart(total: number, season: Season, seasonStart: number, force: ForecastForce): number | null {
+  const len = TYPHOON_HOURS * 60 * 1.5;
+  if (force.typhoonAt != null && total >= force.typhoonAt && total < force.typhoonAt + len) return force.typhoonAt;
+  const seasonDay = Math.floor((total - seasonStart) / DAY);
+  const inSeason = (season === 'summer' && seasonDay >= TSUYU_DAYS) || (season === 'autumn' && seasonDay < TYPHOON_AUTUMN_DAYS);
+  if (!inSeason) return null;
+  // This window's and the one before (a typhoon can run on across the line).
+  const w0 = Math.floor(total / (TYPHOON_WINDOW * DAY));
+  for (const w of [w0, w0 - 1]) {
+    if (rnd(w, 0, 0x7f00) >= TYPHOON_CHANCE) continue;
+    const start = w * TYPHOON_WINDOW * DAY + Math.floor(rnd(w, 1, 0x7f00) * 3 * DAY);
+    if (total >= start && total < start + len) return start;
+  }
+  return null;
 }
 
 const rnd = (a: number, b: number, c: number): number => hash(a, b, c, 0x3ea7) / 4294967296;
 
-export function outlookAt(total: number, season: Season, seasonStart = 0): Outlook {
+export function outlookAt(total: number, season: Season, seasonStart = 0, force: ForecastForce = {}): Outlook {
   const block = Math.floor(total / BLOCK);
   const s = seasonIndex(season);
   const day = Math.floor(total / DAY);
   const seasonDay = Math.floor((total - seasonStart) / DAY);
   const tsuyu = season === 'summer' && seasonDay >= 0 && seasonDay < TSUYU_DAYS;
   // Heat waves in runs of three days, about half of high summer.
-  const heat = season === 'summer' && !tsuyu && rnd(Math.floor(day / 3), s, 0x4ea7) < 0.5;
+  const heat = (season === 'summer' && !tsuyu && rnd(Math.floor(day / 3), s, 0x4ea7) < 0.5) || (force.heatUntil != null && total < force.heatUntil);
   const o = ODDS[tsuyu ? 'tsuyu' : heat ? 'heat' : season];
   const m = (((total % DAY) + DAY) % DAY);
   // The temperature: the day's low before dawn, its high at two in the afternoon, a little different each day.
   const swing = (rnd(day, s, 0x7e3) - 0.5) * 4;
   const mid = (o.temp[0] + o.temp[1]) / 2 + swing;
   const air = mid + ((o.temp[1] - o.temp[0]) / 2) * Math.cos((2 * Math.PI * (m / 60 - 14)) / 24);
+  const calm = { typhoon: 0, wind: 0, turn: 0, after: false };
+  // A typhoon passing takes over the weather.
+  const ty = typhoonStart(total, season, seasonStart, force);
+  if (ty !== null) {
+    const p = (total - ty) / (TYPHOON_HOURS * 60);
+    const smooth = (a: number, b: number, v: number): number => {
+      const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    };
+    if (p < 1) {
+      const k = smooth(0, 0.45, p) * (1 - smooth(0.7, 1, p));
+      // Out in its bands: rain on and off; near its heart, a downpour.
+      const band = Math.sin(p * 55 + rnd(ty, 2, 0x7f00) * 6) > 0.1 - k;
+      const raining = k > 0.55 || (k > 0.12 && band);
+      return { weather: raining ? 'rain' : 'clear', amount: raining ? Math.min(1, 0.35 + 0.7 * k) : 0, shower: false, tsuyu: false, heat: false, temp: air - 2 * k, typhoon: k, wind: 0.12 + 1.0 * k, turn: (p - 0.5) * 140, after: false };
+    }
+    // After it (台風一過): clear and fresh, the wind dropping.
+    return { weather: 'clear', amount: 0, shower: false, tsuyu: false, heat: false, temp: air + 1.5, typhoon: 0, wind: 0.35 * (1.5 - p) * 2, turn: 70, after: true };
+  }
   const u = rnd(block, s, 1);
   const hard = o.light + (o.heavy - o.light) * rnd(block, s, 2);
-  if (u < o.snow) return { weather: 'snow', amount: 0.3 + 0.6 * rnd(block, s, 2), shower: false, tsuyu, heat, temp: Math.min(air, 0.5) };
-  if (u < o.snow + o.rain) return { weather: 'rain', amount: hard, shower: false, tsuyu, heat, temp: air - 3 };
+  if (u < o.snow) return { weather: 'snow', amount: 0.3 + 0.6 * rnd(block, s, 2), shower: false, tsuyu, heat, temp: Math.min(air, 0.5), ...calm };
+  if (u < o.snow + o.rain) return { weather: 'rain', amount: hard, shower: false, tsuyu, heat, temp: air - 3, ...calm };
   if (u < o.snow + o.rain + o.shower) {
     // A shower: 20-60 minutes somewhere in the spell.
     const len = 20 + 40 * rnd(block, s, 3);
@@ -82,14 +139,14 @@ export function outlookAt(total: number, season: Season, seasonStart = 0): Outlo
     const at = total - block * BLOCK;
     if (at >= start && at < start + len) {
       const cold = season === 'winter' && rnd(block, s, 5) < 0.5;
-      return { weather: cold ? 'snow' : 'rain', amount: Math.min(1, hard + 0.15), shower: true, tsuyu, heat, temp: cold ? Math.min(air, 0.5) : air - 1.5 };
+      return { weather: cold ? 'snow' : 'rain', amount: Math.min(1, hard + 0.15), shower: true, tsuyu, heat, temp: cold ? Math.min(air, 0.5) : air - 1.5, ...calm };
     }
   }
   // Morning fog (04:00 to 09:00), on some mornings.
-  if (m >= 4 * 60 && m < 9 * 60 && hash(day, s, 0xf06) / 4294967296 < o.fog * 3) return { weather: 'fog', amount: 0, shower: false, tsuyu, heat, temp: air };
-  return { weather: 'clear', amount: 0, shower: false, tsuyu, heat, temp: air };
+  if (m >= 4 * 60 && m < 9 * 60 && hash(day, s, 0xf06) / 4294967296 < o.fog * 3) return { weather: 'fog', amount: 0, shower: false, tsuyu, heat, temp: air, ...calm };
+  return { weather: 'clear', amount: 0, shower: false, tsuyu, heat, temp: air, ...calm };
 }
 
-export function forecastAt(total: number, season: Season, seasonStart = 0): Weather {
-  return outlookAt(total, season, seasonStart).weather;
+export function forecastAt(total: number, season: Season, seasonStart = 0, force: ForecastForce = {}): Weather {
+  return outlookAt(total, season, seasonStart, force).weather;
 }

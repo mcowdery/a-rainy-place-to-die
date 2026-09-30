@@ -41,6 +41,9 @@ export interface AudioFrame {
   /** Nearest vehicles (position, velocity, speed, acceleration, bus), nearest first; how wet the road is 0-1. */
   readonly cars: readonly { readonly x: number; readonly z: number; readonly vx: number; readonly vz: number; readonly speed: number; readonly acc: number; readonly bus: boolean }[];
   readonly wet: number;
+  /** Summer: the cicadas' daytime chorus (0-1, louder in a heat wave and among trees), and the higurashi at dusk. */
+  readonly cicadas?: number;
+  readonly higurashi?: number;
 }
 
 const TYRE_VOICES = 3;
@@ -70,6 +73,9 @@ export class CityAudio {
   // Train rumble.
   private trainGain!: GainNode;
   // Tyres.
+  // Cicadas: the aburazemi's sizzle, and the higurashi's calls at dusk.
+  private cicadaGain!: GainNode;
+  private higurashiDebt = 0;
   private tyres: { gain: GainNode; pan: StereoPannerNode; band: BiquadFilterNode; engine: GainNode; osc: OscillatorNode[]; lp: BiquadFilterNode }[] = [];
   private patterDebt = 0;
   private roofDebt = 0;
@@ -153,6 +159,27 @@ export class CityAudio {
     this.howlBand.Q.value = 9;
     this.loop(this.noise, 3.3).connect(this.howlBand).connect(this.howlGain).connect(this.master);
     // Train: a low rumble with the rail joints' rhythm.
+    // Cicadas. The aburazemi: a bright sizzle, noise through a narrow band near 4.5 kHz, buzzed at ~50 Hz.
+    this.cicadaGain = ctx.createGain();
+    this.cicadaGain.gain.value = 0;
+    this.cicadaGain.connect(this.master);
+    const sizzleBand = ctx.createBiquadFilter();
+    sizzleBand.type = 'bandpass';
+    sizzleBand.frequency.value = 4000;
+    sizzleBand.Q.value = 1.2;
+    // (Softened: the top taken off, so it sits back in the distance rather than in your ear.)
+    const soften = ctx.createBiquadFilter();
+    soften.type = 'lowpass';
+    soften.frequency.value = 5200;
+    const buzz = ctx.createGain();
+    buzz.gain.value = 0.8;
+    const buzzLfo = ctx.createOscillator();
+    buzzLfo.frequency.value = 52;
+    const buzzDepth = ctx.createGain();
+    buzzDepth.gain.value = 0.2;
+    buzzLfo.connect(buzzDepth).connect(buzz.gain);
+    buzzLfo.start();
+    this.loop(this.noise, 2.1).connect(sizzleBand).connect(soften).connect(buzz).connect(this.cicadaGain);
     this.trainGain = ctx.createGain();
     this.trainGain.gain.value = 0;
     const trainLp = ctx.createBiquadFilter();
@@ -459,6 +486,61 @@ export class CityAudio {
     n.start(t);
   }
 
+  /**
+   * Water thrown up by a tyre through a puddle: a whoosh and a slap. strength 0-1 (speed and depth); pan -1..1;
+   * how near (1 close, 0 far).
+   */
+  splash(strength: number, pan = 0, near = 1): void {
+    if (!this.ctx || strength <= 0.02 || near <= 0.02) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.005;
+    const k = Math.min(1, strength) * near;
+    const dur = 0.25 + 0.35 * Math.min(1, strength);
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(2600, t);
+    bp.frequency.exponentialRampToValueAtTime(700, t + dur);
+    bp.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.45 * k, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const pn = ctx.createStereoPanner();
+    pn.pan.value = Math.max(-0.9, Math.min(0.9, pan));
+    n.connect(bp).connect(g).connect(pn).connect(this.cover);
+    n.start(t, Math.random() * 3, dur + 0.05);
+  }
+
+  /** A higurashi's call: a clear, high, falling "kana-kana-kana", fading, somewhere off in the trees. */
+  private higurashiCall(level: number): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + 0.02;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    const f0 = 4300 + Math.random() * 500;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.linearRampToValueAtTime(f0 * 0.82, t + 3.2);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    const pulses = 18 + Math.floor(Math.random() * 10);
+    const rate = 6.5 + Math.random() * 1.5;
+    for (let i = 0; i < pulses; i++) {
+      const at = t + i / rate;
+      const a = level * 0.035 * Math.pow(1 - i / pulses, 1.3);
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(a, at + 0.02);
+      g.gain.linearRampToValueAtTime(a * 0.3, at + 0.08);
+      g.gain.linearRampToValueAtTime(0, at + 0.13);
+    }
+    const pn = ctx.createStereoPanner();
+    pn.pan.value = Math.random() * 1.6 - 0.8;
+    o.connect(g).connect(pn).connect(this.master);
+    o.start(t);
+    o.stop(t + pulses / rate + 0.3);
+  }
+
   /** A message on the phone: a soft rising two-note ping, close to the ear. */
   ping(): void {
     if (!this.ctx) return;
@@ -607,6 +689,17 @@ export class CityAudio {
     set(this.howlGain.gain, Math.max(0, w - 0.45) * 0.35 * (enclosed ? 0.3 : 1), 0.5);
     set(this.howlBand.frequency, 380 + 520 * w + 60 * Math.sin(t * 0.7), 0.3);
     this.levels.wind = windLevel;
+    // Cicadas: the chorus swells and ebbs; muffled indoors, quiet in the rain.
+    // (Kept low, a background to the day: it comes in waves with lulls between, never a constant whine.)
+    const cic = (f.cicadas ?? 0) * (enclosed ? 0.15 : roof ? 0.6 : 1) * (1 - Math.min(1, r * 2));
+    const wave = Math.max(0, Math.sin(t * 0.13) * 0.6 + Math.sin(t * 0.047 + 1.1) * 0.5 + 0.15);
+    set(this.cicadaGain.gain, cic * 0.012 * Math.min(1, wave), 2.5);
+    const hig = (f.higurashi ?? 0) * (enclosed ? 0.25 : 1) * (1 - Math.min(1, r * 2));
+    this.higurashiDebt += hig * f.dt * 0.12;
+    if (this.higurashiDebt >= 1) {
+      this.higurashiDebt = -Math.random() * 0.6;
+      this.higurashiCall(hig);
+    }
     // Train rumble.
     set(this.trainGain.gain, f.train ? 0.5 + 0.15 * Math.sin(t * 9.5) : 0, 0.2);
     // Tyres on wet roads: louder close, panned by where the car is relative to the view.

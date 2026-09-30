@@ -2,12 +2,12 @@ import { RacePath, RaceState, type RaceDef } from './cityRace';
 import { RaceHud } from './raceHud';
 import { RaceRival } from './raceRival';
 import { separateCars } from '../../race/battle';
-import { FLAG_SEASON, isSeason, SEASON_NAMES, SEASONS, seasonFlag, seasonIndex, type Season } from './seasons';
+import { FLAG_SEASON, isSeason, SEASON_NAMES, seasonFlag, seasonIndex, type Season } from './seasons';
 import { DebugMenu, type DebugHit } from './debugMenu';
 import { WaitPanel } from './waitPanel';
 import { outlookAt } from './forecast';
 import { WeatherApp } from './weatherApp';
-import { weatherGrip, type RoadWeather } from './roadGrip';
+import { puddleAt, weatherGrip, wheelsOf as carWheels, type RoadWeather } from './roadGrip';
 import { blendAtmosphere } from './atmosphere';
 import { clockAt, clockLabel, DAY, lateAt, phaseAt, RATE, sleepUntil, START_MINUTE, sunDirAt, TIMES_OF_DAY, untilMinute, blendAt, type NamedTime } from './clock';
 import { buildEdges } from '../real/edges';
@@ -70,7 +70,7 @@ import { GRADE_NAMES, GradePass } from '../real/grade';
 import { DofPass } from '../real/dof';
 import { SsrPass } from '../real/ssr';
 import { CityAudio } from '../real/audio';
-import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater, Drift } from '../real/weather';
+import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater, Drift, Splashes } from '../real/weather';
 import { TrackMap, type Wheel } from '../real/tracks';
 import { setTreeSink, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { LITTER, WIPERS } from '../real/city';
@@ -118,7 +118,16 @@ const FLAG_SEASON_START = 'world.season_start';
 /** The rainy season (梅雨) and a heat wave (猛暑), as the forecast has them (for the story and the look). */
 const FLAG_TSUYU = 'world.tsuyu';
 const FLAG_HEAT = 'world.heat';
-const HEAT_HAZE = new THREE.Color(0xe4d8c0);
+/** A typhoon passing (台風), as the forecast has it; and the story's (or the debug menu's) say: a typhoon that
+ * began at this minute, a heat wave until this minute. */
+const FLAG_TYPHOON = 'world.typhoon';
+const FLAG_TYPHOON_AT = 'world.typhoon_at';
+const FLAG_HEAT_UNTIL = 'world.heat_until';
+const HEAT_HAZE = new THREE.Color(0xfff4e0);
+const HEAT_ZENITH = new THREE.Color(0x3f86d8);
+const HEAT_SUN = new THREE.Color(0xfff2d6);
+const HEAT_FILL = new THREE.Color(0xfff0d8);
+const HEAT_GROUND = new THREE.Color(0x9a7a52);
 const START_SPAWN = 'kaburo_crossing.view';
 const SEED = 0x0c179090;
 const CELL_W = 8;
@@ -387,6 +396,9 @@ async function run(): Promise<void> {
   scene.add(lightning.bolt, lightning.light, lightning.light.target);
   // What drifts down: snow in snowy weather, petals in spring, leaves in autumn.
   const drift = new Drift(cityU);
+  // Water thrown up by tyres through puddles.
+  const splashes = new Splashes(cityU);
+  scene.add(splashes.points);
   scene.add(rain.group, rainLayers.group, streetWater.group, cones.mesh, lampShadows.group, drift.points);
   const windVec = new THREE.Vector2();
   const windTarget = new THREE.Vector2();
@@ -690,7 +702,11 @@ async function run(): Promise<void> {
   let clockTotal = Number(flags.get(FLAG_CLOCK) ?? startTotal);
   let clockStopped = false;
   // The forecast's weather last applied: a new spell changes the weather (so a change by hand lasts till then).
-  const outlookNow = (total = Math.floor(clockTotal)) => outlookAt(total, season(), Number(flags.get(FLAG_SEASON_START) ?? 0));
+  const num = (k: string): number | null => (typeof flags.get(k) === 'number' ? (flags.get(k) as number) : null);
+  const outlookNow = (total = Math.floor(clockTotal)) => outlookAt(total, season(), Number(flags.get(FLAG_SEASON_START) ?? 0), { typhoonAt: num(FLAG_TYPHOON_AT), heatUntil: num(FLAG_HEAT_UNTIL) });
+  // The forecast's own wind (a typhoon's), and how far it turns the setting's direction.
+  let forecastWind = 0;
+  let forecastTurn = 0;
   let lastForecast = outlookNow().weather;
   const syncClockFlags = (): void => {
     const total = Math.floor(clockTotal);
@@ -700,8 +716,11 @@ async function run(): Promise<void> {
     const o = outlookNow(total);
     flags.set(FLAG_TSUYU, o.tsuyu);
     flags.set(FLAG_HEAT, o.heat);
+    flags.set(FLAG_TYPHOON, o.typhoon > 0.05);
     const held = flags.get(FLAG_WEATHER_HOLD) === true;
     if (!held && o.amount > 0) flags.set(FLAG_RAIN_AMOUNT, o.amount);
+    forecastWind = held ? 0 : o.wind;
+    forecastTurn = held ? 0 : o.turn;
     if (o.weather !== lastForecast) {
       lastForecast = o.weather;
       if (!held) flags.set(FLAG_WEATHER, o.weather);
@@ -744,7 +763,7 @@ async function run(): Promise<void> {
     flags.set(k, false);
     advanceClock(untilMinute(Math.floor(clockTotal), TIMES_OF_DAY[m[1] as NamedTime]));
   });
-  if (debug) (window as unknown as { __clock: unknown }).__clock = { now: () => clockNow(), total: () => clockTotal, advance: (m: number) => advanceClock(m), wait: (m: number) => waitFor(m), outlook: (t?: number) => outlookNow(t) };
+  if (debug) (window as unknown as { __clock: unknown }).__clock = { now: () => clockNow(), total: () => clockTotal, advance: (m: number) => advanceClock(m), wait: (m: number) => waitFor(m), outlook: (t?: number) => outlookNow(t), sun: () => sky.uniforms.uSunDir.value };
 
   // Atmosphere: re-applied whenever (district, time, weather) changes.
   let atm!: Atmosphere3;
@@ -799,6 +818,10 @@ async function run(): Promise<void> {
   const base = { zenith: new THREE.Color(), horizon: new THREE.Color(), cloudLit: new THREE.Color(), hemi: 0, fogNear: 60, fogFar: 620 };
   let rainAmount = -1;
   let rainTarget = 0;
+  /** The wind now: the setting's, the season's breeze and the forecast's (a typhoon). */
+  let windNow = 0;
+  /** A heat wave's hold on the light now (0-1, by day). */
+  let heatNow = 0;
   let wetness = -1;
   let sunBase = 0;
   let lightGainBase = 1;
@@ -816,7 +839,7 @@ async function run(): Promise<void> {
     const d = mood.darkness;
     const keep = 1 - 0.9 * d;
     // Heavy rain and wind-blown spray close the view in; the fog setting scales the density.
-    const vis = (1 - rainAmount * 0.45) * (1 - mood.wind * rainAmount * 0.3) / mood.fog;
+    const vis = (1 - rainAmount * 0.45) * (1 - Math.min(1, windNow) * rainAmount * 0.3) / mood.fog;
     base.fogNear = atm.fogNear * vis;
     base.fogFar = atm.fogFar * vis;
     fog.color.setHex(atm.fog).multiplyScalar(1 - 0.8 * d);
@@ -828,18 +851,31 @@ async function run(): Promise<void> {
     sunBase = sun.intensity;
     base.zenith.setHex(atm.sky).multiplyScalar(1 - 0.85 * d);
     base.horizon.setHex(atm.horizon).multiplyScalar(1 - 0.85 * d);
-    // A heat wave by day: a hot white haze low in the sky, the distance closing in.
+    // A heat wave by day: a blazing sun (hard light, hard shadows, its glare: grade.ts), a clear bright sky with a
+    // white-hot horizon, warm light thrown back off the hot ground, and hardly a cloud.
     const heatHaze = flags.get(FLAG_HEAT) === true && weather() === 'clear' ? Math.max(0, Math.min(1, (0.5 - atm.lamps) / 0.4)) : 0;
+    sun.color.setHex(atm.sunColor);
+    hemi.color.setHex(atm.hemiSky);
+    hemi.groundColor.setHex(atm.hemiGround);
+    sky.uniforms.uSunColor.value.setHex(atm.sunColor).multiplyScalar((1 - 0.75 * atm.lamps) * (1 + 0.15 * heatHaze));
     if (heatHaze > 0) {
-      base.horizon.lerp(HEAT_HAZE, 0.35 * heatHaze);
-      base.fogFar *= 1 - 0.2 * heatHaze;
-      fog.color.lerp(HEAT_HAZE, 0.3 * heatHaze);
+      const h = heatHaze;
+      base.zenith.lerp(HEAT_ZENITH, 0.35 * h);
+      base.horizon.lerp(HEAT_HAZE, 0.45 * h);
+      base.fogFar *= 1 - 0.15 * h;
+      fog.color.lerp(HEAT_HAZE, 0.35 * h);
+      sun.intensity *= 1 + 0.9 * h;
+      sunBase = sun.intensity;
+      sun.color.lerp(HEAT_SUN, 0.45 * h);
+      hemi.color.lerp(HEAT_FILL, 0.25 * h);
+      hemi.groundColor.lerp(HEAT_GROUND, 0.5 * h);
+      base.hemi *= 1 + 0.1 * h;
     }
     base.cloudLit.setHex(atm.cloudLit).multiplyScalar(1 - 0.7 * d);
     sky.uniforms.uCloudDark.value.setHex(atm.cloudDark).multiplyScalar(1 - 0.7 * d);
     // (Autumn skies are cloudier.)
     const clouds = flags.get(FLAG_TSUYU) === true ? atm.clouds + (1 - atm.clouds) * 0.75 : season() === 'autumn' ? atm.clouds + (1 - atm.clouds) * 0.4 : atm.clouds;
-    sky.uniforms.uCover.value = rainAmount > 0 ? Math.max(clouds, 0.75 + rainAmount * 0.25) : clouds;
+    sky.uniforms.uCover.value = rainAmount > 0 ? Math.max(clouds, 0.75 + rainAmount * 0.25) : clouds * (1 - 0.75 * heatHaze);
     sky.uniforms.uStars.value = time() === 'night' && rainAmount === 0 && weather() === 'clear' ? 1 - d * 0.5 : 0;
     cityU.uZenith.value.copy(base.zenith);
     cityU.uHorizon.value.copy(base.horizon);
@@ -855,7 +891,8 @@ async function run(): Promise<void> {
     cityU.uDark.value = d;
     dof.strength = mood.dof;
     dof.focus = mood.focus;
-    renderer.toneMappingExposure = atm.exposure * (1 - 0.3 * d);
+    renderer.toneMappingExposure = atm.exposure * (1 - 0.3 * d) * (1 + 0.1 * heatHaze);
+    heatNow = heatHaze;
     grade.grade = mood.grade;
     fogScale = 0;
   };
@@ -1013,6 +1050,57 @@ async function run(): Promise<void> {
     const w = width / 2 - 0.2;
     return [[f, w], [f, -w], [-f, w], [-f, -w]].map(([a, b]) => ({ x: x + dx * a + dz * b, z: z + dz * a - dx * b, y }));
   };
+  // Splashes: water thrown up where a wheel runs through a puddle, yours or the traffic's near you, and its sound
+  // (a whoosh as a car hits one, and on while it ploughs through).
+  const splashT = new Map<unknown, number>();
+  const updateSplashes = (dt: number, wet: number): void => {
+    splashes.update(dt, 0.12 + 0.5 * (1 - cityU.uLamps.value));
+    if (wet <= 0.35) return;
+    const cp = camera.position;
+    const yaw = (lookYaw() * Math.PI) / 180;
+    const through = (key: unknown, wheels: readonly (readonly [number, number])[], y: number, fx: number, fz: number, speed: number, you: boolean): void => {
+      if (Math.abs(speed) < 2.5) return;
+      let deepest = 0;
+      let at = 0;
+      wheels.forEach(([x, z], i) => {
+        const d = puddleAt(x, z, wet);
+        if (d > 0.15) splashes.emit(x, y, z, fx, fz, i % 2 === 0 ? 1 : -1, speed, d, dt);
+        if (d > deepest) [deepest, at] = [d, i];
+      });
+      const t = (splashT.get(key) ?? 0) - dt;
+      if (deepest > 0.3 && t <= 0) {
+        const [x, z] = wheels[at];
+        const dx = x - cp.x;
+        const dz = z - cp.z;
+        const dist = Math.hypot(dx, dz);
+        const right = (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / Math.max(dist, 0.1);
+        audio.splash(Math.min(1, (Math.abs(speed) / 22) * deepest), you ? right * 0.6 : right, you ? 1 : Math.min(1, 7 / Math.max(dist, 1)));
+        splashT.set(key, 0.4);
+      } else splashT.set(key, deepest > 0.3 ? t : Math.min(t, 0));
+    };
+    if (driving.own && !ownCar.aloft()) {
+      const c = ownCar.sim;
+      through(ownCar, carWheels(c, 1.3, -1.25, 0.75), c.y, Math.sin(c.h), Math.cos(c.h), c.u, true);
+    }
+    for (const v of traffic.movingNear(cp, 60)) {
+      const f = Math.max(0.6, v.half - 0.8);
+      const w = v.width / 2 - 0.15;
+      through(v.key, [[v.x + v.dx * f + v.dz * w, v.z + v.dz * f - v.dx * w], [v.x + v.dx * f - v.dz * w, v.z + v.dz * f + v.dx * w], [v.x - v.dx * f + v.dz * w, v.z - v.dz * f - v.dx * w], [v.x - v.dx * f - v.dz * w, v.z - v.dz * f + v.dx * w]], v.y, v.dx, v.dz, v.v, false);
+    }
+  };
+  // Summer's insects (real/audio.ts): the cicadas by day (a few in the rainy season, loud in a heat wave, into
+  // the first days of autumn), the higurashi at dawn and dusk; more among trees, none at night or underground.
+  const insects = (): { cicadas: number; higurashi: number } => {
+    const m = Math.floor(clockTotal) % DAY;
+    const o = outlookNow();
+    const autumnDays = (Math.floor(clockTotal) - Number(flags.get(FLAG_SEASON_START) ?? 0)) / DAY;
+    const sing = season() === 'summer' ? (o.tsuyu ? 0.3 : o.heat ? 1 : 0.65) : season() === 'autumn' && autumnDays < 10 ? 0.3 : 0;
+    if (!sing || camera.position.y < -2.6 || o.typhoon > 0.2) return { cicadas: 0, higurashi: 0 };
+    const trees = 0.35 + 0.65 * Math.min(1, treesNear / 10);
+    const day = m >= 7 * 60 && m < 18 * 60 ? 1 : m >= 6 * 60 && m < 19 * 60 ? 0.4 : 0;
+    const dusk = (m >= 17 * 60 + 30 && m < 19 * 60 + 30) || (m >= 4 * 60 + 30 && m < 5 * 60 + 45) ? 1 : 0;
+    return { cicadas: sing * day * trees, higurashi: (season() === 'summer' ? 0.9 : 0.5) * dusk * trees };
+  };
   const updateSnowTraffic = (dt: number, snowing: boolean): void => {
     const moving = snowCover > 0.02 ? traffic.movingNear(camera.position, 130) : [];
     const own = driving.own && !ownCar.aloft() ? ownCar.sim : null;
@@ -1040,6 +1128,8 @@ async function run(): Promise<void> {
   let litterT = 1;
   const litterAt = new THREE.Vector3(1e9, 0, 0);
   let litterSeason = '';
+  /** Trees within 45 m of you (the cicadas sing from them). */
+  let treesNear = 0;
   const refreshLitter = (dt: number): void => {
     litterT += dt;
     const cp = camera.position;
@@ -1049,12 +1139,14 @@ async function run(): Promise<void> {
     litterSeason = season();
     const s = season();
     const cand: { key: string; x: number; z: number; y: number; r: number; code: number; d: number }[] = [];
+    treesNear = 0;
     const add = (x: number, z: number, y: number, species: TreeSpecies, reach: number): void => {
       const code = litterCode(species, s);
       const d = Math.hypot(x - cp.x, z - cp.z);
+      if (d < 45) treesNear++;
       if (code >= 0 && d < 95) cand.push({ key: `${Math.round(x * 4)},${Math.round(z * 4)}`, x, z, y, r: reach, code, d });
     };
-    if (s === 'spring' || s === 'autumn') {
+    {
       const mx0 = Math.floor(cp.x / CELL);
       const my0 = Math.floor(cp.z / CELL);
       for (let my = my0 - 1; my <= my0 + 1; my++) {
@@ -1536,7 +1628,38 @@ async function run(): Promise<void> {
   const minuteNow = (): number => Math.floor(clockTotal) % DAY;
   const debugMenu = import.meta.env.DEV || debug
     ? new DebugMenu([
-        { title: 'Season', items: () => SEASONS.map((x) => ({ label: SEASON_NAMES[x], on: () => season() === x, run: () => flags.set(FLAG_SEASON, x) })) },
+        {
+          // Every season, and summer's stages: the rainy season (a new summer), high summer (past it), a heat wave
+          // and a typhoon (each starting now, on the forecast).
+          title: 'Season',
+          items: () => {
+            const now = Math.floor(clockTotal);
+            const o = outlookNow();
+            const go = (x: Season, start: number): void => {
+              flags.set(FLAG_HEAT_UNTIL, false);
+              flags.set(FLAG_TYPHOON_AT, false);
+              flags.set(FLAG_SEASON, x);
+              flags.set(FLAG_SEASON_START, start);
+            };
+            const auto = (): void => {
+              flags.set(FLAG_WEATHER_HOLD, false);
+              syncClockFlags();
+              const w = outlookNow();
+              lastForecast = w.weather;
+              if (w.amount > 0) flags.set(FLAG_RAIN_AMOUNT, w.amount);
+              flags.set(FLAG_WEATHER, w.weather);
+            };
+            return [
+              { label: SEASON_NAMES.spring, on: () => season() === 'spring', run: () => go('spring', now) },
+              { label: '夏 梅雨 rainy season', on: () => o.tsuyu, run: () => { go('summer', now); auto(); } },
+              { label: '夏 summer', on: () => season() === 'summer' && !o.tsuyu && !o.heat && o.typhoon === 0, run: () => { go('summer', now - 7 * DAY); auto(); } },
+              { label: '夏 猛暑 heat wave', on: () => o.heat, run: () => { go('summer', now - 7 * DAY); flags.set(FLAG_HEAT_UNTIL, now + 2 * DAY); auto(); } },
+              { label: '台風 typhoon', on: () => o.typhoon > 0, run: () => { if (season() !== 'summer' && season() !== 'autumn') go('summer', now - 7 * DAY); flags.set(FLAG_TYPHOON_AT, now - 8 * 60); auto(); } },
+              { label: SEASON_NAMES.autumn, on: () => season() === 'autumn' && o.typhoon === 0, run: () => { go('autumn', now - 20 * DAY); auto(); } },
+              { label: SEASON_NAMES.winter, on: () => season() === 'winter', run: () => go('winter', now) },
+            ];
+          },
+        },
         {
           title: () => `Time · ${clockNow()}${clockStopped ? ' · stopped' : ''}`,
           items: () => [
@@ -2006,6 +2129,7 @@ async function run(): Promise<void> {
       const cond = { speed: 1 - 0.1 * road.wet - 0.3 * snowCover - 0.15 * fog, gap: 1 + 0.3 * road.wet + 0.9 * snowCover + 0.3 * fog, grip: weatherGrip(road) };
       traffic.conditions = cond;
       exTraffic.conditions = cond;
+      updateSplashes(dt, road.wet);
     }
     const outdoors = !inInterior() && camera.position.y > -2.6 && !trainRiding() && !subway.riding;
     refreshLitter(dt);
@@ -2031,9 +2155,10 @@ async function run(): Promise<void> {
     const tt = now / 1000;
     const gust = 0.72 + 0.2 * Math.sin(tt * 0.83) + 0.12 * Math.sin(tt * 2.31 + 1.3) + 0.06 * Math.sin(tt * 5.7);
     // Autumn is windier (and spring a little): a season's breeze under the setting.
-    const windAmt = mood.wind + seasonWind();
+    const windAmt = mood.wind + seasonWind() + forecastWind;
+    windNow = windAmt;
     const blow = windAmt * gust;
-    const wa = (mood.windDir * Math.PI) / 180;
+    const wa = ((mood.windDir + forecastTurn) * Math.PI) / 180;
     // The wind turns and builds with a little inertia rather than snapping to the settings.
     windTarget.set(Math.sin(wa), -Math.cos(wa)).multiplyScalar(blow * 3.2);
     windVec.lerp(windTarget, Math.min(1, dt * 1.5));
@@ -2059,12 +2184,20 @@ async function run(): Promise<void> {
       const fwd = camera.getWorldDirection(new THREE.Vector3());
       const hz = new THREE.Vector3(cp.x + fwd.x * 1000, cp.y, cp.z + fwd.z * 1000).project(camera);
       const day = Math.max(0, Math.min(1, (0.5 - atm.lamps) / 0.4));
-      const shimmer = flags.get(FLAG_HEAT) === true && weather() === 'clear' && !inside && cp.y > -2 ? day * (1 - rainAmount) : 0;
-      grade.heat(shimmer, (hz.y + 1) / 2);
+      // (It hugs the ground: from up high, little of it.)
+      const lowDown = 1 - THREE.MathUtils.smoothstep(cp.y - groundAt(cp.x, cp.z), 4, 30) * 0.85;
+      const shimmer = flags.get(FLAG_HEAT) === true && weather() === 'clear' && !inside && cp.y > -2 ? day * (1 - rainAmount) * lowDown : 0;
+      grade.heat(shimmer, (hz.y + 1) / 2, overlay.depth, camera.near, camera.far);
+      // The sun's glare (clear days, strongest in a heat wave): where the sun is on the screen, if in front.
+      const sd = sky.uniforms.uSunDir.value as THREE.Vector3;
+      const sp = new THREE.Vector3().copy(cp).addScaledVector(sd, 1000).project(camera);
+      const inFront = fwd.dot(sd) > 0 && sd.y > 0.02;
+      const clearSky = weather() === 'clear' && rainAmount < 0.05 && !inside && cp.y > -2;
+      grade.glare(inFront && clearSky ? day * (0.4 + 0.6 * heatNow) * Math.min(1, sd.y * 8) : 0, (sp.x + 1) / 2, (sp.y + 1) / 2);
     }
     // Lightning in a storm (or on demand): the sky, the clouds and the ambient light flash.
     // Strikes per minute: auto brings them with a real storm (heavy rain and wind).
-    const perMinute = mood.lightning === 'storm' ? 6 : mood.lightning === 'occasional' ? 1.2 : mood.lightning === 'auto' && rainAmount > 0.55 && mood.wind > 0.3 ? 1.5 + 6 * rainAmount * mood.wind : 0;
+    const perMinute = mood.lightning === 'storm' ? 6 : mood.lightning === 'occasional' ? 1.2 : mood.lightning === 'auto' && rainAmount > 0.55 && windNow > 0.3 ? 1.5 + 6 * rainAmount * Math.min(1.2, windNow) : 0;
     const flash = lightning.update(dt, perMinute, cp);
     hemi.intensity = base.hemi + flash * 0.5;
     // Below ground: the surface is hidden (and costs nothing), the sky's light and the street's don't reach.
@@ -2114,6 +2247,7 @@ async function run(): Promise<void> {
       yaw: (lookYaw() * Math.PI) / 180,
       cars: traffic.nearest(cp, 3),
       wet: cityU.uWet.value,
+      ...insects(),
     });
 
     const t0 = performance.now();
@@ -2168,7 +2302,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        trainRiding()?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${SEASON_NAMES[season()]}${flags.get(FLAG_TSUYU) === true ? ' 梅雨' : ''}${flags.get(FLAG_HEAT) === true ? ' 猛暑' : ''} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
+        trainRiding()?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${SEASON_NAMES[season()]}${flags.get(FLAG_TSUYU) === true ? ' 梅雨' : ''}${flags.get(FLAG_HEAT) === true ? ' 猛暑' : ''}${flags.get(FLAG_TYPHOON) === true ? ' 台風' : ''} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · res ${Math.round(resScale * 100)}%${resFixed() === null ? ' (auto)' : ''} · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,

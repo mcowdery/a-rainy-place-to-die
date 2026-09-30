@@ -789,13 +789,13 @@ export class TrafficSystem {
    * car, which has its own owner, nor any up on the deck): for their wipers and their tyre tracks in the snow. y is
    * the ground under them.
    */
-  movingNear(p: THREE.Vector3, r: number): { key: object; x: number; z: number; y: number; dx: number; dz: number; half: number; width: number; bus: boolean }[] {
-    const out: { key: object; x: number; z: number; y: number; dx: number; dz: number; half: number; width: number; bus: boolean; d: number }[] = [];
+  movingNear(p: THREE.Vector3, r: number): { key: object; x: number; z: number; y: number; dx: number; dz: number; v: number; half: number; width: number; bus: boolean }[] {
+    const out: { key: object; x: number; z: number; y: number; dx: number; dz: number; v: number; half: number; width: number; bus: boolean; d: number }[] = [];
     for (const v of this.vehicles) {
       if (v.own || v.aloft || !v.obj.visible || v.mode === 'parked' || (v.mode === 'traffic' && !v.live)) continue;
       const d = (v.x - p.x) ** 2 + (v.z - p.z) ** 2;
       if (d > r * r) continue;
-      out.push({ key: v, x: v.x, z: v.z, y: v.obj.position.y, dx: v.dx, dz: v.dz, half: v.half, width: v.width, bus: v.bus, d });
+      out.push({ key: v, x: v.x, z: v.z, y: v.obj.position.y, dx: v.dx, dz: v.dz, v: v.v, half: v.half, width: v.width, bus: v.bus, d });
     }
     return out.sort((a, b) => a.d - b.d);
   }
