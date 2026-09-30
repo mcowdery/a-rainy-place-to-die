@@ -102,3 +102,22 @@ export function parseAtmosphere3(file: string, text: string, errors: string[]): 
   else for (const k of ALL_KEYS) if (!(k in base.set)) err(`base rule is missing '${k}'`);
   return errors.length > before ? null : new AtmosphereTable3(rules);
 }
+
+/**
+ * Part way from one look to another (f 0-1): colours and numbers blend (the clock's dusk fades into night rather
+ * than switching), the neon's state switches half way.
+ */
+export function blendAtmosphere(a: Atmosphere3, b: Atmosphere3, f: number): Atmosphere3 {
+  if (f <= 0) return a;
+  if (f >= 1) return b;
+  const out: Record<string, unknown> = {};
+  const lerp = (x: number, y: number): number => x + (y - x) * f;
+  for (const k of COLOR_KEYS) {
+    const x = a[k] as number;
+    const y = b[k] as number;
+    out[k] = (Math.round(lerp((x >> 16) & 255, (y >> 16) & 255)) << 16) | (Math.round(lerp((x >> 8) & 255, (y >> 8) & 255)) << 8) | Math.round(lerp(x & 255, y & 255));
+  }
+  for (const k of NUMBER_KEYS) out[k] = lerp(a[k] as number, b[k] as number);
+  out.neon = f < 0.5 ? a.neon : b.neon;
+  return out as unknown as Atmosphere3;
+}

@@ -1,3 +1,6 @@
+import { WaitPanel } from './waitPanel';
+import { blendAtmosphere } from './atmosphere';
+import { clockAt, clockLabel, DAY, lateAt, phaseAt, RATE, sleepUntil, START_MINUTE, sunDirAt, TIMES_OF_DAY, untilMinute, blendAt, type NamedTime } from './clock';
 import { buildEdges } from '../real/edges';
 import { railReserved } from './rail';
 import * as THREE from 'three';
@@ -7,7 +10,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { FlagStore } from '../../core/flags';
 import { ContentError } from '../../content/load';
-import { FLAG_TIME, FLAG_WEATHER, TIMES, WEATHERS, type TimeOfDay, type Weather } from '../../atmosphere/rules';
+import { FLAG_TIME, FLAG_WEATHER, WEATHERS, type TimeOfDay, type Weather } from '../../atmosphere/rules';
 import { PlaceholderVnBridge } from '../../game/bridge';
 import { loadVnLibrary } from '../../vn/content';
 import { VnPlayer } from '../../vn/player';
@@ -92,6 +95,8 @@ const bench = params.get('bench') === '1';
 const debug = params.get('debug') === '1';
 /** After the last train (終電): stations shut, no trains. A story flag; ?late=1, or L to toggle. */
 const FLAG_LATE = 'world.late';
+/** Minutes since the story began (district/clock.ts). */
+const FLAG_CLOCK = 'world.clock';
 const START_SPAWN = 'kaburo_crossing.view';
 const SEED = 0x0c179090;
 const CELL_W = 8;
@@ -101,7 +106,17 @@ type C3 = [number, number, number];
 
 async function run(): Promise<void> {
   const content = loadDistrictContent();
-  const flags = new FlagStore({ [FLAG_TIME]: params.get('time') ?? 'night', [FLAG_WEATHER]: params.get('weather') ?? 'clear', [FLAG_LATE]: params.get('late') === '1' });
+  // The clock (district/clock.ts): minutes since the story began, in the flags so saves carry it. ?clock=HH:MM and
+  // ?day= set it; ?time= (dawn, day, dusk, night) picks a time in that look; ?late=1 starts after the last train.
+  const startMinute = ((): number => {
+    const c = /^(\d{1,2}):(\d{2})$/.exec(params.get('clock') ?? '');
+    if (c) return (Number(c[1]) % 24) * 60 + Number(c[2]);
+    if (params.get('late') === '1') return TIMES_OF_DAY.late;
+    const byLook: Record<string, number> = { dawn: 5 * 60 + 45, day: 12 * 60, dusk: 18 * 60, night: START_MINUTE };
+    return byLook[params.get('time') ?? ''] ?? START_MINUTE;
+  })();
+  const startTotal = (Math.max(1, Number(params.get('day')) || 1) - 1) * DAY + startMinute;
+  const flags = new FlagStore({ [FLAG_CLOCK]: startTotal, [FLAG_TIME]: phaseAt(startMinute), [FLAG_WEATHER]: params.get('weather') ?? 'clear', [FLAG_LATE]: lateAt(startMinute) });
   // ?load=<slot>: a saved game (save/save.ts). Its world's flags now; its character's car, money, place and phone
   // as each of those is set up below.
   const loadSlot = params.get('load') as Slot | null;
@@ -129,6 +144,7 @@ async function run(): Promise<void> {
   const hemi = new THREE.HemisphereLight();
   const sun = new THREE.DirectionalLight();
   sun.shadow.mapSize.set(2048, 2048);
+  sun.castShadow = true;
   const sc = sun.shadow.camera;
   sc.left = -110;
   sc.right = 110;
@@ -632,15 +648,62 @@ async function run(): Promise<void> {
   const warmMs = performance.now() - warm0;
   const warmChunks = district.loaded;
 
+  // The clock: running (half a game minute a real second) except in scenes, menus and the benchmark; its flags kept
+  // up to date (the minute, the time of day's look, the last train); jumps for waiting, sleep, taxis and the story.
+  let clockTotal = Number(flags.get(FLAG_CLOCK) ?? startTotal);
+  const syncClockFlags = (): void => {
+    const total = Math.floor(clockTotal);
+    flags.set(FLAG_CLOCK, total);
+    flags.set(FLAG_TIME, phaseAt(total % DAY));
+    flags.set(FLAG_LATE, lateAt(total % DAY));
+  };
+  const advanceClock = (minutes: number): void => {
+    clockTotal += Math.max(0, minutes);
+    syncClockFlags();
+  };
+  const clockNow = (): string => clockLabel(clockAt(Math.floor(clockTotal)));
+  /** Let time pass (a wait, sleep): fade out, the clock running on, fade back in on the new time. */
+  const waitFor = async (minutes: number, what = 'Waiting'): Promise<void> => {
+    if (inVn || minutes <= 0) return;
+    inVn = true;
+    await fadeTo(1);
+    const from = clockTotal;
+    for (let i = 1; i <= 20; i++) {
+      clockTotal = from + (minutes * i) / 20;
+      toast(`${what}… ${clockNow()}`, 1.5);
+      await new Promise((r) => setTimeout(r, 45));
+    }
+    syncClockFlags();
+    applyAtmosphere();
+    await new Promise((r) => setTimeout(r, 250));
+    await fadeTo(0);
+    inVn = false;
+    toast(clockNow(), 3);
+  };
+  const waitPanel = new WaitPanel(() => Math.floor(clockTotal), (m) => {
+    controls.lock();
+    void waitFor(m);
+  });
+  // The story asks for a time of day by flag (time_morning, time_noon, time_evening, time_night, time_late): the
+  // clock runs on to it (a scene that needs night; later, choreographed scenes).
+  flags.subscribe((k) => {
+    const m = /^time_(morning|noon|evening|night|late)$/.exec(k);
+    if (!m || flags.get(k) !== true) return;
+    flags.set(k, false);
+    advanceClock(untilMinute(Math.floor(clockTotal), TIMES_OF_DAY[m[1] as NamedTime]));
+  });
+  if (debug) (window as unknown as { __clock: unknown }).__clock = { now: () => clockNow(), total: () => clockTotal, advance: (m: number) => advanceClock(m), wait: (m: number) => waitFor(m) };
+
   // Atmosphere: re-applied whenever (district, time, weather) changes.
   let atm!: Atmosphere3;
   let atmKey = '';
-  const SUN_DIR: Record<TimeOfDay, C3> = { day: [0.45, 0.85, 0.35], dawn: [0.9, 0.22, 0.35], dusk: [-0.85, 0.2, 0.45], night: [-0.35, 0.7, -0.55] };
   const applyAtmosphere = (): void => {
-    const key = `${time()}|${weather()}`;
+    const minute = Math.floor(clockTotal) % DAY;
+    const key = `${minute}|${weather()}`;
     if (key === atmKey) return;
     atmKey = key;
-    atm = content.atmosphere.resolve('neon', time(), weather());
+    const bl = blendAt(minute);
+    atm = blendAtmosphere(content.atmosphere.resolve('neon', bl.a, weather()), content.atmosphere.resolve('neon', bl.b, weather()), bl.f);
     const fog = scene.fog as THREE.Fog;
     fog.color.setHex(atm.fog);
     fog.near = atm.fogNear;
@@ -651,14 +714,19 @@ async function run(): Promise<void> {
     sun.color.setHex(atm.sunColor);
     sun.intensity = atm.sun;
     const clear = weather() === 'clear';
-    sun.castShadow = atm.sun >= 1.0 && clear;
-    const d = SUN_DIR[time()];
+    // Sun shadows in clear weather with the sun high enough, faded in and out with it (never switched: a change in
+    // the number of shadow-casting lights recompiles every shader, and the clock crosses dawn and dusk); the map
+    // only redraws while they show.
+    const sunShadow = clear ? Math.max(0, Math.min(1, (atm.sun - 0.8) / 0.4)) : 0;
+    sun.shadow.intensity = sunShadow;
+    sun.shadow.autoUpdate = sunShadow > 0;
+    const d = sunDirAt(minute);
     sky.uniforms.uSunDir.value.set(d[0], d[1], d[2]).normalize();
     sky.uniforms.uZenith.value.setHex(atm.sky);
     sky.uniforms.uHorizon.value.setHex(atm.horizon);
-    sky.uniforms.uSunColor.value.setHex(atm.sunColor).multiplyScalar(time() === 'night' ? 0.25 : 1);
+    sky.uniforms.uSunColor.value.setHex(atm.sunColor).multiplyScalar(1 - 0.75 * atm.lamps);
     sky.uniforms.uDisc.value = clear ? 1 : 0;
-    sky.uniforms.uStars.value = time() === 'night' && clear ? 1 : 0;
+    sky.uniforms.uStars.value = clear ? Math.max(0, Math.min(1, (atm.lamps - 0.7) / 0.3)) : 0;
     sky.uniforms.uCover.value = atm.clouds;
     sky.uniforms.uCloudLit.value.setHex(atm.cloudLit);
     sky.uniforms.uCloudDark.value.setHex(atm.cloudDark);
@@ -932,6 +1000,8 @@ async function run(): Promise<void> {
     taxiRide = null;
     traffic.releaseHail();
     await fadeTo(1);
+    // The ride's time through the streets (about 25 km/h, lights and all).
+    advanceClock((r.cum[r.cum.length - 1] / 1000) * 2.4);
     const profile = loadProfile();
     const paid = Math.min(profile.yen, r.fare);
     profile.yen -= paid;
@@ -1232,6 +1302,11 @@ async function run(): Promise<void> {
       location.href = 'garage.html?from=city';
       return;
     }
+    if (n.kind === 'hotspot' && n.sleep) {
+      await waitFor(sleepUntil(Math.floor(clockTotal)), 'Sleeping');
+      autosave();
+      return;
+    }
     if (n.kind === 'station' && n.returnSpawn) {
       if (content.subway.stops.has(n.placementId)) {
         if (late()) return toast(LAST_TRAIN);
@@ -1350,8 +1425,8 @@ async function run(): Promise<void> {
     }
     if (e.code === 'KeyH') hailTaxi();
     if (e.code === 'KeyL') {
-      flags.set(FLAG_LATE, !late());
-      toast(late() ? LAST_TRAIN : 'Trains are running (始発 the first trains have started).');
+      void waitFor(untilMinute(Math.floor(clockTotal), late() ? 5 * 60 + 30 : TIMES_OF_DAY.late));
+      return;
     }
     if (e.code === 'KeyM' || (e.code === 'Escape' && travel.open)) {
       if (travel.open) travel.hide();
@@ -1363,7 +1438,13 @@ async function run(): Promise<void> {
     }
     if (travel.open) return;
     if (e.code === 'KeyE') void interact();
-    if (e.code === 'KeyT') flags.set(FLAG_TIME, TIMES[(TIMES.indexOf(time()) + 1) % TIMES.length]);
+    if (e.code === 'KeyT') {
+      if (driving.car || taxiRide || trainRiding() || subway.riding) toast("You can't wait here.");
+      else {
+        document.exitPointerLock();
+        waitPanel.show();
+      }
+    }
     if (e.code === 'KeyR') flags.set(FLAG_WEATHER, WEATHERS[(WEATHERS.indexOf(weather()) + 1) % WEATHERS.length]);
     if (e.code === 'KeyF' && !driving.car) controls.fly = !controls.fly;
     if (e.code === 'KeyI') {
@@ -1482,8 +1563,15 @@ async function run(): Promise<void> {
     for (const t of trainLines.values()) t.update(dt, camera);
     subway.update(dt, camera);
     updateInteriors(inVn ? 0 : dt);
+    if (Number(flags.get(FLAG_CLOCK)) !== Math.floor(clockTotal)) clockTotal = Number(flags.get(FLAG_CLOCK)) || clockTotal;
+    if (!bench && !inVn && !travel.open && !waitPanel.open) {
+      const before = Math.floor(clockTotal);
+      clockTotal += dt * RATE;
+      if (Math.floor(clockTotal) !== before) syncClockFlags();
+    }
     if (!bench) {
       phoneUi.update(phone.update(dt));
+      phone.clock = Math.floor(clockTotal) % DAY;
       phoneUi.tick(dt);
     }
     // The walker, when on foot at street level, is someone the traffic has to stop for.
@@ -1692,14 +1780,14 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        trainRiding()?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${time()} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
+        trainRiding()?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · res ${Math.round(resScale * 100)}%${resFixed() === null ? ' (auto)' : ''} · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
-        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? 'Look' : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : taxiHere() ? '[E] Get in the taxi' : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
+        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? (t.sleep ? 'Sleep until morning' : 'Look') : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : taxiHere() ? '[E] Get in the taxi' : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
         `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · I invert mouse Y · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look`,
       ].join('\n');
       builtThisWindow = 0;

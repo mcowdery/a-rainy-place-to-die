@@ -12,4 +12,5 @@ nodes:
   home: { kind: spawn, name: Manga Café Tsukiyo (inside), at: [8, -4.6], floor: 0.05, facing: north, view: [0, -4] }
   leave: { kind: door, name: the street, at: [8, -2.0], floor: 0.05, returnSpawn: front, through: true }
   booth_17: { kind: hotspot, name: Booth 17 (yours), at: [3.1, -14.4], floor: 0.05 }
+  sleep: { kind: hotspot, name: Booth 17 (the recliner), at: [1.6, -14.4], floor: 0.05, sleep: true }
   clerk: { kind: npc, name: The night clerk, at: [12.3, -4.3], floor: 0.05, figure: { body: man, pose: stand, color: '#b8c8e8' } }

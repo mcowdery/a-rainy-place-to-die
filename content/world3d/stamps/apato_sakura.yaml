@@ -16,4 +16,5 @@ nodes:
   room_203: { kind: door, name: Room 203 (yours), at: [10.55, 0.4], returnSpawn: mc_home, through: true }
   mc_home: { kind: spawn, name: Kōpo Sakura 203 (yours), at: [10.95, -3.4], floor: 3, facing: south, view: [180, -4] }
   mc_leave: { kind: door, name: the street, at: [10.55, -2.2], floor: 3, returnSpawn: front, through: true }
+  mc_sleep: { kind: hotspot, name: The futon, at: [11.6, -9.9], floor: 3, sleep: true }
   mailbox: { kind: hotspot, name: The mailboxes, at: [16, 0.6] }
