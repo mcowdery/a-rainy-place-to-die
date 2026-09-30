@@ -1,5 +1,6 @@
 # 都営西原団地 Nishihara Danchi, a 1960s public housing estate (real/suburbs.ts, kind danchi): three five-storey slab
-# blocks in rows, bicycle sheds, the playground, the water tower. The salaryman's home is block 3, room 402.
+# blocks in rows, bicycle sheds, the playground, the water tower. The salaryman's home is block 3, room 402, a 2DK
+# you walk into (real/homesCast.ts): E at the stairwell takes you up and in, E at the flat's door back down.
 id: danchi
 name: 都営西原団地 Nishihara Danchi
 footprint: [104, 96]
@@ -8,5 +9,9 @@ front: south
 landmark: danchi
 nodes:
   front: { kind: spawn, name: Nishihara Danchi, at: [50, 6], facing: north, view: [0, 6] }
-  room_402: { kind: door, name: Block 3, room 402 (the salaryman's), at: [26, -57.4], returnSpawn: front }
+  room_402: { kind: door, name: Block 3, room 402 (the salaryman's), at: [26, -56.4], returnSpawn: home, through: true }
+  home: { kind: spawn, name: Block 3, room 402 (the salaryman's), at: [29.6, -65.8], floor: 9, facing: west, view: [90, -6] }
+  leave: { kind: door, name: Down to the street, at: [29.7, -66.4], floor: 9, returnSpawn: front, through: true }
+  altar: { kind: hotspot, name: The family photo, at: [27.1, -61.1], floor: 9 }
+  balcony: { kind: hotspot, name: A cigarette on the balcony, at: [29.0, -57.6], floor: 9 }
   bench: { kind: npc, name: Old man on the bench, at: [44, -31], figure: { body: elder, pose: stand, color: '#c8c0b0' } }

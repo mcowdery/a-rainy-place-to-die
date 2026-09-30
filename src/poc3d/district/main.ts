@@ -371,7 +371,7 @@ async function run(): Promise<void> {
     .filter((p) => p.stamp.landmark && INTERIORS[p.stamp.landmark])
     .map((p) => {
       const def = INTERIORS[p.stamp.landmark!];
-      return { id: p.id, b: p.building, range: def.range, hides: def.hides, layout: def.layout(p.building), start: () => def.build(p.building, city, ghost), job: null as Generator<void, Interior> | null, built: null as Interior | null, active: false };
+      return { id: p.id, b: p.building, range: def.range, hides: def.hides, keep: !!def.keep, layout: def.layout(p.building), start: () => def.build(p.building, city, ghost), job: null as Generator<void, Interior> | null, built: null as Interior | null, active: false };
     });
   const inInterior = (): boolean => interiors.some((i) => i.active);
   const updateInteriors = (dt = 0): void => {
@@ -400,7 +400,7 @@ async function run(): Promise<void> {
         it.active = inside;
         it.built!.group.visible = inside;
         const ext = exteriors.get(it.id);
-        const shell = it.hides ? ext?.parts[it.hides] : ext?.group;
+        const shell = it.keep ? null : it.hides ? ext?.parts[it.hides] : ext?.group;
         if (shell) shell.visible = !inside;
         district.setInterior(it.id, inside ? it.built : null);
       }

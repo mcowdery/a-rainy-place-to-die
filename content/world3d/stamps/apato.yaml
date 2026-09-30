@@ -1,5 +1,6 @@
 # コーポ川端 Kōpo Kawabata, a worn wooden apartment block in the old town (real/kawabata.ts, kind apato). The
-# detective's home: room 201 up the outside stair is a story door.
+# detective's home: room 201 up the outside stair, a flat you walk into (real/homesCast.ts): E at the door takes you
+# in, E at the door inside back out. The case board is the story's way in at home.
 id: apato
 name: コーポ川端 Kōpo Kawabata
 footprint: [22, 12]
@@ -8,5 +9,8 @@ front: north
 landmark: apato
 nodes:
   front: { kind: spawn, name: Kōpo Kawabata (the detective's), at: [9, 6], facing: south, view: [180, 8] }
-  room_201: { kind: door, name: Room 201 (the detective's), at: [2, 0.4], returnSpawn: front }
+  room_201: { kind: door, name: Room 201 (the detective's), at: [2, 0.4], returnSpawn: home, through: true }
+  home: { kind: spawn, name: Room 201 (the detective's), at: [2.1, -3.4], floor: 3, facing: south, view: [180, -4] }
+  leave: { kind: door, name: the street, at: [1.95, -2.2], floor: 3, returnSpawn: front, through: true }
+  case_board: { kind: hotspot, name: The case board, at: [3.8, -7.6], floor: 3 }
   mailbox: { kind: hotspot, name: The mailboxes, at: [16, 0.6] }
