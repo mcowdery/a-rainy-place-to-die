@@ -1,0 +1,12 @@
+# 鷹ノ台展望公園 Takanodai Lookout, the park on the heights' summit (real/suburbs.ts, kind lookout): the railed terrace
+# looking out over the whole city, coin telescopes, benches, the shelter, cherry trees. Couples come up at night.
+id: lookout
+name: 鷹ノ台展望公園 Takanodai Lookout
+footprint: [80, 48]
+height: 5
+front: north
+landmark: lookout
+nodes:
+  entrance: { kind: spawn, name: Takanodai Lookout (the gate), at: [40, 4], facing: south, view: [180, 0] }
+  rail: { kind: spawn, name: Takanodai Lookout (the deck), at: [40, -43.5], floor: 8, facing: south, view: [180, -4] }
+  telescope: { kind: hotspot, name: The coin telescope, at: [30, -43.4], floor: 8 }

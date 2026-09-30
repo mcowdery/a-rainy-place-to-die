@@ -575,7 +575,7 @@ describe('Subway', () => {
 
   it('numbers the stations along two straight lines under the roads', () => {
     expect(net.lines.map((l) => l.id)).toEqual(['toto', 'yako', 'wakaba', 'seiko']);
-    expect(net.lines[3].stops.map((s) => s.code)).toEqual(['S01', 'S02', 'S03', 'S04']);
+    expect(net.lines[3].stops.map((s) => s.code)).toEqual(['S01', 'S02', 'S03', 'S04', 'S05', 'S06']);
     expect(net.lines[0].stops.map((s) => `${s.code} ${s.en}`)).toEqual(['T01 GAKUENZAKA', 'T02 ASAGIRI', 'T03 TŌTO-CHŪŌ', 'T04 KABURO']);
     expect(net.lines[1].stops.map((s) => s.code)).toEqual(['Y01', 'Y02', 'Y03', 'Y04', 'Y05']);
     expect(net.lines[2].stops.map((s) => s.code)).toEqual(['W01', 'W02', 'W03']);

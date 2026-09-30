@@ -1,0 +1,13 @@
+# 西原ドリームランド Nishihara Dreamland, closed for years at the city's edge (real/suburbs.ts, kind ruined_park): the
+# ticket gate chained shut, the rusted wheel, the coaster track that stops in mid-air, weeds. There's a gap in the
+# fence down the far end.
+id: ruined_park
+name: 西原ドリームランド Nishihara Dreamland (closed)
+footprint: [100, 100]
+height: 40
+front: south
+landmark: ruined_park
+nodes:
+  gate: { kind: spawn, name: Nishihara Dreamland (the gate), at: [50, 7], facing: north, view: [0, 14] }
+  chained_gate: { kind: hotspot, name: The chained gate, at: [50, 1] }
+  wheel: { kind: hotspot, name: Under the rusted wheel, at: [30, -52] }

@@ -1,0 +1,11 @@
+# 鷹ノ台一丁目一番 The house on the heights (real/suburbs.ts, kind villa): white walls and glass, the pool out back,
+# three bays in the garage. The top rung of the MC's housing ladder (docs/city-plan.md); for now, for sale.
+id: villa
+name: 鷹ノ台の家 The House on the Heights
+footprint: [36, 36]
+height: 7.2
+front: south
+landmark: villa
+nodes:
+  gate: { kind: spawn, name: The house on the heights (Takanodai 1-1), at: [18, 16], facing: north, view: [0, 6] }
+  front_door: { kind: door, name: Front door (for sale), at: [7, -4.2], returnSpawn: gate }

@@ -48,6 +48,12 @@ avenues:
   # Past the terminal, Tōto-ōdōri narrows over the Seikō Line's Tōto-Chūō station (subway stations stand
   # 10 m from their road's centre, so a road with a line under it is 20 m at most).
   - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 25, to: 26, width: 20, median: 2.4 }
+  # The outer ring road (外環 GAIKAN) round the west and north-west: up the city's west side to the heights, along
+  # under the summit, and down the valley to Asagiri-nishi-dōri; Kita-ōdōri across the heights.
+  - { name: 外環通り GAIKAN-DŌRI, col: 10, from: 4, to: 18, width: 24, median: 0 }
+  - { name: 外環通り GAIKAN-DŌRI, row: 4, from: 10, to: 21, width: 24, median: 0 }
+  - { name: 朝霧西通り ASAGIRI-NISHI-DŌRI, col: 21, from: 4, to: 8, width: 24, median: 0 }
+  - { name: 北大通り KITA-ŌDŌRI, row: 6, from: 10, to: 21, width: 20, median: 0 }
 
 # Street bridges over the water (roads.ts parseBridges): along a grid line, across the water cells from..to; the
 # cell-edge roads either side carry on over it. The Shiomi bridge's upper deck is the expressway's (expressway.yaml).

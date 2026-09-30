@@ -8,3 +8,6 @@ terraces:
   - { name: Gakuenzaka, cells: [22, 3, 30, 5], level: 12 }
   # 東光寺: the temple on its rise over the river.
   - { name: Tōkō-ji rise, cells: [39, 6, 41, 8], level: 6 }
+  # 鷹ノ台: the heights in two steps, the upper plateau and the summit (the lookout, the house on the heights).
+  - { name: Takanodai, cells: [12, 2, 20, 7], level: 10 }
+  - { name: Takanodai summit, cells: [13, 2, 16, 4], level: 22 }

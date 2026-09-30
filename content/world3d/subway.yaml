@@ -15,13 +15,13 @@ lines:
     letter: W
     color: '#b5d62a'
     stations: [w01_station, w02_station, w03_station]
-  # The private railway from the terminal out to the Sakuragaoka suburb (underground all the way).
+  # The private railway from the terminal out through Sakuragaoka to Nishihara (underground all the way).
   - id: seiko
     name: 西光線
     nameEn: SEIKŌ LINE
     letter: S
     color: '#2a6ad0'
-    stations: [s01_station, s02_station, s03_station, s04_station]
+    stations: [s01_station, s02_station, s03_station, s04_station, s05_station, s06_station]
 transfers:
   - [y04_station, w02_station]
   - [totochuo_station, y03_station]

@@ -1,0 +1,12 @@
+# 都営西原団地 Nishihara Danchi, a 1960s public housing estate (real/suburbs.ts, kind danchi): three five-storey slab
+# blocks in rows, bicycle sheds, the playground, the water tower. The salaryman's home is block 3, room 402.
+id: danchi
+name: 都営西原団地 Nishihara Danchi
+footprint: [104, 96]
+height: 25
+front: south
+landmark: danchi
+nodes:
+  front: { kind: spawn, name: Nishihara Danchi, at: [50, 6], facing: north, view: [0, 6] }
+  room_402: { kind: door, name: Block 3, room 402 (the salaryman's), at: [26, -57.4], returnSpawn: front }
+  bench: { kind: npc, name: Old man on the bench, at: [44, -31], figure: { body: elder, pose: stand, color: '#c8c0b0' } }

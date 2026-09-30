@@ -1,0 +1,40 @@
+# 西原団地前駅 Nishihara-Danchi-Mae Station, 西光線 Seikō Line (S06): the private railway from the terminal out to the
+# western suburbs (see content/world3d/subway.yaml). A subway station built by real/subwayStation.ts: an entrance
+# pavilion on the street with stairs down to the concourse and an island platform under the road.
+id: subway_s06
+name: 西原団地前駅 Nishihara-Danchi-Mae Station
+footprint: [14, 12]
+height: 4.5
+front: north
+landmark: subway
+station: { jp: 西原団地前, en: NISHIHARA-DANCHI-MAE }
+nodes:
+  exit:
+    kind: spawn
+    name: Nishihara-Danchi-Mae Station (Seikō Line S06)
+    at: [7, 4]
+    facing: south
+  platform:
+    kind: spawn
+    name: Nishihara-Danchi-Mae Station (Seikō Line platform)
+    at: [23, 10]
+    floor: -11
+    facing: east
+  board_a:
+    kind: station
+    name: Seikō Line 西光線
+    at: [-16, 10]
+    floor: -11
+    returnSpawn: platform
+  board_b:
+    kind: station
+    name: Seikō Line 西光線
+    at: [-6, 10]
+    floor: -11
+    returnSpawn: platform
+  board_c:
+    kind: station
+    name: Seikō Line 西光線
+    at: [29.5, 10]
+    floor: -11
+    returnSpawn: platform

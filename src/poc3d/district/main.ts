@@ -445,9 +445,11 @@ async function run(): Promise<void> {
   const teleport = (id: string): void => {
     const n = nodeById.get(id)!;
     // Inside first (an interior's storeys decide the floor), then the level.
-    camera.position.set(n.x, n.floor + 1.7, n.z);
+    // (A node's floor is from the ground under it: on a hill, add the ground.)
+    const floor = n.floor + groundAt(n.x, n.z);
+    camera.position.set(n.x, floor + 1.7, n.z);
     updateInteriors();
-    const level = district.floorAt(n.x, n.z, n.floor);
+    const level = district.floorAt(n.x, n.z, floor);
     camera.position.set(n.x, level + 1.7, n.z);
     controls.setLevel(level);
     if (n.view) controls.setView(n.view[0], n.view[1]);
@@ -464,9 +466,10 @@ async function run(): Promise<void> {
     ...(rail && railStations.length >= 2 && !content.subway.lines.some((l) => l.letter === 'T') ? [{ name: `${rail.name} ${rail.nameEn}`, color: rail.color, letter: 'T', stops: [...railStations].sort((a, b) => a.z - b.z).map((s, i) => ({ x: rail.x, z: s.z, code: `T${String(i + 1).padStart(2, '0')}`, name: `${s.names.jp} ${s.names.en}` })) }] : []),
   ];
   const travel = new TravelMap(district, content.zones, allPlaces(), (d: Destination) => {
-    camera.position.set(d.x, d.floor + 1.7, d.z);
+    const floor = d.floor + groundAt(d.x, d.z);
+    camera.position.set(d.x, floor + 1.7, d.z);
     updateInteriors();
-    const level = district.floorAt(d.x, d.z, d.floor);
+    const level = district.floorAt(d.x, d.z, floor);
     camera.position.set(d.x, controls.fly ? Math.max(camera.position.y, 1.7) : level + 1.7, d.z);
     controls.setLevel(level);
     controls.setView(d.yaw, d.pitch);
@@ -822,9 +825,10 @@ async function run(): Promise<void> {
     const paid = Math.min(profile.yen, r.fare);
     profile.yen -= paid;
     saveProfile(profile);
-    camera.position.set(r.dest.x, r.dest.floor + 1.7, r.dest.z);
+    const floor = r.dest.floor + groundAt(r.dest.x, r.dest.z);
+    camera.position.set(r.dest.x, floor + 1.7, r.dest.z);
     updateInteriors();
-    controls.setLevel(district.floorAt(r.dest.x, r.dest.z, r.dest.floor));
+    controls.setLevel(district.floorAt(r.dest.x, r.dest.z, floor));
     controls.setView(r.dest.yaw, r.dest.pitch);
     controls.held = false;
     await fadeTo(0);
@@ -1288,9 +1292,10 @@ async function run(): Promise<void> {
       const step = n.kind === 'npc' ? 1.8 : 0;
       const x = n.x + n.nx * step;
       const z = n.z + n.nz * step;
-      camera.position.set(x, n.floor + 1.7, z);
+      const floor = n.floor + groundAt(x, z);
+      camera.position.set(x, floor + 1.7, z);
       updateInteriors();
-      const level = district.floorAt(x, z, n.floor);
+      const level = district.floorAt(x, z, floor);
       camera.position.y = level + 1.7;
       controls.setLevel(level);
       void use(n);

@@ -136,6 +136,12 @@ export class District {
 
   /** Interiors you're inside (real/interiors.ts): their floors and collision per level. */
   private readonly interiors = new Map<string, Pick<Interior, 'colliders' | 'floorAt'>>();
+  private readonly footings = new Map<Placed3, number>();
+  private footingOf(p: Placed3): number {
+    let f = this.footings.get(p);
+    if (f === undefined) this.footings.set(p, (f = this.terrain.footing(p.building.x, p.building.z, p.building.w, p.building.d)));
+    return f;
+  }
 
   /**
    * Step inside a placement's interior: its storeys' floors, and its walls and fixtures on each level instead of
@@ -175,8 +181,10 @@ export class District {
       if (y !== null) return y;
     }
     for (const p of this.model.placed) {
-      const y = landmarkFloor(p, x, z, current);
-      if (y !== null) return y;
+      // A landmark's levels are its own, from its footing (on a hill it stands level at its lowest corner).
+      const base = this.footingOf(p);
+      const y = landmarkFloor(p, x, z, current - base);
+      if (y !== null) return y + base;
     }
     return this.terrain.height(x, z);
   };

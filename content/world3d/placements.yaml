@@ -265,3 +265,36 @@
   stamp: river_walk
   cell: [38, 11]
   offset: [10, 14]
+# 鷹ノ台 Takanodai, the north-west heights, and 西原 Nishihara, the western suburbs (docs/city-plan.md).
+- id: takanodai_lookout
+  stamp: lookout
+  cell: [14, 3]
+  offset: [24, 60]
+- id: takanodai_villa
+  stamp: villa
+  cell: [13, 3]
+  offset: [46, 72]
+- id: takanoyu
+  stamp: ryokan
+  cell: [17, 3]
+  offset: [44, 74]
+- id: flood_shaft
+  stamp: flood_shaft
+  cell: [19, 6]
+  offset: [56, 106]
+- id: nishihara_danchi
+  stamp: danchi
+  cell: [11, 11]
+  offset: [12, 22]
+- id: dreamland
+  stamp: ruined_park
+  cell: [8, 7]
+  offset: [14, 14]
+- id: s05_station
+  stamp: subway_s05
+  cell: [13, 10]
+  offset: [60, 10]
+- id: s06_station
+  stamp: subway_s06
+  cell: [11, 10]
+  offset: [60, 10]

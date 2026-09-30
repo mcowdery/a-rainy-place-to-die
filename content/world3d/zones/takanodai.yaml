@@ -1,0 +1,98 @@
+# 鷹ノ台 Takanodai, the north-west heights (format: src/poc3d/district/zones.ts; the whole-city plan:
+# docs/city-plan.md), after the quiet hill towns on the edge of Tokyo (Den-en-chofu, Seijo): big houses behind
+# hedges and walls on wide lots, trees over the lanes, the summit's woods and the lookout, a ryokan on the upper
+# terrace; low apartments down at the foot of the hill (Takanodai-shita). The heights are terraces in
+# terrain.yaml: the upper plateau at 10 m and the summit at 22 m, the streets climbing between them.
+district: residential
+area: 鷹ノ台 Takanodai
+origin: [8, 1]
+map:
+  - .......HHHHHHH
+  - ....HHGGHHHHHH
+  - ..HHHHHHHHHHHH
+  - .HHHHHHHHHHHMM
+  - HHHHHHHHHHHHMM
+  - HHHHHHHHHHHHMM
+  - ......MMMMMMMM
+  - ......MMMMMM..
+
+zones:
+  H:
+    id: takanodai_houses
+    name: Takanodai (the heights)
+    plan:
+      floors: [[2, 2, 65], [3, 3, 35]]
+      lotW: [14, 24]
+      localStreet: [4, 5.5]
+      block: [30, 52]
+      twoRowDepth: 44
+      lotGap: 0.6
+      signChance: 0.02
+      open: { parking: 0.04, vacant: 0.05 }
+      rear: [4, 9]
+      setback: [3, 6]
+      streetTrees: 0.7
+      hedges: 0.9
+      pots: 0.3
+    ads: { mainstream: 1 }
+    look:
+      windows: { punched: 40, balcony: 35, ribbon: 25 }
+      walls: ['#f0ece4', '#e8e4dc', '#d8d0c0', '#c8c4bc', '#a89880', '#5a4a3e', '#e0dcd8']
+      tiled: true
+      shops: { warm: 2 }
+      open: 0.3
+      homes: 0.98
+      roofs: 0.6
+      bikes: 0.1
+
+  G:
+    id: takanodai_woods
+    name: Takanodai (the summit woods)
+    plan:
+      park: 0.7
+      floors: [[2, 2, 70], [3, 3, 30]]
+      lotW: [16, 24]
+      localStreet: [4, 5.5]
+      rear: [4, 9]
+      setback: [3, 6]
+      streetTrees: 0.9
+      hedges: 0.9
+    ads: { mainstream: 1 }
+    look:
+      windows: { punched: 50, balcony: 50 }
+      walls: ['#f0ece4', '#e8e4dc', '#d8d0c0', '#5a4a3e']
+      tiled: true
+      shops: { warm: 1 }
+      open: 0.3
+      homes: 0.98
+      roofs: 0.6
+
+  M:
+    id: takanodai_shita
+    name: Takanodai-shita (the foot of the hill)
+    plan:
+      floors: [[2, 3, 50], [4, 6, 40], [7, 9, 10]]
+      lotW: [9, 18]
+      localStreet: [3.5, 5]
+      block: [20, 40]
+      lotGap: 0.45
+      signChance: 0.12
+      open: { parking: 0.08, vacant: 0.03, playground: 0.03 }
+      rear: [1.5, 4]
+      setback: [1, 3]
+      streetTrees: 0.3
+      hedges: 0.3
+      pots: 0.5
+    signs:
+      words: [クリーニング, 米屋, 薬局, 歯科, 不動産, 喫茶, 花屋, 酒屋, 理容]
+      colors: ['#ffffff', '#ffe45f', '#6bff8a']
+    ads: { street: 2, mainstream: 1, food: 1 }
+    look:
+      windows: { punched: 45, balcony: 35, small: 20 }
+      walls: ['#d8d0c0', '#c8c0b0', '#e8e0d0', '#b8a890', '#a8b0b8']
+      tiled: true
+      shops: { warm: 3, cool: 1 }
+      open: 0.5
+      homes: 0.8
+      roofs: 0.5
+      bikes: 0.5

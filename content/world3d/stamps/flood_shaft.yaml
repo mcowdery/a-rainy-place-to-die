@@ -1,0 +1,11 @@
+# 東都地下放水路 第3立坑 The flood tunnel's shaft No. 3 (real/suburbs.ts, kind flood_shaft): a fenced concrete shaft
+# house on the heights over the pillared halls of the flood tunnel (G-Cans-like), its steel door and warning signs.
+id: flood_shaft
+name: 地下放水路 第3立坑 Flood Tunnel Shaft 3
+footprint: [16, 12]
+height: 5.4
+front: south
+landmark: flood_shaft
+nodes:
+  front: { kind: spawn, name: The flood tunnel's shaft, at: [8, 4], facing: north }
+  shaft_door: { kind: door, name: The steel door (立入禁止), at: [8, -2.7], returnSpawn: front }

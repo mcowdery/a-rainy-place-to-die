@@ -1,0 +1,121 @@
+# 西原 Nishihara, the western suburbs at the end of the Seikō Line (format: src/poc3d/district/zones.ts; the
+# whole-city plan: docs/city-plan.md): the 1960s danchi estates in their rows (the salaryman lives in Nishihara
+# Danchi, block 3), small houses on the lanes between, a shōtengai along the railway's road, and at the city's
+# edge, behind a fence, the amusement park that closed years ago.
+district: residential
+area: 西原 Nishihara
+origin: [7, 7]
+map:
+  - WXWWWWW
+  - WWWDDWW
+  - WWDDDWW
+  - SSSSSSS
+  - WWDDDWW
+  - WWDDWWW
+  - WWWWWWW
+
+zones:
+  W:
+    id: nishihara_houses
+    name: Nishihara (houses)
+    plan:
+      floors: [[2, 2, 70], [3, 3, 25], [4, 4, 5]]
+      lotW: [7, 10]
+      localStreet: [3, 4.5]
+      block: [16, 34]
+      lotGap: 0.45
+      signChance: 0.05
+      open: { parking: 0.1, vacant: 0.06, playground: 0.03 }
+      rear: [1.2, 3]
+      setback: [0.6, 2]
+      streetTrees: 0.1
+      hedges: 0.15
+      pots: 0.6
+    ads: { street: 2, food: 1, mainstream: 1 }
+    look:
+      windows: { punched: 45, small: 35, balcony: 20 }
+      walls: ['#c8c0b0', '#b8b0a0', '#d8d0c0', '#a8a098', '#9aa0a8', '#8a7a6a']
+      tiled: true
+      shops: { warm: 3, cool: 1 }
+      open: 0.5
+      homes: 0.9
+      roofs: 0.75
+      bikes: 0.7
+
+  D:
+    id: nishihara_danchi
+    name: Nishihara Danchi (the estates)
+    plan:
+      floors: [[4, 5, 75], [11, 14, 25]]
+      lotW: [36, 60]
+      localStreet: [6, 9]
+      block: [40, 70]
+      twoRowDepth: 34
+      lotGap: 8
+      signChance: 0.03
+      open: { parking: 0.1, playground: 0.12 }
+      rear: [6, 10]
+      setback: [5, 9]
+      streetTrees: 0.8
+      hedges: 0.4
+    ads: { mainstream: 1 }
+    look:
+      windows: { balcony: 90, punched: 10 }
+      walls: ['#d8d4c8', '#d0ccc0', '#c8c4b8', '#e0dcd0']
+      tiled: false
+      shops: { cool: 2 }
+      open: 0.4
+      homes: 0.95
+      bikes: 0.8
+
+  S:
+    id: nishihara_shotengai
+    name: Nishihara Shōtengai
+    plan:
+      floors: [[2, 3, 70], [4, 5, 30]]
+      lotW: [5, 9]
+      localStreet: [4, 6]
+      lotGap: 0.1
+      signChance: 0.85
+      verticalSign: 0.5
+      open: { parking: 0.04 }
+      rear: [0.5, 1.5]
+      setback: [0, 0.4]
+      streetTrees: 0.1
+      pots: 0.5
+    signs:
+      words: [八百屋, 精肉, 鮮魚, コロッケ, 惣菜, 豆腐, 薬局, 喫茶, パチンコ, 定食, 中華, 銭湯, 酒店, 西原銀座]
+      colors: ['#ffe45f', '#ff4f4f', '#ffb040', '#ffffff', '#6bff8a']
+    ads: { food: 4, street: 3, fun: 1 }
+    look:
+      windows: { punched: 60, small: 40 }
+      walls: ['#b8a88c', '#c2b49a', '#a89878', '#7c604c', '#d8d5cc']
+      tiled: true
+      shops: { warm: 7, cool: 2, colourful: 1 }
+      open: 0.9
+      homes: 0.15
+      roofs: 0.3
+      bikes: 0.4
+
+  X:
+    id: nishihara_edge
+    name: Nishihara (the edge of the city)
+    plan:
+      floors: [[2, 2, 80], [3, 3, 20]]
+      lotW: [8, 12]
+      localStreet: [3, 4.5]
+      block: [16, 34]
+      open: { parking: 0.15, vacant: 0.35 }
+      rear: [1.5, 3]
+      setback: [1, 2.5]
+      pots: 0.2
+    ads: { street: 1 }
+    look:
+      windows: { punched: 50, small: 50 }
+      walls: ['#a8a098', '#9a9288', '#8a7a6a', '#b8b0a0']
+      tiled: true
+      shops: { warm: 1 }
+      open: 0.2
+      homes: 0.9
+      roofs: 0.8
+      bikes: 0.4

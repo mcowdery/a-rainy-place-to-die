@@ -1,0 +1,12 @@
+# 旅館 鷹の湯 Ryokan Taka-no-yu, a traditional inn on the heights (real/suburbs.ts, kind ryokan): the roofed gate and
+# its lanterns, the garden, the two-storey wooden inn, the outdoor bath behind the fence.
+id: ryokan
+name: 旅館 鷹の湯 Ryokan Taka-no-yu
+footprint: [40, 34]
+height: 10
+front: south
+landmark: ryokan
+nodes:
+  front: { kind: spawn, name: Ryokan Taka-no-yu, at: [20, 5], facing: north, view: [0, 4] }
+  genkan: { kind: door, name: The ryokan's genkan, at: [20, -11], returnSpawn: front }
+  okami: { kind: npc, name: The okami at the gate, at: [18, -2], figure: { body: woman, pose: stand, color: '#e8b8c8' } }
