@@ -798,7 +798,9 @@ async function run(): Promise<void> {
     base.horizon.setHex(atm.horizon).multiplyScalar(1 - 0.85 * d);
     base.cloudLit.setHex(atm.cloudLit).multiplyScalar(1 - 0.7 * d);
     sky.uniforms.uCloudDark.value.setHex(atm.cloudDark).multiplyScalar(1 - 0.7 * d);
-    sky.uniforms.uCover.value = rainAmount > 0 ? Math.max(atm.clouds, 0.75 + rainAmount * 0.25) : atm.clouds;
+    // (Autumn skies are cloudier.)
+    const clouds = season() === 'autumn' ? atm.clouds + (1 - atm.clouds) * 0.4 : atm.clouds;
+    sky.uniforms.uCover.value = rainAmount > 0 ? Math.max(clouds, 0.75 + rainAmount * 0.25) : clouds;
     sky.uniforms.uStars.value = time() === 'night' && rainAmount === 0 && weather() === 'clear' ? 1 - d * 0.5 : 0;
     cityU.uZenith.value.copy(base.zenith);
     cityU.uHorizon.value.copy(base.horizon);
@@ -940,7 +942,10 @@ async function run(): Promise<void> {
   sky.uniforms.uMountains.value = 1;
   // The season (district/seasons.ts): the trees, the lawns, the forest on the hills, snow on the mountains. The story
   // moves it by flag (season_spring ... season_winter).
+  const seasonWind = (): number => (season() === 'autumn' ? 0.3 : season() === 'spring' ? 0.1 : 0);
   const applySeason = (): void => {
+    // (The atmosphere again: autumn's cloudier sky.)
+    atmKey = '';
     const i = seasonIndex(season());
     cityU.uSeason.value = i;
     edges.setSeason(i);
@@ -1922,8 +1927,9 @@ async function run(): Promise<void> {
     updateSnowTraffic(dt, snowing);
     const outdoors = !inInterior() && camera.position.y > -2.6 && !trainRiding() && !subway.riding;
     refreshLitter(dt);
-    drift.set(!outdoors ? 'none' : snowing ? 'snow' : season() === 'spring' ? 'petals' : season() === 'autumn' ? 'leaves' : 'none', snowing ? 0.75 : season() === 'spring' ? 0.35 : 0.2, cityU.uLitterCount.value);
-    drift.update(dt, camera.position, 0.12 + 0.5 * (1 - cityU.uLamps.value), windVec);
+    const breeze = Math.min(1, windVec.length() / 3);
+    drift.set(!outdoors ? 'none' : snowing ? 'snow' : season() === 'spring' ? 'petals' : season() === 'autumn' ? 'leaves' : 'none', snowing ? 0.75 : season() === 'spring' ? 0.1 + 0.1 * breeze : 0.07 + 0.2 * breeze);
+    drift.update(dt, camera.position, 0.12 + 0.5 * (1 - cityU.uLamps.value), windVec, groundAt(camera.position.x, camera.position.z));
     ssr.wet = wetness;
     ssr.rain = rainAmount;
     cityU.uCarCount.value = traffic.fillLights(camera.position, cityU.uCars.value);
@@ -1942,7 +1948,9 @@ async function run(): Promise<void> {
     // Wind: a direction and strength with gusts; the rain slants by up to ~3 m sideways per metre of fall.
     const tt = now / 1000;
     const gust = 0.72 + 0.2 * Math.sin(tt * 0.83) + 0.12 * Math.sin(tt * 2.31 + 1.3) + 0.06 * Math.sin(tt * 5.7);
-    const blow = mood.wind * gust;
+    // Autumn is windier (and spring a little): a season's breeze under the setting.
+    const windAmt = mood.wind + seasonWind();
+    const blow = windAmt * gust;
     const wa = (mood.windDir * Math.PI) / 180;
     // The wind turns and builds with a little inertia rather than snapping to the settings.
     windTarget.set(Math.sin(wa), -Math.cos(wa)).multiplyScalar(blow * 3.2);
@@ -1961,7 +1969,7 @@ async function run(): Promise<void> {
     const inside = !!trainRiding() || district.sheltered(cp.x, cp.z, cp.y);
     cones.update(cp, lamps, Math.max(atm.haze, rainAmount * 1.2) * atm.lamps * 0.05 * (1 - 0.3 * mood.darkness));
     lampShadows.update(cp, lamps, atm.lamps * 55);
-    skyTime += dt * (1 + mood.wind * 30);
+    skyTime += dt * (1 + windAmt * 30);
     sky.uniforms.uTime.value = skyTime;
     grade.tick(tt, inside ? 0 : rainAmount * (1 + mood.wind));
     // Lightning in a storm (or on demand): the sky, the clouds and the ambient light flash.
@@ -2006,7 +2014,7 @@ async function run(): Promise<void> {
     audio.update({
       dt,
       rain: rainAmount,
-      wind: mood.wind,
+      wind: windAmt,
       gust,
       cover,
       train: !!trainRiding() || subway.riding,

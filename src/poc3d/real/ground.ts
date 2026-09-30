@@ -14,16 +14,21 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rec
   mb.style = [0, 0, 0, 0];
   mb.frontNormal = null;
   const cell = plan.rect;
-  const slab = (r: Rect, y0: number, y1: number, kind: number, top: number, hex: number): void => {
+  // Each slab carries its whole rectangle (and a road its kerbs), so the city shader knows where its edges are:
+  // fallen leaves and petals gather along them (city.ts fallenAt). style (0, x0, z0, w); flags SLAB_FLAG +
+  // depth * 8 * 128 + the kerb (a road's pavement width * 2, +64 if it runs north-south).
+  const slab = (r: Rect, y0: number, y1: number, kind: number, top: number, hex: number, kerb = 0): void => {
     const c = intersect(r, cell);
     if (!c || c.w < 0.01 || c.h < 0.01) return;
     mb.kind = kind;
     mb.color = lin(hex);
+    mb.style = [0, r.x, r.y, r.w];
+    mb.flags = SLAB_FLAG + Math.round(r.h * 8) * 128 + kerb;
     mb.box(c.x + c.w / 2, c.y + c.h / 2, y0, y1, c.w, c.h, top);
   };
   // Lot concrete, with any openings (stairwells to basements) cut out.
   for (const piece of subtract(cell, holes)) slab(piece, -0.2, 0, KIND.lot, KIND.lot, 0x6a6862);
-  for (const r of plan.roads) slab(r.rect, 0, 0.02, KIND.asphalt, KIND.asphalt, r.kind === 'coast' ? 0x5a5e62 : 0x2a2a2e);
+  for (const r of plan.roads) slab(r.rect, 0, 0.02, KIND.asphalt, KIND.asphalt, r.kind === 'coast' ? 0x5a5e62 : 0x2a2a2e, r.sidewalk > 0 ? Math.min(63, Math.round(r.sidewalk * 2)) + (r.vertical ? 64 : 0) : 0);
   for (const r of plan.roads) {
     if (r.sidewalk <= 0) continue;
     const crossings = plan.roads.filter((o) => o !== r && o.vertical !== r.vertical && o.kind !== 'coast' && overlaps(o.rect, r.rect));
@@ -47,9 +52,14 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rec
       mb.quad([l.rect.x, l.y, l.rect.y + l.rect.h], [l.rect.w, 0, 0], [0, 0, -l.rect.h]);
     }
   }
+  mb.style = [0, 0, 0, 0];
+  mb.flags = 0;
   paint(mb, plan);
   for (const s of scrambles) scramble(mb, plan, s);
 }
+
+/** Marks a ground slab's flags (see addGround's slab). */
+export const SLAB_FLAG = 4096;
 
 /**
  * A scramble crossing: zebra bands along both diagonals of the junction box (bars 0.45 m across the

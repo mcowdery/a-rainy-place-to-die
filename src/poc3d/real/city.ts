@@ -223,12 +223,10 @@ const common = /* glsl */ `
     vec4 t = texture2D(tTracks, fract(wp.xz / uTrackRect.z));
     return t.r * (1.0 - smoothstep(0.8, 1.6, abs(wp.y - t.g * 64.0)));
   }
-  // Fallen petals (spring) or leaves (autumn) round the feet of the trees near the camera: speckles up close, a
-  // wash of their colour further off. Returns the colour (linear) in rgb and the cover in a.
-  vec4 litterAt(vec3 wp, float fine) {
+  // The trees dropping petals (spring) or leaves (autumn) near the camera: the colour of the nearest one's
+  // (linear) and how thick they lie there (0 away from them).
+  vec4 treeLitter(vec3 wp) {
     if (uLitterCount == 0) return vec4(0.0);
-    float camD = length(wp.xz - cameraPosition.xz);
-    if (camD > uLitterReach) return vec4(0.0);
     vec4 best = vec4(0.0);
     for (int i = 0; i < ${LITTER}; i++) {
       if (i >= uLitterCount) break;
@@ -236,26 +234,92 @@ const common = /* glsl */ `
       vec2 rel = wp.xz - t.xy;
       float r = t.z;
       float d2 = dot(rel, rel);
-      if (d2 > r * r * 1.7) continue;
-      float code = mod(t.w, 8.0);
+      if (r <= 0.0 || d2 > r * r * 2.2) continue;
       float gy = floor(t.w / 8.0) * 0.5;
       if (abs(wp.y - gy) > 1.5) continue;
-      float dens = (1.0 - smoothstep(r * 0.35, r * 1.3, sqrt(d2))) * (0.55 + 0.45 * vnoise(wp.xz * 0.9 + t.xy));
+      float dens = 1.0 - smoothstep(r * 0.3, r * 1.45, sqrt(d2));
       if (dens <= best.a) continue;
+      float code = mod(t.w, 8.0);
       vec3 c;
-      if (uSeason < 0.5) c = code > 2.5 ? vec3(0.96, 0.9, 0.9) : vec3(0.96, 0.66, 0.78);
-      else c = code < 0.5 ? vec3(0.64, 0.36, 0.14) : code < 1.5 ? vec3(0.9, 0.72, 0.12) : code < 2.5 ? vec3(0.74, 0.3, 0.14) : vec3(0.6, 0.13, 0.12);
-      best = vec4(pow(c, vec3(2.2)), dens);
+      if (uSeason < 0.5) c = code > 2.5 ? vec3(0.97, 0.9, 0.9) : vec3(0.96, 0.68, 0.8);
+      else c = code < 0.5 ? vec3(0.62, 0.34, 0.13) : code < 1.5 ? vec3(0.93, 0.74, 0.12) : code < 2.5 ? vec3(0.76, 0.28, 0.12) : vec3(0.62, 0.12, 0.12);
+      best = vec4(c, dens);
     }
-    if (best.a <= 0.0) return vec4(0.0);
-    // Petals are small and sparse, leaves bigger and thicker on the ground.
-    float scale = uSeason < 0.5 ? 11.0 : 6.0;
-    vec2 cellP = floor(wp.xz * scale);
-    vec2 jit = vec2(h2(cellP + 3.1), h2(cellP + 5.7)) - 0.5;
-    float spot = step(1.0 - best.a * (uSeason < 0.5 ? 0.85 : 0.95), h2(cellP)) * smoothstep(0.42, 0.3, length(fract(wp.xz * scale) - 0.5 - jit * 0.3));
-    float cover = mix(best.a * (uSeason < 0.5 ? 0.4 : 0.55), spot, fine);
-    vec3 col = best.rgb * (0.8 + 0.4 * h2(cellP + 7.0));
-    return vec4(col, cover * (1.0 - smoothstep(uLitterReach * 0.75, uLitterReach, camD)));
+    float camD = length(wp.xz - cameraPosition.xz);
+    return vec4(best.rgb, best.a * (1.0 - smoothstep(uLitterReach * 0.75, uLitterReach, camD)));
+  }
+  // How far a point on a ground slab's top is from the slab's edges (ground.ts addGround: the pavement's kerb
+  // and building line, a plaza's border, a lawn's), or on a road from its kerbs; far (99) if it isn't a slab.
+  float slabEdge(vec3 wp) {
+    if (vFlags < 4095.5) return 99.0;
+    float f = vFlags - 4096.0;
+    float kc = mod(f, 128.0);
+    float d = floor(f / 128.0) / 8.0;
+    vec2 q = wp.xz - vStyle.yz;
+    float w = vStyle.w;
+    float ex = min(q.x, w - q.x);
+    float ez = min(q.y, d - q.y);
+    if (kc > 0.5) {
+      // A road: its kerbs a pavement's width in from its sides.
+      float kerbS = mod(kc, 64.0) * 0.5;
+      return abs((kc > 63.5 ? ex : ez) - kerbS);
+    }
+    return min(ex, ez);
+  }
+  // A leaf (or a petal) lying in a cell: q from the cell's centre, turned by ang; length L, width W (cell units).
+  // Returns (inside 0-1, across the midrib -1..1).
+  vec2 leafShape(vec2 q, float ang, float L, float W, float notch) {
+    float ca = cos(ang), sa = sin(ang);
+    vec2 r = vec2(ca * q.x + sa * q.y, -sa * q.x + ca * q.y);
+    float t = r.x / L;
+    if (abs(t) > 1.0) return vec2(0.0);
+    // Broad toward the stalk end, pointed at the tip; a petal has a notch at its tip.
+    float w = W * sqrt(max(0.0, 1.0 - t * t)) * (1.0 - 0.35 * t) + 1e-4;
+    float inside = 1.0 - smoothstep(w * 0.75, w, abs(r.y));
+    if (notch > 0.0) inside *= smoothstep(notch * 0.6, notch, length(vec2(r.x - L, r.y)));
+    return vec2(inside, r.y / w);
+  }
+  // Fallen leaves (autumn) or cherry petals (spring): a thin scatter everywhere, drifts in streaks where the wind
+  // left them, piled along the edges (kerbs, the foot of walls, a plaza's rim) and thick under the trees that
+  // dropped them. Leaves up close (two offset layers of cells, each maybe holding one, turned and sized at random,
+  // with a midrib), a wash of their colour further off. Returns the colour (linear) and the cover.
+  vec4 fallenAt(vec3 wp, float fine, float edge) {
+    bool spring = uSeason < 0.5;
+    vec4 tree = treeLitter(wp);
+    vec2 sp = vec2(wp.x * 0.8 + wp.z * 0.6, -wp.x * 0.6 + wp.z * 0.8);
+    float streak = vnoise(sp * vec2(0.07, 0.45));
+    float pile = exp(-edge / (spring ? 0.35 : 0.5)) * (0.6 + 0.4 * vnoise(wp.xz * 0.9));
+    float dens = (spring ? 0.03 : 0.08) + (spring ? 0.08 : 0.2) * smoothstep(0.5, 0.85, streak) + (spring ? 0.5 : 0.75) * pile + (spring ? 0.75 : 0.85) * tree.a;
+    dens = clamp(dens, 0.0, 0.92);
+    float scale = spring ? 9.0 : 4.2;
+    vec3 col = vec3(0.0);
+    float cover = 0.0;
+    for (int k = 0; k < 2; k++) {
+      vec2 g = wp.xz * scale + float(k) * vec2(0.37, 0.61);
+      vec2 cellP = floor(g) + float(k) * 71.0;
+      float h = h2(cellP);
+      if (h > dens) continue;
+      vec2 q = fract(g) - 0.5 - (vec2(h2(cellP + 3.1), h2(cellP + 5.7)) - 0.5) * 0.25;
+      float ang = h2(cellP + 9.3) * 6.2832;
+      float sz = 0.75 + 0.5 * h2(cellP + 1.7);
+      vec2 lf = spring ? leafShape(q, ang, 0.3 * sz, 0.2 * sz, 0.07 * sz) : leafShape(q, ang, 0.42 * sz, 0.2 * sz, 0.0);
+      if (lf.x <= cover) continue;
+      float pick = h2(cellP + 13.9);
+      vec3 c;
+      if (spring) c = pick < 0.75 ? vec3(0.96, 0.7, 0.8) : vec3(0.98, 0.88, 0.9);
+      else c = pick < 0.22 ? vec3(0.9, 0.68, 0.14) : pick < 0.44 ? vec3(0.84, 0.42, 0.12) : pick < 0.6 ? vec3(0.62, 0.17, 0.1) : pick < 0.82 ? vec3(0.46, 0.28, 0.12) : vec3(0.64, 0.52, 0.3);
+      // Near a tree, mostly its own.
+      if (h2(cellP + 21.3) < tree.a) c = tree.rgb;
+      c = pow(c * (0.85 + 0.3 * h2(cellP + 17.1)), vec3(2.2));
+      // The midrib, and the leaf a touch darker at its edges.
+      if (!spring) c *= (1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.12, abs(lf.y)))) * (1.0 - 0.2 * abs(lf.y));
+      col = c;
+      cover = lf.x;
+    }
+    // Further off: a wash of the average colour.
+    vec3 avg = spring ? pow(vec3(0.96, 0.74, 0.83), vec3(2.2)) : mix(pow(vec3(0.7, 0.42, 0.14), vec3(2.2)), pow(tree.rgb, vec3(2.2)), tree.a);
+    float wash = dens * (spring ? 0.3 : 0.45);
+    return vec4(mix(avg, col, fine), mix(wash, cover, fine));
   }
 
   // Interior mapping: trace a ray into an axis-aligned room [0, rw] x [0, ch] x [-depth, 0] (x along the
@@ -723,12 +787,12 @@ const surface = /* glsl */ `
     // A wet road throws the headlights back at you: a glare stretched toward the viewer.
     if (groundKind && uWet > 0.0) sEmit += cl * 0.05 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * 2.0 * uWet;
   }
-  // Fallen petals and leaves round the feet of the trees (spring, autumn): on the ground and whatever else lies
-  // flat at its level (a landmark's paving), not on paint, glass, lights, water or the crowns themselves.
-  if (Nw.y > 0.7 && (uSeason < 0.5 || (uSeason > 1.5 && uSeason < 2.5)) && kindF < 12.5 && !(kindF > 2.5 && kindF < 6.5) && vStyle.x < 19.5) {
-    vec4 lit = litterAt(vWPos, 1.0 - smoothstep(0.02, 0.06, max(fwW.x, fwW.y)));
+  // Fallen leaves (autumn) and petals (spring) on whatever lies flat (the ground, paving, the tops of things), not on
+  // glass, paint, lights, water or the crowns themselves; piled along the ground slabs' edges.
+  if (Nw.y > 0.7 && (uSeason < 0.5 || (uSeason > 1.5 && uSeason < 2.5)) && kindF < 12.5 && !(kindF > 2.5 && kindF < 6.5) && !(kindF < 0.5 && vStyle.x > 19.5)) {
+    vec4 lit = fallenAt(vWPos, 1.0 - smoothstep(0.03, 0.09, max(fwW.x, fwW.y)), groundKind ? slabEdge(vWPos) : 99.0);
     albedo = mix(albedo, lit.rgb, lit.a);
-    sRough = mix(sRough, 0.8, lit.a);
+    sRough = mix(sRough, 0.85, lit.a);
   }
   // Snow on what faces up (roofs, pavements, lawns, the tops of things), patchy as it starts; roads keep less of it.
   if (uSnow > 0.0 && !(kindF > 2.5 && kindF < 3.5) && !(kindF > 12.5)) {
@@ -736,15 +800,20 @@ const surface = /* glsl */ `
     float patchy = smoothstep(0.3, 0.7, vnoise(vWPos.xz * 0.45) * 0.55 + uSnow * 0.75);
     float road = kindF > 6.5 && kindF < 7.5 ? 0.8 : 1.0;
     float sn = up * patchy * road * uSnow;
-    // Moving cars have their wipers going; tyres press tracks into it (slush, dark and wet, in them).
+    // Moving cars have their wipers going; tyres press tracks into it (packed snow, a little greyer and smoother).
     if (kindF > 4.5 && kindF < 5.5 && uWiperCount > 0) sn *= 1.0 - wiped(vWPos, Nw);
     float trk = groundKind ? trackAt(vWPos) * uSnow : 0.0;
-    sn *= 1.0 - 0.8 * trk;
+    sn = max(sn, trk * up * 0.85);
     albedo = mix(albedo, vec3(0.62, 0.64, 0.68), sn);
     sRough = mix(sRough, 0.92, sn);
     if (trk > 0.0) {
-      albedo = mix(albedo, albedo * 0.55 + vec3(0.02, 0.022, 0.026), trk);
-      sRough = mix(sRough, 0.3, trk);
+      // The tread: faint ribs across the track up close.
+      float tread = 0.9 + 0.1 * step(0.5, fract(dot(vWPos.xz, vec2(0.7071)) * 9.0)) * (1.0 - smoothstep(0.02, 0.06, max(fwW.x, fwW.y)));
+      // Pressed snow a shade greyer, and the snow pushed up along its edges a shade brighter.
+      float ridge = clamp(trk * (1.0 - trk) * 4.0, 0.0, 1.0) * (1.0 - smoothstep(0.7, 1.0, trk));
+      albedo = mix(albedo, vec3(0.42, 0.44, 0.5) * tread, smoothstep(0.35, 1.0, trk) * 0.75);
+      albedo = mix(albedo, vec3(0.7, 0.72, 0.76), ridge * 0.5 * uSnow);
+      sRough = mix(sRough, 0.7, trk);
     }
   }
   diffuseColor.rgb = albedo;

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { LITTER, type CityUniforms } from './city';
+import type { CityUniforms } from './city';
 import { screenLightGlsl } from './screenLight';
 
 /**
@@ -918,11 +918,12 @@ export class LampShadows {
 }
 
 /**
- * Things drifting down: snow in winter weather, in a box that follows the camera; petals in spring and leaves in
- * autumn only from the trees dropping them near the camera (the city's uLitter list: each point belongs to one of
- * its slots and falls from under that tree's crown to its foot, over and over, drifting a little downwind; the
- * ground under them has the fallen ones, city.ts litterAt). main.ts picks by the season and the weather. Each point
- * falls at its own pace and sways, lit by the street light (the lightmap) and the sky.
+ * Things drifting down round the camera: snow in winter weather, cherry petals in spring, leaves in autumn (main.ts
+ * picks by the season and the weather). Points in a box that follows the camera, each falling at its own pace and
+ * swaying, lit by the street light (the lightmap) and the sky. Petals and leaves are drawn as their shapes, turning
+ * and tumbling (thin when edge-on), and ride the wind: carried downwind (the offset is integrated here, so a change
+ * of wind doesn't jump them), hanging longer and spinning faster as it rises; when it's up, a share of them skitter
+ * along the ground in hops instead of falling.
  */
 export class Drift {
   readonly points: THREE.Points;
@@ -930,17 +931,19 @@ export class Drift {
     uTime: { value: 0 },
     uCam: { value: new THREE.Vector3() },
     uAmount: { value: 0 },
-    uColor: { value: new THREE.Color(1, 1, 1) },
-    uColor2: { value: new THREE.Color(1, 1, 1) },
+    /** 0 snow, 1 petals, 2 leaves. */
+    uKind: { value: 0 },
     /** Fall speed (m/s), sway (m), size (m). */
     uFall: { value: 1 },
     uSway: { value: 0.4 },
     uSize: { value: 0.03 },
     uAmbient: { value: 0.3 },
-    /** 0: the box round the camera (snow); 1: under the trees (petals, leaves). */
-    uMode: { value: 0 },
-    uSeason: { value: 0 },
-    uWind: { value: new THREE.Vector2(0.3, 0.1) },
+    /** The wind now (m/s), and how far it has carried things so far (m), aloft and along the ground. */
+    uWind: { value: new THREE.Vector2() },
+    uCarry: { value: new THREE.Vector2() },
+    uSkid: { value: new THREE.Vector2() },
+    /** The ground's height under the camera (for the skittering ones). */
+    uGround: { value: 0 },
   };
 
   constructor(city: CityUniforms) {
@@ -951,7 +954,7 @@ export class Drift {
     g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(N * 3), 3));
     g.setAttribute('aSeed', new THREE.Float32BufferAttribute(seed, 4));
     this.points = new THREE.Points(g, new THREE.ShaderMaterial({
-      uniforms: { ...this.u, uTrees: city.uLitter, uTreeCount: city.uLitterCount, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain },
+      uniforms: { ...this.u, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain },
       transparent: true,
       depthWrite: false,
       vertexShader: /* glsl */ `
@@ -959,114 +962,133 @@ export class Drift {
         uniform float uTime;
         uniform vec3 uCam;
         uniform float uAmount;
+        uniform float uKind;
         uniform float uFall;
         uniform float uSway;
         uniform float uSize;
         uniform float uAmbient;
-        uniform vec3 uColor;
-        uniform vec3 uColor2;
-        uniform float uMode;
-        uniform float uSeason;
-        uniform vec4 uTrees[${LITTER}];
-        uniform int uTreeCount;
         uniform vec2 uWind;
+        uniform vec2 uCarry;
+        uniform vec2 uSkid;
+        uniform float uGround;
         ${lightmapGlsl}
         varying vec3 vCol;
         varying float vA;
+        varying vec2 vRot;
+        varying float vFlip;
         void main() {
-          if (uMode > 0.5) {
-            // Under a tree: its slot, a spot under its crown, and a fall from the crown to the ground.
-            int slot = int(floor(aSeed.x * ${LITTER}.0));
-            vec4 T = uTrees[slot < ${LITTER} ? slot : 0];
-            float live = (slot < uTreeCount && T.z > 0.01 && fract(aSeed.x * 97.0) < uAmount) ? 1.0 : 0.0;
-            float code = mod(T.w, 8.0);
-            float gy = floor(T.w / 8.0) * 0.5;
-            float r = T.z;
-            float top = 2.2 + r * 0.9;
-            float speed = uFall * (0.7 + aSeed.w * 0.6);
-            float cyc = top / speed;
-            float t = mod(uTime + aSeed.y * cyc * 7.0, cyc);
-            float a = aSeed.z * 6.2832;
-            vec2 at = T.xy + vec2(cos(a), sin(a)) * sqrt(fract(aSeed.w * 13.0)) * r * 0.85;
-            vec3 p = vec3(at.x, gy + top - t * speed, at.y);
-            p.xz += uWind * t;
-            p.x += sin(uTime * (0.6 + aSeed.w) + aSeed.z * 20.0) * uSway;
-            p.z += cos(uTime * (0.5 + aSeed.x) + aSeed.y * 20.0) * uSway;
-            vec4 mv = viewMatrix * vec4(p, 1.0);
-            float d = -mv.z;
-            vA = live * smoothstep(0.4, 1.5, d) * (1.0 - smoothstep(38.0, 50.0, length(p - uCam))) * smoothstep(0.0, 0.4, t) * smoothstep(0.0, 0.3, p.y - gy);
-            vec3 c;
-            if (uSeason < 0.5) c = code > 2.5 ? vec3(0.98, 0.95, 0.92) : vec3(1.0, 0.78, 0.86);
-            else c = code < 0.5 ? vec3(0.64, 0.36, 0.14) : code < 1.5 ? vec3(0.95, 0.76, 0.14) : code < 2.5 ? vec3(0.78, 0.3, 0.12) : vec3(0.66, 0.13, 0.12);
-            vCol = c * (0.9 + 0.2 * fract(aSeed.y * 31.0)) * (uAmbient + lightAt(p.xz) * 0.8);
-            gl_Position = projectionMatrix * mv;
-            gl_PointSize = min(uSize * 900.0 / max(d, 0.3), 6.0) * step(0.01, vA);
-            return;
-          }
-          vec3 box = vec3(44.0, 24.0, 44.0);
-          float speed = uFall * (0.7 + aSeed.w * 0.6);
+          bool snow = uKind < 0.5;
+          float windS = length(uWind);
+          vec3 box = snow ? vec3(44.0, 24.0, 44.0) : vec3(52.0, 20.0, 52.0);
+          // Leaves and petals hang longer in a wind; each rides it a little differently.
+          float speed = uFall * (0.7 + aSeed.w * 0.6) / (snow ? 1.0 : 1.0 + windS * 0.3);
+          float ride = snow ? 0.35 : 0.75 + 0.5 * fract(aSeed.x * 31.0);
           vec3 p = aSeed.xyz * box;
           p.y -= uTime * speed;
-          p.x += sin(uTime * (0.6 + aSeed.w) + aSeed.z * 20.0) * uSway;
-          p.z += cos(uTime * (0.5 + aSeed.x) + aSeed.y * 20.0) * uSway;
-          p = mod(p - uCam + box * 0.5, box) + uCam - box * 0.5;
-          float live = step(aSeed.w, uAmount);
+          p.xz += uCarry * ride;
+          float sway = uSway * (1.0 + windS * 0.35);
+          p.x += sin(uTime * (0.6 + aSeed.w) + aSeed.z * 20.0) * sway;
+          p.z += cos(uTime * (0.5 + aSeed.x) + aSeed.y * 20.0) * sway;
+          // A share skitter along the ground when the wind's up: carried in bursts, hopping.
+          bool skit = !snow && fract(aSeed.w * 53.0) < 0.3;
+          float skitA = 1.0;
+          if (skit) {
+            p = vec3(aSeed.x * box.x, 0.0, aSeed.z * box.z);
+            p.xz += uSkid * (0.6 + 0.8 * fract(aSeed.y * 17.0));
+            float hop = abs(sin(uTime * (3.0 + 4.0 * aSeed.y) + aSeed.z * 40.0));
+            p.y = 0.0;
+            p = mod(p - uCam + box * 0.5, box) + uCam - box * 0.5;
+            p.y = uGround + 0.12 + hop * hop * 0.35 * min(1.0, windS / 3.0);
+            skitA = smoothstep(0.6, 1.8, windS);
+          } else {
+            p = mod(p - uCam + box * 0.5, box) + uCam - box * 0.5;
+          }
+          float live = step(fract(aSeed.w * 7.31), uAmount);
           vec4 mv = viewMatrix * vec4(p, 1.0);
           float d = -mv.z;
-          vA = live * smoothstep(0.4, 1.5, d) * (1.0 - smoothstep(14.0, 21.0, length(p - uCam))) * step(0.0, p.y);
-          vCol = mix(uColor, uColor2, step(0.5, fract(aSeed.x * 7.0))) * (uAmbient + lightAt(p.xz) * 0.8);
+          float reach = snow ? 21.0 : 30.0;
+          vA = live * skitA * smoothstep(0.4, 1.5, d) * (1.0 - smoothstep(reach * 0.65, reach, length(p - uCam))) * step(uGround - 0.5, p.y);
+          // Turning (faster in a wind) and tumbling (thin when edge-on).
+          float spin = (aSeed.z - 0.5) * 5.0 * (1.0 + windS * 0.4);
+          float a = aSeed.y * 6.2832 + uTime * spin;
+          vRot = vec2(cos(a), sin(a));
+          vFlip = cos(uTime * (1.2 + aSeed.x * 2.5) * (1.0 + windS * 0.3) + aSeed.w * 20.0);
+          vec3 c;
+          float pick = fract(aSeed.z * 13.7);
+          if (snow) c = mix(vec3(0.95, 0.96, 1.0), vec3(0.88, 0.9, 0.96), step(0.5, pick));
+          else if (uKind < 1.5) c = pick < 0.75 ? vec3(1.0, 0.76, 0.86) : vec3(1.0, 0.92, 0.94);
+          else c = pick < 0.22 ? vec3(0.95, 0.72, 0.16) : pick < 0.44 ? vec3(0.9, 0.45, 0.12) : pick < 0.62 ? vec3(0.7, 0.18, 0.1) : pick < 0.84 ? vec3(0.52, 0.3, 0.12) : vec3(0.7, 0.56, 0.32);
+          vCol = c * (uAmbient + lightAt(p.xz) * 0.8);
           gl_Position = projectionMatrix * mv;
-          gl_PointSize = min(uSize * 900.0 / max(d, 0.3), 6.0) * step(0.01, vA);
+          float px = uSize * (0.8 + 0.4 * fract(aSeed.y * 5.3)) * 900.0 / max(d, 0.3);
+          gl_PointSize = min(px, snow ? 6.0 : 26.0) * step(0.01, vA);
         }`,
       fragmentShader: /* glsl */ `
+        uniform float uKind;
         varying vec3 vCol;
         varying float vA;
+        varying vec2 vRot;
+        varying float vFlip;
         void main() {
-          vec2 q = gl_PointCoord - 0.5;
-          float r = dot(q, q);
-          if (r > 0.25 || vA < 0.01) discard;
-          gl_FragColor = vec4(vCol, vA * (1.0 - r * 3.0));
+          vec2 q = (gl_PointCoord - 0.5) * 2.0;
+          if (uKind < 0.5) {
+            float r = dot(q, q) * 0.25;
+            if (r > 0.25 || vA < 0.01) discard;
+            gl_FragColor = vec4(vCol, vA * (1.0 - r * 3.0));
+            return;
+          }
+          // A leaf (long, pointed, a midrib) or a petal (rounder, a notch at the tip), turned, tumbling.
+          vec2 r = vec2(vRot.x * q.x + vRot.y * q.y, -vRot.y * q.x + vRot.x * q.y);
+          bool petal = uKind < 1.5;
+          float L = petal ? 0.75 : 0.95;
+          float t = r.x / L;
+          float flat_ = 0.12 + 0.88 * abs(vFlip);
+          float w = (petal ? 0.55 : 0.45) * sqrt(max(0.0, 1.0 - t * t)) * (1.0 - 0.3 * t) * flat_ + 1e-3;
+          if (abs(t) > 1.0 || abs(r.y) > w || vA < 0.01) discard;
+          if (petal && length(vec2(r.x - L, r.y)) < 0.22) discard;
+          // The side toward the sky is lighter; the midrib darker.
+          vec3 c = vCol * (vFlip > 0.0 ? 1.0 : 0.75);
+          if (!petal) c *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.1 * flat_, abs(r.y)));
+          gl_FragColor = vec4(c, vA);
         }`,
     }));
     this.points.frustumCulled = false;
     this.points.renderOrder = 5;
   }
 
-  /**
-   * kind: what's drifting (or none); amount 0-1 (for petals and leaves, the share of each tree's points in the air).
-   * Petals and leaves fall only under the trees in the city's litter list.
-   */
-  set(kind: 'none' | 'snow' | 'petals' | 'leaves', amount: number, trees = 1): void {
+  /** kind: what's drifting (or none); amount 0-1. */
+  set(kind: 'none' | 'snow' | 'petals' | 'leaves', amount: number): void {
     const u = this.u;
     u.uAmount.value = kind === 'none' ? 0 : amount;
-    u.uMode.value = kind === 'petals' || kind === 'leaves' ? 1 : 0;
-    u.uSeason.value = kind === 'petals' ? 0 : 2;
-    this.points.visible = kind !== 'none' && amount > 0 && (kind === 'snow' || trees > 0);
+    this.points.visible = kind !== 'none' && amount > 0;
+    u.uKind.value = kind === 'petals' ? 1 : kind === 'leaves' ? 2 : 0;
     if (kind === 'snow') {
-      u.uColor.value.setRGB(0.95, 0.96, 1.0);
-      u.uColor2.value.setRGB(0.88, 0.9, 0.96);
       u.uFall.value = 1.1;
       u.uSway.value = 0.5;
       u.uSize.value = 0.028;
     } else if (kind === 'petals') {
-      u.uColor.value.setRGB(1.0, 0.78, 0.86);
-      u.uColor2.value.setRGB(0.98, 0.9, 0.93);
-      u.uFall.value = 0.6;
+      u.uFall.value = 0.55;
       u.uSway.value = 1.1;
-      u.uSize.value = 0.02;
+      u.uSize.value = 0.03;
     } else if (kind === 'leaves') {
-      u.uColor.value.setRGB(0.85, 0.5, 0.12);
-      u.uColor2.value.setRGB(0.75, 0.22, 0.1);
-      u.uFall.value = 1.3;
-      u.uSway.value = 0.9;
-      u.uSize.value = 0.04;
+      u.uFall.value = 1.0;
+      u.uSway.value = 1.0;
+      u.uSize.value = 0.075;
     }
   }
 
-  update(dt: number, camera: THREE.Vector3, ambient: number, wind?: THREE.Vector2): void {
-    this.u.uTime.value += dt;
-    if (wind) this.u.uWind.value.copy(wind).multiplyScalar(0.25);
-    this.u.uCam.value.copy(camera);
-    this.u.uAmbient.value = ambient;
+  /** Each frame: the camera, the ambient light, the wind (m/s) and the ground's height under the camera. */
+  update(dt: number, camera: THREE.Vector3, ambient: number, wind: THREE.Vector2, ground: number): void {
+    const u = this.u;
+    u.uTime.value += dt;
+    u.uWind.value.copy(wind);
+    u.uCarry.value.addScaledVector(wind, dt);
+    // Along the ground only the stronger gusts move them, in bursts.
+    const s = wind.length();
+    const burst = Math.max(0, s - 0.8) * (0.6 + 0.4 * Math.sin(u.uTime.value * 1.3) * Math.sin(u.uTime.value * 0.37 + 1));
+    if (s > 1e-3) u.uSkid.value.addScaledVector(wind, (dt * burst) / s);
+    u.uCam.value.copy(camera);
+    u.uAmbient.value = ambient;
+    u.uGround.value = ground;
   }
 }
