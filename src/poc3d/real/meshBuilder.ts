@@ -326,6 +326,52 @@ export class MeshBuilder {
     }
   }
 
+  /**
+   * A lathe (as `lathe`) with smooth normals: each vertex takes the normal of the ellipsoid about (cx, cy, cz) with
+   * radii (rx, ry), so a low-poly mass (a tree's crown) shades round rather than faceted. Same triangles.
+   */
+  latheSmooth(cx: number, cy: number, cz: number, rx: number, ry: number, rings: readonly (readonly [number, number])[], n = 7): void {
+    const nrm = new Float32Array(3);
+    const put = (a: number, y: number, r: number): void => {
+      const x = cx + Math.cos(a) * r;
+      const z = cz + Math.sin(a) * r;
+      let nx = (x - cx) / (rx * rx);
+      let ny = (y - cy) / (ry * ry);
+      let nz = (z - cz) / (rx * rx);
+      const l = Math.hypot(nx, ny, nz) || 1;
+      nx /= l;
+      ny /= l;
+      nz /= l;
+      nrm[0] = nx;
+      nrm[1] = ny;
+      nrm[2] = nz;
+      this.vert(x, y, z, nrm as unknown as V3, 0, y, 0, this.kind);
+    };
+    for (let k = 0; k + 1 < rings.length; k++) {
+      const [y0, r0] = rings[k];
+      const [y1, r1] = rings[k + 1];
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2;
+        const a1 = ((i + 1) / n) * Math.PI * 2;
+        this.grow(4, 6);
+        const s = this.nv;
+        put(a1, y0, r0);
+        put(a0, y0, r0);
+        put(a0, y1, r1);
+        put(a1, y1, r1);
+        const I = this.idx;
+        const j = this.ni;
+        I[j] = s;
+        I[j + 1] = s + 1;
+        I[j + 2] = s + 2;
+        I[j + 3] = s;
+        I[j + 4] = s + 2;
+        I[j + 5] = s + 3;
+        this.ni += 6;
+      }
+    }
+  }
+
   /** A thin square prism between two arbitrary points (wires, cables, diagonal braces). No end caps. */
   beam(a: V3, b: V3, t: number): void {
     const d: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];

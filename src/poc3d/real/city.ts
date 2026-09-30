@@ -38,6 +38,9 @@ export interface CityUniforms extends ScreenUniforms {
   uSnow: { value: number };
   /** 0-1: street light pools under its sources and falls off to black between them. */
   uDark: { value: number };
+  /** Toward the sun (or the moon), and its light (colour x intensity): leaves glow with it behind them. */
+  uSunDir: { value: THREE.Vector3 };
+  uSunCol: { value: THREE.Color };
   /** Moving cars' headlights near the camera: (x, z, dx, dz) per car, and how many; uHeadlights 0-1 switches them. */
   uCars: { value: THREE.Vector4[] };
   uCarCount: { value: number };
@@ -81,6 +84,8 @@ export function cityUniforms(): CityUniforms {
     uSeason: { value: 0 },
     uSnow: { value: 0 },
     uDark: { value: 0 },
+    uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    uSunCol: { value: new THREE.Color(0, 0, 0) },
     uCars: { value: Array.from({ length: CAR_LIGHTS }, () => new THREE.Vector4()) },
     uCarCount: { value: 0 },
     uHeadlights: { value: 0 },
@@ -112,6 +117,8 @@ const common = /* glsl */ `
   uniform float uSeason;
   uniform float uSnow;
   uniform float uDark;
+  uniform vec3 uSunDir;
+  uniform vec3 uSunCol;
   uniform vec4 uCars[${CAR_LIGHTS}];
   uniform int uCarCount;
   uniform float uHeadlights;
@@ -176,6 +183,13 @@ const common = /* glsl */ `
   float h1(float p) { p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
   float h2(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
   float h3(vec3 p3) { p3 = fract(p3 * 0.1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y) * p3.z); }
+  float vnoise3(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = mix(mix(h3(i), h3(i + vec3(1, 0, 0)), f.x), mix(h3(i + vec3(0, 1, 0)), h3(i + vec3(1, 1, 0)), f.x), f.y);
+    float b = mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), f.x), mix(h3(i + vec3(0, 1, 1)), h3(i + vec3(1, 1, 1)), f.x), f.y);
+    return mix(a, b, f.z);
+  }
   float vnoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
@@ -355,6 +369,9 @@ const surface = /* glsl */ `
   float kindF = mod(floor(vFacade.w + 0.5), 16.0);
   bool isFront = vFacade.w > 15.5;
   vec3 albedo = vColor.rgb;
+  // (Foliage: its leaf bump, applied to the lighting normal after three works it out: normalFoliage.)
+  float leafy = 0.0;
+  vec3 leafBump = vec3(0.0);
   float sRough = 0.85;
   float sMetal = 0.0;
   vec3 sEmit = vec3(0.0);
@@ -366,26 +383,70 @@ const surface = /* glsl */ `
   if (kindF < 0.5) {
     albedo *= 0.88 + 0.24 * vnoise(vWPos.xz * 1.3 + vWPos.y * 0.7);
     // Tree crowns (models/trees.ts tags them FOLIAGE_TAG + species): coloured by the season. Groups: zelkova,
-    // ginkgo, cherry, the evergreens (pine, camphor, azalea, box: their own colours) and dogwood.
+    // ginkgo, cherry, the evergreens (pine, camphor, azalea, box: their own colours) and dogwood. Each crown is a
+    // few smooth masses; here they get their leaves: clusters (two octaves of noise over the surface), darker
+    // under and between them, a bumpy normal so the light catches the clusters (normalFoliage), a ragged leafy
+    // edge instead of a polygon (up close), colour in patches (blossom and autumn mixed, not one flat tone), and
+    // the sun glowing through when you look toward it.
     if (vStyle.x > 19.5) {
       float sp = vStyle.x - 20.0;
       float grp = sp < 0.5 ? 0.0 : sp < 2.5 ? 1.0 : sp < 4.5 ? 2.0 : (sp > 6.5 && sp < 8.5) ? 4.0 : 3.0;
-      float shade = 0.8 + 0.4 * h1(floor(vWPos.x * 0.8) * 7.0 + floor(vWPos.y * 0.8) * 13.0 + floor(vWPos.z * 0.8) * 3.0);
+      float shade = 0.85 + 0.3 * h1(floor(vWPos.x * 0.8) * 7.0 + floor(vWPos.y * 0.8) * 13.0 + floor(vWPos.z * 0.8) * 3.0);
+      vec3 lp = vWPos;
+      float n1 = vnoise3(lp * 2.3);
+      float n2 = vnoise3(lp * 6.1 + 17.0);
+      float n3 = vnoise3(lp * 0.55 + 5.0);
+      // The leaves themselves (or florets), a few centimetres across, only where they're bigger than a pixel.
+      float n4 = vnoise3(lp * 17.0 + 3.0);
+      float closeL = 1.0 - smoothstep(0.02, 0.07, max(fwW.x, fwW.y));
+      float closeF = 1.0 - smoothstep(0.006, 0.025, max(fwW.x, fwW.y));
+      float clump = mix(0.55, smoothstep(0.25, 0.8, n1 * 0.6 + n2 * 0.4), 0.25 + 0.75 * closeL);
+      float blossom = uSeason < 0.5 && (grp > 1.5 && grp < 2.5 || grp > 3.5) ? 1.0 : 0.0;
+      // Petals let the light through: a blossoming crown is lighter underneath and between its clusters.
+      float ao = mix(mix(0.42, 0.7, blossom), 1.0, smoothstep(-0.75, 0.55, Nw.y));
+      float lightK = mix(mix(0.62, 0.82, blossom), mix(1.18, 1.08, blossom), clump) * ao * mix(1.0, mix(0.78, 1.14, smoothstep(0.3, 0.75, n4)), closeF);
+      bool bare = uSeason > 2.5 && !(grp > 2.5 && grp < 3.5);
+      // A ragged edge, leaves against the sky (only up close, where a leaf is bigger than a pixel).
+      float rim = 1.0 - abs(dot(Nw, Vw));
+      if (!bare && closeL > 0.3 && rim > 0.55 && mix(n2, n4, 0.55) < (rim - 0.55) * 2.4) discard;
       vec3 c;
-      if (uSeason < 0.5) c = grp < 0.5 ? vec3(0.46, 0.63, 0.28) : grp < 1.5 ? vec3(0.56, 0.7, 0.26) : grp < 2.5 ? vec3(0.97, 0.8, 0.87) : vec3(0.95, 0.93, 0.9);
-      else if (uSeason < 1.5) c = grp < 0.5 ? vec3(0.22, 0.36, 0.14) : grp < 1.5 ? vec3(0.3, 0.45, 0.15) : grp < 2.5 ? vec3(0.26, 0.4, 0.16) : vec3(0.24, 0.38, 0.16);
-      else c = grp < 0.5 ? vec3(0.64, 0.36, 0.14) : grp < 1.5 ? vec3(0.9, 0.72, 0.12) : grp < 2.5 ? vec3(0.74, 0.3, 0.14) : vec3(0.6, 0.13, 0.12);
+      if (uSeason < 0.5) {
+        if (grp < 0.5) c = mix(vec3(0.46, 0.63, 0.28), vec3(0.64, 0.76, 0.3), n3);
+        else if (grp < 1.5) c = mix(vec3(0.56, 0.7, 0.26), vec3(0.72, 0.8, 0.32), n3);
+        else if (grp < 2.5) {
+          // Cherry blossom: pale pink and white florets (bright specks up close), deeper pink patches.
+          c = mix(vec3(0.97, 0.8, 0.87), vec3(0.99, 0.94, 0.95), smoothstep(0.35, 0.7, n2));
+          c = mix(c, vec3(0.93, 0.6, 0.73), smoothstep(0.55, 0.85, n3) * 0.65);
+          c = mix(c, vec3(1.0, 0.97, 0.97), smoothstep(0.62, 0.8, n4) * closeF * 0.7);
+        } else c = mix(vec3(0.97, 0.94, 0.9), vec3(0.95, 0.7, 0.8), smoothstep(0.4, 0.8, n3));
+      } else if (uSeason < 1.5) {
+        vec3 g = grp < 0.5 ? vec3(0.22, 0.36, 0.14) : grp < 1.5 ? vec3(0.3, 0.45, 0.15) : grp < 2.5 ? vec3(0.26, 0.4, 0.16) : vec3(0.24, 0.38, 0.16);
+        c = mix(g, g * vec3(1.3, 1.22, 0.85), n3);
+      } else {
+        // Autumn in patches: some of the crown further on than the rest.
+        if (grp < 0.5) c = mix(mix(vec3(0.64, 0.36, 0.14), vec3(0.8, 0.54, 0.16), n3), vec3(0.45, 0.26, 0.1), smoothstep(0.6, 0.9, n1) * 0.5);
+        else if (grp < 1.5) c = mix(vec3(0.95, 0.76, 0.14), vec3(0.72, 0.74, 0.22), smoothstep(0.62, 0.9, n3) * 0.6);
+        else if (grp < 2.5) c = mix(vec3(0.74, 0.3, 0.14), vec3(0.9, 0.54, 0.16), n3);
+        else c = mix(vec3(0.6, 0.13, 0.12), vec3(0.48, 0.1, 0.24), n3);
+      }
       if (grp > 2.5 && grp < 3.5) {
         // Evergreens keep their own greens (azaleas flower in spring); duller in winter.
-        c = vColor.rgb / max(0.001, shade) * (uSeason > 2.5 ? 0.78 : 1.0);
-        if (sp > 8.5 && sp < 9.5 && uSeason < 0.5) c = vec3(0.85, 0.35, 0.6);
-        albedo = c * shade;
-      } else if (uSeason > 2.5) {
+        c = vColor.rgb * mix(0.85, 1.15, n3) * (uSeason > 2.5 ? 0.78 : 1.0);
+        if (sp > 8.5 && sp < 9.5 && uSeason < 0.5) c = pow(mix(vec3(0.85, 0.35, 0.6), vec3(0.95, 0.55, 0.75), n2), vec3(2.2));
+        albedo = c * shade * lightK;
+        leafy = 1.0;
+      } else if (bare) {
         // Bare in winter: a sparse lace of twigs where the crown was.
         if (vnoise(vWPos.xz * 2.7 + vWPos.y * 1.9) < 0.72) discard;
         albedo = vec3(0.07, 0.055, 0.045);
       } else {
-        albedo = pow(c, vec3(2.2)) * shade;
+        albedo = pow(c, vec3(2.2)) * shade * lightK;
+        leafy = 1.0;
+      }
+      if (leafy > 0.5) {
+        leafBump = vec3(n2 - 0.5, 0.35 * (n1 - 0.5), vnoise3(lp * 3.1 + 9.0) - 0.5) * 1.2 * closeL;
+        // The sun through the leaves: a glow looking toward it through a crown.
+        sEmit += albedo * uSunCol * pow(max(dot(Vw, uSunDir), 0.0), 5.0) * 0.3 * (0.3 + 0.7 * clump);
       }
     }
   } else if (kindF < 1.5) {
@@ -873,6 +934,9 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${common}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${surface}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        // normalFoliage: a tree crown's leaf clusters catch the light (city surface: leafBump, world space).
+        if (leafy > 0.5) normal = normalize(normal + (viewMatrix * vec4(leafBump, 0.0)).xyz);`)
       .replace('#include <opaque_fragment>', `
         // Never hand the post chain more than a bright highlight's worth of light (or a NaN).
         outgoingLight = clamp(outgoingLight, 0.0, 48.0);

@@ -1094,32 +1094,73 @@ export class Drift {
 }
 
 /**
- * Water thrown up by tyres through puddles (main.ts emits it for your car and the traffic near you): drops flung out
- * to the side and up from the wheel, carried a little with the car, falling back to the road, lit by the street
- * light (the lightmap) and the sky. A small pool of points simulated here.
+ * Water thrown up by tyres through puddles (main.ts emits it for your car and the traffic near you): droplets flung
+ * out to the side and up from the wheel, carried a little with the car, falling back to the road, drawn as short
+ * streaks along their motion (the eye sees a fast drop as a line); and a fine mist that hangs over the wheel and
+ * drifts off. Lit by the street light (the lightmap) and the sky. A small pool of each, simulated here.
  */
 export class Splashes {
-  readonly points: THREE.Points;
-  private static readonly N = 2400;
+  readonly group = new THREE.Group();
+  private static readonly N = 1800;
+  private static readonly M = 260;
   private readonly pos = new Float32Array(Splashes.N * 3);
   private readonly vel = new Float32Array(Splashes.N * 3);
   private readonly life = new Float32Array(Splashes.N);
   private readonly max = new Float32Array(Splashes.N);
   private readonly floor = new Float32Array(Splashes.N);
+  private readonly line = new Float32Array(Splashes.N * 6);
+  private readonly lineA = new Float32Array(Splashes.N * 2);
+  private readonly mPos = new Float32Array(Splashes.M * 3);
+  private readonly mVel = new Float32Array(Splashes.M * 3);
+  private readonly mLife = new Float32Array(Splashes.M);
+  private readonly mA = new Float32Array(Splashes.M * 2);
   private next = 0;
+  private mNext = 0;
   private live = 0;
   private readonly u = { uAmbient: { value: 0.3 } };
+  private readonly streaks: THREE.LineSegments;
+  private readonly mist: THREE.Points;
+  private readonly drops: THREE.Points;
+  private readonly dropA = new Float32Array(Splashes.N);
 
   constructor(city: CityUniforms) {
+    const lit = { ...this.u, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain };
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute('aLife', new THREE.BufferAttribute(new Float32Array(Splashes.N), 1).setUsage(THREE.DynamicDrawUsage));
-    this.points = new THREE.Points(g, new THREE.ShaderMaterial({
-      uniforms: { ...this.u, tLight: city.tLight, uLightRect: city.uLightRect, uLightGain: city.uLightGain },
+    g.setAttribute('position', new THREE.BufferAttribute(this.line, 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('aA', new THREE.BufferAttribute(this.lineA, 1).setUsage(THREE.DynamicDrawUsage));
+    this.streaks = new THREE.LineSegments(g, new THREE.ShaderMaterial({
+      uniforms: lit,
       transparent: true,
       depthWrite: false,
       vertexShader: /* glsl */ `
-        attribute float aLife;
+        attribute float aA;
+        uniform float uAmbient;
+        ${lightmapGlsl}
+        varying vec3 vCol;
+        varying float vA;
+        void main() {
+          vec4 mv = viewMatrix * vec4(position, 1.0);
+          vA = aA * (1.0 - smoothstep(40.0, 60.0, -mv.z));
+          vCol = vec3(0.78, 0.84, 0.9) * (uAmbient + lightAt(position.xz) * 1.1);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */ `
+        varying vec3 vCol;
+        varying float vA;
+        void main() {
+          if (vA < 0.01) discard;
+          gl_FragColor = vec4(vCol, vA);
+        }`,
+    }));
+    const mg = new THREE.BufferGeometry();
+    mg.setAttribute('position', new THREE.BufferAttribute(this.mPos, 3).setUsage(THREE.DynamicDrawUsage));
+    mg.setAttribute('aM', new THREE.BufferAttribute(this.mA, 2).setUsage(THREE.DynamicDrawUsage));
+    this.mist = new THREE.Points(mg, new THREE.ShaderMaterial({
+      uniforms: lit,
+      transparent: true,
+      depthWrite: false,
+      vertexShader: /* glsl */ `
+        attribute vec2 aM;
         uniform float uAmbient;
         ${lightmapGlsl}
         varying vec3 vCol;
@@ -1127,10 +1168,43 @@ export class Splashes {
         void main() {
           vec4 mv = viewMatrix * vec4(position, 1.0);
           float d = -mv.z;
-          vA = aLife * smoothstep(0.3, 1.2, d) * (1.0 - smoothstep(45.0, 60.0, d));
-          vCol = vec3(0.72, 0.78, 0.84) * (uAmbient + lightAt(position.xz) * 0.9);
+          // aM: its fade (0-1) and how far it has spread (its size, m).
+          vA = aM.x * smoothstep(2.5, 6.0, d) * (1.0 - smoothstep(40.0, 60.0, d));
+          vCol = vec3(0.8, 0.84, 0.88) * (uAmbient + lightAt(position.xz) * 1.1);
           gl_Position = projectionMatrix * mv;
-          gl_PointSize = min(0.07 * 900.0 / max(d, 0.3), 12.0) * step(0.01, vA);
+          gl_PointSize = min(aM.y * 900.0 / max(d, 0.3), 90.0) * step(0.005, vA);
+        }`,
+      fragmentShader: /* glsl */ `
+        varying vec3 vCol;
+        varying float vA;
+        void main() {
+          vec2 q = gl_PointCoord - 0.5;
+          float r = dot(q, q) * 4.0;
+          if (r > 1.0 || vA < 0.005) discard;
+          gl_FragColor = vec4(vCol, vA * 0.09 * (1.0 - r) * (1.0 - r) * (1.0 - r));
+        }`,
+    }));
+    // A drop at the head of each streak (a streak alone is a hairline further off).
+    const dg = new THREE.BufferGeometry();
+    dg.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
+    dg.setAttribute('aA', new THREE.BufferAttribute(this.dropA, 1).setUsage(THREE.DynamicDrawUsage));
+    this.drops = new THREE.Points(dg, new THREE.ShaderMaterial({
+      uniforms: lit,
+      transparent: true,
+      depthWrite: false,
+      vertexShader: /* glsl */ `
+        attribute float aA;
+        uniform float uAmbient;
+        ${lightmapGlsl}
+        varying vec3 vCol;
+        varying float vA;
+        void main() {
+          vec4 mv = viewMatrix * vec4(position, 1.0);
+          float d = -mv.z;
+          vA = aA * smoothstep(0.3, 1.2, d) * (1.0 - smoothstep(45.0, 60.0, d));
+          vCol = vec3(0.82, 0.88, 0.94) * (uAmbient + lightAt(position.xz) * 1.1);
+          gl_Position = projectionMatrix * mv;
+          gl_PointSize = clamp(0.028 * 900.0 / max(d, 0.3), 1.5, 5.0) * step(0.01, vA);
         }`,
       fragmentShader: /* glsl */ `
         varying vec3 vCol;
@@ -1139,11 +1213,14 @@ export class Splashes {
           vec2 q = gl_PointCoord - 0.5;
           float r = dot(q, q);
           if (r > 0.25 || vA < 0.01) discard;
-          gl_FragColor = vec4(vCol, vA * 0.85 * (1.0 - r * 3.0));
+          gl_FragColor = vec4(vCol * (1.2 - r * 2.0), vA * (1.0 - r * 3.0));
         }`,
     }));
-    this.points.frustumCulled = false;
-    this.points.renderOrder = 5;
+    for (const o of [this.streaks, this.mist, this.drops]) {
+      o.frustumCulled = false;
+      o.renderOrder = 5;
+    }
+    this.group.add(this.mist, this.streaks, this.drops);
   }
 
   /**
@@ -1152,25 +1229,40 @@ export class Splashes {
    */
   emit(x: number, y: number, z: number, fx: number, fz: number, side: number, speed: number, depth: number, dt: number): void {
     const s = Math.min(Math.abs(speed), 30);
-    let n = depth * s * 55 * dt;
-    // (A fraction left over: sometimes one more.)
+    let n = depth * s * 60 * dt;
     n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0);
     const lx = fz * side;
     const lz = -fx * side;
     for (let k = 0; k < n; k++) {
       const i = this.next;
       this.next = (this.next + 1) % Splashes.N;
-      const out = (1.2 + s * 0.13) * (0.4 + Math.random());
-      const up = (0.8 + s * 0.12) * (0.3 + Math.random());
-      const carry = Math.sign(speed) * s * (0.25 + 0.5 * Math.random());
-      this.pos[i * 3] = x + lx * 0.1 + (Math.random() - 0.5) * 0.3;
-      this.pos[i * 3 + 1] = y + 0.05;
-      this.pos[i * 3 + 2] = z + lz * 0.1 + (Math.random() - 0.5) * 0.3;
+      // Most go out sideways in a fan off the tyre, some kicked up behind it.
+      const back = Math.random() < 0.3;
+      const out = (back ? 0.4 : 1.4 + s * 0.14) * (0.4 + Math.random());
+      const up = (0.9 + s * 0.13) * (0.3 + Math.random()) * (back ? 1.3 : 1);
+      const carry = Math.sign(speed) * s * (back ? -0.05 : 0.3 + 0.45 * Math.random());
+      this.pos[i * 3] = x + lx * 0.12 + (Math.random() - 0.5) * 0.35;
+      this.pos[i * 3 + 1] = y + 0.04;
+      this.pos[i * 3 + 2] = z + lz * 0.12 + (Math.random() - 0.5) * 0.35;
       this.vel[i * 3] = lx * out + fx * carry;
       this.vel[i * 3 + 1] = up;
       this.vel[i * 3 + 2] = lz * out + fz * carry;
-      this.max[i] = this.life[i] = 0.45 + 0.5 * Math.random();
+      this.max[i] = this.life[i] = 0.4 + 0.5 * Math.random();
       this.floor[i] = y;
+    }
+    // Mist over the wheel, more at speed.
+    let m = depth * Math.max(0, s - 4) * 1.6 * dt;
+    m = Math.floor(m) + (Math.random() < m % 1 ? 1 : 0);
+    for (let k = 0; k < m; k++) {
+      const i = this.mNext;
+      this.mNext = (this.mNext + 1) % Splashes.M;
+      this.mPos[i * 3] = x + lx * 0.3;
+      this.mPos[i * 3 + 1] = y + 0.3;
+      this.mPos[i * 3 + 2] = z + lz * 0.3;
+      this.mVel[i * 3] = lx * (0.8 + Math.random()) + fx * Math.sign(speed) * s * 0.35;
+      this.mVel[i * 3 + 1] = 0.5 + Math.random() * 0.6;
+      this.mVel[i * 3 + 2] = lz * (0.8 + Math.random()) + fz * Math.sign(speed) * s * 0.35;
+      this.mLife[i] = 1;
     }
     this.live = Math.max(this.live, 1);
   }
@@ -1178,12 +1270,13 @@ export class Splashes {
   update(dt: number, ambient: number): void {
     this.u.uAmbient.value = ambient;
     if (!this.live) return;
-    const life = (this.points.geometry.getAttribute('aLife') as THREE.BufferAttribute).array as Float32Array;
     let any = 0;
     const drag = Math.exp(-1.8 * dt);
+    const L = this.line;
     for (let i = 0; i < Splashes.N; i++) {
       if (this.life[i] <= 0) {
-        life[i] = 0;
+        this.lineA[i * 2] = this.lineA[i * 2 + 1] = 0;
+        this.dropA[i] = 0;
         continue;
       }
       any++;
@@ -1195,10 +1288,36 @@ export class Splashes {
       this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
       this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
       if (this.pos[i * 3 + 1] < this.floor[i]) this.life[i] = 0;
-      life[i] = Math.max(0, this.life[i] / this.max[i]);
+      // The streak: from the drop back along its motion (a 30 ms exposure).
+      const k = 0.03;
+      L[i * 6] = this.pos[i * 3];
+      L[i * 6 + 1] = this.pos[i * 3 + 1];
+      L[i * 6 + 2] = this.pos[i * 3 + 2];
+      L[i * 6 + 3] = this.pos[i * 3] - this.vel[i * 3] * k;
+      L[i * 6 + 4] = this.pos[i * 3 + 1] - this.vel[i * 3 + 1] * k;
+      L[i * 6 + 5] = this.pos[i * 3 + 2] - this.vel[i * 3 + 2] * k;
+      const a = Math.max(0, this.life[i] / this.max[i]) * 0.75;
+      this.lineA[i * 2] = a;
+      this.lineA[i * 2 + 1] = a * 0.15;
+      this.dropA[i] = a * 0.85;
+    }
+    const mDrag = Math.exp(-2.5 * dt);
+    for (let i = 0; i < Splashes.M; i++) {
+      if (this.mLife[i] <= 0) {
+        this.mA[i * 2] = 0;
+        continue;
+      }
+      any++;
+      this.mLife[i] -= dt / 1.1;
+      for (let c = 0; c < 3; c++) {
+        this.mVel[i * 3 + c] *= mDrag;
+        this.mPos[i * 3 + c] += this.mVel[i * 3 + c] * dt;
+      }
+      const t = 1 - this.mLife[i];
+      this.mA[i * 2] = Math.max(0, this.mLife[i]) * Math.min(1, t * 6);
+      this.mA[i * 2 + 1] = 0.35 + t * 0.9;
     }
     this.live = any;
-    this.points.geometry.getAttribute('position').needsUpdate = true;
-    this.points.geometry.getAttribute('aLife').needsUpdate = true;
+    for (const o of [this.streaks, this.mist, this.drops]) for (const k of Object.keys(o.geometry.attributes)) o.geometry.attributes[k].needsUpdate = true;
   }
 }

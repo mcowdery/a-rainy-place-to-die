@@ -398,7 +398,7 @@ async function run(): Promise<void> {
   const drift = new Drift(cityU);
   // Water thrown up by tyres through puddles.
   const splashes = new Splashes(cityU);
-  scene.add(splashes.points);
+  scene.add(splashes.group);
   scene.add(rain.group, rainLayers.group, streetWater.group, cones.mesh, lampShadows.group, drift.points);
   const windVec = new THREE.Vector2();
   const windTarget = new THREE.Vector2();
@@ -871,6 +871,9 @@ async function run(): Promise<void> {
       hemi.groundColor.lerp(HEAT_GROUND, 0.5 * h);
       base.hemi *= 1 + 0.1 * h;
     }
+    // The sun (or moon) for the leaves' glow against it.
+    cityU.uSunDir.value.copy(sky.uniforms.uSunDir.value as THREE.Vector3).normalize();
+    cityU.uSunCol.value.copy(sun.color).multiplyScalar(sun.intensity);
     base.cloudLit.setHex(atm.cloudLit).multiplyScalar(1 - 0.7 * d);
     sky.uniforms.uCloudDark.value.setHex(atm.cloudDark).multiplyScalar(1 - 0.7 * d);
     // (Autumn skies are cloudier.)

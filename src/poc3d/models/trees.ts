@@ -70,7 +70,8 @@ function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: 
   // the season (blossom, summer green, autumn colour, bare in winter) without rebuilding anything.
   const style = mb.style;
   mb.style = [FOLIAGE_TAG + SPECIES, 0, 0, 0];
-  mb.lathe(x, z, [[y - ry, rx * 0.15], [y - ry * 0.4, rx * 0.95], [y + ry * 0.35, rx * 0.88], [y + ry, rx * 0.12]], n);
+  // (Smooth normals: the shader's leaf clusters, bump and ragged edge do the rest: real/city.ts.)
+  mb.latheSmooth(x, y, z, rx, ry, [[y - ry, rx * 0.15], [y - ry * 0.4, rx * 0.95], [y + ry * 0.35, rx * 0.88], [y + ry, rx * 0.12]], n);
   mb.style = style;
 }
 
