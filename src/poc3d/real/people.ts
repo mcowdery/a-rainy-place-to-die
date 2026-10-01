@@ -49,7 +49,7 @@ export interface FigureSpec {
   readonly side: number;
   /** Head turn, radians. */
   readonly look: number;
-  /** Height of the floor stood on (default 0, the street). */
+  /** Height of the floor stood on above the pavement (default 0: on the pavement, 0.15 m above the road). */
   readonly y?: number;
   /** Fades in and out with the crowd (default true); false keeps it there (story NPCs). */
   readonly fade?: boolean;
@@ -88,7 +88,12 @@ function mobShade(c: V3): V3 {
 const PELVIS = 0, SPINE = 1, HEAD = 2, THIGH_L = 3, SHIN_L = 4, THIGH_R = 5, SHIN_R = 6, ARM_L = 7, FORE_L = 8, ARM_R = 9, FORE_R = 10;
 /** Bone 11, the root: only the walk's bob (an umbrella in the hand rides on it). */
 const ROOT = 11;
-const PARENT = [-1, PELVIS, SPINE, PELVIS, THIGH_L, PELVIS, THIGH_R, SPINE, ARM_L, SPINE, ARM_R, -1];
+/** The feet (on the shins, held nearly level through the stride so the toes don't dig in). */
+const FOOT_L = 12, FOOT_R = 13;
+const BONES = 14;
+const PARENT = [-1, PELVIS, SPINE, PELVIS, THIGH_L, PELVIS, THIGH_R, SPINE, ARM_L, SPINE, ARM_R, -1, SHIN_L, SHIN_R];
+/** How much of the leg's pitch a foot takes back (1: level; a little less, a toe-off behind and a heel strike ahead). */
+const FOOT_LEVEL = 0.85;
 
 /** A body template in its bind pose (figure frame: x right, y up, z forward, feet at y 0). */
 interface Template {
@@ -403,6 +408,8 @@ function pivotsOf(body: Body): { pivot: V3[]; armOut: number } {
     [P.shoulderX, 1.42 * ys, -0.01],
     [P.elbowX, 1.13 * ys, -0.02],
     [0, 0, 0],
+    [-P.hipX * 0.88, 0.08 * ys, 0],
+    [P.hipX * 0.88, 0.08 * ys, 0],
   ];
   return { pivot, armOut: Math.atan2(P.wristX - P.shoulderX, (1.42 - 0.865) * ys) };
 }
@@ -434,12 +441,12 @@ function buildTemplate(body: Body, hair: Hair, long: boolean): Template {
   }
   // Legs and feet.
   const knee = 0.47 * ys;
-  for (const [s, thigh, shin] of [[-1, THIGH_L, SHIN_L], [1, THIGH_R, SHIN_R]] as const) {
+  for (const [s, thigh, shin, foot] of [[-1, THIGH_L, SHIN_L, FOOT_L], [1, THIGH_R, SHIN_R, FOOT_R]] as const) {
     const rows = LEG.map(([y, a, b, z]): Row => [y * ys, a * P.leg, b * P.leg, z * P.leg]);
     const x = (r: Row): number => s * P.hipX * (0.86 + 0.14 * (r[0] / (0.92 * ys)));
     tb.loft(rows, x, (r, i) => (i === rows.length - 1 ? blend(thigh, PELVIS, 0.6) : r[0] > knee + 0.04 * ys ? one(thigh) : r[0] < knee - 0.06 * ys ? one(shin) : blend(thigh, shin, 0.5)), legs, 8);
-    const foot = FOOT.map(([z, a, h, y]): Row => [z * P.leg, a * P.leg, h * P.leg, y * P.leg]);
-    tb.loft(foot, () => s * P.hipX * 0.88, () => one(shin), legs * 0.8, 8, 2.4, 'z');
+    const feet = FOOT.map(([z, a, h, y]): Row => [z * P.leg, a * P.leg, h * P.leg, y * P.leg]);
+    tb.loft(feet, () => s * P.hipX * 0.88, () => one(foot), legs * 0.8, 8, 2.4, 'z');
   }
   // Arms and hands, hanging a little out from the body.
   const ax = (y: number): number =>
@@ -533,12 +540,12 @@ function skeleton(s: FigureSpec): Skeleton {
   switch (s.pose) {
     case 'walk': {
       const a = Math.sin(s.phase * Math.PI * 2) * 0.36;
-      gest(sk.legL, a, 0, a < 0 ? 0.3 : 0.06);
-      gest(sk.legR, -a, 0, -a < 0 ? 0.3 : 0.06);
+      gest(sk.legL, a, 0, 0.06 + 0.24 * Math.min(1, Math.max(0, -a / 0.36)));
+      gest(sk.legR, -a, 0, 0.06 + 0.24 * Math.min(1, Math.max(0, a / 0.36)));
       gest(sk.armL, -a * 0.7, 0.1, 0.25);
       gest(sk.armR, a * 0.7, 0.1, 0.25);
       sk.lean += 0.04;
-      sk.drop = 0.02;
+      sk.drop = PROPORTIONS[s.body].ys * 0.9 * (1 - Math.cos(a));
       break;
     }
     case 'talk':
@@ -569,8 +576,8 @@ function skeleton(s: FigureSpec): Skeleton {
 const _m = new THREE.Matrix4();
 const _r = new THREE.Matrix4();
 const _t = new THREE.Matrix4();
-const boneMats = Array.from({ length: 12 }, () => new THREE.Matrix4());
-const rot = Array.from({ length: 12 }, () => new THREE.Matrix4());
+const boneMats = Array.from({ length: BONES }, () => new THREE.Matrix4());
+const rot = Array.from({ length: BONES }, () => new THREE.Matrix4());
 
 /** Each bone's matrix (bind pose to posed), in the figure frame. */
 function poseBones(T: Template, s: FigureSpec): THREE.Matrix4[] {
@@ -578,16 +585,17 @@ function poseBones(T: Template, s: FigureSpec): THREE.Matrix4[] {
   for (const m of rot) m.identity();
   rot[SPINE].makeRotationX(sk.lean);
   rot[HEAD].makeRotationY(s.look).premultiply(_r.makeRotationX(-sk.lean * 0.7));
-  for (const [sgn, l, thigh, shin] of [[-1, sk.legL, THIGH_L, SHIN_L], [1, sk.legR, THIGH_R, SHIN_R]] as const) {
+  for (const [sgn, l, thigh, shin, foot] of [[-1, sk.legL, THIGH_L, SHIN_L, FOOT_L], [1, sk.legR, THIGH_R, SHIN_R, FOOT_R]] as const) {
     rot[thigh].makeRotationX(-l.swing).multiply(_r.makeRotationZ(sgn * l.raise));
     rot[shin].makeRotationX(l.bend);
+    rot[foot].makeRotationX(FOOT_LEVEL * (l.swing - l.bend));
   }
   for (const [sgn, l, arm, fore] of [[-1, sk.armL, ARM_L, FORE_L], [1, sk.armR, ARM_R, FORE_R]] as const) {
     rot[arm].makeRotationX(-l.swing).multiply(_r.makeRotationZ(sgn * (l.raise - T.armOut)));
     if (l.up) rot[fore].makeRotationZ(sgn * l.bend);
     else rot[fore].makeRotationX(-l.bend);
   }
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < BONES; i++) {
     const p = T.pivot[i];
     // local = T(p) R T(-p); world = parent * local.
     _m.makeTranslation(p[0], p[1], p[2]).multiply(rot[i]).multiply(_t.makeTranslation(-p[0], -p[1], -p[2]));
@@ -655,6 +663,8 @@ export function templateGeometry(i: number): THREE.BufferGeometry {
  * walk ex, ez, speed, phase, floor at the start and end, gap, tint r, g, b, and whether it carries an umbrella.
  */
 export const FIGURE_STRIDE = 20;
+/** The pavements' and plazas' height (real/ground.ts): where a figure stands unless its floor says otherwise. */
+const PAVEMENT = 0.15;
 /** The per-figure attributes the material reads, and where each comes from in a figure's numbers. */
 export const FIGURE_ATTRS: readonly { readonly name: string; readonly at: readonly number[] }[] = [
   { name: 'aFig', at: [1, 2, 3, 4] },
@@ -679,7 +689,8 @@ function carriesUmbrella(s: FigureSpec): boolean {
 function writeFigure(o: Float32Array, k: number, s: FigureSpec, ground: ((x: number, z: number) => number) | null): void {
   const c = mobShade(s.color);
   const w = s.walk;
-  const y = s.y ?? 0;
+  // A figure stands on the raised pavement (0.15 m) plus its own floor (s.y: a step, a storey, or less on open ground).
+  const y = PAVEMENT + (s.y ?? 0);
   const g0 = ground ? ground(s.x, s.z) : 0;
   const g1 = w && ground ? ground(s.x + w.ex, s.z + w.ez) : g0;
   o[k] = templateIndex(s);
@@ -824,7 +835,7 @@ export function posedFigure(s: FigureSpec): Float32Array {
     const py = w * (e0[1] * x + e0[5] * y + e0[9] * z + e0[13]) + u * (e1[1] * x + e1[5] * y + e1[9] * z + e1[13]);
     const pz = w * (e0[2] * x + e0[6] * y + e0[10] * z + e0[14]) + u * (e1[2] * x + e1[6] * y + e1[10] * z + e1[14]);
     out[i * 3] = s.x + fz * px + fx * pz;
-    out[i * 3 + 1] = (s.y ?? 0) + py;
+    out[i * 3 + 1] = PAVEMENT + (s.y ?? 0) + py;
     out[i * 3 + 2] = s.z - fx * px + fz * pz;
   }
   return out;
@@ -868,7 +879,7 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
     vertexShader: /* glsl */ `
       #include <fog_pars_vertex>
       uniform float uTime;
-      uniform vec3 uPivot[${BODY_LIST.length * 12}];
+      uniform vec3 uPivot[${BODY_LIST.length * BONES}];
       uniform float uArmOut[${BODY_LIST.length}];
       attribute float aShade;
       attribute vec3 aBone;
@@ -899,8 +910,8 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
         M = mat3(1.0);
         T = vec3(0.0, -drop, 0.0);
         if (b == 0 || b == 11) return;
-        if (b >= 3 && b <= 6) {
-          bool left = b <= 4;
+        if ((b >= 3 && b <= 6) || b >= 12) {
+          bool left = b == 3 || b == 4 || b == 12;
           Limb l = legR;
           if (left) l = legL;
           float sg = left ? -1.0 : 1.0;
@@ -908,6 +919,8 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
           joint(M, T, rotX(-l.swing) * rotZ(sg * l.raise), uPivot[base + ti]);
           if (b == ti) return;
           joint(M, T, rotX(l.bend), uPivot[base + ti + 1]);
+          if (b < 12) return;
+          joint(M, T, rotX(${FOOT_LEVEL.toFixed(3)} * (l.swing - l.bend)), uPivot[base + b]);
           return;
         }
         joint(M, T, rotX(lean) * rotZ(spineRoll), uPivot[base + 1]);
@@ -929,7 +942,7 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
       void main() {
         float t = uTime;
         int body = int(aPose.x + 0.5);
-        base = body * 12;
+        base = body * ${BONES};
         armOut = uArmOut[body];
         float side = aPose.z;
         float seed = aFig.w;
@@ -975,15 +988,16 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
         headPitch = 0.0;
         if (P == 1) {
           float a = sin(phase * 6.2832) * 0.36;
-          legL = Limb(a, 0.0, a < 0.0 ? 0.3 : 0.06, 0.0);
-          legR = Limb(-a, 0.0, -a < 0.0 ? 0.3 : 0.06, 0.0);
+          // The knee bends as the leg goes back (smoothly, so the foot doesn't snap as the legs pass).
+          legL = Limb(a, 0.0, 0.06 + 0.24 * clamp(-a / 0.36, 0.0, 1.0), 0.0);
+          legR = Limb(-a, 0.0, 0.06 + 0.24 * clamp(a / 0.36, 0.0, 1.0), 0.0);
           armL = Limb(-a * 0.7, 0.1, 0.25, 0.0);
           armR = Limb(a * 0.7, 0.1, 0.25, 0.0);
           lean += 0.04;
-          drop = 0.02;
+          // The hips drop as far as the swinging legs rise, so the planted foot stays on the ground.
+          drop = uPivot[base + 3].y * (1.0 - cos(a));
           if (moving) {
-            // The bob (lowest as the feet pass), the shoulders turning with the stride, a glance about.
-            drop += 0.014 * cos(phase * 12.566);
+            // The shoulders turning with the stride, a glance about.
             spineRoll = 0.03 * sin(phase * 6.2832);
             headYaw = aPose.w * 0.4 + 0.12 * sin(t * 0.4 + r * 9.0);
           }
@@ -1221,6 +1235,13 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
   // Plazas (a busy square of people crossing, waiting to meet someone, and standing in groups), and more
   // thinly the open ground: tower plazas, park paths, playgrounds.
   const areas = [...plazas.map((rect) => ({ rect, density: 0.5 })), ...detail.open.flatMap((o) => o.crowd)];
+  // Open ground stands lower than the pavements (car parks, grass, gravel paths): figures there stand on its top.
+  const pieces = detail.open.flatMap((o) => o.ground);
+  const floorAt = (x: number, z: number): number => {
+    let top = -1;
+    for (const g of pieces) if (inRect(g.rect, x, z, 0)) top = Math.max(top, g.top);
+    return top < 0 ? 0 : top - 0.15;
+  };
   for (const { rect: q, density } of areas) {
     const rnd = rng(hash(Math.round(q.x), Math.round(q.y), 0x9e1));
     for (let x = q.x + 2.5; x < q.x + q.w - 2; x += 4.2) {
@@ -1237,6 +1258,8 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
         const L = Math.min(reach(px, pz, dx, dz), inside);
         const roll = rnd.float();
         const seed = rnd.float();
+        const y = floorAt(px, pz);
+        const from = out.length;
         if (roll < 0.35) {
           const who = randomPerson(rnd, px, pz, yaw, L >= 8 ? 'walk' : 'stand');
           out.push(L >= 8 ? { ...who, seed, walk: walkOf(rnd, L, dx, dz, who.body === 'elder') } : { ...who, seed });
@@ -1254,6 +1277,7 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
             out.push({ ...randomPerson(rnd, px + Math.sin(ang) * 0.6, pz + Math.cos(ang) * 0.6, ang + Math.PI, rnd.pick(['stand', 'stand', 'pockets', 'talk', 'phone'] as const)), look: (rnd.float() - 0.5) * 0.8, seed });
           }
         }
+        if (y !== 0) for (let i = from; i < out.length; i++) out[i] = { ...out[i], y };
       }
     }
   }

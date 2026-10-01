@@ -36,11 +36,24 @@ describe('mob figures', () => {
   it('stand on the floor at believable heights', () => {
     const heights: Record<Body, [number, number]> = { man: [1.66, 1.78], woman: [1.54, 1.66], child: [1.0, 1.2], elder: [1.55, 1.7] };
     for (const body of Object.keys(heights) as Body[]) {
-      const b = bounds(spec(body, 'stand', { hair: 'none', y: 0.15 }));
+      // On the pavement, 0.15 m above the road.
+      const b = bounds(spec(body, 'stand', { hair: 'none' }));
       expect(b.lo - 0.15).toBeGreaterThan(-0.01);
       expect(b.lo - 0.15).toBeLessThan(0.03);
       expect(b.hi - 0.15).toBeGreaterThan(heights[body][0]);
       expect(b.hi - 0.15).toBeLessThan(heights[body][1]);
+    }
+  });
+
+  it('keep their feet out of the floor in every pose and all through the walk', () => {
+    for (const body of ['man', 'woman', 'child', 'elder'] as Body[]) {
+      for (const pose of ['stand', 'talk', 'phone', 'pockets', 'wave', 'hold'] as Pose[]) expect(bounds(spec(body, pose, { y: 1 })).lo).toBeGreaterThan(1.15 - 0.012);
+      for (let phase = 0; phase < 1; phase += 0.05) {
+        const lo = bounds(spec(body, 'walk', { phase, y: 1 })).lo;
+        expect(lo).toBeGreaterThan(1.15 - 0.015);
+        // ...and a foot on the ground (not walking on air).
+        expect(lo).toBeLessThan(1.15 + 0.05);
+      }
     }
   });
 
@@ -65,8 +78,8 @@ describe('mob figures', () => {
     expect(f[4]).toBeLessThan(1);
     expect([f[9], f[10], f[11]]).toEqual([10, 0, expect.closeTo(1.3, 5)]);
     // The floor at the start and the end of the walk, from the ground there plus its own.
-    expect(f[13]).toBeCloseTo(2 + 1, 5);
-    expect(f[14]).toBeCloseTo(2 + 2, 5);
+    expect(f[13]).toBeCloseTo(0.15 + 2 + 1, 5);
+    expect(f[14]).toBeCloseTo(0.15 + 2 + 2, 5);
   });
 
   it('share a seed when together; story NPCs never fade', () => {
