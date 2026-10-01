@@ -1095,7 +1095,7 @@ async function run(): Promise<void> {
   // The bay and the river (real/sea.ts): water over the map's water cells, seawalls where built land meets it.
   const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), cityU.uHorizon, content.bridges, content.terrain);
   // Hanejima's airfield and its traffic (real/airport.ts).
-  const airport = buildAirport();
+  const airport = buildAirport(transitNew ? city : null);
   scene.add(airport.group);
   scene.add(sea.group);
   freeze(sea.group);

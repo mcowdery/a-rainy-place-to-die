@@ -16,6 +16,8 @@ import { buildMegaSign } from '../real/megaSign';
 import { trainModel } from '../real/rail';
 import { carGlass, carSet2 } from '../real/trainCar';
 import { buildBus2 } from '../real/busModel';
+import { airliner2, AIRLINES } from '../real/airliner';
+import { airliner } from '../real/airport';
 import { BUS } from '../district/busCabin';
 import { parkedBus } from '../real/traffic';
 import type { BusLine } from '../district/traffic';
@@ -321,6 +323,29 @@ cityU.uLightRect.value = showLightmap.uniformRect;
   genItems.new.push({ name: 'bus (inside, to the back)', group: 'Transit', at: new THREE.Vector3(at.x, 2.0, at.z + 2.4), size: 1.5, view: new THREE.Vector3(0, 0.05, 1).normalize() });
   genItems.new.push({ name: 'bus (inside, to the front)', group: 'Transit', at: new THREE.Vector3(at.x, 2.4, at.z - 3.5), size: 1.5, view: new THREE.Vector3(0, 0.1, -1).normalize() });
   genItems.new.push({ name: 'bus (doors)', group: 'Transit', at: new THREE.Vector3(at.x + 1.2, 1.4, at.z + 1.5), size: 6, view: new THREE.Vector3(1, 0.15, 0.3).normalize() });
+}
+// The airliner: the airport's (previous) and the new one (real/airliner.ts, under review), in each airline's colours.
+{
+  const at = new THREE.Vector3(40, 0, 270);
+  const pad = new MeshBuilder();
+  pad.kind = KIND.lot;
+  pad.color = lin(0x5a5a5c);
+  pad.box(at.x + 30, at.z, -0.2, 0.01, 130, 60, KIND.lot);
+  scene.add(new THREE.Mesh(pad.build()!, city));
+  const old = airliner(0x1a4aa0);
+  old.group.position.copy(at);
+  old.landing.visible = false;
+  genRoot.previous.add(old.group);
+  label('previous', 'airliner', at.x, 15, at.z);
+  AIRLINES.forEach((a, i) => {
+    const p = airliner2(a, city);
+    p.group.position.set(at.x + i * 40, 0, at.z);
+    p.landing.visible = false;
+    genRoot.new.add(p.group);
+    label('new', `airliner · ${a.name}`, at.x + i * 40, 15, at.z);
+  });
+  for (const g of ['new', 'previous'] as const) genItems[g].push({ name: 'airliner', group: 'Transit', at: new THREE.Vector3(at.x, 4, at.z), size: 40, view: new THREE.Vector3(1, 0.35, 0.8).normalize() });
+  genItems.new.push({ name: 'airliners (all)', group: 'Transit', at: new THREE.Vector3(at.x + 60, 4, at.z), size: 110, view: new THREE.Vector3(0.2, 0.5, 1).normalize() });
 }
 // Kaburo mega-sign (the corner tower with its screens and the neon dragon) on its own plaza.
 {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { airliner2, AIRLINES } from './airliner';
 
 /**
  * 東都空港 Tōto Airport's airfield on Hanejima (the whole-city plan: docs/city-plan.md). The island's landside
@@ -32,7 +33,7 @@ export interface Airport {
 }
 
 /** A low-poly airliner (about an A320: 38 m long, 34 m span), nose along +z, wheels at y 0. */
-function airliner(tail: number): { group: THREE.Group; landing: THREE.Mesh; strobes: THREE.Mesh[]; beacon: THREE.Mesh; windows: THREE.Mesh } {
+export function airliner(tail: number): { group: THREE.Group; landing: THREE.Mesh; strobes: THREE.Mesh[]; beacon: THREE.Mesh; windows: THREE.Mesh } {
   const g = new THREE.Group();
   const white = new THREE.MeshStandardMaterial({ color: 0xeef0f2, roughness: 0.35, metalness: 0.1 });
   const grey = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.5, metalness: 0.3 });
@@ -72,7 +73,9 @@ function airliner(tail: number): { group: THREE.Group; landing: THREE.Mesh; stro
   return { group: g, landing, strobes, beacon, windows };
 }
 
-export function buildAirport(): Airport {
+/** The airfield; with the city material, its airliners are the new ones (real/airliner.ts, ?transit=new). */
+export function buildAirport(city: THREE.Material | null = null): Airport {
+  const plane = (k: number, tail: number): ReturnType<typeof airliner> => (city ? airliner2(AIRLINES[k % AIRLINES.length], city) : airliner(tail));
   const group = new THREE.Group();
   const flat = (x0: number, z0: number, x1: number, z1: number, y: number, color: number, emissive = 0): THREE.Mesh => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), new THREE.MeshStandardMaterial({ color, roughness: 0.9, emissive: emissive ? color : 0x000000, emissiveIntensity: emissive }));
@@ -135,7 +138,7 @@ export function buildAirport(): Airport {
   // Airliners at the stands, their jet bridges out from the terminal.
   const TAILS = [0x1a4aa0, 0xc8201a, 0x1a8a6a, 0xe8a020];
   STANDS.forEach((x, i) => {
-    const a = airliner(TAILS[i % TAILS.length]);
+    const a = plane(i + 1, TAILS[i % TAILS.length]);
     a.group.position.set(x, 0, APRON_Z);
     a.landing.visible = false;
     group.add(a.group);
@@ -145,8 +148,8 @@ export function buildAirport(): Airport {
   });
 
   // The traffic: an arrival and a departure on one 150 s cycle.
-  const arrival = airliner(0x1a4aa0);
-  const departure = airliner(0xc8201a);
+  const arrival = plane(0, 0x1a4aa0);
+  const departure = plane(2, 0xc8201a);
   group.add(arrival.group, departure.group);
   const CYCLE = 150;
   const TOUCH = RWY.x0 + 300;
