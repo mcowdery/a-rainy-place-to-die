@@ -20,6 +20,8 @@ zones:
   H:
     id: takanodai_houses
     name: Takanodai (the heights)
+    # Big houses: saloons, the family minivan, a sports car in the garage.
+    cars: { luxury: 26, sedan: 30, minivan: 24, kei: 8, van: 3, keivan: 2, roadster: 3, sports: 2, awd: 2 }
     plan:
       floors: [[2, 2, 65], [3, 3, 35]]
       lotW: [14, 24]

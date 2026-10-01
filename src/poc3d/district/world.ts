@@ -49,6 +49,8 @@ export interface DistrictKit {
   readonly ghost: THREE.Material;
   /** Photo ads (billboards and posters). */
   readonly ads: THREE.Material;
+  /** Parked taxis' photo ads (the taxi ad atlas, real/adAtlas.ts AdAtlas). */
+  readonly taxiAds: THREE.Material;
   readonly atlas: SignAtlas;
   readonly lightmap: Lightmap;
   /** Sign words (the workers rebuild the same sign layout from them). */
@@ -615,10 +617,11 @@ export class District {
         m.castShadow = true;
         near.add(m);
       }
+      if (r.meshes.taxiAds) near.add(new THREE.Mesh(toGeometry(r.meshes.taxiAds), kit.taxiAds));
       c.group.add(near);
       near.updateMatrixWorld(true);
       c.near = near;
-      c.nearTriangles = rawTriangles(r.meshes.near ?? null) + rawTriangles(r.meshes.signs ?? null) + rawTriangles(r.meshes.ads ?? null);
+      c.nearTriangles = rawTriangles(r.meshes.near ?? null) + rawTriangles(r.meshes.signs ?? null) + rawTriangles(r.meshes.ads ?? null) + rawTriangles(r.meshes.taxiAds ?? null);
       return true;
     }
     if (!c || !c.near || c.ghostsBuilt) return false;

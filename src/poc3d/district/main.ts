@@ -78,6 +78,7 @@ import { setTreeSink, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { LITTER, WIPERS } from '../real/city';
 import { moodFromUrl, MoodPanel } from './moodPanel';
 import { carLoops, routeFor, Signals } from './traffic';
+import { carMixFor, CITY_CARS } from './carMix';
 import { destinations, TravelMap, type Destination, type MapLine } from './travel';
 import { RoutePicker } from './routePicker';
 import { subwayRoute } from './subway';
@@ -85,7 +86,8 @@ import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
 import { addFigure, GhostBuilder, ghostMaterial, type FigureSpec } from '../real/people';
 import { SignAtlas, signMaterial } from '../real/signs';
-import { adMaterial, DistrictAdAtlas } from '../real/adAtlas';
+import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
+import { TAXI_ADS } from '../models/ads';
 import { Sky } from '../real/sky';
 import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
@@ -232,7 +234,10 @@ async function run(): Promise<void> {
   const ghost = ghostMaterial();
   const ads = adMaterial(cityU, new DistrictAdAtlas());
   const cityDepth = cityDepthMaterial(cityU);
-  district.setKit({ city, cityDepth, signs: signMaterial(cityU, atlas), ghost, ads, atlas, lightmap, words });
+  // Taxis' photo ads (parked and in traffic) and the vehicles' lettering (in the sign atlas).
+  const taxiAds = adMaterial(cityU, new AdAtlas(TAXI_ADS));
+  const signs = signMaterial(cityU, atlas);
+  district.setKit({ city, cityDepth, signs, ghost, ads, taxiAds, atlas, lightmap, words });
   scene.add(district.root);
 
   // Post: HDR scene with MSAA and a depth texture -> ASCII overlay -> bloom -> tone mapping + sRGB.
@@ -381,6 +386,11 @@ async function run(): Promise<void> {
     content.traffic.buses.map((line) => ({ line, route: routeFor(line.rect, false, plan, piers) })),
     city,
     signals,
+    { signs, taxiAds, layout: atlas },
+    (x, z) => {
+      const p = plan(Math.floor(x / CELL), Math.floor(z / CELL));
+      return p ? carMixFor(p.style, p.kind) : CITY_CARS;
+    },
   );
   const signalLamps = new SignalLamps(signals, (x, z, r) => district.signalsNear(x, z, r));
   scene.add(traffic.group, signalLamps.mesh);
@@ -2192,6 +2202,12 @@ async function run(): Promise<void> {
     // The wind turns and builds with a little inertia rather than snapping to the settings.
     windTarget.set(Math.sin(wa), -Math.cos(wa)).multiplyScalar(blow * 3.2);
     windVec.lerp(windTarget, Math.min(1, dt * 1.5));
+    // The trees lean and sway with it (real/city.ts): the way it blows and its strength, easing to a change
+    // (the gusts are the shader's own, running downwind through the trees).
+    const treeWind = cityU.uWind.value;
+    const blowLen = windVec.length();
+    if (blowLen > 0.01) treeWind.setX(windVec.x / blowLen).setY(windVec.y / blowLen);
+    treeWind.z += (Math.min(1.4, windAmt) - treeWind.z) * Math.min(1, dt * 0.5);
     const cp = camera.position;
     const lamps = (x: number, z: number, r: number) => district.lampsNear(x, z, r);
     // Riding the train, the car is the shelter.

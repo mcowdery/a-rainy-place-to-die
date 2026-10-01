@@ -43,6 +43,8 @@ zones:
   H:
     id: host_street
     name: Host Street
+    # The hosts' cars: black saloons and the odd sports car, and taxis for the customers.
+    cars: { luxury: 22, sedan: 16, taxi: 18, taxi2: 12, minivan: 10, kei: 6, van: 3, keivan: 2, police: 2, sports: 3, rotary: 2 }
     plan:
       open: { parking: 0.04, vacant: 0.02 }
       streetTrees: 0.3
@@ -66,6 +68,8 @@ zones:
   L:
     id: love_district
     name: Love District
+    # Taxis dropping couples off, black cars waiting.
+    cars: { taxi: 24, taxi2: 14, luxury: 14, sedan: 16, minivan: 12, kei: 8, van: 3, keivan: 3, police: 2 }
     plan:
       open: { parking: 0.08, vacant: 0.02 }
       streetTrees: 0.3

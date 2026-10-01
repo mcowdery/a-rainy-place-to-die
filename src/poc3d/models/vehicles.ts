@@ -2,6 +2,8 @@ import type { Light } from '../real/lightmap';
 import { EMIT, KIND, lin, type MeshBuilder } from '../real/meshBuilder';
 import { signBox, type SignBuilder, type SignLayout } from '../real/signs';
 import { addBike, BIKE_LENGTH, type BikeType } from './bikes';
+import { hash } from '../../core/hash';
+import { TAXI_ADS } from './ads';
 
 /**
  * Vehicles, second generation (review in models.html before they replace real/cars.ts in the district).
@@ -19,9 +21,13 @@ import { addBike, BIKE_LENGTH, type BikeType } from './bikes';
  * coupe, an 80s light hatchback, a rotary coupe, a turbo all-wheel-drive coupe and a kei roadster.
  */
 
-export type CarType = 'sedan' | 'luxury' | 'sports' | 'taxi' | 'taxi2' | 'kei' | 'minivan' | 'keitruck' | 'hatch' | 'rotary' | 'awd' | 'roadster';
+export type CarType =
+  | 'sedan' | 'luxury' | 'sports' | 'taxi' | 'taxi2' | 'kei' | 'minivan' | 'keitruck' | 'hatch' | 'rotary' | 'awd' | 'roadster'
+  | 'van' | 'keivan' | 'boxtruck' | 'police';
 export type VehicleType = CarType | BikeType;
-export const CAR_TYPES2: readonly CarType[] = ['sedan', 'luxury', 'sports', 'taxi', 'taxi2', 'kei', 'minivan', 'keitruck', 'hatch', 'rotary', 'awd', 'roadster'];
+export const CAR_TYPES2: readonly CarType[] = ['sedan', 'luxury', 'sports', 'taxi', 'taxi2', 'kei', 'minivan', 'keitruck', 'hatch', 'rotary', 'awd', 'roadster', 'van', 'keivan', 'boxtruck', 'police'];
+/** The working vehicles and the patrol car (under review in the showroom, not yet in the district's mixes). */
+export const WORK_TYPES: readonly CarType[] = ['van', 'keivan', 'boxtruck', 'police'];
 /** The cars you can own and race (the garage). */
 export const SPORT_TYPES: readonly CarType[] = ['sports', 'hatch', 'rotary', 'awd', 'roadster'];
 export const BIKE_TYPES: readonly BikeType[] = ['scooter', 'motorcycle', 'delivery'];
@@ -229,7 +235,49 @@ const ROADSTER: Design = {
   plateY: [0.3, 0.42], plate: 'yellow', bumper: 'body', softTop: true,
 };
 
-const DESIGNS: Record<CarType, Design> = { sedan: SEDAN, luxury: LUXURY, sports: SPORTS, taxi: TAXI, taxi2: TAXI2, kei: KEI, minivan: MINIVAN, keitruck: KEITRUCK, hatch: HATCH, rotary: ROTARY, awd: AWD, roadster: ROADSTER };
+/** The white work van (after the Hiace): semi-bonnet, a box to the back, glass in the doors only, black bumpers. */
+const VAN: Design = {
+  name: 'van', L: 4.695, W: 0.847, corner: 0.1, clear: 0.17, x0: 0,
+  top: [[0, 0.68], [0.02, 1.3], [0.05, 1.92], [0.2, 1.98], [3.72, 1.98], [4.2, 1.42], [4.5, 1.12], [4.66, 1.0], [4.695, 0.72]],
+  belt: [[0, 1.12], [4.695, 1.1]],
+  roofInset: 0.07,
+  windscreen: [3.74, 4.2], rearGlass: [0.02, 0.055], sideGlass: [0.3, 4.12], pillars: [[0.3, 1.98], [2.9, 3.02]], blackPillars: false,
+  wheelX: [1.17, 3.74], wheelR: 0.31, tyreW: 0.195, rims: 'steel',
+  seams: [1.98, 2.98],
+  head: [0.92, 1.06, 0.36, 0.8], grille: [0.72, 0.98, 0, 0.36], grilleChrome: false, tail: [0.7, 1.2, 0.68, 0.8],
+  plateY: [0.42, 0.54], plate: 'white', bumper: 'black',
+};
+
+/** Kei van (after the Every and the Hijet): a semi-cab-over box on the kei footprint, sliding doors, steel wheels. */
+const KEIVAN: Design = {
+  name: 'keivan', L: 3.395, W: 0.737, corner: 0.1, clear: 0.16, x0: 0,
+  top: [[0, 0.7], [0.02, 1.25], [0.05, 1.83], [0.18, 1.88], [2.72, 1.88], [3.12, 1.32], [3.3, 1.08], [3.38, 0.95], [3.395, 0.72]],
+  belt: [[0, 1.04], [3.395, 1.02]],
+  roofInset: 0.06,
+  windscreen: [2.74, 3.12], rearGlass: [0.02, 0.05], sideGlass: [0.22, 3.0], pillars: [[2.12, 2.24], [0.9, 1.0]], blackPillars: true,
+  wheelX: [0.62, 2.95], wheelR: 0.27, tyreW: 0.145, rims: 'steel',
+  seams: [1.08, 2.18],
+  head: [0.86, 0.99, 0.28, 0.66], grille: [0.66, 0.84, 0, 0.26], grilleChrome: false, tail: [0.62, 1.12, 0.6, 0.71],
+  plateY: [0.4, 0.52], plate: 'yellow', bumper: 'black',
+};
+
+/** Two-tonne box truck (after the Elf and the Canter): a flat-fronted cab over the front wheels, an aluminium box. */
+const BOXTRUCK: Design = {
+  name: 'boxtruck', L: 4.69, W: 0.85, corner: 0.08, clear: 0.45, x0: 3.08,
+  top: [[3.08, 1.1], [3.1, 2.12], [3.2, 2.2], [4.3, 2.2], [4.42, 2.12], [4.56, 1.35], [4.66, 1.1], [4.69, 0.62]],
+  belt: [[3.08, 1.42], [4.69, 1.38]],
+  roofInset: 0.05,
+  windscreen: [4.42, 4.56], rearGlass: [0, 0], sideGlass: [3.35, 4.5], pillars: [], blackPillars: false,
+  wheelX: [1.12, 3.62], wheelR: 0.36, tyreW: 0.2, rims: 'steel',
+  seams: [3.36],
+  head: [0.62, 0.78, 0.48, 0.8], grille: [0.95, 1.3, 0, 0.5], grilleChrome: false, tail: [0, 0, 0, 0],
+  plateY: [0.36, 0.48], plate: 'green', bumper: 'black',
+};
+
+/** The patrol car (after the Crown patrol cars): the saloon, white over black, steel wheels, a red light bar. */
+const POLICE: Design = { ...SEDAN, name: 'police', rims: 'steel', twoTone: 4 };
+
+const DESIGNS: Record<CarType, Design> = { van: VAN, keivan: KEIVAN, boxtruck: BOXTRUCK, police: POLICE, sedan: SEDAN, luxury: LUXURY, sports: SPORTS, taxi: TAXI, taxi2: TAXI2, kei: KEI, minivan: MINIVAN, keitruck: KEITRUCK, hatch: HATCH, rotary: ROTARY, awd: AWD, roadster: ROADSTER };
 
 export const PAINTS: Record<VehicleType, readonly number[]> = {
   sedan: [0xe8e8e4, 0x121316, 0xb4b6ba, 0x1c2a44, 0x5a1a20],
@@ -240,6 +288,11 @@ export const PAINTS: Record<VehicleType, readonly number[]> = {
   kei: [0xe8e8e4, 0xa8d4bc, 0xd8c09a, 0xe0b0b8, 0x8ab0d0],
   minivan: [0xe8e8e4, 0x121316, 0xb4b6ba, 0x3a3e44],
   keitruck: [0xe8e8e4, 0xe8e8e4, 0xb4b6ba],
+  van: [0xf0f0ec, 0xf0f0ec, 0xf0f0ec, 0xb4b6ba, 0x121316, 0x1c2a44],
+  keivan: [0xf0f0ec, 0xf0f0ec, 0xb4b6ba, 0x8ab0d0],
+  // The truck's cab (its box is aluminium: paint2).
+  boxtruck: [0xf0f0ec, 0xf0f0ec, 0x2a5a9a, 0x2a6a4a],
+  police: [0xf2f2ee],
   hatch: [0xf0f0ec, 0xc01818, 0x121316, 0xb4b6ba],
   rotary: [0xe8c020, 0xc01818, 0x1c3a7a, 0xf0f0ec],
   awd: [0x5a5e66, 0x121316, 0xf0f0ec, 0x1a2c5a],
@@ -317,14 +370,26 @@ export interface VehicleSpec {
   readonly paint: number;
   /** Second livery colour (taxi upper body / stripe); defaults per type. */
   readonly paint2?: number;
-  /** Station spacing in metres: 0.05 for close-ups, ~0.12 for the street. */
+  /**
+   * Station spacing in metres: 0.05 for close-ups, ~0.12 for the street; from 0.2 the wheels are simple too
+   * (a parked car in a chunk: ~1,600 triangles instead of ~7,000).
+   */
   readonly detail?: number;
   /** Taxi advertising (needs `signs` passed to addVehicle for the text). */
   readonly ad?: TaxiAd;
+  /** false: a parked car, its lamps off (the head and tail lamps otherwise come on with the street lamps). */
+  readonly lamps?: boolean;
   /** false leaves the wheels off, for a car whose wheels are drawn apart so they can turn (`wheelLayout`, `addWheel`). */
   readonly wheels?: boolean;
   /** Livery: twin racing stripes over the top (bonnet, roof, boot; not the glass), and a stripe along each side. */
   readonly livery?: { readonly stripes?: number | null; readonly side?: number | null };
+  /**
+   * Dresses a street vehicle from this seed (`addVehicleMarks`): a taxi's ad, a work vehicle's company lettering
+   * (or none), a patrol car's unit on its roof.
+   */
+  readonly marks?: number;
+  /** A work vehicle's company (index into WORK_LIVERIES), over the one `marks` would pick. */
+  readonly company?: number;
 }
 
 /** Text geometry for vehicles that carry lettering (taxi ads, delivery boxes). */
@@ -341,13 +406,76 @@ export interface VehicleSigns {
   };
 }
 
-/** Every text a vehicle can show (for the sign atlas / layout). */
-export function vehicleTexts(ads: readonly TaxiAd[]): { text: string; vertical: boolean }[] {
-  const out = [{ text: DELIVERY_TEXT, vertical: false }];
+/** Company lettering on the working vehicles (all invented): the name large, a line under it, and a band. */
+export interface WorkLivery {
+  readonly name: string;
+  readonly sub: string;
+  readonly ink: number;
+  /** A stripe along the truck's box (and the vans' sides). */
+  readonly band?: number;
+  readonly on: readonly CarType[];
+}
+export const WORK_LIVERIES: readonly WorkLivery[] = [
+  { name: '東都運輸', sub: 'TŌTO UNYU', ink: 0x1c3f8a, band: 0x1c3f8a, on: ['boxtruck', 'van'] },
+  { name: 'つばめ急便', sub: 'TSUBAME EXPRESS', ink: 0x1e7a46, band: 0x1e7a46, on: ['boxtruck', 'keivan', 'van'] },
+  { name: '若葉引越センター', sub: 'お引越しは若葉へ', ink: 0x2a8a3a, band: 0xe8a020, on: ['boxtruck'] },
+  { name: '丸三水産', sub: '東都中央卸売市場', ink: 0x18346e, on: ['boxtruck', 'keivan'] },
+  { name: '青葉電気工事', sub: '電気工事・空調', ink: 0xd0601a, band: 0xd0601a, on: ['van', 'keivan'] },
+  { name: '鈴木工務店', sub: '住まいのリフォーム', ink: 0x2c2c30, on: ['van'] },
+  { name: '酒の丸八', sub: '配達いたします', ink: 0xa01818, on: ['keivan'] },
+  { name: '中村クリーニング', sub: '集配いたします', ink: 0x1a6ab0, on: ['keivan'] },
+  { name: '花のさくら屋', sub: 'FLOWER SAKURAYA', ink: 0xc8407a, on: ['keivan'] },
+  { name: '東都ガス', sub: 'ガス・暮らしのサービス', ink: 0x1c4a9a, band: 0x1c4a9a, on: ['van'] },
+];
+/** Share of each work vehicle that's plain (no lettering). */
+const PLAIN: Partial<Record<CarType, number>> = { van: 0.45, keivan: 0.4, boxtruck: 0.2 };
+
+/** The patrol car: the force on its doors, POLICE under it, its station and car number on the roof. */
+export const POLICE_NAME = '警視庁';
+export const POLICE_EN = 'POLICE';
+const POLICE_UNITS = ['歌舞路', '朝霧', '霞町', '川端', '電光', '桜丘', '学園'];
+const unitText = (u: number, n: number): string => `${POLICE_UNITS[u]}${n}`;
+
+/** A taxi's ad from its seed: most carry one (the demo leaves out the love hotel's). */
+const TAXI_AD_SHARE = 0.6;
+export function taxiAdFor(seed: number): TaxiAd | undefined {
+  const h = hash(seed, 0x7a8);
+  if ((h % 1000) / 1000 >= TAXI_AD_SHARE) return undefined;
+  const ads = TAXI_ADS.map((a, i) => ({ ...a, photo: i })).filter((a) => !(__EDITION__ === 'demo' && a.art === '06_hotel_paradise'));
+  return ads[(h >>> 10) % ads.length];
+}
+
+/** A work vehicle's lettering: the one it was given, else from its seed (or none). */
+export function liveryOf(spec: VehicleSpec): WorkLivery | null {
+  if (spec.company !== undefined) return WORK_LIVERIES[spec.company] ?? null;
+  const plain = PLAIN[spec.type as CarType];
+  if (plain === undefined || spec.marks === undefined) return null;
+  const h = hash(spec.marks, 0x11e);
+  if ((h % 1000) / 1000 < plain) return null;
+  const list = WORK_LIVERIES.filter((l) => l.on.includes(spec.type as CarType));
+  return list[(h >>> 10) % list.length] ?? null;
+}
+
+/** The ad a vehicle carries: the one it was given, else a taxi's from its seed. */
+const adOf = (spec: VehicleSpec): TaxiAd | undefined =>
+  spec.ad ?? (spec.marks !== undefined && isTaxi(spec.type) ? taxiAdFor(spec.marks) : undefined);
+
+/** What a vehicle's dressing comes to (its ad, company, patrol unit), for sharing models between vehicles dressed alike. */
+export function marksKey(spec: VehicleSpec): string {
+  const ad = adOf(spec) as (TaxiAd & { photo?: number }) | undefined;
+  const l = liveryOf(spec);
+  return `${ad ? (ad.photo ?? ad.roof ?? '?') : '-'}|${l ? WORK_LIVERIES.indexOf(l) : '-'}|${spec.type === 'police' ? hash(spec.marks ?? 0, 0x9011) % 42 : '-'}`;
+}
+
+/** Every text a vehicle can show (for the sign atlas / layout): the ads' copy and the lettering. */
+export function vehicleTexts(ads: readonly TaxiAd[] = TAXI_ADS): { text: string; vertical: boolean }[] {
+  const out = [{ text: DELIVERY_TEXT, vertical: false }, { text: POLICE_NAME, vertical: false }, { text: POLICE_EN, vertical: false }];
   for (const a of ads) {
     if (a.roof) out.push({ text: a.roof, vertical: false });
     if (a.side) out.push({ text: a.side, vertical: false });
   }
+  for (const l of WORK_LIVERIES) out.push({ text: l.name, vertical: false }, { text: l.sub, vertical: false });
+  for (let u = 0; u < POLICE_UNITS.length; u++) for (let n = 1; n <= 6; n++) out.push({ text: unitText(u, n), vertical: false });
   return out;
 }
 export const DELIVERY_TEXT = '出前 らーめん';
@@ -379,26 +507,32 @@ export function vehicleLights(spec: VehicleSpec): Light[] {
   return beams;
 }
 
-/** Adds a vehicle to the builder (city material: gloss / glass / chrome / emit kinds). */
-export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSigns): void {
-  if (!(spec.type in DESIGNS)) return addBike(mb, spec as VehicleSpec & { type: BikeType }, signs);
-  const d = DESIGNS[spec.type as CarType];
+/** A box in a vehicle's frame (x from the back, z across), for its parts. */
+const boxer = (mb: MeshBuilder, P: (x: number, y: number, z: number) => V3, N: (n: V3) => V3) => (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): void => {
+  const faces: [V3, V3[]][] = [
+    [[1, 0, 0], [[x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0]]],
+    [[-1, 0, 0], [[x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1]]],
+    [[0, 1, 0], [[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]]],
+    [[0, -1, 0], [[x0, y0, z0], [x0, y0, z1], [x1, y0, z1], [x1, y0, z0]]],
+    [[0, 0, 1], [[x0, y0, z1], [x0, y1, z1], [x1, y1, z1], [x1, y0, z1]]],
+    [[0, 0, -1], [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0]]],
+  ];
+  for (const [n, q] of faces) {
+    const nw = N(n);
+    mb.quadN(P(...q[0]), P(...q[1]), P(...q[2]), P(...q[3]), nw, nw, nw, nw);
+  }
+};
+
+/** A design's body as functions of x: its top line, beltline, half-width, bottom edge and cross-section. */
+function shapeOf(d: Design): {
+  top: (x: number) => number;
+  belt: (x: number) => number;
+  halfW: (x: number) => number;
+  bottom: (x: number) => number;
+  section: (x: number) => [number, number][];
+} {
   const top = curve(d.top);
   const belt = curve(d.belt);
-  const f: V3 = [spec.fx, 0, spec.fz];
-  const s: V3 = [spec.fz, 0, -spec.fx];
-  const half = d.L / 2;
-  const P = (x: number, y: number, z: number): V3 => [spec.x + f[0] * (x - half) + s[0] * z, y, spec.z + f[2] * (x - half) + s[2] * z];
-  const N = (n: V3): V3 => [f[0] * n[0] + s[0] * n[2], n[1], f[2] * n[0] + s[2] * n[2]];
-  const paint = lin(spec.paint);
-  const paint2 = lin(spec.paint2 ?? (spec.type === 'hatch' ? 0x121316 : spec.type === 'taxi' ? (spec.paint === 0xe0a818 ? 0x121316 : spec.paint === 0x1f5a36 ? 0xe07818 : spec.paint) : spec.paint));
-  const wrap = spec.ad?.wrap !== undefined ? lin(spec.ad.wrap) : null;
-  // The wrap covers the rear doors: between the first two door seams, from the sill to the beltline.
-  const wrapX: Range = [d.seams[0] + 0.02, d.seams[1] - 0.02];
-  const BLACK: V3 = [0.012, 0.012, 0.013];
-  const CHROME: V3 = [0.85, 0.86, 0.88];
-  const TRIM: V3 = [0.02, 0.02, 0.022];
-
   const halfW = (x: number): number => {
     const e = Math.min(x - d.x0, d.L - x);
     if (e >= d.corner) return d.W;
@@ -417,7 +551,14 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
   };
 
   /** Half cross-section (y, z) from the underside centre, up the side, to the roof centre. */
+  // (Cached by x: finding the skin under a lamp or the grille steps through the same stations again and again.)
+  const sections = new Map<number, [number, number][]>();
   const section = (x: number): [number, number][] => {
+    let h = sections.get(x);
+    if (!h) sections.set(x, (h = sectionAt(x)));
+    return h;
+  };
+  const sectionAt = (x: number): [number, number][] => {
     const w = halfW(x);
     const b = bottom(x);
     const t = top(x);
@@ -442,12 +583,44 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     for (let i = 1; i < pts.length; i++) pts[i][0] = Math.max(pts[i][0], pts[i - 1][0] + 0.0005);
     return pts;
   };
+  return { top, belt, halfW, bottom, section };
+}
+
+/**
+ * Adds a vehicle to the builder (city material: gloss / glass / chrome / emit kinds). `brake`, if given, gets
+ * the brake lights: panels just proud of the tail lights, for a mesh shown while braking (real/traffic.ts).
+ */
+export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSigns, brake?: MeshBuilder): void {
+  if (!(spec.type in DESIGNS)) return addBike(mb, spec as VehicleSpec & { type: BikeType }, signs);
+  const d = DESIGNS[spec.type as CarType];
+  const f: V3 = [spec.fx, 0, spec.fz];
+  const s: V3 = [spec.fz, 0, -spec.fx];
+  const half = d.L / 2;
+  const P = (x: number, y: number, z: number): V3 => [spec.x + f[0] * (x - half) + s[0] * z, y, spec.z + f[2] * (x - half) + s[2] * z];
+  const N = (n: V3): V3 => [f[0] * n[0] + s[0] * n[2], n[1], f[2] * n[0] + s[2] * n[2]];
+  const paint = lin(spec.paint);
+  const paint2 = lin(spec.paint2 ?? (spec.type === 'police' ? 0x101012 : spec.type === 'boxtruck' ? 0xc4c7ca : spec.type === 'hatch' ? 0x121316 : spec.type === 'taxi' ? (spec.paint === 0xe0a818 ? 0x121316 : spec.paint === 0x1f5a36 ? 0xe07818 : spec.paint) : spec.paint));
+  const wrap = adOf(spec)?.wrap !== undefined ? lin(adOf(spec)!.wrap!) : null;
+  // The wrap covers the rear doors: between the first two door seams, from the sill to the beltline.
+  const wrapX: Range = [d.seams[0] + 0.02, d.seams[1] - 0.02];
+  const BLACK: V3 = [0.012, 0.012, 0.013];
+  const CHROME: V3 = [0.85, 0.86, 0.88];
+  const TRIM: V3 = [0.02, 0.02, 0.022];
+
+  const { top, belt, halfW, bottom, section } = shapeOf(d);
   const isHood = (x: number): boolean => top(x) - Math.min(belt(x), top(x) - 0.02) < 0.14;
 
   // Stations and the full ring (right half then the mirrored left half).
   const step = spec.detail ?? 0.05;
+  // Stations every `step`, and at the profile's keys and the glass's ends, so a coarse body keeps its
+  // silhouette (a van's upright back, a windscreen's foot).
+  const keys = [...d.top.map((p) => p[0]), ...d.windscreen, ...d.rearGlass].filter((x) => x > d.x0 + 0.004 && x < d.L - 0.004);
+  const regular = Array.from({ length: Math.ceil((d.L - d.x0) / step - 1e-6) }, (_, i) => d.x0 + i * step);
   const xs: number[] = [];
-  for (let x = d.x0; x < d.L - 1e-6; x += step) xs.push(x);
+  for (const x of [...regular, ...keys].sort((a, b) => a - b)) {
+    if (!xs.length || x - xs[xs.length - 1] > 0.008) xs.push(x);
+  }
+  if (d.L - xs[xs.length - 1] < 0.008) xs.pop();
   xs.push(d.L);
   const H = 11;
   const ringOf = (x: number): V3[] => {
@@ -508,6 +681,11 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
       mb.color = CHROME;
       return;
     }
+    if (spec.type === 'police' && (xm > d.windscreen[1] || xm < d.rearGlass[0])) {
+      // The patrol car's bonnet, boot and both ends are black; the cabin white over black.
+      mb.color = paint2;
+      return;
+    }
     if (d.twoTone && k < d.twoTone) {
       mb.color = paint2;
       return;
@@ -547,7 +725,7 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     const c = centre(i);
     const nn: V3 = N([dir, 0, 0]);
     mb.kind = d.bumper === 'chrome' ? KIND.gloss : KIND.gloss;
-    mb.color = spec.type === 'keitruck' && dir < 0 ? paint : paint;
+    mb.color = spec.type === 'police' ? paint2 : paint;
     for (let j = 0; j < R; j++) {
       const a = ring[j];
       const b = ring[(j + 1) % R];
@@ -591,10 +769,13 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
    * A detail panel (lights, grille, plate) conforming to the front (dir 1) or rear (dir -1) skin over
    * y0..y1 x z0..z1, lifted a few millimetres off it; subdivided so it follows the curvature.
    */
-  const panelX = (lift: number, y0: number, y1: number, z0: number, z1: number, dir: number): void => {
+  const panelX = (lift: number, y0: number, y1: number, z0: number, z1: number, dir: number, into: MeshBuilder = mb): void => {
     const nu = 4;
     const nv = 3;
-    const pt = (i: number, j: number): { p: V3; n: V3 } => {
+    // (Each corner is shared by up to four cells: find it once.)
+    const pts: ({ p: V3; n: V3 } | undefined)[] = [];
+    const pt = (i: number, j: number): { p: V3; n: V3 } => (pts[i * (nv + 1) + j] ??= ptAt(i, j));
+    const ptAt = (i: number, j: number): { p: V3; n: V3 } => {
       const y = y0 + ((y1 - y0) * j) / nv;
       const z = z0 + ((z1 - z0) * i) / nu;
       const x = skinX(y, z, dir);
@@ -613,23 +794,18 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
         const b = pt(i + 1, j);
         const c = pt(i + 1, j + 1);
         const e2 = pt(i, j + 1);
-        mb.quadN(a.p, b.p, c.p, e2.p, a.n, b.n, c.n, e2.n);
+        into.quadN(a.p, b.p, c.p, e2.p, a.n, b.n, c.n, e2.n);
       }
     }
   };
-  const boxL = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): void => {
-    const faces: [V3, V3[]][] = [
-      [[1, 0, 0], [[x1, y0, z0], [x1, y0, z1], [x1, y1, z1], [x1, y1, z0]]],
-      [[-1, 0, 0], [[x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1]]],
-      [[0, 1, 0], [[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]]],
-      [[0, -1, 0], [[x0, y0, z0], [x0, y0, z1], [x1, y0, z1], [x1, y0, z0]]],
-      [[0, 0, 1], [[x0, y0, z1], [x0, y1, z1], [x1, y1, z1], [x1, y0, z1]]],
-      [[0, 0, -1], [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0]]],
-    ];
-    for (const [n, q] of faces) {
-      const nw = N(n);
-      mb.quadN(P(...q[0]), P(...q[1]), P(...q[2]), P(...q[3]), nw, nw, nw, nw);
-    }
+  const boxL = boxer(mb, P, N);
+
+  /** The brush for a headlamp's lens: lit on the lamp channel, or (a parked car) plain glass. */
+  const lens = (): void => {
+    const on = spec.lamps !== false;
+    mb.kind = on ? KIND.emit : KIND.gloss;
+    mb.style = [on ? EMIT.lamp : 0, 0, 0, 0];
+    mb.color = on ? [0.95, 0.9, 0.8] : [0.5, 0.5, 0.48];
   };
 
   // Front: grille (chrome surround and dark slats), headlights, plate.
@@ -650,9 +826,7 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     mb.color = [0.9, 0.9, 0.92];
     panelX(0, hy0, hy1, sd * hz0, sd * hz1, 1);
     // Lens: emissive on the lamp channel, so headlights are on at night and dark glass by day.
-    mb.kind = KIND.emit;
-    mb.style = [EMIT.lamp, 0, 0, 0];
-    mb.color = [0.95, 0.9, 0.8];
+    lens();
     panelX(0.002, hy0 + (hy1 - hy0) * 0.25, hy1 - (hy1 - hy0) * 0.25, sd * (hz0 + 0.04), sd * (hz0 + 0.04 + (hz1 - hz0) * 0.35), 1);
     mb.style = [0, 0, 0, 0];
     // Amber indicator at the outer end.
@@ -668,7 +842,9 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
   panelX(0.004, d.plateY[0], d.plateY[1], -0.165, 0.165, 1);
   // Rear: tail lights, plate.
   const [ty0, ty1, tz0, tz1] = d.tail;
-  for (const sd of [-1, 1]) {
+  // (The trucks' are on the frame at the back, below: `rearLamps`.)
+  const truck = spec.type === 'keitruck' || spec.type === 'boxtruck';
+  for (const sd of truck ? [] : [-1, 1]) {
     // Tail lights: dim red by day (always channel) with a brighter lamp layer at night.
     mb.kind = KIND.emit;
     mb.style = [EMIT.always, 0, 0, 0];
@@ -676,16 +852,17 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     panelX(0, ty0, ty1, sd * tz0, sd * tz1, -1);
     mb.style = [EMIT.lamp, 0, 0, 0];
     mb.color = [0.3, 0.006, 0.004];
-    panelX(0.001, ty0 + (ty1 - ty0) * 0.35, ty1 - (ty1 - ty0) * 0.15, sd * (tz0 + 0.02), sd * (tz1 - 0.02), -1);
+    if (spec.lamps !== false) panelX(0.001, ty0 + (ty1 - ty0) * 0.35, ty1 - (ty1 - ty0) * 0.15, sd * (tz0 + 0.02), sd * (tz1 - 0.02), -1);
     mb.style = [EMIT.always, 0, 0, 0];
     mb.color = [0.1, 0.045, 0.0];
     panelX(0.002, ty0, ty0 + (ty1 - ty0) * 0.3, sd * tz0, sd * (tz0 + (tz1 - tz0) * 0.4), -1);
     mb.style = [0, 0, 0, 0];
+    if (brake) panelX(0.012, ty0 + (ty1 - ty0) * 0.3, ty1, sd * tz0, sd * tz1, -1, brake);
   }
   mb.kind = KIND.plain;
   mb.color = plateColor;
   const rpy = spec.type === 'keitruck' ? [0.5, 0.62] : [d.plateY[0] + 0.18, d.plateY[1] + 0.18];
-  if (spec.type !== 'keitruck') panelX(0.004, rpy[0], rpy[1], -0.165, 0.165, -1);
+  if (!truck) panelX(0.004, rpy[0], rpy[1], -0.165, 0.165, -1);
 
   // Door seams and handles on both sides, following the body surface.
   for (const sx of d.seams) {
@@ -743,7 +920,7 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
 
   if (isTaxi(spec.type)) {
     // Roof andon (lit company sign) and the red "vacant" sign low in the windscreen.
-    const ax = spec.ad?.roof ? d.windscreen[0] - 0.25 : spec.type === 'taxi2' ? 2.6 : 2.45;
+    const ax = adOf(spec)?.roof ? d.windscreen[0] - 0.25 : spec.type === 'taxi2' ? 2.6 : 2.45;
     const ay = top(ax);
     mb.kind = KIND.chrome;
     mb.color = CHROME;
@@ -798,9 +975,7 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
       mb.kind = KIND.gloss;
       mb.color = TRIM;
       boxL(x1, x1 + 0.006, y + 0.02, y + 0.145, Math.min(z0, z1) + 0.015, Math.max(z0, z1) - 0.015);
-      mb.kind = KIND.emit;
-      mb.style = [EMIT.lamp, 0, 0, 0];
-      mb.color = [0.95, 0.9, 0.8];
+      lens();
       const n = N([1, 0, 0]);
       const za = Math.min(z0, z1) + 0.04;
       const zb = Math.max(z0, z1) - 0.04;
@@ -846,16 +1021,41 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
       }
     }
   }
-  if (spec.type === 'minivan') {
-    // Sliding-door rail along the rear quarter.
+  if (spec.type === 'minivan' || spec.type === 'van' || spec.type === 'keivan') {
+    // Sliding-door rail along the rear quarter, back from the door.
     mb.kind = KIND.plain;
     mb.color = TRIM;
+    const x1 = d.seams[0];
     for (const sd of [-1, 1]) {
       const y = section(1.0)[5][0] - 0.02;
       const n = N([0, 0, sd]);
-      mb.quadN(P(0.3, y, sd * (d.W + 0.004)), P(1.4, y, sd * (d.W + 0.004)), P(1.4, y + 0.025, sd * (d.W + 0.004)), P(0.3, y + 0.025, sd * (d.W + 0.004)), n, n, n, n);
+      mb.quadN(P(0.3, y, sd * (d.W + 0.004)), P(x1, y, sd * (d.W + 0.004)), P(x1, y + 0.025, sd * (d.W + 0.004)), P(0.3, y + 0.025, sd * (d.W + 0.004)), n, n, n, n);
     }
   }
+  /**
+   * A truck's tail lamps, on the frame at the back (x: the face they stand on) over y0..y1 at the outer corners:
+   * dim red by day, a lamp layer at night, and the brake lights for the traffic.
+   */
+  const rearLamps = (x: number, y0: number, y1: number): void => {
+    for (const sd of [-1, 1]) {
+      const [z0, z1] = [sd * (d.W - 0.3), sd * (d.W - 0.06)];
+      const [zl, zh] = [Math.min(z0, z1), Math.max(z0, z1)];
+      mb.kind = KIND.emit;
+      mb.style = [EMIT.always, 0, 0, 0];
+      mb.color = [0.14, 0.004, 0.004];
+      boxL(x - 0.05, x, y0, y1, zl, zh);
+      const back = N([-1, 0, 0]);
+      const face = (into: MeshBuilder, fx: number, ya: number, yb: number): void =>
+        into.quadN(P(fx, ya, zl + 0.02), P(fx, ya, zh - 0.02), P(fx, yb, zh - 0.02), P(fx, yb, zl + 0.02), back, back, back, back);
+      if (spec.lamps !== false) {
+        mb.style = [EMIT.lamp, 0, 0, 0];
+        mb.color = [0.3, 0.006, 0.004];
+        face(mb, x - 0.052, y0 + (y1 - y0) * 0.62, y1 - 0.015);
+      }
+      if (brake) face(brake, x - 0.06, y0 + 0.02, y1 - 0.01);
+      mb.style = [0, 0, 0, 0];
+    }
+  };
   if (spec.type === 'keitruck') {
     // Flat bed with drop sides, a headboard guard behind the cab, chassis and mud flaps.
     mb.kind = KIND.plain;
@@ -876,14 +1076,279 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     // Rear plate on the tailgate.
     mb.kind = KIND.plain;
     mb.color = plateColor;
-    panelX(-0.004, 0.66, 0.78, -0.165, 0.165, -1);
+    const rear = N([-1, 0, 0]);
+    mb.quadN(P(-0.004, 0.56, -0.165), P(-0.004, 0.56, 0.165), P(-0.004, 0.72, 0.165), P(-0.004, 0.72, -0.165), rear, rear, rear, rear);
     mb.kind = KIND.plain;
     mb.color = BLACK;
     for (const sd of [-1, 1]) boxL(0.25, 0.27, 0.12, 0.5, sd * (d.W - 0.25), sd * (d.W - 0.03));
+    // Tail lamps low on the rear corners, under the tailgate.
+    rearLamps(0.02, 0.36, 0.49);
+  }
+  if (spec.type === 'boxtruck') {
+    // The box (aluminium, paint2) on a subframe, the chassis rails under it, the rear doors, a rub rail along
+    // each side, side guards between the axles, the fuel tank, the rear bar with the lamps and plate.
+    const bw = d.W + 0.03;
+    const zs = (a: number, b: number): [number, number] => [Math.min(a, b), Math.max(a, b)];
+    mb.kind = KIND.plain;
+    mb.color = BLACK;
+    boxL(-0.05, 3.6, 0.55, 0.88, -0.42, 0.42);
+    mb.color = [0.05, 0.05, 0.055];
+    boxL(0.05, 3.02, 0.88, 0.98, -bw + 0.06, bw - 0.06);
+    mb.kind = KIND.gloss;
+    mb.color = paint2;
+    boxL(0.0, 3.02, 0.98, 3.05, -bw, bw);
+    mb.color = lin(0x8a8d90);
+    for (const sd of [-1, 1]) {
+      boxL(0.02, 3.0, 1.02, 1.1, ...zs(sd * bw, sd * (bw + 0.02)));
+      boxL(0.0, 3.02, 2.98, 3.05, ...zs(sd * bw, sd * (bw + 0.012)));
+    }
+    // Rear doors: the gap down the middle, the frame, four lock rods with their handles.
+    const back = N([-1, 0, 0]);
+    const rq = (x: number, y0: number, y1: number, z0: number, z1: number): void => mb.quadN(P(x, y0, z0), P(x, y0, z1), P(x, y1, z1), P(x, y1, z0), back, back, back, back);
+    mb.kind = KIND.plain;
+    mb.color = BLACK;
+    rq(-0.003, 1.0, 3.0, -0.01, 0.01);
+    mb.kind = KIND.gloss;
+    mb.color = lin(0x9a9da0);
+    rq(-0.004, 0.98, 1.06, -bw, bw);
+    rq(-0.004, 2.96, 3.05, -bw, bw);
+    for (const sd of [-1, 1]) rq(-0.004, 0.98, 3.05, ...zs(sd * bw, sd * (bw - 0.06)));
+    mb.kind = KIND.chrome;
+    mb.color = CHROME;
+    for (const zr of [-0.62, -0.18, 0.18, 0.62]) {
+      rq(-0.008, 1.08, 2.94, zr - 0.012, zr + 0.012);
+      rq(-0.012, 1.7, 1.76, ...zs(zr, zr + (zr < 0 ? 0.12 : -0.12)));
+    }
+    mb.kind = KIND.plain;
+    mb.color = BLACK;
+    for (const sd of [-1, 1]) {
+      boxL(1.55, 3.2, 0.45, 0.55, ...zs(sd * (d.W - 0.06), sd * (d.W - 0.02)));
+      boxL(0.62, 0.66, 0.2, 0.6, ...zs(sd * (d.W - 0.3), sd * (d.W - 0.05)));
+    }
+    mb.kind = KIND.gloss;
+    mb.color = lin(0x7a7d80);
+    boxL(1.75, 2.35, 0.42, 0.78, -d.W + 0.06, -d.W + 0.36);
+    mb.kind = KIND.plain;
+    mb.color = BLACK;
+    boxL(-0.06, 0.06, 0.38, 0.56, -(d.W - 0.02), d.W - 0.02);
+    rearLamps(-0.06, 0.4, 0.54);
+    mb.kind = KIND.plain;
+    mb.color = plateColor;
+    rq(-0.066, 0.4, 0.52, -0.165, 0.165);
+  }
+  if (spec.type === 'police') {
+    // The gold emblem on the grille.
+    mb.kind = KIND.chrome;
+    mb.color = [0.78, 0.56, 0.16];
+    const gm = (d.grille[0] + d.grille[1]) / 2;
+    panelX(0.012, gm - 0.05, gm + 0.05, -0.05, 0.05, 1);
+    // The light bar across the roof (red, glowing), an aerial on the boot.
+    const ax = (d.rearGlass[1] + d.windscreen[0]) / 2;
+    const ay = top(ax);
+    mb.kind = KIND.gloss;
+    mb.color = BLACK;
+    boxL(ax - 0.13, ax + 0.13, ay, ay + 0.05, -0.56, 0.56);
+    mb.kind = KIND.emit;
+    mb.style = [EMIT.always, 0, 0, 0];
+    mb.color = [0.42, 0.02, 0.02];
+    for (const sd of [-1, 1]) boxL(ax - 0.11, ax + 0.11, ay + 0.05, ay + 0.15, Math.min(sd * 0.16, sd * 0.55), Math.max(sd * 0.16, sd * 0.55));
+    mb.style = [0, 0, 0, 0];
+    mb.kind = KIND.gloss;
+    mb.color = [0.3, 0.3, 0.32];
+    boxL(ax - 0.1, ax + 0.1, ay + 0.05, ay + 0.13, -0.16, 0.16);
+    mb.color = BLACK;
+    boxL(0.4, 0.42, top(0.41), top(0.41) + 0.55, 0.3, 0.32);
   }
 
-  if (spec.ad && signs) {
-    const ad = spec.ad;
+  if (signs) addVehicleMarks(mb, spec, signs);
+  if (spec.type === 'sports') {
+    // Ducktail spoiler on posts, and a louvred rear hatch strip.
+    const sx = 0.22;
+    const sy = top(sx);
+    mb.kind = KIND.gloss;
+    mb.color = BLACK;
+    for (const z of [-0.5, 0.5]) boxL(sx - 0.03, sx + 0.03, sy - 0.02, sy + 0.05, z - 0.02, z + 0.02);
+    mb.color = paint;
+    boxL(sx - 0.12, sx + 0.08, sy + 0.05, sy + 0.075, -0.74, 0.74);
+    mb.color = BLACK;
+    for (let i = 0; i < 5; i++) {
+      const x = 1.15 + i * 0.14;
+      const y = top(x) + 0.006;
+      const n = N([-(top(x + 0.02) - top(x - 0.02)) / 0.04, 1, 0]);
+      mb.quadN(P(x, y, -0.55), P(x + 0.05, top(x + 0.05) + 0.006, -0.55), P(x + 0.05, top(x + 0.05) + 0.006, 0.55), P(x, y, 0.55), n, n, n, n);
+    }
+  }
+  if (spec.type === 'luxury') {
+    // Stand-up bonnet ornament and chrome sills.
+    const ox = d.L - 0.3;
+    mb.kind = KIND.chrome;
+    mb.color = CHROME;
+    boxL(ox - 0.03, ox + 0.03, top(ox), top(ox) + 0.07, -0.006, 0.006);
+    for (const sd of [-1, 1]) {
+      const n = N([0, 0, sd]);
+      const y = section(2.5)[3][0] + 0.02;
+      mb.quadN(P(1.4, y, sd * (d.W + 0.006)), P(4.0, y, sd * (d.W + 0.006)), P(4.0, y + 0.03, sd * (d.W + 0.006)), P(1.4, y + 0.03, sd * (d.W + 0.006)), n, n, n, n);
+    }
+  }
+  if (spec.type === 'taxi2') {
+    // Sliding rear door rail.
+    mb.kind = KIND.plain;
+    mb.color = TRIM;
+    for (const sd of [-1, 1]) {
+      const y = section(1.0)[5][0] - 0.02;
+      const n = N([0, 0, sd]);
+      mb.quadN(P(0.3, y, sd * (d.W + 0.004)), P(1.44, y, sd * (d.W + 0.004)), P(1.44, y + 0.025, sd * (d.W + 0.004)), P(0.3, y + 0.025, sd * (d.W + 0.004)), n, n, n, n);
+    }
+  }
+
+  // Livery.
+  const lv = spec.livery;
+  if (lv?.stripes != null) {
+    // Twin stripes along the top, over the flat crown (bonnet, roof, boot), skipping the glass and a soft top.
+    mb.kind = KIND.gloss;
+    mb.color = lin(lv.stripes);
+    const skip = (x: number): boolean => within(x, d.windscreen) || within(x, d.rearGlass) || (!!d.softTop && x > d.rearGlass[0] && x < d.windscreen[0]);
+    for (let x = 0.02; x < d.L - 0.04; x += 0.05) {
+      const xb = Math.min(d.L - 0.02, x + 0.05);
+      if (skip(x) || skip(xb)) continue;
+      const ya = top(x) + 0.005;
+      const yb = top(xb) + 0.005;
+      const n = N([-(yb - ya), xb - x, 0]);
+      for (const [z0, z1] of [[0.05, 0.21], [-0.21, -0.05]]) mb.quadN(P(x, ya, z0), P(xb, yb, z0), P(xb, yb, z1), P(x, ya, z1), n, n, n, n);
+    }
+  }
+  if (lv?.side != null) {
+    // A band along each flank below the beltline, broken by the wheel arches.
+    mb.kind = KIND.gloss;
+    mb.color = lin(lv.side);
+    for (let x = 0.2; x < d.L - 0.3; x += 0.05) {
+      const xb = x + 0.05;
+      const yb = Math.min(belt(x), belt(xb)) - 0.1;
+      const ya = yb - 0.06;
+      if (bottom(x) > ya - 0.02 || bottom(xb) > ya - 0.02) continue;
+      for (const sd of [-1, 1]) {
+        const n = N([0, 0, sd]);
+        mb.quadN(P(x, ya, sd * (halfW(x) + 0.006)), P(xb, ya, sd * (halfW(xb) + 0.006)), P(xb, yb, sd * (halfW(xb) + 0.006)), P(x, yb, sd * (halfW(x) + 0.006)), n, n, n, n);
+      }
+    }
+  }
+
+  // Wheels.
+  const lite = (spec.detail ?? 0.05) >= 0.2;
+  if (spec.wheels !== false) for (const wx of d.wheelX) for (const sd of [-1, 1]) wheel(mb, P, N, wx, d.wheelR, d.tyreW, sd * (d.W - 0.035), sd, d.rims, lite);
+}
+
+/**
+ * Where a car's livery text goes, in its frame (the car at the origin pointing +z, +x its left): the door
+ * roundel's centre on the left flank (mirror x for the right) and its radius, and the windscreen banner: the
+ * top edge of the screen from (y0, z0) at the roof down to (y1, z1), and its half-width.
+ */
+export function liveryAnchors(type: CarType): { door: { x: number; y: number; z: number; r: number }; banner: { y0: number; z0: number; y1: number; z1: number; half: number } } {
+  const d = DESIGNS[type];
+  const top = curve(d.top);
+  const belt = curve(d.belt);
+  const half = d.L / 2;
+  const dx = d.seams.length >= 2 ? (d.seams[0] + d.seams[1]) / 2 : d.L / 2;
+  const bl = Math.min(belt(dx), top(dx) - 0.02);
+  const b = d.clear;
+  const r = Math.min(0.2, (bl - b) * 0.36);
+  const [w0, w1] = d.windscreen;
+  const x0 = w0 + 0.02;
+  const x1 = w0 + (w1 - w0) * 0.26;
+  return {
+    door: { x: d.W + 0.008, y: b + (bl - b) * 0.55, z: dx - half, r },
+    banner: { y0: top(x0) + 0.006, z0: x0 - half, y1: top(x1) + 0.006, z1: x1 - half, half: Math.max(0.3, d.W - d.roofInset - 0.12) },
+  };
+}
+
+/** A wheel's hub in its car's frame (the car at the origin pointing +z; +x is the car's left), and its side. */
+export interface WheelSpot {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly front: boolean;
+  /** +1 on the left (+x) side, -1 on the right. */
+  readonly sd: 1 | -1;
+}
+
+/**
+ * A vehicle's lettering and ads (the sign builders in `signs`; a roof ad's rack in `mb`): a taxi's ad, a work
+ * vehicle's company, the patrol car's markings. Apart from the body (`addVehicle`, which calls it when it's given
+ * signs), so a parked car's body can be stamped from one built once and dressed on its own.
+ */
+export function addVehicleMarks(mb: MeshBuilder, spec: VehicleSpec, signs: VehicleSigns): void {
+  if (!(spec.type in DESIGNS)) return;
+  const d = DESIGNS[spec.type as CarType];
+  const { top, section } = shapeOf(d);
+  const f: V3 = [spec.fx, 0, spec.fz];
+  const s: V3 = [spec.fz, 0, -spec.fx];
+  const half = d.L / 2;
+  const P = (x: number, y: number, z: number): V3 => [spec.x + f[0] * (x - half) + s[0] * z, y, spec.z + f[2] * (x - half) + s[2] * z];
+  const N = (n: V3): V3 => [f[0] * n[0] + s[0] * n[2], n[1], f[2] * n[0] + s[2] * n[2]];
+  const boxL = boxer(mb, P, N);
+  const paint = lin(spec.paint);
+  const paint2 = lin(spec.paint2 ?? (spec.type === 'police' ? 0x101012 : spec.type === 'boxtruck' ? 0xc4c7ca : spec.paint));
+  const wrapAd = adOf(spec);
+  const wrap = wrapAd?.wrap !== undefined ? lin(wrapAd.wrap) : null;
+  const wrapX: Range = [d.seams[0] + 0.02, d.seams[1] - 0.02];
+  const CHROME: V3 = [0.85, 0.86, 0.88];
+  const sb = signs.sb;
+
+  /** The body's half-width at height y on station x (from its cross-section). */
+  const sideAt = (x: number, y: number): number => {
+    const h = section(x);
+    for (let k = 1; k + 1 < h.length; k++) {
+      const [ya, za] = h[k];
+      const [yb, zb] = h[k + 1];
+      if (y >= ya && y <= yb) return za + ((zb - za) * (y - ya)) / Math.max(1e-6, yb - ya);
+    }
+    return d.W;
+  };
+  /**
+   * Lettering (decals) along both sides, centred at (xm, ym), h tall (the slot's height) and at most maxLen long, laid
+   * on the body (tilted with the tumblehome), or on a flat side `flat` out from the middle (a truck's box).
+   */
+  const sideText = (text: string, xm: number, ym: number, h: number, maxLen: number, ink: V3, plate: V3, flat?: number): void => {
+    const rect = signs.layout.rect(text, false);
+    if (!rect) return;
+    let w = h * (rect.w / rect.h);
+    if (w > maxLen) {
+      w = maxLen;
+      h = w * (rect.h / rect.w);
+    }
+    sb.ink = ink;
+    sb.plate = plate;
+    // A decal: only the letters (the paint shows round them).
+    sb.sign = [0, 3];
+    const z0 = flat ?? sideAt(xm, ym - h / 2) + 0.007;
+    const z1 = flat ?? sideAt(xm, ym + h / 2) + 0.007;
+    for (const sd of [-1, 1]) {
+      // Reads left to right from outside: along +f on the right side (sd = -1), -f on the left.
+      const a0 = sd < 0 ? xm - w / 2 : xm + w / 2;
+      const a1 = sd < 0 ? xm + w / 2 : xm - w / 2;
+      const c0 = P(a0, ym - h / 2, sd * z0);
+      const c1 = P(a1, ym - h / 2, sd * z0);
+      const t0 = P(a0, ym + h / 2, sd * z1);
+      sb.quad(c0, [c1[0] - c0[0], 0, c1[2] - c0[2]], [t0[0] - c0[0], h, t0[2] - c0[2]], [rect.u0, rect.v0, rect.u1, rect.v1]);
+    }
+  };
+  /** A plain printed band along both sides (blank text), y0..y1 over x0..x1. */
+  const band = (x0: number, x1: number, y0: number, y1: number, color: V3, flat: number): void => {
+    const [bu, bv] = signs.layout.blankUv;
+    sb.plate = color;
+    sb.ink = color;
+    sb.sign = [0, 2];
+    for (const sd of [-1, 1]) {
+      const a0 = sd < 0 ? x0 : x1;
+      const a1 = sd < 0 ? x1 : x0;
+      const c0 = P(a0, y0, sd * flat);
+      const c1 = P(a1, y0, sd * flat);
+      sb.quad(c0, [c1[0] - c0[0], 0, c1[2] - c0[2]], [0, y1 - y0, 0], [bu, bv, bu, bv]);
+    }
+  };
+
+  const ad = adOf(spec);
+  if (ad) {
     const toW = (x: number, z: number): [number, number, number] => P(x, 0, z);
     const photos = ad.photo !== undefined ? signs.photos : undefined;
     if (photos && ad.photo !== undefined) {
@@ -970,113 +1435,48 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
       }
     }
   }
-  if (spec.type === 'sports') {
-    // Ducktail spoiler on posts, and a louvred rear hatch strip.
-    const sx = 0.22;
-    const sy = top(sx);
-    mb.kind = KIND.gloss;
-    mb.color = BLACK;
-    for (const z of [-0.5, 0.5]) boxL(sx - 0.03, sx + 0.03, sy - 0.02, sy + 0.05, z - 0.02, z + 0.02);
-    mb.color = paint;
-    boxL(sx - 0.12, sx + 0.08, sy + 0.05, sy + 0.075, -0.74, 0.74);
-    mb.color = BLACK;
-    for (let i = 0; i < 5; i++) {
-      const x = 1.15 + i * 0.14;
-      const y = top(x) + 0.006;
-      const n = N([-(top(x + 0.02) - top(x - 0.02)) / 0.04, 1, 0]);
-      mb.quadN(P(x, y, -0.55), P(x + 0.05, top(x + 0.05) + 0.006, -0.55), P(x + 0.05, top(x + 0.05) + 0.006, 0.55), P(x, y, 0.55), n, n, n, n);
-    }
-  }
-  if (spec.type === 'luxury') {
-    // Stand-up bonnet ornament and chrome sills.
-    const ox = d.L - 0.3;
-    mb.kind = KIND.chrome;
-    mb.color = CHROME;
-    boxL(ox - 0.03, ox + 0.03, top(ox), top(ox) + 0.07, -0.006, 0.006);
-    for (const sd of [-1, 1]) {
-      const n = N([0, 0, sd]);
-      const y = section(2.5)[3][0] + 0.02;
-      mb.quadN(P(1.4, y, sd * (d.W + 0.006)), P(4.0, y, sd * (d.W + 0.006)), P(4.0, y + 0.03, sd * (d.W + 0.006)), P(1.4, y + 0.03, sd * (d.W + 0.006)), n, n, n, n);
-    }
-  }
-  if (spec.type === 'taxi2') {
-    // Sliding rear door rail.
-    mb.kind = KIND.plain;
-    mb.color = TRIM;
-    for (const sd of [-1, 1]) {
-      const y = section(1.0)[5][0] - 0.02;
-      const n = N([0, 0, sd]);
-      mb.quadN(P(0.3, y, sd * (d.W + 0.004)), P(1.44, y, sd * (d.W + 0.004)), P(1.44, y + 0.025, sd * (d.W + 0.004)), P(0.3, y + 0.025, sd * (d.W + 0.004)), n, n, n, n);
-    }
-  }
 
-  // Livery.
-  const lv = spec.livery;
-  if (lv?.stripes != null) {
-    // Twin stripes along the top, over the flat crown (bonnet, roof, boot), skipping the glass and a soft top.
-    mb.kind = KIND.gloss;
-    mb.color = lin(lv.stripes);
-    const skip = (x: number): boolean => within(x, d.windscreen) || within(x, d.rearGlass) || (!!d.softTop && x > d.rearGlass[0] && x < d.windscreen[0]);
-    for (let x = 0.02; x < d.L - 0.04; x += 0.05) {
-      const xb = Math.min(d.L - 0.02, x + 0.05);
-      if (skip(x) || skip(xb)) continue;
-      const ya = top(x) + 0.005;
-      const yb = top(xb) + 0.005;
-      const n = N([-(yb - ya), xb - x, 0]);
-      for (const [z0, z1] of [[0.05, 0.21], [-0.21, -0.05]]) mb.quadN(P(x, ya, z0), P(xb, yb, z0), P(xb, yb, z1), P(x, ya, z1), n, n, n, n);
+  const liv = liveryOf(spec);
+  if (liv) {
+    const ink = lin(liv.ink);
+    if (spec.type === 'boxtruck') {
+      // On the box: the band low along it, the name large, the line under it.
+      const flat = d.W + 0.03 + 0.004;
+      if (liv.band !== undefined) band(0.05, 2.97, 1.16, 1.34, lin(liv.band), flat);
+      sideText(liv.name, 1.51, 2.3, 0.66, 2.7, ink, paint2, flat);
+      sideText(liv.sub, 1.51, 1.7, 0.26, 2.4, ink, paint2, flat);
+    } else if (spec.type === 'van') {
+      // On the blank rear quarter, above the beltline.
+      sideText(liv.name, 1.14, 1.5, 0.34, 1.45, ink, paint);
+      sideText(liv.sub, 1.14, 1.24, 0.13, 1.4, ink, paint);
+    } else {
+      // The kei van: below the windows, on the sliding door and the rear quarter.
+      sideText(liv.name, 1.55, 0.86, 0.2, 1.1, ink, paint);
+      sideText(liv.sub, 1.55, 0.68, 0.09, 1.0, ink, paint);
     }
   }
-  if (lv?.side != null) {
-    // A band along each flank below the beltline, broken by the wheel arches.
-    mb.kind = KIND.gloss;
-    mb.color = lin(lv.side);
-    for (let x = 0.2; x < d.L - 0.3; x += 0.05) {
-      const xb = x + 0.05;
-      const yb = Math.min(belt(x), belt(xb)) - 0.1;
-      const ya = yb - 0.06;
-      if (bottom(x) > ya - 0.02 || bottom(xb) > ya - 0.02) continue;
-      for (const sd of [-1, 1]) {
-        const n = N([0, 0, sd]);
-        mb.quadN(P(x, ya, sd * (halfW(x) + 0.006)), P(xb, ya, sd * (halfW(xb) + 0.006)), P(xb, yb, sd * (halfW(xb) + 0.006)), P(x, yb, sd * (halfW(x) + 0.006)), n, n, n, n);
-      }
+  if (spec.type === 'police') {
+    // 警視庁 on the front doors (white), POLICE in reflective yellow under it (black), the unit on the roof.
+    const xm = (d.seams[1] + d.seams[2]) / 2;
+    sideText(POLICE_NAME, xm, 0.81, 0.2, 0.85, [0.02, 0.02, 0.025], paint);
+    sideText(POLICE_EN, xm, 0.45, 0.13, 0.62, lin(0xf0c020), paint2);
+    const h = hash(spec.marks ?? 0, 0x9011) % (POLICE_UNITS.length * 6);
+    const rect = signs.layout.rect(unitText(h % POLICE_UNITS.length, 1 + Math.floor(h / POLICE_UNITS.length)), false);
+    if (rect) {
+      const x0 = d.rearGlass[1] + 0.05;
+      const len = 0.42;
+      const w = Math.min(1.1, len * (rect.w / rect.h));
+      const y = top(x0 + len / 2) + 0.006;
+      sb.ink = [0.02, 0.02, 0.025];
+      sb.plate = paint;
+      sb.sign = [0, 3];
+      // Read from above and behind: across the car, its foot toward the boot.
+      const c = P(x0, y, w / 2);
+      const r = P(x0, y, -w / 2);
+      const u = P(x0 + len, y, w / 2);
+      sb.quad(c, [r[0] - c[0], 0, r[2] - c[2]], [u[0] - c[0], 0, u[2] - c[2]], [rect.u0, rect.v0, rect.u1, rect.v1]);
     }
   }
-
-  // Wheels.
-  if (spec.wheels !== false) for (const wx of d.wheelX) for (const sd of [-1, 1]) wheel(mb, P, N, wx, d.wheelR, d.tyreW, sd * (d.W - 0.035), sd, d.rims);
-}
-
-/**
- * Where a car's livery text goes, in its frame (the car at the origin pointing +z, +x its left): the door
- * roundel's centre on the left flank (mirror x for the right) and its radius, and the windscreen banner: the
- * top edge of the screen from (y0, z0) at the roof down to (y1, z1), and its half-width.
- */
-export function liveryAnchors(type: CarType): { door: { x: number; y: number; z: number; r: number }; banner: { y0: number; z0: number; y1: number; z1: number; half: number } } {
-  const d = DESIGNS[type];
-  const top = curve(d.top);
-  const belt = curve(d.belt);
-  const half = d.L / 2;
-  const dx = d.seams.length >= 2 ? (d.seams[0] + d.seams[1]) / 2 : d.L / 2;
-  const bl = Math.min(belt(dx), top(dx) - 0.02);
-  const b = d.clear;
-  const r = Math.min(0.2, (bl - b) * 0.36);
-  const [w0, w1] = d.windscreen;
-  const x0 = w0 + 0.02;
-  const x1 = w0 + (w1 - w0) * 0.26;
-  return {
-    door: { x: d.W + 0.008, y: b + (bl - b) * 0.55, z: dx - half, r },
-    banner: { y0: top(x0) + 0.006, z0: x0 - half, y1: top(x1) + 0.006, z1: x1 - half, half: Math.max(0.3, d.W - d.roofInset - 0.12) },
-  };
-}
-
-/** A wheel's hub in its car's frame (the car at the origin pointing +z; +x is the car's left), and its side. */
-export interface WheelSpot {
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
-  readonly front: boolean;
-  /** +1 on the left (+x) side, -1 on the right. */
-  readonly sd: 1 | -1;
 }
 
 /** Where a car's four wheels are, and their size and rims, for drawing them apart (to spin and steer). */
@@ -1089,6 +1489,28 @@ export function wheelLayout(type: CarType): { r: number; tw: number; rims: 'allo
   return { r: d.wheelR, tw: d.tyreW, rims: d.rims, spots };
 }
 
+function liteWheel(mb: MeshBuilder, P: (x: number, y: number, z: number) => V3, N: (n: V3) => V3, cx: number, r: number, tw: number, zOut: number, sd: number, rims: 'alloy' | 'steel'): void {
+  const seg = 10;
+  const rimR = r * 0.66;
+  const at = (a: number, rad: number, depth: number): V3 => P(cx + Math.cos(a) * rad, r + Math.sin(a) * rad, zOut - sd * depth);
+  const out = N([0, 0, sd]);
+  mb.style = [0, 0, 0, 0];
+  for (let i = 0; i < seg; i++) {
+    const a0 = (i / seg) * Math.PI * 2;
+    const a1 = ((i + 1) / seg) * Math.PI * 2;
+    const rad = (a: number): V3 => N([Math.cos(a), Math.sin(a), 0]);
+    mb.kind = KIND.plain;
+    mb.color = [0.018, 0.018, 0.02];
+    mb.quadN(at(a0, rimR, 0), at(a1, rimR, 0), at(a1, r, 0.03), at(a0, r, 0.03), out, out, out, out);
+    mb.quadN(at(a0, r, 0.03), at(a1, r, 0.03), at(a1, r, tw), at(a0, r, tw), rad(a0), rad(a1), rad(a1), rad(a0));
+    // The face: alternate segments are the spokes (or the hubcap's vents between its dome and the rim).
+    const dark = i % 2 === 1;
+    mb.kind = dark ? KIND.plain : rims === 'steel' ? KIND.gloss : KIND.chrome;
+    mb.color = dark ? [0.05, 0.05, 0.055] : rims === 'steel' ? [0.45, 0.46, 0.48] : [0.7, 0.71, 0.73];
+    mb.quadN(at(a0, 0, 0.02), at(a1, 0, 0.02), at(a1, rimR, 0.02), at(a0, rimR, 0.02), out, out, out, out);
+  }
+}
+
 /**
  * One wheel with its hub at the origin and its axle along x, the outer face toward +x (sd 1) or -x (sd -1):
  * rolling forward (+z) is a positive turn about +x.
@@ -1098,8 +1520,13 @@ export function addWheel(mb: MeshBuilder, r: number, tw: number, sd: 1 | -1, rim
   wheel(mb, (x, y, z) => [z, y - r, x], (n) => [n[2], n[1], n[0]], 0, r, tw, (sd * tw) / 2, sd, rims);
 }
 
-/** A turned wheel: rounded tyre, rim lip, and five alloy spokes (or a steel hubcap). */
-export function wheel(mb: MeshBuilder, P: (x: number, y: number, z: number) => V3, N: (n: V3) => V3, cx: number, r: number, tw: number, zOut: number, sd: number, rims: 'alloy' | 'steel'): void {
+/**
+ * A turned wheel: rounded tyre, rim lip, and five alloy spokes (or a steel hubcap). `lite` is the street's
+ * version (parked cars, ~60 triangles): ten sides, the sidewall and tread, a flat face with the spokes or the
+ * hubcap painted on.
+ */
+export function wheel(mb: MeshBuilder, P: (x: number, y: number, z: number) => V3, N: (n: V3) => V3, cx: number, r: number, tw: number, zOut: number, sd: number, rims: 'alloy' | 'steel', lite = false): void {
+  if (lite) return liteWheel(mb, P, N, cx, r, tw, zOut, sd, rims);
   const seg = 24;
   // Tyre profile: (radius, depth inward from the outer face).
   const prof: P2[] = [[r * 0.66, 0.0], [r * 0.9, 0.0], [r * 0.985, 0.025], [r, 0.06], [r, tw - 0.06], [r * 0.985, tw - 0.025], [r * 0.9, tw], [r * 0.66, tw]];

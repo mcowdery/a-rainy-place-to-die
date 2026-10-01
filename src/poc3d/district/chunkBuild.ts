@@ -6,6 +6,7 @@ import { paintLights, type Light } from '../real/lightmap';
 import { MeshBuilder } from '../real/meshBuilder';
 import { addFigure, addUmbrella, cellCrowd, GhostBuilder } from '../real/people';
 import { addProps } from '../real/props';
+import { taxiPhotos } from '../real/taxiAdLayout';
 import type { RawGeometry } from '../real/rawGeometry';
 import { sightline } from '../real/sightline';
 import { addSigns, signLights, SignBuilder, type SignLayout } from '../real/signs';
@@ -28,7 +29,7 @@ export interface ChunkBuilt {
   readonly mx: number;
   readonly my: number;
   readonly stage: Stage;
-  readonly meshes: Partial<Record<'base' | 'far' | 'near' | 'signs' | 'ads' | 'ghosts' | 'umbrellas', RawGeometry | null>>;
+  readonly meshes: Partial<Record<'base' | 'far' | 'near' | 'signs' | 'ads' | 'taxiAds' | 'ghosts' | 'umbrellas', RawGeometry | null>>;
   readonly lightmap?: Uint8Array;
   readonly people?: number;
   /** Time spent building, in the worker. */
@@ -39,6 +40,8 @@ export class ChunkBuilder {
   private readonly mb = new MeshBuilder(1 << 16);
   private readonly sb = new SignBuilder();
   private readonly ab = new SignBuilder();
+  /** Parked taxis' photo ads (the taxi ad atlas). */
+  private readonly tb = new SignBuilder();
   private readonly gb = new GhostBuilder();
   private readonly ub = new GhostBuilder();
   private readonly canvas = new OffscreenCanvas(CELL, CELL);
@@ -93,8 +96,9 @@ export class ChunkBuilder {
     if (stage === 'near') {
       const mb = this.mb.reset();
       for (const b of buildings) addBuilding(mb, b, true);
-      addProps(mb, m.detail(mx, my)!);
       const sb = this.sb.reset();
+      const tb = this.tb.reset();
+      addProps(mb, m.detail(mx, my)!, { sb, layout: this.layout, photos: taxiPhotos(tb) });
       // Sightlines for billboards and rooftop letters: this cell's and the neighbours' buildings.
       const around: Building3[] = [];
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) around.push(...m.buildings(mx + dx, my + dy));
@@ -102,7 +106,7 @@ export class ChunkBuilder {
       addSigns([...plan.signs, ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb, seen);
       const ab = this.ab.reset();
       addDistrictAds(ab, mb, buildings, plan.signs, m.detail(mx, my)!.props, undefined, seen, plan.open);
-      return { mx, my, stage, meshes: { near: lift(mb.raw(cx, cz)), signs: lift(sb.raw(cx, cz)), ads: lift(ab.raw(cx, cz)) }, ms: performance.now() - t0 };
+      return { mx, my, stage, meshes: { near: lift(mb.raw(cx, cz)), signs: lift(sb.raw(cx, cz)), ads: lift(ab.raw(cx, cz)), taxiAds: lift(tb.raw(cx, cz)) }, ms: performance.now() - t0 };
     }
     const crowd = cellCrowd(plan, m.detail(mx, my)!, m.plazas(mx, my));
     const gb = this.gb.reset();

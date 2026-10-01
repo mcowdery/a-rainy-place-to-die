@@ -184,7 +184,10 @@ const signCommon = /* glsl */ `
   float sh2(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 `;
 
-/** Material for textured signs: neon text on a dark plate (style 0), a lit lightbox (1), or print (2). */
+/**
+ * Material for textured signs: neon text on a dark plate (style 0), a lit lightbox (1), print (2), or a decal (3:
+ * only the letters, cut out, so the surface under them shows: lettering on a vehicle's paint).
+ */
 export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.1 });
   const tSigns = { value: atlas.texture };
@@ -211,7 +214,10 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
         vec2 st = texture2D(tSigns, vSUv).rg;
         float flk = uFlicker > 0.5 && sh2(vec2(vSign.x, floor(uTime * 12.0))) > 0.992 ? 0.08 : 1.0;
         float on = uNeon * flk;
-        if (vSign.y < 0.5) {
+        if (vSign.y > 2.5) {
+          if (st.r < 0.4) discard;
+          diffuseColor.rgb = vInk;
+        } else if (vSign.y < 0.5) {
           diffuseColor.rgb = mix(vPlate, vInk * 0.6, st.r);
           totalEmissiveRadiance += vInk * (st.r * 3.0 + st.g * 0.35) * on;
         } else if (vSign.y > 1.5) {
@@ -224,7 +230,7 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
           totalEmissiveRadiance += mix(vPlate * 0.9, vInk * inkGlow, st.r) * on;
         }`);
   };
-  m.customProgramCacheKey = () => 'signs-v1';
+  m.customProgramCacheKey = () => 'signs-v2';
   return m;
 }
 

@@ -344,7 +344,7 @@ export const KAWABATA_BUILDERS: Record<KawabataKind, (k: Kit, id: string, part: 
     for (const [uu, v] of [[10, 1], [36, 2]] as const) {
       const [x, z] = toWorld(k.f, uu, -5);
       k.mb.kind = KIND.plain;
-      addCar(k.mb, { x, z, fx: k.f.r[0], fz: k.f.r[2], variant: 60 + v, type: 'sedan', paint: 0x0c0c0e });
+      addCar(k.mb, { x, z, fx: k.f.r[0], fz: k.f.r[2], variant: 60 + v, type: 'luxury', paint: 0x0c0c0e });
     }
     k.person(18.4, -1.6, 0, -1, { body: 'man', pose: 'pockets', color: [0.55, 0.55, 0.65] });
     k.person(31, -2.4, -1, 0, { body: 'man', pose: 'stand', color: [0.55, 0.55, 0.65] });

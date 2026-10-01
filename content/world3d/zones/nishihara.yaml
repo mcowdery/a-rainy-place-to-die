@@ -45,6 +45,7 @@ zones:
   D:
     id: nishihara_danchi
     name: Nishihara Danchi (the estates)
+    cars: { kei: 34, minivan: 26, sedan: 22, keitruck: 8, keivan: 6, van: 3, taxi: 6, hatch: 2 }
     plan:
       floors: [[4, 5, 75], [11, 14, 25]]
       lotW: [36, 60]

@@ -2,6 +2,7 @@ import YAML from 'yaml';
 import { ID_PATTERN } from '../../content/stamps';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import { AD_CATEGORIES, type AdCategory } from '../models/ads';
+import { CAR_TYPES2 } from '../models/vehicles';
 import { WIN } from '../real/buildings';
 import { LOT_OPEN, STYLES3, type DistrictStyle3, type Zone3, type ZoneLook } from './plan';
 
@@ -23,6 +24,8 @@ import { LOT_OPEN, STYLES3, type DistrictStyle3, type Zone3, type ZoneLook } fro
  *       look: { windows: { punched: 50, small: 40 }, walls: ['#6c5242'], tiled: true, shops: { warm: 2, bar: 3 }, open: 0.9 }
  *       # look may also set homes (share of buildings that are homes: a door, not a shop), roofs (share of
  *       # low homes with a pitched roof) and bikes (share of homes with bicycles out front).
+ *       cars: { luxury: 3, taxi: 4, sedan: 2 }   # optional: the cars parked and driving here, by model
+ *       # (models/vehicles.ts); otherwise the district's (district/carMix.ts).
  *
  * plan overrides any DistrictStyle3 field (localStreet, block, twoRowDepth, lotW, lotGap, floors,
  * signChance, verticalSign); anything not given comes from the district's style. Zones are part of the
@@ -151,6 +154,19 @@ export function parseZones3(file: string, text: string, macro: MacroMap, errors:
       if (!(AD_CATEGORIES as readonly string[]).includes(k)) err(`${at}: unknown ad category '${k}' (${AD_CATEGORIES.join(', ')})`);
       else if (typeof v !== 'number' || v <= 0) err(`${at}: ad weight for ${k} must be a positive number`);
       else ads[k as AdCategory] = v;
+    }
+
+    if (raw.cars !== undefined) {
+      const cars: Record<string, number> = {};
+      if (!isObj(raw.cars)) err(`${at}: cars must map car models to weights`);
+      else {
+        for (const [k, v] of Object.entries(raw.cars)) {
+          if (!(CAR_TYPES2 as readonly string[]).includes(k)) err(`${at}: unknown car model '${k}' (${CAR_TYPES2.join(', ')})`);
+          else if (typeof v !== 'number' || v <= 0) err(`${at}: car weight for ${k} must be a positive number`);
+          else cars[k] = v;
+        }
+        style.cars = cars;
+      }
     }
 
     const lookRaw = isObj(raw.look) ? raw.look : {};

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Expressway, Road } from '../district/expressway';
-import { addCar } from './cars';
+import { addVehicle } from '../models/vehicles';
+import { CITY_CARS, pickCar } from '../district/carMix';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 
 /**
@@ -504,18 +505,12 @@ export class ExpresswayTraffic {
       }
       this.bend[i] = t;
     }
-    const types = ['sedan', 'sedan', 'kei', 'minivan', 'taxi', 'sedan'] as const;
-    const paints = [0xe8e8e4, 0x1a1a1c, 0x8a8e94, 0x2a3a5a, 0x7a1a1a, 0xc8c0b0];
-    const geos = types.map((type, k) => {
+    // Eight models from the city's mix (models/vehicles.ts at street detail, their lamps lit at night: the
+    // loop after dark is a river of tail lights), shared round the loop.
+    const geos = Array.from({ length: 8 }, (_, k) => {
       const mb = new MeshBuilder();
-      addCar(mb, { x: 0, z: 0, fx: 0, fz: 1, variant: 700 + k, type, ...(type === 'taxi' || type === 'kei' ? {} : { paint: paints[k % paints.length] }) });
-      // Tail lights, lit (the loop at night is a river of them).
-      mb.kind = KIND.emit;
-      mb.style = [EMIT.lamp, 0, 0, 0];
-      mb.color = [0.6, 0.02, 0.01];
-      for (const sd of [-1, 1]) mb.box(sd * 0.6, -2.36, 0.78, 0.9, 0.3, 0.03, KIND.emit, true);
-      mb.color = [0.6, 0.58, 0.5];
-      for (const sd of [-1, 1]) mb.box(sd * 0.6, 2.37, 0.62, 0.74, 0.3, 0.03, KIND.emit, true);
+      const { type, paint } = pickCar(CITY_CARS, 700 + k);
+      addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type, paint, detail: 0.2 });
       return mb.build()!;
     });
     for (let k = 0; k < count; k++) {

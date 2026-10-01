@@ -148,15 +148,15 @@ export class CityAudio {
     this.windGain.gain.value = 0;
     this.windBand = ctx.createBiquadFilter();
     this.windBand.type = 'bandpass';
-    this.windBand.frequency.value = 400;
-    this.windBand.Q.value = 0.7;
+    this.windBand.frequency.value = 300;
+    this.windBand.Q.value = 0.6;
     this.loop(this.noise, 2.1).connect(this.windBand).connect(this.windGain).connect(this.master);
     this.howlGain = ctx.createGain();
     this.howlGain.gain.value = 0;
     this.howlBand = ctx.createBiquadFilter();
     this.howlBand.type = 'bandpass';
     this.howlBand.frequency.value = 600;
-    this.howlBand.Q.value = 9;
+    this.howlBand.Q.value = 5;
     this.loop(this.noise, 3.3).connect(this.howlBand).connect(this.howlGain).connect(this.master);
     // Train: a low rumble with the rail joints' rhythm.
     // Cicadas. The aburazemi: a bright sizzle, noise through a narrow band near 4.5 kHz, buzzed at ~50 Hz.
@@ -681,13 +681,15 @@ export class CityAudio {
       this.dripDebt -= 1;
       this.drip(roof ? 0.08 : 0.03);
     }
-    // Wind: level and pitch with the gusts; the howl only in a gale.
+    // Wind: level and pitch with the gusts; the howl only in a gale. Low and soft, with no floor, so a
+    // breeze is barely heard (not a constant hiss), and slow to follow the gusts, so it swells and ebbs
+    // instead of fluttering with their quick wobble.
     const w = f.wind * f.gust;
-    const windLevel = w <= 0.01 ? 0 : (0.05 + 0.5 * w * w) * (enclosed ? 0.25 : 1);
-    set(this.windGain.gain, windLevel, 0.4);
-    set(this.windBand.frequency, 250 + 700 * w, 0.4);
-    set(this.howlGain.gain, Math.max(0, w - 0.45) * 0.35 * (enclosed ? 0.3 : 1), 0.5);
-    set(this.howlBand.frequency, 380 + 520 * w + 60 * Math.sin(t * 0.7), 0.3);
+    const windLevel = w <= 0.01 ? 0 : 0.32 * w * w * (enclosed ? 0.25 : 1);
+    set(this.windGain.gain, windLevel, 1.2);
+    set(this.windBand.frequency, 160 + 420 * w, 1.5);
+    set(this.howlGain.gain, Math.max(0, w - 0.6) * 0.22 * (enclosed ? 0.3 : 1), 1.2);
+    set(this.howlBand.frequency, 340 + 420 * w + 40 * Math.sin(t * 0.4), 1);
     this.levels.wind = windLevel;
     // Cicadas: the chorus swells and ebbs; muffled indoors, quiet in the rain.
     // (Kept low, a background to the day: it comes in waves with lulls between, never a constant whine.)

@@ -189,7 +189,10 @@ export function shrubMass(mb: MeshBuilder, x: number, y: number, z: number, rx: 
   LIFT = 0;
   const kind = mb.kind;
   mb.kind = KIND.plain;
+  const v0 = mb.vertexCount;
   mass(mb, x, y, z, rx, ry, hex, n);
+  // (Stirring in the wind, from the ground up.)
+  mb.sway(v0);
   mb.kind = kind;
   LIFT = lift;
   SPECIES = was;
@@ -226,6 +229,7 @@ export function addTree(mb: MeshBuilder, t: TreeSpec): void {
   const k = t.size ?? 1;
   sink?.({ x: t.x + (t.lean?.[0] ?? 0), z: t.z + (t.lean?.[1] ?? 0), species: t.species, reach: TREE_REACH[t.species] * k });
   SPECIES = TREE_SPECIES.indexOf(t.species);
+  const v0 = mb.vertexCount;
   const rnd = rng(hash(t.seed ?? 0, Math.round(t.x * 8), Math.round(t.z * 8), 0x7ee5));
   // The crown's trunk stands at (x, z), lifted; a stem leans to it from the foot.
   const [lx, lz] = t.lean ?? [0, 0];
@@ -366,6 +370,8 @@ export function addTree(mb: MeshBuilder, t: TreeSpec): void {
   }
   LIFT = 0;
   mb.kind = KIND.plain;
+  // Everything but the grate and the fallen leaves sways in the wind (real/city.ts), the more the higher up.
+  mb.sway(v0);
 }
 
 /** Small flower blobs over a mound of radius r, height h. */

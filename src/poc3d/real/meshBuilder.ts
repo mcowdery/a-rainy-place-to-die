@@ -89,6 +89,59 @@ export class MeshBuilder {
     for (let i = from; i < this.nv; i++) this.pos[i * 3 + 1] += dy;
   }
 
+  /**
+   * Copies another builder's geometry in, turned about y so that its +z points along the unit vector (fx, fz),
+   * and moved to (x, z), under this builder's current id and flags: stamping a model built once many times
+   * (parked cars, whose lofted bodies are slow to build).
+   */
+  append(src: MeshBuilder, x: number, z: number, fx: number, fz: number): void {
+    const n = src.nv;
+    this.grow(n, src.ni);
+    const s = this.nv;
+    for (let i = 0; i < n; i++) {
+      const j = s + i;
+      const px = src.pos[i * 3];
+      const pz = src.pos[i * 3 + 2];
+      this.pos[j * 3] = x + px * fz + pz * fx;
+      this.pos[j * 3 + 1] = src.pos[i * 3 + 1];
+      this.pos[j * 3 + 2] = z - px * fx + pz * fz;
+      const nx = src.nor[i * 3];
+      const nz = src.nor[i * 3 + 2];
+      this.nor[j * 3] = nx * fz + nz * fx;
+      this.nor[j * 3 + 1] = src.nor[i * 3 + 1];
+      this.nor[j * 3 + 2] = -nx * fx + nz * fz;
+      this.flg[j] = this.flags;
+      this.bid[j] = this.id;
+    }
+    this.col.set(src.col.subarray(0, n * 3), s * 3);
+    this.fac.set(src.fac.subarray(0, n * 4), s * 4);
+    this.sty.set(src.sty.subarray(0, n * 4), s * 4);
+    for (let i = 0; i < src.ni; i++) this.idx[this.ni + i] = src.idx[i] + s;
+    this.nv += n;
+    this.ni += src.ni;
+  }
+
+  /** Recolours the vertices added since vertex `from` that are exactly colour `a` (a model's paint) to `b`. */
+  recolor(from: number, a: V3, b: V3): void {
+    const c = this.col;
+    const [a0, a1, a2] = [Math.fround(a[0]), Math.fround(a[1]), Math.fround(a[2])];
+    for (let i = from; i < this.nv; i++) {
+      if (c[i * 3] === a0 && c[i * 3 + 1] === a1 && c[i * 3 + 2] === a2) {
+        c[i * 3] = b[0];
+        c[i * 3 + 1] = b[1];
+        c[i * 3 + 2] = b[2];
+      }
+    }
+  }
+
+  /**
+   * Marks every vertex added since vertex `from` as part of a tree standing on y = 0, for the city shader's
+   * sway in the wind: style.w = -(0.01 + its height above the foot).
+   */
+  sway(from: number): void {
+    for (let i = from; i < this.nv; i++) this.sty[i * 4 + 3] = -(0.01 + Math.max(0, this.pos[i * 3 + 1]));
+  }
+
   /** Empties the builder, keeping its buffers (reuse one builder for many meshes to avoid reallocating). */
   reset(): this {
     this.nv = 0;

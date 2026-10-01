@@ -3,6 +3,10 @@ import { edition } from '@edition';
 import { DISTRICT_ADS, type AdDef, type DistrictAd } from '../models/ads';
 import { DISTRICT_ATLAS, districtAdRect } from './districtAds';
 import type { CityUniforms } from './city';
+import {
+  TAXI_ATLAS_H, TAXI_ATLAS_W, TAXI_BLANK_UV, TAXI_DOOR_ASPECT, TAXI_DOOR_H, TAXI_DOOR_PHOTO_W, TAXI_DOOR_W, TAXI_ROOF_ASPECT, TAXI_ROOF_H, TAXI_ROOF_W,
+  taxiAdAt, taxiAdUv,
+} from './taxiAdLayout';
 
 /**
  * Photo ads: one canvas atlas holding, per ad, a roof-panel texture (square photo + brand on the lit plate)
@@ -16,13 +20,13 @@ const artUrl = (name: string): string | undefined => Object.entries(art).find(([
 // Kaburo's ad art comes from the edition: the demo's leaves out the revealing ads (src/edition/demoArt.ts).
 const kaburoUrl = (name: string): string | undefined => edition.kaburoArt[name];
 
-const ROOF_W = 768;
-const ROOF_H = 256;
-const DOOR_W = 832;
-const DOOR_H = 480;
-const DOOR_PHOTO_W = 360;
-const W = ROOF_W + DOOR_W * 2;
-const H = 2048;
+const ROOF_W = TAXI_ROOF_W;
+const ROOF_H = TAXI_ROOF_H;
+const DOOR_W = TAXI_DOOR_W;
+const DOOR_H = TAXI_DOOR_H;
+const DOOR_PHOTO_W = TAXI_DOOR_PHOTO_W;
+const W = TAXI_ATLAS_W;
+const H = TAXI_ATLAS_H;
 
 type Rect4 = readonly [number, number, number, number];
 
@@ -103,27 +107,25 @@ export class AdAtlas {
   }
 
   private roofAt(i: number): [number, number] {
-    return [0, i * ROOF_H];
+    return taxiAdAt(i, 'roof');
   }
 
   private doorAt(i: number): [number, number] {
-    return [ROOF_W + (i % 2) * DOOR_W, Math.floor(i / 2) * 512];
+    return taxiAdAt(i, 'door');
   }
 
-  /** UV rect (u0, v0 top, u1, v1 bottom) of an ad's roof panel or door wrap. */
+  /** UV rect (u0, v0 top, u1, v1 bottom) of an ad's roof panel or door wrap (the layout: taxiAdLayout.ts). */
   uv(i: number, part: 'roof' | 'door'): Rect4 {
-    const [x, y] = part === 'roof' ? this.roofAt(i) : this.doorAt(i);
-    const [w, h] = part === 'roof' ? [ROOF_W, ROOF_H] : [DOOR_W, DOOR_H];
-    return [(x + 1) / W, (y + 1) / H, (x + w - 1) / W, (y + h - 1) / H];
+    return taxiAdUv(i, part);
   }
 
   /** Aspect (width / height) of each part. */
-  static readonly ROOF_ASPECT = ROOF_W / ROOF_H;
-  static readonly DOOR_ASPECT = DOOR_W / DOOR_H;
+  static readonly ROOF_ASPECT = TAXI_ROOF_ASPECT;
+  static readonly DOOR_ASPECT = TAXI_DOOR_ASPECT;
 
   /** A plain spot for the panels' edges and backs (the gap under the first door row). */
   get blankUv(): [number, number] {
-    return [(ROOF_W + 40) / W, 496 / H];
+    return TAXI_BLANK_UV;
   }
 
   private text(t: string, x: number, y: number, w: number, h: number, color: string, weight = 'bold'): void {

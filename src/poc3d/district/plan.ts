@@ -4,6 +4,7 @@ import { isWide } from '../../core/wide';
 import { isLand, type CellKind, type DistrictId, type MacroMap } from '../../gen/macro';
 import { STYLES } from '../../gen/styles';
 import type { AdCategory } from '../models/ads';
+import type { CarMix } from './carMix';
 import type { EdgeSpec } from './roads';
 
 /**
@@ -174,6 +175,8 @@ export interface DistrictStyle3 {
    * L0 cells spread far beyond it (the residential ring round the centre).
    */
   readonly onlyZoned?: boolean;
+  /** The zone's cars, parked and in traffic (a zone's `cars:`; otherwise the district's, district/carMix.ts). */
+  readonly cars?: CarMix;
 }
 
 const BOUNDARY_ROAD = 16;

@@ -27,6 +27,8 @@ export const LITTER = 32;
  */
 export interface CityUniforms extends ScreenUniforms {
   uTime: { value: number };
+  /** The wind for the trees: x, y the direction it blows toward (world x, z), z its strength (0 calm, ~1 a typhoon). */
+  uWind: { value: THREE.Vector3 };
   uWindowLit: { value: number };
   uLamps: { value: number };
   uNeon: { value: number };
@@ -76,6 +78,7 @@ export interface CityUniforms extends ScreenUniforms {
 export function cityUniforms(): CityUniforms {
   return {
     uTime: { value: 0 },
+    uWind: { value: new THREE.Vector3(1, 0, 0) },
     uWindowLit: { value: 0.4 },
     uLamps: { value: 1 },
     uNeon: { value: 1 },
@@ -106,6 +109,42 @@ export function cityUniforms(): CityUniforms {
     ...screenUniforms(),
   };
 }
+
+/**
+ * Trees in the wind (vertex stage; the city material and its shadow caster both run it, so shadows sway with
+ * the crowns). models/trees.ts tags every vertex of a tree with its height above the tree's foot (style.w =
+ * -(0.01 + height), plain kind). The tree bends like a stem, more the higher up (height²): a lean downwind that
+ * grows with the strength squared, gusts sweeping through downwind, a rocking of its own and a little sideways,
+ * and the leaves flutter on top. A breeze barely stirs them; in a typhoon the crowns thrash a metre or so.
+ */
+const swayVertex = /* glsl */ `
+  #ifndef USE_INSTANCING
+  if (aStyle.w < 0.0 && mod(aFacade.w, 16.0) < 0.5) {
+    float swH = -aStyle.w - 0.01;
+    vec3 swP = (modelMatrix * vec4(transformed, 1.0)).xyz;
+    float swS = uWind.z;
+    vec2 swD = uWind.xy;
+    float swBend = swH * swH / 64.0;
+    float swAlong = dot(swP.xz, swD);
+    // A gust: a wave running downwind through the trees, stronger every so often.
+    float swGust = (0.55 + 0.45 * sin(uTime * 0.8 - swAlong * 0.07)) * (0.65 + 0.35 * sin(uTime * 0.21 - swAlong * 0.018 + 1.7));
+    float swPh = dot(swP.xz, vec2(0.13, 0.09));
+    float swLean = swS * swS * 0.35 * (0.3 + swGust);
+    float swRock = sin(uTime * (1.2 + 0.6 * swS) + swPh) * (0.015 + 0.08 * swS + 0.14 * swS * swS) * (0.6 + 0.6 * swGust);
+    float swSide = sin(uTime * 0.85 + swPh * 1.7 + 2.0) * (0.01 + 0.04 * swS + 0.05 * swS * swS);
+    vec2 swXZ = (swD * (swLean + swRock) + vec2(-swD.y, swD.x) * swSide) * swBend;
+    vec3 swW = vec3(swXZ.x, -0.5 * dot(swXZ, swXZ) / max(swH, 1.0), swXZ.y);
+    if (aStyle.x > 19.5) {
+      // The leaves flutter, each part of the crown at its own pace.
+      float swF = uTime * (5.0 + 5.0 * swS) + dot(swP, vec3(1.9, 2.7, 1.3));
+      swW += vec3(sin(swF), 0.6 * sin(swF * 1.3 + 1.0), cos(swF * 0.9)) * (0.01 + 0.06 * swS + 0.04 * swS * swS) * min(1.0, swH * 0.3) * (0.5 + swGust);
+    }
+    // World to the mesh's own frame (landmarks are turned and may be scaled).
+    mat3 swM = mat3(modelMatrix);
+    transformed += transpose(swM) * swW / dot(swM[0], swM[0]);
+  }
+  #endif
+`;
 
 const common = /* glsl */ `
   uniform float uTime;
@@ -952,13 +991,18 @@ export function cityDepthMaterial(u: CityUniforms): THREE.MeshDepthMaterial {
   const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uSeason = u.uSeason;
+    shader.uniforms.uTime = u.uTime;
+    shader.uniforms.uWind = u.uWind;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
+        uniform float uTime;
+        uniform vec3 uWind;
         attribute vec4 aFacade;
         attribute vec4 aStyle;
         varying vec4 vFacade;
         flat varying vec4 vStyle;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
+        ${swayVertex}
         vFacade = aFacade;
         vStyle = aStyle;`);
     shader.fragmentShader = shader.fragmentShader
@@ -996,6 +1040,8 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
     shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_begin>', LIGHTS_BEGIN);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
+        uniform float uTime;
+        uniform vec3 uWind;
         attribute vec4 aFacade;
         attribute vec4 aStyle;
         attribute float aFlags;
@@ -1007,6 +1053,7 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
         varying vec3 vWPos;
         varying vec3 vWNor;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
+        ${swayVertex}
         vFacade = aFacade;
         vStyle = aStyle;
         vFlags = aFlags;

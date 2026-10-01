@@ -50,6 +50,8 @@ zones:
   N:
     id: port_nightlife
     name: Warehouse nightlife
+    # Where the racing crowd parks.
+    cars: { sports: 8, rotary: 8, awd: 8, hatch: 6, roadster: 4, sedan: 18, minivan: 10, taxi: 12, luxury: 6, keitruck: 6, boxtruck: 4, van: 3, police: 1 }
     plan:
       floors: [[3, 4, 70], [5, 6, 30]]
       lotW: [18, 34]

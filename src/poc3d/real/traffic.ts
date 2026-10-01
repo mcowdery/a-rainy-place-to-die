@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Rect } from '../../core/coords';
 import { hash } from '../../core/hash';
 import { along, SIDES, Signals, TURN, type BusLine, type Junction, type Route } from '../district/traffic';
 import type { Prop } from './props';
-import { addWheel } from '../models/vehicles';
-import { addCar, carWheels } from './cars';
+import { addVehicle, addWheel, marksKey, wheelLayout, SPORT_TYPES, WORK_TYPES, type CarType } from '../models/vehicles';
+import { SignBuilder, type SignLayout } from './signs';
+import { taxiPhotos } from './taxiAdLayout';
+import { CITY_CARS, isTaxi, pickCar, type CarMix } from '../district/carMix';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 
 /**
@@ -49,38 +50,64 @@ export interface Walker {
 const BUS_DWELL = 12;
 const BUS_LEN = 10.5;
 /** A bus's wheels: big steel wheels, standing just proud of the body's side over dark wells. */
-const BUS_WHEELS: ReturnType<typeof carWheels> = {
+const BUS_WHEELS: ReturnType<typeof wheelLayout> = {
   r: 0.48,
   tw: 0.3,
   rims: 'steel',
   spots: [-3.2, 3.6].flatMap((z) => ([-1, 1] as const).map((sd) => ({ x: sd * 1.12, y: 0.48, z, front: z > 0, sd }))),
 };
 
-type WheelLayout = ReturnType<typeof carWheels>;
-type Model = { geo: THREE.BufferGeometry; half: number; brake: THREE.BufferGeometry; label: string; wheels: WheelLayout };
+type WheelLayout = ReturnType<typeof wheelLayout>;
+type Model = {
+  geo: THREE.BufferGeometry;
+  /** Lettering (sign atlas) and a taxi's photo ad (taxi ad atlas), if it has any. */
+  text: THREE.BufferGeometry | null;
+  photo: THREE.BufferGeometry | null;
+  half: number;
+  width: number;
+  brake: THREE.BufferGeometry;
+  label: string;
+  wheels: WheelLayout;
+};
+/** What traffic draws a vehicle's lettering and ads with (null: none). */
+export interface TrafficSigns {
+  readonly signs: THREE.Material;
+  readonly taxiAds: THREE.Material;
+  readonly layout: SignLayout;
+}
 
-const LABELS = { sedan: 'Car', kei: 'Kei car', minivan: 'Minivan', taxi: 'Taxi' } as const;
+const LABELS: Record<CarType, string> = {
+  sedan: 'Car', luxury: 'Car', taxi: 'Taxi', taxi2: 'Taxi', kei: 'Kei car', minivan: 'Minivan', keitruck: 'Kei truck',
+  sports: 'Sports car', hatch: 'Hatchback', rotary: 'Sports car', awd: 'Sports car', roadster: 'Roadster',
+  van: 'Van', keivan: 'Kei van', boxtruck: 'Truck', police: 'Police car',
+};
 
-/** A car model at the origin pointing +z, with headlight glows added (the district's cars are parked). */
-function carModel(type: 'sedan' | 'kei' | 'minivan' | 'taxi', paint: number | undefined, variant: number): Model {
+/**
+ * A car model at the origin pointing +z (models/vehicles.ts at street detail, its own head and tail lamps lit
+ * at night), its wheels apart (`wheelLayout`: they turn), and its brake lights as a separate mesh.
+ */
+function carModel(type: CarType, paint: number, marks: number, layout: SignLayout | null): Model {
   const mb = new MeshBuilder();
-  addCar(mb, { x: 0, z: 0, fx: 0, fz: 1, variant, type, wheels: false, ...(paint === undefined ? {} : { paint }) });
+  const brake = new MeshBuilder(1024);
+  brake.kind = KIND.plain;
+  brake.color = [1, 1, 1];
+  const sb = new SignBuilder();
+  const pb = new SignBuilder();
+  addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type, paint, detail: 0.12, wheels: false, marks }, layout ? { sb, layout, photos: taxiPhotos(pb) } : undefined, brake);
   const body = mb.build()!;
   body.computeBoundingBox();
   const bb = body.boundingBox!;
-  const lamps = new MeshBuilder();
-  lamps.kind = KIND.emit;
-  lamps.style = [EMIT.lamp, 0, 0, 0];
-  lamps.color = [0.35, 0.33, 0.28];
-  for (const s of [-1, 1]) lamps.box(s * (bb.max.x - 0.3), bb.max.z + 0.01, 0.62, 0.74, 0.3, 0.03, KIND.emit, true);
-  lamps.color = [0.25, 0.01, 0.01];
-  for (const s of [-1, 1]) lamps.box(s * (bb.max.x - 0.25), bb.min.z - 0.01, 0.8, 0.9, 0.28, 0.03, KIND.emit, true);
-  // Brake lights: brighter lamps just behind the tail lights, shown while braking.
-  const brake = new MeshBuilder();
-  brake.kind = KIND.plain;
-  brake.color = [1, 1, 1];
-  for (const s of [-1, 1]) brake.box(s * (bb.max.x - 0.25), bb.min.z - 0.025, 0.79, 0.91, 0.3, 0.02, KIND.plain, true);
-  return { geo: mergeGeometries([body, lamps.build()!])!, half: (bb.max.z - bb.min.z) / 2, brake: brake.build()!, label: LABELS[type], wheels: carWheels(type) };
+  // (The width without the mirrors.)
+  return {
+    geo: body,
+    text: sb.build(0, 0),
+    photo: pb.build(0, 0),
+    half: (bb.max.z - bb.min.z) / 2,
+    width: Math.min(1.9, bb.max.x - bb.min.x - 0.2),
+    brake: brake.build()!,
+    label: LABELS[type],
+    wheels: wheelLayout(type),
+  };
 }
 
 /** A city bus at the origin pointing +z (10.5 m): cream and green, glass sides, lit inside, a destination board. */
@@ -425,12 +452,20 @@ export class TrafficSystem {
     buses: readonly { line: BusLine; route: Route }[],
     city: THREE.Material,
     private readonly signals: Signals,
+    /** Lettering and taxi ads (none in tests). */
+    signs: TrafficSigns | null = null,
+    /** The cars each part of the city has (district/carMix.ts): a car takes its model from where it starts. */
+    mixAt: (x: number, z: number) => CarMix = () => CITY_CARS,
   ) {
-    const models: Model[] = [];
-    const PAINTS = [0xe8e8e4, 0x1a1a1c, 0x8a8e94, 0x2a3a5a, 0x7a1a1a, 0xc8c0b0];
-    for (let i = 0; i < 6; i++) models.push(carModel('sedan', PAINTS[i], 900 + i));
-    models.push(carModel('kei', undefined, 911), carModel('kei', undefined, 912), carModel('minivan', 0xe8e8e4, 913), carModel('minivan', 0x2a2a2e, 914));
-    const taxis = [carModel('taxi', undefined, 921), carModel('taxi', undefined, 922), carModel('taxi', undefined, 923)];
+    // Models are shared by every car of the same model and paint.
+    const models = new Map<string, Model>();
+    const modelFor = (type: CarType, paint: number, marks: number): Model => {
+      // (Shared by the cars dressed alike: the same ad, company or patrol unit.)
+      const key = `${type}:${paint}:${marksKey({ x: 0, z: 0, fx: 0, fz: 1, type, paint, marks })}`;
+      let m = models.get(key);
+      if (!m) models.set(key, (m = carModel(type, paint, marks, signs?.layout ?? null)));
+      return m;
+    };
     const brakeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 0.12, 0.06) });
     let k = 0;
     const add = (obj: THREE.Object3D, brakeGeo: THREE.BufferGeometry, route: Route, half: number, width: number, bus: boolean, driver: Driver, s: number, label: string, wheels: WheelLayout): void => {
@@ -447,14 +482,30 @@ export class TrafficSystem {
       const n = Math.max(2, Math.floor(route.length / spacing));
       for (let i = 0; i < n; i++) {
         const h = hash(k++, 0x7a1);
-        const taxi = h % 10 < 3;
-        const m = taxi ? taxis[h % taxis.length] : models[(h >>> 4) % models.length];
+        const r = (b: number): number => ((h >>> b) % 1000) / 1000;
+        const s0 = (route.length * i) / n + r(2) * 8;
+        const at = along(route, s0);
+        const pick = pickCar(mixAt(at.x, at.z), h);
+        const taxi = isTaxi(pick.type);
+        const sporty = SPORT_TYPES.includes(pick.type);
+        const m = modelFor(pick.type, pick.paint, h);
         const obj = new THREE.Mesh(m.geo, city);
         obj.castShadow = true;
-        // Temperaments: taxis a little brisker; everyone a little different.
-        const r = (b: number): number => ((h >>> b) % 1000) / 1000;
-        const driver: Driver = { v0: (taxi ? 12.5 : 11) + r(8) * 3, a: 1.4 + r(12) * 1.2 + (taxi ? 0.4 : 0), b: 2.2 + r(16) * 1.2, T: 1.1 + r(20) * 0.6, s0: 2.2 + r(4) * 0.8 };
-        add(obj, m.brake, route, m.half, 1.8, false, driver, (route.length * i) / n + r(2) * 8, m.label, m.wheels);
+        if (signs && m.text) obj.add(new THREE.Mesh(m.text, signs.signs));
+        if (signs && m.photo) obj.add(new THREE.Mesh(m.photo, signs.taxiAds));
+        // Temperaments: taxis and sports cars a little brisker, work vehicles steadier (a loaded truck slower to
+        // pull away); everyone a little different.
+        const brisk = taxi || sporty;
+        const work = WORK_TYPES.includes(pick.type) && pick.type !== 'police';
+        const truck = pick.type === 'boxtruck';
+        const driver: Driver = {
+          v0: (brisk ? 12.5 : work ? 10.5 : 11) + r(8) * 3 + (sporty ? 1 : 0),
+          a: (truck ? 0.9 : 1.4) + r(12) * (truck ? 0.5 : 1.2) + (brisk ? 0.4 : 0),
+          b: 2.2 + r(16) * 1.2,
+          T: 1.1 + r(20) * 0.6 + (work ? 0.2 : 0),
+          s0: 2.2 + r(4) * 0.8,
+        };
+        add(obj, m.brake, route, m.half, m.width, false, driver, s0, m.label, m.wheels);
       }
     }
     const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.22, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });

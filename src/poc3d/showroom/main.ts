@@ -5,12 +5,11 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { addCar, CAR_TYPES } from '../real/cars';
 import { cityMaterial, cityUniforms } from '../real/city';
 import { KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Pose } from '../real/people';
 import { figureGeometry, ghostMaterials2, POSES2, type Body2, type FigureShape, type Pose2 } from '../models/figures';
-import { addVehicle, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, type VehicleSpec, type VehicleType } from '../models/vehicles';
+import { addVehicle, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, WORK_TYPES, type VehicleSpec, type VehicleType } from '../models/vehicles';
 import { Lightmap, paintLights, type Light } from '../real/lightmap';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { buildMegaSign } from '../real/megaSign';
@@ -83,6 +82,10 @@ floor.color = lin(0x5e5e5c);
 floor.box(0, 6, -0.2, 0, 80, 80, KIND.lot);
 floor.kind = KIND.asphalt;
 floor.box(0, -10.5, 0, 0.02, 32, 26, KIND.asphalt);
+floor.box(0, -30, 0, 0.02, 32, 11, KIND.asphalt);
+floor.kind = KIND.lot;
+floor.box(0, -36, -0.2, 0, 80, 6, KIND.lot);
+floor.kind = KIND.asphalt;
 floor.kind = KIND.plain;
 floor.color = lin(0x8a867e);
 floor.box(0, 17.5, 0, 0.15, 17, 23, KIND.sidewalk);
@@ -101,7 +104,7 @@ interface Item {
 /** People face +z in rows; viewed from the front and ~30 degrees up, the row in front doesn't block. */
 const FRONT_VIEW = new THREE.Vector3(0, 0.55, 0.85).normalize();
 // Two generations of models side by side in the same layout: 'new' (models/vehicles.ts, models/figures.ts,
-// under review) and 'previous' (real/cars.ts, real/people.ts, what the district uses today).
+// under review) and 'previous' (real/people.ts and the old street tree, what the district uses today).
 type Gen = 'new' | 'previous';
 let gen: Gen = 'new';
 const genRoot: Record<Gen, THREE.Group> = { new: new THREE.Group(), previous: new THREE.Group() };
@@ -135,16 +138,19 @@ const NAMES: Record<VehicleType, string> = {
   sedan: 'sedan', luxury: 'luxury sedan', sports: 'sports coupe', taxi: 'taxi (classic)', taxi2: 'taxi (modern)', kei: 'kei tall-wagon',
   minivan: 'minivan', keitruck: 'kei truck', scooter: 'scooter', motorcycle: 'motorcycle', delivery: 'delivery scooter',
   hatch: 'hatchback (80s)', rotary: 'rotary coupe', awd: 'turbo AWD coupe', roadster: 'kei roadster',
+  van: 'work van', keivan: 'kei van', boxtruck: 'box truck (2 t)', police: 'patrol car',
 };
 const PAINT_A: Record<VehicleType, number> = {
   sedan: 0xe8e8e4, luxury: 0x07070a, sports: 0xc01818, taxi: 0x121316, taxi2: 0x1c2240, kei: 0xa8d4bc, minivan: 0xb4b6ba, keitruck: 0xe8e8e4,
   scooter: 0xe8e0c8, motorcycle: 0xb81818, delivery: 0xc81818,
   hatch: 0xf0f0ec, rotary: 0xe8c020, awd: 0x5a5e66, roadster: 0xe8c020,
+  van: 0xf0f0ec, keivan: 0xf0f0ec, boxtruck: 0xf0f0ec, police: 0xf2f2ee,
 };
 const PAINT_B: Record<VehicleType, number> = {
   sedan: 0x1c2a44, luxury: 0xf0efe8, sports: 0xf0f0ec, taxi: 0xe0a818, taxi2: 0x121316, kei: 0xd8c09a, minivan: 0x121316, keitruck: 0xb4b6ba,
   scooter: 0x8ab0d0, motorcycle: 0x121316, delivery: 0x1c4a9a,
   hatch: 0xc01818, rotary: 0xc01818, awd: 0x1a2c5a, roadster: 0xc01818,
+  van: 0x1c2a44, keivan: 0x8ab0d0, boxtruck: 0x2a5a9a, police: 0xf2f2ee,
 };
 const newCars = new MeshBuilder(1 << 17);
 const nightLights: Light[] = [];
@@ -154,12 +160,22 @@ const vehicle = (spec: VehicleSpec, name: string, size: number, labelY = 2.4): v
   genItems.new.push({ name, group: 'Cars', at: new THREE.Vector3(spec.x, 0.8, spec.z), size });
   label('new', name, spec.x, labelY, spec.z);
 };
-CAR_TYPES2.forEach((type, i) => {
+CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t)).forEach((type, i) => {
   const x = -13 + i * 3.7;
   vehicle({ x, z: -1.5, fx: 0, fz: 1, type, paint: PAINT_A[type] }, NAMES[type], 4.5);
   // Second row: other paints, facing away; the taxis carry ads.
   const ad = type === 'taxi' ? ADS[1] : type === 'taxi2' ? ADS[0] : undefined;
   vehicle({ x, z: -8.5, fx: 0, fz: -1, type, paint: PAINT_B[type], ad }, `${NAMES[type]} (alt${ad ? ' + ad' : ''})`, 4.5);
+});
+// Working vehicles and the patrol car (new, under review): a row of their own behind the taxi ads, the second
+// paint facing away.
+// Each in two companies' lettering (WORK_LIVERIES), the patrol cars two units.
+const COMPANY: Partial<Record<VehicleType, [number, number]>> = { van: [0, 4], keivan: [1, 6], boxtruck: [2, 3] };
+WORK_TYPES.forEach((type, i) => {
+  const x = -10 + i * 6.5;
+  const [ca, cb] = COMPANY[type] ?? [undefined, undefined];
+  vehicle({ x, z: -27, fx: 0, fz: 1, type, paint: PAINT_A[type], company: ca, marks: 1 }, NAMES[type], 5.5, 3.4);
+  vehicle({ x, z: -33, fx: 0, fz: -1, type, paint: PAINT_B[type], company: cb, marks: 7 }, `${NAMES[type]} (alt)`, 5.5, 3.4);
 });
 BIKE_TYPES.forEach((type, i) => {
   for (const [j, paints] of [PAINT_A, PAINT_B].entries()) {
@@ -451,23 +467,6 @@ genItems.new.push({ name: 'groups', group: 'People', at: new THREE.Vector3(0, 1,
 const tPeople = performance.now() - t0 - tCars;
 
 // ---- Previous generation (for comparison) ----
-const carRows: { z: number; dir: number; paints: Record<string, number> }[] = [
-  { z: -1.5, dir: 1, paints: { sedan: 0xe2e2de, kei: 0x9ac8b0, minivan: 0xa8aaae, taxi: 0x141416 } },
-  { z: -8.5, dir: -1, paints: { sedan: 0x1e2c48, kei: 0xc8b48c, minivan: 0x141416, taxi: 0xd89a20 } },
-];
-const carMb = new MeshBuilder();
-for (const [ri, row] of carRows.entries()) {
-  CAR_TYPES.forEach((type, i) => {
-    const x = -6 + i * 4;
-    addCar(carMb, { x, z: row.z, fx: 0, fz: row.dir, variant: 1, type, paint: row.paints[type] });
-    const name = `${type}${ri ? ' (alt paint)' : ''}`;
-    genItems.previous.push({ name, group: 'Cars', at: new THREE.Vector3(x, 0.8, row.z), size: 4.5 });
-    label('previous', name, x, 2.4, row.z);
-  });
-}
-const cars = new THREE.Mesh(carMb.build()!, city);
-cars.castShadow = cars.receiveShadow = true;
-genRoot.previous.add(cars);
 // The district's one street tree (real/props.ts), where the new species stand.
 {
   const pad = new MeshBuilder();

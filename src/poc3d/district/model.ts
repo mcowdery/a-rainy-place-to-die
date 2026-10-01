@@ -8,6 +8,7 @@ import { ZoneMap } from './zones';
 import type { Avenues, EdgeSpec } from './roads';
 import { SCRAMBLE_ROAD } from './plan';
 import { landmarkHoles } from './landmarks';
+import { vehicleTexts } from '../models/vehicles';
 
 /**
  * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings, signs) and
@@ -190,5 +191,7 @@ export function signTexts(words: readonly string[], placed: readonly Placed3[]):
   return [
     ...words.flatMap((text) => [{ text, vertical: false }, { text, vertical: true }]),
     ...placed.flatMap((p) => p.signs.map((s) => ({ text: s.text, vertical: s.vertical }))),
+    // The vehicles' lettering and taxi ads' copy.
+    ...vehicleTexts(),
   ];
 }

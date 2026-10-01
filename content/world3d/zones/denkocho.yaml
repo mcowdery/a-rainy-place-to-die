@@ -36,6 +36,8 @@ zones:
   B:
     id: denko_back
     name: Denkō-chō back streets
+    # The parts shops' deliveries: box trucks and vans in the back streets.
+    cars: { sedan: 18, kei: 16, minivan: 12, van: 10, keivan: 10, boxtruck: 12, keitruck: 6, taxi: 8, taxi2: 4, police: 1 }
     plan:
       floors: [[3, 5, 55], [6, 9, 45]]
       lotW: [4, 8]

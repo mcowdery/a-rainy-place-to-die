@@ -118,7 +118,7 @@ export function buildRyujin(b: Building3, city: THREE.Material, ghost: THREE.Mat
   // Black sedans, nose to the street.
   for (const [u, t] of CARS) {
     const [x, z] = toWorld(f, u, t);
-    addCar(mb, { x, z, fx: f.n[0], fz: f.n[2], variant: Math.round(u * 13), type: 'sedan', paint: 0x0c0c0e });
+    addCar(mb, { x, z, fx: f.n[0], fz: f.n[2], variant: Math.round(u * 13), type: 'luxury', paint: 0x0c0c0e });
   }
 
   const mesh = new THREE.Mesh(mb.build()!, city);

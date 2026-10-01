@@ -4,6 +4,8 @@ import { frontSpan, type Building3, type CellPlan3, type Road3 } from '../distri
 import { frontFrame, styleFor } from './buildings';
 import type { Light } from './lightmap';
 import { addCar } from './cars';
+import { carMixFor, pickCar } from '../district/carMix';
+import type { CarType, VehicleSigns } from '../models/vehicles';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
 import { addTree, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { addDressing } from './dressing';
@@ -47,6 +49,9 @@ export interface Prop {
   readonly size?: number;
   /** Trees: the species (models/trees.ts); without one, the plain tree (the showroom's previous generation). */
   readonly species?: TreeSpecies;
+  /** Cars: the model and its paint (picked by the cell's mix, district/carMix.ts). */
+  readonly car?: CarType;
+  readonly paint?: number;
   /** Trees: canopy shifted this far toward n (out over the road, off a facade), and raised for traffic. */
   readonly lean?: number;
   readonly high?: boolean;
@@ -318,13 +323,21 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
     }
     lights.push({ x: cx, z: cz, r: Math.max(q.w, q.h) * 0.6, color: [0.9, 0.75, 0.85], i: 0.35 });
   }
+  // Parked cars (the kerbs' and the open lots'): the models this part of the city has.
+  const mix = carMixFor(plan.style, plan.kind);
+  for (let i = 0; i < props.length; i++) {
+    const p = props[i];
+    if (p.kind !== 'car' || p.car) continue;
+    const c = pickCar(mix, p.variant);
+    props[i] = { ...p, car: c.type, paint: c.paint };
+  }
   return { props, wires, lights, open, solids };
 }
 
 const VENDING = [0xd8d8d4, 0xb8242a, 0x2a4a8a, 0x2a2a2e];
 
-/** Geometry for a cell's props and wires. */
-export function addProps(mb: MeshBuilder, d: CellDetail): void {
+/** Geometry for a cell's props and wires; with `signs`, the parked cars' lettering and ads. */
+export function addProps(mb: MeshBuilder, d: CellDetail, signs?: VehicleSigns): void {
   mb.id = 0;
   mb.flags = 0;
   for (const p of d.props) {
@@ -377,7 +390,7 @@ export function addProps(mb: MeshBuilder, d: CellDetail): void {
     } else if (p.kind === 'car') {
       // Cars face either way along the kerb.
       const dir = p.variant % 2 ? 1 : -1;
-      addCar(mb, { x: p.x, z: p.z, fx: p.nz * dir, fz: -p.nx * dir, variant: p.variant });
+      addCar(mb, { x: p.x, z: p.z, fx: p.nz * dir, fz: -p.nx * dir, variant: p.variant, type: p.car, paint: p.paint }, signs);
     } else if (p.kind === 'signal') {
       signal(mb, p);
     } else if (p.kind !== 'vending') {
