@@ -158,6 +158,9 @@ describe('street crowds', () => {
         if (f.walk) walking++;
         if (!f.walk) {
           expect(foot(f.x, f.z)).toBe('foot');
+          // Nobody stands with a building right in front of their face.
+          const ax = f.x + Math.sin(f.yaw) * 0.9, az = f.z + Math.cos(f.yaw) * 0.9;
+          for (const b of plan.buildings) expect(Math.abs(ax - b.x) < b.w / 2 && Math.abs(az - b.z) < b.d / 2).toBe(false);
           continue;
         }
         if (f.walk.signal) continue;

@@ -1302,7 +1302,7 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
           off = Limb(0.4, 0.08, 1.4, 0.0, 0.3);
           A.pitch = 0.35;
         } else if (a == 3) {
-          main = L3(0.2, 0.32, 2.5);
+          main = Limb(0.45, 0.12, 2.45, 0.0, 0.25);
           A.yaw = 0.25 * sin(u * 0.4 + r * 5.0);
         } else if (a == 4) {
           main = Limb(0.3, 0.02, 1.55, 0.0, 1.0);
@@ -1616,7 +1616,7 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
  * talking where a pavement is wide, a few in plazas and parks. Nobody stands in the road (`footingOf`). People
  * together share a fade seed and a walk.
  */
-export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly Rect[] = [], signals: Signals | null = null, around: readonly Road3[] = plan.roads): FigureSpec[] {
+export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly (Rect & { readonly focus?: readonly [number, number] })[] = [], signals: Signals | null = null, around: readonly Road3[] = plan.roads): FigureSpec[] {
   const out: FigureSpec[] = [];
   const mix = plan.style.people ?? DISTRICT_PEOPLE[plan.kind] ?? CITY_PEOPLE;
   const person = (rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body?: Body): FigureSpec => randomPerson(rnd, x, z, yaw, pose, body, mix);
@@ -1813,7 +1813,7 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
 
   // Plazas (a busy square of people crossing it, a few waiting to meet someone or standing together), and more
   // thinly the open ground: tower plazas, park paths, playgrounds.
-  const areas = [...plazas.map((rect) => ({ rect, density: 0.5 })), ...detail.open.flatMap((o) => o.crowd)];
+  const areas: { rect: Rect; density: number; focus?: readonly [number, number] }[] = [...plazas.map((rect) => ({ rect, density: 0.5, focus: rect.focus })), ...detail.open.flatMap((o) => o.crowd)];
   // Open ground stands lower than the pavements (car parks, grass, gravel paths): figures there stand on its top.
   const pieces = detail.open.flatMap((o) => o.ground);
   const floorAt = (x: number, z: number): number => {
@@ -1821,7 +1821,12 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
     for (const g of pieces) if (inRect(g.rect, x, z, 0)) top = Math.max(top, g.top);
     return top < 0 ? 0 : top - 0.15;
   };
-  for (const { rect: q, density } of areas) {
+  /** Something solid within `d` m of (x, z) along (dx, dz): a wall, a fence, a planter. */
+  const wallAt = (x: number, z: number, dx: number, dz: number, d: number): boolean => {
+    for (let s = 0.5; s <= d; s += 0.5) if (!clear(x + dx * s, z + dz * s)) return true;
+    return false;
+  };
+  for (const { rect: q, density, focus } of areas) {
     const rnd = rng(hash(Math.round(q.x), Math.round(q.y), 0x9e1));
     for (let x = q.x + 2.5; x < q.x + q.w - 2; x += 4.2) {
       for (let z = q.y + 2.5; z < q.y + q.h - 2; z += 4.2) {
@@ -1838,9 +1843,21 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
         let inside = 0;
         while (inside < 60 && inRect(q, px + dx * (inside + 1), pz + dz * (inside + 1), 0)) inside++;
         const L = Math.min(reach(px, pz, dx, dz), inside);
-        if (roll < 0.72 && L >= 8) walkers(rnd, px, pz, dx, dz, L, true);
-        else if (roll < 0.9) out.push({ ...person(rnd, px, pz, yaw, rnd.pick(['stand', 'phone', 'phone', 'pockets'] as const)), seed: rnd.float() });
-        else {
+        // Someone alone waits where people wait: with their back to something (a wall, a planter), looking out,
+        // or near a landmark watching it (the big screens); never alone in the open facing nothing.
+        let wait: number | null = null;
+        for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+          if (wallAt(px, pz, Math.sin(a), Math.cos(a), 2.5)) {
+            wait = a + Math.PI + (rnd.float() - 0.5) * 0.7;
+            break;
+          }
+        }
+        const fd = focus ? Math.hypot(focus[0] - px, focus[1] - pz) : Infinity;
+        if (wait === null && fd < 45) wait = Math.atan2(focus![0] - px, focus![1] - pz) + (rnd.float() - 0.5) * 0.5;
+        if (L >= 8 && (roll < 0.62 || (roll < 0.86 && wait === null))) walkers(rnd, px, pz, dx, dz, L, true);
+        else if (roll < 0.86) {
+          if (wait !== null) out.push({ ...person(rnd, px, pz, wait, rnd.pick(['phone', 'phone', 'stand', 'pockets'] as const)), look: 0, seed: rnd.float() });
+        } else {
           const seed = rnd.float();
           const n = rnd.int(2, 4);
           for (let i = 0; i < n; i++) {
@@ -1852,6 +1869,12 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
         if (y !== 0) for (let i = from; i < out.length; i++) out[i] = { ...out[i], y };
       }
     }
+  }
+  // Nobody stands facing a wall: anyone standing with something solid right in front turns round.
+  for (let i = 0; i < out.length; i++) {
+    const f = out[i];
+    if (f.walk) continue;
+    if (wallAt(f.x, f.z, Math.sin(f.yaw), Math.cos(f.yaw), 1.0)) out[i] = { ...f, yaw: f.yaw + Math.PI };
   }
   return out;
 }

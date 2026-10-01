@@ -106,10 +106,11 @@ export class DistrictModel {
    * The parts of stamp plazas in this cell that are off the roads (paved, with lamps and trees). A road
    * crossing a plaza piece trims it to the largest side left over.
    */
-  plazas(mx: number, my: number): Rect[] {
+  /** The cell's pieces of stamps' plazas, each with its landmark's centre (`focus`: what people there look at). */
+  plazas(mx: number, my: number): (Rect & { readonly focus?: readonly [number, number] })[] {
     const p = this.plan(mx, my);
     if (!p) return [];
-    const out: Rect[] = [];
+    const out: (Rect & { readonly focus?: readonly [number, number] })[] = [];
     for (const q of this.placed) {
       const pr = plazaRect(q);
       let piece = pr && intersect(pr, p.rect);
@@ -126,7 +127,7 @@ export class DistrictModel {
         ].filter((t) => t.w > 0.5 && t.h > 0.5);
         piece = sides.sort((a, b) => b.w * b.h - a.w * a.h)[0] ?? null;
       }
-      if (piece) out.push(piece);
+      if (piece) out.push({ ...piece, focus: [q.rect.x + q.rect.w / 2, q.rect.y + q.rect.h / 2] });
     }
     return out;
   }

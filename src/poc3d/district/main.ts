@@ -607,7 +607,8 @@ async function run(): Promise<void> {
       return !within && cp.y > 0.5 && x > shut.x - r && x < shut.x + shut.w + r && z > shut.y - r && z < shut.y + shut.h + r;
     });
   };
-  const controls = new FirstPerson(camera, document.body, (x, z, r, floor) => district.blocked(x, z, r, floor) || ((floor ?? 0) > -1 && (floor ?? 0) < 1 && (npcBlocked(x, z, r) || traffic.blocked(x, z, r) || shutterBlocked(x, z, r))));
+  // On foot you walk through people (story NPCs included: they're figures, not walls); cars still stop for them.
+  const controls = new FirstPerson(camera, document.body, (x, z, r, floor) => district.blocked(x, z, r, floor) || ((floor ?? 0) > -1 && (floor ?? 0) < 1 && (traffic.blocked(x, z, r) || shutterBlocked(x, z, r))));
   controls.setShearMode(false);
   controls.fly = params.get('fly') === '1';
   controls.floorAt = district.floorAt;
