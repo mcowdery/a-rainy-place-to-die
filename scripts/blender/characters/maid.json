@@ -1,0 +1,134 @@
+{
+  "name": "maid",
+  "out": "assets/characters/maid.glb",
+  "preview": "assets/characters/previews/maid.png",
+  "body": {
+    "gender": 0,
+    "years": 21,
+    "height_cm": 158,
+    "muscle": 0.4,
+    "weight": 0.4,
+    "proportions": 0.65,
+    "cupsize": 0.5,
+    "firmness": 0.6,
+    "race": {
+      "asian": 1
+    },
+    "targets": {
+      "head-oval": 0.5,
+      "head-invertedtriangular": 0.3,
+      "head-scale-horiz-decr": 0.1,
+      "chin-width-decr": 0.5,
+      "chin-triangle": 0.4,
+      "chin-height-decr": 0.2,
+      "lr-cheek-bones-decr": 0.3,
+      "lr-cheek-volume-incr": 0.2,
+      "nose-scale-horiz-decr": 0.35,
+      "nose-scale-vert-decr": 0.45,
+      "nose-point-width-decr": 0.4,
+      "nose-nostrils-width-decr": 0.35,
+      "nose-volume-decr": 0.3,
+      "nose-point-up": 0.25,
+      "lr-eye-scale-incr": 0.85,
+      "lr-eye-height2-incr": 0.0,
+      "lr-eye-corner2-down": 0.2,
+      "mouth-scale-horiz-decr": 0.3,
+      "mouth-upperlip-volume-incr": 0.0,
+      "mouth-lowerlip-volume-incr": 0.0,
+      "mouth-cupidsbow-incr": 0.3,
+      "mouth-angles-up": 0.25,
+      "measure-neck-circ-decr": 0.35,
+      "lr-eye-height1-decr": 0.0,
+      "lr-eye-height1-incr": 0.15,
+      "mouth-scale-vert-decr": 0.15
+    },
+    "decimate": 0.6
+  },
+  "max_tex": 1024,
+  "skin": {
+    "asset": "young_asian_female",
+    "max_tex": 2048,
+    "roughness": 0.55,
+    "ops": [
+      {"op": "grade", "saturation": 0.8, "gamma": 0.95},
+      {"op": "smooth", "radius": 3, "amount": 0.5},
+      {"op": "colorize", "color": "#2a1d15", "contrast": 0.5, "uvmask": "under_hair", "amount": 0.9}
+    ]
+  },
+  "eyes": {
+    "asset": "high-poly",
+    "color": "brown",
+    "roughness": 0.35,
+    "ops": [
+      {"op": "grade", "sat": [0.15, 1], "saturation": 0.55, "gain": [0.55, 0.5, 0.48]}
+    ]
+  },
+  "eyebrows": {
+    "asset": "eyebrow001",
+    "double_sided": true
+  },
+  "eyelashes": {
+    "asset": "eyelashes01",
+    "double_sided": true
+  },
+  "hair": {
+    "asset": "toigo_blunt_bob_with_bangs",
+    "roughness": 0.6,
+    "double_sided": true,
+    "normal_map": false,
+    "decimate": 0.75,
+    "ops": [
+      {"op": "colorize", "color": "#22180f", "contrast": 1.6}
+    ]
+  },
+  "clothes": [
+    {
+      "asset": "wdg_mycenaean_tunic",
+      "roughness": 0.85,
+      "metallic": 0,
+      "hem_cm": 88,
+      "ops": [
+        {"op": "colorize", "color": "#1d1d22", "contrast": 0.6}
+      ]
+    },
+    {
+      "asset": "toigo_skirt_with_lace_ruffle",
+      "roughness": 0.85,
+      "metallic": 0,
+      "ops": [
+        {"op": "colorize", "color": "#1d1d22", "contrast": 0.8}
+      ],
+      "decimate": 0.6
+    },
+    {
+      "asset": "marco_105_stocking01",
+      "roughness": 0.8,
+      "metallic": 0,
+      "ops": [
+        {"op": "opaque"},
+        {"op": "colorize", "color": "#18181b", "contrast": 0.4}
+      ]
+    },
+    {
+      "asset": "toigo_mj_cloth_shoes",
+      "roughness": 0.5,
+      "metallic": 0,
+      "ops": [
+        {"op": "colorize", "color": "#141416"}
+      ]
+    }
+  ],
+  "garments": [
+    {
+      "type": "apron",
+      "over": ["wdg_mycenaean_tunic", "toigo_skirt_with_lace_ruffle"],
+      "color": "#dad6ce"
+    },
+    {
+      "type": "headband",
+      "on": "toigo_blunt_bob_with_bangs",
+      "color": "#dad6ce",
+      "band_color": "#141416"
+    }
+  ]
+}

@@ -1,0 +1,242 @@
+{
+  "name": "julie",
+  "out": "assets/characters/julie.glb",
+  "preview": "assets/characters/previews/julie.png",
+  "compare": {
+    "ref": "assets/ads/source/26_julie_album.png",
+    "crop": [130, 20, 770, 660],
+    "out": "assets/characters/previews/julie_compare.png",
+    "turn": 15,
+    "pitch": 3,
+    "eye_at": 0.405,
+    "top_at": 0.035,
+    "lens": 85
+  },
+  "body": {
+    "gender": 0,
+    "years": 22,
+    "height_cm": 162,
+    "muscle": 0.4,
+    "weight": 0.38,
+    "proportions": 0.7,
+    "cupsize": 0.5,
+    "firmness": 0.6,
+    "race": {
+      "asian": 1
+    },
+    "targets": {
+      "head-oval": 0.5,
+      "head-invertedtriangular": 0.4,
+      "head-scale-horiz-decr": 0.45,
+      "head-fat-decr": 0.5,
+      "head-age-decr": 0.4,
+      "chin-width-decr": 0.8,
+      "chin-triangle": 0.5,
+      "chin-prominent-incr": 0.1,
+      "chin-height-decr": 0.8,
+      "lr-cheek-bones-decr": 0.2,
+      "lr-cheek-volume-incr": 0.0,
+      "lr-cheek-trans-up": 0.2,
+      "lr-eye-scale-incr": 1.0,
+      "lr-eye-height2-incr": 0.0,
+      "lr-eye-corner2-up": 0.15,
+      "lr-eye-bag-height-incr": 0.2,
+      "nose-scale-horiz-decr": 0.35,
+      "nose-point-width-decr": 0.4,
+      "nose-nostrils-width-decr": 0.35,
+      "nose-scale-vert-decr": 0.5,
+      "nose-volume-decr": 0.25,
+      "nose-hump-decr": 0.2,
+      "nose-width1-decr": 0.3,
+      "nose-trans-up": 0.2,
+      "mouth-scale-horiz-decr": 0.2,
+      "mouth-cupidsbow-incr": 0.6,
+      "measure-neck-circ-decr": 0.4,
+      "lr-eye-height2-decr": 0.25,
+      "mouth-scale-depth-decr": 0.6,
+      "mouth-upperlip-volume-decr": 0.45,
+      "mouth-trans-backward": 0.3,
+      "mouth-lowerlip-volume-decr": 0.05,
+      "mouth-scale-vert-decr": 0.3,
+      "eyebrows-trans-down": 0.2,
+      "mouth-trans-down": 0.6,
+      "mouth-angles-up": 0.8,
+      "eyebrows-angle-up": 0.3,
+      "lr-cheek-inner-decr": 0.4
+    },
+    "sculpt": {
+      "lower_face": 0.3,
+      "jaw_narrow": 0.22,
+      "local": [
+        {"at": "lips", "radius": 0.035, "scale": [0.75, 0.8, 0.72]},
+        {"at": "nose", "radius": 0.03, "scale": [0.85, 0.9, 0.85]},
+        {"at": "eyes", "radius": 0.025, "scale": [1.1, 1.0, 1.08]}
+      ]
+    },
+    "decimate": 0.6
+  },
+  "max_tex": 1024,
+  "skin": {
+    "asset": "young_asian_female",
+    "max_tex": 2048,
+    "roughness": 0.5,
+    "masks": {
+      "lips": {
+        "expr": "group('lips')",
+        "size": 2048,
+        "blur": 2
+      },
+      "lips_c": {
+        "expr": "group('lips') * near(L['lips'], 0.011)",
+        "size": 2048,
+        "blur": 3
+      },
+      "blush": {
+        "expr": "(near(onface(P(L['eye_l'], 0.008, 0, -0.022)), 0.022) + near(onface(P(L['eye_r'], -0.008, 0, -0.022)), 0.022)) * (ny < 0)",
+        "size": 2048,
+        "blur": 6
+      },
+      "shadow": {
+        "expr": "(near3(L['eye_l'], 0.017, 0.03, 0.011) + near3(L['eye_r'], 0.017, 0.03, 0.011)) * lin(z, L['eye_l'][2] - 0.002, L['eye_l'][2] + 0.004) * (ny < 0.2)",
+        "size": 2048,
+        "blur": 4
+      },
+      "liner": {
+        "expr": "lin(dist(boundary() & (np.minimum(np.linalg.norm(np.stack([x, y, z], 1) - L['eye_l'], axis=1), np.linalg.norm(np.stack([x, y, z], 1) - L['eye_r'], axis=1)) < 0.025) & (z > L['eye_l'][2] - 0.001)), 0.004, 0.0008)",
+        "size": 2048,
+        "blur": 1
+      },
+      "mark": {
+        "expr": "near(onface(P(L['eye_r'], -0.017, 0, -0.04)), 0.0018)",
+        "size": 2048,
+        "blur": 0
+      }
+    },
+    "ops": [
+      {"op": "grade", "saturation": 0.55, "gain": [1.05, 1.01, 1.05], "gamma": 0.88},
+      {"op": "smooth", "radius": 3, "amount": 0.6},
+      {"op": "colorize", "color": "#16130f", "contrast": 0.5, "uvmask": "under_hair", "amount": 0.92},
+      {"op": "grade", "gain": [1.0, 0.82, 0.84], "uvmask": "blush", "amount": 0.5},
+      {"op": "grade", "gain": [0.72, 0.55, 0.5], "uvmask": "shadow", "amount": 0.85},
+      {"op": "colorize", "color": "#e5737a", "contrast": 1.0, "uvmask": "lips", "amount": 0.8},
+      {"op": "colorize", "color": "#cc3a45", "contrast": 1.0, "uvmask": "lips_c", "amount": 0.7},
+      {"op": "fill", "color": "#1a1210", "uvmask": "liner", "amount": 0.9},
+      {"op": "fill", "color": "#3a2621", "uvmask": "mark", "amount": 0.9}
+    ]
+  },
+  "eyes": {
+    "asset": "high-poly",
+    "color": "brown",
+    "roughness": 0.4,
+    "ops": [
+      {"op": "bulge", "center": [0.708, 0.293], "radius": 0.24, "scale": 1.45},
+      {"op": "bulge", "center": [0.293, 0.713], "radius": 0.24, "scale": 1.45},
+      {"op": "colorize", "color": "#1f120c", "contrast": 0.9, "circle": [0.708, 0.293, 0.15], "lum": [0, 0.55]},
+      {"op": "colorize", "color": "#1f120c", "contrast": 0.9, "circle": [0.293, 0.713, 0.15], "lum": [0, 0.55]}
+    ],
+    "specular": 0.3
+  },
+  "eyebrows": {
+    "asset": "eyebrow009",
+    "double_sided": true
+  },
+  "eyelashes": {
+    "asset": "eyelashes02",
+    "double_sided": true
+  },
+  "hair": {
+    "asset": "long01",
+    "roughness": 0.55,
+    "double_sided": true,
+    "normal_map": false,
+    "ops": [
+      {"op": "colorize", "color": "#0e0c0c", "contrast": 0.8}
+    ],
+    "specular": 0.3,
+    "inflate": 0.015
+  },
+  "clothes": [
+    {
+      "asset": "female_casualsuit01",
+      "roughness": 0.85,
+      "metallic": 0,
+      "ops": [
+        {"op": "colorize", "color": "#e8e6e2", "contrast": 0.15, "rect": [0, 0, 1, 0.42]},
+        {"op": "colorize", "color": "#e8e6e2", "contrast": 0.15, "rect": [0.84, 0.55, 1, 0.87]},
+        {"op": "colorize", "color": "#6b3f22", "contrast": 0.4, "uvmask": "belt"}
+      ],
+      "masks": {
+        "belt": {
+          "expr": "(v > 0.42) * (u < 0.66) * lin(z, np.max(z[(v > 0.42) & (u < 0.66)]) - 0.045, np.max(z[(v > 0.42) & (u < 0.66)]) - 0.04) * lin(z, np.max(z[(v > 0.42) & (u < 0.66)]) - 0.006, np.max(z[(v > 0.42) & (u < 0.66)]) - 0.01)",
+          "blur": 1
+        }
+      },
+      "delete_where": "v < 0.42 and z < top_of(0.42, 1.0, 0.0, 0.66) - 0.012",
+      "decimate": 0.8
+    },
+    {
+      "asset": "male_casualsuit05",
+      "roughness": 0.32,
+      "metallic": 0,
+      "specular": 0.6,
+      "sheen": {
+        "weight": 0.35,
+        "roughness": 0.3,
+        "tint": "#ffd6e4"
+      },
+      "delete_uv": [[0, 0.55, 0.6, 1.0], [0, 0.08, 0.2, 0.22], [0.6, 0.55, 0.82, 0.64]],
+      "masks": {
+        "yoke": {
+          "expr": "lin(z, L['chin'][2] - 0.2, L['chin'][2] - 0.17) * lin(abs(x), 0.09, 0.11)",
+          "blur": 4
+        }
+      },
+      "ops": [
+        {"op": "opaque"},
+        {"op": "colorize", "color": "#eda2bd", "contrast": 0.35},
+        {"op": "colorize", "color": "#8fd6c8", "contrast": 0.35, "rect": [0.28, 0.05, 0.42, 0.28]},
+        {"op": "colorize", "color": "#8fd6c8", "contrast": 0.35, "rect": [0.68, 0.05, 0.82, 0.28]},
+        {"op": "colorize", "color": "#8fd6c8", "contrast": 0.35, "uvmask": "yoke"}
+      ],
+      "delete_where": "abs(x) < 0.045 and ((0.83 <= u <= 0.95 and 0.25 <= v <= 0.56) or (0.56 <= u <= 0.64 and 0.04 <= v <= 0.31))"
+    },
+    {
+      "asset": "shoes05",
+      "roughness": 0.6,
+      "metallic": 0,
+      "decimate": 0.5
+    }
+  ],
+  "garments": [
+    {
+      "type": "hair_cards",
+      "on": "long01",
+      "color": "#0e0c0c",
+      "roughness": 0.5,
+      "fringe": {
+        "count": 32,
+        "spread": 46,
+        "part": 6,
+        "root": 60,
+        "tip": 0.006,
+        "width": 0.016,
+        "layers": 2,
+        "density": 1.2,
+        "texels": 96
+      },
+      "locks": {
+        "count": 6,
+        "from": 62,
+        "root": 28,
+        "length": 0.36,
+        "spread": 0.06,
+        "width": 0.026,
+        "out": 0.012,
+        "depth": 0.03,
+        "density": 1.6
+      },
+      "specular": 0.35,
+      "density": 0.65
+    }
+  ]
+}

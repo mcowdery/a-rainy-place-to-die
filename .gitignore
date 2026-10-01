@@ -12,3 +12,6 @@ adult/
 # Generated ad candidates awaiting review (approved ones move to assets/ads/source/)
 assets/ads/pending/
 debug-shots/
+
+# Python bytecode (scripts/blender)
+__pycache__/

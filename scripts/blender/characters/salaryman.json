@@ -1,0 +1,91 @@
+{
+  "name": "salaryman",
+  "out": "assets/characters/salaryman.glb",
+  "preview": "assets/characters/previews/salaryman.png",
+  "body": {
+    "gender": 1,
+    "years": 38,
+    "height_cm": 172,
+    "muscle": 0.45,
+    "weight": 0.42,
+    "proportions": 0.55,
+    "race": {
+      "asian": 1
+    },
+    "targets": {
+      "head-oval": 0.3,
+      "head-rectangular": 0.2,
+      "chin-width-decr": 0.1,
+      "chin-prominent-incr": 0.2,
+      "lr-cheek-bones-incr": 0.15,
+      "lr-cheek-volume-decr": 0.3,
+      "nose-scale-horiz-decr": 0.15,
+      "nose-point-width-decr": 0.2,
+      "nose-hump-decr": 0.2,
+      "lr-eye-scale-incr": 0.15,
+      "lr-eye-bag-incr": 0.5,
+      "mouth-scale-horiz-decr": 0.1,
+      "mouth-angles-down": 0.25,
+      "measure-neck-circ-decr": 0.1,
+      "head-age-incr": 0.5,
+      "mouth-laugh-lines-in": 0.3,
+      "lr-eye-height2-decr": 0.15,
+      "eyebrows-angle-down": 0.2,
+      "nose-scale-vert-incr": 0.1
+    },
+    "decimate": 0.7
+  },
+  "max_tex": 1024,
+  "skin": {
+    "asset": "middleage_asian_male",
+    "max_tex": 2048,
+    "roughness": 0.55,
+    "ops": [
+      {"op": "grade", "saturation": 0.8, "gamma": 0.97},
+      {"op": "smooth", "radius": 2, "amount": 0.35},
+      {"op": "colorize", "color": "#16130f", "contrast": 0.5, "uvmask": "under_hair", "amount": 0.92}
+    ]
+  },
+  "eyes": {
+    "asset": "high-poly",
+    "color": "brown",
+    "roughness": 0.35,
+    "ops": [
+      {"op": "grade", "sat": [0.15, 1], "saturation": 0.55, "gain": [0.55, 0.5, 0.48]}
+    ]
+  },
+  "eyebrows": {
+    "asset": "eyebrow009",
+    "double_sided": true
+  },
+  "eyelashes": {
+    "asset": "eyelashes01",
+    "double_sided": true
+  },
+  "hair": {
+    "asset": "short02",
+    "roughness": 0.6,
+    "double_sided": true,
+    "normal_map": false,
+    "ops": [
+      {"op": "colorize", "color": "#141210", "contrast": 0.6}
+    ]
+  },
+  "clothes": [
+    {
+      "asset": "male_elegantsuit01",
+      "roughness": 0.85,
+      "metallic": 0,
+      "decimate": 0.55,
+      "ops": [
+        {"op": "colorize", "color": "#2b2f38", "lum": [0, 0.4], "sat": [0, 0.25]},
+        {"op": "colorize", "color": "#262b3c", "contrast": 0.35, "poly": [[0.3782, 0.0831], [0.4124, 0.0831], [0.4134, 0.1149], [0.3919, 0.1858], [0.3548, 0.1897], [0.3567, 0.1589], [0.3758, 0.1149]]}
+      ]
+    },
+    {
+      "asset": "shoes04",
+      "roughness": 0.5,
+      "metallic": 0
+    }
+  ]
+}
