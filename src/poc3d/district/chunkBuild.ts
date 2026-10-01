@@ -14,6 +14,7 @@ import type { Building3 } from './plan';
 import { landmarkLights } from './landmarks';
 import type { DistrictModel } from './model';
 import { CELL } from './plan';
+import { scrambleKeys, Signals } from './traffic';
 
 /**
  * Builds a chunk's geometry in stages, as transferable arrays. Runs in the chunk workers (chunkWorker.ts);
@@ -41,6 +42,8 @@ export interface ChunkBuilt {
 
 export class ChunkBuilder {
   private readonly mb = new MeshBuilder(1 << 16);
+  /** The junctions' signals (the crowd crosses on them). */
+  private readonly signals: Signals;
   /** The props with a middle-distance version (cars, trees, hedges, bikes): full, and the middle distance's. */
   private readonly pf = new MeshBuilder(1 << 16);
   private readonly pm = new MeshBuilder(1 << 14);
@@ -54,7 +57,9 @@ export class ChunkBuilder {
   constructor(
     private readonly model: DistrictModel,
     private readonly layout: SignLayout,
-  ) {}
+  ) {
+    this.signals = new Signals(scrambleKeys(model.placed, CELL));
+  }
 
   build(mx: number, my: number, stage: Stage): ChunkBuilt {
     const t0 = performance.now();
@@ -118,7 +123,9 @@ export class ChunkBuilder {
       return { mx, my, stage, meshes: { near: lift(mb.raw(cx, cz)), props: lift(pf.raw(cx, cz)), propsMid: lift(pm.raw(cx, cz)), signs: lift(sb.raw(cx, cz)), ads: lift(ab.raw(cx, cz)), taxiAds: lift(tb.raw(cx, cz)) }, ms: performance.now() - t0 };
     }
     // People as numbers (the main thread draws them instanced), standing on the lie of the land.
-    const crowd = cellCrowd(plan, m.detail(mx, my)!, m.plazas(mx, my));
+    const around = [];
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) around.push(...(m.plan(mx + dx, my + dy)?.roads ?? []));
+    const crowd = cellCrowd(plan, m.detail(mx, my)!, m.plazas(mx, my), this.signals, around);
     return { mx, my, stage, meshes: {}, crowd: packFigures(crowd, raised ? (x, z) => T.height(x, z) : null), people: crowd.length, ms: performance.now() - t0 };
   }
 }

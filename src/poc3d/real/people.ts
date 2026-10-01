@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import type { Rect } from '../../core/coords';
+import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng, u01, type Rng } from '../../core/hash';
-import type { CellPlan3, Road3 } from '../district/plan';
+import { CELL, type CellPlan3, type Road3 } from '../district/plan';
+import type { Signals } from '../district/traffic';
 import { propDist, type CellDetail } from './props';
 import { toGeometry, type RawGeometry } from './rawGeometry';
 import { CITY_PEOPLE, DISTRICT_PEOPLE, OUTFITS, pickOutfit, type Outfit, type PeopleMix } from '../district/peopleMix';
@@ -62,7 +63,17 @@ export interface FigureSpec {
    * A walker: walks (ex, ez) metres from where it stands at `speed` m/s, fades out at the end, stays away
    * `gap` seconds and comes back to the start. Without it a figure stands (a 'walk' pose then mid-stride).
    */
-  readonly walk?: { readonly ex: number; readonly ez: number; readonly speed: number; readonly gap: number };
+  readonly walk?: {
+    readonly ex: number;
+    readonly ez: number;
+    readonly speed: number;
+    readonly gap: number;
+    /**
+     * A crossing on a signal: its cycle (s), when the figure appears at the kerb (s into the cycle, on the
+     * traffic's clock) and how long it waits there for the walk light. `gap` is then unused.
+     */
+    readonly signal?: { readonly cycle: number; readonly at: number; readonly wait: number };
+  };
   /** The fade cycle's seed (people together share one, so they come and go together); else from where it stands. */
   readonly seed?: number;
 }
@@ -859,10 +870,11 @@ function writeFigure(o: Float32Array, k: number, s: FigureSpec, ground: ((x: num
   o[k + 9] = w?.ex ?? 0;
   o[k + 10] = w?.ez ?? 0;
   o[k + 11] = w?.speed ?? 0;
-  o[k + 12] = s.phase;
+  o[k + 12] = w?.signal ? w.signal.at : s.phase;
   o[k + 13] = y + g0;
   o[k + 14] = y + g1;
-  o[k + 15] = w?.gap ?? 0;
+  // (A signal crossing packs its cycle and wait into the gap: -(cycle * 100 + wait), both whole seconds.)
+  o[k + 15] = w?.signal ? -(Math.round(w.signal.cycle) * 100 + Math.min(99, Math.round(w.signal.wait))) : (w?.gap ?? 0);
   o[k + 16] = c[0];
   o[k + 17] = c[1];
   o[k + 18] = c[2];
@@ -1110,7 +1122,23 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
         float phase = aWalk.w;
         float fade = 1.0;
         bool moving = aWalk.z > 0.0;
-        if (moving) {
+        bool crosser = moving && aGround.z < 0.0;
+        if (crosser) {
+          // On a signal's clock (cycle C): appear at the kerb at aWalk.w, wait W s for the walk light, cross,
+          // gone at the far side until the next cycle. Off the kerb (from 0.4 m in) a step down to the road.
+          float C = floor(-aGround.z / 100.0);
+          float W = mod(-aGround.z, 100.0);
+          float L = max(length(aWalk.xy), 0.1);
+          float tw = L / aWalk.z;
+          float s = mod(t - aWalk.w, C);
+          float k = clamp((s - W) / tw, 0.0, 1.0);
+          moving = s > W && s < W + tw;
+          org += aWalk.xy * k;
+          float d = k * L;
+          ground = mix(aGround.x, aGround.y, k) - ${PAVEMENT.toFixed(2)} * smoothstep(0.3, 0.6, d) * (1.0 - smoothstep(L - 0.6, L - 0.3, d));
+          phase = fract(k * L / (body == 2 ? 0.95 : 1.35));
+          fade = smoothstep(0.0, 1.5, s) * (1.0 - smoothstep(W + tw - 1.2, W + tw, s));
+        } else if (moving) {
           float L = max(length(aWalk.xy), 0.1);
           float tw = L / aWalk.z;
           float cycle = tw + aGround.z;
@@ -1129,6 +1157,7 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
 
         // The pose, and on top of it the motion.
         int P = int(aPose.y + 0.5);
+        if (crosser && !moving) P = 0;
         Limb still = Limb(0.0, 0.1, 0.12, 0.0);
         Limb leg0 = Limb(0.0, 0.0, 0.0, 0.0);
         armL = still;
@@ -1263,12 +1292,41 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
   });
 }
 
+/** Where a point is, for people: on a pavement or open ground, a shared lane (walk along it), or the road. */
+export type Footing = 'foot' | 'lane' | 'road';
+
+/**
+ * A cell's roads as people see them: the carriageways of roads with raised pavements and their junction boxes
+ * (where the pavement stops for a crossing road) are 'road', shared lanes without pavements 'lane', and
+ * everything else (pavements, alleys, plazas off the carriageways, open ground) 'foot'.
+ */
+export function footingOf(roads: readonly Road3[]): (x: number, z: number) => Footing {
+  const live = roads.filter((r) => r.kind !== 'alley' && r.kind !== 'coast');
+  return (x, z) => {
+    let lane = false;
+    for (const r of live) {
+      const q = r.rect;
+      if (x < q.x || x > q.x + q.w || z < q.y || z > q.y + q.h) continue;
+      if (r.sidewalk <= 0) {
+        lane = true;
+        continue;
+      }
+      const across = r.vertical ? Math.min(x - q.x, q.x + q.w - x) : Math.min(z - q.y, q.y + q.h - z);
+      if (across > r.sidewalk - 0.2) return 'road';
+      // The pavement stops where a crossing road passes (the junction box is road).
+      const cut = live.some((o) => o !== r && o.vertical !== r.vertical && o.sidewalk > 0 && (r.vertical ? z > o.rect.y && z < o.rect.y + o.rect.h : x > o.rect.x && x < o.rect.x + o.rect.w));
+      if (cut) return 'road';
+    }
+    return lane ? 'lane' : 'foot';
+  };
+}
+
 // ---- Crowds ----
 
 function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body: Body | undefined, mix: PeopleMix): FigureSpec {
   const b: Body = body ?? (rnd.chance(0.45) ? 'man' : rnd.chance(0.85) ? 'woman' : 'elder');
   const woman = b === 'woman';
-  // What they wear, by the place's mix (a long coat or skirt as often as before where the mix has 'long').
+  // What they wear, by the place's mix.
   const outfit = pickOutfit(mix, rnd.int(0, 1 << 30), (o) => wears(b, o));
   let hair: Hair = woman ? rnd.pick(['long', 'long', 'bun', 'short', 'hat'] as const) : b === 'elder' ? rnd.pick(['none', 'hat', 'cap'] as const) : rnd.pick(['short', 'short', 'short', 'none', 'cap', 'hat'] as const);
   if (outfit === 'maid' || (outfit === 'school' && woman)) hair = rnd.pick(['long', 'long', 'short', 'bun'] as const);
@@ -1293,13 +1351,15 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
 }
 
 /**
- * Deterministic groups of people along a cell's pavements: people walking a stretch of pavement (and fading
- * at its ends), people standing, and now and then a couple walking together, two talking, a parent with a
- * child, a few friends, someone on the phone. People together share a fade seed (they come and go together).
+ * Deterministic people for a cell. A city's people are mostly going somewhere: most walk a stretch of pavement
+ * (or a shared lane, a plaza, a park path), alone, in couples, with a child, two friends side by side, fading in
+ * at one end and out at the other. People stand where it makes sense: at the kerb waiting for the walk light
+ * (and then crossing on the zebra, on the signal's clock: `signals`), against a wall on the phone or waiting,
+ * talking where a pavement is wide, a few in plazas and parks. Nobody stands in the road (`footingOf`). People
+ * together share a fade seed and a walk.
  */
-export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly Rect[] = []): FigureSpec[] {
+export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly Rect[] = [], signals: Signals | null = null, around: readonly Road3[] = plan.roads): FigureSpec[] {
   const out: FigureSpec[] = [];
-  // Dressed for where they are (the zone's mix, else the district's).
   const mix = plan.style.people ?? DISTRICT_PEOPLE[plan.kind] ?? CITY_PEOPLE;
   const person = (rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body?: Body): FigureSpec => randomPerson(rnd, x, z, yaw, pose, body, mix);
   const cell = plan.rect;
@@ -1309,98 +1369,191 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
     !detail.props.some((p) => propDist(p, x, z) < p.radius + (p.kind === 'car' ? 1.6 : 0.8)) &&
     !detail.solids.some((q) => inRect(q, x, z, 0.8)) &&
     !plan.buildings.some((b) => Math.abs(x - b.x) < b.w / 2 + 0.8 && Math.abs(z - b.z) < b.d / 2 + 0.8);
-  // A plaza can reach across a road: nobody stands where the cars drive (the carriageways, kerb to kerb).
-  const lanes = plan.roads.filter((r) => r.kind !== 'alley' && r.kind !== 'coast' && r.sidewalk > 0);
-  const inTraffic = (x: number, z: number): boolean =>
-    lanes.some(({ rect: q, sidewalk: sw, vertical }) =>
-      vertical ? x > q.x + sw - 0.4 && x < q.x + q.w - sw + 0.4 && z > q.y && z < q.y + q.h : z > q.y + sw - 0.4 && z < q.y + q.h - sw + 0.4 && x > q.x && x < q.x + q.w,
-    );
-  /** How far a walker can go on from (x, z) along (dx, dz) while the way is clear: whole metres, up to 36. */
-  const reach = (x: number, z: number, dx: number, dz: number): number => {
+  // (The neighbours' roads too: a junction at the cell's corner is partly theirs.)
+  const footing = footingOf(around);
+  /** Somewhere a person can stand: off the road and the lanes, clear, in this cell. */
+  const standable = (x: number, z: number): boolean => mine(x, z) && footing(x, z) === 'foot' && clear(x, z);
+  /** How far a walker can go from (x, z) along (dx, dz) without reaching the road (lanes are fine), up to `max` m. */
+  const reach = (x: number, z: number, dx: number, dz: number, max = 90): number => {
     let L = 0;
-    for (let s = 1; s <= 36; s++) {
+    for (let s = 1; s <= max; s++) {
       const px = x + dx * s;
       const pz = z + dz * s;
-      if (!mine(px, pz) || !clear(px, pz) || inTraffic(px, pz)) break;
+      if (!mine(px, pz) || !clear(px, pz) || footing(px, pz) === 'road') break;
       L = s;
     }
     return L;
   };
   /** A walk along (dx, dz) for L metres at a stroll (an elder's slower), and the time away between walks. */
-  const walkOf = (rnd: Rng, L: number, dx: number, dz: number, slow = false): FigureSpec['walk'] => ({ ex: dx * L, ez: dz * L, speed: (slow ? 0.95 : 1.2) + rnd.float() * 0.35, gap: 4 + rnd.float() * 30 });
+  const walkOf = (rnd: Rng, L: number, dx: number, dz: number, slow = false): FigureSpec['walk'] => ({ ex: dx * L, ez: dz * L, speed: (slow ? 0.95 : 1.2) + rnd.float() * 0.35, gap: 3 + rnd.float() * 20 });
+  /** People walking from (x, z) along (dx, dz): one, a couple, a parent and child, or two friends side by side. */
+  const walkers = (rnd: Rng, x: number, z: number, dx: number, dz: number, L: number, roomy: boolean): void => {
+    const yaw = Math.atan2(dx, dz);
+    const rx = dz, rz = -dx;
+    const seed = rnd.float();
+    const roll = rnd.float();
+    const at = (o: number): [number, number] => [x + rx * o, z + rz * o];
+    if (roll < 0.6 || !roomy) {
+      const who = person(rnd, x, z, yaw, 'walk');
+      out.push({ ...who, seed, walk: walkOf(rnd, L, dx, dz, who.body === 'elder') });
+    } else if (roll < 0.78) {
+      const walk = walkOf(rnd, L, dx, dz);
+      const [x1, z1] = at(-0.33);
+      const [x2, z2] = at(0.33);
+      out.push({ ...person(rnd, x1, z1, yaw, 'walk', 'man'), seed, walk });
+      out.push({ ...person(rnd, x2, z2, yaw, 'walk', 'woman'), look: -0.4, seed, walk });
+    } else if (roll < 0.9) {
+      const walk = walkOf(rnd, L, dx, dz, true);
+      const [x1, z1] = at(-0.28);
+      const [x2, z2] = at(0.3);
+      const parent = person(rnd, x1, z1, yaw, 'walk', rnd.chance(0.6) ? 'woman' : 'man');
+      // (A parent out with a child: in their own clothes, not a uniform.)
+      const own = parent.outfit === 'maid' || parent.outfit === 'school' ? 'plain' : parent.outfit;
+      out.push({ ...parent, outfit: own, side: 1, seed, walk });
+      out.push({ ...person(rnd, x2, z2, yaw, 'walk', 'child'), side: -1, hair: rnd.pick(['short', 'cap', 'bun'] as const), look: -0.3, phase: parent.phase + 0.5, seed, walk });
+    } else {
+      const walk = walkOf(rnd, L, dx, dz);
+      const [x1, z1] = at(-0.32);
+      const [x2, z2] = at(0.32);
+      out.push({ ...person(rnd, x1, z1, yaw, 'walk'), look: 0.35, seed, walk });
+      out.push({ ...person(rnd, x2, z2, yaw, 'walk'), look: -0.35, seed, walk });
+    }
+  };
   const onRoad = (r: Road3, side: number, t: number, across: number): [number, number, number, number] => {
     const q = r.rect;
-    // (x, z) on the pavement, plus the direction along the road.
+    // (x, z) across from the road's edge on `side` (its building side), plus the direction along the road.
     return r.vertical ? [side < 0 ? q.x + across : q.x + q.w - across, t, 0, 1] : [t, side < 0 ? q.y + across : q.y + q.h - across, 1, 0];
   };
+
   for (const r of plan.roads) {
     if (r.kind === 'coast') continue;
     const q = r.rect;
-    const pave = r.sidewalk > 0 ? r.sidewalk : 1.4;
+    const shared = r.kind !== 'alley' && r.sidewalk <= 0;
+    const pave = r.sidewalk > 0 ? r.sidewalk : r.kind === 'alley' ? Math.min(r.vertical ? q.w : q.h, 4) / 2 : 1.6;
     const rnd = rng(hash(Math.round(q.x * 3), Math.round(q.y * 3), 0x9e0, r.vertical ? 1 : 2));
     const [a, b] = r.vertical ? [q.y, q.y + q.h] : [q.x, q.x + q.w];
     for (const side of [-1, 1]) {
-      for (let t = a + 3 + rnd.float() * 6; t < b - 3; t += 9 + rnd.float() * 10) {
-        if (!rnd.chance(r.sidewalk > 0 ? 0.55 : 0.3)) continue;
-        const across = pave * (0.35 + rnd.float() * 0.3);
-        const [x, z, dx, dz] = onRoad(r, side, t, across);
-        if (!mine(x, z) || !clear(x, z)) continue;
-        const dirYaw = Math.atan2(dx, dz) + (rnd.chance(0.5) ? Math.PI : 0);
-        const f: V3 = [Math.sin(dirYaw), 0, Math.cos(dirYaw)];
-        const rt: V3 = [f[2], 0, -f[0]];
+      for (let t = a + 2 + rnd.float() * 5; t < b - 2; t += 6 + rnd.float() * 9) {
+        if (!rnd.chance(r.sidewalk > 0 ? 0.62 : shared ? 0.3 : 0.4)) continue;
+        // Walking, on the pavement's middle (in a shared lane, near its edge).
+        const across = shared ? 0.7 + rnd.float() * 0.6 : pave * (0.35 + rnd.float() * 0.3);
+        const [x, z, dx0, dz0] = onRoad(r, side, t, across);
+        const dir = rnd.chance(0.5) ? 1 : -1;
+        const [dx, dz] = [dx0 * dir, dz0 * dir];
         const roll = rnd.float();
+        if (shared || roll < 0.72) {
+          if (!mine(x, z) || !clear(x, z) || footing(x, z) === 'road') continue;
+          const L = reach(x, z, dx, dz);
+          if (L >= 10) walkers(rnd, x, z, dx, dz, L, pave >= 2.2);
+          continue;
+        }
+        // Standing: against the wall (on the phone, waiting, two talking), or where the pavement is wide, a few.
+        const [wx, wz] = onRoad(r, side, t, 0.45);
+        if (!standable(wx, wz)) continue;
+        const face = Math.atan2(r.vertical ? -side : 0, r.vertical ? 0 : -side);
         const seed = rnd.float();
-        const p = (ox: number, oz: number): [number, number] => [x + rt[0] * ox + f[0] * oz, z + rt[2] * ox + f[2] * oz];
-        const L = reach(x, z, f[0], f[2]);
-        if (roll < 0.3) {
-          // Someone walking down the pavement (standing, if there's no room to walk).
-          const who = person(rnd, x, z, dirYaw, L >= 8 ? 'walk' : 'stand');
-          out.push(L >= 8 ? { ...who, seed, walk: walkOf(rnd, L, f[0], f[2], who.body === 'elder') } : { ...who, seed });
-        } else if (roll < 0.45) {
-          out.push({ ...person(rnd, x, z, dirYaw + (rnd.float() - 0.5) * 1.2, rnd.chance(0.7) ? 'stand' : 'pockets'), seed });
-        } else if (roll < 0.57) {
-          // A couple walking side by side (or waiting together).
-          const [x1, z1] = p(-0.35, 0);
-          const [x2, z2] = p(0.35, 0.1);
-          const walk = L >= 8 ? walkOf(rnd, L - 1, f[0], f[2]) : undefined;
-          const pose: Pose = walk ? 'walk' : 'stand';
-          out.push({ ...person(rnd, x1, z1, dirYaw, pose, 'man'), seed, walk });
-          out.push({ ...person(rnd, x2, z2, dirYaw, pose, 'woman'), look: -0.4, seed, walk });
-        } else if (roll < 0.7) {
-          // Two people talking, face to face.
-          const [x1, z1] = p(0, -0.45);
-          const [x2, z2] = p(0, 0.45);
-          out.push({ ...person(rnd, x1, z1, dirYaw, rnd.chance(0.4) ? 'talk' : 'stand'), look: 0, seed });
-          out.push({ ...person(rnd, x2, z2, dirYaw + Math.PI, rnd.chance(0.5) ? 'stand' : 'pockets'), look: 0, seed });
-        } else if (roll < 0.8) {
-          // Parent and child holding hands, walking or waiting.
-          const walk = rnd.chance(0.6) && L >= 8 ? walkOf(rnd, L - 1, f[0], f[2], true) : undefined;
-          const [x1, z1] = p(-0.28, 0);
-          const [x2, z2] = p(0.3, 0);
-          const parent = person(rnd, x1, z1, dirYaw, walk ? 'walk' : 'hold', rnd.chance(0.6) ? 'woman' : 'man');
-          // (A parent out with a child: in their own clothes, not a uniform.)
-          const own = parent.outfit === 'maid' || parent.outfit === 'school' ? 'plain' : parent.outfit;
-          out.push({ ...parent, outfit: own, side: 1, pose: walk ? 'walk' : 'hold', seed, walk });
-          out.push({ ...person(rnd, x2, z2, dirYaw, walk ? 'walk' : 'hold', 'child'), side: -1, hair: rnd.pick(['short', 'cap', 'bun'] as const), long: false, look: -0.3, phase: parent.phase + 0.5, seed, walk });
-        } else if (roll < 0.9) {
-          // Friends in a loose circle.
+        if (roll < 0.86) {
+          out.push({ ...person(rnd, wx, wz, face + (rnd.float() - 0.5) * 0.8, rnd.pick(['phone', 'phone', 'stand', 'pockets'] as const)), seed });
+        } else if (roll < 0.95 || pave < 3.2) {
+          const [ux, uz] = [dx0 * 0.45, dz0 * 0.45];
+          if (!standable(wx + ux, wz + uz) || !standable(wx - ux, wz - uz)) continue;
+          const yaw = Math.atan2(dx0, dz0);
+          out.push({ ...person(rnd, wx - ux, wz - uz, yaw, rnd.chance(0.5) ? 'talk' : 'stand'), look: 0, seed });
+          out.push({ ...person(rnd, wx + ux, wz + uz, yaw + Math.PI, rnd.chance(0.5) ? 'stand' : 'pockets'), look: 0, seed });
+        } else {
+          const [cx, cz] = onRoad(r, side, t, 1.3);
           const n = rnd.int(3, 4);
           for (let i = 0; i < n; i++) {
             const ang = (i / n) * Math.PI * 2 + rnd.float() * 0.4;
-            const [xi, zi] = [x + Math.sin(ang) * 0.6, z + Math.cos(ang) * 0.6];
-            out.push({ ...person(rnd, xi, zi, ang + Math.PI, rnd.pick(['stand', 'stand', 'pockets', 'talk', 'phone'] as const)), look: (rnd.float() - 0.5) * 0.8, seed });
+            const [xi, zi] = [cx + Math.sin(ang) * 0.6, cz + Math.cos(ang) * 0.6];
+            if (standable(xi, zi)) out.push({ ...person(rnd, xi, zi, ang + Math.PI, rnd.pick(['stand', 'stand', 'pockets', 'talk', 'phone'] as const)), look: (rnd.float() - 0.5) * 0.8, seed });
           }
-        } else if (roll < 0.97) {
-          // On the phone, facing the street from the building side.
-          const [x1, z1] = onRoad(r, side, t, pave - 0.4);
-          out.push({ ...person(rnd, x1, z1, Math.atan2(r.vertical ? -side : 0, r.vertical ? 0 : -side), 'phone'), seed });
-        } else {
-          out.push({ ...person(rnd, x, z, dirYaw + Math.PI / 2, 'wave'), seed });
         }
       }
     }
   }
-  // Plazas (a busy square of people crossing, waiting to meet someone, and standing in groups), and more
+
+  // Crossing at the zebras: a junction of two roads with pavements has a zebra over each road just outside the
+  // junction box (real/ground.ts). People wait at the kerb and cross: at a signal (cell-edge roads on the grid
+  // lines) when the walk light is on, on the traffic's clock; elsewhere whenever they come.
+  const live = plan.roads.filter((r) => r.kind !== 'alley' && r.kind !== 'coast' && r.sidewalk > 0);
+  const onGrid = (v: number): boolean => Math.abs(v - Math.round(v / CELL) * CELL) < 0.01;
+  for (const r of live) {
+    const q = r.rect;
+    const width = r.vertical ? q.w : q.h;
+    const centre = r.vertical ? q.x + q.w / 2 : q.y + q.h / 2;
+    for (const o of live) {
+      if (o === r || o.vertical === r.vertical || Math.min(o.rect.w, o.rect.h) < 3 || !overlaps(o.rect, q)) continue;
+      const oc = o.vertical ? o.rect.x + o.rect.w / 2 : o.rect.y + o.rect.h / 2;
+      const gx = Math.round((r.vertical ? centre : oc) / CELL);
+      const gy = Math.round((r.vertical ? oc : centre) / CELL);
+      const signal = signals && onGrid(centre) && onGrid(oc) && width >= 8 ? signals.walkPhase(gx, gy, o.vertical) : null;
+      const rnd = rng(hash(Math.round(q.x * 3 + o.rect.x), Math.round(q.y * 3 + o.rect.y), 0x7e5));
+      const [ja, jb] = r.vertical ? [o.rect.y, o.rect.y + o.rect.h] : [o.rect.x, o.rect.x + o.rect.w];
+      for (const [edge, dir] of [[ja, -1], [jb, 1]] as const) {
+        const t = edge + dir * 2.1;
+        for (const side of [-1, 1]) {
+          // From the kerb on `side` straight across to the other.
+          const [x, z] = onRoad(r, side, t, r.sidewalk - 0.45);
+          if (!mine(x, z) || !clear(x, z)) continue;
+          const L = width - 2 * (r.sidewalk - 0.45);
+          const [dx, dz] = r.vertical ? [-side, 0] : [0, -side];
+          const yaw = Math.atan2(dx, dz);
+          // A few at each kerb: more on the avenues, at the signals.
+          const n = rnd.chance(signal ? 0.75 : 0.35) ? rnd.int(1, r.kind === 'boulevard' && signal ? 3 : 1) : 0;
+          for (let i = 0; i < n; i++) {
+            // Bunched at the kerb, a little apart along it.
+            const off = (rnd.float() - 0.5) * 2.6;
+            const back = rnd.float() * 0.5;
+            const px = x + (r.vertical ? -dx * back : off);
+            const pz = z + (r.vertical ? off : -dz * back);
+            if (!mine(px, pz)) continue;
+            const who = person(rnd, px, pz, yaw, 'walk');
+            if (signal) {
+              // Off the kerb within the first few seconds of the walk light, across in time.
+              const delay = rnd.float() * 3;
+              const speed = Math.max(1.25 + rnd.float() * 0.3, L / Math.max(4, signal.length - delay - 1));
+              const wait = 3 + rnd.float() * Math.min(18, signal.cycle - L / speed - delay - 6);
+              const at = (((signal.start + delay - wait) % signal.cycle) + signal.cycle) % signal.cycle;
+              out.push({ ...who, look: 0, walk: { ex: dx * L, ez: dz * L, speed, gap: 0, signal: { cycle: signal.cycle, at, wait } } });
+            } else out.push({ ...who, seed: rnd.float(), walk: walkOf(rnd, L, dx, dz, who.body === 'elder') });
+          }
+        }
+      }
+    }
+  }
+  // A scramble: people also cross the junction diagonally, corner to corner, in the scramble phase.
+  if (signals) {
+    for (const v of live.filter((r) => r.vertical && onGrid(r.rect.x + r.rect.w / 2))) {
+      for (const h of live.filter((r) => !r.vertical && onGrid(r.rect.y + r.rect.h / 2) && overlaps(r.rect, v.rect))) {
+        const X = v.rect.x + v.rect.w / 2;
+        const Z = h.rect.y + h.rect.h / 2;
+        const gx = Math.round(X / CELL), gy = Math.round(Z / CELL);
+        if (!signals.isScramble(gx, gy)) continue;
+        const ph = signals.walkPhase(gx, gy, true);
+        const rnd = rng(hash(gx, gy, 0x5c4));
+        for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+          // From the corner of the pavements to the opposite corner.
+          const x0 = X + sx * (v.rect.w / 2 - v.sidewalk / 2);
+          const z0 = Z + sz * (h.rect.h / 2 + 0.6);
+          if (!mine(x0, z0)) continue;
+          const ex = -2 * (x0 - X), ez = -2 * (z0 - Z);
+          const L = Math.hypot(ex, ez);
+          const yaw = Math.atan2(ex, ez);
+          for (let i = rnd.int(1, 3); i > 0; i--) {
+            const px = x0 + (rnd.float() - 0.5) * 1.6, pz = z0 + sz * rnd.float() * 0.8;
+            const delay = rnd.float() * 2.5;
+            const speed = Math.max(1.3, L / (ph.length - delay - 1));
+            const wait = 3 + rnd.float() * 15;
+            const at = (((ph.start + delay - wait) % ph.cycle) + ph.cycle) % ph.cycle;
+            out.push({ ...person(rnd, px, pz, yaw, 'walk'), look: 0, walk: { ex, ez, speed, gap: 0, signal: { cycle: ph.cycle, at, wait } } });
+          }
+        }
+      }
+    }
+  }
+
+  // Plazas (a busy square of people crossing it, a few waiting to meet someone or standing together), and more
   // thinly the open ground: tower plazas, park paths, playgrounds.
   const areas = [...plazas.map((rect) => ({ rect, density: 0.5 })), ...detail.open.flatMap((o) => o.crowd)];
   // Open ground stands lower than the pavements (car parks, grass, gravel paths): figures there stand on its top.
@@ -1417,32 +1570,25 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
         if (!rnd.chance(density)) continue;
         const px = x + (rnd.float() - 0.5) * 2.4;
         const pz = z + (rnd.float() - 0.5) * 2.4;
-        if (!mine(px, pz) || !clear(px, pz) || inTraffic(px, pz)) continue;
+        if (!standable(px, pz)) continue;
         const yaw = rnd.float() * Math.PI * 2;
         const [dx, dz] = [Math.sin(yaw), Math.cos(yaw)];
-        // Plaza walks stay inside the area (crossing the square, not wandering off into the streets).
-        let inside = 0;
-        while (inside < 36 && inRect(q, px + dx * (inside + 1), pz + dz * (inside + 1), 0)) inside++;
-        const L = Math.min(reach(px, pz, dx, dz), inside);
         const roll = rnd.float();
-        const seed = rnd.float();
         const y = floorAt(px, pz);
         const from = out.length;
-        if (roll < 0.35) {
-          const who = person(rnd, px, pz, yaw, L >= 8 ? 'walk' : 'stand');
-          out.push(L >= 8 ? { ...who, seed, walk: walkOf(rnd, L, dx, dz, who.body === 'elder') } : { ...who, seed });
-        } else if (roll < 0.47) {
-          const [sx, sz] = [Math.cos(yaw) * 0.35, -Math.sin(yaw) * 0.35];
-          const walk = L >= 8 ? walkOf(rnd, L - 1, dx, dz) : undefined;
-          out.push({ ...person(rnd, px - sx, pz - sz, yaw, walk ? 'walk' : 'stand', 'man'), seed, walk });
-          out.push({ ...person(rnd, px + sx, pz + sz, yaw, walk ? 'walk' : 'stand', 'woman'), look: -0.4, seed, walk });
-        } else if (roll < 0.82) {
-          out.push({ ...person(rnd, px, pz, yaw, rnd.pick(['stand', 'stand', 'pockets', 'phone'] as const)), seed });
-        } else {
+        // Walks stay inside the area (crossing the square, not wandering off into the streets).
+        let inside = 0;
+        while (inside < 60 && inRect(q, px + dx * (inside + 1), pz + dz * (inside + 1), 0)) inside++;
+        const L = Math.min(reach(px, pz, dx, dz), inside);
+        if (roll < 0.72 && L >= 8) walkers(rnd, px, pz, dx, dz, L, true);
+        else if (roll < 0.9) out.push({ ...person(rnd, px, pz, yaw, rnd.pick(['stand', 'phone', 'phone', 'pockets'] as const)), seed: rnd.float() });
+        else {
+          const seed = rnd.float();
           const n = rnd.int(2, 4);
           for (let i = 0; i < n; i++) {
             const ang = (i / n) * Math.PI * 2 + rnd.float() * 0.4;
-            out.push({ ...person(rnd, px + Math.sin(ang) * 0.6, pz + Math.cos(ang) * 0.6, ang + Math.PI, rnd.pick(['stand', 'stand', 'pockets', 'talk', 'phone'] as const)), look: (rnd.float() - 0.5) * 0.8, seed });
+            const [xi, zi] = [px + Math.sin(ang) * 0.6, pz + Math.cos(ang) * 0.6];
+            if (standable(xi, zi)) out.push({ ...person(rnd, xi, zi, ang + Math.PI, rnd.pick(['stand', 'stand', 'pockets', 'talk', 'phone'] as const)), look: (rnd.float() - 0.5) * 0.8, seed });
           }
         }
         if (y !== 0) for (let i = from; i < out.length; i++) out[i] = { ...out[i], y };

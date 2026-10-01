@@ -78,7 +78,7 @@ import { TrackMap, type Wheel } from '../real/tracks';
 import { setTreeSink, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { LITTER, WIPERS } from '../real/city';
 import { moodFromUrl, MoodPanel, QUALITY } from './moodPanel';
-import { carLoops, routeFor, Signals } from './traffic';
+import { carLoops, routeFor, scrambleKeys, Signals } from './traffic';
 import { carMixFor, CITY_CARS } from './carMix';
 import { CAR } from './cabin';
 import { BUS } from './busCabin';
@@ -393,9 +393,7 @@ async function run(): Promise<void> {
   const piers = rails.flatMap((l) => l.segments);
   const plan = (mx: number, my: number) => district.plan(mx, my);
   // Every grid-corner junction has signals; scramble crossings add a pedestrian phase.
-  const scrambles = new Set(
-    content.placed.filter((p) => p.stamp.scramble).map((p) => `${Math.round((p.rect.x + p.stamp.scramble![0]) / CELL)},${Math.round((p.rect.y + p.stamp.scramble![1]) / CELL)}`),
-  );
+  const scrambles = scrambleKeys(content.placed, CELL);
   const signals = new Signals(scrambles);
   setTrafficGround(groundAt);
   const traffic = new TrafficSystem(
@@ -2563,7 +2561,8 @@ async function run(): Promise<void> {
     sun.target.position.set(tx, 0, tz);
     sun.position.set(tx + sd.x * 400, sd.y * 400, tz + sd.z * 400);
     cityU.uTime.value = now / 1000;
-    ghost.uniforms.uTime.value = now / 1000;
+    // The mob runs on the traffic's clock, so people cross on the green.
+    ghost.uniforms.uTime.value = traffic.clock;
     overlay.setRain(rainAmount * 0.11 * (inside ? 0 : 1), now / 1000);
     renderer.info.reset();
     // Hidden groups (the subway above ground, interiors you're not in, the surface below ground) skip the matrix

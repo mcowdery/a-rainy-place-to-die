@@ -194,6 +194,25 @@ export class Signals {
   isScramble(gx: number, gy: number): boolean {
     return this.scrambles.has(`${gx},${gy}`);
   }
+
+  /**
+   * When people on foot may cross at a junction: walking parallel to the north-south road (`alongNS`) they go
+   * with its green, otherwise with the east-west road's; at a scramble everyone goes in the scramble phase.
+   * The walk light starts at `start` (seconds, mod `cycle`, on the same clock as `state`) and lasts `length`.
+   */
+  walkPhase(gx: number, gy: number, alongNS: boolean): { cycle: number; start: number; length: number } {
+    const cycle = this.cycle(gx, gy);
+    const offset = (((gx * 7919 + gy * 104729) % cycle) + cycle) % cycle;
+    const leg = Signals.GREEN + Signals.AMBER + Signals.CLEAR;
+    const scramble = this.isScramble(gx, gy);
+    const at = scramble ? 2 * leg : alongNS ? 0 : leg;
+    return { cycle, start: (((at - offset) % cycle) + cycle) % cycle, length: scramble ? Signals.SCRAMBLE : Signals.GREEN };
+  }
+}
+
+/** The scramble junctions (grid points "gx,gy"), from the stamps that mark one. */
+export function scrambleKeys(placed: readonly { readonly rect: { readonly x: number; readonly y: number }; readonly stamp: { readonly scramble?: readonly [number, number] | null } }[], cell: number): Set<string> {
+  return new Set(placed.filter((p) => p.stamp.scramble).map((p) => `${Math.round((p.rect.x + p.stamp.scramble![0]) / cell)},${Math.round((p.rect.y + p.stamp.scramble![1]) / cell)}`));
 }
 
 /**
