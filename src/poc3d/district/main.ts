@@ -90,7 +90,7 @@ import { RoutePicker } from './routePicker';
 import { subwayRoute } from './subway';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
-import { addFigure, GhostBuilder, ghostMaterial, type FigureSpec } from '../real/people';
+import { addFigure, GhostBuilder, ghostMaterial, setMobLook, type FigureSpec, type MobLook } from '../real/people';
 import { SignAtlas, signMaterial } from '../real/signs';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { TAXI_ADS } from '../models/ads';
@@ -303,6 +303,8 @@ async function run(): Promise<void> {
   };
   grade.grade = mood.grade;
   composer.addPass(grade);
+  // (?diag=1: __mobClock(t) holds the mob's clock still, for comparing looks.)
+  let mobClock: number | null = null;
   // Occlusion culling: chunks behind others drop to their building masses (real/occlusion.ts; ?occlusion=0 turns it off).
   const occlusion = new Occlusion(renderer);
   occlusion.enabled = params.get('occlusion') !== '0';
@@ -709,7 +711,7 @@ async function run(): Promise<void> {
       else if (e.kind === 'arrive') audio.chime();
     };
   }
-  if (params.get('diag') === '1') Object.assign(window, { __scene: scene, __camera: camera, __renderer: renderer, __district: district, __mood: mood, __occlusion: occlusion, __passes: { ssr, overlay, dof, bloom, grade }, __lampShadows: lampShadows, __sun: sun, __ghost: ghost, __dof: dof, __audio: audio, __city: cityU, __traffic: traffic, __strike: () => {
+  if (params.get('diag') === '1') Object.assign(window, { __scene: scene, __camera: camera, __renderer: renderer, __district: district, __mood: mood, __occlusion: occlusion, __passes: { ssr, overlay, dof, bloom, grade }, __lampShadows: lampShadows, __sun: sun, __ghost: ghost, __mobLook: (l: MobLook) => setMobLook(ghost, l), __mobClock: (t: number | null) => (mobClock = t), __dof: dof, __audio: audio, __city: cityU, __traffic: traffic, __strike: () => {
     const d = camera.getWorldDirection(new THREE.Vector3());
     lightning.strikeNow(camera.position, { x: d.x, z: d.z });
   },
@@ -986,6 +988,7 @@ async function run(): Promise<void> {
     district.peopleDistance = q.people;
     traffic.drawDistance = q.traffic;
     traffic.carLod = q.carLod;
+    setMobLook(ghost, mood.mob);
     renderer.toneMappingExposure = atm.exposure * (1 - 0.3 * d) * (1 + 0.1 * heatHaze);
     heatNow = heatHaze;
     grade.grade = mood.grade;
@@ -2562,7 +2565,7 @@ async function run(): Promise<void> {
     sun.position.set(tx + sd.x * 400, sd.y * 400, tz + sd.z * 400);
     cityU.uTime.value = now / 1000;
     // The mob runs on the traffic's clock, so people cross on the green.
-    ghost.uniforms.uTime.value = traffic.clock;
+    ghost.uniforms.uTime.value = mobClock ?? traffic.clock;
     overlay.setRain(rainAmount * 0.11 * (inside ? 0 : 1), now / 1000);
     renderer.info.reset();
     // Hidden groups (the subway above ground, interiors you're not in, the surface below ground) skip the matrix

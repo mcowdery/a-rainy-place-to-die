@@ -1109,6 +1109,28 @@ export function posedFigure(s: FigureSpec): Float32Array {
 
 // ---- The material ----
 
+/**
+ * How the mob looks (the K panel's People, `?mob=`): `ghost` faint and see-through; `rim` a little more solid,
+ * with a soft cool light along the silhouette so dark figures part from dark streets; `solid` near-opaque dark
+ * mannequins; `lit` lighter mid-tone figures with the rim.
+ */
+export const MOB_LOOKS = {
+  ghost: { opacity: 0.72, lift: 1, rim: 0 },
+  rim: { opacity: 0.8, lift: 1, rim: 0.32 },
+  solid: { opacity: 0.94, lift: 1, rim: 0.12 },
+  lit: { opacity: 0.85, lift: 3.2, rim: 0.32 },
+} as const;
+export type MobLook = keyof typeof MOB_LOOKS;
+export const MOB_LOOK_NAMES = Object.keys(MOB_LOOKS) as MobLook[];
+
+/** Sets the mob material's look. */
+export function setMobLook(material: THREE.ShaderMaterial, look: MobLook): void {
+  const L = MOB_LOOKS[look];
+  material.uniforms.uOpacity.value = L.opacity;
+  material.uniforms.uLift.value = L.lift;
+  (material.uniforms.uRim.value as THREE.Color).setRGB(0.42 * L.rim, 0.5 * L.rim, 0.62 * L.rim);
+}
+
 /** The street lightmap's uniforms (real/city.ts), shared so the mob is lit where the streets are. */
 export interface GhostLight {
   readonly tLight: { value: THREE.Texture | null };
@@ -1124,7 +1146,7 @@ export interface GhostLight {
  * silhouette, see-through by alpha to coverage (opaque pass, depth written: one surface per figure, no
  * sorting). `uTime` drives the motion and the fades (main.ts sets it).
  */
-export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
+export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THREE.ShaderMaterial {
   const pivots: THREE.Vector3[] = [];
   const armOut: number[] = [];
   for (const body of BODY_LIST) {
@@ -1132,9 +1154,9 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
     for (const v of p.pivot) pivots.push(new THREE.Vector3(...v));
     armOut.push(p.armOut);
   }
-  return new THREE.ShaderMaterial({
+  const material = new THREE.ShaderMaterial({
     uniforms: {
-      ...THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uOpacity: { value: 0.72 }, uPivot: { value: pivots }, uArmOut: { value: armOut } }]),
+      ...THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uOpacity: { value: 0.72 }, uLift: { value: 1 }, uRim: { value: new THREE.Color(0, 0, 0) }, uPivot: { value: pivots }, uArmOut: { value: armOut } }]),
       tLight: light?.tLight ?? { value: null },
       uLightRect: light?.uLightRect ?? { value: new THREE.Vector4(0, 0, 1, 1) },
       uLightFade: light?.uLightFade ?? { value: new THREE.Vector2(0, 0) },
@@ -1354,6 +1376,8 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
     fragmentShader: /* glsl */ `
       #include <fog_pars_fragment>
       uniform float uOpacity;
+      uniform float uLift;
+      uniform vec3 uRim;
       uniform sampler2D tLight;
       uniform vec4 uLightRect;
       uniform vec2 uLightFade;
@@ -1371,7 +1395,9 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
         float rim = 1.0 - abs(dot(n, v));
         rim *= rim;
         float light = 0.6 + 0.4 * (n.y * 0.5 + 0.5);
-        vec3 col = vC * light * (1.0 + 0.5 * rim);
+        vec3 col = vC * uLift * light * (1.0 + 0.5 * rim);
+        // A soft light along the silhouette (MOB_LOOKS), so dark figures part from a dark street.
+        col += uRim * rim * (0.4 + 0.6 * rim);
         // Street light (the lightmap): the dark clothes catch the lamps and the neon.
         if (uLightGain > 0.0) {
           vec3 L = texture2D(tLight, (vW.xz - uLightRect.xy) * uLightRect.zw).rgb * uLightGain;
@@ -1390,6 +1416,8 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
         #include <fog_fragment>
       }`,
   });
+  setMobLook(material, look);
+  return material;
 }
 
 /** Where a point is, for people: on a pavement or open ground, a shared lane (walk along it), or the road. */

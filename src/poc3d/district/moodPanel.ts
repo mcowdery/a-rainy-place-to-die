@@ -1,3 +1,4 @@
+import { MOB_LOOK_NAMES, type MobLook } from '../real/people';
 import { GRADE_NAMES, type GradeName } from '../real/grade';
 
 /**
@@ -46,6 +47,8 @@ export interface MoodSettings {
   resolution: Resolution;
   /** How far the detail reaches (QUALITY): high is the full city; medium and low pull it in for slower machines. */
   quality: Quality;
+  /** How the people in the streets look (real/people.ts MOB_LOOKS). */
+  mob: MobLook;
 }
 
 export const QUALITIES = ['high', 'medium', 'low'] as const;
@@ -64,7 +67,7 @@ export const QUALITY: Record<Quality, { detail: number; mid: number; traffic: nu
 export const RESOLUTIONS = ['auto', '100', '85', '70', '55'] as const;
 export type Resolution = (typeof RESOLUTIONS)[number];
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, resolution: 'auto', quality: 'high' };
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, resolution: 'auto', quality: 'high', mob: 'solid' };
 const SHADOW_COUNTS = [0, 2, 4, 8];
 const SAVED_KEY = 'city-popper.district.mood';
 
@@ -103,6 +106,8 @@ function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettin
   if (r && RESOLUTIONS.includes(r)) m.resolution = r;
   const q = params.get('quality') as Quality | null;
   if (q && QUALITIES.includes(q)) m.quality = q;
+  const mb = params.get('mob') as MobLook | null;
+  if (mb && MOB_LOOK_NAMES.includes(mb)) m.mob = mb;
   return m;
 }
 
@@ -127,6 +132,7 @@ function moodParams(m: MoodSettings, base: MoodSettings, into = new URLSearchPar
   set('cycle', m.cycle ? '1' : '0', base.cycle ? '1' : '0');
   set('res', m.resolution, base.resolution);
   set('quality', m.quality, base.quality);
+  set('mob', m.mob, base.mob);
   return into;
 }
 
@@ -197,6 +203,7 @@ export class MoodPanel {
     this.choice('grade', 'Grade', GRADE_NAMES, () => s.grade, (v) => (s.grade = v as GradeName));
     this.choice('res', 'Resolution %', RESOLUTIONS, () => s.resolution, (v) => (s.resolution = v as Resolution));
     this.choice('quality', 'Detail', QUALITIES, () => s.quality, (v) => (s.quality = v as Quality));
+    this.choice('mob', 'People', MOB_LOOK_NAMES, () => s.mob, (v) => (s.mob = v as MobLook));
 
     const buttons = document.createElement('div');
     Object.assign(buttons.style, { display: 'flex', gap: '8px', marginTop: '12px' });
