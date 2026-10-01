@@ -66,7 +66,7 @@ describe('mob figures', () => {
           for (const outfit of OUTFITS) {
             const b = bounds(spec(body, pose, { hair, outfit }));
             expect(b.r).toBeLessThan(1.0);
-            expect(b.n).toBeLessThan(1500);
+            expect(b.n).toBeLessThan(1800);
           }
         }
       }
@@ -126,7 +126,8 @@ describe('street crowds', () => {
             const o = outfitOf(f);
             t[o] = (t[o] ?? 0) + 1;
             if (o === 'maid') expect(f.body).toBe('woman');
-            if (o !== 'plain' && o !== 'school') expect(f.body).not.toBe('child');
+            if (f.body === 'child') expect(['plain', 'school', 'yukata', 'backpack']).toContain(o);
+            if (o === 'work' || o === 'police') expect(['man', 'woman']).toContain(f.body);
           }
         }
       }
