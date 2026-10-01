@@ -1224,7 +1224,7 @@ async function run(): Promise<void> {
   let snowCover = params.has('snowcover') ? Math.max(0, Math.min(1, Number(params.get('snowcover')))) : weather() === 'snow' ? 0.8 : 0;
   if (debug) (window as unknown as { __sea: unknown }).__sea = { sea, renderer, horizon: cityU.uHorizon };
   const exView = buildExpressway(expressway, city);
-  const exTraffic = new ExpresswayTraffic(expressway, city);
+  const exTraffic = new ExpresswayTraffic(expressway, city, undefined, { signs, taxiAds, layout: atlas });
   scene.add(exView.group, exTraffic.group);
   freeze(exView.group);
   const sodium = exView.group.getObjectByName('sodium') as THREE.Mesh;

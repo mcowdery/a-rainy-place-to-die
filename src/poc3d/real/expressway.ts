@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { Expressway, Road } from '../district/expressway';
 import { addVehicle } from '../models/vehicles';
+import { SignBuilder } from './signs';
+import { taxiPhotos } from './taxiAdLayout';
+import type { TrafficSigns } from './traffic';
 import { CITY_CARS, pickCar } from '../district/carMix';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 
@@ -492,6 +495,8 @@ export class ExpresswayTraffic {
     private readonly ex: Expressway,
     city: THREE.Material,
     count = 22,
+    /** Lettering and taxi ads (none in tests). */
+    signs: TrafficSigns | null = null,
   ) {
     const loop = ex.loop;
     this.L = loop.x.length;
@@ -507,14 +512,19 @@ export class ExpresswayTraffic {
     }
     // Eight models from the city's mix (models/vehicles.ts at street detail, their lamps lit at night: the
     // loop after dark is a river of tail lights), shared round the loop.
-    const geos = Array.from({ length: 8 }, (_, k) => {
+    const models = Array.from({ length: 8 }, (_, k) => {
       const mb = new MeshBuilder();
+      const sb = new SignBuilder();
+      const pb = new SignBuilder();
       const { type, paint } = pickCar(CITY_CARS, 700 + k);
-      addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type, paint, detail: 0.2 });
-      return mb.build()!;
+      addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type, paint, detail: 0.2, marks: 700 + k }, signs ? { sb, layout: signs.layout, photos: taxiPhotos(pb) } : undefined);
+      return { body: mb.build()!, text: sb.build(0, 0), photo: pb.build(0, 0) };
     });
     for (let k = 0; k < count; k++) {
-      const mesh = new THREE.Mesh(geos[k % geos.length], city);
+      const m = models[k % models.length];
+      const mesh = new THREE.Mesh(m.body, city);
+      if (signs && m.text) mesh.add(new THREE.Mesh(m.text, signs.signs));
+      if (signs && m.photo) mesh.add(new THREE.Mesh(m.photo, signs.taxiAds));
       this.group.add(mesh);
       this.cars.push({ mesh, s: (this.L * k) / count, v: 18, lane: k % 2 ? -1.8 : 1.8, v0: 17 + ((k * 37) % 10) });
     }
