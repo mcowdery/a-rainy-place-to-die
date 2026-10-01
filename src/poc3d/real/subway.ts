@@ -156,7 +156,7 @@ export class SubwaySystem {
     set.group.visible = true;
     this.place2();
     // The island platforms are on the right of the way the train runs.
-    return { set, doorSide: -1, doors: () => timeline.state().doors };
+    return { cars: set.cars, doorSide: -1, doors: () => timeline.state().doors };
   }
 
   get ride2State(): RideState | null {

@@ -170,3 +170,45 @@ export function seatNear(x: number, z: number, ends: CarEnds, reach = 1.0): Seat
   }
   return best;
 }
+
+/**
+ * Any vehicle you walk about in (a train car, a bus), in its own frame (x across, +x its left; z along, +z its
+ * front; y up from the ground or rail): its floor, what blocks you, where you leave it, its seats.
+ */
+export interface CabinLayout {
+  /** Floor height at a point (a bus steps up toward the back). */
+  floor(x: number, z: number): number;
+  /** Blocked for a walker of radius r; doors: the side whose doors are open (0 none). */
+  blocked(x: number, z: number, r: number, doors: number): boolean;
+  /** Gone on into the next car, or out of a door. */
+  exit(x: number, z: number, doors: number): 'front' | 'back' | 'door' | null;
+  /** The seat within reach, if any. */
+  seatNear(x: number, z: number, reach: number): SeatAt | null;
+}
+
+/** A seat to sit on: where (the cushion's middle), the eye's height over the floor, and which way you face. */
+export interface SeatAt {
+  readonly x: number;
+  readonly z: number;
+  /** Camera yaw (radians, in the vehicle's frame) to face the way the seat does. */
+  readonly face: number;
+  /** Where the eye goes when you sit (in the vehicle's frame). */
+  readonly eye: readonly [number, number, number];
+  /** Where you stand when you get up. */
+  readonly up: readonly [number, number];
+}
+
+/** A train car's layout (the functions above). */
+export function carLayout(ends: CarEnds): CabinLayout {
+  return {
+    floor: () => CAR.FLOOR,
+    blocked: (x, z, r, doors) => carBlocked(x, z, r, ends, doors),
+    exit: (x, z, doors) => carExit(x, z, ends, doors),
+    seatNear: (x, z, reach) => {
+      const s = seatNear(x, z, ends, reach);
+      if (!s) return null;
+      // Facing across the car (the camera looks along its -z: toward -side x).
+      return { x: s.x, z: s.z, face: s.side > 0 ? Math.PI / 2 : -Math.PI / 2, eye: [s.x - s.side * 0.18, CAR.FLOOR + 1.2, s.z], up: [s.side * (CAR.SEAT_X - 0.45), s.z] };
+    },
+  };
+}

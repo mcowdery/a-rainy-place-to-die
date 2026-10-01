@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CAR, carBenches, carPoles, type CarEnds } from '../district/cabin';
+import { CAR, carBenches, carLayout, carPoles, type CabinLayout, type CarEnds } from '../district/cabin';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 import { SignBuilder } from './signs';
 import { taxiAdUv } from './taxiAdLayout';
@@ -53,6 +53,8 @@ export interface DoorLeaves {
 export interface Car2 {
   readonly obj: THREE.Group;
   readonly ends: CarEnds;
+  /** Its walkable layout (district/cabin.ts). */
+  readonly layout: CabinLayout;
   readonly doors: readonly DoorLeaves[];
   readonly inside: THREE.Group;
 }
@@ -86,7 +88,7 @@ const LINING = 0xeceae4;
 const STEEL_IN = 0xc4c8cc;
 
 /** Rectangles covering [z0, z1] x [y0, y1] except the holes (a wall with its openings). */
-function wallRects(z0: number, z1: number, y0: number, y1: number, holes: readonly [number, number, number, number][]): [number, number, number, number][] {
+export function wallRects(z0: number, z1: number, y0: number, y1: number, holes: readonly [number, number, number, number][]): [number, number, number, number][] {
   const zs = [...new Set([z0, z1, ...holes.flatMap((h) => [h[0], h[1]])])].filter((z) => z >= z0 && z <= z1).sort((a, b) => a - b);
   const ys = [...new Set([y0, y1, ...holes.flatMap((h) => [h[2], h[3]])])].filter((y) => y >= y0 && y <= y1).sort((a, b) => a - b);
   const out: [number, number, number, number][] = [];
@@ -449,7 +451,7 @@ function buildCar2(look: CarLook, ends: CarEnds, lamps: 'head' | 'tail' | null, 
     obj.add(new THREE.Mesh(screens, screen));
   }
   obj.add(inside);
-  return { obj, ends, doors, inside };
+  return { obj, ends, layout: carLayout(ends), doors, inside };
 }
 
 /** The screens' canvas: the next station (top half), an ad (third quarter), the destination (bottom quarter). */
@@ -562,7 +564,7 @@ export function carSet2(lineColor: number, mats: CarMaterials, opts: { subway?: 
         obj.add(m);
       }
       group.add(obj);
-      return { obj, ends: p.ends, doors, inside };
+      return { obj, ends: p.ends, layout: p.layout, doors, inside };
     });
     const screenMeshes = cars.flatMap((c) => c.obj.children.filter((m) => (m as THREE.Mesh).material === shared.material) as THREE.Mesh[]);
     return {

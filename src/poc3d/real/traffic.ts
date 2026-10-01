@@ -6,6 +6,11 @@ import type { Prop } from './props';
 import { addVehicle, addWheel, marksKey, wheelLayout, SPORT_TYPES, WORK_TYPES, type CarType } from '../models/vehicles';
 import { SignBuilder, type SignLayout } from './signs';
 import { taxiPhotos } from './taxiAdLayout';
+import { buildBus2, type Bus2 } from './busModel';
+import { BUS } from '../district/busCabin';
+import { dwellDoors } from '../district/rideTimeline';
+import type { CarMaterials } from './trainCar';
+import type { Ridable } from './cabinRider';
 import { CITY_CARS, isTaxi, pickCar, type CarMix } from '../district/carMix';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 
@@ -58,6 +63,13 @@ const BUS_WHEELS: ReturnType<typeof wheelLayout> = {
 };
 
 type WheelLayout = ReturnType<typeof wheelLayout>;
+/** The new bus's wheels (district/busCabin.ts: its axles). */
+const BUS2_WHEELS: WheelLayout = {
+  r: BUS.WHEEL_R,
+  tw: 0.3,
+  rims: 'steel',
+  spots: BUS.AXLES.flatMap((z) => ([-1, 1] as const).map((sd) => ({ x: sd * 1.1, y: BUS.WHEEL_R, z, front: z > 0, sd }))),
+};
 type Model = {
   geo: THREE.BufferGeometry;
   /** Lettering (sign atlas) and a taxi's photo ad (taxi ad atlas), if it has any. */
@@ -366,6 +378,11 @@ interface Vehicle extends DrivenVehicle {
   turned: number;
   /** Simulated this frame (within SIM of the camera, or not in traffic). */
   live: boolean;
+  /** A new bus (?transit=new): its doors, screens and layout to ride in, and its line. */
+  bus2?: Bus2;
+  line?: BusLine;
+  /** Someone aboard pressed the stop button (the next stop's screen says so). */
+  requested?: boolean;
 }
 
 /**
@@ -456,6 +473,8 @@ export class TrafficSystem {
     signs: TrafficSigns | null = null,
     /** The cars each part of the city has (district/carMix.ts): a car takes its model from where it starts. */
     mixAt: (x: number, z: number) => CarMix = () => CITY_CARS,
+    /** The new buses (?transit=new): their materials. */
+    transit: CarMaterials | null = null,
   ) {
     // Models are shared by every car of the same model and paint.
     const models = new Map<string, Model>();
@@ -514,7 +533,22 @@ export class TrafficSystem {
     busBrake.color = [1, 1, 1];
     for (const sd of [-1, 1]) busBrake.box(sd * 0.75, -BUS_LEN / 2 - 0.08, 0.9, 1.1, 0.35, 0.02, KIND.plain, true);
     const busBrakeGeo = busBrake.build()!;
+    const bus2Brake = new MeshBuilder();
+    bus2Brake.kind = KIND.plain;
+    bus2Brake.color = [1, 1, 1];
+    for (const sd of [-1, 1]) bus2Brake.box(sd * 1.11, -BUS.H - 0.02, 0.66, 1.28, 0.2, 0.02, KIND.plain, true);
+    const bus2BrakeGeo = bus2Brake.build()!;
     for (const { line, route } of buses) {
+      if (transit) {
+        for (let i = 0; i < line.buses; i++) {
+          const bus2 = buildBus2(line, transit);
+          add(bus2.obj, bus2BrakeGeo, route, BUS_LEN / 2, 2.5, true, { v0: 9.5, a: 0.9, b: 1.6, T: 1.6, s0: 3 }, (route.length * (i + 0.3)) / line.buses, 'Bus', BUS2_WHEELS);
+          const v = this.vehicles[this.vehicles.length - 1];
+          v.bus2 = bus2;
+          v.line = line;
+        }
+        continue;
+      }
       const model = busModel(line);
       for (let i = 0; i < line.buses; i++) {
         const obj = new THREE.Group();
@@ -537,6 +571,65 @@ export class TrafficSystem {
     const stops = busStops(buses, city);
     this.group.add(stops.mesh);
     this.colliders.push(...stops.colliders);
+  }
+
+  /** How open a new bus's doors are (open while it dwells at a stop). */
+  busDoors(v: Vehicle): number {
+    return v.dwell > 0 ? dwellDoors(v.dwell, BUS_DWELL) : 0;
+  }
+
+  /** A new bus standing at a stop with its doors open, its front door within r of p: to board. */
+  busToBoard(p: THREE.Vector3, r = 3.5): Vehicle | null {
+    for (const v of this.vehicles) {
+      if (!v.bus2 || this.busDoors(v) < 0.85) continue;
+      // The front door's middle, outside the kerb side (+x is the bus's left).
+      const zf = (BUS.FRONT_DOOR[0] + BUS.FRONT_DOOR[1]) / 2;
+      const lx = v.dz;
+      const lz = -v.dx;
+      const x = v.obj.position.x + v.dx * zf + lx * (BUS.W + 0.6);
+      const z = v.obj.position.z + v.dz * zf + lz * (BUS.W + 0.6);
+      if (Math.hypot(p.x - x, p.z - z) < r) return v;
+    }
+    return null;
+  }
+
+  /** Ride a new bus: its one car (the bus), the doors on its left (the kerb). */
+  busRide(v: Vehicle): Ridable {
+    return { cars: [{ obj: v.obj, layout: v.bus2!.layout }], doorSide: 1, doors: () => this.busDoors(v) };
+  }
+
+  /** A bus's line, the stop it's standing at (if it is), and the next one. */
+  busStops(v: Vehicle): { line: BusLine; at: string | null; next: string } | null {
+    if (!v.line) return null;
+    const L = v.route.length;
+    const ahead = (a: number, b: number): number => (((b - a) % L) + L) % L;
+    const order: readonly string[] = SIDES;
+    let next = 0;
+    let best = Infinity;
+    v.route.edges.forEach((e, i) => {
+      if (i === v.stopDone && v.dwell === 0) return;
+      const d = ahead(v.s, e.mid);
+      const dd = d > L - 2 ? 0 : d;
+      if (dd < best) {
+        best = dd;
+        next = i;
+      }
+    });
+    const name = (i: number): string => v.line!.stops[order.indexOf(v.route.edges[i].side)] ?? v.line!.stops[i] ?? '';
+    return { line: v.line, at: v.dwell > 0 ? name(next) : null, next: name(next) };
+  }
+
+  /** The stop button (someone aboard wants the next stop): the screens say so until the doors open. */
+  requestStop(v: Vehicle): void {
+    v.requested = true;
+  }
+
+  /** Keeps a ridden bus's screens current (the next stop, the stop request). */
+  busScreens(v: Vehicle): void {
+    const st = this.busStops(v);
+    if (!st || !v.bus2) return;
+    if (v.dwell > 0) v.requested = false;
+    v.bus2.setNext({ jp: st.next, en: '' }, !!v.requested);
   }
 
   /**
@@ -653,6 +746,10 @@ export class TrafficSystem {
       v.roll += (lean - v.roll) * Math.min(1, dt * 5);
       v.obj.rotation.z = v.roll;
       v.brake.visible = v.acc < -0.6 || v.v < 0.4;
+      if (v.bus2) {
+        v.bus2.setDoors(this.busDoors(v));
+        v.bus2.cull(camera);
+      }
       // The wheels roll with the speed, and the front ones steer with the curve: tan(steer) = wheelbase * k
       // (k > 0 turning right, the car's right is -x; reversing, the curve runs the other way).
       v.turned = (v.turned + (v.v * dt) / v.wheels.r) % (Math.PI * 2);

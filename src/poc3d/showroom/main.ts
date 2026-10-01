@@ -9,12 +9,16 @@ import { cityMaterial, cityUniforms } from '../real/city';
 import { KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Pose } from '../real/people';
 import { figureGeometry, ghostMaterials2, POSES2, type Body2, type FigureShape, type Pose2 } from '../models/figures';
-import { addVehicle, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, WORK_TYPES, type VehicleSpec, type VehicleType } from '../models/vehicles';
+import { addVehicle, addWheel, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, WORK_TYPES, type VehicleSpec, type VehicleType } from '../models/vehicles';
 import { Lightmap, paintLights, type Light } from '../real/lightmap';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { buildMegaSign } from '../real/megaSign';
 import { trainModel } from '../real/rail';
 import { carGlass, carSet2 } from '../real/trainCar';
+import { buildBus2 } from '../real/busModel';
+import { BUS } from '../district/busCabin';
+import { parkedBus } from '../real/traffic';
+import type { BusLine } from '../district/traffic';
 import { CAR } from '../district/cabin';
 import { addProps, type Prop } from '../real/props';
 import { addTree, FOLIAGE_VARIANTS, setFoliageVariant, type TreeSpecies } from '../models/trees';
@@ -285,6 +289,38 @@ cityU.uLightRect.value = showLightmap.uniformRect;
   genItems.new.push({ name: 'train (inside, to the cab)', group: 'Transit', at: new THREE.Vector3(at.x, 2.5, at.z + 22), size: 2.5, view: new THREE.Vector3(0.0, 0.02, -1).normalize() });
   genItems.new.push({ name: 'train (doors, platform)', group: 'Transit', at: new THREE.Vector3(at.x - 1, 2.0, at.z + 2.3), size: 4, view: new THREE.Vector3(-1, 0.15, 0.2).normalize() });
   genItems.new.push({ name: 'subway car', group: 'Transit', at: new THREE.Vector3(at.x - 9, 2, at.z), size: 24, view: new THREE.Vector3(-1, 0.25, 0.5).normalize() });
+}
+// The city bus: the district's (previous) and the new one (real/busModel.ts, under review: walk-in, doors that
+// open), at a stop's kerb.
+{
+  const at = new THREE.Vector3(-40, 0, 104);
+  const kerb = new MeshBuilder();
+  kerb.kind = KIND.sidewalk;
+  kerb.color = lin(0xb4b0a8);
+  kerb.box(at.x + 3.6, at.z, 0, 0.15, 3.0, 16, KIND.sidewalk);
+  scene.add(new THREE.Mesh(kerb.build()!, city));
+  const old = parkedBus('歌舞路循環', city);
+  old.position.copy(at);
+  genRoot.previous.add(old);
+  label('previous', 'city bus', at.x, 4, at.z);
+  const line = { id: 'kaburo', name: '歌舞路循環', en: 'KABURO LOOP', rect: [26, 10, 31, 12], buses: 1, stops: ['歌舞路北', '歌舞路東口', '歌舞路二丁目', '歌舞路西口'] } as unknown as BusLine;
+  const bus = buildBus2(line, { city, glass: carGlass(), ads: null });
+  bus.obj.position.copy(at);
+  bus.setDoors(1);
+  bus.setNext({ jp: '歌舞路東口', en: 'Kaburo East Exit' }, true);
+  genRoot.new.add(bus.obj);
+  for (const z of BUS.AXLES) for (const sd of [-1, 1] as const) {
+    const w = new MeshBuilder(2048);
+    addWheel(w, BUS.WHEEL_R, 0.3, sd, 'steel');
+    const m = new THREE.Mesh(w.build()!, city);
+    m.position.set(at.x + sd * 1.1, BUS.WHEEL_R, at.z + z);
+    genRoot.new.add(m);
+  }
+  label('new', 'city bus (new)', at.x, 4, at.z);
+  for (const g of ['new', 'previous'] as const) genItems[g].push({ name: 'bus', group: 'Transit', at: new THREE.Vector3(at.x, 1.5, at.z), size: 13, view: new THREE.Vector3(1, 0.3, 0.7).normalize() });
+  genItems.new.push({ name: 'bus (inside, to the back)', group: 'Transit', at: new THREE.Vector3(at.x, 2.0, at.z + 2.4), size: 1.5, view: new THREE.Vector3(0, 0.05, 1).normalize() });
+  genItems.new.push({ name: 'bus (inside, to the front)', group: 'Transit', at: new THREE.Vector3(at.x, 2.4, at.z - 3.5), size: 1.5, view: new THREE.Vector3(0, 0.1, -1).normalize() });
+  genItems.new.push({ name: 'bus (doors)', group: 'Transit', at: new THREE.Vector3(at.x + 1.2, 1.4, at.z + 1.5), size: 6, view: new THREE.Vector3(1, 0.15, 0.3).normalize() });
 }
 // Kaburo mega-sign (the corner tower with its screens and the neon dragon) on its own plaza.
 {

@@ -56,7 +56,7 @@ import { SaveApp } from './saveApp';
 import { readSave, SAVE_VERSION, SLOTS, writeSave, type SaveGame, type Slot } from '../../save/save';
 import { installSnap } from '../../debug/snap';
 import { fare, rideMetres, TaxiPicker } from './taxi';
-import { earn, loadProfile, saveProfile } from '../../race/profile';
+import { earn, loadProfile, saveProfile, spend } from '../../race/profile';
 import { Expressway, parseExpressway } from './expressway';
 import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
 import { buildSea } from '../real/sea';
@@ -80,6 +80,7 @@ import { moodFromUrl, MoodPanel } from './moodPanel';
 import { carLoops, routeFor, Signals } from './traffic';
 import { carMixFor, CITY_CARS } from './carMix';
 import { CAR } from './cabin';
+import { BUS } from './busCabin';
 import { carGlass, type CarMaterials } from '../real/trainCar';
 import { CabinRider, type Ridable } from '../real/cabinRider';
 import type { RideState } from './rideTimeline';
@@ -398,7 +399,25 @@ async function run(): Promise<void> {
       const p = plan(Math.floor(x / CELL), Math.floor(z / CELL));
       return p ? carMixFor(p.style, p.kind) : CITY_CARS;
     },
+    carMats,
   );
+  if (debug && transitNew) {
+    // Checks: stand at the front door of a bus that's standing at a stop with its doors open (true if there is one).
+    (window as unknown as { __gotoBus: () => boolean }).__gotoBus = () => {
+      const vs = (traffic as unknown as { vehicles: { obj: THREE.Object3D; dx: number; dz: number; bus2?: unknown }[] }).vehicles;
+      for (const v of vs) {
+        if (!v.bus2 || traffic.busDoors(v as never) < 0.85) continue;
+        const zf = (BUS.FRONT_DOOR[0] + BUS.FRONT_DOOR[1]) / 2;
+        const x = v.obj.position.x + v.dx * zf + v.dz * (BUS.W + 1.0);
+        const z = v.obj.position.z + v.dz * zf - v.dx * (BUS.W + 1.0);
+        camera.position.set(x, groundAt(x, z) + 1.7, z);
+        controls.setLevel(groundAt(x, z));
+        controls.setView((Math.atan2(v.dz, -v.dx) * 180) / Math.PI, 0);
+        return true;
+      }
+      return false;
+    };
+  }
   const signalLamps = new SignalLamps(signals, (x, z, r) => district.signalsNear(x, z, r));
   scene.add(traffic.group, signalLamps.mesh);
   // Weather near the camera: rain streaks and splashes lit by the street, light cones under the lamps.
@@ -584,7 +603,24 @@ async function run(): Promise<void> {
   /** Walking about inside a moving train (the new cars). */
   const rider = new CabinRider(camera, controls);
   /** The ride you're walking about in: the train's system, and what to call when you're off. */
-  let cabin: { system: { alight(): void; readonly ride2State: RideState | null }; done: (key: string | null) => void } | null = null;
+  let cabin: Cabin | null = null;
+  /** Walking about in a train or a bus: its doors, where it stands, getting off, and the HUD's line. */
+  interface Cabin {
+    /** How open the doors are. */
+    doors(): number;
+    /** The station it's standing at (a train), or null (a bus). */
+    atKey(): string | null;
+    /** You're off: a train shuts its doors and pulls away (a bus goes on). */
+    alight(): void;
+    /** Off by E (or a door with no floor outside): put the walker where they'd be (the platform, the pavement). */
+    fallback(): void;
+    /** E with the doors shut: skip to your stop (a train) or press the stop button (a bus). */
+    press(): void;
+    status(): string;
+    /** The bus you're on, if it's a bus. */
+    readonly bus?: Parameters<TrafficSystem['busRide']>[0];
+    done(key: string | null): void;
+  }
   /** On a train or a subway: walking about in one, or (the district's cars) standing in one. */
   if (debug) Object.assign(window, { __rider: rider, __trains: trainLines, __subway: subway });
   const aboard = (): boolean => rider.active || (!!trainRiding() && !trainRiding()!.walkable) || (subway.riding && !subway.walkable);
@@ -1042,6 +1078,8 @@ async function run(): Promise<void> {
   const interact = async (): Promise<void> => {
     if (driving.car) return exitCar();
     if (taxiHere()) return getInTaxi();
+    const bus = transitNew && !rider.active ? traffic.busToBoard(camera.position) : null;
+    if (bus) return boardBus(bus);
     const n = target();
     if (n) return use(n);
     const car = takeableCar();
@@ -1889,9 +1927,8 @@ async function run(): Promise<void> {
    */
   function getOff(door: THREE.Vector3 | null): void {
     const c = cabin;
-    const st = c?.system.ride2State;
-    const at = st?.at;
-    if (!c || !st || !at || st.doors < 0.85) return;
+    if (!c || c.doors() < 0.85) return;
+    const key = c.atKey();
     cabin = null;
     if (door) {
       const level = door.y - 1.7;
@@ -1900,8 +1937,8 @@ async function run(): Promise<void> {
         rider.leave();
         controls.setLevel(f);
         camera.position.set(door.x, f + 1.7, door.z);
-        c.system.alight();
-        c.done(at.key);
+        c.alight();
+        c.done(key);
         return;
       }
     }
@@ -1909,12 +1946,62 @@ async function run(): Promise<void> {
       inVn = true;
       await fadeTo(1);
       rider.leave();
-      teleport(`${at.key}.platform`);
-      c.system.alight();
+      c.fallback();
+      c.alight();
       await fadeTo(0);
       inVn = false;
-      c.done(at.key);
+      c.done(key);
     })();
+  }
+
+  /** The cabin for a train ride (its system's ride in the new cars). */
+  const trainCabin = (system: { alight(): void; skip(): void; readonly ride2State: RideState | null; readonly status: string | null }, done: (key: string | null) => void): Cabin => ({
+    doors: () => system.ride2State?.doors ?? 0,
+    atKey: () => system.ride2State?.at?.key ?? null,
+    alight: () => system.alight(),
+    fallback: () => {
+      const at = system.ride2State?.at;
+      if (at) teleport(`${at.key}.platform`);
+    },
+    press: () => system.skip(),
+    status: () => system.status ?? '',
+    done,
+  });
+
+  /** Board a bus at its front door: pay the flat fare, stand inside facing down the bus. */
+  const BUS_FARE = 210;
+  function boardBus(v: Parameters<TrafficSystem['busRide']>[0]): void {
+    const profile = loadProfile();
+    if (!spend(profile, BUS_FARE)) return toast(`Not enough for the fare (¥${BUS_FARE}).`);
+    saveProfile(profile);
+    rider.board(traffic.busRide(v), 0, 0.72, 4.15, 0);
+    audio.chime();
+    toast(`IC ¥${BUS_FARE} · ピッ · walk about, sit (E by a seat), E for the stop button, off at the middle door`, 5);
+    cabin = {
+      bus: v,
+      doors: () => traffic.busDoors(v),
+      atKey: () => null,
+      alight: () => undefined,
+      fallback: () => {
+        // Out of the middle door onto the pavement.
+        const z = (BUS.MID_DOOR[0] + BUS.MID_DOOR[1]) / 2;
+        v.obj.updateWorldMatrix(true, false);
+        const p = new THREE.Vector3(BUS.W + 1.1, 0, z).applyMatrix4(v.obj.matrixWorld);
+        const f = district.floorAt(p.x, p.z, groundAt(p.x, p.z));
+        controls.setLevel(f);
+        camera.position.set(p.x, f + 1.7, p.z);
+      },
+      press: () => {
+        traffic.requestStop(v);
+        audio.chime();
+        toast('とまります · Stopping at the next stop', 2);
+      },
+      status: () => {
+        const st = traffic.busStops(v);
+        return st ? `${st.line.name} ${st.line.en} · ${st.at ? `${st.at} · doors open` : `next: ${st.next}`}` : '';
+      },
+      done: () => undefined,
+    };
   }
 
   /**
@@ -1937,7 +2024,7 @@ async function run(): Promise<void> {
       inVn = true;
       const line = content.subway.lines.find((l) => l.id === leg.line)!;
       let ridable: Ridable;
-      let system: { alight(): void; readonly ride2State: RideState | null };
+      let system: { alight(): void; skip(): void; readonly ride2State: RideState | null; readonly status: string | null };
       if (line.kind === 'elevated') {
         const tl = trainLines.get(line.id);
         const step = leg.to > leg.from ? 1 : -1;
@@ -1953,7 +2040,7 @@ async function run(): Promise<void> {
       }
       // Standing in the middle car by a door on the platform side, facing it (the doors are closing).
       rider.board(ridable, 1, ridable.doorSide * 0.6, CAR.DOORS[1], ridable.doorSide > 0 ? -Math.PI / 2 : Math.PI / 2);
-      const got = new Promise<string | null>((done) => (cabin = { system, done }));
+      const got = new Promise<string | null>((done) => (cabin = trainCabin(system, done)));
       await fadeTo(0);
       inVn = false;
       const key = await got;
@@ -2012,9 +2099,9 @@ async function run(): Promise<void> {
       // to your stop.
       if (e.code !== 'KeyE') return;
       if (rider.seated) rider.stand();
+      else if (cabin.doors() > 0.85) getOff(null);
       else if (rider.sit()) toast('Sitting · E to get up', 2);
-      else if ((cabin.system.ride2State?.doors ?? 0) > 0.85) getOff(null);
-      else [...trainLines.values(), subway].find((t) => t.riding)?.skip();
+      else cabin.press();
       return;
     }
     const riding = trainRiding();
@@ -2238,7 +2325,7 @@ async function run(): Promise<void> {
     dash.style.display = driving.car ? 'block' : 'none';
     if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}`;
     damageHud.update(inVn ? 0 : dt, driving.own ? ownCar : null);
-    const onFoot = !driving.car && !controls.fly && !inVn && Math.abs(camAbove() - 1.7) < 1.2;
+    const onFoot = !driving.car && !controls.fly && !inVn && !rider.active && Math.abs(camAbove() - 1.7) < 1.2;
     let wvx = dt > 0 ? (cp0.x - lastWalker.x) / dt : 0;
     let wvz = dt > 0 ? (cp0.z - lastWalker.z) / dt : 0;
     // Faster than anyone runs: a teleport or a ride, not a step.
@@ -2246,6 +2333,10 @@ async function run(): Promise<void> {
     const walkers = onFoot ? [{ x: cp0.x, z: cp0.z, vx: wvx, vz: wvz }] : [];
     lastWalker.set(cp0.x, cp0.y, cp0.z);
     traffic.update(dt, camera.position, walkers);
+    if (cabin?.bus) {
+      traffic.busScreens(cabin.bus);
+      rider.compose();
+    }
     // Horns: from where the car is, panned by where it is from the view (yaw 0 looks toward -z; right is +x).
     for (const h of traffic.honks) {
       const yaw = (lookYaw() * Math.PI) / 180;
@@ -2470,7 +2561,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        (rider.active ? `${(trainRiding()?.status ?? subway.status) ?? ''}  ·  [E] ${rider.seated ? 'stand up' : rider.seatNear() ? 'sit' : (cabin?.system.ride2State?.doors ?? 0) > 0.85 ? 'get off' : 'skip to your stop'}` : null) ??
+        (rider.active && cabin ? `${cabin.status()}  ·  [E] ${rider.seated ? 'stand up' : cabin.doors() > 0.85 ? 'get off' : rider.seatNear() ? 'sit' : cabin.bus ? 'stop button' : 'skip to your stop'}` : null) ??
         trainRiding()?.status ??
         subway.status ??
         `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${SEASON_NAMES[season()]}${flags.get(FLAG_TSUYU) === true ? ' 梅雨' : ''}${flags.get(FLAG_HEAT) === true ? ' 猛暑' : ''}${flags.get(FLAG_TYPHOON) === true ? ' 台風' : ''} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
@@ -2480,7 +2571,7 @@ async function run(): Promise<void> {
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
-        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? (t.sleep ? 'Sleep until morning' : 'Look') : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : taxiHere() ? '[E] Get in the taxi' : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
+        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? (t.sleep ? 'Sleep until morning' : 'Look') : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : taxiHere() ? '[E] Get in the taxi' : transitNew && !rider.active && traffic.busToBoard(camera.position) ? `[E] Board the bus · ¥${BUS_FARE}` : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
         `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · I invert mouse Y · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look${debugMenu ? ' · ` debug menu' : ''}`,
       ].join('\n');
       builtThisWindow = 0;

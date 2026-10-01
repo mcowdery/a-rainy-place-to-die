@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CAR, carBenches, carBlocked, carExit, carSeats, carStanding, seatNear, type CarEnds } from '../src/poc3d/district/cabin';
 import { dwellDoors, RideTimeline, START, type RideStop } from '../src/poc3d/district/rideTimeline';
+import { BUS, busLayout } from '../src/poc3d/district/busCabin';
 
 const MID: CarEnds = { back: 'gangway', front: 'gangway' };
 const LEAD: CarEnds = { back: 'gangway', front: 'cab' };
@@ -92,5 +93,38 @@ describe('a ride timeline', () => {
     expect(dwellDoors(0, 16)).toBe(0);
     expect(dwellDoors(4, 16)).toBe(1);
     expect(dwellDoors(15.9, 16)).toBe(0);
+  });
+});
+
+describe('a city bus inside', () => {
+  const bus = busLayout();
+  it('lets you walk from the front door down the aisle to the back bench, up the steps', () => {
+    // From inside the front door, past the fare box, down the aisle.
+    let x = 0.72;
+    let z = 4.15;
+    const path: [number, number][] = [[0.6, 3.6], [0.15, 3.2], [0.0, 2.5], [0.0, 0.0], [0.0, -2.0], [0.0, -4.3]];
+    for (const [tx, tz] of path) {
+      for (let k = 0; k < 200 && Math.hypot(tx - x, tz - z) > 0.05; k++) {
+        const d = Math.hypot(tx - x, tz - z);
+        const nx = x + ((tx - x) / d) * 0.05;
+        const nz = z + ((tz - z) / d) * 0.05;
+        expect(bus.blocked(nx, nz, 0.4, 0), `blocked at ${nx.toFixed(2)}, ${nz.toFixed(2)}`).toBe(false);
+        x = nx;
+        z = nz;
+      }
+    }
+    expect(bus.floor(0, 3)).toBeLessThan(bus.floor(0, -3));
+  });
+
+  it('lets you out of the doors only when they are open', () => {
+    expect(bus.blocked(1.2, 0.3, 0.4, 0)).toBe(true);
+    expect(bus.blocked(1.2, 0.3, 0.4, 1)).toBe(false);
+    expect(bus.exit(BUS.W + 0.6, 0.3, 1)).toBe('door');
+    expect(bus.exit(BUS.W + 0.6, 0.3, 0)).toBe(null);
+    expect(bus.exit(BUS.W + 0.6, 4.2, 1)).toBe('door');
+  });
+
+  it('has a seat in reach from the aisle all the way down', () => {
+    for (let z = 2.5; z > -4.8; z -= 0.5) if (!(z < 0.9 && z > -1.7)) expect(bus.seatNear(0, z, 1.0), `z ${z}`).not.toBe(null);
   });
 });

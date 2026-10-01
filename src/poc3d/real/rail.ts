@@ -405,7 +405,7 @@ export class TrainSystem {
     this.rideTrain.visible = true;
     this.place2();
     // Trains keep left, with their platforms outside the tracks: the doors open on the left.
-    return { set, doorSide: 1, doors: () => timeline.state().doors };
+    return { cars: set.cars, doorSide: 1, doors: () => timeline.state().doors };
   }
 
   /** The ride in the new cars (its timeline's state), if one is on. */
