@@ -608,6 +608,8 @@ async function run(): Promise<void> {
   interface Cabin {
     /** How open the doors are. */
     doors(): number;
+    /** Whether E gets you off now (not at the stop you boarded at: there E skips on). */
+    canLeave(): boolean;
     /** The station it's standing at (a train), or null (a bus). */
     atKey(): string | null;
     /** You're off: a train shuts its doors and pulls away (a bus goes on). */
@@ -1955,18 +1957,22 @@ async function run(): Promise<void> {
   }
 
   /** The cabin for a train ride (its system's ride in the new cars). */
-  const trainCabin = (system: { alight(): void; skip(): void; readonly ride2State: RideState | null; readonly status: string | null }, done: (key: string | null) => void): Cabin => ({
-    doors: () => system.ride2State?.doors ?? 0,
-    atKey: () => system.ride2State?.at?.key ?? null,
-    alight: () => system.alight(),
-    fallback: () => {
-      const at = system.ride2State?.at;
-      if (at) teleport(`${at.key}.platform`);
-    },
-    press: () => system.skip(),
-    status: () => system.status ?? '',
-    done,
-  });
+  const trainCabin = (system: { alight(): void; skip(): void; readonly ride2State: RideState | null; readonly status: string | null }, done: (key: string | null) => void): Cabin => {
+    const boarded = system.ride2State?.at?.key ?? null;
+    return {
+      doors: () => system.ride2State?.doors ?? 0,
+      canLeave: () => (system.ride2State?.at?.key ?? null) !== boarded,
+      atKey: () => system.ride2State?.at?.key ?? null,
+      alight: () => system.alight(),
+      fallback: () => {
+        const at = system.ride2State?.at;
+        if (at) teleport(`${at.key}.platform`);
+      },
+      press: () => system.skip(),
+      status: () => system.status ?? '',
+      done,
+    };
+  };
 
   /** Board a bus at its front door: pay the flat fare, stand inside facing down the bus. */
   const BUS_FARE = 210;
@@ -1980,6 +1986,7 @@ async function run(): Promise<void> {
     cabin = {
       bus: v,
       doors: () => traffic.busDoors(v),
+      canLeave: () => true,
       atKey: () => null,
       alight: () => undefined,
       fallback: () => {
@@ -2099,7 +2106,7 @@ async function run(): Promise<void> {
       // to your stop.
       if (e.code !== 'KeyE') return;
       if (rider.seated) rider.stand();
-      else if (cabin.doors() > 0.85) getOff(null);
+      else if (cabin.doors() > 0.85 && cabin.canLeave()) getOff(null);
       else if (rider.sit()) toast('Sitting · E to get up', 2);
       else cabin.press();
       return;
@@ -2561,7 +2568,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        (rider.active && cabin ? `${cabin.status()}  ·  [E] ${rider.seated ? 'stand up' : cabin.doors() > 0.85 ? 'get off' : rider.seatNear() ? 'sit' : cabin.bus ? 'stop button' : 'skip to your stop'}` : null) ??
+        (rider.active && cabin ? `${cabin.status()}  ·  [E] ${rider.seated ? 'stand up' : cabin.doors() > 0.85 && cabin.canLeave() ? 'get off' : rider.seatNear() ? 'sit' : cabin.bus ? 'stop button' : 'skip to your stop'}` : null) ??
         trainRiding()?.status ??
         subway.status ??
         `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${SEASON_NAMES[season()]}${flags.get(FLAG_TSUYU) === true ? ' 梅雨' : ''}${flags.get(FLAG_HEAT) === true ? ' 猛暑' : ''}${flags.get(FLAG_TYPHOON) === true ? ' 台風' : ''} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
