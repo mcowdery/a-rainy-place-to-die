@@ -786,8 +786,10 @@ interface Limb {
   raise: number;
   /** Elbow / knee bend, radians (elbow folds forward, knee folds back). */
   bend: number;
-  /** The forearm folds up beside the body instead of forward (a wave). */
-  up?: boolean;
+  /** The forearm's bend out to the side (a wave holds it upright), radians. */
+  side?: number;
+  /** The forearm turned in across the body (arms crossed, hands clasped), radians. */
+  twist?: number;
 }
 
 interface Skeleton {
@@ -803,11 +805,12 @@ function skeleton(s: FigureSpec): Skeleton {
   const still: Limb = { swing: 0, raise: 0.1, bend: 0.12 };
   const leg: Limb = { swing: 0, raise: 0.0, bend: 0 };
   const sk: Skeleton = { lean: s.body === 'elder' ? 0.2 : 0.02, drop: 0, armL: { ...still }, armR: { ...still }, legL: { ...leg }, legR: { ...leg } };
-  const gest = (l: Limb, swing: number, raise: number, bend: number, up = false): void => {
+  const gest = (l: Limb, swing: number, raise: number, bend: number, side = 0, twist = 0): void => {
     l.swing = swing;
     l.raise = raise;
     l.bend = bend;
-    l.up = up;
+    l.side = side;
+    l.twist = twist;
   };
   const armS = s.side > 0 ? sk.armR : sk.armL;
   switch (s.pose) {
@@ -834,7 +837,7 @@ function skeleton(s: FigureSpec): Skeleton {
       gest(sk.armR, -0.1, 0.22, 0.45);
       break;
     case 'wave':
-      gest(armS, 0.15, 1.3, 1.35, true);
+      gest(armS, 0.15, 1.3, 0, 1.35);
       break;
     case 'hold':
       gest(armS, 0.1, s.body === 'child' ? 0.75 : 0.26, 0.1);
@@ -878,8 +881,8 @@ function poseBones(T: Template, s: FigureSpec): THREE.Matrix4[] {
   }
   for (const [sgn, l, arm, fore] of [[-1, sk.armL, ARM_L, FORE_L], [1, sk.armR, ARM_R, FORE_R]] as const) {
     rot[arm].makeRotationX(-l.swing).multiply(_r.makeRotationZ(sgn * (l.raise - T.armOut)));
-    if (l.up) rot[fore].makeRotationZ(sgn * l.bend);
-    else rot[fore].makeRotationX(-l.bend);
+    // rotY(-sgn twist) rotZ(sgn side) rotX(-bend): bent forward, out to the side, turned in (as the shader).
+    rot[fore].makeRotationY(-sgn * (l.twist ?? 0)).multiply(_r.makeRotationZ(sgn * (l.side ?? 0))).multiply(_t.makeRotationX(-l.bend));
   }
   for (let i = 0; i < BONES; i++) {
     const p = T.pivot[i];
@@ -988,7 +991,10 @@ function writeFigure(o: Float32Array, k: number, s: FigureSpec, ground: ((x: num
   o[k + 4] = figureSeed(s);
   o[k + 5] = BODY_LIST.indexOf(s.body);
   o[k + 6] = POSE_LIST.indexOf(s.pose);
-  o[k + 7] = s.side >= 0 ? 1 : -1;
+  // (+-2: a bag in the left hand, so the routine keeps that hand down.)
+  const o2 = outfitOf(s);
+  const bag = (o2 === 'suit' && s.body !== 'woman') || (o2 === 'school' && s.body !== 'child');
+  o[k + 7] = (s.side >= 0 ? 1 : -1) * (bag ? 2 : 1);
   o[k + 8] = s.look;
   o[k + 9] = w?.ex ?? 0;
   o[k + 10] = w?.ez ?? 0;
@@ -1205,7 +1211,13 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
       varying vec3 vC;
       varying float vFade;
 
-      struct Limb { float swing; float raise; float bend; float up; };
+      // swing forward, raise out, bend (elbow forward / knee back), the forearm's side bend and inward twist.
+      struct Limb { float swing; float raise; float bend; float side; float twist; };
+      Limb L3(float s, float r, float b) { return Limb(s, r, b, 0.0, 0.0); }
+      Limb mixL(Limb a, Limb b, float w) { return Limb(mix(a.swing, b.swing, w), mix(a.raise, b.raise, w), mix(a.bend, b.bend, w), mix(a.side, b.side, w), mix(a.twist, b.twist, w)); }
+      // A standing activity: the limbs, and how the head and hips go.
+      struct Act { Limb aL; Limb aR; Limb lL; Limb lR; float yaw; float pitch; float roll; };
+      float hh1(float k, float r) { return fract(sin(k * 12.9898 + r * 78.233) * 43758.5453); }
       Limb armL, armR, legL, legR;
       float lean, drop, spineRoll, headYaw, headPitch, armOut;
       int base;
@@ -1247,7 +1259,82 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         int ai = left ? 7 : 9;
         joint(M, T, rotX(-l.swing) * rotZ(sg * (l.raise - armOut)), uPivot[base + ai]);
         if (b == ai) return;
-        joint(M, T, l.up > 0.5 ? rotZ(sg * l.bend) : rotX(-l.bend), uPivot[base + ai + 1]);
+        joint(M, T, rotY(-sg * l.twist) * rotZ(sg * l.side) * rotX(-l.bend), uPivot[base + ai + 1]);
+      }
+
+      /** Which activity (STANDING) a standing figure does in its k-th stretch, by its pose's temperament. */
+      int pickAct(int P, float k, float r, bool bag) {
+        float h = hh1(k, r);
+        int a = 0;
+        if (P == 3) a = h < 0.4 ? 2 : h < 0.6 ? 3 : h < 0.72 ? 6 : h < 0.85 ? 1 : 0;
+        else if (P == 2) a = h < 0.5 ? 8 : h < 0.62 ? 4 : h < 0.7 ? 5 : h < 0.8 ? 1 : h < 0.85 ? 6 : 0;
+        else if (P == 5) a = h < 0.15 ? 9 : h < 0.45 ? 6 : h < 0.65 ? 1 : 0;
+        else a = h < 0.27 ? 0 : h < 0.41 ? 1 : h < 0.51 ? 2 : h < 0.6 ? 4 : h < 0.67 ? 5 : h < 0.84 ? 6 : h < 0.89 ? 7 : h < 0.94 ? 3 : 0;
+        // Two-handed things aren't for someone holding a bag.
+        if (bag && (a == 2 || a == 4 || a == 5)) a = a == 2 ? 3 : 0;
+        return a;
+      }
+
+      /**
+       * The activities: 0 standing easy, 1 hands in pockets, 2 texting, 3 a call, 4 arms crossed, 5 hands clasped,
+       * 6 looking about, 7 a glance at the watch, 8 talking with a hand, 9 a wave. u: seconds into it; k: which
+       * stretch (the resting leg alternates).
+       */
+      Act act(int a, float u, float k, float t, float r, float side, int body) {
+        Limb hang = L3(0.0, 0.1, 0.12);
+        Limb rest = L3(0.05, 0.05, 0.1);
+        Limb leg = L3(0.0, 0.0, 0.0);
+        bool leftRests = mod(k, 2.0) < 1.0;
+        // (No ?: on structs in ESSL 1.0.)
+        Act A = Act(hang, hang, rest, leg, 0.0, 0.0, -0.035);
+        if (!leftRests) {
+          A.lL = leg;
+          A.lR = rest;
+          A.roll = 0.035;
+        }
+        Limb main = hang;
+        Limb off = hang;
+        if (a == 1) {
+          main = L3(-0.1, 0.22, 0.45);
+          off = main;
+        } else if (a == 2) {
+          main = Limb(0.45, 0.08, 1.45, 0.0, 0.35);
+          off = Limb(0.4, 0.08, 1.4, 0.0, 0.3);
+          A.pitch = 0.35;
+        } else if (a == 3) {
+          main = L3(0.2, 0.32, 2.5);
+          A.yaw = 0.25 * sin(u * 0.4 + r * 5.0);
+        } else if (a == 4) {
+          main = Limb(0.3, 0.02, 1.55, 0.0, 1.0);
+          off = main;
+        } else if (a == 5) {
+          main = Limb(0.12, 0.0, 0.95, 0.0, 0.6);
+          off = main;
+        } else if (a == 6) {
+          A.yaw = 0.75 * sin(u * 0.8 + k * 2.1) + 0.2 * sin(u * 2.3 + r * 6.0);
+          A.pitch = 0.08 * sin(u * 0.5 + k);
+        } else if (a == 7) {
+          // Up to the face for two seconds or so, then down again.
+          float w = smoothstep(0.2, 0.8, u) * (1.0 - smoothstep(2.4, 3.2, u));
+          off = mixL(hang, Limb(0.35, 0.1, 1.9, 0.0, 0.6), w);
+          A.pitch = 0.3 * w;
+          A.yaw = -0.25 * side * w;
+        } else if (a == 8) {
+          main = L3(0.3 + 0.12 * sin(t * 2.1 + r * 7.0), 0.12, 1.25 + 0.3 * sin(t * 3.3 + r * 3.0));
+          off = mixL(hang, L3(0.15, 0.1, 0.6), 0.5 + 0.5 * sin(t * 0.7 + r));
+        } else if (a == 9) {
+          // A short wave, then easy again.
+          float w = smoothstep(0.2, 0.8, u) * (1.0 - smoothstep(2.6, 3.4, u));
+          main = mixL(hang, Limb(0.15, 1.3, 0.0, 1.35 + 0.3 * sin(t * 7.0 + r * 2.0), 0.0), w);
+        }
+        if (side > 0.0) {
+          A.aR = main;
+          A.aL = off;
+        } else {
+          A.aL = main;
+          A.aR = off;
+        }
+        return A;
       }
 
       void main() {
@@ -1255,7 +1342,9 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         int body = int(aPose.x + 0.5);
         base = body * ${BONES};
         armOut = uArmOut[body];
-        float side = aPose.z;
+        float side = sign(aPose.z);
+        // A bag in the left hand: that hand stays down.
+        bool bag = abs(aPose.z) > 1.5;
         float seed = aFig.w;
         // Each figure's own randomness for its idle motion (seeds can be shared by a group).
         float r = fract(sin(dot(aFig.xy, vec2(12.9898, 78.233))) * 43758.5453);
@@ -1303,8 +1392,11 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         // The pose, and on top of it the motion.
         int P = int(aPose.y + 0.5);
         if (crosser && !moving) P = 0;
-        Limb still = Limb(0.0, 0.1, 0.12, 0.0);
-        Limb leg0 = Limb(0.0, 0.0, 0.0, 0.0);
+        // Mid-stride with nowhere to go (set pieces' figures): they stand and go about the routine instead. (Fixed
+        // figures, seed < 0, keep their pose: the showroom, story NPCs.)
+        if (P == 1 && !moving && seed >= 0.0) P = 0;
+        Limb still = L3(0.0, 0.1, 0.12);
+        Limb leg0 = L3(0.0, 0.0, 0.0);
         armL = still;
         armR = still;
         legL = leg0;
@@ -1317,10 +1409,10 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         if (P == 1) {
           float a = sin(phase * 6.2832) * 0.36;
           // The knee bends as the leg goes back (smoothly, so the foot doesn't snap as the legs pass).
-          legL = Limb(a, 0.0, 0.06 + 0.24 * clamp(-a / 0.36, 0.0, 1.0), 0.0);
-          legR = Limb(-a, 0.0, 0.06 + 0.24 * clamp(a / 0.36, 0.0, 1.0), 0.0);
-          armL = Limb(-a * 0.7, 0.1, 0.25, 0.0);
-          armR = Limb(a * 0.7, 0.1, 0.25, 0.0);
+          legL = L3(a, 0.0, 0.06 + 0.24 * clamp(-a / 0.36, 0.0, 1.0));
+          legR = L3(-a, 0.0, 0.06 + 0.24 * clamp(a / 0.36, 0.0, 1.0));
+          armL = L3(-a * 0.7, 0.1, 0.25);
+          armR = L3(a * 0.7, 0.1, 0.25);
           lean += 0.04;
           // The hips drop as far as the swinging legs rise, so the planted foot stays on the ground.
           drop = uPivot[base + 3].y * (1.0 - cos(a));
@@ -1334,47 +1426,47 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
           float sway = sin(t * 0.55 + r * 31.0);
           lean += 0.012 * breath;
           spineRoll = 0.025 * sway;
-          headYaw = aPose.w + 0.22 * sin(t * 0.23 + r * 17.0) + 0.08 * sin(t * 0.61 + r * 5.0);
+          headYaw = aPose.w + 0.12 * sin(t * 0.23 + r * 17.0) + 0.06 * sin(t * 0.61 + r * 5.0);
           headPitch = 0.04 * sin(t * 0.31 + r * 11.0);
           armL.swing += 0.015 * breath;
           armR.swing += 0.015 * breath;
           Limb g = still;
           bool gest = false;
-          if (P == 0) {
-            legR = Limb(0.03, 0.06, 0.02, 0.0);
-          } else if (P == 2) {
-            g = Limb(0.3 + 0.12 * sin(t * 2.1 + r * 7.0), 0.12, 1.25 + 0.3 * sin(t * 3.3 + r * 3.0), 0.0);
-            gest = true;
-            legL = Limb(0.04, 0.04, 0.04, 0.0);
-            legR = Limb(-0.04, 0.06, 0.04, 0.0);
-          } else if (P == 3) {
-            g = Limb(0.2, 0.32, 2.5, 0.0);
-            gest = true;
-            headPitch += 0.25;
-            headYaw = aPose.w + 0.05 * sin(t * 0.3 + r * 4.0);
-          } else if (P == 4) {
-            armL = Limb(-0.1, 0.22, 0.45, 0.0);
-            armR = armL;
-          } else if (P == 5) {
-            // The elbow up near shoulder height, the forearm upright and swinging.
-            g = Limb(0.15, 1.3, 1.35 + 0.3 * sin(t * 7.0 + r * 2.0), 1.0);
-            gest = true;
-          } else if (P == 6) {
-            g = Limb(0.1, body == 2 ? 0.75 : 0.26, 0.1, 0.0);
+          if (P == 6) {
+            g = L3(0.1, body == 2 ? 0.75 : 0.26, 0.1);
             gest = true;
           } else if (P == 7) {
             // Sitting (a seat 0.46 m up): the same as skeleton()'s 'sit', breathing.
-            legL = Limb(1.45, 0.07, 1.45, 0.0);
+            legL = L3(1.45, 0.07, 1.45);
             legR = legL;
-            armL = Limb(0.3, 0.08, 0.75, 0.0);
+            armL = L3(0.3, 0.08, 0.75);
             armR = armL;
             lean = -0.05 + 0.01 * breath;
             spineRoll *= 0.3;
             drop = uPivot[base + 3].y - 0.46;
           } else if (P == 8) {
             // Holding a strap, swaying a little with the ride.
-            g = Limb(2.75 + 0.04 * sway, 0.12, 0.25, 0.0);
+            g = L3(2.75 + 0.04 * sway, 0.12, 0.25);
             gest = true;
+          } else {
+            // Standing: a routine of everyday things a few seconds each (the pose sets the temperament: a talker
+            // mostly talks), easing from one to the next.
+            float dur = 5.0 + 6.0 * r;
+            float tt = t / dur + r * 37.0;
+            float k = floor(tt);
+            float u = fract(tt) * dur;
+            Act A = act(pickAct(P, k, r, bag), u, k, t, r, side, body);
+            Act B = act(pickAct(P, k + 1.0, r, bag), u - dur, k + 1.0, t, r, side, body);
+            float w = smoothstep(dur - 1.2, dur, u);
+            armL = mixL(A.aL, B.aL, w);
+            armR = mixL(A.aR, B.aR, w);
+            legL = mixL(A.lL, B.lL, w);
+            legR = mixL(A.lR, B.lR, w);
+            headYaw += mix(A.yaw, B.yaw, w);
+            headPitch += mix(A.pitch, B.pitch, w);
+            spineRoll += mix(A.roll, B.roll, w);
+            armL.swing += 0.015 * breath;
+            armR.swing += 0.015 * breath;
           }
           if (gest) {
             if (side > 0.0) armR = g;
