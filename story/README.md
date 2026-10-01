@@ -13,12 +13,15 @@ It's plain Markdown in git, next to the content it points at (node ids in `conte
 |---|---|
 | [premise.md](premise.md) | The pitch, the shape of the year, the pillars, tone |
 | [style.md](style.md) | How the writing reads: voice, dialogue, the three ways a scene can play, language |
+| [names.md](names.md) | Who's who and where: every district and person named so far, what the names mean, plain English handles |
 | [world.md](world.md) | Tōto as the story sees it: districts, places and every story node, by district |
 | [factions.md](factions.md) | The groups with power: yakuza, the agency, the police, the racing scene |
 | [cast/](cast/README.md) | One file per character that matters, plus the minor ones in one list |
-| [episodes/](episodes/README.md) | The episodes, one file each: character, story, the two editions, what it reveals |
+| [main/](main/README.md) | The main story: one per season, in chapters, with its lead, reveal and machine |
+| [side/](side/README.md) | Optional side content: side cases, side stories, and the pool of ideas not yet placed |
 | [threads/](threads/README.md) | Plot threads: what happens, the clues, the flags, the scenes |
-| [timeline.md](timeline.md) | Chapters (one per season), episodes, what happens when |
+| [dating.md](dating.md) | The open world's dating: one-night stands and short stories, how they play, the rules |
+| [timeline.md](timeline.md) | Chapters (one per season), the map by season, what each season brings |
 | [flags.md](flags.md) | Every flag: what the engine owns, what the story sets, where each is set and read |
 
 ## Canon, proposals and open questions

@@ -1,7 +1,7 @@
 # Name 名前
 
 **Role:** one line (what they are to the story).
-**Episode character:** yes / no (the centre of an episode).
+**Story character:** yes / no (the centre of a season's story or a side case).
 **Home:** the place and its node ids.
 **Look:** a line, and their entry in Krea Studio's Cast (name, outfits, LoRA) once they have one.
 

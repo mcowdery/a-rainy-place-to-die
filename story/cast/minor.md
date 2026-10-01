@@ -8,7 +8,7 @@ gets their own file.
 | Who | Node | Notes |
 |---|---|---|
 | Kuroneko's mama | `yokocho.mama`, `yokocho.kuroneko` | Runs BAR 黒猫 in Hoshikuzu Yokocho. A story hook (Kaburo plan). |
-| Julie | `live_house.show` | Plays the basement LIVE HOUSE 地下室. Her look is the `ohwx julie` LoRA in Studio (synthetic, usable anywhere). **Open:** singer or underground idol; Stella's or not. |
+| Julie | `live_house.show` | The face in all of Kaburo's ads (the `ohwx julie` LoRA in Studio: synthetic, usable anywhere). Plays the basement LIVE HOUSE 地下室. **Proposed:** a former idol, now gravure and ads, tempted back up by the idol manager (see [the pool](../side/pool.md)). |
 | The racer at Ebisu-jima PA | `ebisu_pa.racer` | By the silver coupe; offers the city races. **Open:** name, crew. |
 | The night clerk | `tsukiyo.clerk` | Manga Café Tsukiyo, where the MC sleeps. |
 | The mechanic | `speed_lab.mechanic` | SPEED LAB, the tuning shop by the port. |

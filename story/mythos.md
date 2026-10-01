@@ -1,6 +1,6 @@
 # The hidden layer
 
-What's really going on behind the episodes. The player learns it slowly, a piece an episode, and some of it
+What's really going on behind the stories. The player learns it slowly, a piece at a time, and some of it
 never outright. Most of the story stays grounded; this is the part that isn't.
 
 ## The man behind it
@@ -9,12 +9,43 @@ never outright. Most of the story stays grounded; this is the part that isn't.
 - He doesn't care about humanity at all. People are toys and tools to him. He wants control, a kingdom to rule,
   and his own pleasures.
 - **Satan** is behind him, but only alluded to: never shown, never even talked about.
-- **Open:** who he is in the city (a public face, or no face at all?), when the player first sees him, and
-  what he looks like.
+- **He has no face.** Mack doesn't know what he looks like, and neither does the player: whenever he's shown,
+  his face is blocked or blurred (a reflection, a shadow, a hand, a smeared photograph). All anyone knows is
+  that he's Japanese, very wealthy, and that when he speaks, people listen.
 - **He is the figure the detective hunts**: Red John-like, elusive, everywhere, with followers. Every glimpse
   the detective gets of him is a glimpse of the man behind it all.
+- **He kills the cuckolded men.** **Proposed**, his signature as a killer, the way a crime drama's killer has
+  one: the men whose ruin the circle arranged and watched, he finishes himself. He takes them, humiliates them,
+  mutilates them and kills them, in the most humiliating way, because he thinks them beneath him: the weak, the
+  ones another man took a woman from. It's the end of the cuckolding, its psychology carried to the last step,
+  and his pleasure. The scenes are dressed as something else (a suicide, a murder-suicide, an accident) and the
+  police are paid to believe it. Victims so far: Minato (spring). It turns on Mack too: every married woman he
+  sleeps with leaves a cuckolded man behind (the first night's husband, perhaps; and in autumn, the oyabun).
 - **His calling card is the number 200** (the two hundred Watchers), left small and easy to miss where he has
-  had a hand. It first appears in [episode 1](episodes/01-osananajimi.md) and recurs through the year.
+  had a hand. It first appears in [the opening](main/spring/01-osananajimi.md) and recurs through the year.
+
+### His profile
+
+For keeping the writing consistent: the rules of his killings, as a profiler would put them. Mack builds this
+profile across the year, a piece with each death (perhaps with the kōban officer's help), so each one teaches
+the player something about him.
+
+- **Type.** A "mission" killer with the dark tetrad's four traits: narcissism (he's above everyone),
+  Machiavellianism (people are tools), psychopathy (no empathy), sadism (their suffering is his pleasure). Power
+  enables it, as it did for the sadistic aristocrats of history.
+- **Victims.** Men the circle has cuckolded: the men another man took a woman from, whom he counts as the bottom
+  of the hierarchy. Never women; the women are his instrument, not his target. Never the men who did the taking.
+- **Method** (what he does to kill): the circle does the work first. Seduction, the recording, the man's ruin
+  delivered to him (the video sent to Minato). Then he's taken, at night, by the order's people.
+- **Signature** (what he does because he needs to): humiliation, layer by layer: the woman, the pride, the body,
+  the life. The mutilation degrades; it isn't needed to kill. And the 200, small, somewhere near.
+- **Staging.** Every scene is dressed as something ordinary (a suicide, a murder-suicide, an accident), and the
+  police are paid to believe it. The signature survives under the dressing, for anyone who looks.
+- **Why.** Status, total and final: nothing of the man's rank is left. It's the cuckolding's psychology carried
+  to its last step: the consensual game's humiliation, turned into a predator's. And it's pride, the sin that
+  holds others beneath it.
+- **His weakness.** He needs the humiliation to land. A man who has already forgiven, who has nothing left to be
+  humiliated by, breaks the game (the oyabun, in autumn). Humility can't be humiliated.
 
 ## The order
 
@@ -28,7 +59,7 @@ they know it or not. It serves the man behind it.
 - **The tangled.** People in the city who get drawn in act like cultists, but they aren't the real group, only
   followers. The order itself is never in the room.
 - It gathers data on people: their sins, their desires, their humiliations. The NTR and humiliation stories in
-  the episodes are part of what it collects.
+  the stories are part of what it collects.
 - But not only for use. There's pure evil in it, and disdain: they do it because they enjoy it.
 - **Names.** All three are used; which is the order's own name is **Open**:
   - **二百人衆 the Two Hundred**, after the two hundred Watchers who came down on Mount Hermon (Enoch). Either
@@ -77,14 +108,15 @@ with his body, is close to powerless against it.
 ## The light
 
 Christianity is the subtle light in a dark story: ambiguous, alluded to rather than explicit, never preached.
-The exception is the ending, which is a little more revealing and more explicitly Christian than the rest.
+The exceptions are the order (where the Christian framework can show more openly) and the ending, which is a
+little more revealing and more explicitly Christian than the rest.
 
 - An allusion: Japan's hidden Christians, the Kakure Kirishitan, who kept their faith secret for 250 years
   behind Buddhist disguises: a Maria Kannon statue, a cross carved into a stone lantern. The old monk sweeping
   Tōkō-ji's steps may be a descendant.
-- **Open:** where else the light shows: a person, a church, a moment of grace in an episode.
+- **Open:** where else the light shows: a person, a church, a moment of grace in a story.
 
 ## The detective's part
 
 The order killed the detective and rebuilt him as a tool; he escaped with most of his memory gone, helped by a
-mysterious insider. See [cast/mc.md](cast/mc.md).
+mysterious figure, Michael ([cast/michael.md](cast/michael.md)). See [cast/mc.md](cast/mc.md).

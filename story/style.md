@@ -16,6 +16,17 @@ How the writing reads, and what each way of telling a scene can hold.
   Welcome to KAIWA.).
 - Captions are present tense, second person, spare: "The rain stops. Somewhere above, a window closes."
 
+## Grounded
+
+Everything leans grounded in reality. The exceptions come from two places only: **technology** (Mack's body, the
+machines, the Beast) and the **Christian supernatural** (demons, angels, the Nephilim, fallen ones). Anything
+supernatural has to work by the Christian framework: the occult (fortune telling, a séance, a curse) can be real
+if what's really behind it is demonic, but the story prefers the grounded explanation: a fortune teller is
+usually a fraud, a strange coincidence usually has a human cause.
+
+The Christian themes stay subtle: hinted at, never explicit, left for the reader to interpret that way. They
+become more explicit only where the order is involved, and at the very end.
+
 ## The ways a scene can play
 
 | Way | What the player sees | Good for | Made with |
@@ -65,6 +76,13 @@ to a spawn (`exit:<place>.<spawn>`) or where the player stood.
   and add frames that lead back to where the story was going, but never the choices' targets, the flags or the
   entry points. So write the standard scene first, with a frame where the explicit part goes (the fade); the
   overlay replaces that frame and adds its own after it.
+
+## The killings
+
+The faceless man's killings (see [mythos.md](mythos.md)) are shown the way crime dramas show them: the scene
+found afterwards, the reactions, the detective's reconstruction, the horror implied more than shown, never
+lingered on. They are never sexualised and never part of the explicit edition: the uncensored edition is for
+consensual sex, not for this.
 
 ## Crimes against children (under consideration)
 

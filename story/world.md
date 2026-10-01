@@ -89,7 +89,8 @@ Residential, west of Asagiri on the Seikō Line. Houses, マンション, Sakura
 
 ## 電光町 Denkō-chō: the electric town
 
-After Akihabara. Denkō-dōri's sign-covered towers, parts shops, maid café lanes.
+After Akihabara. Denkō-dōri's sign-covered towers, parts shops, maid café lanes. The otaku district: anime,
+manga, eroge, cosplay and hentai culture. Opens in summer, the season of the conventions.
 
 | Node | Kind | Name | Scene |
 |---|---|---|---|
@@ -146,6 +147,9 @@ Wooden houses and apāto on narrow lanes, the temple quarter, Tōto Tower, the r
 loyalties.
 
 - Kōpo Kawabata: the detective's room 201, with the case board.
+- **To build: a church**, with an interior you can walk into. **Proposed:** a small Catholic church in the old
+  town, near Tōkō-ji and Mack's office: pews, candles, a stained-glass window, a confessional (noir needs a
+  confessional). Japan's Catholics go back to the hidden Christians. How it's used in the story stays subtle.
 - The Rindō-gumi's family house: the gate with the crest lanterns.
 
 | Node | Kind | Name | Scene |

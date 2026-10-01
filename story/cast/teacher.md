@@ -1,6 +1,6 @@
 # The teacher
 
-**Role:** an episode character. She's a teacher.
+**Role:** a story character. She's a teacher.
 **Home:** コーポ桜 Kōpo Sakura, room 102, Sakuragaoka: downstairs from room 203, the MC's apāto on the housing
 ladder's second rung. Node: `kopo_sakura.tests` (the tests to mark).
 **Look:** **Open.**

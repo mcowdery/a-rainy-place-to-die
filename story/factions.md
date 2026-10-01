@@ -8,10 +8,10 @@ Behind all of them is the order ([mythos.md](mythos.md)); most of them don't kno
 The old yakuza family, based in the old town. Their family house in Kawabata: a plastered wall, a heavy gate
 with the crest's lanterns, a pine, black sedans, young men outside. Nodes: `rindo.gate`, `rindo.guard`.
 
-- **Open:** the oyabun, the lieutenants, what they run (the old town's festivals and stalls, construction,
-  the port?), their code.
-- **Open:** how they stand with Ryujin Kogyo: the same organisation (Ryujin a front of theirs), rivals, or
-  an old family being pushed out by a new one.
+- **Proposed** (autumn, [main/autumn.md](main/autumn.md)): the oyabun Rindō Tesshin, dying; his wife Sayo, the family's
+  real mind; the wakagashira. The old code: no drugs, no women sold; the festival stalls and the old town
+  protected; the family's land under the Kasumi-chō redevelopment site.
+- **Proposed:** an old family being taken apart by a new one: Ryujin Kogyo, the Amakudari-kai's front.
 
 ## 竜神興業 Ryujin Kogyo
 
@@ -26,7 +26,7 @@ a gold 竜 crest, guards. Their dragon crowns the mega-sign on the crossing. Nod
 
 The idol agency, in an Asagiri tower. A glamorous surface, darker underneath. Its idols live in the dorm in
 Sakuragaoka; their stages run from the basement live house in Kaburo to the Stella Theater in Denkō-chō, Tōto
-Bay Hall and Tōto Dome. The idol manager (an episode character) works for it. Nodes: `stella_production.*`,
+Bay Hall and Tōto Dome. The idol manager (a story character) works for it. Nodes: `stella_production.*`,
 `stella_dorm.*`, `idol_theatre.*`, `bay_hall.*`, `dome.*`, `manager_flat.*`.
 
 - **Open:** what's underneath: whose money, what the girls are asked to do.

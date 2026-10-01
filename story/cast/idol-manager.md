@@ -1,6 +1,6 @@
 # The idol manager
 
-**Role:** an episode character; manages idols for Stella Production.
+**Role:** a story character; manages idols for Stella Production.
 **Home:** メゾン電光 Maison Denkō, room 603: a seven-storey マンション on Denkō-chō's back streets, near the
 Stella Theater. Nodes: `manager_flat.schedule` (the girls' week on the whiteboard), `manager_flat.laptop`
 (mail from the agency).

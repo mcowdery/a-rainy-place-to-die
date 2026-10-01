@@ -1,4 +1,4 @@
-# Episode 1: 幼馴染 Osananajimi (working title)
+# Spring, chapter 1: 幼馴染 Osananajimi (working title)
 
 The story's opening. It isn't the detective's: it belongs to a university student, and it's intentionally dark
 and provocative, a shock to set the tone for everything after (as the Red Wedding does): a happy, warm build-up
@@ -6,7 +6,7 @@ with only subtle signs, then the betrayal.
 
 ## The characters
 
-- **The student.** A university student (Tōto University, Gakuenzaka). The episode is his point of view: the
+- **The student.** A university student (Tōto University, Gakuenzaka). The opening is his point of view: the
   player plays him. **Open:** name, age, home (a student apāto in Gakuenzaka-shita's student town is the
   natural fit; not built yet).
 - **The girlfriend.** His childhood friend (幼馴染), now his girlfriend. Tempted by the senpai.
@@ -45,20 +45,41 @@ with only subtle signs, then the betrayal.
 3. **The message.** A KAIWA message from the senpai: pictures and videos of the two of them having sex, from that
    night. The phone (Tab) already plays photos and videos in chats.
 4. **The pivot.** The story cuts straight to the detective at 22:00, day 1: in bed with a married woman (see
-   [cast/mc.md](../cast/mc.md)).
-5. **The aftermath.** That same night, while the detective is with her, the student kills the senpai, then
-   himself. The girlfriend lives.
-6. **The case.** The police close it in a day: a jealous boy who snapped. The student's mother won't believe it
+   [cast/mc.md](../../cast/mc.md)).
+5. **The aftermath.** That same night, while the detective is with her, Minato and the senpai die. The girlfriend
+   lives. **Proposed** (the faceless man's signature, see [mythos.md](../../mythos.md)): Minato killed nobody. The
+   faceless man took him that night, humiliated him, mutilated him and killed him: the first of his cuckolded
+   men. The senpai, only a tool, was killed cleanly as a loose end. The scene was arranged as a murder-suicide.
+6. **The case.** The police close it in a day: a jealous boy who snapped. (**Proposed:** they were paid to; the
+   real autopsy is sealed.) The student's mother won't believe it
    and brings it to the detective (the noir opening: a client at the door). It looks like another sad, tragic,
    otherwise ordinary case.
-7. **The survivor.** The girlfriend is the living witness, and carries the episode's grey areas from her side:
+7. **The survivor.** The girlfriend is the living witness, and carries the opening's grey areas from her side:
    why she did it, what she thought it was, the guilt. She can return later in the year.
 8. **The calling card: the number 200.** The girlfriend says it in an interview with the detective: something she
    heard. She doesn't know what it means, and won't say anything more. She isn't telling the whole story, and
    she's scared. It's what the senpai said about the video, that night: it was "for the two
-   hundred". It's the first sign the order is involved. It shows the senpai didn't act alone: the seduction and the video were meant to push the
-   student exactly this far, for someone who wanted to watch. The student still chose what he did; they made
-   sure he would.
+   hundred". It's the first sign the order is involved. It shows the senpai didn't act alone: the seduction and the video were meant to ruin the
+   student, for someone who wanted to watch, and then to finish what was left of him.
+
+## Koharu, after
+
+**Proposed.** She's one of the story's recurring characters, a year-long arc:
+
+- **Spring:** the survivor. Shame, the video still out there, the 200 she won't explain. She drops out and works
+  nights at BAR 黒猫 in Hoshikuzu Yokocho. The spring finale ([chapter 5](05-the-end-of-the-blossom.md)) is hers: the order's
+  followers offer her forgiveness.
+- **Summer and autumn:** she's among the people Mack finds worshipping *something* he doesn't understand. He
+  tries to pull her out; she calls him a hypocrite, and she's right: he betrayed his wife, and his daughter died
+  for it.
+- **The mirror.** Both of them betrayed someone who died of it. Each sees their own sin in the other, and
+  neither can absolve the other. Only grace can: the story's quiet light.
+- **Saved, by Mack.** She comes out of the order's circle because of something good and honest she sees in
+  him. Afterwards she helps out at the detective agency. He's still a lone wolf, but she and Kuroneko's mama
+  become two of the few people close to him.
+- **Something between them:** complicated, and eventually romantic. It gets complicated when he learns his wife
+  may still be alive. And he stays a loose man who sleeps around almost to the end; he only starts to become
+  better at the very end. **Proposed** shape: see [the detective's thread](../../threads/the-detective.md).
 
 ## The two editions
 
@@ -74,5 +95,13 @@ confident man taking what the gentle boy had; inequality), the cruelty of sendin
 
 ## Open
 
-- **Open:** what she's scared of: who has warned her, and how.
-- **Open:** whether the senpai knew what he was part of (one of the order's tangled followers?) or was used too.
+- **Names.** The student, 佐伯 湊 **Saeki Minato**. The girlfriend, 小春 **Koharu** (little spring: she
+  belongs to the season). The senpai, 神宮寺 玲 **Jingūji Rei**, an old, moneyed name that sounds like the ladder
+  he stands on.
+- **What she's scared of.** The day after the killings, one KAIWA message from a number that doesn't
+  exist: the video's first frame, and "200". Nothing else. The video is still out there, someone still has it,
+  and they know where she is. A man she doesn't know also told her, kindly, that it was just a jealous boy.
+- **Whether the senpai knew.** He was on the order's lowest rung and didn't know it: he thought he was
+  selling amateur videos to a circle of rich men who paid well, and promised him introductions and a future.
+  "For the two hundred" was their phrase, not his. The last instruction they gave him was to send the video to
+  the boyfriend: they wanted to watch the boy break. The senpai did it without asking why.
