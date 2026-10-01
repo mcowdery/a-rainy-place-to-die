@@ -335,14 +335,17 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: s
     k.box(0x1a4aa0, -30, 70, T0 - 0.02, T0 + 16.02, 2.2, 2.9);
     k.box(0xf0f0ec, -18, 56, T0 + 1.5, T0 + 14.5, 6, 10.5);
     k.box(0xf0f0ec, -8, 36, T0 + 2.5, T0 + 13.5, 10.5, 14);
-    for (const [y0, y1, u0, u1] of [[7.2, 8.4, -17, 55], [11.5, 12.6, -7, 35], [3.6, 4.6, -26, 66]] as const) k.glow([1.6, 1.4, 1.0], u0, u1, T0 - 0.05, T0 + 0.05, y0, y1, EMIT.lamp);
+    // Its windows, a row to each deck: separate panes, warm and soft (lit cabins, not floodlights).
+    for (const [y0, y1, u0, u1, w, step] of [[7.3, 8.3, -17, 55, 1.2, 1.9], [11.6, 12.5, -7, 35, 1.0, 1.7], [3.7, 4.5, -26, 66, 0.55, 2.4]] as const) {
+      for (let u = u0 + 0.6; u + w < u1 - 0.4; u += step) k.glow([0.45, 0.36, 0.23], u, u + w, T0 - 0.04, T0 + 0.04, y0, y1, EMIT.lamp);
+    }
     k.box(0x1a4aa0, 10, 18, T0 + 5, T0 + 11, 14, 19);
     k.box(0x101010, 10, 18, T0 + 5, T0 + 11, 19, 20);
     k.glow([2.5, 0.2, 0.15], 13.8, 14.2, T0 + 7.8, T0 + 8.2, 20, 20.4, EMIT.always);
     plate(k, 18, 1.6, 20, T0 - 0.1, 4.2, (g, W, H) => {
       g.fillStyle = '#f0f0ec';
       g.fillRect(0, 0, W, H);
-      text(g, 'さんふらわあ とうと', W / 2, H * 0.72, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#1a4aa0');
+      text(g, 'フェリーかもめ 東都', W / 2, H * 0.72, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#1a4aa0');
     }, false, 'in');
     k.person(12, -2, 0, 1, { body: 'woman', pose: 'stand', color: [0.9, 0.85, 1.0] });
     k.person(22, -3, -1, 0, { body: 'man', pose: 'phone', color: [0.8, 0.9, 1.0] });

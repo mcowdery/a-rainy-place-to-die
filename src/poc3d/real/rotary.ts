@@ -230,7 +230,7 @@ export function buildRotary(b: Building3, city: THREE.Material, ghost: THREE.Mat
       text(g, BAY_TO[i].split(' ')[0], 130, 128, "bold 36px 'Yu Gothic', 'Meiryo', sans-serif", '#ffffff');
       text(g, BAY_TO[i].split(' ')[1], 130, 170, "24px 'Arial', sans-serif", '#c8d8f0');
     }), 1.3, 1.0, c + 2.55, 33.3, 2.4, 'out', 1.15);
-    const bus = parkedBus(BAY_TO[i].split(' ')[0], city);
+    const bus = parkedBus(BAY_TO[i].split(' ')[0], city, BAY_TO[i].split(' ').slice(1).join(' '));
     const [x, z] = toWorld(f, c, 31.2);
     bus.position.set(x, 0.02, z);
     // Heading +u (keep left: the doors, on the bus's left, open onto the south kerb).

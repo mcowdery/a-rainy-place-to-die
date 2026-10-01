@@ -82,7 +82,8 @@ class BusScreens {
     g.fillText(this.line.en, 150, 170, 350);
     g.fillStyle = '#ffd890';
     g.font = "26px 'Yu Gothic', 'Meiryo', sans-serif";
-    g.fillText('循環  ·  LOOP  ·  均一 ¥210', 20, 226, 480);
+    // A loop line says so; a terminal's bus where it's going.
+    g.fillText(this.line.stops.some((st) => st) ? '循環  ·  LOOP  ·  均一 ¥210' : '行  ·  均一 ¥210', 20, 226, 480);
     // The next-stop screen inside (bottom half): 次は / Next, the stop big, the stop-request lamp.
     g.fillStyle = '#0e1016';
     g.fillRect(0, 256, 512, 256);

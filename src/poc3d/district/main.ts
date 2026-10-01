@@ -48,7 +48,7 @@ import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../re
 import { buildRotary, type RotaryBuilt } from '../real/rotary';
 import { interiorFor, type Interior } from '../real/interiors';
 import { hash } from '../../core/hash';
-import { SignalLamps, TrafficSystem, type DrivenVehicle, setTrafficGround } from '../real/traffic';
+import { SignalLamps, TrafficSystem, type DrivenVehicle, setTrafficGround, useNewBuses } from '../real/traffic';
 import { Driving } from './driving';
 import { CITY_ASSISTS, OwnCar } from './ownCar';
 import { DamageHud } from './damageHud';
@@ -358,6 +358,7 @@ async function run(): Promise<void> {
   // The new trains (real/trainCar.ts, under review): walk about inside while they run. ?transit=new turns them on.
   const transitNew = params.get('transit') === 'new';
   const carMats: CarMaterials | null = transitNew ? { city, glass: carGlass(), ads: taxiAds } : null;
+  useNewBuses(carMats);
   const trainLines = new Map(rails.map((l) => [l.id, new TrainSystem(l, railStations.filter((s) => s.line === l.id), city, carMats)]));
   for (const t of trainLines.values()) {
     scene.add(t.group);

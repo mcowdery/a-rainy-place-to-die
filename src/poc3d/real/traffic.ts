@@ -200,8 +200,27 @@ function busModel(line: BusLine): { body: THREE.BufferGeometry; glass: THREE.Buf
   return { body: mb.build()!, glass: gb.build()!, signs };
 }
 
-/** A parked bus (scenery: a terminal's bays), pointing +z, its destination on the board. */
-export function parkedBus(destination: string, city: THREE.Material): THREE.Group {
+/** The new buses for the scenery's parked ones too (?transit=new): set by the page before the set pieces are built. */
+let parkedNew: CarMaterials | null = null;
+export function useNewBuses(mats: CarMaterials | null): void {
+  parkedNew = mats;
+}
+
+/** A parked bus (scenery: a terminal's bays), pointing +z, its destination on the board (en: in English). */
+export function parkedBus(destination: string, city: THREE.Material, en = ''): THREE.Group {
+  if (parkedNew) {
+    const line = { id: 'kaburo', name: destination, en, rect: [0, 0, 0, 0], buses: 1, stops: ['', '', '', ''] } as unknown as BusLine;
+    const bus = buildBus2(line, parkedNew);
+    // Its wheels (standing still, so plain meshes).
+    for (const w of BUS2_WHEELS.spots) {
+      const mb = new MeshBuilder(4096);
+      addWheel(mb, BUS2_WHEELS.r, BUS2_WHEELS.tw, w.sd, BUS2_WHEELS.rims);
+      const wheel = new THREE.Mesh(mb.build()!, city);
+      wheel.position.set(w.x, w.y, w.z);
+      bus.obj.add(wheel);
+    }
+    return bus.obj;
+  }
   const m = busModel({ name: destination } as BusLine);
   const g = new THREE.Group();
   g.add(new THREE.Mesh(m.body, city));
