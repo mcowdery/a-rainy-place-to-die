@@ -655,7 +655,7 @@ export class Lightning {
   private readonly boltMat: THREE.MeshBasicMaterial;
 
   constructor() {
-    this.boltMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
+    this.boltMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide, forceSinglePass: true });
     this.bolt = new THREE.Mesh(new THREE.BufferGeometry(), this.boltMat);
     this.bolt.frustumCulled = false;
     this.bolt.renderOrder = 1001;
@@ -804,6 +804,7 @@ export class LampCones {
         depthWrite: false,
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
+        forceSinglePass: true,
         vertexShader: /* glsl */ `
           varying float vH;
           varying float vEdge;

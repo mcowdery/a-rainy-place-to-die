@@ -30,7 +30,7 @@ export class GpsMarks {
     s.closePath();
     const geo = new THREE.ShapeGeometry(s);
     geo.rotateX(-Math.PI / 2);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, blending: THREE.AdditiveBlending });
     this.chevrons = new THREE.InstancedMesh(geo, mat, MAX);
     this.chevrons.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3);
     this.chevrons.count = 0;
@@ -50,12 +50,12 @@ export class GpsMarks {
     const tex = new THREE.CanvasTexture(cv);
     this.beacon = new THREE.Mesh(
       new THREE.CylinderGeometry(1.1, 1.1, 220, 20, 1, true).translate(0, 110, 0),
-      new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(0.5, 1.2, 1.6), transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false }),
+      new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(0.5, 1.2, 1.6), transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, blending: THREE.AdditiveBlending, fog: false }),
     );
     this.beacon.renderOrder = 4;
     this.ring = new THREE.Mesh(
       new THREE.RingGeometry(2.2, 2.7, 40).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+      new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, blending: THREE.AdditiveBlending }),
     );
     this.ring.renderOrder = 4;
     this.group.add(this.chevrons, this.beacon, this.ring);

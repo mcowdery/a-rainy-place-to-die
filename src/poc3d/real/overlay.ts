@@ -30,6 +30,7 @@ const fragmentShader = /* glsl */ `
   uniform vec2 uRes;
   uniform vec2 uCellPx;
   uniform float uGrain;
+  uniform float uOff;
   uniform vec2 uDissolve;
   uniform float uSky;
   uniform float uAll;
@@ -51,12 +52,14 @@ const fragmentShader = /* glsl */ `
     vec2 cell = floor(px / uCellPx);
     vec2 local = fract(px / uCellPx);
     vec2 cc = (cell + 0.5) * uCellPx / uRes;
-    vec2 q = uCellPx * 0.25 / uRes;
-    vec3 avg = 0.25 * (texture2D(tScene, cc - q).rgb + texture2D(tScene, cc + q).rgb
-      + texture2D(tScene, cc + vec2(q.x, -q.y)).rgb + texture2D(tScene, cc + vec2(-q.x, q.y)).rgb);
     vec3 img = texture2D(tScene, vUv).rgb;
     // Guard the post chain: any NaN / Inf / runaway value from the scene would be smeared into a disc by bloom.
     if (any(isnan(img)) || any(isinf(img))) img = vec3(0.0);
+    // Overlay off: only the guard (no cell average, depth or glyphs: this pass is then little more than a copy).
+    if (uOff > 0.5) { gl_FragColor = vec4(clamp(img, 0.0, 48.0), 1.0); return; }
+    vec2 q = uCellPx * 0.25 / uRes;
+    vec3 avg = 0.25 * (texture2D(tScene, cc - q).rgb + texture2D(tScene, cc + q).rgb
+      + texture2D(tScene, cc + vec2(q.x, -q.y)).rgb + texture2D(tScene, cc + vec2(-q.x, q.y)).rgb);
     if (any(isnan(avg)) || any(isinf(avg))) avg = vec3(0.0);
     img = min(img, vec3(48.0));
     avg = min(avg, vec3(48.0));
@@ -127,6 +130,7 @@ export class AsciiOverlayPass extends Pass {
         uRes: { value: new THREE.Vector2(1, 1) },
         uCellPx: { value: new THREE.Vector2(cellW, cellH) },
         uGrain: { value: 0.2 },
+        uOff: { value: 0 },
         uDissolve: { value: new THREE.Vector2(120, 500) },
         uSky: { value: 0.6 },
         uKeep: { value: new THREE.Vector2(0.3, 0.6) },
@@ -178,6 +182,7 @@ export class AsciiOverlayPass extends Pass {
     const [near, far] = this.fog;
     const p = this.presetName;
     u.uGrain.value = p === 'vibe' ? 0.15 : p === 'heavy' ? 0.45 : 0;
+    u.uOff.value = p === 'off' ? 1 : 0;
     u.uSky.value = p === 'off' ? 0 : p === 'vibe' ? 0.7 : 1;
     u.uAll.value = p === 'ascii' ? 1 : 0;
     (u.uKeep.value as THREE.Vector2).set(p === 'vibe' ? 0.3 : p === 'heavy' ? 0.12 : 0, p === 'vibe' ? 0.65 : p === 'heavy' ? 0.35 : 0);

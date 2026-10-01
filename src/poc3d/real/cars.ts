@@ -1,6 +1,6 @@
 import { hash } from '../../core/hash';
 import { CITY_CARS, isTaxi, pickCar } from '../district/carMix';
-import { addVehicle, addVehicleMarks, PAINTS, taxiAdFor, type CarType, type VehicleSigns } from '../models/vehicles';
+import { addVehicle, addVehicleLow, addVehicleMarks, PAINTS, taxiAdFor, type CarType, type VehicleSigns } from '../models/vehicles';
 import { KIND, lin, MeshBuilder } from './meshBuilder';
 
 /**
@@ -32,10 +32,24 @@ const built = new Map<string, MeshBuilder>();
 const PLACEHOLDER = 0x010203;
 const WRAP_PLACEHOLDER = 0x030201;
 
+const pickedOf = (c: CarSpec): { type: CarType; paint: number } => {
+  const picked = c.type ? { type: c.type, paint: PAINTS[c.type][hash(c.variant, 0x9a1) % PAINTS[c.type].length] } : pickCar(CITY_CARS, c.variant);
+  return { type: picked.type, paint: c.paint ?? picked.paint };
+};
+
+/** The same parked car for the middle distance: its model's size and paint as a handful of faces (addVehicleLow). */
+export function addCarLow(mb: MeshBuilder, c: CarSpec): void {
+  const { type, paint } = pickedOf(c);
+  const l = Math.hypot(c.fx, c.fz) || 1;
+  addVehicleLow(mb, { x: c.x, z: c.z, fx: c.fx / l, fz: c.fz / l, type, paint });
+  mb.kind = KIND.plain;
+  mb.style = [0, 0, 0, 0];
+}
+
 /** Adds a parked car to the builder; with `signs`, its lettering and ads too. */
 export function addCar(mb: MeshBuilder, c: CarSpec, signs?: VehicleSigns): void {
-  const picked = c.type ? { type: c.type, paint: PAINTS[c.type][hash(c.variant, 0x9a1) % PAINTS[c.type].length] } : pickCar(CITY_CARS, c.variant);
-  const paint = c.paint ?? picked.paint;
+  const picked = pickedOf(c);
+  const paint = picked.paint;
   const detail = c.detail ?? 0.25;
   const livery = isTaxi(picked.type);
   const base = livery ? paint : PLACEHOLDER;

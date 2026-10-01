@@ -180,7 +180,7 @@ export class Kit {
     }
     const g = this.glassB.build();
     if (g) {
-      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x9ab8c4, transparent: true, opacity: 0.2, roughness: 0.05, metalness: 0.2, depthWrite: false, side: THREE.DoubleSide }));
+      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x9ab8c4, transparent: true, opacity: 0.2, roughness: 0.05, metalness: 0.2, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }));
       m.renderOrder = 3;
       this.group.add(m);
     }

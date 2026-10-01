@@ -265,7 +265,7 @@ export function buildStation(b: Building3, city: THREE.Material, names: StationN
   };
   pane(0.3, 18, 0, 8.3, 0.15);
   pane(28, fw - 0.3, 0, 8.3, 0.15);
-  const glassMesh = new THREE.Mesh(glass.build()!, new THREE.MeshStandardMaterial({ color: 0xa8c4cc, transparent: true, opacity: 0.16, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide }));
+  const glassMesh = new THREE.Mesh(glass.build()!, new THREE.MeshStandardMaterial({ color: 0xa8c4cc, transparent: true, opacity: 0.16, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }));
   glassMesh.renderOrder = 3;
   group.add(glassMesh);
 

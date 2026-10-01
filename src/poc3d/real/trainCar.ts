@@ -79,7 +79,7 @@ export interface CarMaterials {
 }
 
 export function carGlass(): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.16, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
+  return new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.16, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true });
 }
 
 const BLACK = 0x141518;

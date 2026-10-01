@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { airliner2, AIRLINES } from './airliner';
 
 /**
@@ -77,13 +78,15 @@ export function airliner(tail: number): { group: THREE.Group; landing: THREE.Mes
 export function buildAirport(city: THREE.Material | null = null): Airport {
   const plane = (k: number, tail: number): ReturnType<typeof airliner> => (city ? airliner2(AIRLINES[k % AIRLINES.length], city) : airliner(tail));
   const group = new THREE.Group();
-  const flat = (x0: number, z0: number, x1: number, z1: number, y: number, color: number, emissive = 0): THREE.Mesh => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), new THREE.MeshStandardMaterial({ color, roughness: 0.9, emissive: emissive ? color : 0x000000, emissiveIntensity: emissive }));
-    m.rotation.x = -Math.PI / 2;
-    m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2);
-    m.receiveShadow = true;
-    group.add(m);
-    return m;
+  // The airfield's static parts are a handful of draws (it was ~500 meshes, each its own draw and matrix): the
+  // ground and paint one merged mesh with vertex colours, the bulbs and posts instanced.
+  const flats: THREE.BufferGeometry[] = [];
+  const flat = (x0: number, z0: number, x1: number, z1: number, y: number, color: number): void => {
+    const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2).translate((x0 + x1) / 2, y, (z0 + z1) / 2);
+    const c = new THREE.Color(color);
+    const n = g.attributes.position.count;
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).map((_, i) => [c.r, c.g, c.b][i % 3]), 3));
+    flats.push(g);
   };
   // The field (short grass), the runway, the taxiway and its links, the apron.
   flat(X0, Z0, X1, Z1, 0.02, 0x3a4630);
@@ -92,48 +95,57 @@ export function buildAirport(city: THREE.Material | null = null): Airport {
   for (const x of [RWY.x0 + 70, (RWY.x0 + RWY.x1) / 2, RWY.x1 - 70]) flat(x - TWY.half, TWY.z, x + TWY.half, RWY.z, 0.05, 0x323236);
   flat(1030, Z0 + 2, 1190, APRON_Z + 22, 0.055, 0x5a5a5c);
   // Runway markings: the centreline, the threshold bars, the touchdown zone, the numbers' blocks.
-  const paint = (x0: number, z0: number, x1: number, z1: number): void => void flat(x0, z0, x1, z1, 0.07, 0xe8e8e0);
+  const paint = (x0: number, z0: number, x1: number, z1: number): void => flat(x0, z0, x1, z1, 0.07, 0xe8e8e0);
   for (let x = RWY.x0 + 90; x < RWY.x1 - 90; x += 50) paint(x, RWY.z - 0.45, x + 30, RWY.z + 0.45);
   for (const [xa, dir] of [[RWY.x0 + 6, 1], [RWY.x1 - 6, -1]] as const) {
     for (let k = -7; k <= 7; k++) if (k !== 0) paint(Math.min(xa, xa + dir * 30), RWY.z + k * 2.6 - 0.9, Math.max(xa, xa + dir * 30), RWY.z + k * 2.6 + 0.9);
     for (const off of [150, 300]) for (const s of [-1, 1]) paint(Math.min(xa + dir * off, xa + dir * (off + 22)), RWY.z + s * 9 - 1.6, Math.max(xa + dir * off, xa + dir * (off + 22)), RWY.z + s * 9 + 1.6);
   }
   for (const s of [-1, 1]) paint(RWY.x0, RWY.z + s * (RWY.half - 1) - 0.4, RWY.x1, RWY.z + s * (RWY.half - 1) + 0.4);
+  const ground = new THREE.Mesh(mergeGeometries(flats)!, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
+  ground.receiveShadow = true;
+  group.add(ground);
   // Lights: runway edges (white), taxiway edges (blue), approach lights over the water west of the runway.
   const lights: { x: number; z: number; y: number; c: THREE.Color }[] = [];
   for (let x = RWY.x0; x <= RWY.x1; x += 40) for (const s of [-1, 1]) lights.push({ x, z: RWY.z + s * (RWY.half + 1), y: 0.4, c: new THREE.Color(3, 2.9, 2.5) });
   for (let k = -7; k <= 7; k++) lights.push({ x: RWY.x0 - 2, z: RWY.z + k * 3, y: 0.4, c: new THREE.Color(0.3, 3, 0.5) });
   for (let x = RWY.x0 + 60; x <= RWY.x1 - 60; x += 30) for (const s of [-1, 1]) lights.push({ x, z: TWY.z + s * (TWY.half + 1), y: 0.3, c: new THREE.Color(0.4, 0.7, 3.2) });
-  const approach: THREE.Mesh[] = [];
-  const bulb = new THREE.SphereGeometry(0.45, 6, 4);
-  for (const L of lights) {
-    const m = new THREE.Mesh(bulb, new THREE.MeshBasicMaterial({ color: L.c }));
-    m.position.set(L.x, L.y, L.z);
-    group.add(m);
-  }
-  const post = new THREE.MeshStandardMaterial({ color: 0x6a6e72, roughness: 0.8 });
+  const posts: { x: number; y: number; z: number; w: number; h: number }[] = [];
+  // The approach lights: a bar of five on a post every 30 m; the middle one of each is the sequenced strobe.
+  const approachAt: THREE.Vector3[] = [];
   for (let k = 1; k <= 12; k++) {
     const x = RWY.x0 - k * 30;
-    const p = new THREE.Mesh(new THREE.BoxGeometry(0.4, 4, 0.4), post);
-    p.position.set(x, 0, RWY.z);
-    group.add(p);
-    for (const dz of [-4, -2, 0, 2, 4]) {
-      const m = new THREE.Mesh(bulb, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 2.3, 2.0) }));
-      m.position.set(x, 2, RWY.z + dz);
-      group.add(m);
-      if (dz === 0) approach.push(m);
-    }
+    posts.push({ x, y: 0, z: RWY.z, w: 0.4, h: 4 });
+    for (const dz of [-4, -2, 2, 4]) lights.push({ x, z: RWY.z + dz, y: 2, c: new THREE.Color(2.4, 2.3, 2.0) });
+    approachAt.push(new THREE.Vector3(x, 2, RWY.z));
   }
+  const bulb = new THREE.SphereGeometry(0.45, 6, 4);
+  const bulbs = new THREE.InstancedMesh(bulb, new THREE.MeshBasicMaterial(), lights.length);
+  const m4 = new THREE.Matrix4();
+  lights.forEach((L, i) => {
+    bulbs.setMatrixAt(i, m4.makeTranslation(L.x, L.y, L.z));
+    bulbs.setColorAt(i, L.c);
+  });
+  bulbs.computeBoundingSphere();
+  group.add(bulbs);
+  const approach = new THREE.InstancedMesh(bulb, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 2.3, 2.0) }), approachAt.length);
+  approachAt.forEach((p, i) => approach.setMatrixAt(i, m4.makeTranslation(p.x, p.y, p.z)));
+  approach.computeBoundingSphere();
+  group.add(approach);
   // The perimeter fence along the landside (posts and rails; the fence itself reads as a haze of wire).
   const fence = new THREE.MeshStandardMaterial({ color: 0x8a9096, roughness: 0.6, transparent: true, opacity: 0.35 });
   const fz = Z0 + 1;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, 3), fence);
   mesh.position.set((X0 + X1) / 2, 1.5, fz);
   group.add(mesh);
-  for (let x = X0; x <= X1; x += 6) {
-    const p = new THREE.Mesh(new THREE.BoxGeometry(0.12, 3.2, 0.12), post);
-    p.position.set(x, 1.6, fz);
-    group.add(p);
+  for (let x = X0; x <= X1; x += 6) posts.push({ x, y: 1.6, z: fz, w: 0.12, h: 3.2 });
+  const postMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x6a6e72, roughness: 0.8 }), posts.length);
+  posts.forEach((p, i) => postMesh.setMatrixAt(i, m4.makeScale(p.w, p.h, p.w).setPosition(p.x, p.y, p.z)));
+  postMesh.computeBoundingSphere();
+  group.add(postMesh);
+  for (const o of [ground, bulbs, approach, mesh, postMesh]) {
+    o.updateMatrix();
+    o.matrixAutoUpdate = false;
   }
   // Airliners at the stands, their jet bridges out from the terminal.
   const TAILS = [0x1a4aa0, 0xc8201a, 0x1a8a6a, 0xe8a020];
@@ -204,8 +216,12 @@ export function buildAirport(city: THREE.Material | null = null): Airport {
         a.beacon.visible = strobeT % 1.0 < 0.5;
         (a.windows.material as THREE.MeshBasicMaterial).color.setHex(night ? 0xffe0a0 : 0x2a3036);
       }
-      const k = Math.floor((strobeT * 24) % approach.length);
-      approach.forEach((m, i) => (m.scale.setScalar(night && i === approach.length - 1 - k ? 2.6 : 1)));
+      const k = Math.floor((strobeT * 24) % approachAt.length);
+      approachAt.forEach((p, i) => {
+        const sc = night && i === approachAt.length - 1 - k ? 2.6 : 1;
+        approach.setMatrixAt(i, m4.makeScale(sc, sc, sc).setPosition(p));
+      });
+      approach.instanceMatrix.needsUpdate = true;
     },
   };
 }

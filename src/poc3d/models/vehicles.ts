@@ -1276,6 +1276,67 @@ export interface WheelSpot {
  * vehicle's company, the patrol car's markings. Apart from the body (`addVehicle`, which calls it when it's given
  * signs), so a parked car's body can be stamped from one built once and dressed on its own.
  */
+/**
+ * A car as a handful of faces for the middle distance (parked cars beyond ~130 m, real/props.ts): the body a box
+ * to the beltline, the glasshouse a prism from the rear glass to the windscreen with its roof in the paint and
+ * dark glass round it, and the wheels as dark blocks; a box truck's box, a kei truck's bed. ~60 triangles against
+ * ~2,000 for the lofted car, and it keeps the size, the colour and the cabin's place.
+ */
+export function addVehicleLow(mb: MeshBuilder, spec: { x: number; z: number; fx: number; fz: number; type: CarType; paint: number }): void {
+  const d = DESIGNS[spec.type];
+  if (!d) return;
+  const f: V3 = [spec.fx, 0, spec.fz];
+  const s: V3 = [spec.fz, 0, -spec.fx];
+  const half = d.L / 2;
+  const P = (x: number, y: number, z: number): V3 => [spec.x + f[0] * (x - half) + s[0] * z, y, spec.z + f[2] * (x - half) + s[2] * z];
+  const N = (x: number, y: number, z: number): V3 => [f[0] * x + s[0] * z, y, f[2] * x + s[2] * z];
+  const face = (a: V3, b: V3, c: V3, e: V3, n: V3): void => mb.quadN(a, b, c, e, n, n, n, n);
+  /** An oriented box: x along the car (from the rear), z across, y up. */
+  const box = (x0: number, x1: number, y0: number, y1: number, w: number, top = true): void => {
+    face(P(x0, y0, -w), P(x0, y1, -w), P(x0, y1, w), P(x0, y0, w), N(-1, 0, 0));
+    face(P(x1, y0, -w), P(x1, y1, -w), P(x1, y1, w), P(x1, y0, w), N(1, 0, 0));
+    face(P(x0, y0, -w), P(x1, y0, -w), P(x1, y1, -w), P(x0, y1, -w), N(0, 0, -1));
+    face(P(x0, y0, w), P(x1, y0, w), P(x1, y1, w), P(x0, y1, w), N(0, 0, 1));
+    if (top) face(P(x0, y1, -w), P(x1, y1, -w), P(x1, y1, w), P(x0, y1, w), N(0, 1, 0));
+  };
+  const paint = lin(spec.paint);
+  const belt = d.belt.reduce((a, p) => a + p[1], 0) / d.belt.length;
+  const roof = Math.max(...d.top.map((p) => p[1]));
+  const W = d.W;
+  mb.style = [0, 0, 0, 0];
+  // Wheels first (dark), then the body over them.
+  mb.kind = KIND.plain;
+  mb.color = [0.02, 0.02, 0.022];
+  for (const wx of d.wheelX) box(wx - d.wheelR * 0.9, wx + d.wheelR * 0.9, 0, d.wheelR * 1.6, W - 0.02, false);
+  mb.kind = KIND.gloss;
+  mb.color = paint;
+  box(d.x0 > 0 ? d.x0 : 0, d.L, d.clear + 0.05, belt, W);
+  if (spec.type === 'boxtruck') {
+    mb.kind = KIND.plain;
+    mb.color = lin(0xc4c7ca);
+    box(0, d.x0 - 0.05, d.clear + 0.1, 2.6, W + 0.12);
+  } else if (d.x0 > 0) {
+    // A kei truck's bed behind the cab.
+    box(0, d.x0 - 0.05, d.clear + 0.05, belt * 0.85, W);
+  }
+  // The glasshouse: rear base, rear top, front top, front base; narrower at the roof.
+  const xr0 = Math.max(d.x0, d.rearGlass[0]);
+  const xr1 = Math.max(d.x0, d.rearGlass[1]);
+  const xf1 = d.windscreen[0];
+  const xf0 = d.windscreen[1];
+  const ri = W - d.roofInset;
+  mb.kind = KIND.glass;
+  mb.color = [0.012, 0.014, 0.018];
+  // Sides (each a quad: the rear and front pillars meet the roof), the rear glass and the windscreen.
+  for (const sg of [-1, 1]) face(P(xr0, belt, sg * W), P(xr1, roof, sg * ri), P(xf1, roof, sg * ri), P(xf0, belt, sg * W), N(0, 0.25, sg));
+  face(P(xr0, belt, -W), P(xr1, roof, -ri), P(xr1, roof, ri), P(xr0, belt, W), N(-(roof - belt), xr1 - xr0, 0));
+  face(P(xf0, belt, -W), P(xf1, roof, -ri), P(xf1, roof, ri), P(xf0, belt, W), N(roof - belt, xf0 - xf1, 0));
+  mb.kind = KIND.gloss;
+  mb.color = paint;
+  face(P(xr1, roof, -ri), P(xf1, roof, -ri), P(xf1, roof, ri), P(xr1, roof, ri), N(0, 1, 0));
+  mb.kind = KIND.plain;
+}
+
 export function addVehicleMarks(mb: MeshBuilder, spec: VehicleSpec, signs: VehicleSigns): void {
   if (!(spec.type in DESIGNS)) return;
   const d = DESIGNS[spec.type as CarType];

@@ -228,7 +228,7 @@ export function buildLiveHouse(b: Building3, city: THREE.Material, ghost: THREE.
     glow([c.r * 2, c.g * 2, c.b * 2], u - 0.14, u + 0.14, 17.45, 17.7, trussY - 0.25, trussY);
     const cone = new THREE.Mesh(
       new THREE.ConeGeometry(0.9, 3.0, 20, 1, true),
-      new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }),
     );
     const [x, z] = toWorld(f, u, 18.2);
     cone.geometry.translate(0, -1.5, 0);

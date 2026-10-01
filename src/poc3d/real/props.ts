@@ -3,11 +3,11 @@ import { hash, rng, u01 } from '../../core/hash';
 import { frontSpan, type Building3, type CellPlan3, type Road3 } from '../district/plan';
 import { frontFrame, styleFor } from './buildings';
 import type { Light } from './lightmap';
-import { addCar } from './cars';
+import { addCar, addCarLow } from './cars';
 import { carMixFor, pickCar } from '../district/carMix';
 import type { CarType, VehicleSigns } from '../models/vehicles';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
-import { addTree, TREE_REACH, type TreeSpecies } from '../models/trees';
+import { addTree, foliageVariant, setFoliageVariant, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { addDressing } from './dressing';
 import { openLayout, type OpenLayout } from './openLots';
 
@@ -337,10 +337,29 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
 const VENDING = [0xd8d8d4, 0xb8242a, 0x2a4a8a, 0x2a2a2e];
 
 /** Geometry for a cell's props and wires; with `signs`, the parked cars' lettering and ads. */
-export function addProps(mb: MeshBuilder, d: CellDetail, signs?: VehicleSigns): void {
+/**
+ * Which props a build takes: all of them, only those with a middle-distance version (`swap`: parked cars,
+ * trees, hedges, bikes, the bulk of a chunk's triangles) or only the rest (`fixed`). The chunks build the swap
+ * set twice, full and `mid`, and show one or the other by distance (district/world.ts).
+ */
+export type PropPart = 'all' | 'swap' | 'fixed';
+const SWAP_KINDS = new Set<Prop['kind']>(['car', 'tree', 'hedge', 'bike']);
+
+export function addProps(mb: MeshBuilder, d: CellDetail, signs?: VehicleSigns, part: PropPart = 'all', mid = false): void {
   mb.id = 0;
   mb.flags = 0;
+  // In the middle distance, foliage takes the lighter leaf-card crowns (FOLIAGE_VARIANTS 'cards': the same look as
+  // 'airy', ~15-30% fewer triangles; the plain 'puffs' read as balloons).
+  const variant = foliageVariant();
+  if (mid) setFoliageVariant(2);
   for (const p of d.props) {
+    if (part !== 'all' && SWAP_KINDS.has(p.kind) !== (part === 'swap')) continue;
+    if (mid && p.kind === 'bike') continue;
+    if (mid && p.kind === 'car') {
+      const dir = p.variant % 2 ? 1 : -1;
+      addCarLow(mb, { x: p.x, z: p.z, fx: p.nz * dir, fz: -p.nx * dir, variant: p.variant, type: p.car, paint: p.paint });
+      continue;
+    }
     const r: C3 = [p.nz, 0, -p.nx];
     const n: C3 = [p.nx, 0, p.nz];
     const o: C3 = [p.x, 0, p.z];
@@ -410,6 +429,8 @@ export function addProps(mb: MeshBuilder, d: CellDetail, signs?: VehicleSigns): 
       mb.style = [0, 0, 0, 0];
     }
   }
+  if (mid) setFoliageVariant(variant);
+  if (part === 'swap') return;
   mb.kind = KIND.plain;
   mb.color = [0.02, 0.02, 0.02];
   for (const w of d.wires) for (let i = 0; i + 1 < w.length; i++) mb.beam(w[i], w[i + 1], 0.035);

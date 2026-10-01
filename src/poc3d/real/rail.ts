@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { splitByTile } from './tiles';
 import type { RailKind, RailLine3 } from '../district/rail';
 import { leftOf } from '../district/rail';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
@@ -277,7 +278,7 @@ export function trainModel(color: number, city: THREE.Material, mono = false): T
  * the group's children, each along +z with its origin at the car's centre (the tail's cab faces back).
  */
 function carSet(color: number, city: THREE.Material, mono = false): () => THREE.Group {
-  const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.18, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.18, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true });
   const lead = buildCar(color, [1.6, 1.55, 1.3], mono);
   const mid = buildCar(color, null, mono);
   const tail = buildCar(color, [1.4, 0.1, 0.08], mono);
@@ -545,7 +546,7 @@ export class TrainSystem {
     camera.position.set(x, PLATFORM_Y + 1.6, z);
   }
 
-  private buildViaduct(city: THREE.Material): THREE.Mesh {
+  private buildViaduct(city: THREE.Material): THREE.Group {
     const mb = new MeshBuilder();
     mb.flags = 0;
     mb.style = [0, 0, 0, 0];
@@ -620,8 +621,13 @@ export class TrainSystem {
         obox(mb, h.x, h.z, h.hx, h.hz, -1.4, 1.4, -4.5, 4.5, 6.2, 6.8, true);
       }
     }
-    const mesh = new THREE.Mesh(mb.build()!, city);
-    mesh.castShadow = mesh.receiveShadow = true;
-    return mesh;
+    // In 256 m tiles, so the line is culled a stretch at a time rather than drawn whole from anywhere.
+    const group = new THREE.Group();
+    for (const g of splitByTile(mb.build()!, 256)) {
+      const mesh = new THREE.Mesh(g, city);
+      mesh.castShadow = mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+    return group;
   }
 }

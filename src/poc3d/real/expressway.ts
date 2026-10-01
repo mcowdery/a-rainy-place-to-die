@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { splitByTile } from './tiles';
 import type { Expressway, Road } from '../district/expressway';
 import { addVehicle } from '../models/vehicles';
 import { SignBuilder } from './signs';
@@ -240,10 +241,12 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
     const text = road.kind === 'spur' ? [`${road.sign}`, 'TUNNEL · 直進'] : [`出口 EXIT`, `${road.sign}`];
     group.add(gantry(road, 0, text, ex));
   }
-  const mesh = new THREE.Mesh(mb.build()!, city);
-  mesh.frustumCulled = false;
-  mesh.receiveShadow = true;
-  group.add(mesh);
+  // In 256 m tiles, so what's off screen isn't drawn (the network as one mesh was ~550k triangles from anywhere).
+  for (const g of splitByTile(mb.build()!, 256)) {
+    const mesh = new THREE.Mesh(g, city);
+    mesh.receiveShadow = true;
+    group.add(mesh);
+  }
   // Pools of sodium light on the deck (additive decals), shown at night with the lamps.
   const pool = poolTexture();
   const pm = new THREE.MeshBasicMaterial({ map: pool, color: new THREE.Color(0.26, 0.12, 0.03), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });

@@ -205,7 +205,7 @@ export function buildKonbini(b: Building3, city: THREE.Material, ghost: THREE.Ma
   group.add(mesh);
 
   // Glass: the shopfront panes and the two sliding door leaves.
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0xa8c4cc, transparent: true, opacity: 0.14, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0xa8c4cc, transparent: true, opacity: 0.14, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true });
   const gb = new MeshBuilder();
   const pane = (m: MeshBuilder, u0: number, u1: number, y0: number, y1: number, t: number): void => {
     const [ax, az] = toWorld(f, u0, t);

@@ -3,7 +3,7 @@ import type { Rect } from '../../core/coords';
 import { hash } from '../../core/hash';
 import { along, SIDES, Signals, TURN, type BusLine, type Junction, type Route } from '../district/traffic';
 import type { Prop } from './props';
-import { addVehicle, addWheel, marksKey, wheelLayout, SPORT_TYPES, WORK_TYPES, type CarType } from '../models/vehicles';
+import { addVehicle, addVehicleLow, addWheel, marksKey, wheelLayout, SPORT_TYPES, WORK_TYPES, type CarType } from '../models/vehicles';
 import { SignBuilder, type SignLayout } from './signs';
 import { taxiPhotos } from './taxiAdLayout';
 import { buildBus2, type Bus2 } from './busModel';
@@ -26,6 +26,8 @@ import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
  */
 
 const DRAW = 320;
+/** Beyond this, cars in traffic are drawn as their low model (no lettering, brake lights or separate wheels). */
+const CAR_LOD = 80;
 /** The ground's height (district/terrain.ts), set by the page: vehicles, their lamps and signals stand on it. */
 let groundY: (x: number, z: number) => number = () => 0;
 export function setTrafficGround(f: (x: number, z: number) => number): void {
@@ -72,6 +74,8 @@ const BUS2_WHEELS: WheelLayout = {
 };
 type Model = {
   geo: THREE.BufferGeometry;
+  /** The same car as a handful of faces (addVehicleLow), drawn beyond CAR_LOD. */
+  low: THREE.BufferGeometry;
   /** Lettering (sign atlas) and a taxi's photo ad (taxi ad atlas), if it has any. */
   text: THREE.BufferGeometry | null;
   photo: THREE.BufferGeometry | null;
@@ -107,11 +111,15 @@ function carModel(type: CarType, paint: number, marks: number, layout: SignLayou
   const pb = new SignBuilder();
   addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type, paint, detail: 0.12, wheels: false, marks }, layout ? { sb, layout, photos: taxiPhotos(pb) } : undefined, brake);
   const body = mb.build()!;
+  const lb = new MeshBuilder(256);
+  addVehicleLow(lb, { x: 0, z: 0, fx: 0, fz: 1, type, paint });
+  const low = lb.build()!;
   body.computeBoundingBox();
   const bb = body.boundingBox!;
   // (The width without the mirrors.)
   return {
     geo: body,
+    low,
     text: sb.build(0, 0),
     photo: pb.build(0, 0),
     half: (bb.max.z - bb.min.z) / 2,
@@ -224,7 +232,7 @@ export function parkedBus(destination: string, city: THREE.Material, en = ''): T
   const m = busModel({ name: destination } as BusLine);
   const g = new THREE.Group();
   g.add(new THREE.Mesh(m.body, city));
-  const glass = new THREE.Mesh(m.glass, new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.25, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide }));
+  const glass = new THREE.Mesh(m.glass, new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.25, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }));
   glass.renderOrder = 3;
   g.add(glass, m.signs);
   // Its wheels (standing still, so plain meshes).
@@ -397,6 +405,8 @@ interface Vehicle extends DrivenVehicle {
   turned: number;
   /** Simulated this frame (within SIM of the camera, or not in traffic). */
   live: boolean;
+  /** A car's two bodies (full and low) and its lettering, swapped by distance; buses keep theirs. */
+  lod?: { full: THREE.BufferGeometry; low: THREE.BufferGeometry; marks: THREE.Object3D[]; isLow: boolean };
   /** A new bus (?transit=new): its doors, screens and layout to ride in, and its line. */
   bus2?: Bus2;
   line?: BusLine;
@@ -457,7 +467,13 @@ class Wheels {
   end(): void {
     for (const m of this.meshes.values()) {
       m.mesh.count = m.n;
-      m.mesh.instanceMatrix.needsUpdate = true;
+      // Only the slots used this frame go to the GPU (the buffer holds every vehicle's wheels: ~200 KB a mesh).
+      const im = m.mesh.instanceMatrix;
+      im.clearUpdateRanges();
+      if (m.n > 0) {
+        im.addUpdateRange(0, m.n * 16);
+        im.needsUpdate = true;
+      }
     }
   }
 }
@@ -475,6 +491,10 @@ const ahead = (a: number, b: number, L: number): number => (((b - a) % L) + L) %
 
 export class TrafficSystem {
   readonly group = new THREE.Group();
+  /** Cars beyond this are drawn as their low model (CAR_LOD; the K panel's Detail sets it). */
+  carLod = CAR_LOD;
+  /** Vehicles beyond this aren't drawn (DRAW; the K panel's Detail sets it). */
+  drawDistance = DRAW;
   readonly colliders: Rect[] = [];
   private readonly vehicles: Vehicle[] = [];
   /** The taxi pulling in for you (hail), if any. */
@@ -529,8 +549,10 @@ export class TrafficSystem {
         const m = modelFor(pick.type, pick.paint, h);
         const obj = new THREE.Mesh(m.geo, city);
         obj.castShadow = true;
-        if (signs && m.text) obj.add(new THREE.Mesh(m.text, signs.signs));
-        if (signs && m.photo) obj.add(new THREE.Mesh(m.photo, signs.taxiAds));
+        const marks: THREE.Object3D[] = [];
+        if (signs && m.text) marks.push(new THREE.Mesh(m.text, signs.signs));
+        if (signs && m.photo) marks.push(new THREE.Mesh(m.photo, signs.taxiAds));
+        for (const mk of marks) obj.add(mk);
         // Temperaments: taxis and sports cars a little brisker, work vehicles steadier (a loaded truck slower to
         // pull away); everyone a little different.
         const brisk = taxi || sporty;
@@ -544,9 +566,10 @@ export class TrafficSystem {
           s0: 2.2 + r(4) * 0.8,
         };
         add(obj, m.brake, route, m.half, m.width, false, driver, s0, m.label, m.wheels);
+        this.vehicles[this.vehicles.length - 1].lod = { full: m.geo, low: m.low, marks, isLow: false };
       }
     }
-    const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.22, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.22, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true });
     const busBrake = new MeshBuilder();
     busBrake.kind = KIND.plain;
     busBrake.color = [1, 1, 1];
@@ -737,6 +760,7 @@ export class TrafficSystem {
     for (const v of V) {
       if (!v.live) {
         v.obj.visible = false;
+        v.obj.matrixWorldAutoUpdate = false;
         continue;
       }
       if (v.mode === 'traffic') {
@@ -747,8 +771,18 @@ export class TrafficSystem {
         v.v = 0;
         v.acc = 0;
       }
-      const near = v.mode === 'driven' || Math.hypot(v.x - camera.x, v.z - camera.z) < DRAW;
+      const near = v.mode === 'driven' || Math.hypot(v.x - camera.x, v.z - camera.z) < this.drawDistance;
+      const dist = Math.hypot(v.x - camera.x, v.z - camera.z);
       v.obj.visible = near && !v.hideBody;
+      // Past CAR_LOD a car is its low model (a pointer swap; the driven car always full).
+      const low = !!v.lod && v.mode !== 'driven' && dist > this.carLod;
+      if (v.lod && low !== v.lod.isLow) {
+        v.lod.isLow = low;
+        (v.obj as THREE.Mesh).geometry = low ? v.lod.low : v.lod.full;
+        for (const mk of v.lod.marks) mk.visible = !low;
+      }
+      // Hidden vehicles (most of them: beyond DRAW) skip three's per-frame matrix update, children and all.
+      v.obj.matrixWorldAutoUpdate = v.obj.visible;
       if (!near || v.own) continue;
       const p = v.mode === 'traffic' ? this.pose(v) : { x: v.x, z: v.z, dx: v.dx, dz: v.dz, k: v.curv };
       v.obj.position.set(p.x, groundY(p.x, p.z), p.z);
@@ -764,7 +798,7 @@ export class TrafficSystem {
       const lean = THREE.MathUtils.clamp(-v.v * v.v * p.k * 0.011, -0.035, 0.035) * (v.bus ? 0.6 : 1);
       v.roll += (lean - v.roll) * Math.min(1, dt * 5);
       v.obj.rotation.z = v.roll;
-      v.brake.visible = v.acc < -0.6 || v.v < 0.4;
+      v.brake.visible = !low && (v.acc < -0.6 || v.v < 0.4);
       if (v.bus2) {
         v.bus2.setDoors(this.busDoors(v));
         v.bus2.cull(camera);
@@ -772,7 +806,7 @@ export class TrafficSystem {
       // The wheels roll with the speed, and the front ones steer with the curve: tan(steer) = wheelbase * k
       // (k > 0 turning right, the car's right is -x; reversing, the curve runs the other way).
       v.turned = (v.turned + (v.v * dt) / v.wheels.r) % (Math.PI * 2);
-      if (v.hideBody) continue;
+      if (v.hideBody || low) continue;
       const k = v.mode === 'traffic' || v.v >= 0 ? p.k : -p.k;
       const base = v.wheels.spots[v.wheels.spots.length - 1].z - v.wheels.spots[0].z;
       this.wheels.add(v, -THREE.MathUtils.clamp(Math.atan(base * k), -0.62, 0.62));
@@ -1170,6 +1204,9 @@ export class SignalLamps {
         this.mesh.setColorAt(h.base + k, this.col);
       }
     }
-    this.mesh.instanceColor!.needsUpdate = true;
+    const ic = this.mesh.instanceColor!;
+    ic.clearUpdateRanges();
+    ic.addUpdateRange(0, this.mesh.count * 3);
+    ic.needsUpdate = true;
   }
 }

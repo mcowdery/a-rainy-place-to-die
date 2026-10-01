@@ -420,7 +420,7 @@ export function buildSubwayStation(b: Building3, info: SubwayStationInfo, city: 
   streetMesh.receiveShadow = true;
   group.add(streetMesh);
   below.add(new THREE.Mesh(under.build()!, city));
-  const glass = new THREE.Mesh(glassMb.build()!, new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.2, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide }));
+  const glass = new THREE.Mesh(glassMb.build()!, new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.2, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }));
   glass.renderOrder = 3;
   below.add(glass);
 

@@ -232,7 +232,7 @@ export const NORTH_BUILDERS: Record<NorthKind, (k: Kit, id: string) => ((camera:
       post(fu0, t);
       post(fu1, t);
     }
-    const net = new THREE.MeshBasicMaterial({ color: 0x3a5a4a, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false });
+    const net = new THREE.MeshBasicMaterial({ color: 0x3a5a4a, transparent: true, opacity: 0.22, side: THREE.DoubleSide, forceSinglePass: true, depthWrite: false });
     const netPlane = (u0: number, t0: number, u1: number, t1: number): void => {
       const [ax, az] = toWorld(k.f, u0, t0);
       const [bx, bz] = toWorld(k.f, u1, t1);
