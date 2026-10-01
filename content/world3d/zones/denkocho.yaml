@@ -17,6 +17,7 @@ zones:
   M:
     id: denko_main
     name: Denkō-dōri
+    people: { plain: 6, maid: 1, suit: 1, school: 1 }
     plan:
       floors: [[6, 9, 40], [10, 14, 45], [15, 20, 15]]
       lotW: [6, 12]
@@ -58,6 +59,7 @@ zones:
   C:
     id: denko_culture
     name: Maid café lanes
+    people: { maid: 4, plain: 5, school: 1 }
     plan:
       floors: [[4, 7, 60], [8, 11, 40]]
       lotW: [5, 9]

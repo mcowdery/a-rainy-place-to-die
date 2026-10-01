@@ -16,6 +16,7 @@ zones:
   K:
     id: skyscraper_row
     name: Skyscraper Row
+    people: { suit: 8, plain: 2, long: 2 }
     cars: { luxury: 24, sedan: 26, taxi2: 20, taxi: 8, minivan: 14, kei: 4, van: 4, police: 4 }
     plan:
       floors: [[14, 24, 35], [26, 40, 45], [42, 55, 20]]
@@ -42,6 +43,7 @@ zones:
   G:
     id: tower_plaza
     name: Tower Plaza
+    people: { suit: 6, plain: 3, long: 2 }
     plan:
       floors: [[44, 60, 70], [30, 40, 30]]
       lotW: [26, 40]
@@ -89,6 +91,7 @@ zones:
   Y:
     id: omoide_lane
     name: Omoide Lane
+    people: { suit: 4, plain: 4, long: 2 }
     plan:
       floors: [[2, 3, 80], [4, 5, 20]]
       lotW: [3, 5]

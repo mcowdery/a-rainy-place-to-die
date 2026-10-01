@@ -16,6 +16,7 @@ zones:
   U:
     id: campus_halls
     name: Tōto University
+    people: { school: 6, plain: 3 }
     plan:
       floors: [[3, 5, 50], [6, 9, 40], [10, 14, 10]]
     signs:
@@ -32,6 +33,7 @@ zones:
   Q:
     id: campus_quad
     name: Tōto University (the quad)
+    people: { school: 6, plain: 3 }
     plan:
       park: 0.55
       floors: [[3, 5, 60], [6, 8, 40]]
@@ -46,6 +48,7 @@ zones:
   L:
     id: campus_lanes
     name: Gakuenzaka (the slope)
+    people: { school: 5, plain: 4, long: 1 }
     plan:
       floors: [[2, 3, 50], [4, 6, 50]]
       lotW: [5, 10]

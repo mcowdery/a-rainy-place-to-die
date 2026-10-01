@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { loadDistrictContent } from '../src/poc3d/district/content';
 import { DistrictModel } from '../src/poc3d/district/model';
 import { DISTRICTS3 } from '../src/poc3d/district/plan';
+import { OUTFITS } from '../src/poc3d/district/peopleMix';
 import { railReserved } from '../src/poc3d/district/rail';
-import { addFigure, addUmbrella, cellCrowd, FIGURE_STRIDE, GHOST_COLORS, GhostBuilder, packFigures, posedFigure, templateIndex, TEMPLATE_COUNT, umbrellaIndex, type Body, type FigureSpec, type Hair, type Pose } from '../src/poc3d/real/people';
+import { addFigure, addUmbrella, cellCrowd, FIGURE_STRIDE, GHOST_COLORS, GhostBuilder, packFigures, outfitOf, posedFigure, templateIndex, TEMPLATE_COUNT, umbrellaIndex, type Body, type FigureSpec, type Hair, type Pose } from '../src/poc3d/real/people';
 
 const spec = (body: Body, pose: Pose, extra: Partial<FigureSpec> = {}): FigureSpec => ({
   x: 10,
@@ -57,17 +58,19 @@ describe('mob figures', () => {
     }
   });
 
-  it('pose every body, hair and coat within a person-sized footprint', () => {
+  it('pose every body, hair and outfit within a person-sized footprint', () => {
     for (const body of ['man', 'woman', 'child', 'elder'] as Body[]) {
       for (const pose of ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold'] as Pose[]) {
         for (const hair of ['short', 'long', 'bun', 'hat', 'cap', 'none'] as Hair[]) {
-          const b = bounds(spec(body, pose, { hair, long: true }));
-          expect(b.r).toBeLessThan(1.0);
-          expect(b.n).toBeLessThan(1500);
+          for (const outfit of OUTFITS) {
+            const b = bounds(spec(body, pose, { hair, outfit }));
+            expect(b.r).toBeLessThan(1.0);
+            expect(b.n).toBeLessThan(1500);
+          }
         }
       }
     }
-  });
+  }, 60000);
 
   it('are numbers for the GPU: template, seed, walk and floor', () => {
     const f = packFigures([spec('woman', 'walk', { hair: 'bun', long: true, y: 2, walk: { ex: 10, ez: 0, speed: 1.3, gap: 5 } })], (x) => x * 0.1);
@@ -110,6 +113,30 @@ describe('mob figures', () => {
 describe('street crowds', () => {
   const content = loadDistrictContent();
   const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 1, content.zones, content.avenues, content.terrain, railReserved(content.rails));
+
+  it('dress for where they are: maids in the café lanes, suits on Skyscraper Row, never what a body cannot wear', () => {
+    const tally = (zone: string): Record<string, number> => {
+      const t: Record<string, number> = {};
+      for (let my = 0; my < content.macro.rows; my++) {
+        for (let mx = 0; mx < content.macro.cols; mx++) {
+          const plan = model.plan(mx, my);
+          if (!plan || content.zones.at(mx, my)?.id !== zone) continue;
+          for (const f of cellCrowd(plan, model.detail(mx, my)!, model.plazas(mx, my))) {
+            const o = outfitOf(f);
+            t[o] = (t[o] ?? 0) + 1;
+            if (o === 'maid') expect(f.body).toBe('woman');
+            if (o !== 'plain' && o !== 'school') expect(f.body).not.toBe('child');
+          }
+        }
+      }
+      return t;
+    };
+    const lanes = tally('denko_culture');
+    expect(lanes.maid ?? 0).toBeGreaterThan(5);
+    const row = tally('skyscraper_row');
+    expect(row.suit ?? 0).toBeGreaterThan((row.plain ?? 0) + (row.long ?? 0));
+    expect(tally('kawabata_temple').kimono ?? 0).toBeGreaterThan(3);
+  });
 
   it('walk clear stretches of their own cell, together when they go together', () => {
     let walkers = 0;

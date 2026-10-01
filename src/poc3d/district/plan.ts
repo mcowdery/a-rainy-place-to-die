@@ -1,3 +1,4 @@
+import type { PeopleMix } from './peopleMix';
 import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng, type Rng } from '../../core/hash';
 import { isWide } from '../../core/wide';
@@ -177,6 +178,8 @@ export interface DistrictStyle3 {
   readonly onlyZoned?: boolean;
   /** The zone's cars, parked and in traffic (a zone's `cars:`; otherwise the district's, district/carMix.ts). */
   readonly cars?: CarMix;
+  /** What the zone's people wear (a zone's `people:`; otherwise the district's, district/peopleMix.ts). */
+  readonly people?: PeopleMix;
 }
 
 const BOUNDARY_ROAD = 16;

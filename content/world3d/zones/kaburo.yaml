@@ -43,6 +43,7 @@ zones:
   H:
     id: host_street
     name: Host Street
+    people: { suit: 6, long: 3, plain: 2 }
     # The hosts' cars: black saloons and the odd sports car, and taxis for the customers.
     cars: { luxury: 22, sedan: 16, taxi: 18, taxi2: 12, minivan: 10, kei: 6, van: 3, keivan: 2, police: 2, sports: 3, rotary: 2 }
     plan:
@@ -68,6 +69,7 @@ zones:
   L:
     id: love_district
     name: Love District
+    people: { long: 5, plain: 4, suit: 2 }
     # Taxis dropping couples off, black cars waiting.
     cars: { taxi: 24, taxi2: 14, luxury: 14, sedan: 16, minivan: 12, kei: 8, van: 3, keivan: 3, police: 2 }
     plan:
@@ -123,6 +125,7 @@ zones:
   M:
     id: food_lane
     name: Music & Food Lane
+    people: { plain: 6, long: 3, suit: 1 }
     plan:
       open: { parking: 0.05, vacant: 0.02 }
       streetTrees: 0.4
@@ -147,6 +150,7 @@ zones:
   S:
     id: station_edge
     name: Station Edge
+    people: { suit: 4, plain: 4, long: 2, school: 1 }
     plan:
       open: { parking: 0.08 }
       streetTrees: 0.5

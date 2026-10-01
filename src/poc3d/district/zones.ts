@@ -1,3 +1,4 @@
+import { OUTFITS } from './peopleMix';
 import YAML from 'yaml';
 import { ID_PATTERN } from '../../content/stamps';
 import type { DistrictId, MacroMap } from '../../gen/macro';
@@ -26,6 +27,8 @@ import { LOT_OPEN, STYLES3, type DistrictStyle3, type Zone3, type ZoneLook } fro
  *       # low homes with a pitched roof) and bikes (share of homes with bicycles out front).
  *       cars: { luxury: 3, taxi: 4, sedan: 2 }   # optional: the cars parked and driving here, by model
  *       # (models/vehicles.ts); otherwise the district's (district/carMix.ts).
+ *       people: { suit: 4, plain: 2 }   # optional: what the people here wear, by outfit (district/peopleMix.ts:
+ *       # plain, long, suit, maid, school, kimono); otherwise the district's.
  *
  * plan overrides any DistrictStyle3 field (localStreet, block, twoRowDepth, lotW, lotGap, floors,
  * signChance, verticalSign); anything not given comes from the district's style. Zones are part of the
@@ -166,6 +169,19 @@ export function parseZones3(file: string, text: string, macro: MacroMap, errors:
           else cars[k] = v;
         }
         style.cars = cars;
+      }
+    }
+
+    if (raw.people !== undefined) {
+      const people: Record<string, number> = {};
+      if (!isObj(raw.people)) err(`${at}: people must map outfits to weights`);
+      else {
+        for (const [k, v] of Object.entries(raw.people)) {
+          if (!(OUTFITS as readonly string[]).includes(k)) err(`${at}: unknown outfit '${k}' (${OUTFITS.join(', ')})`);
+          else if (typeof v !== 'number' || v <= 0) err(`${at}: outfit weight for ${k} must be a positive number`);
+          else people[k] = v;
+        }
+        style.people = people;
       }
     }
 

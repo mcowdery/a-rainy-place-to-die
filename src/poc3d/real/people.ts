@@ -4,6 +4,9 @@ import { hash, rng, u01, type Rng } from '../../core/hash';
 import type { CellPlan3, Road3 } from '../district/plan';
 import { propDist, type CellDetail } from './props';
 import { toGeometry, type RawGeometry } from './rawGeometry';
+import { CITY_PEOPLE, DISTRICT_PEOPLE, OUTFITS, pickOutfit, type Outfit, type PeopleMix } from '../district/peopleMix';
+
+export type { Outfit } from '../district/peopleMix';
 
 /**
  * The mob: the city's passers-by as faint, dark, see-through figures (after COM3D2's "transparent man"),
@@ -41,8 +44,10 @@ export interface FigureSpec {
   /** Linear colour; bright colours are darkened to the mob's shades. */
   readonly color: V3;
   readonly hair: Hair;
-  /** A skirt (women) or a long coat (men). */
+  /** A skirt (women) or a long coat (men): the 'long' outfit when `outfit` isn't given. */
   readonly long: boolean;
+  /** What they wear (district/peopleMix.ts); else everyday clothes, or 'long' with `long`. */
+  readonly outfit?: Outfit;
   /** Walk cycle phase 0-1 (which leg is forward, how far). */
   readonly phase: number;
   /** Which side a talking/waving/holding arm is on: 1 right, -1 left. */
@@ -381,13 +386,84 @@ const COAT: readonly Row[] = [
   [1.49, 0.07, 0.065, -0.012],
 ];
 
+/** The outfits' garments, in the man's heights (rows scaled to each body like the skirt and coat). */
+const MAID_SKIRT: readonly Row[] = [
+  [0.6, 0.235, 0.215, 0.02],
+  [0.64, 0.24, 0.22, 0.02],
+  [0.8, 0.205, 0.175, 0.01],
+  [0.95, 0.16, 0.12, 0],
+  [1.04, 0.125, 0.09, 0],
+  [1.06, 0.12, 0.088, 0],
+];
+const PLEATS: readonly Row[] = [
+  [0.6, 0.2, 0.17, 0.01],
+  [0.64, 0.198, 0.168, 0.01],
+  [0.85, 0.17, 0.13, 0],
+  [1.0, 0.13, 0.095, 0],
+  [1.04, 0.12, 0.088, 0],
+];
+const PENCIL: readonly Row[] = [
+  [0.48, 0.13, 0.1, 0],
+  [0.5, 0.135, 0.105, 0],
+  [0.85, 0.165, 0.115, -0.01],
+  [1.0, 0.13, 0.092, 0],
+  [1.04, 0.12, 0.088, 0],
+];
+const ROBE: readonly Row[] = [
+  [0.07, 0.13, 0.11, 0.01],
+  [0.1, 0.14, 0.115, 0.01],
+  [0.35, 0.155, 0.12, 0.01],
+  [0.65, 0.168, 0.125, 0],
+  [0.9, 0.172, 0.12, -0.005],
+  [1.0, 0.16, 0.11, 0],
+];
+const OBI: readonly Row[] = [
+  [0.97, 0.168, 0.118, 0],
+  [0.99, 0.172, 0.122, 0],
+  [1.16, 0.168, 0.12, 0.01],
+  [1.18, 0.16, 0.112, 0.01],
+];
+/** Hanging kimono sleeves on the arm: deep front to back, down past the wrist. */
+const SLEEVE: readonly Row[] = [
+  [0.82, 0.03, 0.07, -0.03],
+  [0.85, 0.05, 0.12, -0.03],
+  [1.12, 0.052, 0.13, -0.02],
+  [1.2, 0.046, 0.08, -0.015],
+  [1.25, 0.035, 0.045, -0.01],
+];
+const PUFF: readonly Row[] = [
+  [1.27, 0.03, 0.035, -0.01],
+  [1.3, 0.066, 0.07, -0.01],
+  [1.38, 0.072, 0.076, -0.01],
+  [1.44, 0.05, 0.055, -0.01],
+];
+/** A case hanging from the left hand (briefcase or school bag): [y, half thickness, half length, z]. */
+const CASE: readonly Row[] = [
+  [0.4, 0.028, 0.17, 0.02],
+  [0.42, 0.034, 0.19, 0.02],
+  [0.64, 0.034, 0.19, 0.02],
+  [0.66, 0.028, 0.17, 0.02],
+];
+/** White garments (apron, collar, shirt, obi) are lighter shades of the figure's dark: still dark, readable. */
+const WHITE = 3.6;
+
+/** Which outfits a body wears (others fall back to everyday clothes). */
+const wears = (b: Body, o: Outfit): boolean => o === 'plain' || (o === 'maid' ? b === 'woman' : o === 'school' ? b !== 'elder' : b !== 'child');
+
+/** The outfit a figure is drawn in: its own if its body wears it, else 'long' or everyday clothes. */
+export function outfitOf(s: Pick<FigureSpec, 'body' | 'long' | 'outfit'>): Outfit {
+  const o = s.outfit ?? (s.long ? 'long' : 'plain');
+  return wears(s.body, o) ? o : s.long && s.body !== 'child' ? 'long' : 'plain';
+}
+
 const templates = new Map<string, Template>();
 
-/** The posable template for a body with its hair and clothes (built once per combination). */
-function template(body: Body, hair: Hair, long: boolean): Template {
-  const key = `${body}|${hair}|${long && body !== 'child'}`;
+/** The posable template for a body with its hair and outfit (built once per combination). */
+function template(body: Body, hair: Hair, outfit: Outfit): Template {
+  const o = wears(body, outfit) ? outfit : 'plain';
+  const key = `${body}|${hair}|${o}`;
   let t = templates.get(key);
-  if (!t) templates.set(key, (t = buildTemplate(body, hair, long && body !== 'child')));
+  if (!t) templates.set(key, (t = buildTemplate(body, hair, o)));
   return t;
 }
 
@@ -414,14 +490,16 @@ function pivotsOf(body: Body): { pivot: V3[]; armOut: number } {
   return { pivot, armOut: Math.atan2(P.wristX - P.shoulderX, (1.42 - 0.865) * ys) };
 }
 
-function buildTemplate(body: Body, hair: Hair, long: boolean): Template {
+function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
   const P = PROPORTIONS[body];
   const ys = P.ys;
   const tb = new TemplateBuilder();
   const neckY = 1.5 * ys;
   const hk = P.head;
   const { pivot, armOut } = pivotsOf(body);
-  const legs = body === 'woman' && long ? 0.9 : 0.82;
+  const long = outfit === 'long';
+  // Legs: bare-ish under a skirt, dark stockings under a maid's dress, trousers otherwise.
+  const legs = outfit === 'maid' ? 0.6 : body === 'woman' && outfit !== 'plain' ? 0.9 : 0.82;
   const top = 1;
   // Torso: hips on the pelvis, the chest on the spine, blended at the waist.
   const waist = 1.06 * ys;
@@ -457,9 +535,83 @@ function buildTemplate(body: Body, hair: Hair, long: boolean): Template {
     const hand = HAND.map(([y, a, b, z]): Row => [y * ys, a * P.arm, b * P.arm, z]);
     tb.loft(hand, () => s * (P.wristX + 0.003), () => one(fore), top, 8);
   }
+  const hips = (r: Row): Weight => (r[0] < waist - 0.02 ? one(PELVIS) : r[0] > waist + 0.08 ? one(SPINE) : blend(SPINE, PELVIS, 0.5));
   if (long) {
     const rows = scaleRows(body === 'woman' ? SKIRT : COAT, ys, body === 'woman' ? 0.95 : P.arm);
-    tb.loft(rows, () => 0, (r) => (r[0] < waist - 0.02 ? one(PELVIS) : r[0] > waist + 0.08 ? one(SPINE) : blend(SPINE, PELVIS, 0.5)), body === 'woman' ? 0.85 : 0.9, 14, 2.2);
+    tb.loft(rows, () => 0, hips, body === 'woman' ? 0.85 : 0.9, 14, 2.2);
+  }
+  // The torso's section at a height (this body's rows): half width, half depth, centre z.
+  const torsoAt = (y: number): [number, number, number] => {
+    const T = P.torso;
+    let i = 0;
+    while (i < T.length - 2 && T[i + 1][0] < y) i++;
+    const a = T[i], b = T[i + 1];
+    const k = Math.min(1, Math.max(0, (y - a[0]) / (b[0] - a[0])));
+    return [a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k, a[3] + (b[3] - a[3]) * k];
+  };
+  /** A thin panel over the torso's front (side 1) or back (-1), between two heights (man's), narrowing by `w`. */
+  const panel = (y0: number, y1: number, w: (y: number) => number, side: number, shade: number, off = 0.004): void => {
+    const rows: Row[] = [];
+    for (let i = 0; i <= 4; i++) {
+      const y = (y0 + ((y1 - y0) * i) / 4) * ys;
+      const [, d, z] = torsoAt(y);
+      rows.push([y, w(y / ys) * (body === 'child' ? 0.64 : 1), 0.007, z + side * (d + off + 0.007)]);
+    }
+    tb.loft(rows, () => 0, (r) => (r[0] > waist ? one(SPINE) : one(PELVIS)), shade, 8, 6);
+  };
+  /** A case in the left hand (a briefcase, a school bag), `k` its size. */
+  const caseInHand = (k: number): void => tb.loft(CASE.map(([y, a, b, z]): Row => [y * ys, a, b * k, z]), () => -(P.wristX + 0.012), () => one(FORE_L), 1.3, 8, 6);
+  const armRows = (rows: readonly Row[], s: number, shade: number, arm: number, fore: number): void =>
+    tb.loft(rows.map(([y, a, b, z]): Row => [y * ys, a * P.arm, b * P.arm, z * P.arm]), (r) => s * ax(r[0] / ys), (r) => (r[0] > 1.18 * ys ? one(arm) : one(fore)), shade, 8);
+  if (outfit === 'suit') {
+    if (body === 'woman') {
+      tb.loft(scaleRows(PENCIL, ys, 0.95), () => 0, hips, 0.95, 14, 2.4);
+      // A shoulder bag at the left hip.
+      tb.loft([[0.84 * ys, 0.03, 0.11, 0], [0.86 * ys, 0.034, 0.12, 0], [1.0 * ys, 0.034, 0.12, 0], [1.02 * ys, 0.03, 0.11, 0]], () => -(P.hipX + 0.115), () => one(PELVIS), 1.3, 8, 6);
+    } else {
+      // The jacket's skirt over the hips, a little proud of the body.
+      const rows: Row[] = [0.82, 0.86, 0.92, 0.99, 1.06].map((y) => {
+        const [w, d, z] = torsoAt(y * ys);
+        return [y * ys, w * 1.05 + 0.012, d * 1.05 + 0.012, z];
+      });
+      tb.loft(rows, () => 0, hips, 1, 12, 2.4);
+      caseInHand(1);
+    }
+    // The shirt's V at the collar and a dark tie down it.
+    panel(1.24, 1.46, (y) => 0.012 + (y - 1.24) * 0.22, 1, WHITE);
+    if (body !== 'woman') panel(1.06, 1.42, () => 0.014, 1, 0.45, 0.012);
+  } else if (outfit === 'maid') {
+    const skirt = scaleRows(MAID_SKIRT, ys, 0.95);
+    tb.loft(skirt, () => 0, hips, 1, 14, 2.2);
+    // The apron over the skirt's front, and its bib up the chest; the frilled headband; puffed sleeves.
+    const apron = skirt.filter((r) => r[0] > 0.62 * ys && r[0] < 1.02 * ys).map(([y, w, d, z]): Row => [y, w * 0.62, 0.008, z + d + 0.01]);
+    tb.loft(apron, () => 0, hips, WHITE, 8, 6);
+    panel(1.06, 1.32, () => 0.07, 1, WHITE);
+    tb.loft(headRows([[0.158, 0.09, 0.112, -0.008], [0.182, 0.088, 0.108, -0.01]]), () => 0, () => one(HEAD), WHITE, 12, 2.1);
+    for (const [sd, arm, fore] of [[-1, ARM_L, FORE_L], [1, ARM_R, FORE_R]] as const) armRows(PUFF, sd, 1, arm, fore);
+  } else if (outfit === 'school') {
+    if (body === 'woman') {
+      tb.loft(scaleRows(PLEATS, ys, 0.95), () => 0, hips, 1, 16, 3.5);
+      // The sailor collar's flap down the back, and the scarf at the front.
+      panel(1.33, 1.47, () => 0.13, -1, WHITE);
+      panel(1.27, 1.34, () => 0.035, 1, WHITE);
+    }
+    if (body === 'child') {
+      // The randoseru on the back.
+      const yb = [0.6, 0.62, 0.84, 0.86].map((y) => y * ys / 0.6);
+      const back = Math.min(...yb.map((y) => torsoAt(y)[2] - torsoAt(y)[1]));
+      tb.loft(yb.map((y, i): Row => [y, i % 3 === 0 ? 0.095 : 0.105, i % 3 === 0 ? 0.05 : 0.06, back - 0.06]), () => 0, () => one(SPINE), 1.2, 8, 6);
+    } else caseInHand(0.8);
+  } else if (outfit === 'kimono') {
+    const woman = body === 'woman';
+    tb.loft(scaleRows(ROBE, ys, woman ? 0.95 : P.arm), () => 0, () => one(PELVIS), 1, 14, 2.4);
+    tb.loft(scaleRows(OBI, ys, woman ? 0.95 : P.arm), () => 0, hips, woman ? 2.6 : 1.3, 14, 2.4);
+    if (woman) {
+      // The obi's bow on the back.
+      const [, d, z] = torsoAt(1.08 * ys);
+      tb.loft([1.0, 1.02, 1.16, 1.18].map((y, i): Row => [y * ys, i % 3 === 0 ? 0.11 : 0.13, i % 3 === 0 ? 0.025 : 0.035, z - d - 0.05]), () => 0, () => one(SPINE), 2.6, 8, 6);
+    }
+    for (const [sd, arm, fore] of [[-1, ARM_L, FORE_L], [1, ARM_R, FORE_R]] as const) armRows(SLEEVE, sd, 1, arm, fore);
   }
   return tb.build(pivot, armOut);
 }
@@ -561,7 +713,7 @@ function skeleton(s: FigureSpec): Skeleton {
       gest(sk.armR, -0.1, 0.22, 0.45);
       break;
     case 'wave':
-      gest(armS, 0.15, 0.95, 1.6, true);
+      gest(armS, 0.15, 1.3, 1.35, true);
       break;
     case 'hold':
       gest(armS, 0.1, s.body === 'child' ? 0.75 : 0.26, 0.1);
@@ -611,10 +763,10 @@ const BODY_LIST: readonly Body[] = ['man', 'woman', 'child', 'elder'];
 const HAIR_LIST: readonly Hair[] = ['short', 'long', 'bun', 'hat', 'cap', 'none'];
 const POSE_LIST: readonly Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold'];
 
-/** Body templates are 0 to TEMPLATE_COUNT - 1 (body, hair, long); the umbrellas follow, one per body. */
-export const TEMPLATE_COUNT = BODY_LIST.length * HAIR_LIST.length * 2;
-export const templateIndex = (s: Pick<FigureSpec, 'body' | 'hair' | 'long'>): number =>
-  (BODY_LIST.indexOf(s.body) * HAIR_LIST.length + HAIR_LIST.indexOf(s.hair)) * 2 + (s.long && s.body !== 'child' ? 1 : 0);
+/** Body templates are 0 to TEMPLATE_COUNT - 1 (body, outfit, hair); the umbrellas follow, one per body. */
+export const TEMPLATE_COUNT = BODY_LIST.length * OUTFITS.length * HAIR_LIST.length;
+export const templateIndex = (s: Pick<FigureSpec, 'body' | 'hair' | 'long' | 'outfit'>): number =>
+  (BODY_LIST.indexOf(s.body) * OUTFITS.length + OUTFITS.indexOf(outfitOf(s))) * HAIR_LIST.length + HAIR_LIST.indexOf(s.hair);
 export const umbrellaIndex = (body: Body): number => TEMPLATE_COUNT + BODY_LIST.indexOf(body);
 
 function templateAt(i: number): Template {
@@ -624,7 +776,9 @@ function templateAt(i: number): Template {
     if (!t) templates.set(`umbrella|${body}`, (t = buildUmbrella(body)));
     return t;
   }
-  return template(BODY_LIST[Math.floor(i / 2 / HAIR_LIST.length)], HAIR_LIST[Math.floor(i / 2) % HAIR_LIST.length], i % 2 === 1);
+  const hair = HAIR_LIST[i % HAIR_LIST.length];
+  const outfit = OUTFITS[Math.floor(i / HAIR_LIST.length) % OUTFITS.length];
+  return template(BODY_LIST[Math.floor(i / HAIR_LIST.length / OUTFITS.length)], hair, outfit);
 }
 
 /** A template's per-vertex attributes (bind pose, bones), as arrays. */
@@ -822,7 +976,7 @@ export function addUmbrella(gb: GhostBuilder, s: FigureSpec): boolean {
 
 /** A figure posed as the material poses it at rest (no idle motion), in the world: for tests. */
 export function posedFigure(s: FigureSpec): Float32Array {
-  const T = template(s.body, s.hair, s.long);
+  const T = template(s.body, s.hair, outfitOf(s));
   const M = poseBones(T, s);
   const n = T.pos.length / 3;
   const out = new Float32Array(n * 3);
@@ -1028,7 +1182,8 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
             armL = Limb(-0.1, 0.22, 0.45, 0.0);
             armR = armL;
           } else if (P == 5) {
-            g = Limb(0.15, 0.95, 1.6 + 0.35 * sin(t * 7.0 + r * 2.0), 1.0);
+            // The elbow up near shoulder height, the forearm upright and swinging.
+            g = Limb(0.15, 1.3, 1.35 + 0.3 * sin(t * 7.0 + r * 2.0), 1.0);
             gest = true;
           } else if (P == 6) {
             g = Limb(0.1, body == 2 ? 0.75 : 0.26, 0.1, 0.0);
@@ -1110,10 +1265,17 @@ export function ghostMaterial(light?: GhostLight): THREE.ShaderMaterial {
 
 // ---- Crowds ----
 
-function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body?: Body): FigureSpec {
+function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body: Body | undefined, mix: PeopleMix): FigureSpec {
   const b: Body = body ?? (rnd.chance(0.45) ? 'man' : rnd.chance(0.85) ? 'woman' : 'elder');
   const woman = b === 'woman';
-  const hair: Hair = woman ? rnd.pick(['long', 'long', 'bun', 'short', 'hat'] as const) : b === 'elder' ? rnd.pick(['none', 'hat', 'cap'] as const) : rnd.pick(['short', 'short', 'short', 'none', 'cap', 'hat'] as const);
+  // What they wear, by the place's mix (a long coat or skirt as often as before where the mix has 'long').
+  const outfit = pickOutfit(mix, rnd.int(0, 1 << 30), (o) => wears(b, o));
+  let hair: Hair = woman ? rnd.pick(['long', 'long', 'bun', 'short', 'hat'] as const) : b === 'elder' ? rnd.pick(['none', 'hat', 'cap'] as const) : rnd.pick(['short', 'short', 'short', 'none', 'cap', 'hat'] as const);
+  if (outfit === 'maid' || (outfit === 'school' && woman)) hair = rnd.pick(['long', 'long', 'short', 'bun'] as const);
+  if (outfit === 'kimono') hair = woman ? 'bun' : rnd.pick(['short', 'none'] as const);
+  if (outfit === 'suit' && !woman) hair = rnd.pick(['short', 'short', 'none'] as const);
+  // A bag in the left hand: they gesture with the right.
+  const carries = (outfit === 'suit' && !woman) || (outfit === 'school' && b !== 'child');
   return {
     x,
     z,
@@ -1122,9 +1284,10 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
     pose,
     color: rnd.pick(GHOST_COLORS),
     hair,
-    long: woman ? rnd.chance(0.5) : b === 'man' && rnd.chance(0.2),
+    long: outfit === 'long',
+    outfit,
     phase: rnd.float(),
-    side: rnd.chance(0.5) ? 1 : -1,
+    side: carries || rnd.chance(0.5) ? 1 : -1,
     look: (rnd.float() - 0.5) * 0.6,
   };
 }
@@ -1136,6 +1299,9 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
  */
 export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly Rect[] = []): FigureSpec[] {
   const out: FigureSpec[] = [];
+  // Dressed for where they are (the zone's mix, else the district's).
+  const mix = plan.style.people ?? DISTRICT_PEOPLE[plan.kind] ?? CITY_PEOPLE;
+  const person = (rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body?: Body): FigureSpec => randomPerson(rnd, x, z, yaw, pose, body, mix);
   const cell = plan.rect;
   const mine = (x: number, z: number): boolean => x >= cell.x && z >= cell.y && x < cell.x + cell.w && z < cell.y + cell.h;
   const inRect = (q: Rect, x: number, z: number, m: number): boolean => x > q.x - m && x < q.x + q.w + m && z > q.y - m && z < q.y + q.h + m;
@@ -1188,46 +1354,48 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
         const L = reach(x, z, f[0], f[2]);
         if (roll < 0.3) {
           // Someone walking down the pavement (standing, if there's no room to walk).
-          const who = randomPerson(rnd, x, z, dirYaw, L >= 8 ? 'walk' : 'stand');
+          const who = person(rnd, x, z, dirYaw, L >= 8 ? 'walk' : 'stand');
           out.push(L >= 8 ? { ...who, seed, walk: walkOf(rnd, L, f[0], f[2], who.body === 'elder') } : { ...who, seed });
         } else if (roll < 0.45) {
-          out.push({ ...randomPerson(rnd, x, z, dirYaw + (rnd.float() - 0.5) * 1.2, rnd.chance(0.7) ? 'stand' : 'pockets'), seed });
+          out.push({ ...person(rnd, x, z, dirYaw + (rnd.float() - 0.5) * 1.2, rnd.chance(0.7) ? 'stand' : 'pockets'), seed });
         } else if (roll < 0.57) {
           // A couple walking side by side (or waiting together).
           const [x1, z1] = p(-0.35, 0);
           const [x2, z2] = p(0.35, 0.1);
           const walk = L >= 8 ? walkOf(rnd, L - 1, f[0], f[2]) : undefined;
           const pose: Pose = walk ? 'walk' : 'stand';
-          out.push({ ...randomPerson(rnd, x1, z1, dirYaw, pose, 'man'), seed, walk });
-          out.push({ ...randomPerson(rnd, x2, z2, dirYaw, pose, 'woman'), look: -0.4, seed, walk });
+          out.push({ ...person(rnd, x1, z1, dirYaw, pose, 'man'), seed, walk });
+          out.push({ ...person(rnd, x2, z2, dirYaw, pose, 'woman'), look: -0.4, seed, walk });
         } else if (roll < 0.7) {
           // Two people talking, face to face.
           const [x1, z1] = p(0, -0.45);
           const [x2, z2] = p(0, 0.45);
-          out.push({ ...randomPerson(rnd, x1, z1, dirYaw, rnd.chance(0.4) ? 'talk' : 'stand'), look: 0, seed });
-          out.push({ ...randomPerson(rnd, x2, z2, dirYaw + Math.PI, rnd.chance(0.5) ? 'stand' : 'pockets'), look: 0, seed });
+          out.push({ ...person(rnd, x1, z1, dirYaw, rnd.chance(0.4) ? 'talk' : 'stand'), look: 0, seed });
+          out.push({ ...person(rnd, x2, z2, dirYaw + Math.PI, rnd.chance(0.5) ? 'stand' : 'pockets'), look: 0, seed });
         } else if (roll < 0.8) {
           // Parent and child holding hands, walking or waiting.
           const walk = rnd.chance(0.6) && L >= 8 ? walkOf(rnd, L - 1, f[0], f[2], true) : undefined;
           const [x1, z1] = p(-0.28, 0);
           const [x2, z2] = p(0.3, 0);
-          const parent = randomPerson(rnd, x1, z1, dirYaw, walk ? 'walk' : 'hold', rnd.chance(0.6) ? 'woman' : 'man');
-          out.push({ ...parent, side: 1, pose: walk ? 'walk' : 'hold', seed, walk });
-          out.push({ ...randomPerson(rnd, x2, z2, dirYaw, walk ? 'walk' : 'hold', 'child'), side: -1, hair: rnd.pick(['short', 'cap', 'bun'] as const), long: false, look: -0.3, phase: parent.phase + 0.5, seed, walk });
+          const parent = person(rnd, x1, z1, dirYaw, walk ? 'walk' : 'hold', rnd.chance(0.6) ? 'woman' : 'man');
+          // (A parent out with a child: in their own clothes, not a uniform.)
+          const own = parent.outfit === 'maid' || parent.outfit === 'school' ? 'plain' : parent.outfit;
+          out.push({ ...parent, outfit: own, side: 1, pose: walk ? 'walk' : 'hold', seed, walk });
+          out.push({ ...person(rnd, x2, z2, dirYaw, walk ? 'walk' : 'hold', 'child'), side: -1, hair: rnd.pick(['short', 'cap', 'bun'] as const), long: false, look: -0.3, phase: parent.phase + 0.5, seed, walk });
         } else if (roll < 0.9) {
           // Friends in a loose circle.
           const n = rnd.int(3, 4);
           for (let i = 0; i < n; i++) {
             const ang = (i / n) * Math.PI * 2 + rnd.float() * 0.4;
             const [xi, zi] = [x + Math.sin(ang) * 0.6, z + Math.cos(ang) * 0.6];
-            out.push({ ...randomPerson(rnd, xi, zi, ang + Math.PI, rnd.pick(['stand', 'stand', 'pockets', 'talk', 'phone'] as const)), look: (rnd.float() - 0.5) * 0.8, seed });
+            out.push({ ...person(rnd, xi, zi, ang + Math.PI, rnd.pick(['stand', 'stand', 'pockets', 'talk', 'phone'] as const)), look: (rnd.float() - 0.5) * 0.8, seed });
           }
         } else if (roll < 0.97) {
           // On the phone, facing the street from the building side.
           const [x1, z1] = onRoad(r, side, t, pave - 0.4);
-          out.push({ ...randomPerson(rnd, x1, z1, Math.atan2(r.vertical ? -side : 0, r.vertical ? 0 : -side), 'phone'), seed });
+          out.push({ ...person(rnd, x1, z1, Math.atan2(r.vertical ? -side : 0, r.vertical ? 0 : -side), 'phone'), seed });
         } else {
-          out.push({ ...randomPerson(rnd, x, z, dirYaw + Math.PI / 2, 'wave'), seed });
+          out.push({ ...person(rnd, x, z, dirYaw + Math.PI / 2, 'wave'), seed });
         }
       }
     }
@@ -1261,20 +1429,20 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
         const y = floorAt(px, pz);
         const from = out.length;
         if (roll < 0.35) {
-          const who = randomPerson(rnd, px, pz, yaw, L >= 8 ? 'walk' : 'stand');
+          const who = person(rnd, px, pz, yaw, L >= 8 ? 'walk' : 'stand');
           out.push(L >= 8 ? { ...who, seed, walk: walkOf(rnd, L, dx, dz, who.body === 'elder') } : { ...who, seed });
         } else if (roll < 0.47) {
           const [sx, sz] = [Math.cos(yaw) * 0.35, -Math.sin(yaw) * 0.35];
           const walk = L >= 8 ? walkOf(rnd, L - 1, dx, dz) : undefined;
-          out.push({ ...randomPerson(rnd, px - sx, pz - sz, yaw, walk ? 'walk' : 'stand', 'man'), seed, walk });
-          out.push({ ...randomPerson(rnd, px + sx, pz + sz, yaw, walk ? 'walk' : 'stand', 'woman'), look: -0.4, seed, walk });
+          out.push({ ...person(rnd, px - sx, pz - sz, yaw, walk ? 'walk' : 'stand', 'man'), seed, walk });
+          out.push({ ...person(rnd, px + sx, pz + sz, yaw, walk ? 'walk' : 'stand', 'woman'), look: -0.4, seed, walk });
         } else if (roll < 0.82) {
-          out.push({ ...randomPerson(rnd, px, pz, yaw, rnd.pick(['stand', 'stand', 'pockets', 'phone'] as const)), seed });
+          out.push({ ...person(rnd, px, pz, yaw, rnd.pick(['stand', 'stand', 'pockets', 'phone'] as const)), seed });
         } else {
           const n = rnd.int(2, 4);
           for (let i = 0; i < n; i++) {
             const ang = (i / n) * Math.PI * 2 + rnd.float() * 0.4;
-            out.push({ ...randomPerson(rnd, px + Math.sin(ang) * 0.6, pz + Math.cos(ang) * 0.6, ang + Math.PI, rnd.pick(['stand', 'stand', 'pockets', 'talk', 'phone'] as const)), look: (rnd.float() - 0.5) * 0.8, seed });
+            out.push({ ...person(rnd, px + Math.sin(ang) * 0.6, pz + Math.cos(ang) * 0.6, ang + Math.PI, rnd.pick(['stand', 'stand', 'pockets', 'talk', 'phone'] as const)), look: (rnd.float() - 0.5) * 0.8, seed });
           }
         }
         if (y !== 0) for (let i = from; i < out.length; i++) out[i] = { ...out[i], y };

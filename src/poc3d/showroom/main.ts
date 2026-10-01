@@ -103,7 +103,7 @@ floor.box(0, -36, -0.2, 0, 80, 6, KIND.lot);
 floor.kind = KIND.asphalt;
 floor.kind = KIND.plain;
 floor.color = lin(0x8a867e);
-floor.box(0, 17.5, 0, 0.15, 17, 23, KIND.sidewalk);
+floor.box(1, 20, 0, 0.15, 22, 28, KIND.sidewalk);
 const floorMesh = new THREE.Mesh(floor.build()!, city);
 floorMesh.receiveShadow = true;
 scene.add(floorMesh);
@@ -548,11 +548,33 @@ label('new', 'parent + child', -1.6, 2.4, zg);
 label('new', 'couple walking', 1.8, 2.4, zg);
 label('new', 'waiting', 5.4, 2.4, zg);
 genItems.new.push({ name: 'groups (fading)', group: 'People', at: new THREE.Vector3(0, 1, zg), size: 7, view: FRONT_VIEW });
+// Outfits (district/peopleMix.ts): what the mob wears where.
+const zo = zg + DZ;
+const DRESSED: [string, Partial<FigureSpec> & Pick<FigureSpec, 'body' | 'pose'>][] = [
+  ['salaryman · suit', { body: 'man', pose: 'walk', outfit: 'suit', phase: 0.3 }],
+  ['office · suit', { body: 'woman', pose: 'stand', outfit: 'suit', hair: 'bun' }],
+  ['maid', { body: 'woman', pose: 'wave', outfit: 'maid', hair: 'long' }],
+  ['maid', { body: 'woman', pose: 'stand', outfit: 'maid', hair: 'short' }],
+  ['schoolgirl', { body: 'woman', pose: 'phone', outfit: 'school', hair: 'long' }],
+  ['schoolboy', { body: 'man', pose: 'walk', outfit: 'school', phase: 0.7 }],
+  ['randoseru', { body: 'child', pose: 'walk', outfit: 'school', hair: 'cap', phase: 0.2 }],
+  ['kimono', { body: 'woman', pose: 'stand', outfit: 'kimono', hair: 'bun' }],
+  ['kimono (man)', { body: 'man', pose: 'pockets', outfit: 'kimono' }],
+  ['kimono (elder)', { body: 'elder', pose: 'stand', outfit: 'kimono', hair: 'none' }],
+];
+DRESSED.forEach(([name, sp], c) => {
+  const x = x0 - 2 + c * DX;
+  person({ x, z: zo, color: GHOST_COLORS[(c * 3 + 1) % GHOST_COLORS.length], ...sp });
+  person({ x, z: zo + 1.4, yaw: Math.PI, color: GHOST_COLORS[(c * 3 + 1) % GHOST_COLORS.length], ...sp });
+  label('new', name, x, 2.3, zo);
+});
+genItems.new.push({ name: 'outfits', group: 'People', at: new THREE.Vector3(x0 - 2 + 4.5 * DX, 1, zo), size: 9, view: FRONT_VIEW });
+genItems.new.push({ name: 'outfits (backs)', group: 'People', at: new THREE.Vector3(x0 - 2 + 4.5 * DX, 1, zo + 1.4), size: 9, view: new THREE.Vector3(0, 0.55, -0.85).normalize() });
 const mobMesh = new THREE.Mesh(mob.build(0, 0)!, ghost);
 genRoot.new.add(mobMesh);
 (window as unknown as { __mob: unknown }).__mob = { scene, mobMesh, floorMesh, ghost };
 // The cast as modelled characters (models/characters.ts), on a pad of their own past the mob, idling.
-const CAST_Z = 32;
+const CAST_Z = 38;
 const castPad = new MeshBuilder();
 castPad.kind = KIND.plain;
 castPad.color = lin(0x8a867e);

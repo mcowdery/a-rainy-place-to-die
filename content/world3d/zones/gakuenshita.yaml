@@ -11,6 +11,7 @@ zones:
   S:
     id: student_town
     name: Student town
+    people: { school: 4, plain: 5, long: 1 }
     plan:
       floors: [[3, 5, 55], [6, 9, 45]]
       lotW: [5, 11]
