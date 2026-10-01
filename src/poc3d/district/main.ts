@@ -61,6 +61,7 @@ import { Expressway, parseExpressway } from './expressway';
 import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
 import { buildSea } from '../real/sea';
 import { buildAirport, onAirfield } from '../real/airport';
+import { Occlusion } from '../real/occlusion';
 import { carParkDecks } from '../real/denko';
 import expresswayText from '../../../content/world3d/expressway.yaml?raw';
 import { pointsAhead, Router, type NavMode } from './gps';
@@ -76,7 +77,7 @@ import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater,
 import { TrackMap, type Wheel } from '../real/tracks';
 import { setTreeSink, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { LITTER, WIPERS } from '../real/city';
-import { moodFromUrl, MoodPanel } from './moodPanel';
+import { moodFromUrl, MoodPanel, QUALITY } from './moodPanel';
 import { carLoops, routeFor, Signals } from './traffic';
 import { carMixFor, CITY_CARS } from './carMix';
 import { CAR } from './cabin';
@@ -236,7 +237,8 @@ async function run(): Promise<void> {
   cityU.tLight.value = lightmap.texture;
   cityU.uLightRect.value = lightmap.uniformRect;
   cityU.uLightFade.value.set(...lightmap.fade);
-  const ghost = ghostMaterial();
+  // The mob, lit by the street lightmap as the city is.
+  const ghost = ghostMaterial({ tLight: cityU.tLight, uLightRect: cityU.uLightRect, uLightFade: cityU.uLightFade, uLightGain: cityU.uLightGain });
   const ads = adMaterial(cityU, new DistrictAdAtlas());
   const cityDepth = cityDepthMaterial(cityU);
   // Taxis' photo ads (parked and in traffic) and the vehicles' lettering (in the sign atlas).
@@ -301,6 +303,12 @@ async function run(): Promise<void> {
   };
   grade.grade = mood.grade;
   composer.addPass(grade);
+  // Occlusion culling: chunks behind others drop to their building masses (real/occlusion.ts; ?occlusion=0 turns it off).
+  const occlusion = new Occlusion(renderer);
+  occlusion.enabled = params.get('occlusion') !== '0';
+  occlusion.depthSource = () => overlay.depth;
+  district.occluded = occlusion.occluded;
+  composer.insertPass(occlusion.pass, composer.passes.indexOf(overlay) + 1);
 
   // Stamp dressing (door, noren, lanterns) and NPCs as ghosts (visibility follows their conditions).
   const nodes = district.nodes;
@@ -703,7 +711,7 @@ async function run(): Promise<void> {
       else if (e.kind === 'arrive') audio.chime();
     };
   }
-  if (params.get('diag') === '1') Object.assign(window, { __scene: scene, __renderer: renderer, __dof: dof, __audio: audio, __city: cityU, __traffic: traffic, __strike: () => {
+  if (params.get('diag') === '1') Object.assign(window, { __scene: scene, __camera: camera, __renderer: renderer, __district: district, __mood: mood, __occlusion: occlusion, __passes: { ssr, overlay, dof, bloom, grade }, __lampShadows: lampShadows, __sun: sun, __ghost: ghost, __dof: dof, __audio: audio, __city: cityU, __traffic: traffic, __strike: () => {
     const d = camera.getWorldDirection(new THREE.Vector3());
     lightning.strikeNow(camera.position, { x: d.x, z: d.z });
   },
@@ -973,6 +981,13 @@ async function run(): Promise<void> {
     cityU.uDark.value = d;
     dof.strength = mood.dof;
     dof.focus = mood.focus;
+    // Detail (K panel): how far full detail, traffic and people reach.
+    const q = QUALITY[mood.quality];
+    district.detailDistance = q.detail;
+    district.midDistance = q.mid;
+    district.peopleDistance = q.people;
+    traffic.drawDistance = q.traffic;
+    traffic.carLod = q.carLod;
     renderer.toneMappingExposure = atm.exposure * (1 - 0.3 * d) * (1 + 0.1 * heatHaze);
     heatNow = heatHaze;
     grade.grade = mood.grade;
@@ -2224,6 +2239,18 @@ async function run(): Promise<void> {
   const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   const gpu = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : 'unknown';
   const px = new Uint8Array(4);
+  // ?diag=1: GPU time per frame (a timer query round the render, read back a few frames later) and the CPU
+  // time of the frame's work, the last 600 frames each in window.__perf, so a scene can be told GPU- or CPU-bound.
+  const timer = params.get('diag') === '1' ? gl.getExtension('EXT_disjoint_timer_query_webgl2') : null;
+  // frameQuery off lets a script time passes itself (timer queries can't nest).
+  const perf = { gpu: [] as number[], cpu: [] as number[], timer: !!timer, frameQuery: true };
+  const queries: WebGLQuery[] = [];
+  const gl2 = gl as WebGL2RenderingContext;
+  if (params.get('diag') === '1') Object.assign(window, { __perf: perf });
+  const keep = (a: number[], v: number): void => {
+    a.push(v);
+    if (a.length > 600) a.shift();
+  };
 
   // Bench: stream along a boulevard through the district at run-to-fly speed, then hold still per preset.
   interface Sample { ms: number; calls: number; tris: number; built: number; t: number }
@@ -2536,12 +2563,30 @@ async function run(): Promise<void> {
     sun.target.position.set(tx, 0, tz);
     sun.position.set(tx + sd.x * 400, sd.y * 400, tz + sd.z * 400);
     cityU.uTime.value = now / 1000;
+    ghost.uniforms.uTime.value = now / 1000;
     overlay.setRain(rainAmount * 0.11 * (inside ? 0 : 1), now / 1000);
     renderer.info.reset();
     // Hidden groups (the subway above ground, interiors you're not in, the surface below ground) skip the matrix
     // update too; the frozen ones always do.
     for (const o of scene.children) o.matrixWorldAutoUpdate = o.visible && !frozen.has(o);
+    let query: WebGLQuery | null = null;
+    if (timer && perf.frameQuery && queries.length < 6) {
+      query = gl2.createQuery();
+      gl2.beginQuery(timer.TIME_ELAPSED_EXT, query);
+    }
     composer.render(dt);
+    if (query) {
+      gl2.endQuery(timer!.TIME_ELAPSED_EXT);
+      queries.push(query);
+    }
+    while (timer && queries.length > 0 && gl2.getQueryParameter(queries[0], gl2.QUERY_RESULT_AVAILABLE)) {
+      const q = queries.shift()!;
+      if (!gl2.getParameter(timer.GPU_DISJOINT_EXT)) keep(perf.gpu, gl2.getQueryParameter(q, gl2.QUERY_RESULT) / 1e6);
+      gl2.deleteQuery(q);
+    }
+    // Test the loaded chunks against this frame's depth (not below ground, where the surface is hidden).
+    occlusion.update(!under, camera, district.occlusionBoxes(camera.position));
+    if (perf.timer || params.get('diag') === '1') keep(perf.cpu, performance.now() - t0);
     shot.afterRender();
     if (bench) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     const frameMs = performance.now() - t0;
@@ -2666,7 +2711,7 @@ function dressDoor(mb: MeshBuilder, n: Node3, r: C3, nn: C3, y = 0): void {
   }
 }
 
-/** An NPC as a ghost: its stamp's figure, else a woman talking (Bar Kanpai's mama at her door). */
+/** An NPC as a mob figure that stays put: its stamp's figure, else a woman talking (Bar Kanpai's mama at her door). */
 function npcSpec(n: Node3, facing: C3): FigureSpec {
   const yaw = Math.atan2(facing[0], facing[2]);
   const f = n.figure;
@@ -2685,6 +2730,7 @@ function npcSpec(n: Node3, facing: C3): FigureSpec {
       phase: 0,
       side: 1,
       look: 0,
+      fade: false,
     };
   }
   return {
@@ -2699,6 +2745,7 @@ function npcSpec(n: Node3, facing: C3): FigureSpec {
     phase: 0,
     side: 1,
     look: 0.3,
+    fade: false,
   };
 }
 

@@ -1,5 +1,7 @@
 import { Terrain } from './terrain';
 import * as THREE from 'three';
+import { Crowd } from '../real/crowd';
+import type { OcclusionBox } from '../real/occlusion';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import type { Lightmap } from '../real/lightmap';
 import { KIND } from '../real/meshBuilder';
@@ -25,6 +27,8 @@ export const UNLOAD_RADIUS = 820;
 export const LIGHTMAP_WINDOW = 16;
 /** Within this, a chunk shows its full detail (built on demand); beyond, plain building masses. */
 export const LOD_DISTANCE = 300;
+/** Within this, a chunk's parked cars, trees, hedges and bikes are full; beyond it (to LOD_DISTANCE) simplified. */
+export const MID_DISTANCE = 140;
 /** Detail is built a little before it's needed and dropped well after. */
 const NEAR_BUILD = LOD_DISTANCE + 40;
 const NEAR_DROP = LOD_DISTANCE + 160;
@@ -66,8 +70,9 @@ interface Chunk {
   readonly group: THREE.Group;
   readonly far: THREE.Mesh | null;
   near: THREE.Group | null;
-  ghosts: THREE.Mesh | null;
-  umbrellas: THREE.Mesh | null;
+  /** The props with a middle-distance version: full and simplified (in `near`). */
+  props: THREE.Mesh | null;
+  propsMid: THREE.Mesh | null;
   ghostsBuilt: boolean;
   people: number;
   readonly triangles: number;
@@ -108,6 +113,18 @@ export class District {
   private wake: (() => void) | null = null;
   /** People carry their umbrellas (while it rains). */
   umbrellas = false;
+  /** The streets' people, drawn instanced (real/crowd.ts). */
+  crowd: Crowd | null = null;
+  /** Chunks whose centre is further than this aren't drawn at all (Infinity: everything loaded). */
+  drawDistance = Infinity;
+  /** Full detail within this distance (at most LOD_DISTANCE, as far as it's built); the masses beyond. */
+  detailDistance = LOD_DISTANCE;
+  /** Full props (parked cars, trees, hedges, bikes) within this distance; their simplified versions beyond. */
+  midDistance = MID_DISTANCE;
+  /** People are shown within this distance of a chunk's centre (at most GHOST_DISTANCE, as far as they're built). */
+  peopleDistance = GHOST_DISTANCE;
+  /** Chunks hidden behind others (real/occlusion.ts), shown as their building masses instead of full detail. */
+  occluded: ReadonlySet<number> = new Set();
   /** Geometry bytes integrated by the last update() (they reach the GPU in the next render). */
   lastBytes = 0;
 
@@ -331,6 +348,8 @@ export class District {
   /** Sets the render kit and starts the worker pool. */
   setKit(kit: DistrictKit, workerCount = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 2))): void {
     this.kit = kit;
+    this.crowd = new Crowd(kit.ghost);
+    this.root.add(this.crowd.group);
     for (let i = 0; i < workerCount; i++) {
       const w = new Worker(new URL('./chunkWorker.ts', import.meta.url), { type: 'module' });
       this.ready.push(
@@ -462,14 +481,44 @@ export class District {
       }
     }
     if (n > 0) this.dispatch(pos);
+    const peopleShown = new Set<number>();
     for (const c of this.chunks.values()) {
-      const showNear = c.near !== null && dist(c) < LOD_DISTANCE;
-      if (c.near) c.near.visible = showNear;
-      if (c.far) c.far.visible = !showNear;
-      if (c.ghosts) c.ghosts.visible = showNear && dist(c) < GHOST_DISTANCE;
-      if (c.umbrellas) c.umbrellas.visible = this.umbrellas && showNear && dist(c) < GHOST_DISTANCE;
+      const d = dist(c);
+      const shown = d < this.drawDistance;
+      const showNear = c.near !== null && d < Math.min(LOD_DISTANCE, this.detailDistance) && !this.occluded.has(c.key);
+      if (c.near) c.near.visible = shown && showNear;
+      if (c.props && c.propsMid) {
+        const full = d < Math.min(this.midDistance, this.detailDistance);
+        c.props.visible = full;
+        c.propsMid.visible = !full;
+      }
+      if (c.far) c.far.visible = shown && !showNear;
+      if (c.ghostsBuilt && shown && showNear && d < Math.min(GHOST_DISTANCE, this.peopleDistance)) peopleShown.add(c.key);
+    }
+    if (this.crowd) {
+      this.crowd.show(peopleShown);
+      this.crowd.umbrellas = this.umbrellas;
+      this.crowd.update();
     }
     return n;
+  }
+
+  /**
+   * The chunks worth an occlusion test: those with full detail loaded and in range, each as its cell's box (a
+   * little wider, for awnings and crowns over the edge) from the lowest ground to above its tallest building.
+   */
+  occlusionBoxes(pos: THREE.Vector3): OcclusionBox[] {
+    const out: OcclusionBox[] = [];
+    const T = this.model.terrain;
+    for (const c of this.chunks.values()) {
+      if (!c.near || Math.hypot(c.cx - pos.x, c.cz - pos.z) >= Math.min(LOD_DISTANCE, this.detailDistance)) continue;
+      const x0 = c.mx * CELL;
+      const z0 = c.my * CELL;
+      const g = [T.height(x0, z0), T.height(x0 + CELL, z0), T.height(x0, z0 + CELL), T.height(x0 + CELL, z0 + CELL)];
+      const top = c.buildings.reduce((m, b) => Math.max(m, b.h), 0);
+      out.push({ key: c.key, x0: x0 - 2, x1: x0 + CELL + 2, z0: z0 - 2, z1: z0 + CELL + 2, y0: Math.min(...g) - 2, y1: Math.max(...g) + top + 14 });
+    }
+    return out;
   }
 
   /**
@@ -592,7 +641,7 @@ export class District {
       group.updateMatrixWorld(true);
       this.root.add(group);
       this.chunks.set(task.key, {
-        key: task.key, mx: r.mx, my: r.my, cx, cz, group, far, near: null, ghosts: null, umbrellas: null, ghostsBuilt: false, people: 0,
+        key: task.key, mx: r.mx, my: r.my, cx, cz, group, far, near: null, props: null, propsMid: null, ghostsBuilt: false, people: 0,
         triangles: rawTriangles(r.meshes.base ?? null) + rawTriangles(r.meshes.far ?? null), nearTriangles: 0, buildings: this.model.buildings(r.mx, r.my),
       });
       if (r.lightmap) kit.lightmap.upload(r.mx * CELL, r.my * CELL, r.lightmap);
@@ -606,6 +655,16 @@ export class District {
         m.castShadow = m.receiveShadow = true;
         if (kit.cityDepth) m.customDepthMaterial = kit.cityDepth;
         near.add(m);
+      }
+      for (const k of ['props', 'propsMid'] as const) {
+        const raw = r.meshes[k];
+        if (!raw) continue;
+        const m = new THREE.Mesh(toGeometry(raw), kit.city);
+        m.castShadow = m.receiveShadow = true;
+        if (kit.cityDepth) m.customDepthMaterial = kit.cityDepth;
+        m.visible = k === 'props';
+        near.add(m);
+        c[k] = m;
       }
       if (r.meshes.signs) {
         const m = new THREE.Mesh(toGeometry(r.meshes.signs), kit.signs);
@@ -621,26 +680,13 @@ export class District {
       c.group.add(near);
       near.updateMatrixWorld(true);
       c.near = near;
-      c.nearTriangles = rawTriangles(r.meshes.near ?? null) + rawTriangles(r.meshes.signs ?? null) + rawTriangles(r.meshes.ads ?? null) + rawTriangles(r.meshes.taxiAds ?? null);
+      c.nearTriangles = rawTriangles(r.meshes.near ?? null) + rawTriangles(r.meshes.props ?? null) + rawTriangles(r.meshes.signs ?? null) + rawTriangles(r.meshes.ads ?? null) + rawTriangles(r.meshes.taxiAds ?? null);
       return true;
     }
     if (!c || !c.near || c.ghostsBuilt) return false;
     c.ghostsBuilt = true;
     c.people = r.people ?? 0;
-    if (r.meshes.ghosts) {
-      c.ghosts = new THREE.Mesh(toGeometry(r.meshes.ghosts), kit.ghost);
-      c.ghosts.renderOrder = 2;
-      c.near.add(c.ghosts);
-      c.ghosts.updateMatrixWorld(true);
-      c.nearTriangles += rawTriangles(r.meshes.ghosts);
-    }
-    if (r.meshes.umbrellas) {
-      c.umbrellas = new THREE.Mesh(toGeometry(r.meshes.umbrellas), kit.ghost);
-      c.umbrellas.renderOrder = 2;
-      c.umbrellas.visible = false;
-      c.near.add(c.umbrellas);
-      c.umbrellas.updateMatrixWorld(true);
-    }
+    this.crowd?.set(c.key, r.crowd ?? null);
     return true;
   }
 
@@ -651,7 +697,9 @@ export class District {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
     });
     c.near = null;
-    c.ghosts = null;
+    c.props = null;
+    c.propsMid = null;
+    this.crowd?.set(c.key, null);
     c.ghostsBuilt = false;
     c.people = 0;
     c.nearTriangles = 0;

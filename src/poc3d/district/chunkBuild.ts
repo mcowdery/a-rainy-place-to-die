@@ -4,7 +4,7 @@ import { addDistrictAds } from '../real/districtAds';
 import { addGround } from '../real/ground';
 import { paintLights, type Light } from '../real/lightmap';
 import { MeshBuilder } from '../real/meshBuilder';
-import { addFigure, addUmbrella, cellCrowd, GhostBuilder } from '../real/people';
+import { cellCrowd, packFigures } from '../real/people';
 import { addProps } from '../real/props';
 import { taxiPhotos } from '../real/taxiAdLayout';
 import type { RawGeometry } from '../real/rawGeometry';
@@ -19,8 +19,9 @@ import { CELL } from './plan';
  * Builds a chunk's geometry in stages, as transferable arrays. Runs in the chunk workers (chunkWorker.ts);
  * the main thread only turns the arrays into meshes.
  * - base: ground, the plain building masses (distant LOD) and the cell's lightmap tile;
- * - near: full building dressing, street furniture, signs;
- * - ghosts: the crowd of people.
+ * - near: full building dressing, street furniture, signs; the props with a middle-distance version (parked
+ *   cars, trees, hedges, bikes) apart, full and simplified, for the streamer to show by distance;
+ * - ghosts: the crowd of people, as numbers (people.ts packFigures) for the instanced crowd (real/crowd.ts).
  * Coordinates are relative to the cell centre.
  */
 export type Stage = 'base' | 'near' | 'ghosts';
@@ -29,7 +30,9 @@ export interface ChunkBuilt {
   readonly mx: number;
   readonly my: number;
   readonly stage: Stage;
-  readonly meshes: Partial<Record<'base' | 'far' | 'near' | 'signs' | 'ads' | 'taxiAds' | 'ghosts' | 'umbrellas', RawGeometry | null>>;
+  readonly meshes: Partial<Record<'base' | 'far' | 'near' | 'props' | 'propsMid' | 'signs' | 'ads' | 'taxiAds', RawGeometry | null>>;
+  /** The crowd stage's people, as numbers for the instanced crowd (people.ts packFigures). */
+  readonly crowd?: Float32Array;
   readonly lightmap?: Uint8Array;
   readonly people?: number;
   /** Time spent building, in the worker. */
@@ -38,12 +41,13 @@ export interface ChunkBuilt {
 
 export class ChunkBuilder {
   private readonly mb = new MeshBuilder(1 << 16);
+  /** The props with a middle-distance version (cars, trees, hedges, bikes): full, and the middle distance's. */
+  private readonly pf = new MeshBuilder(1 << 16);
+  private readonly pm = new MeshBuilder(1 << 14);
   private readonly sb = new SignBuilder();
   private readonly ab = new SignBuilder();
   /** Parked taxis' photo ads (the taxi ad atlas). */
   private readonly tb = new SignBuilder();
-  private readonly gb = new GhostBuilder();
-  private readonly ub = new GhostBuilder();
   private readonly canvas = new OffscreenCanvas(CELL, CELL);
   private readonly g = this.canvas.getContext('2d', { willReadFrequently: true })!;
 
@@ -98,7 +102,12 @@ export class ChunkBuilder {
       for (const b of buildings) addBuilding(mb, b, true);
       const sb = this.sb.reset();
       const tb = this.tb.reset();
-      addProps(mb, m.detail(mx, my)!, { sb, layout: this.layout, photos: taxiPhotos(tb) });
+      const detail = m.detail(mx, my)!;
+      addProps(mb, detail, undefined, 'fixed');
+      const pf = this.pf.reset();
+      addProps(pf, detail, { sb, layout: this.layout, photos: taxiPhotos(tb) }, 'swap');
+      const pm = this.pm.reset();
+      addProps(pm, detail, undefined, 'swap', true);
       // Sightlines for billboards and rooftop letters: this cell's and the neighbours' buildings.
       const around: Building3[] = [];
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) around.push(...m.buildings(mx + dx, my + dy));
@@ -106,16 +115,11 @@ export class ChunkBuilder {
       addSigns([...plan.signs, ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb, seen);
       const ab = this.ab.reset();
       addDistrictAds(ab, mb, buildings, plan.signs, m.detail(mx, my)!.props, undefined, seen, plan.open);
-      return { mx, my, stage, meshes: { near: lift(mb.raw(cx, cz)), signs: lift(sb.raw(cx, cz)), ads: lift(ab.raw(cx, cz)), taxiAds: lift(tb.raw(cx, cz)) }, ms: performance.now() - t0 };
+      return { mx, my, stage, meshes: { near: lift(mb.raw(cx, cz)), props: lift(pf.raw(cx, cz)), propsMid: lift(pm.raw(cx, cz)), signs: lift(sb.raw(cx, cz)), ads: lift(ab.raw(cx, cz)), taxiAds: lift(tb.raw(cx, cz)) }, ms: performance.now() - t0 };
     }
+    // People as numbers (the main thread draws them instanced), standing on the lie of the land.
     const crowd = cellCrowd(plan, m.detail(mx, my)!, m.plazas(mx, my));
-    const gb = this.gb.reset();
-    const ub = this.ub.reset();
-    for (const f of crowd) {
-      addFigure(gb, f);
-      addUmbrella(ub, f);
-    }
-    return { mx, my, stage, meshes: { ghosts: lift(gb.raw(cx, cz)), umbrellas: lift(ub.raw(cx, cz)) }, people: crowd.length, ms: performance.now() - t0 };
+    return { mx, my, stage, meshes: {}, crowd: packFigures(crowd, raised ? (x, z) => T.height(x, z) : null), people: crowd.length, ms: performance.now() - t0 };
   }
 }
 

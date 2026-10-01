@@ -33,5 +33,6 @@ self.onmessage = (e: MessageEvent<WorkerIn>) => {
   const result = builder!.build(m.mx, m.my, m.stage);
   const transfer: Transferable[] = rawTransfer(Object.values(result.meshes));
   if (result.lightmap) transfer.push(result.lightmap.buffer as ArrayBuffer);
+  if (result.crowd) transfer.push(result.crowd.buffer as ArrayBuffer);
   self.postMessage({ type: 'built', id: m.id, result }, { transfer });
 };

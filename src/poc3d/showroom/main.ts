@@ -8,8 +8,9 @@ import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRe
 import { cityMaterial, cityUniforms } from '../real/city';
 import { KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Pose } from '../real/people';
-import { figureGeometry, ghostMaterials2, POSES2, type Body2, type FigureShape, type Pose2 } from '../models/figures';
-import { addVehicle, addWheel, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, WORK_TYPES, type VehicleSpec, type VehicleType } from '../models/vehicles';
+import { Character, CHARACTERS, setCharacterEnvironment } from '../models/characters';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { addVehicle, addVehicleLow, addWheel, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, WORK_TYPES, type VehicleSpec, type VehicleType } from '../models/vehicles';
 import { Lightmap, paintLights, type Light } from '../real/lightmap';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { buildMegaSign } from '../real/megaSign';
@@ -62,6 +63,12 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI * 0.495;
 controls.update();
+// For scripted screenshots: __view(x, y, z, tx, ty, tz) puts the camera at (x, y, z) looking at (tx, ty, tz).
+(window as unknown as { __view: (...v: number[]) => void }).__view = (x, y, z, tx, ty, tz) => {
+  camera.position.set(x, y, z);
+  controls.target.set(tx, ty, tz);
+  controls.update();
+};
 
 // Lighting: a key light with soft shadows, sky/ground fill, and two warm "street" point lights for night.
 const hemi = new THREE.HemisphereLight();
@@ -111,8 +118,8 @@ interface Item {
 }
 /** People face +z in rows; viewed from the front and ~30 degrees up, the row in front doesn't block. */
 const FRONT_VIEW = new THREE.Vector3(0, 0.55, 0.85).normalize();
-// Two generations of models side by side in the same layout: 'new' (models/vehicles.ts, models/figures.ts,
-// under review) and 'previous' (real/people.ts and the old street tree, what the district uses today).
+// Two generations of models side by side in the same layout: 'new' (models/vehicles.ts and the rest,
+// under review) and 'previous' (the old street tree, what the district used before).
 type Gen = 'new' | 'previous';
 let gen: Gen = 'new';
 const genRoot: Record<Gen, THREE.Group> = { new: new THREE.Group(), previous: new THREE.Group() };
@@ -175,6 +182,11 @@ CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t)).forEach((type, i) => {
   const ad = type === 'taxi' ? ADS[1] : type === 'taxi2' ? ADS[0] : undefined;
   vehicle({ x, z: -8.5, fx: 0, fz: -1, type, paint: PAINT_B[type], ad }, `${NAMES[type]} (alt${ad ? ' + ad' : ''})`, 4.5);
 });
+// The middle-distance versions (addVehicleLow: parked cars beyond ~140 m, traffic beyond 80 m), in front of row 1.
+CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t)).forEach((type, i) => addVehicleLow(newCars, { x: -13 + i * 3.7, z: 3, fx: 0, fz: 1, type, paint: PAINT_A[type] }));
+WORK_TYPES.forEach((type, i) => addVehicleLow(newCars, { x: 30 + i * 6.5, z: 3, fx: 0, fz: 1, type, paint: PAINT_A[type] }));
+label('new', 'middle-distance models (parked beyond ~140 m, traffic beyond 80 m)', 4, 2.6, 3);
+genItems.new.push({ name: 'middle-distance cars', group: 'Cars', at: new THREE.Vector3(4, 0.8, 3), size: 16 });
 // Working vehicles and the patrol car (new, under review): a row of their own behind the taxi ads, the second
 // paint facing away.
 // Each in two companies' lettering (WORK_LIVERIES), the patrol cars two units.
@@ -482,81 +494,87 @@ const VARIANT_ROW: [TreeSpecies, number][] = [['zelkova', 0], ['ginkgo', 11], ['
 }
 const tCars = performance.now() - t0;
 
-const ghostCache = new Map<number, ReturnType<typeof ghostMaterials2>>();
-const ghostOf = (hex: number): ReturnType<typeof ghostMaterials2> => {
-  let g = ghostCache.get(hex);
-  if (!g) ghostCache.set(hex, (g = ghostMaterials2(hex)));
-  return g;
+// The mob (real/people.ts): every body type in every pose, the hair and clothes, and groups as they stand
+// in the street. Fading is off here except in the last row, which shows the crowd coming and going.
+const mob = new GhostBuilder();
+const person = (s: Partial<FigureSpec> & Pick<FigureSpec, 'x' | 'z' | 'body' | 'pose'>): void => {
+  addFigure(mob, { yaw: 0, color: GHOST_COLORS[1], hair: s.body === 'woman' ? 'long' : s.body === 'elder' ? 'none' : 'short', long: false, phase: 0.25, side: 1, look: 0, fade: false, ...s });
 };
-const COLORS2 = [0x5ad8ff, 0xff6ab8, 0xb08cff, 0x6affa8, 0xffb850, 0xc8d4ff, 0xff8a6a];
-const figure2 = (shape: FigureShape, x: number, z: number, yaw: number, hex: number): void => {
-  const geo = figureGeometry(shape);
-  const mats = ghostOf(hex);
-  for (const [m, order] of [[mats.depth, 1], [mats.color, 2]] as const) {
-    const mesh = new THREE.Mesh(geo, m);
-    mesh.position.set(x, 0.15, z);
-    mesh.rotation.y = yaw;
-    mesh.renderOrder = order;
-    genRoot.new.add(mesh);
-  }
-};
-const shape = (body: Body2, pose: Pose2, extra: Partial<FigureShape> = {}): FigureShape => ({
-  body,
-  pose,
-  outfit: body === 'woman' ? 'dress' : 'casual',
-  hair: body === 'woman' ? 'bob' : body === 'elder' ? 'none' : 'short',
-  hat: 'none',
-  accessory: pose === 'phone' ? 'phone' : 'none',
-  phase: 0.25,
-  side: 1,
-  look: 0,
-  ...extra,
-});
-const BODIES2: Body2[] = ['man', 'woman', 'child', 'elder'];
+const BODIES: Body[] = ['man', 'woman', 'child', 'elder'];
+const POSES: Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold'];
 const DX = 2.0;
 const DZ = 3.6;
-const x0 = -((POSES2.length - 1) * DX) / 2;
-BODIES2.forEach((body, r) => {
+const x0 = -((POSES.length - 1) * DX) / 2;
+BODIES.forEach((body, r) => {
   const z = 8 + r * DZ;
-  POSES2.forEach((pose, c) => {
+  POSES.forEach((pose, c) => {
     const x = x0 + c * DX;
-    figure2(shape(body, pose), x, z, 0, COLORS2[r]);
-    label('new', `${body} · ${pose}`, x, body === 'child' ? 1.55 : 2.2, z);
+    person({ x, z, body, pose, color: GHOST_COLORS[(r * 3 + c) % GHOST_COLORS.length] });
+    label('new', `${body} · ${pose}`, x, body === 'child' ? 1.5 : 2.2, z);
   });
   genItems.new.push({ name: `${body} × all poses`, group: 'People', at: new THREE.Vector3(0, 1, z), size: 7, view: FRONT_VIEW });
 });
-const OUTFITS: [string, FigureShape][] = [
-  ['salaryman · suit + briefcase', shape('man', 'carry', { outfit: 'suit', accessory: 'briefcase' })],
-  ['salaryman · bowing (ojigi)', shape('man', 'bow', { outfit: 'suit' })],
-  ['office worker · bag + ponytail', shape('woman', 'walk', { hair: 'ponytail', accessory: 'shoulderbag', phase: 0.5 })],
-  ['kimono · obi + bun', shape('woman', 'stand', { outfit: 'kimono', hair: 'bun' })],
-  ['detective · trench + fedora', shape('man', 'pockets', { outfit: 'coat', hat: 'fedora' })],
-  ['schoolchild · randoseru + hat', shape('child', 'walk', { outfit: 'school', hat: 'schoolhat' })],
-  ['elder · cane + sun hat', shape('elder', 'carry', { accessory: 'cane', hat: 'sunhat' })],
-  ['vinyl umbrella · long hair', shape('woman', 'umbrella', { outfit: 'casual', hair: 'long', accessory: 'umbrella' })],
+const LOOKS: [string, Partial<FigureSpec> & Pick<FigureSpec, 'body' | 'pose'>][] = [
+  ['bob · skirt', { body: 'woman', pose: 'stand', hair: 'short', long: true }],
+  ['bun · skirt', { body: 'woman', pose: 'walk', hair: 'bun', long: true }],
+  ['sun hat', { body: 'woman', pose: 'pockets', hair: 'hat' }],
+  ['long coat · fedora', { body: 'man', pose: 'pockets', hair: 'hat', long: true }],
+  ['cap', { body: 'man', pose: 'stand', hair: 'cap' }],
+  ['bald', { body: 'man', pose: 'phone', hair: 'none' }],
+  ['elder · cap', { body: 'elder', pose: 'stand', hair: 'cap' }],
 ];
-const zv = 8 + BODIES2.length * DZ;
-OUTFITS.forEach(([name, s], c) => {
+const zv = 8 + BODIES.length * DZ;
+LOOKS.forEach(([name, s], c) => {
   const x = x0 + c * DX;
-  figure2(s, x, zv, 0, COLORS2[(c + 4) % COLORS2.length]);
-  label('new', name, x, s.body === 'child' ? 1.6 : s.accessory === 'umbrella' ? 2.7 : 2.3, zv);
+  person({ x, z: zv, color: GHOST_COLORS[(c * 5 + 2) % GHOST_COLORS.length], ...s });
+  label('new', name, x, 2.3, zv);
 });
-genItems.new.push({ name: 'outfits & accessories', group: 'People', at: new THREE.Vector3(0, 1, zv), size: 7.5, view: FRONT_VIEW });
+genItems.new.push({ name: 'hair & clothes', group: 'People', at: new THREE.Vector3(0, 1, zv), size: 7.5, view: FRONT_VIEW });
+// Groups as they'll appear in the street, fading in and out on their own cycles.
 const zg = zv + DZ + 0.2;
-// Groups as they'll appear in the street.
-figure2(shape('woman', 'talk', { outfit: 'kimono', hair: 'bun', look: 0 }), -5.2, zg - 0.45, 0, COLORS2[1]);
-figure2(shape('man', 'stand', { outfit: 'suit' }), -5.2, zg + 0.45, Math.PI, COLORS2[0]);
-figure2(shape('woman', 'hold', { side: 1 }), -1.9, zg, 0, COLORS2[3]);
-figure2(shape('child', 'hold', { side: -1, outfit: 'school', hat: 'schoolhat', look: -0.4 }), -1.35, zg, 0, COLORS2[4]);
-figure2(shape('man', 'walk', { phase: 0.25 }), 1.5, zg, 0, COLORS2[5]);
-figure2(shape('woman', 'walk', { phase: 0.75, look: -0.4, hair: 'long' }), 2.15, zg + 0.1, 0, COLORS2[2]);
-figure2(shape('man', 'bow', { outfit: 'suit' }), 5.2, zg - 0.55, 0, COLORS2[6]);
-figure2(shape('man', 'bow', { outfit: 'suit' }), 5.2, zg + 0.55, Math.PI, COLORS2[0]);
+const GROUP: (Partial<FigureSpec> & Pick<FigureSpec, 'x' | 'z' | 'body' | 'pose'>)[] = [
+  { x: -5.2, z: zg - 0.45, body: 'woman', pose: 'talk', hair: 'bun', long: true },
+  { x: -5.2, z: zg + 0.45, body: 'man', pose: 'stand', yaw: Math.PI, color: GHOST_COLORS[3] },
+  { x: -1.9, z: zg, body: 'woman', pose: 'hold', side: 1, color: GHOST_COLORS[4] },
+  { x: -1.35, z: zg, body: 'child', pose: 'hold', side: -1, hair: 'cap', look: -0.4, color: GHOST_COLORS[6] },
+  { x: 1.5, z: zg, body: 'man', pose: 'walk', phase: 0.25, color: GHOST_COLORS[0] },
+  { x: 2.15, z: zg + 0.1, body: 'woman', pose: 'walk', phase: 0.75, look: -0.4, color: GHOST_COLORS[5] },
+  { x: 5.2, z: zg - 0.4, body: 'man', pose: 'pockets', hair: 'hat', long: true, color: GHOST_COLORS[2] },
+  { x: 5.6, z: zg + 0.4, body: 'woman', pose: 'phone', yaw: Math.PI, color: GHOST_COLORS[7] },
+];
+for (const g of GROUP) person({ ...g, fade: true });
 label('new', 'talking pair', -5.2, 2.4, zg);
 label('new', 'parent + child', -1.6, 2.4, zg);
 label('new', 'couple walking', 1.8, 2.4, zg);
-label('new', 'bowing pair', 5.2, 2.2, zg);
-genItems.new.push({ name: 'groups', group: 'People', at: new THREE.Vector3(0, 1, zg), size: 7, view: FRONT_VIEW });
+label('new', 'waiting', 5.4, 2.4, zg);
+genItems.new.push({ name: 'groups (fading)', group: 'People', at: new THREE.Vector3(0, 1, zg), size: 7, view: FRONT_VIEW });
+const mobMesh = new THREE.Mesh(mob.build(0, 0)!, ghost);
+genRoot.new.add(mobMesh);
+(window as unknown as { __mob: unknown }).__mob = { scene, mobMesh, floorMesh, ghost };
+// The cast as modelled characters (models/characters.ts), on a pad of their own past the mob, idling.
+const CAST_Z = 32;
+const castPad = new MeshBuilder();
+castPad.kind = KIND.plain;
+castPad.color = lin(0x8a867e);
+castPad.box(0, CAST_Z, 0, 0.15, Math.max(6, CHARACTERS.length * 2.2 + 2), 5, KIND.sidewalk);
+genRoot.new.add(new THREE.Mesh(castPad.build()!, city));
+const pmrem = new THREE.PMREMGenerator(renderer);
+setCharacterEnvironment(pmrem.fromScene(new RoomEnvironment(), 0.04).texture);
+const cast: Character[] = [];
+CHARACTERS.forEach((name, i) => {
+  const x = (i - (CHARACTERS.length - 1) / 2) * 2.2;
+  label('new', name, x, 2.15, CAST_Z);
+  genItems.new.push({ name, group: 'Characters', at: new THREE.Vector3(x, 1.1, CAST_Z), size: 2.2, view: new THREE.Vector3(0.25, 0.2, 1).normalize() });
+  genItems.new.push({ name: `${name}: face`, group: 'Characters', at: new THREE.Vector3(x, 1.55, CAST_Z), size: 0.45, view: new THREE.Vector3(0.2, 0.05, 1).normalize() });
+  Character.load(name, i)
+    .then((c) => {
+      c.root.position.set(x, 0.15, CAST_Z);
+      genRoot.new.add(c.root);
+      cast.push(c);
+    })
+    .catch((e: unknown) => console.warn(`character ${name}:`, e));
+});
+if (CHARACTERS.length > 0) genItems.new.push({ name: 'the cast', group: 'Characters', at: new THREE.Vector3(0, 1, CAST_Z), size: 3 + CHARACTERS.length, view: FRONT_VIEW });
 const tPeople = performance.now() - t0 - tCars;
 
 // ---- Previous generation (for comparison) ----
@@ -579,30 +597,6 @@ const tPeople = performance.now() - t0 - tCars;
     genItems.previous.push({ name, group: 'Trees', at: new THREE.Vector3(p.x, 4, p.z), size: 11, view: new THREE.Vector3(0.2, 0.25, 1).normalize() });
   });
 }
-const BODIES: Body[] = ['man', 'woman', 'child', 'elder'];
-const POSES: Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold'];
-const px0 = -((POSES.length - 1) * DX) / 2;
-const person = (s: FigureSpec): void => {
-  const gb = new GhostBuilder();
-  addFigure(gb, s);
-  const m = new THREE.Mesh(gb.build(0, 0)!, ghost);
-  m.renderOrder = 2;
-  genRoot.previous.add(m);
-};
-const base = (x: number, z: number, body: Body, pose: Pose, color: [number, number, number]): FigureSpec => ({
-  x, z, yaw: 0, body, pose, color, hair: body === 'woman' ? 'long' : body === 'elder' ? 'none' : 'short',
-  long: false, phase: 0.25, side: 1, look: 0,
-});
-BODIES.forEach((body, r) => {
-  const z = 8 + r * DZ;
-  POSES.forEach((pose, c) => {
-    const x = px0 + c * DX;
-    person(base(x, z, body, pose, GHOST_COLORS[r % GHOST_COLORS.length] as [number, number, number]));
-    label('previous', `${body} · ${pose}`, x, body === 'child' ? 1.5 : 2.2, z);
-  });
-  genItems.previous.push({ name: `${body} × all poses`, group: 'People', at: new THREE.Vector3(0, 1, z), size: 7, view: FRONT_VIEW });
-});
-
 const applyGen = (g: Gen): void => {
   gen = g;
   genRoot.new.visible = g === 'new';
@@ -706,7 +700,7 @@ function renderPanel(): void {
     cityU.uSeason.value = i;
     renderPanel();
   }));
-  for (const g of ['Foliage', 'Transit', 'Mega-sign', 'Cars', 'Billboards', 'Posters', 'People']) {
+  for (const g of ['Characters', 'Foliage', 'Transit', 'Mega-sign', 'Cars', 'Billboards', 'Posters', 'People']) {
     section(g);
     for (const it of genItems[gen].filter((i) => i.group === g)) button(it.name, false, () => focus(it));
   }
@@ -779,6 +773,8 @@ renderer.setAnimationLoop(() => {
   controls.autoRotate = turntable;
   controls.update();
   cityU.uTime.value = performance.now() / 1000;
+  ghost.uniforms.uTime.value = performance.now() / 1000;
+  for (const c of cast) c.update(dt);
   composer.render(dt);
   labels.render(scene, camera);
   $('hud').textContent = [
