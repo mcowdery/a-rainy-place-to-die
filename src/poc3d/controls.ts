@@ -75,7 +75,8 @@ export class FirstPerson {
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
     dom: HTMLElement,
-    private readonly blocked: Blocker,
+    /** Collision (swapped while walking inside a moving vehicle: real/cabinRider.ts). */
+    public blocked: Blocker,
   ) {
     this.look = new PointerLockControls(camera, dom);
     // Mouse look is handled here (filtered); PointerLockControls only does the locking.

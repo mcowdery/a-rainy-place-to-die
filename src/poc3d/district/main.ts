@@ -79,6 +79,10 @@ import { LITTER, WIPERS } from '../real/city';
 import { moodFromUrl, MoodPanel } from './moodPanel';
 import { carLoops, routeFor, Signals } from './traffic';
 import { carMixFor, CITY_CARS } from './carMix';
+import { CAR } from './cabin';
+import { carGlass, type CarMaterials } from '../real/trainCar';
+import { CabinRider, type Ridable } from '../real/cabinRider';
+import type { RideState } from './rideTimeline';
 import { destinations, TravelMap, type Destination, type MapLine } from './travel';
 import { RoutePicker } from './routePicker';
 import { subwayRoute } from './subway';
@@ -350,7 +354,10 @@ async function run(): Promise<void> {
       const l = lineOfStation(p);
       return l ? [railStation(l, p.id, p.stamp.station!, p.building.x, p.building.z)] : [];
     });
-  const trainLines = new Map(rails.map((l) => [l.id, new TrainSystem(l, railStations.filter((s) => s.line === l.id), city)]));
+  // The new trains (real/trainCar.ts, under review): walk about inside while they run. ?transit=new turns them on.
+  const transitNew = params.get('transit') === 'new';
+  const carMats: CarMaterials | null = transitNew ? { city, glass: carGlass(), ads: taxiAds } : null;
+  const trainLines = new Map(rails.map((l) => [l.id, new TrainSystem(l, railStations.filter((s) => s.line === l.id), city, carMats)]));
   for (const t of trainLines.values()) {
     scene.add(t.group);
     // (The viaduct stands still; the trains in the same group move.)
@@ -361,7 +368,7 @@ async function run(): Promise<void> {
   /** The line you're riding, if any. */
   const trainRiding = (): TrainSystem | null => [...trainLines.values()].find((t) => t.riding) ?? null;
   // The subway: tunnels and trains below ground (shown only there), and its stations (landmarks, below).
-  const subway = new SubwaySystem(content.subway, city);
+  const subway = new SubwaySystem(content.subway, city, carMats);
   subway.group.visible = false;
   scene.add(subway.group);
   const subwayViews: { view: SubwayStationView; x: number; z: number }[] = [];
@@ -574,6 +581,13 @@ async function run(): Promise<void> {
   controls.setShearMode(false);
   controls.fly = params.get('fly') === '1';
   controls.floorAt = district.floorAt;
+  /** Walking about inside a moving train (the new cars). */
+  const rider = new CabinRider(camera, controls);
+  /** The ride you're walking about in: the train's system, and what to call when you're off. */
+  let cabin: { system: { alight(): void; readonly ride2State: RideState | null }; done: (key: string | null) => void } | null = null;
+  /** On a train or a subway: walking about in one, or (the district's cars) standing in one. */
+  if (debug) Object.assign(window, { __rider: rider, __trains: trainLines, __subway: subway });
+  const aboard = (): boolean => rider.active || (!!trainRiding() && !trainRiding()!.walkable) || (subway.riding && !subway.walkable);
   // Footsteps and landings, by what's underfoot, wet or not, and under cover (set each frame below).
   let stepCover: 'open' | 'roof' | 'enclosed' = 'open';
   const stepSound = (run: boolean, land?: number): void => {
@@ -644,6 +658,12 @@ async function run(): Promise<void> {
   });
   // Station sounds on a ride: the departure melody (each station its own), the door chime on arrival.
   subway.onEvent = (kind, stop) => (kind === 'depart' ? audio.melody(hash(stop.key.length, stop.s | 0, 0x5eed)) : audio.chime());
+  for (const t of trainLines.values()) {
+    t.onEvent = (e) => {
+      if (e.kind === 'depart') audio.melody(hash(e.stop.key.length, e.stop.s | 0, 0x5eed));
+      else if (e.kind === 'arrive') audio.chime();
+    };
+  }
   if (params.get('diag') === '1') Object.assign(window, { __scene: scene, __renderer: renderer, __dof: dof, __audio: audio, __city: cityU, __traffic: traffic, __strike: () => {
     const d = camera.getWorldDirection(new THREE.Vector3());
     lightning.strikeNow(camera.position, { x: d.x, z: d.z });
@@ -1555,12 +1575,12 @@ async function run(): Promise<void> {
     const { at } = g;
     const route = guide.route;
     // Chevrons on the street ahead (not below ground or up in a building).
-    const street = (driving.car || Math.abs(camAbove() - 1.7) < 1.2) && !subway.riding;
+    const street = (driving.car || Math.abs(camAbove() - 1.7) < 1.2) && !aboard();
     const car = from.mode === 'drive';
     // Driving, the route runs down the road's centre line: the chevrons sit in the left lane (keep left).
     const ahead = (at && route && street ? pointsAhead(route, at.seg, at.t, car ? 90 : 60, car ? 7 : 4.5, car ? 6 : 3) : []).map((p) => (car ? { ...p, x: p.x + p.dz * 1.5, z: p.z - p.dx * 1.5 } : p));
     gpsMarks.update(dt, ahead.map((p) => ({ ...p, y: (driving.own && ownCar.aloft() ? ownCar.sim.y : groundAt(p.x, p.z)) })), { ...dest, y: groundAt(dest.x, dest.z) });
-    gpsMarks.group.visible = camera.position.y > -2 && !subway.riding;
+    gpsMarks.group.visible = camera.position.y > -2 && !aboard();
     // The compass: toward the route a little way ahead (or the destination itself), from where you're looking.
     const next = at && route ? (pointsAhead(route, at.seg, at.t, 14, 14, 14)[0] ?? dest) : dest;
     camera.getWorldDirection(forward);
@@ -1587,7 +1607,7 @@ async function run(): Promise<void> {
   // ride or a scene (you'd load into a moving train); the autosave waits for those to end.
   const played0 = loaded?.played ?? 0;
   const t0 = performance.now();
-  const saveBlocked = (): string | null => (inVn ? 'Not during a scene.' : taxiRide || subway.riding || trainRiding() ? 'Not during a ride.' : race ? 'Not during a race.' : null);
+  const saveBlocked = (): string | null => (inVn ? 'Not during a scene.' : taxiRide || aboard() ? 'Not during a ride.' : race ? 'Not during a race.' : null);
   const gather = (): SaveGame => {
     const d = camera.getWorldDirection(new THREE.Vector3());
     const p = driving.car ? { x: driving.car.x, z: driving.car.z } : camera.position;
@@ -1863,7 +1883,89 @@ async function run(): Promise<void> {
     inVn = false;
   }
   // Riding the subway: each leg in real time (E skips it); a change of line is a short walk (a fade).
+  /**
+   * Off the train at the stop it's standing at: out of the door you walked through onto the platform when there's
+   * floor there (the near platforms), else (or with E) onto the station's platform spawn after a fade.
+   */
+  function getOff(door: THREE.Vector3 | null): void {
+    const c = cabin;
+    const st = c?.system.ride2State;
+    const at = st?.at;
+    if (!c || !st || !at || st.doors < 0.85) return;
+    cabin = null;
+    if (door) {
+      const level = door.y - 1.7;
+      const f = district.floorAt(door.x, door.z, level);
+      if (Math.abs(f - level) < 0.6 && !district.blocked(door.x, door.z, 0.4, f)) {
+        rider.leave();
+        controls.setLevel(f);
+        camera.position.set(door.x, f + 1.7, door.z);
+        c.system.alight();
+        c.done(at.key);
+        return;
+      }
+    }
+    void (async () => {
+      inVn = true;
+      await fadeTo(1);
+      rider.leave();
+      teleport(`${at.key}.platform`);
+      c.system.alight();
+      await fadeTo(0);
+      inVn = false;
+      c.done(at.key);
+    })();
+  }
+
+  /**
+   * A journey in the new trains: each leg's train with you standing in its middle car by the doors; you walk
+   * about, sit, and get off by walking out at a stop (the journey ends where you get off; at a change of line the
+   * next leg's train takes over).
+   */
+  async function rideWalk(from: string, to: string): Promise<void> {
+    const legs = subwayRoute(content.subway, from, to);
+    if (!legs) return;
+    inVn = true;
+    for (const leg of legs) {
+      if (leg.kind === 'transfer') {
+        const s = content.subway.stops.get(leg.to)!;
+        const l = content.subway.lines.find((x) => x.id === s.line)!;
+        toast(`Change here for the ${l.nameEn} (${l.name}): ${s.jp} ${s.en} ${s.code}`, 5);
+        continue;
+      }
+      await fadeTo(1);
+      inVn = true;
+      const line = content.subway.lines.find((l) => l.id === leg.line)!;
+      let ridable: Ridable;
+      let system: { alight(): void; readonly ride2State: RideState | null };
+      if (line.kind === 'elevated') {
+        const tl = trainLines.get(line.id);
+        const step = leg.to > leg.from ? 1 : -1;
+        const keys: string[] = [];
+        for (let i = leg.from; i !== leg.to + step; i += step) keys.push(line.stops[i].key);
+        const stations = keys.map((k) => railStations.find((s) => s.id === k)).filter((s): s is RailStation => !!s);
+        if (!tl || !tl.walkable || stations.length < 2) break;
+        ridable = tl.startRide2(stations);
+        system = tl;
+      } else {
+        ridable = subway.startRide2(leg.line, leg.from, leg.to);
+        system = subway;
+      }
+      // Standing in the middle car by a door on the platform side, facing it (the doors are closing).
+      rider.board(ridable, 1, ridable.doorSide * 0.6, CAR.DOORS[1], ridable.doorSide > 0 ? -Math.PI / 2 : Math.PI / 2);
+      const got = new Promise<string | null>((done) => (cabin = { system, done }));
+      await fadeTo(0);
+      inVn = false;
+      const key = await got;
+      // Off before the end of this leg: the journey ends there.
+      if (key !== line.stops[leg.to].key) break;
+      inVn = true;
+    }
+    inVn = false;
+  }
+
   async function rideSubway(from: string, to: string): Promise<void> {
+    if (transitNew) return rideWalk(from, to);
     const legs = subwayRoute(content.subway, from, to);
     if (!legs) return;
     inVn = true;
@@ -1905,12 +2007,22 @@ async function run(): Promise<void> {
   const direct: Record<string, OverlayPreset> = { Digit1: 'off', Digit2: 'vibe', Digit3: 'heavy', Digit4: 'ascii' };
   window.addEventListener('keydown', (e) => {
     if (bench || inVn) return;
+    if (rider.active && cabin) {
+      // Aboard: E sits down (or gets up) by a seat; at a stop with the doors open it gets you off; else it skips
+      // to your stop.
+      if (e.code !== 'KeyE') return;
+      if (rider.seated) rider.stand();
+      else if (rider.sit()) toast('Sitting · E to get up', 2);
+      else if ((cabin.system.ride2State?.doors ?? 0) > 0.85) getOff(null);
+      else [...trainLines.values(), subway].find((t) => t.riding)?.skip();
+      return;
+    }
     const riding = trainRiding();
-    if (riding) {
+    if (riding && !riding.walkable) {
       if (e.code === 'KeyE') riding.skip();
       return;
     }
-    if (subway.riding) {
+    if (subway.riding && !subway.walkable) {
       if (e.code === 'KeyE') subway.skip();
       return;
     }
@@ -1942,7 +2054,7 @@ async function run(): Promise<void> {
     if (travel.open) return;
     if (e.code === 'KeyE') void interact();
     if (e.code === 'KeyT') {
-      if (driving.car || taxiRide || trainRiding() || subway.riding) toast("You can't wait here.");
+      if (driving.car || taxiRide || aboard()) toast("You can't wait here.");
       else {
         document.exitPointerLock();
         waitPanel.show();
@@ -2063,12 +2175,21 @@ async function run(): Promise<void> {
         (window as unknown as { __bench: unknown }).__bench = summarize();
       }
     } else if (!inVn) {
+      rider.before();
       controls.update(dt);
+      rider.after();
+      if (rider.exited) {
+        const p = rider.exited;
+        rider.exited = null;
+        getOff(p);
+      }
     }
     if (bench) controls.update(0);
     for (const update of landmarkUpdates) update(camera.position, dt);
     for (const t of trainLines.values()) t.update(dt, camera);
     subway.update(dt, camera);
+    // Riding: the camera goes with the car you're in, wherever it's got to.
+    rider.compose();
     updateInteriors(inVn ? 0 : dt);
     if (Number(flags.get(FLAG_CLOCK)) !== Math.floor(clockTotal)) clockTotal = Number(flags.get(FLAG_CLOCK)) || clockTotal;
     if (!bench && !inVn && !travel.open && !waitPanel.open && !clockStopped) {
@@ -2170,7 +2291,7 @@ async function run(): Promise<void> {
       exTraffic.conditions = cond;
       updateSplashes(dt, road.wet);
     }
-    const outdoors = !inInterior() && camera.position.y > -2.6 && !trainRiding() && !subway.riding;
+    const outdoors = !inInterior() && camera.position.y > -2.6 && !aboard();
     refreshLitter(dt);
     const breeze = Math.min(1, windVec.length() / 3);
     drift.set(!outdoors ? 'none' : snowing ? 'snow' : season() === 'spring' ? 'petals' : season() === 'autumn' ? 'leaves' : 'none', snowing ? 0.75 : season() === 'spring' ? 0.1 + 0.1 * breeze : 0.07 + 0.2 * breeze);
@@ -2212,14 +2333,15 @@ async function run(): Promise<void> {
     const lamps = (x: number, z: number, r: number) => district.lampsNear(x, z, r);
     // Riding the train, the car is the shelter.
     const shelters = district.sheltersNear(cp.x, cp.z, 45, 11);
-    if (trainRiding()) shelters.unshift({ rect: { x: cp.x - 1.6, y: cp.z - 30, w: 3.2, h: 60 }, y0: 0, y1: 20 });
+    if (rider.active) shelters.unshift({ rect: { x: cp.x - 3.2, y: cp.z - 3.2, w: 6.4, h: 6.4 }, y0: -20, y1: 20 });
+    else if (aboard()) shelters.unshift({ rect: { x: cp.x - 1.6, y: cp.z - 30, w: 3.2, h: 60 }, y0: 0, y1: 20 });
     rain.update(tt, dt, cp, rainAmount, windVec, shelters);
     rainLayers.update(tt, cp, rainAmount, windVec, wetness, (scene.fog as THREE.Fog).far, base.horizon, shelters);
     streetWater.update(tt, cp, wetness, windVec, district.sheltersNear(cp.x, cp.z, 30, 24));
     district.umbrellas = rainAmount > 0.15;
     // Wet air spreads the glow round lights.
     bloom.radius = 0.45 + 0.35 * Math.min(1, rainAmount + (weather() === 'fog' ? 0.5 : 0));
-    const inside = !!trainRiding() || district.sheltered(cp.x, cp.z, cp.y);
+    const inside = aboard() || district.sheltered(cp.x, cp.z, cp.y);
     cones.update(cp, lamps, Math.max(atm.haze, rainAmount * 1.2) * atm.lamps * 0.05 * (1 - 0.3 * mood.darkness));
     lampShadows.update(cp, lamps, atm.lamps * 55);
     skyTime += dt * (1 + windAmt * 30);
@@ -2247,7 +2369,7 @@ async function run(): Promise<void> {
     const flash = lightning.update(dt, perMinute, cp);
     hemi.intensity = base.hemi + flash * 0.5;
     // Below ground: the surface is hidden (and costs nothing), the sky's light and the street's don't reach.
-    const under = subway.riding || (!controls.fly && camera.position.y < -2.6);
+    const under = (subway.riding && !subway.walkable) || (!controls.fly && camera.position.y < -2.6);
     if (under !== wasUnder) {
       if (under) for (const o of surface) surfaceShown.set(o, o.visible);
       else for (const o of surface) o.visible = surfaceShown.get(o) ?? true;
@@ -2278,7 +2400,7 @@ async function run(): Promise<void> {
     sky.uniforms.uCloudLit.value.copy(base.cloudLit);
     fitFog();
     // Sound follows the same weather: what's overhead, the wind, the nearest cars.
-    const cover = trainRiding() || subway.riding ? 'enclosed' : district.shelterAt(cp.x, cp.z, cp.y)?.enclosed ? 'enclosed' : inside ? 'roof' : 'open';
+    const cover = aboard() ? 'enclosed' : district.shelterAt(cp.x, cp.z, cp.y)?.enclosed ? 'enclosed' : inside ? 'roof' : 'open';
     stepCover = cover;
     audio.update({
       dt,
@@ -2286,7 +2408,7 @@ async function run(): Promise<void> {
       wind: windAmt,
       gust,
       cover,
-      train: !!trainRiding() || subway.riding,
+      train: aboard(),
       volume: mood.volume,
       x: cp.x,
       z: cp.z,
@@ -2348,7 +2470,10 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = [
-        trainRiding()?.status ?? subway.status ?? `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${SEASON_NAMES[season()]}${flags.get(FLAG_TSUYU) === true ? ' 梅雨' : ''}${flags.get(FLAG_HEAT) === true ? ' 猛暑' : ''}${flags.get(FLAG_TYPHOON) === true ? ' 台風' : ''} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
+        (rider.active ? `${(trainRiding()?.status ?? subway.status) ?? ''}  ·  [E] ${rider.seated ? 'stand up' : rider.seatNear() ? 'sit' : (cabin?.system.ride2State?.doors ?? 0) > 0.85 ? 'get off' : 'skip to your stop'}` : null) ??
+        trainRiding()?.status ??
+        subway.status ??
+        `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${SEASON_NAMES[season()]}${flags.get(FLAG_TSUYU) === true ? ' 梅雨' : ''}${flags.get(FLAG_HEAT) === true ? ' 猛暑' : ''}${flags.get(FLAG_TYPHOON) === true ? ' 台風' : ''} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · res ${Math.round(resScale * 100)}%${resFixed() === null ? ' (auto)' : ''} · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,

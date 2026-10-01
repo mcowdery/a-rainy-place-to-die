@@ -14,6 +14,8 @@ import { Lightmap, paintLights, type Light } from '../real/lightmap';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { buildMegaSign } from '../real/megaSign';
 import { trainModel } from '../real/rail';
+import { carGlass, carSet2 } from '../real/trainCar';
+import { CAR } from '../district/cabin';
 import { addProps, type Prop } from '../real/props';
 import { addTree, FOLIAGE_VARIANTS, setFoliageVariant, type TreeSpecies } from '../models/trees';
 import { TAXI_ADS } from '../models/ads';
@@ -236,23 +238,53 @@ cityU.uLightRect.value = showLightmap.uniformRect;
   genRoot.new.add(frames);
   genItems.new.push({ name: 'all district ads', group: 'Billboards', at: new THREE.Vector3(wallX, 3, -2), size: 30, view: new THREE.Vector3(1, 0.2, 0).normalize() });
 }
-// The Toto Line train (three cars) on a short length of track.
+// The Toto Line train (three cars) on a short length of track: the district's (previous) and the new commuter car
+// (real/trainCar.ts, under review: walk-in insides, doors that open), with a platform along it; and the new car in
+// a subway line's colours beside it.
 {
   const at = new THREE.Vector3(-40, 0, 60);
   const track = new MeshBuilder();
   track.kind = KIND.plain;
-  track.color = lin(0x3a3a3c);
-  track.box(at.x, at.z, 0, 0.08, 2.6, 70, KIND.plain);
-  track.color = lin(0xb0b0b4);
-  for (const s of [-0.53, 0.53]) track.box(at.x + s, at.z, 0.08, 0.2, 0.07, 70, KIND.plain);
-  genRoot.new.add(new THREE.Mesh(track.build()!, city));
-  const train = trainModel(0x10a060, city);
-  train.position.set(at.x, 0.2, at.z);
-  genRoot.new.add(train);
-  label('new', 'Toto Line train', at.x, 6, at.z);
-  genItems.new.push({ name: 'train', group: 'Transit', at: new THREE.Vector3(at.x, 2, at.z), size: 60, view: new THREE.Vector3(1, 0.3, 0.6).normalize() });
-  genItems.new.push({ name: 'train (cab)', group: 'Transit', at: new THREE.Vector3(at.x, 2, at.z + 28), size: 8, view: new THREE.Vector3(0.5, 0.15, 1).normalize() });
-  genItems.new.push({ name: 'train (inside)', group: 'Transit', at: new THREE.Vector3(at.x, 2.3, at.z + 3), size: 3, view: new THREE.Vector3(0.01, 0.05, 1).normalize() });
+  for (const x of [at.x, at.x - 9]) {
+    track.color = lin(0x3a3a3c);
+    track.box(x, at.z, 0, 0.08, 2.6, 70, KIND.plain);
+    track.color = lin(0xb0b0b4);
+    for (const s of [-0.53, 0.53]) track.box(x + s, at.z, 0.08, 0.2, 0.07, 70, KIND.plain);
+  }
+  // A platform along the left of the new train, at its floor (0.9 m over the rail).
+  track.kind = KIND.sidewalk;
+  track.color = lin(0xb4b0a8);
+  track.box(at.x - 4.55, at.z, 0, 1.1, 3.0, 64, KIND.sidewalk);
+  track.kind = KIND.plain;
+  track.color = lin(0xe8c030);
+  track.box(at.x - 3.4, at.z, 1.1, 1.11, 0.3, 64, KIND.plain);
+  scene.add(new THREE.Mesh(track.build()!, city));
+  const old = trainModel(0x10a060, city);
+  old.position.set(at.x, 0.2, at.z);
+  genRoot.previous.add(old);
+  label('previous', 'Toto Line train', at.x, 6, at.z);
+  const mats = { city, glass: carGlass(), ads: adMaterial(cityU, photoAtlas) };
+  const set = carSet2(0x10a060, mats, { dest: { jp: '学園坂', en: 'Gakuenzaka' } })();
+  set.group.children.forEach((car, i) => (car.position.z = (i - 1) * (CAR.L + CAR.GAP)));
+  set.group.position.set(at.x, 0.2, at.z);
+  set.setScreens({ jp: '霞町', en: 'Kasumi-chō', code: 'T05' }, { jp: '学園坂', en: 'Gakuenzaka' });
+  // The doors on the platform's side open (the cars' right), as at a station.
+  set.setDoors(-1, 1);
+  genRoot.new.add(set.group);
+  const sub = carSet2(0xd8a020, mats, { subway: true, dest: { jp: '夜光線', en: 'Yakō Line' } })();
+  sub.group.children.forEach((car, i) => (car.position.z = (i - 1) * (CAR.L + CAR.GAP)));
+  sub.group.position.set(at.x - 9, 0.2, at.z);
+  genRoot.new.add(sub.group);
+  label('new', 'Toto Line commuter car (new)', at.x, 6, at.z);
+  label('new', 'subway car (Yakō Line colours)', at.x - 9, 6, at.z);
+  for (const g of ['new', 'previous'] as const) {
+    genItems[g].push({ name: 'train', group: 'Transit', at: new THREE.Vector3(at.x, 2, at.z), size: 60, view: new THREE.Vector3(1, 0.3, 0.6).normalize() });
+    genItems[g].push({ name: 'train (cab)', group: 'Transit', at: new THREE.Vector3(at.x, 2, at.z + 28), size: 8, view: new THREE.Vector3(0.5, 0.15, 1).normalize() });
+    genItems[g].push({ name: 'train (inside)', group: 'Transit', at: new THREE.Vector3(at.x, 2.4, at.z + 3), size: 3, view: new THREE.Vector3(0.01, 0.05, 1).normalize() });
+  }
+  genItems.new.push({ name: 'train (inside, to the cab)', group: 'Transit', at: new THREE.Vector3(at.x, 2.5, at.z + 22), size: 2.5, view: new THREE.Vector3(0.0, 0.02, -1).normalize() });
+  genItems.new.push({ name: 'train (doors, platform)', group: 'Transit', at: new THREE.Vector3(at.x - 1, 2.0, at.z + 2.3), size: 4, view: new THREE.Vector3(-1, 0.15, 0.2).normalize() });
+  genItems.new.push({ name: 'subway car', group: 'Transit', at: new THREE.Vector3(at.x - 9, 2, at.z), size: 24, view: new THREE.Vector3(-1, 0.25, 0.5).normalize() });
 }
 // Kaburo mega-sign (the corner tower with its screens and the neon dragon) on its own plaza.
 {

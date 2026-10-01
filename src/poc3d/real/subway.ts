@@ -6,6 +6,10 @@ import {
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 import { trainFactory } from './rail';
 import { SUBWAY } from './subwayStation';
+import { CAR } from '../district/cabin';
+import { dwellDoors, RideTimeline, type RideEvent, type RideState } from '../district/rideTimeline';
+import { carSet2, type CarMaterials, type TrainSet2 } from './trainCar';
+import type { Ridable } from './cabinRider';
 
 /**
  * The subway below ground: each line's tunnels (between the stations, which build their own platforms),
@@ -42,11 +46,22 @@ function placeTrain(obj: THREE.Object3D, line: SubwayLine3, s: number, sgn: numb
   obj.rotation.y = line.along === 'x' ? (sgn > 0 ? Math.PI / 2 : -Math.PI / 2) : sgn > 0 ? 0 : Math.PI;
 }
 
+/** How open a timetabled train's doors are t seconds into its cycle (open while it stands at a stop). */
+function doorsAt(legs: readonly TimetableLeg[], t: number): number {
+  for (const l of legs) {
+    if (t < l.T) return l.kind === 'wait' && !l.hidden ? dwellDoors(t, l.T) : 0;
+    t -= l.T;
+  }
+  return 0;
+}
+
 interface Train {
   readonly line: SubwayLine3;
   readonly dir: 1 | -1;
   readonly sgn: number;
   readonly obj: THREE.Group;
+  /** The new cars (?transit=new), with doors to open. */
+  readonly set: TrainSet2 | null;
   readonly legs: readonly TimetableLeg[];
   readonly period: number;
   readonly offset: number;
@@ -70,6 +85,9 @@ export class SubwaySystem {
   private readonly trains: Train[] = [];
   private readonly rideTrains = new Map<string, THREE.Group>();
   private ride: Ride | null = null;
+  /** A ride in the new cars: you walk about inside (real/cabinRider.ts). */
+  private ride2: { line: SubwayLine3; timeline: RideTimeline; set: TrainSet2 } | null = null;
+  private readonly rideSets = new Map<string, TrainSet2>();
   /** The timetable's clock (seconds). */
   clock = 0;
   /** Trains run (false after the last train). */
@@ -80,29 +98,89 @@ export class SubwaySystem {
   constructor(
     readonly net: SubwayNet3,
     city: THREE.Material,
+    /** The new cars (?transit=new): their materials. Without, the district's cars and standing rides. */
+    cars: CarMaterials | null = null,
   ) {
     for (const line of net.lines) {
       if (line.kind !== 'subway') continue;
       this.group.add(this.buildTunnels(line, city));
-      const make = trainFactory(line.color, city);
+      const old = trainFactory(line.color, city);
+      const ends = { first: line.stops[0], last: line.stops[line.stops.length - 1] };
+      const makers = cars
+        ? { up: carSet2(line.color, cars, { subway: true, dest: ends.last }), down: carSet2(line.color, cars, { subway: true, dest: ends.first }) }
+        : null;
+      const make = (dir: 1 | -1): { obj: THREE.Group; set: TrainSet2 | null } => {
+        if (!makers) return { obj: old(), set: null };
+        const set = (dir > 0 ? makers.up : makers.down)();
+        set.group.children.forEach((car, i) => (car.position.z = (i - 1) * (CAR.L + CAR.GAP)));
+        return { obj: set.group, set };
+      };
       const order = Math.sign(line.stops[line.stops.length - 1].s - line.stops[0].s) || 1;
       for (const dir of [1, -1] as const) {
         const { legs, period } = lineSchedule(line, dir);
         for (let k = 0; k < TRAINS_PER_DIRECTION; k++) {
-          const obj = make();
+          const { obj, set } = make(dir);
           this.group.add(obj);
-          this.trains.push({ line, dir, sgn: order * dir, obj, legs, period, offset: trainOffset(period, k, dir) });
+          this.trains.push({ line, dir, sgn: order * dir, obj, set, legs, period, offset: trainOffset(period, k, dir) });
         }
       }
-      const ride = make();
-      ride.visible = false;
-      this.group.add(ride);
-      this.rideTrains.set(line.id, ride);
+      const ride = make(1);
+      ride.obj.visible = false;
+      this.group.add(ride.obj);
+      this.rideTrains.set(line.id, ride.obj);
+      if (ride.set) this.rideSets.set(line.id, ride.set);
     }
   }
 
+  /** Rides walk about inside (the new cars). */
+  get walkable(): boolean {
+    return this.rideSets.size > 0;
+  }
+
+  /** Departures, arrivals and doors on a ride in the new cars. */
+  onRideEvent: ((e: RideEvent) => void) | null = null;
+
+  /** Ride a line in the new cars from one stop to another (indices), stopping at each between; you walk about inside. */
+  startRide2(lineId: string, from: number, to: number): Ridable {
+    const line = this.net.lines.find((l) => l.id === lineId)!;
+    const step = to > from ? 1 : -1;
+    const stops: SubwayStop3[] = [];
+    for (let i = from; i !== to + step; i += step) stops.push(line.stops[i]);
+    const timeline = new RideTimeline(
+      stops.map((st) => ({ s: st.s, key: st.key, jp: st.jp, en: st.en, code: st.code })),
+      runProfile,
+      RIDE_DWELL,
+    );
+    const set = this.rideSets.get(line.id)!;
+    this.ride2 = { line, timeline, set };
+    set.group.visible = true;
+    this.place2();
+    // The island platforms are on the right of the way the train runs.
+    return { set, doorSide: -1, doors: () => timeline.state().doors };
+  }
+
+  get ride2State(): RideState | null {
+    return this.ride2?.timeline.state() ?? null;
+  }
+
+  /** You got off: the train shuts its doors and pulls away. */
+  alight(): void {
+    this.ride2?.timeline.alight();
+  }
+
+  private place2(): void {
+    const r = this.ride2!;
+    const st = r.timeline.state();
+    placeTrain(r.set.group, r.line, st.s, r.timeline.dir);
+    r.set.setDoors(-1, st.doors);
+    const stops = r.timeline.stops;
+    const last = stops[stops.length - 1];
+    const next = st.at ?? st.next;
+    r.set.setScreens(next ? { jp: next.jp, en: next.en, code: next.code } : null, { jp: last.jp, en: last.en }, st.at ? 'stopped' : '');
+  }
+
   get riding(): boolean {
-    return this.ride !== null;
+    return this.ride !== null || this.ride2 !== null;
   }
 
   /** Next departures from a station toward each end of its line (seconds). */
@@ -114,6 +192,20 @@ export class SubwaySystem {
 
   /** HUD line while riding. */
   get status(): string | null {
+    if (this.ride2) {
+      const st = this.ride2.timeline.state();
+      const stops = this.ride2.timeline.stops;
+      const last = stops[stops.length - 1];
+      if (st.leaving) return null;
+      const where = st.arrived
+        ? `${last.jp} ${last.en}: your stop · walk out of the open doors (or [E])`
+        : st.at && st.doors > 0
+          ? `${st.at.jp} ${st.at.en} (${st.at.code}) · doors open`
+          : st.next
+            ? `next: ${st.next.jp} ${st.next.en} (${st.next.code})`
+            : '';
+      return `${this.ride2.line.name} ${this.ride2.line.nameEn} · ${last.jp} ${last.en} まで  ·  ${where}`;
+    }
     const r = this.ride;
     if (!r) return null;
     const dest = r.stops[r.stops.length - 1];
@@ -145,6 +237,7 @@ export class SubwaySystem {
 
   skip(): void {
     if (this.ride) this.ride.t = Math.max(this.ride.t, this.ride.T);
+    this.ride2?.timeline.skip();
   }
 
   /** The view across the car toward the platform side (degrees; camera yaw convention). */
@@ -159,10 +252,32 @@ export class SubwaySystem {
 
   update(dt: number, camera: THREE.Camera): void {
     this.clock += dt;
+    const r2 = this.ride2;
     for (const tr of this.trains) {
-      const p = trainAt(tr.legs, (this.clock + tr.offset) % tr.period);
+      const t = (this.clock + tr.offset) % tr.period;
+      const p = trainAt(tr.legs, t);
       placeTrain(tr.obj, tr.line, p.s, tr.sgn);
-      tr.obj.visible = this.running && !p.hidden && !(this.ride && this.ride.line === tr.line && this.ride.sgn === tr.sgn);
+      tr.obj.visible =
+        this.running && !p.hidden && !(this.ride && this.ride.line === tr.line && this.ride.sgn === tr.sgn) && !(r2 && r2.line === tr.line && r2.timeline.dir === tr.sgn);
+      if (tr.set && tr.obj.visible) {
+        tr.set.setDoors(-1, doorsAt(tr.legs, t));
+        tr.set.cull(camera.position);
+      }
+    }
+    if (r2) {
+      for (const e of r2.timeline.advance(dt)) {
+        this.onRideEvent?.(e);
+        // The stations' chimes and melodies, as before.
+        if (e.kind === 'depart' || e.kind === 'arrive') {
+          const stop = r2.line.stops.find((st) => st.key === e.stop.key);
+          if (stop) this.onEvent?.(e.kind, stop);
+        }
+      }
+      this.place2();
+      if (r2.timeline.state().gone) {
+        r2.set.group.visible = false;
+        this.ride2 = null;
+      }
     }
     const r = this.ride;
     if (!r) return;
