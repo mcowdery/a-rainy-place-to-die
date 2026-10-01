@@ -32,7 +32,7 @@ export type { Outfit } from '../district/peopleMix';
 type V3 = [number, number, number];
 
 export type Body = 'man' | 'woman' | 'child' | 'elder';
-export type Pose = 'stand' | 'walk' | 'talk' | 'phone' | 'pockets' | 'wave' | 'hold';
+export type Pose = 'stand' | 'walk' | 'talk' | 'phone' | 'pockets' | 'wave' | 'hold' | 'sit' | 'strap';
 export type Hair = 'short' | 'long' | 'bun' | 'hat' | 'cap' | 'none';
 
 export interface FigureSpec {
@@ -149,19 +149,19 @@ class TemplateBuilder {
    * listed back to front, with Row read as [z, half width, half height, y]. With `arc`, only that part of
    * each ring (angles from +x: pi/2 is the front (+z) for axis y, 3pi/2 the top for axis z), an open sheet.
    */
-  loft(rows: readonly Row[], cx: (r: Row) => number, weight: (r: Row, i: number) => Weight, shade: number, seg: number, n = 2, axis: 'y' | 'z' = 'y', arc?: readonly [number, number]): void {
+  loft(rows: readonly Row[], cx: (r: Row) => number, weight: (r: Row, i: number, x: number) => Weight, shade: number, seg: number, n = 2, axis: 'y' | 'z' = 'y', arc?: readonly [number, number]): void {
     const start = this.pos.length / 3;
     const e = 2 / n;
     const se = (v: number): number => Math.sign(v) * Math.pow(Math.abs(v), e);
     // An arc's rings have seg + 1 points and don't close.
     const pts = arc ? seg + 1 : seg;
     rows.forEach((r, i) => {
-      const [b0, b1, w] = weight(r, i);
       const x0 = cx(r);
       for (let j = 0; j < pts; j++) {
         const t = arc ? arc[0] + ((arc[1] - arc[0]) * j) / seg : (j / seg) * Math.PI * 2;
         const c = se(Math.cos(t));
         const s = se(Math.sin(t));
+        const [b0, b1, w] = weight(r, i, x0 + r[1] * c);
         if (axis === 'y') this.pos.push(x0 + r[1] * c, r[0], r[3] + r[2] * s);
         else this.pos.push(x0 + r[1] * c, r[3] - r[2] * s, r[0]);
         this.b0.push(b0);
@@ -576,9 +576,19 @@ function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
     tb.loft(hand, () => s * (P.wristX + 0.003), () => one(fore), top, 8);
   }
   const hips = (r: Row): Weight => (r[0] < waist - 0.02 ? one(PELVIS) : r[0] > waist + 0.08 ? one(SPINE) : blend(SPINE, PELVIS, 0.5));
+  /**
+   * A skirt's or coat's skinning: below the hip joints each side follows its thigh (more of it lower down), so it
+   * lifts onto the lap when they sit and swings a little with the stride.
+   */
+  const hipY = 0.9 * ys;
+  const drape = (r: Row, _i: number, x: number): Weight => {
+    if (r[0] >= hipY) return hips(r);
+    const k = Math.min(1, (hipY - r[0]) / (0.3 * ys));
+    return [x < 0 ? THIGH_L : THIGH_R, PELVIS, 0.25 + 0.65 * k];
+  };
   if (long) {
     const rows = scaleRows(body === 'woman' ? SKIRT : COAT, ys, body === 'woman' ? 0.95 : P.arm);
-    tb.loft(rows, () => 0, hips, body === 'woman' ? 0.85 : 0.9, 14, 2.2);
+    tb.loft(rows, () => 0, drape, body === 'woman' ? 0.85 : 0.9, 14, 2.2);
   }
   // The torso's section at a height (this body's rows): half width, half depth, centre z.
   const torsoAt = (y: number): [number, number, number] => {
@@ -605,7 +615,7 @@ function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
     tb.loft(rows.map(([y, a, b, z]): Row => [y * ys, a * P.arm, b * P.arm, z * P.arm]), (r) => s * ax(r[0] / ys), (r) => (r[0] > 1.18 * ys ? one(arm) : one(fore)), shade, 8);
   if (outfit === 'suit') {
     if (body === 'woman') {
-      tb.loft(scaleRows(PENCIL, ys, 0.95), () => 0, hips, 0.95, 14, 2.4);
+      tb.loft(scaleRows(PENCIL, ys, 0.95), () => 0, drape, 0.95, 14, 2.4);
       // A shoulder bag at the left hip.
       tb.loft([[0.84 * ys, 0.03, 0.11, 0], [0.86 * ys, 0.034, 0.12, 0], [1.0 * ys, 0.034, 0.12, 0], [1.02 * ys, 0.03, 0.11, 0]], () => -(P.hipX + 0.115), () => one(PELVIS), 1.3, 8, 6);
     } else {
@@ -622,7 +632,7 @@ function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
     if (body !== 'woman') panel(1.06, 1.42, () => 0.014, 1, 0.45, 0.012);
   } else if (outfit === 'maid') {
     const skirt = scaleRows(MAID_SKIRT, ys, 0.95);
-    tb.loft(skirt, () => 0, hips, 1, 18, 2);
+    tb.loft(skirt, () => 0, drape, 1, 18, 2);
     // The skirt at a height: its section, grown by `g` (the apron and lace sit just outside it).
     const skirtAt = (y: number, g: number): Row => {
       let i = 0;
@@ -633,11 +643,11 @@ function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
     };
     const F = Math.PI / 2;
     // Lace under the hem (the petticoat's edge).
-    tb.loft([skirtAt(0.665 * ys, -0.01), [0.63 * ys, 0.25, 0.226, 0.015], [0.65 * ys, 0.262, 0.238, 0.015], skirtAt(0.67 * ys, 0.006)], () => 0, hips, WHITE, 18, 2);
+    tb.loft([skirtAt(0.665 * ys, -0.01), [0.63 * ys, 0.25, 0.226, 0.015], [0.65 * ys, 0.262, 0.238, 0.015], skirtAt(0.67 * ys, 0.006)], () => 0, drape, WHITE, 18, 2);
     // The apron round the front of the skirt, a frill along its bottom, and the waistband all round.
-    tb.loft([0.7, 0.76, 0.86, 0.95, 1.03].map((y) => skirtAt(y * ys, 0.012)), () => 0, hips, WHITE, 10, 2, 'y', [F - 1.0, F + 1.0]);
+    tb.loft([0.7, 0.76, 0.86, 0.95, 1.03].map((y) => skirtAt(y * ys, 0.012)), () => 0, drape, WHITE, 10, 2, 'y', [F - 1.0, F + 1.0]);
     const flare = skirtAt(0.7 * ys, 0.03);
-    tb.loft([[0.672 * ys, flare[1], flare[2], flare[3]], skirtAt(0.7 * ys, 0.014)], () => 0, hips, WHITE * 0.9, 10, 2, 'y', [F - 1.05, F + 1.05]);
+    tb.loft([[0.672 * ys, flare[1], flare[2], flare[3]], skirtAt(0.7 * ys, 0.014)], () => 0, drape, WHITE * 0.9, 10, 2, 'y', [F - 1.05, F + 1.05]);
     const band = (y: number, g: number): Row => {
       const [w, d, z] = torsoAt(y);
       return [y, w + g, d + g, z];
@@ -668,7 +678,7 @@ function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
     tb.loft([hoop(0.012, 0.088, 0.121), hoop(0.026, 0.1, 0.136)], () => 0, () => one(HEAD), WHITE, 12, 2, 'z', [Math.PI + 0.62, 2 * Math.PI - 0.62]);
   } else if (outfit === 'school') {
     if (body === 'woman') {
-      tb.loft(scaleRows(PLEATS, ys, 0.95), () => 0, hips, 1, 16, 3.5);
+      tb.loft(scaleRows(PLEATS, ys, 0.95), () => 0, drape, 1, 16, 3.5);
       // The sailor collar's flap down the back, and the scarf at the front.
       panel(1.33, 1.47, () => 0.13, -1, WHITE);
       panel(1.27, 1.34, () => 0.035, 1, WHITE);
@@ -681,7 +691,7 @@ function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
     } else caseInHand(0.8);
   } else if (outfit === 'kimono') {
     const woman = body === 'woman';
-    tb.loft(scaleRows(ROBE, ys, woman ? 0.95 : P.arm), () => 0, () => one(PELVIS), 1, 14, 2.4);
+    tb.loft(scaleRows(ROBE, ys, woman ? 0.95 : P.arm), () => 0, drape, 1, 14, 2.4);
     tb.loft(scaleRows(OBI, ys, woman ? 0.95 : P.arm), () => 0, hips, woman ? 2.6 : 1.3, 14, 2.4);
     if (woman) {
       // The obi's bow on the back.
@@ -692,7 +702,7 @@ function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
   } else if (outfit === 'yukata') {
     // Light summer cotton (lighter than a kimono) with a dark obi, and a bow behind for women and children.
     const k = body === 'woman' ? 0.95 : P.arm;
-    tb.loft(scaleRows(ROBE, ys, k), () => 0, () => one(PELVIS), 2.2, 14, 2.4);
+    tb.loft(scaleRows(ROBE, ys, k), () => 0, drape, 2.2, 14, 2.4);
     tb.loft(scaleRows(OBI, ys, k).map(([y, w, d, z]): Row => [y, w * 1.005, d * 1.01, z]), () => 0, hips, 0.5, 14, 2.4);
     if (body === 'woman' || body === 'child') {
       const [, d, z] = torsoAt(1.08 * ys);
@@ -829,6 +839,19 @@ function skeleton(s: FigureSpec): Skeleton {
     case 'hold':
       gest(armS, 0.1, s.body === 'child' ? 0.75 : 0.26, 0.1);
       break;
+    case 'sit':
+      // On a seat 0.46 m up: thighs forward, shins down, hands in the lap.
+      gest(sk.legL, 1.45, 0.07, 1.45);
+      gest(sk.legR, 1.45, 0.07, 1.45);
+      gest(sk.armL, 0.3, 0.08, 0.75);
+      gest(sk.armR, 0.3, 0.08, 0.75);
+      sk.lean = -0.05;
+      sk.drop = PROPORTIONS[s.body].ys * 0.9 - 0.46;
+      break;
+    case 'strap':
+      // Holding a strap overhead.
+      gest(armS, 2.75, 0.12, 0.25);
+      break;
     case 'stand':
       gest(sk.legR, 0.03, 0.06, 0.02);
       break;
@@ -872,7 +895,7 @@ function poseBones(T: Template, s: FigureSpec): THREE.Matrix4[] {
 
 const BODY_LIST: readonly Body[] = ['man', 'woman', 'child', 'elder'];
 const HAIR_LIST: readonly Hair[] = ['short', 'long', 'bun', 'hat', 'cap', 'none'];
-const POSE_LIST: readonly Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold'];
+const POSE_LIST: readonly Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold', 'sit', 'strap'];
 
 /** Body templates are 0 to TEMPLATE_COUNT - 1 (body, outfit, hair); the umbrellas follow, one per body. */
 export const TEMPLATE_COUNT = BODY_LIST.length * OUTFITS.length * HAIR_LIST.length;
@@ -1339,6 +1362,19 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
           } else if (P == 6) {
             g = Limb(0.1, body == 2 ? 0.75 : 0.26, 0.1, 0.0);
             gest = true;
+          } else if (P == 7) {
+            // Sitting (a seat 0.46 m up): the same as skeleton()'s 'sit', breathing.
+            legL = Limb(1.45, 0.07, 1.45, 0.0);
+            legR = legL;
+            armL = Limb(0.3, 0.08, 0.75, 0.0);
+            armR = armL;
+            lean = -0.05 + 0.01 * breath;
+            spineRoll *= 0.3;
+            drop = uPivot[base + 3].y - 0.46;
+          } else if (P == 8) {
+            // Holding a strap, swaying a little with the ride.
+            g = Limb(2.75 + 0.04 * sway, 0.12, 0.25, 0.0);
+            gest = true;
           }
           if (gest) {
             if (side > 0.0) armR = g;
@@ -1726,4 +1762,55 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
     }
   }
   return out;
+}
+
+// ---- Passengers ----
+
+/** A place in a vehicle's own frame: where a passenger stands or sits (the seat's middle), on what floor, facing. */
+export interface PassengerSpot {
+  readonly x: number;
+  readonly z: number;
+  /** The floor under the feet (a seated passenger's feet too; the seat is 0.46 m above it). */
+  readonly y: number;
+  readonly yaw: number;
+}
+
+let passengerMaterial: THREE.Material | null = null;
+/** The material passengers are drawn with (the mob's; set by the page before trains and buses are built). */
+export function setPassengerMaterial(m: THREE.Material | null): void {
+  passengerMaterial = m;
+}
+
+/**
+ * Passengers for a vehicle (or people waiting on a platform: no seats, `poses` without the strap): some of its seats taken (sitting, a few on their phones) and people standing in the
+ * aisles holding straps or poles, as one baked mesh in the vehicle's frame (add it to the car or bus, so it rides
+ * along). Who's aboard is a pure function of `seed`; they never fade. Null when there's no material (the
+ * showroom) or nobody aboard.
+ */
+export function passengerMesh(seats: readonly PassengerSpot[], standing: readonly PassengerSpot[], seed: number, fill: { readonly seat: number; readonly stand: number }, mix: PeopleMix = CITY_PEOPLE, poses: readonly Pose[] = ['strap', 'strap', 'stand', 'phone']): THREE.Mesh | null {
+  if (!passengerMaterial) return null;
+  const rnd = rng(hash(seed, 0x9a55));
+  const gb = new GhostBuilder();
+  const add = (p: PassengerSpot, pose: Pose): void => {
+    const who = randomPerson(rnd, 0, 0, p.yaw, pose, rnd.chance(0.04) ? 'child' : undefined, mix);
+    // A seated passenger's feet are 0.15 m in front of the seat's middle (the hips over the cushion).
+    const back = pose === 'sit' ? -0.12 : 0;
+    addFigure(gb, { ...who, x: p.x + Math.sin(p.yaw) * back, z: p.z + Math.cos(p.yaw) * back, y: p.y - 0.15, fade: false, look: (rnd.float() - 0.5) * 0.5 });
+  };
+  // (No one sits right next to someone: the figures are wider than a 0.46 m seat. Seats come in bench order.)
+  let last: PassengerSpot | null = null;
+  for (const p of seats) {
+    const near = last !== null && Math.hypot(p.x - last.x, p.z - last.z) < 0.7;
+    if (!near && rnd.chance(fill.seat * 1.6)) {
+      add(p, 'sit');
+      last = p;
+    }
+  }
+  for (const p of standing) if (rnd.chance(fill.stand)) add(p, rnd.pick(poses));
+  const geo = gb.build(0, 0);
+  if (!geo) return null;
+  const mesh = new THREE.Mesh(geo, passengerMaterial);
+  mesh.renderOrder = 2;
+  mesh.name = 'passengers';
+  return mesh;
 }

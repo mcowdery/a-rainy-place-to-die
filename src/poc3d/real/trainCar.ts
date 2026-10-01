@@ -1,5 +1,8 @@
 import * as THREE from 'three';
-import { CAR, carBenches, carLayout, carPoles, type CabinLayout, type CarEnds } from '../district/cabin';
+import { CAR, carBenches, carLayout, carPoles, carSeats, carStanding, type CabinLayout, type CarEnds } from '../district/cabin';
+import { passengerMesh } from './people';
+
+let carCount = 0;
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 import { SignBuilder } from './signs';
 import { taxiAdUv } from './taxiAdLayout';
@@ -542,6 +545,11 @@ export function carSet2(lineColor: number, mats: CarMaterials, opts: { subway?: 
       for (const child of p.obj.children) {
         if (child === p.inside) {
           for (const c of p.inside.children) inside.add(new THREE.Mesh((c as THREE.Mesh).geometry, (c as THREE.Mesh).material));
+          // Its passengers: about half the seats taken, a few standing (seen through the windows, and around you).
+          const seats = carSeats(p.ends).map((q) => ({ x: q.x, z: q.z, y: CAR.FLOOR + CAR.SEAT_Y - 0.46, yaw: (-q.side * Math.PI) / 2 }));
+          const standing = carStanding(p.ends).map(([x, z]) => ({ x, z, y: CAR.FLOOR, yaw: x > 0 ? -Math.PI / 2 : Math.PI / 2 }));
+          const people = passengerMesh(seats, standing, carCount++, { seat: 0.5, stand: 0.25 });
+          if (people) inside.add(people);
           obj.add(inside);
           continue;
         }

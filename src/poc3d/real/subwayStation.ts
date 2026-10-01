@@ -3,7 +3,8 @@ import type { Rect } from '../../core/coords';
 import type { Building3 } from '../district/plan';
 import type { SubwayLine3, SubwayStop3 } from '../district/subway';
 import type { Light } from './lightmap';
-import { localBox, localFrame, localRect, toLocal, toWorld, type LocalFrame } from './localFrame';
+import { localBox, localFrame, localRect, localYaw, toLocal, toWorld, type LocalFrame } from './localFrame';
+import { passengerMesh, type PassengerSpot } from './people';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 
 /**
@@ -589,6 +590,16 @@ export function buildSubwayStation(b: Building3, info: SubwayStationInfo, city: 
   const shutter = new THREE.Mesh(shutterMb.build()!, city);
   shutter.visible = false;
   group.add(shutter);
+  // People waiting along both edges of the island platform, facing the tracks.
+  const waiting: PassengerSpot[] = [];
+  for (let u = PLAT.u0 + 2; u < PLAT.u1 - 2; u += 2.2) {
+    for (const [t, dt] of [[PLAT.t0 + 1.3, -1], [PLAT.t1 - 1.3, 1]] as const) {
+      const [x, z] = toWorld(f, u + ((u * 7) % 1.2) - 0.6, t);
+      waiting.push({ x, z, y: -11, yaw: localYaw(f, 0, dt) });
+    }
+  }
+  const people = passengerMesh([], waiting, b.id * 17 + 5, { seat: 0, stand: 0.3 }, undefined, ['stand', 'stand', 'phone', 'phone', 'pockets']);
+  if (people) below.add(people);
 
   return {
     group,

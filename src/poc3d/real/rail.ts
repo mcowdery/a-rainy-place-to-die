@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { splitByTile } from './tiles';
+import { passengerMesh, type PassengerSpot } from './people';
 import type { RailKind, RailLine3 } from '../district/rail';
 import { leftOf } from '../district/rail';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
@@ -294,11 +295,33 @@ function carSet(color: number, city: THREE.Material, mono = false): () => THREE.
       inner.add(body, gl);
       if (i === 0) inner.rotation.y = Math.PI;
       car.add(inner);
+      // Its passengers (a different crowd in every car).
+      const people = passengerMesh(OLD_SEATS, OLD_STANDING, carCount++, { seat: 0.55, stand: 0.22 });
+      if (people) car.add(people);
       g.add(car);
     });
     return g;
   };
 }
+
+/** Where the old car's passengers go: a seat every 0.46 m on the benches between the doors, and the aisle. */
+const OLD_SEATS: PassengerSpot[] = [];
+const OLD_STANDING: PassengerSpot[] = [];
+{
+  const H = CAR / 2;
+  const DOORS = [-6.9, -2.3, 2.3, 6.9];
+  for (const s of [-1, 1]) {
+    let z0 = -H + 0.2;
+    for (const d of [...DOORS, H + 0.85]) {
+      const z1 = d - 0.85;
+      const n = Math.floor((z1 - z0) / 0.46);
+      for (let i = 0; i < n; i++) OLD_SEATS.push({ x: s * 1.16, z: z0 + (z1 - z0) * ((i + 0.5) / n), y: 0.96, yaw: (-s * Math.PI) / 2 });
+      z0 = d + 0.85;
+    }
+  }
+  for (const z of [-8, -6.9, -5.4, -4.6, -3.4, -2.3, -1.2, 0, 1.2, 2.3, 3.4, 4.6, 5.4, 6.9, 8]) for (const x of [-0.45, 0.45]) OLD_STANDING.push({ x, z, y: 0.9, yaw: x > 0 ? -Math.PI / 2 : Math.PI / 2 });
+}
+let carCount = 0;
 
 /** Three-car sets for a straight line (the subway): cars along +z, rail top at y 0, the lead cab at +z. */
 export function trainFactory(color: number, city: THREE.Material): () => THREE.Group {

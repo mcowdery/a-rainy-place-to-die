@@ -90,7 +90,7 @@ import { RoutePicker } from './routePicker';
 import { subwayRoute } from './subway';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
-import { addFigure, GhostBuilder, ghostMaterial, setMobLook, type FigureSpec, type MobLook } from '../real/people';
+import { addFigure, GhostBuilder, ghostMaterial, setMobLook, setPassengerMaterial, type FigureSpec, type MobLook } from '../real/people';
 import { SignAtlas, signMaterial } from '../real/signs';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { TAXI_ADS } from '../models/ads';
@@ -239,6 +239,8 @@ async function run(): Promise<void> {
   cityU.uLightFade.value.set(...lightmap.fade);
   // The mob, lit by the street lightmap as the city is.
   const ghost = ghostMaterial({ tLight: cityU.tLight, uLightRect: cityU.uLightRect, uLightFade: cityU.uLightFade, uLightGain: cityU.uLightGain });
+  // Passengers in the trains and buses are the mob too.
+  setPassengerMaterial(ghost);
   const ads = adMaterial(cityU, new DistrictAdAtlas());
   const cityDepth = cityDepthMaterial(cityU);
   // Taxis' photo ads (parked and in traffic) and the vehicles' lettering (in the sign atlas).

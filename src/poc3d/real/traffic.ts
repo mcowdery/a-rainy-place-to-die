@@ -13,6 +13,7 @@ import type { CarMaterials } from './trainCar';
 import type { Ridable } from './cabinRider';
 import { CITY_CARS, isTaxi, pickCar, type CarMix } from '../district/carMix';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
+import { passengerMesh, type PassengerSpot } from './people';
 
 /**
  * Moving traffic. Cars, taxis and buses drive their loops with a car-following model (the Intelligent
@@ -128,6 +129,15 @@ function carModel(type: CarType, paint: number, marks: number, layout: SignLayou
     label: LABELS[type],
     wheels: wheelLayout(type),
   };
+}
+
+/** Where the old bus's passengers go: its seats (pairs down both sides, facing forward) and the aisle. */
+const OLD_BUS_SEATS: PassengerSpot[] = [];
+const OLD_BUS_STANDING: PassengerSpot[] = [];
+{
+  const H = BUS_LEN / 2;
+  for (let z = -H + 0.6; z < H - 2.2; z += 0.9) for (const s of [-1, 1]) OLD_BUS_SEATS.push({ x: s * 0.95, z: z + 0.25, y: 0.45, yaw: 0 });
+  for (let z = -1; z < H - 1.5; z += 1.3) OLD_BUS_STANDING.push({ x: 0, z, y: 0.4, yaw: (z * 7) % 2 > 1 ? Math.PI / 2 : -Math.PI / 2 });
 }
 
 /** A city bus at the origin pointing +z (10.5 m): cream and green, glass sides, lit inside, a destination board. */
@@ -599,6 +609,9 @@ export class TrafficSystem {
         const gl = new THREE.Mesh(model.glass, glass);
         gl.renderOrder = 3;
         obj.add(body, gl, model.signs.clone());
+        // Passengers: heads and shoulders over the seats at the windows, a few standing in the aisle.
+        const people = passengerMesh(OLD_BUS_SEATS, OLD_BUS_STANDING, hash(k++, 0xb05), { seat: 0.5, stand: 0.25 });
+        if (people) obj.add(people);
         add(obj, busBrakeGeo, route, BUS_LEN / 2, 2.5, true, { v0: 9.5, a: 0.9, b: 1.6, T: 1.6, s0: 3 }, (route.length * (i + 0.3)) / line.buses, 'Bus', BUS_WHEELS);
       }
     }

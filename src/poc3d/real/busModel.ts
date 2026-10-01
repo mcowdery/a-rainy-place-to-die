@@ -5,6 +5,9 @@ import type { CabinLayout } from '../district/cabin';
 import type { BusLine } from '../district/traffic';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 import { wallRects, type CarMaterials } from './trainCar';
+import { passengerMesh } from './people';
+
+let busCount = 0;
 
 /**
  * The city bus, second generation (review in models.html; `?transit=new` in the district): a Japanese non-step bus
@@ -329,6 +332,11 @@ export function buildBus2(line: BusLine, mats: CarMaterials): Bus2 {
   sgeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   const inside = new THREE.Group();
   inside.add(new THREE.Mesh(ib.build()!, mats.city));
+  // Passengers: some of the seats taken (facing forward, or across from the wall), a few standing by the poles.
+  const seats = busSeats().map((q) => ({ x: q.x, z: q.z, y: q.cushion - 0.46, yaw: q.face === 'fwd' ? 0 : Math.PI / 2 }));
+  const standing = BUS_POLES.map(([x, z]) => ({ x: x + (x > 0 ? -0.25 : 0.25), z, y: busFloor(z), yaw: x > 0 ? -Math.PI / 2 : Math.PI / 2 }));
+  const people = passengerMesh(seats, standing, busCount++ * 7 + 3, { seat: 0.45, stand: 0.2 });
+  if (people) inside.add(people);
   obj.add(body, glassMesh, new THREE.Mesh(sgeo, screens.material), inside, ...leaves.map((l) => l.group));
   const layout = busLayout();
   const p = new THREE.Vector3();

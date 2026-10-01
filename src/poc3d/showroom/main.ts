@@ -569,6 +569,9 @@ const DRESSED: [string, Partial<FigureSpec> & Pick<FigureSpec, 'body' | 'pose'>]
   ['police (woman)', { body: 'woman', pose: 'walk', outfit: 'police', color: GHOST_COLORS[3], phase: 0.6 }],
   ['backpack', { body: 'man', pose: 'walk', outfit: 'backpack', phase: 0.1 }],
   ['backpack (girl)', { body: 'woman', pose: 'phone', outfit: 'backpack', hair: 'long' }],
+  ['sitting', { body: 'man', pose: 'sit', outfit: 'suit', y: 0 }],
+  ['sitting', { body: 'woman', pose: 'sit', outfit: 'long', hair: 'long', y: 0 }],
+  ['strap', { body: 'man', pose: 'strap', outfit: 'plain' }],
 ];
 DRESSED.forEach(([name, sp], c) => {
   const x = x0 - 2 + c * DX;

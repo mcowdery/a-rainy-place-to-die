@@ -3,7 +3,8 @@ import type { Rect } from '../../core/coords';
 import type { Building3 } from '../district/plan';
 import { WIN } from './buildings';
 import type { Light } from './lightmap';
-import { localBox, localFrame, localRect, toLocal, toWorld } from './localFrame';
+import { localBox, localFrame, localRect, localYaw, toLocal, toWorld } from './localFrame';
+import { passengerMesh, type PassengerSpot } from './people';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 
 /**
@@ -348,5 +349,15 @@ export function buildStation(b: Building3, city: THREE.Material, names: StationN
     box(0x6a6e72, u - 1.6, u + 1.6, FAR_EDGE - 3.1, FAR_EDGE - 3.0, PLATFORM_Y + 1.6, PLATFORM_Y + 3.4);
     plane(board, 3.0, 1.33, u, FAR_EDGE - 2.98, PLATFORM_Y + 2.5, 'in');
   }
+  // People waiting on both platforms, a step back from the edge, facing the track.
+  const waiting: PassengerSpot[] = [];
+  for (let u = 4; u < 56; u += 2.3) {
+    for (const [t, dt] of [[EDGE + 1.2, -1], [FAR_EDGE - 1.2, 1]] as const) {
+      const [x, z] = toWorld(f, u + ((u * 7) % 1.4) - 0.7, t + (((u * 13) % 1) - 0.5) * 0.8);
+      waiting.push({ x, z, y: PLATFORM_Y, yaw: localYaw(f, 0, dt) });
+    }
+  }
+  const people = passengerMesh([], waiting, b.id * 31 + 7, { seat: 0, stand: 0.35 }, undefined, ['stand', 'stand', 'phone', 'phone', 'pockets']);
+  if (people) group.add(people);
   return group;
 }
