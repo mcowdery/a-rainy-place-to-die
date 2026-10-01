@@ -14,6 +14,7 @@ zones:
   E:
     id: shiomi_events
     name: Shiomi event quarter
+    people: { plain: 5, long: 2, yukata: 2, backpack: 1 }
     plan:
       floors: [[3, 5, 50], [6, 10, 35], [12, 18, 15]]
       lotW: [20, 36]

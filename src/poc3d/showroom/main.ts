@@ -103,7 +103,7 @@ floor.box(0, -36, -0.2, 0, 80, 6, KIND.lot);
 floor.kind = KIND.asphalt;
 floor.kind = KIND.plain;
 floor.color = lin(0x8a867e);
-floor.box(1, 20, 0, 0.15, 22, 28, KIND.sidewalk);
+floor.box(9, 20, 0, 0.15, 38, 28, KIND.sidewalk);
 const floorMesh = new THREE.Mesh(floor.build()!, city);
 floorMesh.receiveShadow = true;
 scene.add(floorMesh);
@@ -561,6 +561,14 @@ const DRESSED: [string, Partial<FigureSpec> & Pick<FigureSpec, 'body' | 'pose'>]
   ['kimono', { body: 'woman', pose: 'stand', outfit: 'kimono', hair: 'bun' }],
   ['kimono (man)', { body: 'man', pose: 'pockets', outfit: 'kimono' }],
   ['kimono (elder)', { body: 'elder', pose: 'stand', outfit: 'kimono', hair: 'none' }],
+  ['yukata', { body: 'woman', pose: 'walk', outfit: 'yukata', hair: 'bun', phase: 0.4 }],
+  ['yukata (child)', { body: 'child', pose: 'stand', outfit: 'yukata', hair: 'bun' }],
+  ['yukata (man)', { body: 'man', pose: 'pockets', outfit: 'yukata' }],
+  ['hard hat · hi-vis', { body: 'man', pose: 'stand', outfit: 'work' }],
+  ['police', { body: 'man', pose: 'stand', outfit: 'police', color: GHOST_COLORS[3] }],
+  ['police (woman)', { body: 'woman', pose: 'walk', outfit: 'police', color: GHOST_COLORS[3], phase: 0.6 }],
+  ['backpack', { body: 'man', pose: 'walk', outfit: 'backpack', phase: 0.1 }],
+  ['backpack (girl)', { body: 'woman', pose: 'phone', outfit: 'backpack', hair: 'long' }],
 ];
 DRESSED.forEach(([name, sp], c) => {
   const x = x0 - 2 + c * DX;
@@ -568,7 +576,7 @@ DRESSED.forEach(([name, sp], c) => {
   person({ x, z: zo + 1.4, yaw: Math.PI, color: GHOST_COLORS[(c * 3 + 1) % GHOST_COLORS.length], ...sp });
   label('new', name, x, 2.3, zo);
 });
-genItems.new.push({ name: 'outfits', group: 'People', at: new THREE.Vector3(x0 - 2 + 4.5 * DX, 1, zo), size: 9, view: FRONT_VIEW });
+genItems.new.push({ name: 'outfits', group: 'People', at: new THREE.Vector3(x0 - 2 + 8.5 * DX, 1, zo), size: 17, view: FRONT_VIEW });
 genItems.new.push({ name: 'outfits (backs)', group: 'People', at: new THREE.Vector3(x0 - 2 + 4.5 * DX, 1, zo + 1.4), size: 9, view: new THREE.Vector3(0, 0.55, -0.85).normalize() });
 const mobMesh = new THREE.Mesh(mob.build(0, 0)!, ghost);
 genRoot.new.add(mobMesh);

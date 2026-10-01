@@ -146,17 +146,20 @@ class TemplateBuilder {
   /**
    * A loft through rings, each `seg` points round a superellipse (exponent n: 2 an ellipse, more boxy).
    * Axis 'y': horizontal rings, listed bottom to top, at (cx(y), y, z). Axis 'z': upright rings (feet),
-   * listed back to front, with Row read as [z, half width, half height, y].
+   * listed back to front, with Row read as [z, half width, half height, y]. With `arc`, only that part of
+   * each ring (angles from +x: pi/2 is the front (+z) for axis y, 3pi/2 the top for axis z), an open sheet.
    */
-  loft(rows: readonly Row[], cx: (r: Row) => number, weight: (r: Row, i: number) => Weight, shade: number, seg: number, n = 2, axis: 'y' | 'z' = 'y'): void {
+  loft(rows: readonly Row[], cx: (r: Row) => number, weight: (r: Row, i: number) => Weight, shade: number, seg: number, n = 2, axis: 'y' | 'z' = 'y', arc?: readonly [number, number]): void {
     const start = this.pos.length / 3;
     const e = 2 / n;
     const se = (v: number): number => Math.sign(v) * Math.pow(Math.abs(v), e);
+    // An arc's rings have seg + 1 points and don't close.
+    const pts = arc ? seg + 1 : seg;
     rows.forEach((r, i) => {
       const [b0, b1, w] = weight(r, i);
       const x0 = cx(r);
-      for (let j = 0; j < seg; j++) {
-        const t = (j / seg) * Math.PI * 2;
+      for (let j = 0; j < pts; j++) {
+        const t = arc ? arc[0] + ((arc[1] - arc[0]) * j) / seg : (j / seg) * Math.PI * 2;
         const c = se(Math.cos(t));
         const s = se(Math.sin(t));
         if (axis === 'y') this.pos.push(x0 + r[1] * c, r[0], r[3] + r[2] * s);
@@ -171,10 +174,10 @@ class TemplateBuilder {
     // (axis z), the opposite sense to the stacking axis.
     for (let k = 0; k + 1 < rows.length; k++) {
       for (let j = 0; j < seg; j++) {
-        const a = start + k * seg + j;
-        const b = start + k * seg + ((j + 1) % seg);
-        const c = start + (k + 1) * seg + ((j + 1) % seg);
-        const d = start + (k + 1) * seg + j;
+        const a = start + k * pts + j;
+        const b = start + k * pts + ((j + 1) % pts);
+        const c = start + (k + 1) * pts + ((j + 1) % pts);
+        const d = start + (k + 1) * pts + j;
         this.idx.push(a, c, b, a, d, c);
       }
     }
@@ -398,13 +401,15 @@ const COAT: readonly Row[] = [
 ];
 
 /** The outfits' garments, in the man's heights (rows scaled to each body like the skirt and coat). */
+/** The maid's dress below the waist: a rounded bell over a petticoat, ending mid-thigh. */
 const MAID_SKIRT: readonly Row[] = [
-  [0.6, 0.235, 0.215, 0.02],
-  [0.64, 0.24, 0.22, 0.02],
-  [0.8, 0.205, 0.175, 0.01],
-  [0.95, 0.16, 0.12, 0],
-  [1.04, 0.125, 0.09, 0],
-  [1.06, 0.12, 0.088, 0],
+  [0.665, 0.236, 0.212, 0.015],
+  [0.68, 0.254, 0.23, 0.015],
+  [0.76, 0.247, 0.222, 0.012],
+  [0.86, 0.218, 0.188, 0.006],
+  [0.95, 0.178, 0.143, 0],
+  [1.02, 0.142, 0.102, 0],
+  [1.065, 0.126, 0.091, 0],
 ];
 const PLEATS: readonly Row[] = [
   [0.6, 0.2, 0.17, 0.01],
@@ -442,11 +447,19 @@ const SLEEVE: readonly Row[] = [
   [1.2, 0.046, 0.08, -0.015],
   [1.25, 0.035, 0.045, -0.01],
 ];
+/** A puffed short sleeve, round, gathered at the shoulder and into a cuff. */
 const PUFF: readonly Row[] = [
-  [1.27, 0.03, 0.035, -0.01],
-  [1.3, 0.066, 0.07, -0.01],
-  [1.38, 0.072, 0.076, -0.01],
-  [1.44, 0.05, 0.055, -0.01],
+  [1.25, 0.046, 0.051, -0.012],
+  [1.27, 0.066, 0.071, -0.012],
+  [1.32, 0.075, 0.08, -0.012],
+  [1.38, 0.071, 0.076, -0.011],
+  [1.42, 0.056, 0.06, -0.01],
+  [1.445, 0.038, 0.043, -0.01],
+];
+const CUFF: readonly Row[] = [
+  [1.236, 0.044, 0.049, -0.012],
+  [1.252, 0.05, 0.055, -0.012],
+  [1.262, 0.064, 0.069, -0.012],
 ];
 /** A case hanging from the left hand (briefcase or school bag): [y, half thickness, half length, z]. */
 const CASE: readonly Row[] = [
@@ -459,7 +472,23 @@ const CASE: readonly Row[] = [
 const WHITE = 3.6;
 
 /** Which outfits a body wears (others fall back to everyday clothes). */
-const wears = (b: Body, o: Outfit): boolean => o === 'plain' || (o === 'maid' ? b === 'woman' : o === 'school' ? b !== 'elder' : b !== 'child');
+const wears = (b: Body, o: Outfit): boolean => {
+  switch (o) {
+    case 'plain':
+    case 'yukata':
+      return true;
+    case 'maid':
+      return b === 'woman';
+    case 'school':
+    case 'backpack':
+      return b !== 'elder';
+    case 'work':
+    case 'police':
+      return b === 'man' || b === 'woman';
+    default:
+      return b !== 'child';
+  }
+};
 
 /** The outfit a figure is drawn in: its own if its body wears it, else 'long' or everyday clothes. */
 export function outfitOf(s: Pick<FigureSpec, 'body' | 'long' | 'outfit'>): Outfit {
@@ -593,13 +622,50 @@ function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
     if (body !== 'woman') panel(1.06, 1.42, () => 0.014, 1, 0.45, 0.012);
   } else if (outfit === 'maid') {
     const skirt = scaleRows(MAID_SKIRT, ys, 0.95);
-    tb.loft(skirt, () => 0, hips, 1, 14, 2.2);
-    // The apron over the skirt's front, and its bib up the chest; the frilled headband; puffed sleeves.
-    const apron = skirt.filter((r) => r[0] > 0.62 * ys && r[0] < 1.02 * ys).map(([y, w, d, z]): Row => [y, w * 0.62, 0.008, z + d + 0.01]);
-    tb.loft(apron, () => 0, hips, WHITE, 8, 6);
-    panel(1.06, 1.32, () => 0.07, 1, WHITE);
-    tb.loft(headRows([[0.158, 0.09, 0.112, -0.008], [0.182, 0.088, 0.108, -0.01]]), () => 0, () => one(HEAD), WHITE, 12, 2.1);
-    for (const [sd, arm, fore] of [[-1, ARM_L, FORE_L], [1, ARM_R, FORE_R]] as const) armRows(PUFF, sd, 1, arm, fore);
+    tb.loft(skirt, () => 0, hips, 1, 18, 2);
+    // The skirt at a height: its section, grown by `g` (the apron and lace sit just outside it).
+    const skirtAt = (y: number, g: number): Row => {
+      let i = 0;
+      while (i < skirt.length - 2 && skirt[i + 1][0] < y) i++;
+      const a = skirt[i], b = skirt[i + 1];
+      const k = Math.min(1, Math.max(0, (y - a[0]) / (b[0] - a[0])));
+      return [y, a[1] + (b[1] - a[1]) * k + g, a[2] + (b[2] - a[2]) * k + g, a[3] + (b[3] - a[3]) * k];
+    };
+    const F = Math.PI / 2;
+    // Lace under the hem (the petticoat's edge).
+    tb.loft([skirtAt(0.665 * ys, -0.01), [0.63 * ys, 0.25, 0.226, 0.015], [0.65 * ys, 0.262, 0.238, 0.015], skirtAt(0.67 * ys, 0.006)], () => 0, hips, WHITE, 18, 2);
+    // The apron round the front of the skirt, a frill along its bottom, and the waistband all round.
+    tb.loft([0.7, 0.76, 0.86, 0.95, 1.03].map((y) => skirtAt(y * ys, 0.012)), () => 0, hips, WHITE, 10, 2, 'y', [F - 1.0, F + 1.0]);
+    const flare = skirtAt(0.7 * ys, 0.03);
+    tb.loft([[0.672 * ys, flare[1], flare[2], flare[3]], skirtAt(0.7 * ys, 0.014)], () => 0, hips, WHITE * 0.9, 10, 2, 'y', [F - 1.05, F + 1.05]);
+    const band = (y: number, g: number): Row => {
+      const [w, d, z] = torsoAt(y);
+      return [y, w + g, d + g, z];
+    };
+    tb.loft([band(1.04 * ys, 0.008), band(1.075 * ys, 0.008)], () => 0, hips, WHITE, 14, 2.4);
+    // The bib up the chest, a frill along its top, and straps over the shoulders to the back.
+    tb.loft([1.07, 1.15, 1.23, 1.3].map((y) => band(y * ys, 0.007)), () => 0, () => one(SPINE), WHITE, 8, 2.4, 'y', [F - 0.62, F + 0.62]);
+    tb.loft([band(1.3 * ys, 0.007), band(1.325 * ys, 0.02)], () => 0, () => one(SPINE), WHITE * 0.9, 8, 2.4, 'y', [F - 0.66, F + 0.66]);
+    for (const c of [F - 0.5, F + 0.5, -F + 0.5, -F - 0.5]) tb.loft([1.29, 1.36, 1.42, 1.455].map((y) => band(y * ys, 0.008)), () => 0, () => one(SPINE), WHITE, 2, 2.4, 'y', [c - 0.07, c + 0.07]);
+    // The bow at the back of the waist, its two loops and tails.
+    const [, bd, bz] = torsoAt(1.06 * ys);
+    const back = bz - bd - 0.02;
+    for (const sd of [-1, 1]) {
+      const y = 1.07 * ys;
+      tb.loft([[y - 0.045, 0.004, 0.004, back], [y - 0.03, 0.04, 0.02, back - 0.006], [y, 0.055, 0.026, back - 0.01], [y + 0.03, 0.04, 0.02, back - 0.006], [y + 0.045, 0.004, 0.004, back]], () => sd * 0.055, hips, WHITE, 8);
+      tb.loft([[0.84 * ys, 0.022, 0.005, back - 0.01], [1.05 * ys, 0.016, 0.005, back]], () => sd * 0.03, hips, WHITE, 6, 6);
+    }
+    // A white collar at the neck.
+    tb.loft([band(1.44 * ys, 0.006), band(1.475 * ys, 0.006)], () => 0, () => one(SPINE), WHITE, 10, 2.4, 'y', [F - 1.2, F + 1.2]);
+    // Puffed sleeves with white cuffs.
+    for (const [sd, arm, fore] of [[-1, ARM_L, FORE_L], [1, ARM_R, FORE_R]] as const) {
+      armRows(PUFF, sd, 1, arm, fore);
+      armRows(CUFF, sd, WHITE, arm, fore);
+    }
+    // The katyusha: a band arching over the head from ear to ear, a frill of lace along its front.
+    const hoop = (z: number, w: number, h: number): Row => [z * hk, w * hk, h * hk, neckY + 0.118 * hk];
+    tb.loft([hoop(-0.012, 0.087, 0.12), hoop(0.012, 0.087, 0.12)], () => 0, () => one(HEAD), 0.5, 12, 2, 'z', [Math.PI + 0.5, 2 * Math.PI - 0.5]);
+    tb.loft([hoop(0.012, 0.088, 0.121), hoop(0.026, 0.1, 0.136)], () => 0, () => one(HEAD), WHITE, 12, 2, 'z', [Math.PI + 0.62, 2 * Math.PI - 0.62]);
   } else if (outfit === 'school') {
     if (body === 'woman') {
       tb.loft(scaleRows(PLEATS, ys, 0.95), () => 0, hips, 1, 16, 3.5);
@@ -623,6 +689,40 @@ function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
       tb.loft([1.0, 1.02, 1.16, 1.18].map((y, i): Row => [y * ys, i % 3 === 0 ? 0.11 : 0.13, i % 3 === 0 ? 0.025 : 0.035, z - d - 0.05]), () => 0, () => one(SPINE), 2.6, 8, 6);
     }
     for (const [sd, arm, fore] of [[-1, ARM_L, FORE_L], [1, ARM_R, FORE_R]] as const) armRows(SLEEVE, sd, 1, arm, fore);
+  } else if (outfit === 'yukata') {
+    // Light summer cotton (lighter than a kimono) with a dark obi, and a bow behind for women and children.
+    const k = body === 'woman' ? 0.95 : P.arm;
+    tb.loft(scaleRows(ROBE, ys, k), () => 0, () => one(PELVIS), 2.2, 14, 2.4);
+    tb.loft(scaleRows(OBI, ys, k).map(([y, w, d, z]): Row => [y, w * 1.005, d * 1.01, z]), () => 0, hips, 0.5, 14, 2.4);
+    if (body === 'woman' || body === 'child') {
+      const [, d, z] = torsoAt(1.08 * ys);
+      tb.loft([1.0, 1.02, 1.16, 1.18].map((y, i): Row => [y * ys, (i % 3 === 0 ? 0.1 : 0.12) * k, (i % 3 === 0 ? 0.022 : 0.032) * k, z - d - 0.045 * k]), () => 0, () => one(SPINE), 0.5, 8, 6);
+    }
+    const sleeve = SLEEVE.map(([y, a, b, z]): Row => [y + 0.06, a, b * 0.85, z]);
+    for (const [sd, arm, fore] of [[-1, ARM_L, FORE_L], [1, ARM_R, FORE_R]] as const) armRows(sleeve, sd, 2.2, arm, fore);
+  } else if (outfit === 'work') {
+    // A hard hat with its brim, and a hi-vis vest with two reflective bands.
+    tb.loft(headRows([[0.13, 0.12, 0.13, -0.005], [0.14, 0.12, 0.13, -0.005], [0.145, 0.088, 0.104, -0.008], [0.2, 0.084, 0.098, -0.01], [0.24, 0.05, 0.06, -0.012], [0.255, 0.003, 0.003, -0.012]]), () => 0, () => one(HEAD), WHITE * 1.1, 12, 2.1);
+    const vest = (y: number, g: number): Row => {
+      const [w, d, z] = torsoAt(y);
+      return [y, w + g, d + g, z];
+    };
+    tb.loft([1.0, 1.1, 1.2, 1.3, 1.38].map((y) => vest(y * ys, 0.01)), () => 0, (r) => (r[0] > waist ? one(SPINE) : hips(r)), 2.2, 12, 2.4);
+    for (const y of [1.1, 1.24]) tb.loft([vest(y * ys, 0.014), vest((y + 0.035) * ys, 0.014)], () => 0, () => one(SPINE), WHITE * 1.3, 12, 2.4);
+  } else if (outfit === 'police') {
+    // A peaked cap with a lighter band, and the duty belt.
+    // (Low on the head, the crown flaring wider than the band to a flat top just above the hair.)
+    tb.loft(headRows([[0.155, 0.083, 0.103, -0.006], [0.18, 0.091, 0.112, -0.01], [0.212, 0.104, 0.124, -0.014], [0.226, 0.1, 0.119, -0.015], [0.232, 0.003, 0.003, -0.015]]), () => 0, () => one(HEAD), 0.7, 12, 2.1);
+    tb.loft(headRows([[0.155, 0.084, 0.104, -0.006], [0.172, 0.087, 0.108, -0.008]]), () => 0, () => one(HEAD), WHITE * 0.6, 12, 2.1);
+    tb.loft(headRows(VISOR.map(([y, a, b, z]): Row => [y + 0.02, a * 1.05, b * 1.1, z + 0.004])), () => 0, () => one(HEAD), 0.4, 8);
+    const [w, d, z] = torsoAt(0.98 * ys);
+    tb.loft([[0.955 * ys, w + 0.012, d + 0.012, z], [1.0 * ys, w + 0.012, d + 0.012, z]], () => 0, hips, 0.4, 12, 2.4);
+  } else if (outfit === 'backpack') {
+    // A rucksack on the back.
+    const ys0 = [1.04, 1.06, 1.36, 1.39].map((y) => y * ys);
+    const back = Math.min(...ys0.map((y) => torsoAt(y)[2] - torsoAt(y)[1]));
+    const k = body === 'child' ? 0.75 : 1;
+    tb.loft(ys0.map((y, i): Row => [y, (i % 3 === 0 ? 0.12 : 0.135) * k, (i % 3 === 0 ? 0.06 : 0.075) * k, back - 0.07 * k]), () => 0, () => one(SPINE), 1.4, 10, 3);
   }
   return tb.build(pivot, armOut);
 }
@@ -1330,7 +1430,8 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
   const outfit = pickOutfit(mix, rnd.int(0, 1 << 30), (o) => wears(b, o));
   let hair: Hair = woman ? rnd.pick(['long', 'long', 'bun', 'short', 'hat'] as const) : b === 'elder' ? rnd.pick(['none', 'hat', 'cap'] as const) : rnd.pick(['short', 'short', 'short', 'none', 'cap', 'hat'] as const);
   if (outfit === 'maid' || (outfit === 'school' && woman)) hair = rnd.pick(['long', 'long', 'short', 'bun'] as const);
-  if (outfit === 'kimono') hair = woman ? 'bun' : rnd.pick(['short', 'none'] as const);
+  if (outfit === 'kimono' || outfit === 'yukata') hair = woman ? 'bun' : rnd.pick(['short', 'none'] as const);
+  if (outfit === 'work' || outfit === 'police') hair = woman ? 'short' : rnd.pick(['short', 'none'] as const);
   if (outfit === 'suit' && !woman) hair = rnd.pick(['short', 'short', 'none'] as const);
   // A bag in the left hand: they gesture with the right.
   const carries = (outfit === 'suit' && !woman) || (outfit === 'school' && b !== 'child');
@@ -1340,7 +1441,8 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
     yaw,
     body: b,
     pose,
-    color: rnd.pick(GHOST_COLORS),
+    // (Police in navy.)
+    color: outfit === 'police' ? GHOST_COLORS[3] : rnd.pick(GHOST_COLORS),
     hair,
     long: outfit === 'long',
     outfit,

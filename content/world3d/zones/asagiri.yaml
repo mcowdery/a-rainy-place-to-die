@@ -16,7 +16,7 @@ zones:
   K:
     id: skyscraper_row
     name: Skyscraper Row
-    people: { suit: 8, plain: 2, long: 2 }
+    people: { suit: 8, plain: 2, long: 2, police: 0.2 }
     cars: { luxury: 24, sedan: 26, taxi2: 20, taxi: 8, minivan: 14, kei: 4, van: 4, police: 4 }
     plan:
       floors: [[14, 24, 35], [26, 40, 45], [42, 55, 20]]

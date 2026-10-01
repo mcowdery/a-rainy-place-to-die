@@ -16,6 +16,7 @@ zones:
   C:
     id: port_terminal
     name: Container terminal
+    people: { work: 6, plain: 2 }
     plan:
       yardCover: 0.85
       floors: [[3, 4, 70], [5, 6, 30]]
@@ -35,6 +36,7 @@ zones:
   W:
     id: port_warehouses
     name: Warehouse district
+    people: { work: 5, plain: 3, long: 1 }
     plan:
       yardCover: 0.12
       floors: [[3, 4, 60], [5, 7, 30], [9, 12, 10]]
@@ -91,6 +93,7 @@ zones:
   F:
     id: port_fish_market
     name: Fish market streets
+    people: { work: 4, plain: 4, long: 1 }
     plan:
       floors: [[2, 3, 70], [4, 5, 30]]
       lotW: [8, 16]

@@ -4,27 +4,28 @@ import { hash } from '../../core/hash';
  * What the mob wears where (real/people.ts draws the outfits): weights by outfit per district
  * (`DISTRICT_PEOPLE`), a zone's own with `people:` in its file (zones.ts), which travels with its style
  * (`DistrictStyle3.people`), `CITY_PEOPLE` elsewhere. Suits round the offices and the host clubs, maids in
- * Denkō-chō's café lanes, uniforms by the schools and the university, kimono by the temple. An outfit a body
+ * Denkō-chō's café lanes, uniforms by the schools and the university, kimono by the temple, yukata by the river,
+ * hard hats and hi-vis at the port, a few police officers about, backpacks in Denkō-chō and round the campus. An outfit a body
  * can't wear (a man in a maid's dress, a child in a suit) falls back to its everyday clothes. Pure, and
  * deterministic by seed (the chunk workers dress the crowds with it).
  */
-export const OUTFITS = ['plain', 'long', 'suit', 'maid', 'school', 'kimono'] as const;
+export const OUTFITS = ['plain', 'long', 'suit', 'maid', 'school', 'kimono', 'yukata', 'work', 'police', 'backpack'] as const;
 export type Outfit = (typeof OUTFITS)[number];
 export type PeopleMix = Readonly<Partial<Record<Outfit, number>>>;
 
 /** Anywhere without a mix of its own. */
-export const CITY_PEOPLE: PeopleMix = { plain: 6, long: 3, suit: 2, school: 0.5 };
+export const CITY_PEOPLE: PeopleMix = { plain: 6, long: 3, suit: 2, school: 0.5, backpack: 1, police: 0.06 };
 
 export const DISTRICT_PEOPLE: Readonly<Record<string, PeopleMix>> = {
   // Kaburo: going out, the hosts and the salarymen on their way home.
-  neon: { plain: 5, long: 4, suit: 3, maid: 0.2, kimono: 0.2 },
+  neon: { plain: 5, long: 4, suit: 3, maid: 0.2, kimono: 0.2, backpack: 0.8, police: 0.12 },
   // Asagiri: the offices.
-  tower: { suit: 6, plain: 3, long: 2 },
+  tower: { suit: 6, plain: 3, long: 2, police: 0.1 },
   residential: { plain: 6, long: 2, school: 2, suit: 1.5 },
-  oldtown: { plain: 5, long: 2, kimono: 1, suit: 0.5, school: 0.5 },
-  campus: { school: 5, plain: 3, long: 1 },
-  electric: { plain: 6, suit: 1, maid: 0.6, school: 1 },
-  harbor: { plain: 6, long: 2, suit: 1 },
+  oldtown: { plain: 5, long: 2, kimono: 1, yukata: 0.6, suit: 0.5, school: 0.5, police: 0.06 },
+  campus: { school: 5, plain: 3, long: 1, backpack: 2 },
+  electric: { plain: 6, suit: 1, maid: 0.6, school: 1, backpack: 3 },
+  harbor: { plain: 5, long: 1.5, suit: 1, work: 3 },
 };
 
 /** The mix for a cell planned with `style` in district `kind`: the zone's, else the district's, else the city's. */
