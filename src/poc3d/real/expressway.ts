@@ -257,9 +257,10 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
   for (const road of ex.roads) {
     if (road.kind === 'loop' || road.kind === 'route') continue;
     if (road.rampKind === 'on') {
-      group.add(entranceSign(road));
+      group.add(entranceSign(road), entranceGantry(road));
       continue;
     }
+    if (road.rampKind === 'off') group.add(noEntry(road));
     const text = road.kind === 'spur' ? [`${road.sign}`, 'TUNNEL · 直進'] : [`出口 EXIT`, `${road.sign}`];
     group.add(gantry(road, 0, text, ex));
   }
@@ -307,7 +308,9 @@ function ramp(mb: MeshBuilder, road: Road): void {
     }
   }
   // (The high part stands on arms from the deck's piers in the median: buildExpressway.)
-  if (road.rampKind === 'on') {
+  // Arrows painted near the street end the way traffic goes: up an entrance; down an exit, so they point at
+  // anyone about to drive up it the wrong way.
+  {
     mb.kind = KIND.paint;
     mb.color = lin(0xe8e8e0);
     const flat = (i: number, l0: number, l1: number, a0: number, a1: number): void => {
@@ -317,7 +320,7 @@ function ramp(mb: MeshBuilder, road: Road): void {
       };
       mb.quadN(P(l0, a0), P(l0, a1), P(l1, a1), P(l1, a0), [0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0]);
     };
-    for (const i of [4, 20]) {
+    for (const i of road.rampKind === 'on' ? [4, 20] : [n - 30, n - 14]) {
       // The shaft, then the head as strips narrowing to its point.
       flat(i, 0.15, -0.15, 0, 3.2);
       for (let k = 0; k < 6; k++) {
@@ -401,6 +404,119 @@ function entranceSign(road: Road): THREE.Group {
   const lat = -RAMP_FOOT;
   g.position.set(road.x[0] - road.tx[0] * back + road.tz[0] * lat, 0.18, road.z[0] - road.tz[0] * back - road.tx[0] * lat);
   g.rotation.y = Math.atan2(road.tx[0], road.tz[0]);
+  return g;
+}
+
+/** A sign's face drawn on a canvas, once per kind (shared by every ramp). */
+const faces = new Map<string, THREE.MeshBasicMaterial>();
+function face(key: string, w: number, h: number, draw: (g: CanvasRenderingContext2D) => void): THREE.MeshBasicMaterial {
+  let m = faces.get(key);
+  if (!m) {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    draw(c.getContext('2d')!);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    m = new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(0.9, 0.9, 0.9), transparent: true, alphaTest: 0.5 });
+    faces.set(key, m);
+  }
+  return m;
+}
+
+/**
+ * Over an entrance's foot, a green gantry: 東都高速 入口 ENTRANCE and an arrow up the ramp, facing the street
+ * traffic turning in (so it reads as the way on from the whole block).
+ */
+function entranceGantry(road: Road): THREE.Group {
+  const g = new THREE.Group();
+  const i = 10;
+  // One post in the median (the ramp's right: -x in the group's frame), its arm out over the ramp.
+  const w = road.half + 0.55;
+  const steel = new THREE.MeshStandardMaterial({ color: 0x8a8e94, metalness: 0.5, roughness: 0.5 });
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 6.6, 0.3), steel);
+  post.position.set(-w, 3.3, 0);
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(w + 3, 0.35, 0.35), steel);
+  beam.position.set((w + 3) / 2 - w, 6.3, 0);
+  g.add(post, beam);
+  const mat = face(`entrance:${road.sign}`, 1024, 320, (cg) => {
+    cg.fillStyle = '#0e6a3a';
+    cg.fillRect(0, 0, 1024, 320);
+    cg.strokeStyle = '#f0f0f0';
+    cg.lineWidth = 8;
+    cg.strokeRect(10, 10, 1004, 300);
+    cg.fillStyle = '#f4f4f0';
+    cg.textAlign = 'center';
+    cg.font = "bold 104px 'Yu Gothic', 'Meiryo', sans-serif";
+    cg.fillText('東都高速 入口', 450, 140);
+    cg.font = 'bold 60px Consolas, sans-serif';
+    cg.fillText(`ENTRANCE · ${(road.sign ?? '').replace(/^[^ ]+ /, '')}`, 450, 250);
+    // The arrow: straight on, up the ramp.
+    cg.beginPath();
+    cg.moveTo(900, 50);
+    cg.lineTo(980, 140);
+    cg.lineTo(930, 140);
+    cg.lineTo(930, 280);
+    cg.lineTo(870, 280);
+    cg.lineTo(870, 140);
+    cg.lineTo(820, 140);
+    cg.closePath();
+    cg.fill();
+  });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 1.75), mat);
+  // Traffic travels +z in the group's frame: the sign faces -z, toward it.
+  sign.position.set(0, 5.1, -0.25);
+  sign.rotation.y = Math.PI;
+  g.add(sign);
+  g.position.set(road.x[i], road.y[i], road.z[i]);
+  g.rotation.y = Math.atan2(road.tx[i], road.tz[i]);
+  return g;
+}
+
+/**
+ * At an exit's foot, facing the street (anyone about to drive up it): a 進入禁止 no-entry sign on a post in the
+ * median, a red 逆走 WRONG WAY panel under it.
+ */
+function noEntry(road: Road): THREE.Group {
+  const g = new THREE.Group();
+  const n = road.x.length - 1;
+  const round = face('noentry', 256, 256, (cg) => {
+    cg.fillStyle = '#d81e1e';
+    cg.beginPath();
+    cg.arc(128, 128, 122, 0, Math.PI * 2);
+    cg.fill();
+    cg.strokeStyle = '#f4f4f0';
+    cg.lineWidth = 6;
+    cg.stroke();
+    cg.fillStyle = '#f4f4f0';
+    cg.fillRect(40, 108, 176, 40);
+  });
+  const panel = face('wrongway', 512, 192, (cg) => {
+    cg.fillStyle = '#c81818';
+    cg.fillRect(0, 0, 512, 192);
+    cg.strokeStyle = '#f4f4f0';
+    cg.lineWidth = 6;
+    cg.strokeRect(6, 6, 500, 180);
+    cg.fillStyle = '#f4f4f0';
+    cg.textAlign = 'center';
+    cg.font = "bold 72px 'Yu Gothic', 'Meiryo', sans-serif";
+    cg.fillText('逆走 出口', 256, 88);
+    cg.font = 'bold 54px Consolas, sans-serif';
+    cg.fillText('WRONG WAY', 256, 160);
+  });
+  // On a post in the median beside the foot (the ramp's right: -x in the group's frame), clear of the lanes.
+  const steel = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.5, roughness: 0.5 });
+  const x = -(road.half + 0.55);
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 3.1, 0.1), steel);
+  post.position.set(x, 1.55, 0);
+  const disc = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0), round);
+  disc.position.set(x, 2.6, 0.07);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.49), panel);
+  sign.position.set(x, 1.75, 0.07);
+  g.add(post, disc, sign);
+  // The exit's traffic travels +z in the group's frame, toward the street: the signs face +z, at the street.
+  g.position.set(road.x[n], road.y[n], road.z[n]);
+  g.rotation.y = Math.atan2(road.tx[n], road.tz[n]);
   return g;
 }
 

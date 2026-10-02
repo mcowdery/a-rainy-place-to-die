@@ -24,8 +24,13 @@ const BED = SUBWAY.b2 - 1.4;
 const CEIL = -6.2;
 /** Tunnel walls either side of the line's centre (the stations' track walls line up with them). */
 const HALF = 7.5;
-/** How far the tunnels run past the end stations. */
-const BEYOND = 110;
+/** How far the tunnels run past the end stations (the trains turn back 130 m out: district/subway.ts). */
+const BEYOND = 150;
+/**
+ * Past each end station the trains turn back: a crossover from 36 to 92 m beyond the platform's middle, out of
+ * the platform's end, then the stand at 130 m on the track they leave on.
+ */
+const CROSS = [36, 92] as const;
 /** Dwell at the stations between, on a ride (shorter than the timetable's, so rides keep moving). */
 const RIDE_DWELL = 12;
 
@@ -38,6 +43,34 @@ function onLine(line: SubwayLine3, s: number, off: number, y: number): [number, 
 function trackOff(line: SubwayLine3, sgn: number): number {
   // Moving +x the left is -z; moving +z the left is +x.
   return line.along === 'x' ? -sgn * TRACK_OFFSET : sgn * TRACK_OFFSET;
+}
+
+/** The track across the line at s for a train moving with sgn, through the crossovers past the end stations. */
+function laneAt(line: SubwayLine3, s: number, sgn: number): number {
+  const ss = line.stops.map((st) => st.s);
+  const lo = Math.min(...ss);
+  const hi = Math.max(...ss);
+  // Through a crossover: the s-growing track at its low end, the other at its high end.
+  const across = (z0: number, z1: number): number => {
+    const t = Math.max(0, Math.min(1, (s - z0) / (z1 - z0)));
+    return trackOff(line, 1) + (trackOff(line, -1) - trackOff(line, 1)) * t * t * (3 - 2 * t);
+  };
+  if (sgn > 0) return s <= hi + CROSS[0] ? trackOff(line, 1) : across(hi + CROSS[0], hi + CROSS[1]);
+  return s >= lo - CROSS[0] ? trackOff(line, -1) : across(lo - CROSS[1], lo - CROSS[0]);
+}
+
+/** A timetabled train, each car on its track (round a crossover), the set facing sgn. */
+function poseTrain(obj: THREE.Object3D, line: SubwayLine3, s: number, sgn: number): void {
+  obj.position.set(0, 0, 0);
+  obj.rotation.set(0, 0, 0);
+  for (const car of obj.children) {
+    const a = (car.userData.along ??= car.position.z) as number;
+    const c = s + sgn * a;
+    const [fx, , fz] = onLine(line, c + sgn * 7, laneAt(line, c + sgn * 7, sgn), RAIL);
+    const [bx, , bz] = onLine(line, c - sgn * 7, laneAt(line, c - sgn * 7, sgn), RAIL);
+    car.position.set((fx + bx) / 2, RAIL, (fz + bz) / 2);
+    car.rotation.y = Math.atan2(fx - bx, fz - bz);
+  }
 }
 
 function placeTrain(obj: THREE.Object3D, line: SubwayLine3, s: number, sgn: number): void {
@@ -256,9 +289,11 @@ export class SubwaySystem {
     for (const tr of this.trains) {
       const t = (this.clock + tr.offset) % tr.period;
       const p = trainAt(tr.legs, t);
-      placeTrain(tr.obj, tr.line, p.s, tr.sgn);
+      // (Its layover, beyond an end station, is the stand before it starts back: in view, on its track.)
+      const layover = p.hidden && t < tr.legs[0].T;
+      poseTrain(tr.obj, tr.line, p.s, tr.sgn);
       tr.obj.visible =
-        this.running && !p.hidden && !(this.ride && this.ride.line === tr.line && this.ride.sgn === tr.sgn) && !(r2 && r2.line === tr.line && r2.timeline.dir === tr.sgn);
+        this.running && (!p.hidden || layover) && !(this.ride && this.ride.line === tr.line && this.ride.sgn === tr.sgn) && !(r2 && r2.line === tr.line && r2.timeline.dir === tr.sgn);
       if (tr.set && tr.obj.visible) {
         tr.set.setDoors(-1, doorsAt(tr.legs, t));
         tr.set.cull(camera.position);

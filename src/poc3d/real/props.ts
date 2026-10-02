@@ -1,6 +1,6 @@
 import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng, u01 } from '../../core/hash';
-import { frontSpan, type Building3, type CellPlan3, type Road3 } from '../district/plan';
+import { frontSpan, isRiverWalk, type Building3, type CellPlan3, type Road3 } from '../district/plan';
 import { frontFrame, styleFor } from './buildings';
 import { shopLight, TRADES } from './shops';
 import type { Light } from './lightmap';
@@ -109,7 +109,49 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
   const inBuilding = (x: number, z: number, m: number): boolean => buildings.some((b) => Math.abs(x - b.x) < b.w / 2 + m && Math.abs(z - b.z) < b.d / 2 + m);
 
   const style = plan.style;
+  /**
+   * A riverside walk (plan.ts RIVER_WALK), as Tokyo's along the Sumida: a row of cherries along its land side,
+   * lamps along the flood wall, and benches between the trees facing the water.
+   */
+  const riverWalk = (r: Road3): void => {
+    const q = r.rect;
+    const cx = cell.x + cell.w / 2;
+    const cz = cell.y + cell.h / 2;
+    // Which way the water is (+1 toward the rect's far edge), and the point at t along it, d in from the water.
+    const water = r.vertical ? Math.sign(q.x + q.w / 2 - cx) : Math.sign(q.y + q.h / 2 - cz);
+    const width = r.vertical ? q.w : q.h;
+    const t0 = r.vertical ? q.y : q.x;
+    const t1 = r.vertical ? q.y + q.h : q.x + q.w;
+    const at = (t: number, d: number): [number, number] => {
+      const edge = r.vertical ? (water > 0 ? q.x + q.w : q.x) : water > 0 ? q.y + q.h : q.y;
+      const a = edge - water * d;
+      return r.vertical ? [a, t] : [t, a];
+    };
+    const [wx, wz] = r.vertical ? [water, 0] : [0, water];
+    // Cherries along the river; along the bay, black pines (as on Tokyo's bay promenades), a little sparser.
+    const bay = r.water === 'bay';
+    for (let t = t0 + 4; t < t1 - 3; t += 9) {
+      const [x, z] = at(t, width - 1.2);
+      if (mine(x, z) && (!bay || Math.round((t - t0) / 9) % 3 !== 2)) props.push({ kind: 'tree', species: bay ? 'pine' : 'sakura', x, z, nx: wx, nz: wz, radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8, size: 0.85, lean: 1.2 });
+      const k = Math.round((t - t0) / 9);
+      if (k % 2 === 1) {
+        const [bx, bz] = at(t + 4.5, 2.6);
+        if (mine(bx, bz)) props.push({ kind: 'bench', x: bx, z: bz, nx: wx, nz: wz, radius: 0.35, variant: 0, half: 0.8 });
+      }
+      if (k % 3 === 0) {
+        const [lx, lz] = at(t + 2, 0.6);
+        if (mine(lx, lz)) {
+          props.push({ kind: 'lamp', x: lx, z: lz, nx: -wx, nz: -wz, radius: 0.2, variant: 0 });
+          lights.push({ x: lx - wx * 1.4, z: lz - wz * 1.4, r: 9, color: LAMP_COLOR, i: 0.7 });
+        }
+      }
+    }
+  };
   for (const r of plan.roads) {
+    if (isRiverWalk(r)) {
+      riverWalk(r);
+      continue;
+    }
     if (r.kind === 'coast') continue;
     const q = r.rect;
     const rnd = rng(hash(Math.round(q.x * 4), Math.round(q.y * 4), Math.round(q.w * 4), Math.round(q.h * 4)));
@@ -165,7 +207,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
             }
             if (r.sidewalk >= 2.4) {
               for (const [c, h] of [[t + 5.5, 3.6], [t + 16.5, 3.6]] as const) {
-                if (c + h > e - 3 || !stopClear(c)) continue;
+                if (c + h > e - 3 || !stopClear(c) || !stopClear(c - h) || !stopClear(c + h)) continue;
                 const [hx, hz, hnx, hnz] = along(c, side, r.sidewalk - 0.55);
                 if (!mine(hx, hz) || u01(hash(Math.round(hx * 4), Math.round(hz * 4), 0x4ed9e)) >= style.hedges) continue;
                 if (beforeStamp(hx - (r.vertical ? 0 : h), hz - (r.vertical ? h : 0)) || beforeStamp(hx + (r.vertical ? 0 : h), hz + (r.vertical ? h : 0)) || beforeStamp(hx, hz)) continue;
@@ -254,6 +296,14 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       });
     }
     const rnd = rng(hash(b.id, 0x7e4d));
+    // (Nothing against a wall in the middle of a cell edge's pavement, where a bus stop can stand: on a narrow
+    // pavement its shelter reaches the wall.)
+    const atStop = (u: number): boolean => {
+      const x = f.p[0] + f.r[0] * u;
+      const z = f.p[2] + f.r[2] * u;
+      const near = (a: number, b: number): boolean => Math.abs(a - Math.round(a / CELL3) * CELL3) < 14 && Math.abs(b - (Math.floor(b / CELL3) + 0.5) * CELL3) < 9;
+      return near(x, z) || near(z, x);
+    };
     let vendAt: number | null = null;
     if (sw > 6 && b.hue === undefined && rnd.chance(0.14)) {
       const count = rnd.int(1, 3);
@@ -261,6 +311,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       vendAt = start + (count * 1.05) / 2;
       for (let i = 0; i < count; i++) {
         const u = start + i * 1.05 + 0.5;
+        if (atStop(u)) continue;
         const x = f.p[0] + f.r[0] * u + f.n[0] * 0.45;
         const z = f.p[2] + f.r[2] * u + f.n[2] * 0.45;
         props.push({ kind: 'vending', x, z, nx: f.n[0], nz: f.n[2], radius: 0.55, variant: rnd.int(0, 3) });
@@ -277,7 +328,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       const u = atStart ? s0 + 0.2 + len / 2 : s1 - 0.2 - len / 2;
       const x = f.p[0] + f.r[0] * u + f.n[0] * 0.35;
       const z = f.p[2] + f.r[2] * u + f.n[2] * 0.35;
-      props.push({ kind: 'pots', x, z, nx: f.n[0], nz: f.n[2], radius: 0.3, half: len / 2, variant: pots.int(0, 99999) });
+      if (!atStop(u - len / 2) && !atStop(u + len / 2)) props.push({ kind: 'pots', x, z, nx: f.n[0], nz: f.n[2], radius: 0.3, half: len / 2, variant: pots.int(0, 99999) });
     }
     // Bicycles (mamachari) parked nose to the wall outside homes, at the other end from the pots.
     const bikes = rng(hash(b.id, 0xb1c5));
@@ -286,6 +337,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       const atStart = potsAtStart === null ? bikes.chance(0.5) : !potsAtStart;
       for (let i = 0; i < n; i++) {
         const u = atStart ? s0 + 0.5 + i * 0.7 : s1 - 0.5 - i * 0.7;
+        if (atStop(u)) continue;
         const x = f.p[0] + f.r[0] * u + f.n[0] * 0.95;
         const z = f.p[2] + f.r[2] * u + f.n[2] * 0.95;
         props.push({ kind: 'bike', x, z, nx: f.n[0], nz: f.n[2], radius: 0.35, variant: bikes.int(0, 99999) });

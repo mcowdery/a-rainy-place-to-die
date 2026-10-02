@@ -28,6 +28,8 @@ export interface Road3 {
   readonly vertical: boolean;
   /** A raised central strip (m; 0 for none): an avenue's median, broken at junctions (`CellPlan3.medians`). */
   readonly median: number;
+  /** A waterfront walk (a 'coast' strip along a river or the bay: plan.ts RIVER_WALK). */
+  readonly water?: 'river' | 'bay';
 }
 
 export interface Sign3 {
@@ -186,6 +188,17 @@ export interface DistrictStyle3 {
 
 const BOUNDARY_ROAD = 16;
 const COAST = 4;
+/**
+ * A waterfront (land beside water), after the Sumida's banks and the bay's promenades: a paved walk along the
+ * water (RIVER_WALK, a 'coast' strip with `water` set: no traffic; dressed by real/props.ts, cherries along the
+ * river and black pines along the bay, lamps and benches; the flood wall along its edge, real/ground.ts), then a
+ * street (RIVER_ROAD, with pavements). Cross streets end at that street instead of running into the water, except
+ * where a bridge carries them on over it (an edge spec's `bridge`). A river is water with land beyond it.
+ */
+export const RIVER_WALK = 8;
+const RIVER_ROAD = 12;
+/** A riverside walk: a coast strip wider than a plain one. */
+export const isRiverWalk = (r: Road3): boolean => r.water !== undefined;
 const FLOOR_H = 3;
 
 export const NEON_SIGN_COLORS = [0xff5fc8, 0x4fe3ff, 0xffe45f, 0x6bff8a, 0xff4f4f, 0xb48cff] as const;
@@ -454,8 +467,26 @@ export function planCell3(
     ['n', mx, my - 1, false],
     ['s', mx, my + 1, false],
   ];
+  // Per side: the edge road built there (to trim at a river bank), whether it carries on over a bridge, and the
+  // river banks.
+  const edgeRoads: Partial<Record<keyof typeof insets, { i: number; bridge: boolean }>> = {};
+  const banks: [keyof typeof insets, 'river' | 'bay'][] = [];
+  const held: (keyof typeof insets)[] = [];
   for (const [side, nx, ny, vertical] of sides) {
     const n = macro.kindAt(nx, ny);
+    // A river: water here with land beyond it (one cell across); a bank no set piece already holds.
+    const beyond = macro.kindAt(nx + (nx - mx), ny + (ny - my));
+    const band = RIVER_WALK + RIVER_ROAD;
+    const bandRect = side === 'w' ? { x: R.x, y: R.y, w: band, h: CELL } : side === 'e' ? { x: R.x + CELL - band, y: R.y, w: band, h: CELL }
+      : side === 'n' ? { x: R.x, y: R.y, w: CELL, h: band } : { x: R.x, y: R.y + CELL - band, w: CELL, h: band };
+    if (n === 'water' && !reserved.some((q) => overlaps(q, bandRect))) {
+      banks.push([side, isLand(beyond) ? 'river' : 'bay']);
+      insets[side] = band;
+      continue;
+    }
+    // A waterfront a set piece holds keeps its plain edge, but its cross streets still end where the walk
+    // beside it would begin, level with the next cell's.
+    if (n === 'water') held.push(side);
     if (!isLand(n)) {
       const r = side === 'w' ? { x: R.x, y: R.y, w: COAST, h: CELL } : side === 'e' ? { x: R.x + CELL - COAST, y: R.y, w: COAST, h: CELL }
         : side === 'n' ? { x: R.x, y: R.y, w: CELL, h: COAST } : { x: R.x, y: R.y + CELL - COAST, w: CELL, h: COAST };
@@ -468,8 +499,45 @@ export function planCell3(
     const { w, median } = edge(n, keyX, keyY, vertical);
     const r = side === 'w' ? { x: R.x - w / 2, y: R.y, w, h: CELL } : side === 'e' ? { x: R.x + CELL - w / 2, y: R.y, w, h: CELL }
       : side === 'n' ? { x: R.x, y: R.y - w / 2, w: CELL, h: w } : { x: R.x, y: R.y + CELL - w / 2, w: CELL, h: w };
+    edgeRoads[side] = { i: roads.length, bridge: !!edges?.get(edgeKey(keyX, keyY, vertical))?.bridge };
     roads.push(road(r, w, vertical, false, median));
     insets[side] = w / 2;
+  }
+  // River banks: the walk along the water and the riverside street behind it; the cross streets end at the
+  // riverside street (the walk runs on past their ends), unless a bridge carries one on (the walk stops either
+  // side of it).
+  for (const [side, water] of banks) {
+    const vertical = side === 'w' || side === 'e';
+    const [lo, hi] = vertical ? (['n', 's'] as const) : (['w', 'e'] as const);
+    const at = (d: number, width: number): Rect => (side === 'w' ? { x: R.x + d, y: R.y, w: width, h: CELL } : side === 'e' ? { x: R.x + CELL - d - width, y: R.y, w: width, h: CELL }
+      : side === 'n' ? { x: R.x, y: R.y + d, w: CELL, h: width } : { x: R.x, y: R.y + CELL - d - width, w: CELL, h: width });
+    // The walk, between any bridges' ends.
+    let walk = at(0, RIVER_WALK);
+    for (const end of [lo, hi]) {
+      const e = edgeRoads[end];
+      if (!e?.bridge) continue;
+      const q = roads[e.i].rect;
+      const cut = vertical ? (end === 'n' ? q.y + q.h - R.y : R.y + CELL - q.y) : end === 'w' ? q.x + q.w - R.x : R.x + CELL - q.x;
+      walk = vertical
+        ? end === 'n' ? { ...walk, y: walk.y + cut, h: walk.h - cut } : { ...walk, h: walk.h - cut }
+        : end === 'w' ? { ...walk, x: walk.x + cut, w: walk.w - cut } : { ...walk, w: walk.w - cut };
+    }
+    roads.push({ ...road(walk, RIVER_WALK, vertical, true), water });
+    roads.push(road(at(RIVER_WALK, RIVER_ROAD), RIVER_ROAD, vertical));
+  }
+  // The cross streets: cut back to the waterfront street's far kerb (not into the walk or the water).
+  for (const side of [...banks.map(([b]) => b), ...held]) {
+    const vertical = side === 'w' || side === 'e';
+    const [lo, hi] = vertical ? (['n', 's'] as const) : (['w', 'e'] as const);
+    for (const end of [lo, hi]) {
+      const e = edgeRoads[end];
+      if (!e || e.bridge) continue;
+      const q = roads[e.i].rect;
+      const t: Rect = vertical
+        ? side === 'e' ? { ...q, w: R.x + CELL - RIVER_WALK - q.x } : { ...q, x: R.x + RIVER_WALK, w: q.x + q.w - (R.x + RIVER_WALK) }
+        : side === 's' ? { ...q, h: R.y + CELL - RIVER_WALK - q.y } : { ...q, y: R.y + RIVER_WALK, h: q.y + q.h - (R.y + RIVER_WALK) };
+      roads[e.i] = { ...roads[e.i], rect: t };
+    }
   }
 
   const interior: Rect = { x: R.x + insets.w, y: R.y + insets.n, w: CELL - insets.w - insets.e, h: CELL - insets.n - insets.s };

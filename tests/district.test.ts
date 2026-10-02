@@ -21,7 +21,7 @@ import { SignBuilder } from '../src/poc3d/real/signs';
 import { INTERIORS, interiorFor } from '../src/poc3d/real/interiors';
 import { parseStamp3, plazaRect, reservedRect } from '../src/poc3d/district/stamps';
 import { compileCondition } from '../src/core/condition';
-import { departsAt, lineSchedule, nextDepartures, parseSubway3, subwayRoute, trainAt } from '../src/poc3d/district/subway';
+import { departsAt, lineSchedule, nextDepartures, parseSubway3, subwayRoute, trainAt, trainOffset, TRAINS_PER_DIRECTION } from '../src/poc3d/district/subway';
 
 const content = loadDistrictContent();
 const neonCells: [number, number][] = [];
@@ -709,6 +709,18 @@ describe('Subway', () => {
     }
   });
 
+  it('turns the trains back at the ends: a run ends where and when the other way starts', () => {
+    for (const l of net.lines.filter((q) => q.kind === 'subway')) {
+      const up = lineSchedule(l, 1);
+      const down = lineSchedule(l, -1);
+      expect(up.period).toBeCloseTo(down.period, 6);
+      // Up ends (its last run's end) where down stands to start (its layover), and the other way round.
+      expect(trainAt(up.legs, up.period - 1e-6).s).toBeCloseTo(trainAt(down.legs, 0).s, 3);
+      expect(trainAt(down.legs, down.period - 1e-6).s).toBeCloseTo(trainAt(up.legs, 0).s, 3);
+      for (let k = 0; k < TRAINS_PER_DIRECTION; k++) expect(trainOffset(up.period, k, 1)).toBe(trainOffset(down.period, k, -1));
+    }
+  });
+
   it('walks from the street down the stairs, through the gates, down to the platform', () => {
     for (const id of ['y04_station', 'w02_station']) {
       const f = localFrame(placed(id).building);
@@ -744,11 +756,11 @@ describe('Sakuragaoka (residential)', () => {
   const cells = residential.filter(([mx, my]) => content.zones.at(mx, my)?.id.startsWith('sakuragaoka'));
 
   it('is generated only where its zones are painted, west of Asagiri', () => {
-    expect(cells.length).toBe(24);
+    expect(cells.length).toBe(30);
     // Every generated residential cell is painted by some zone file.
     for (const [mx, my] of residential) expect(content.zones.at(mx, my), `${mx},${my}`).toBeDefined();
     for (const [mx, my] of cells) {
-      expect(mx >= 14 && mx <= 19 && my >= 9 && my <= 12, `${mx},${my}`).toBe(true);
+      expect(mx >= 14 && mx <= 19 && my >= 9 && my <= 13, `${mx},${my}`).toBe(true);
       expect(content.zones.at(mx, my)).toBeDefined();
     }
   });

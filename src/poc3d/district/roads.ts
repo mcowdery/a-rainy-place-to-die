@@ -16,6 +16,8 @@ export interface EdgeSpec {
   /** Raised central strip (m, 0 for none). */
   readonly median: number;
   readonly name: string;
+  /** A street bridge carries this edge's road on over the water beyond it (a river bank leaves it whole). */
+  readonly bridge?: boolean;
 }
 
 export type Avenues = ReadonlyMap<string, EdgeSpec>;
@@ -54,6 +56,20 @@ export function parseRoads3(file: string, text: string, macro: MacroMap, errors:
       out.set(key, { width: a.width, median, name: a.name as string });
     }
   });
+  // The bridges' landings: the edges either side of each bridge's water cells.
+  if (Array.isArray(d.bridges)) {
+    for (const b of d.bridges as Record<string, unknown>[]) {
+      const row = b?.row;
+      const col = b?.col;
+      const line = (row ?? col) as number;
+      if (!num(line) || !num(b.from) || !num(b.to)) continue;
+      for (const k of [(b.from as number) - 1, b.to as number]) {
+        const key = row !== undefined ? edgeKey(k, line - 1, false) : edgeKey(line - 1, k, true);
+        const had = out.get(key);
+        out.set(key, { width: had?.width ?? (num(b.width) ? b.width : 16), median: had?.median ?? (num(b.median) ? b.median : 0), name: had?.name ?? String(b.name), bridge: true });
+      }
+    }
+  }
   return out;
 }
 

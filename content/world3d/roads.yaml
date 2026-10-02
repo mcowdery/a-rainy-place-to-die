@@ -63,6 +63,14 @@ avenues:
 
 # Street bridges over the water (roads.ts parseBridges): along a grid line, across the water cells from..to; the
 # cell-edge roads either side carry on over it. The Shiomi bridge's upper deck is the expressway's (expressway.yaml).
+# Bus streets (traffic.yaml's feeder loops in the old town and the western suburbs): everyday streets widened to
+# 12 m with pavements, where the lanes were too narrow for a bus and its stops.
+  - { name: 川端バス通り, row: 9, from: 40, to: 42, width: 12, median: 0 }
+  - { name: 川端バス通り, col: 40, from: 9, to: 13, width: 12, median: 0 }
+  - { name: 川端バス通り, col: 42, from: 9, to: 13, width: 12, median: 0 }
+  - { name: 桜ヶ丘通り, row: 9, from: 11, to: 20, width: 12, median: 0 }
+  - { name: 西原通り, row: 11, from: 11, to: 20, width: 12, median: 0 }
+  - { name: 西原通り, col: 11, from: 9, to: 11, width: 12, median: 0 }
 bridges:
   - { name: 汐見大橋 SHIOMI-ŌHASHI, col: 28, from: 22, to: 23, width: 32, median: 2.4 }
   - { name: 羽根島大橋 HANEJIMA-ŌHASHI, col: 8, from: 22, to: 23, width: 32, median: 2.4 }

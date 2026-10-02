@@ -235,7 +235,7 @@ export const SUBWAY_RUN = { vmax: 20, acc: 1.1, dwell: 20, layover: 25 } as cons
 /** Half a three-car train's length (18 m cars, 0.4 m gaps). */
 export const SUBWAY_TRAIN_HALF = 27.4;
 /** How far past the end stations the trains turn back (in the tunnel, out of sight). */
-const BEYOND = 90;
+const BEYOND = 130;
 
 /** Distance covered t seconds into a stop-to-stop run of length d, and the run's duration. */
 export function runProfile(d: number): { T: number; at: (t: number) => number } {
@@ -299,8 +299,12 @@ export function departsAt(legs: readonly TimetableLeg[], stop: number): number |
 
 /** Trains per direction, spread evenly over the cycle. */
 export const TRAINS_PER_DIRECTION = 2;
-/** A train's offset into the cycle (k-th of the direction's trains). */
-export const trainOffset = (period: number, k: number, dir: 1 | -1): number => (period * k) / TRAINS_PER_DIRECTION + (dir > 0 ? 0 : period * 0.23);
+/**
+ * A train's offset into the cycle (k-th of the direction's trains). Both directions in step: a train arriving at
+ * the far end of its run is where and when the k-th train the other way stands to start back (its layover), so
+ * real/subway.ts draws the pair as one train turning back rather than one vanishing and another appearing.
+ */
+export const trainOffset = (period: number, k: number, _dir: 1 | -1): number => (period * k) / TRAINS_PER_DIRECTION;
 
 /** Seconds until the next trains leave a stop in one direction (soonest first), at clock time. */
 export function nextDepartures(line: SubwayLine3, stop: number, dir: 1 | -1, clock: number, count = 2): number[] {

@@ -57,3 +57,15 @@ buses:
     rect: [17, 4, 22, 6]
     buses: 1
     stops: [鷹ノ台上, 鷹ノ台東, 鷹ノ台下, 鷹ノ台西]
+  - id: kawabata
+    name: 川端循環
+    en: KAWABATA LOOP
+    rect: [40, 9, 42, 13]
+    buses: 1
+    stops: [竜胆町, 川端東, 東都タワー前, 川端駅前]
+  - id: nishihara
+    name: 西原・桜ヶ丘循環
+    en: NISHIHARA–SAKURAGAOKA LOOP
+    rect: [11, 9, 20, 11]
+    buses: 1
+    stops: [桜ヶ丘北, 朝霧西口, 西原団地, 西原駅前]
