@@ -1102,6 +1102,46 @@ export class TrafficSystem {
   }
 
   /**
+   * A taxi to send for you (district/taxiDispatch.ts): a cruising one at least `far` metres off (out of sight),
+   * nearest first, or null. Taking it (`take`) lifts it off its loop; `restore` puts it back where it was on it.
+   */
+  spareTaxi(camera: THREE.Vector3, far = 450): DrivenVehicle | null {
+    let best: Vehicle | null = null;
+    let bd = Infinity;
+    for (const v of this.vehicles) {
+      if (v.mode !== 'traffic' || v.label !== 'Taxi') continue;
+      const d = Math.hypot(v.x - camera.x, v.z - camera.z);
+      if (d >= far && d < bd) [best, bd] = [v, d];
+    }
+    return best;
+  }
+
+  /** Back on its loop, where it left it (a sent taxi going back to cruising). */
+  restore(d: DrivenVehicle): void {
+    const v = d as Vehicle;
+    v.mode = 'traffic';
+    v.v = 0;
+    v.acc = 0;
+    v.curv = 0;
+  }
+
+  /** Metres to the nearest other vehicle ahead of a driven one in its lane (within `reach`), else Infinity. */
+  gapAhead(d: DrivenVehicle, reach = 30): number {
+    let best = Infinity;
+    for (const o of this.vehicles) {
+      if (o === d || o.aloft || !o.live) continue;
+      const rx = o.x - d.x;
+      const rz = o.z - d.z;
+      if (Math.abs(rx) > reach + 6 || Math.abs(rz) > reach + 6) continue;
+      const fwd = rx * d.dx + rz * d.dz;
+      if (fwd <= 0 || fwd > reach + d.half + o.half) continue;
+      if (Math.abs(rx * d.dz - rz * d.dx) > 1.6) continue;
+      best = Math.min(best, fwd - d.half - o.half);
+    }
+    return best;
+  }
+
+  /**
    * Your own car joins the traffic, parked: `obj` is its model (placed by its owner), half its length, width
    * its width.
    */

@@ -113,7 +113,7 @@ export function carLoops(macro: MacroMap, traffic: TrafficContent, plan: (mx: nu
       const rect = [c0, r0, c0 + n, r0 + n] as const;
       if (out.some((l) => overlaps(l.rect, rect)) || !builtRound(rect)) continue;
       if (!proper(false, r0, c0, c0 + n) || !proper(false, r0 + n, c0, c0 + n) || !proper(true, c0, r0, r0 + n) || !proper(true, c0 + n, r0, r0 + n)) continue;
-      // Not along a street with an expressway ramp's walled foot in it (it stands in the kerb lane).
+      // Not along a street with an expressway ramp's walled foot in it (in the inner lane, which turning traffic crosses).
       const X0 = c0 * CELL;
       const X1 = (c0 + n) * CELL;
       const Z0 = r0 * CELL;
@@ -338,7 +338,13 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
         }
       }
     }
-    return { mid: onEdge(i, Math.max(0, Math.min(edgeLen[i], stop - origin))), kerb, dir: l.d, side };
+    // The shelter at the kerb where the stop stands (an edge can widen along its length, into an avenue: the
+    // lane keeps to the narrowest stretch's, so there the kerb is further out than along the rest).
+    const pos = vertical ? l.p[1] + l.d[1] * stop : l.p[0] + l.d[0] * stop;
+    const here = half(vertical, vertical ? l.p[0] : l.p[1], pos - CELL / 2, pos + CELL / 2);
+    const kerbHere = Math.max(l.kerb, here.w / 2 - here.s * 0.5);
+    const stopKerb: [number, number] = kerbHere > l.kerb ? [left[0] * (kerbHere - l.o), left[1] * (kerbHere - l.o)] : kerb;
+    return { mid: onEdge(i, Math.max(0, Math.min(edgeLen[i], stop - origin))), kerb: stopKerb, dir: l.d, side };
   });
   // Junctions: every grid corner along each edge (including the corner it turns at, not the one it
   // started from), projected onto the lane; the stop line sits before the crossing road's zebra.

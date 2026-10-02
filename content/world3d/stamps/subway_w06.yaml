@@ -1,0 +1,40 @@
+# 汐見島駅 Shiomi-jima Station, 若葉線 Wakaba Line (W06): a subway station on Shiomi-jima, the line's end after its run under the bay (the TV station, the Sky Wheel and the Bay Hall a short walk off) (see content/world3d/subway.yaml for the
+# line). A landmark built by real/subwayStation.ts: an entrance pavilion on the street with stairs down to the
+# concourse and an island platform under the street. The line runs 10 m out from the pavilion's street face.
+id: subway_w06
+name: 汐見島駅 Shiomi-jima Station
+footprint: [12, 14]
+height: 4.5
+front: west
+landmark: subway
+station: { jp: 汐見島, en: SHIOMI-JIMA }
+nodes:
+  exit:
+    kind: spawn
+    name: Shiomi-jima Station (Wakaba Line W06)
+    at: [7, 4]
+    facing: east
+  platform:
+    kind: spawn
+    name: Shiomi-jima Station (Wakaba Line platform)
+    at: [23, 10]
+    floor: -11
+    facing: north
+  board_a:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [-16, 10]
+    floor: -11
+    returnSpawn: platform
+  board_b:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [-6, 10]
+    floor: -11
+    returnSpawn: platform
+  board_c:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [29.5, 10]
+    floor: -11
+    returnSpawn: platform

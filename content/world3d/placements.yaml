@@ -117,6 +117,19 @@
   stamp: subway_w03
   cell: [28, 12]
   offset: [10, 80]
+# The Wakaba Line south (subway.yaml): through Kasumi-chō and the port, then under the bay to Shiomi-jima.
+- id: w04_station
+  stamp: subway_w04
+  cell: [28, 15]
+  offset: [10, 40]
+- id: w05_station
+  stamp: subway_w05
+  cell: [28, 19]
+  offset: [10, 50]
+- id: w06_station
+  stamp: subway_w06
+  cell: [28, 25]
+  offset: [10, 40]
 # The terminal (Tōto-Chūō): the Toto Line station, the department store beside it, the west exit rotary.
 - id: totochuo_station
   stamp: station_totochuo

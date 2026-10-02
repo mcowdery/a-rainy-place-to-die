@@ -17,6 +17,8 @@ import type { Node3, Placed3 } from './stamps';
 import type { ZoneMap } from './zones';
 import type { Avenues, Bridge3 } from './roads';
 import { landmarkColliders, landmarkFloor, landmarkRaisedColliders, landmarkShelters, type Shelter } from './landmarks';
+import { roadUnder } from './rail';
+import { stationKerb } from '../real/station';
 import type { Rect } from '../../core/coords';
 import type { Interior } from '../real/interiors';
 
@@ -147,7 +149,9 @@ export class District {
     this.nodes = placed.flatMap((p) => p.nodes);
     // Stamps collide as their footprint, or (landmarks you can walk into) as their walls and fixtures.
     const solid = (p: Placed3): Rect[] => [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }];
-    this.stampColliders = placed.map((p) => landmarkColliders(p, 0) ?? solid(p));
+    // (A station's piers: in the road's median, or as portal frames over its carriageway.)
+    const under = roadUnder((mx, my) => this.plan(mx, my));
+    this.stampColliders = placed.map((p) => landmarkColliders(p, 0, p.stamp.landmark === 'station' ? stationKerb(p.building, under) : null) ?? solid(p));
     // Below ground, by level: the concourse and basements (-5), and the subway platforms (-11).
     this.basementColliders = placed.map((p) => landmarkColliders(p, -5) ?? []);
     this.deepColliders = placed.map((p) => landmarkColliders(p, -11) ?? []);

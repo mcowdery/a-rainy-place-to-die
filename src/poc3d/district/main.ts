@@ -12,7 +12,7 @@ import { puddleAt, weatherGrip, wheelsOf as carWheels, type RoadWeather } from '
 import { blendAtmosphere } from './atmosphere';
 import { clockAt, clockLabel, DAY, lateAt, phaseAt, RATE, sleepUntil, START_MINUTE, sunDirAt, sunAt, moonnessAt, moonAt, starsAt, DAYLIGHT, type MoonNow, TIMES_OF_DAY, untilMinute, blendAt, type NamedTime } from './clock';
 import { buildEdges } from '../real/edges';
-import { railReserved } from './rail';
+import { railReserved, roadUnder } from './rail';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
@@ -40,7 +40,7 @@ import { buildLiveHouse } from '../real/liveHouse';
 import { buildYokocho } from '../real/yokocho';
 import { buildRyujin } from '../real/ryujin';
 import { buildDiscount } from '../real/discount';
-import { buildStation } from '../real/station';
+import { buildStation, stationKerb } from '../real/station';
 import { ASAGIRI_KINDS, buildAsagiri, type AsagiriBuilt, type AsagiriKind } from '../real/asagiri';
 import { railStation, TrainSystem, viaductPiers, type RailStation } from '../real/rail';
 import { SubwaySystem } from '../real/subway';
@@ -57,6 +57,7 @@ import { SaveApp } from './saveApp';
 import { readSave, SAVE_VERSION, SLOTS, writeSave, type SaveGame, type Slot } from '../../save/save';
 import { installSnap } from '../../debug/snap';
 import { fare, rideMetres, TaxiPicker } from './taxi';
+import { Approach, sideOf, trimToUnseen } from './taxiDispatch';
 import { earn, loadProfile, saveProfile, spend } from '../../race/profile';
 import { Expressway, parseExpressway } from './expressway';
 import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
@@ -428,13 +429,15 @@ async function run(): Promise<void> {
   const busMats: CarMaterials | null = busesNew ? { city, glass: carGlass(), ads: taxiAds } : null;
   const carMats: CarMaterials | null = transitNew ? busMats : null;
   useNewBuses(busMats);
-  const trainLines = new Map(rails.map((l) => [l.id, new TrainSystem(l, railStations.filter((s) => s.line === l.id), city, carMats)]));
+  // The road under a viaduct (its piers stand in its median, or as a portal frame over its carriageway).
+  const roadBelow = roadUnder((mx, my) => district.plan(mx, my));
+  const trainLines = new Map(rails.map((l) => [l.id, new TrainSystem(l, railStations.filter((s) => s.line === l.id), city, carMats, roadBelow)]));
   for (const t of trainLines.values()) {
     scene.add(t.group);
     // (The viaduct stands still; the trains in the same group move.)
     t.group.children[0].updateMatrixWorld(true);
     t.group.children[0].matrixAutoUpdate = false;
-    district.addColliders(viaductPiers(t.line, railStations.filter((s) => s.line === t.line.id)));
+    district.addColliders(viaductPiers(t.line, railStations.filter((s) => s.line === t.line.id), roadBelow));
   }
   /** The line you're riding, if any. */
   const trainRiding = (): TrainSystem | null => [...trainLines.values()].find((t) => t.riding) ?? null;
@@ -555,7 +558,7 @@ async function run(): Promise<void> {
     } else if (lm === 'station' && lineOfStation(placed)) {
       const l = lineOfStation(placed)!;
       const other = railStations.find((s) => s.line === l.id && s.id !== placed.id)?.names ?? null;
-      scene.add(buildStation(placed.building, city, placed.stamp.station!, other, l));
+      scene.add(buildStation(placed.building, city, placed.stamp.station!, other, l, stationKerb(placed.building, roadBelow)));
     } else if (lm === 'mega_sign') {
       const mega = buildMegaSign(cityU, city);
       mega.group.position.set(placed.building.x, 0, placed.building.z);
@@ -1539,10 +1542,82 @@ async function run(): Promise<void> {
   const places = allPlaces();
   /** The ride under way: from, to, the fare, and the seconds it lasts (sped up) and has run. */
   let taxiRide: { dest: Destination; fare: number; t: number; T: number; x0: number; z0: number; path: [number, number][]; cum: number[]; heading?: number } | null = null;
+  /**
+   * A taxi sent for you (taxiDispatch.ts) when none is cruising your way: one from out of sight, taken off its
+   * loop and driven here along the streets; `released` once you've ridden or walked off (it goes back to its
+   * loop when it's out of sight).
+   */
+  let called: { v: DrivenVehicle; approach: Approach; end: [number, number]; released: boolean } | null = null;
+  const inView = (x: number, z: number): boolean => {
+    const d = Math.hypot(x - camera.position.x, z - camera.position.z);
+    if (d < 90) return true;
+    if (d > 420) return false;
+    camera.updateMatrixWorld();
+    const f = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    return f.containsPoint(new THREE.Vector3(x, groundAt(x, z) + 1, z));
+  };
+  const sendTaxi = (): 'sent' | 'none' | 'no road' => {
+    const v = traffic.spareTaxi(camera.position);
+    if (!v) return 'none';
+    const px = camera.position.x;
+    const pz = camera.position.z;
+    // From eight points round you, the shortest approach that starts out of sight and ends at your kerb (on its
+    // left, so it pulls in on your side).
+    let best: { route: [number, number][]; score: number } | null = null;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const route = navGrid('drive').route(px + Math.cos(a) * 320, pz + Math.sin(a) * 320, px, pz);
+      if (!route || route.length < 2) continue;
+      const [ex, ez] = route[route.length - 1];
+      if (Math.hypot(ex - px, ez - pz) > 22) continue;
+      const trimmed = trimToUnseen(route, inView);
+      if (!trimmed) continue;
+      let len = 0;
+      for (let i = 1; i < trimmed.length; i++) len += Math.hypot(trimmed[i][0] - trimmed[i - 1][0], trimmed[i][1] - trimmed[i - 1][1]);
+      const score = len + (sideOf(trimmed, px, pz) > 0 ? 0 : 150);
+      if (!best || score < best.score) best = { route: trimmed.map((q) => [q[0], q[1]] as [number, number]), score };
+    }
+    if (!best) return 'no road';
+    traffic.take(v);
+    const approach = new Approach(best.route);
+    called = { v, approach, end: best.route[best.route.length - 1], released: false };
+    moveCalled(0);
+    traffic.hail = { taxi: v, at: 0, stopped: false };
+    return 'sent';
+  };
+  /** The called taxi's step: on its way, waiting, or (released) gone back to its loop once out of sight. */
+  const moveCalled = (dt: number): void => {
+    if (!called) return;
+    const { v, approach } = called;
+    if (called.released) {
+      v.v = 0;
+      v.acc = 0;
+      if (!inView(v.x, v.z) || Math.hypot(v.x - camera.position.x, v.z - camera.position.z) > 200) {
+        traffic.restore(v);
+        called = null;
+      }
+      return;
+    }
+    approach.step(dt, dt > 0 ? traffic.gapAhead(v) : Infinity);
+    const p = approach.pose();
+    v.x = p.x;
+    v.z = p.z;
+    v.dx = p.dx;
+    v.dz = p.dz;
+    v.v = approach.v;
+    v.acc = approach.acc;
+    v.curv = approach.curv;
+    if (approach.arrived && traffic.hail?.taxi === v) traffic.hail.stopped = true;
+  };
+  const releaseCalled = (): void => {
+    if (called) called.released = true;
+  };
   const hailTaxi = (): void => {
     if (driving.car || taxiRide || inVn || Math.abs(camAbove() - 1.7) > 1.2) return;
-    const h = traffic.hailTaxi(camera.position);
-    toast(h ? 'タクシー! A taxi is pulling in for you: E to get in when it stops.' : 'No free taxi coming this way. Stand at the kerb of a main street (the cell-edge roads) and try again.', 4);
+    if (traffic.hailTaxi(camera.position)) return toast('タクシー! A taxi is pulling in for you: E to get in when it stops.', 4);
+    if (called && !called.released) return toast('Your taxi is on its way.', 3);
+    const sent = sendTaxi();
+    toast(sent === 'sent' ? '配車 A taxi is on its way to you: wait at the kerb, E to get in when it stops.' : sent === 'no road' ? 'No road a taxi can reach here: walk out to a street and try again.' : 'No taxi free right now. Try again in a moment.', 5);
   };
   const taxiHere = (): boolean => {
     const h = traffic.hail;
@@ -1570,6 +1645,7 @@ async function run(): Promise<void> {
     const r = taxiRide!;
     taxiRide = null;
     traffic.releaseHail();
+    releaseCalled();
     await fadeTo(1);
     // The ride's time through the streets (about 25 km/h, lights and all).
     advanceClock((r.cum[r.cum.length - 1] / 1000) * 2.4);
@@ -2586,7 +2662,12 @@ async function run(): Promise<void> {
     else meterEl.style.display = 'none';
     // Walked away from the taxi you hailed: it gives up after a while and drives on.
     const hail = traffic.hail;
-    if (hail && !taxiRide && !taxiPicker.open && Math.hypot(hail.taxi.x - camera.position.x, hail.taxi.z - camera.position.z) > 60) traffic.releaseHail();
+    // (A called taxi: from where it's coming to, not where it is.)
+    const [hx, hz] = called && !called.released && hail?.taxi === called.v ? called.end : hail ? [hail.taxi.x, hail.taxi.z] : [0, 0];
+    if (hail && !taxiRide && !taxiPicker.open && Math.hypot(hx - camera.position.x, hz - camera.position.z) > 60) {
+      traffic.releaseHail();
+      releaseCalled();
+    }
     // The expressway: its traffic (slowing for you in its lane), the sodium lamps' light at night, and the
     // tunnels at the end of the exits (drive in: you're at that pass).
     const onLoop = ownNow().onExpressway() ? expressway.at(ownNow().sim.x, ownNow().sim.z, ownNow().sim.y) : null;
@@ -2643,6 +2724,7 @@ async function run(): Promise<void> {
     }
     mackLast.copy(camera.position);
     lastWalker.set(cp0.x, cp0.y, cp0.z);
+    moveCalled(inVn ? 0 : dt);
     traffic.update(dt, camera.position, walkers);
     if (cabin?.bus) {
       traffic.busScreens(cabin.bus);

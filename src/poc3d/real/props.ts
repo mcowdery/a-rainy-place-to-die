@@ -142,7 +142,10 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
           // the kerb between lamp and tree.
           const phase = side > 0 ? LAMP_SPACING / 2 : 0;
           for (let t = s + 4 + phase; t < e - 3; t += LAMP_SPACING) {
-            const [x, z, nx, nz] = along(t, side, r.sidewalk - 0.45);
+            // (A lamp where a bus stop can stand steps aside, just out of its way.)
+            const mid = t - (((t % CELL3) + CELL3) % CELL3) + CELL3 / 2;
+            const tl = stopClear(t) ? t : t < mid ? mid - 7.5 : mid + 7.5;
+            const [x, z, nx, nz] = along(tl, side, r.sidewalk - 0.45);
             if (mine(x, z)) {
               props.push({ kind: 'lamp', x, z, nx, nz, radius: 0.2, variant: 0 });
               lights.push({ x: x + nx * 1.4, z: z + nz * 1.4, r: 9, color: LAMP_COLOR, i: 0.7 });

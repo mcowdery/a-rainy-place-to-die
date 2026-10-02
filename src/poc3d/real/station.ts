@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Rect } from '../../core/coords';
 import type { Building3 } from '../district/plan';
+import { portalOffset, type RoadUnder } from '../district/rail';
 import { WIN } from './buildings';
 import type { Light } from './lightmap';
 import { localBox, localFrame, localRect, localYaw, toLocal, toWorld } from './localFrame';
@@ -34,6 +35,25 @@ const onStair = (u: number, t: number): boolean => t >= STAIR.t0 && t <= STAIR.t
 const onRaised = (u: number, t: number): boolean =>
   (t >= EDGE && t <= -1 && u >= 1 && u <= 59) || (t >= -1 && t <= STATION.depth && u >= UPPER.u0 && u <= UPPER.u1 && !onStair(u, t));
 
+/**
+ * How far a station's portal-frame columns stand from its line (a road without a median under it: portalOffset),
+ * else null (one column on the line: in the median, or no road under it).
+ */
+export function stationKerb(b: Building3, under: RoadUnder): number | null {
+  const f = localFrame(b);
+  const [x, z] = toWorld(f, STATION.fw / 2, STATION.line);
+  const road = under(x, z, Math.abs(f.r[2]) > Math.abs(f.r[0]));
+  return road && !road.median ? portalOffset(road) : null;
+}
+
+/**
+ * Where a station's piers stand: along it (u), single columns every 12 m; portal frames fewer, in the middle
+ * stretch (the street's bus stops stand at an edge's middle, which a station's end can reach); across (t), one on
+ * the line or a portal frame's two at the back of the pavements.
+ */
+const piersU = (off: number | null): number[] => (off === null ? [6, 18, 30, 42, 54] : [12, 24, 36, 48]);
+const pierTs = (off: number | null): number[] => (off === null ? [STATION.line] : [STATION.line - off, STATION.line + off]);
+
 /** Floor at a world point: the stair ramp, or the platform level where it overlaps the street (by level). */
 export function stationFloor(b: Building3, x: number, z: number, current: number): number | null {
   const [u, t] = toLocal(localFrame(b), x, z);
@@ -43,7 +63,7 @@ export function stationFloor(b: Building3, x: number, z: number, current: number
 }
 
 /** Collision on the walker's level: the street and concourse, the stairs, or the platform level. */
-export function stationColliders(b: Building3, floor: number): Rect[] {
+export function stationColliders(b: Building3, floor: number, kerb: number | null = null): Rect[] {
   const f = localFrame(b);
   const R = (u0: number, u1: number, t0: number, t1: number): Rect => localRect(f, u0, u1, t0, t1);
   const { fw, depth } = STATION;
@@ -61,7 +81,7 @@ export function stationColliders(b: Building3, floor: number): Rect[] {
       R(40, fw - 0.3, 5.9, 6.1),
       R(STAIR.u0, STAIR.u1, STAIR.t0 - 0.2, STAIR.t0),
       R(STAIR.u0, STAIR.u1, STAIR.t1, STAIR.t1 + 0.2),
-      ...[6, 18, 30, 42, 54].map((u) => R(u - 1.2, u + 1.2, STATION.line - 0.8, STATION.line + 0.8)),
+      ...piersU(kerb).flatMap((u) => (kerb === null ? [R(u - 1.2, u + 1.2, STATION.line - 0.8, STATION.line + 0.8)] : pierTs(kerb).map((t) => R(u - 0.5, u + 0.5, t - 0.5, t + 0.5)))),
     ];
   }
   if (floor < 8) return [R(STAIR.u0 - 1, STAIR.u1 + 1, STAIR.t0 - 0.3, STAIR.t0), R(STAIR.u0 - 1, STAIR.u1 + 1, STAIR.t1, STAIR.t1 + 0.3)];
@@ -99,7 +119,7 @@ export interface StationNames {
   readonly en: string;
 }
 
-export function buildStation(b: Building3, city: THREE.Material, names: StationNames, other: StationNames | null, line: { name: string; nameEn: string; color: number; kind?: 'train' | 'monorail'; letter?: string }): THREE.Group {
+export function buildStation(b: Building3, city: THREE.Material, names: StationNames, other: StationNames | null, line: { name: string; nameEn: string; color: number; kind?: 'train' | 'monorail'; letter?: string }, kerb: number | null = null): THREE.Group {
   const f = localFrame(b);
   const group = new THREE.Group();
   const mb = new MeshBuilder();
@@ -218,9 +238,16 @@ export function buildStation(b: Building3, city: THREE.Material, names: StationN
     box(0x8a8a86, 0, fw, EDGE, 0, 6.8, DECK_Y, true);
     for (const tc of [NEAR, FAR]) box(0xc8c4bc, 0, fw, tc - 0.43, tc + 0.43, 6.2, RAIL_Y, true);
   } else box(0x8a8a86, 0, fw, FAR_EDGE - 1.5, 0, 6.8, DECK_Y, true);
-  for (const u of [6, 18, 30, 42, 54]) {
-    box(0x9a9894, u - 1.2, u + 1.2, STATION.line - 0.8, STATION.line + 0.8, 0, 6.2);
-    box(0x9a9894, u - 1.4, u + 1.4, FAR_EDGE - 1.2, 0, 6.2, 6.8, true);
+  for (const u of piersU(kerb)) {
+    if (kerb === null) {
+      box(0x9a9894, u - 1.2, u + 1.2, STATION.line - 0.8, STATION.line + 0.8, 0, 6.2);
+      box(0x9a9894, u - 1.4, u + 1.4, FAR_EDGE - 1.2, 0, 6.2, 6.8, true);
+      continue;
+    }
+    // A portal frame: a column on each pavement, the beam across under the deck (reaching past it to the far one).
+    const [t0, t1] = pierTs(kerb);
+    for (const t of [t0, t1]) box(0x9a9894, u - 0.5, u + 0.5, t - 0.5, t + 0.5, 0, 5.8);
+    box(0x9a9894, u - 0.7, u + 0.7, Math.min(t0 - 0.5, FAR_EDGE - 1.2), Math.max(t1 + 0.5, 0), 5.8, 6.8, true);
   }
   for (const tc of mono ? [] : [NEAR, FAR]) {
     box(0x3a3a3c, 0, fw, tc - 1.3, tc + 1.3, DECK_Y, DECK_Y + 0.08);

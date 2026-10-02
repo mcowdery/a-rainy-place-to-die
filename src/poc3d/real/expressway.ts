@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { splitByTile } from './tiles';
-import type { Expressway, Road } from '../district/expressway';
+import { RAMP_FOOT, type Expressway, type Road } from '../district/expressway';
 import { addVehicle } from '../models/vehicles';
 import { SignBuilder } from './signs';
 import { taxiPhotos } from './taxiAdLayout';
@@ -106,7 +106,7 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
       }
     }
     if (road.kind === 'spur') portal(mb, road);
-    if (road.kind === 'ramp') ramp(mb, road, box);
+    if (road.kind === 'ramp') ramp(mb, road);
   }
   // Piers with crossbeams under the deck (the street's colliders are the same piers, less those in junctions).
   for (const p of ex.piers()) {
@@ -129,6 +129,28 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
     const across = Math.abs(road.tx[best]) > 0.7;
     const span = (Math.abs(road.offset ?? 0) + ex.def.half) * 2 + 1;
     box(CONCRETE, p.x, p.z, p.top - 1.2, p.top, across ? 1.6 : span, across ? span : 1.6);
+    // A ramp alongside, up off the street: an arm out from this pier under it, to its far edge (the ramps stand
+    // on these, not on piers of their own in the lanes).
+    for (const r of ex.roads) {
+      if (r.kind !== 'ramp') continue;
+      if (Math.abs(r.x[0] - p.x) > 400 && Math.abs(r.z[0] - p.z) > 400) continue;
+      let ri = -1;
+      for (let i = 0; i < r.x.length; i++) {
+        const along = (p.x - r.x[i]) * r.tx[i] + (p.z - r.z[i]) * r.tz[i];
+        const lateral = (p.x - r.x[i]) * r.tz[i] - (p.z - r.z[i]) * r.tx[i];
+        if (Math.abs(along) <= 0.5 && Math.abs(lateral) < 18) ri = i;
+      }
+      if (ri < 0 || r.y[ri] < 6.8) continue;
+      // From the pier's far side to the ramp's outer edge, under its underside.
+      const ox = r.x[ri] - p.x;
+      const oz = r.z[ri] - p.z;
+      const reach = Math.hypot(ox, oz) + r.half + 0.3;
+      const ux = ox / Math.hypot(ox, oz);
+      const uz = oz / Math.hypot(ox, oz);
+      const y1 = r.y[ri] - 1.2;
+      const along = Math.abs(r.tx[ri]) > 0.7;
+      box(CONCRETE, p.x + (ux * reach) / 2, p.z + (uz * reach) / 2, y1 - 1.0, y1, along ? 1.4 : reach, along ? reach : 1.4);
+    }
   }
   // Suspension bridges: two towers, the main cables slung between them and down to anchors beyond, hangers down
   // to the deck, and lamps along the cables (lit at night, like the Rainbow Bridge's).
@@ -262,10 +284,11 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
 
 /**
  * A ramp's solid part: where it's too low to walk or drive under (below 5.2 m), a filled embankment between
- * retaining walls, down to the street; above that, on piers. Where an exit ramp's embankment starts, facing
- * the street traffic coming along the lane under it, a yellow-and-black crash cushion.
+ * retaining walls, down to the street; above that, on arms from the deck's piers. Where an exit ramp's embankment
+ * starts, facing the street traffic coming along the lane under it, a yellow-and-black crash cushion. On an
+ * entrance's foot, arrows painted up the lane.
  */
-function ramp(mb: MeshBuilder, road: Road, box: (hex: number, cx: number, cz: number, y0: number, y1: number, w: number, d: number) => void): void {
+function ramp(mb: MeshBuilder, road: Road): void {
   const n = road.x.length;
   const h = road.half;
   const L = (i: number, lat: number, y: number): V3 => [road.x[i] + road.tz[i] * lat, y, road.z[i] - road.tx[i] * lat];
@@ -283,8 +306,26 @@ function ramp(mb: MeshBuilder, road: Road, box: (hex: number, cx: number, cz: nu
       mb.quadN(L(i, s * (h + 0.25), 0), L(i + 1, s * (h + 0.25), 0), L(i + 1, s * (h + 0.25), yb), L(i, s * (h + 0.25), ya), n3, n3, n3, n3);
     }
   }
-  // Piers under the high part.
-  for (let i = 12; i < n; i += 24) if (road.y[i] > LOW) box(CONCRETE, road.x[i], road.z[i], 0, road.y[i] - 1.2, 1.1, 1.1);
+  // (The high part stands on arms from the deck's piers in the median: buildExpressway.)
+  if (road.rampKind === 'on') {
+    mb.kind = KIND.paint;
+    mb.color = lin(0xe8e8e0);
+    const flat = (i: number, l0: number, l1: number, a0: number, a1: number): void => {
+      const P = (lat: number, a: number): V3 => {
+        const p = L(i, lat, 0);
+        return [p[0] + road.tx[i] * a, road.y[i] + 0.03 + (road.y[i + 1] - road.y[i]) * a, p[2] + road.tz[i] * a];
+      };
+      mb.quadN(P(l0, a0), P(l0, a1), P(l1, a1), P(l1, a0), [0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0]);
+    };
+    for (const i of [4, 20]) {
+      // The shaft, then the head as strips narrowing to its point.
+      flat(i, 0.15, -0.15, 0, 3.2);
+      for (let k = 0; k < 6; k++) {
+        const w = 0.75 * (1 - k / 6);
+        flat(i, w, -w, 3.2 + k * 0.25, 3.45 + k * 0.25);
+      }
+    }
+  }
   // The end of the embankment that faces the street's oncoming traffic (an off-ramp's, where it drops below
   // the clearance): a concrete face and a striped cushion.
   if (road.rampKind === 'off') {
@@ -300,7 +341,7 @@ function ramp(mb: MeshBuilder, road: Road, box: (hex: number, cx: number, cz: nu
     for (let k = 0; k < 5; k++) {
       mb.kind = KIND.gloss;
       mb.color = lin(k % 2 ? 0x141414 : 0xe8c020);
-      mb.box(cx, cz, 0.15 + k * 0.22, 0.37 + k * 0.22, Math.abs(road.tz[i]) * 2.8 + Math.abs(road.tx[i]) * 1.0, Math.abs(road.tx[i]) * 2.8 + Math.abs(road.tz[i]) * 1.0, KIND.gloss, true);
+      mb.box(cx, cz, 0.15 + k * 0.22, 0.37 + k * 0.22, Math.abs(road.tz[i]) * (2 * h - 0.4) + Math.abs(road.tx[i]) * 1.0, Math.abs(road.tx[i]) * (2 * h - 0.4) + Math.abs(road.tz[i]) * 1.0, KIND.gloss, true);
     }
     // Amber flashers on top (lamps: bright at night).
     mb.kind = KIND.emit;
@@ -354,9 +395,10 @@ function entranceSign(road: Road): THREE.Group {
   sign.position.set(0, 3.3, -0.1);
   sign.rotation.y = Math.PI;
   g.add(post, sign);
-  // 22 m before the ramp's foot, on the median (5.9 m to the ramp's right, i.e. the avenue's centre line).
-  const back = 22;
-  const lat = -(road.half + 4.6 - 0.6);
+  // On the median's nose by the ramp's foot (the median breaks at the junction before it), so it's in view as
+  // you cross the junction toward it.
+  const back = -3;
+  const lat = -RAMP_FOOT;
   g.position.set(road.x[0] - road.tx[0] * back + road.tz[0] * lat, 0.18, road.z[0] - road.tz[0] * back - road.tx[0] * lat);
   g.rotation.y = Math.atan2(road.tx[0], road.tz[0]);
   return g;
@@ -461,7 +503,7 @@ function gantry(road: Road, i: number, lines: string[], ex: Expressway): THREE.G
 }
 
 let poolTex: THREE.CanvasTexture | null = null;
-function poolTexture(): THREE.CanvasTexture {
+export function poolTexture(): THREE.CanvasTexture {
   if (poolTex) return poolTex;
   const c = document.createElement('canvas');
   c.width = c.height = 128;

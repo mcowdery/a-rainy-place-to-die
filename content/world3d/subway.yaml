@@ -14,7 +14,7 @@ lines:
     nameEn: WAKABA LINE
     letter: W
     color: '#b5d62a'
-    stations: [w01_station, w02_station, w03_station]
+    stations: [w01_station, w02_station, w03_station, w04_station, w05_station, w06_station]
   # The private railway from the terminal out through Sakuragaoka to Nishihara (underground all the way).
   - id: seiko
     name: 西光線
@@ -29,3 +29,4 @@ transfers:
   # The Kawabata Line from Kaburo Crossing's station; the monorail from the Toto Line at Kasumi-chō.
   - [kaburohigashi_station, y05_station]
   - [mono_kasumicho_station, kasumicho_station]
+  - [w04_station, kasumicho_station]

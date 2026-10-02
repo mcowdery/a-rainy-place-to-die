@@ -1,7 +1,7 @@
 import YAML from 'yaml';
 import type { MacroMap } from '../../gen/macro';
 import type { Rect } from '../../core/coords';
-import { CELL } from './plan';
+import { CELL, type CellPlan3 } from './plan';
 
 /**
  * The elevated railways (content/world3d/rail.yaml), in world metres. Each line runs along L0 grid lines through
@@ -196,6 +196,34 @@ export function parseRails3(file: string, text: string, macro: MacroMap, errors:
     });
   });
   return out;
+}
+
+/**
+ * The road under a viaduct at a point: its carriageway's half-width and whether it has a median; null where
+ * there's none (water, open ground). `vertical`: the line runs north-south. Its piers stand in the median, or as
+ * a portal frame over the carriageway (real/rail.ts, real/station.ts).
+ */
+export type RoadUnder = (x: number, z: number, vertical: boolean) => { readonly half: number; readonly sidewalk: number; readonly median: boolean } | null;
+
+/**
+ * Where a portal frame's columns stand from the line over a road without a median: at the back of each pavement,
+ * against the building line (clear of the carriageway, bus stops at the kerb and most of the walkers).
+ */
+export function portalOffset(road: { readonly half: number; readonly sidewalk: number }): number {
+  return road.half + Math.max(1.1, road.sidewalk - 0.6);
+}
+
+/** RoadUnder from the district's plans (the cell-edge road on the grid line under the point). */
+export function roadUnder(plan: (mx: number, my: number) => CellPlan3 | null): RoadUnder {
+  return (x, z, vertical) => {
+    for (const r of plan(Math.floor(x / CELL), Math.floor(z / CELL))?.roads ?? []) {
+      if (r.vertical !== vertical || r.kind === 'coast') continue;
+      const q = r.rect;
+      if (x < q.x || x > q.x + q.w || z < q.y || z > q.y + q.h) continue;
+      return { half: (vertical ? q.w : q.h) / 2 - r.sidewalk, sidewalk: r.sidewalk, median: r.median > 0 };
+    }
+    return null;
+  };
 }
 
 /**

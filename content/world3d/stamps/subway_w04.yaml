@@ -1,0 +1,40 @@
+# 霞町駅 Kasumi-chō Station, 若葉線 Wakaba Line (W04): a subway station in Kasumi-chō, a block east of the Toto Line and monorail station of the same name (a transfer) (see content/world3d/subway.yaml for the
+# line). A landmark built by real/subwayStation.ts: an entrance pavilion on the street with stairs down to the
+# concourse and an island platform under the street. The line runs 10 m out from the pavilion's street face.
+id: subway_w04
+name: 霞町駅 Kasumi-chō Station
+footprint: [12, 14]
+height: 4.5
+front: west
+landmark: subway
+station: { jp: 霞町, en: KASUMI-CHŌ }
+nodes:
+  exit:
+    kind: spawn
+    name: Kasumi-chō Station (Wakaba Line W04)
+    at: [7, 4]
+    facing: east
+  platform:
+    kind: spawn
+    name: Kasumi-chō Station (Wakaba Line platform)
+    at: [23, 10]
+    floor: -11
+    facing: north
+  board_a:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [-16, 10]
+    floor: -11
+    returnSpawn: platform
+  board_b:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [-6, 10]
+    floor: -11
+    returnSpawn: platform
+  board_c:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [29.5, 10]
+    floor: -11
+    returnSpawn: platform

@@ -619,7 +619,7 @@ describe('Subway', () => {
     const codes = (id: string) => net.lines.find((l) => l.id === id)!.stops.map((s) => s.code);
     expect(codes('seiko')).toEqual(['S01', 'S02', 'S03', 'S04', 'S05', 'S06']);
     expect(codes('yako')).toEqual(['Y01', 'Y02', 'Y03', 'Y04', 'Y05']);
-    expect(codes('wakaba')).toEqual(['W01', 'W02', 'W03']);
+    expect(codes('wakaba')).toEqual(['W01', 'W02', 'W03', 'W04', 'W05', 'W06']);
     // (The elevated lines, the monorail with its corners, are tests/rail.test.ts.)
     for (const l of net.lines.filter((q) => q.id !== 'monorail')) {
       // Each line runs along a cell edge (a road), its platforms on it.
@@ -643,6 +643,13 @@ describe('Subway', () => {
       { kind: 'ride', line: 'yako', from: 3, to: 2 },
       { kind: 'transfer', from: 'y03_station', to: 'totochuo_station' },
       { kind: 'ride', line: 'toto', from: 2, to: 1 },
+    ]);
+    // Down the Wakaba Line and under the bay to Shiomi-jima; from the Toto Line, change at Kasumi-chō.
+    expect(subwayRoute(net, 'w01_station', 'w06_station')).toEqual([{ kind: 'ride', line: 'wakaba', from: 0, to: 5 }]);
+    expect(subwayRoute(net, 'kaburo_station', 'w06_station')).toEqual([
+      { kind: 'ride', line: 'toto', from: 3, to: 4 },
+      { kind: 'transfer', from: 'kasumicho_station', to: 'w04_station' },
+      { kind: 'ride', line: 'wakaba', from: 3, to: 5 },
     ]);
     // Up the Toto Line to its new northern end, Gakuenzaka (the university).
     expect(subwayRoute(net, 'totochuo_station', 'gakuenzaka_station')).toEqual([{ kind: 'ride', line: 'toto', from: 2, to: 0 }]);

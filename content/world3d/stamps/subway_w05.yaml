@@ -1,0 +1,40 @@
+# 海岸駅 Kaigan Station, 若葉線 Wakaba Line (W05): a subway station in the middle of Tōto Port, off Kaigan-dōri (see content/world3d/subway.yaml for the
+# line). A landmark built by real/subwayStation.ts: an entrance pavilion on the street with stairs down to the
+# concourse and an island platform under the street. The line runs 10 m out from the pavilion's street face.
+id: subway_w05
+name: 海岸駅 Kaigan Station
+footprint: [12, 14]
+height: 4.5
+front: west
+landmark: subway
+station: { jp: 海岸, en: KAIGAN }
+nodes:
+  exit:
+    kind: spawn
+    name: Kaigan Station (Wakaba Line W05)
+    at: [7, 4]
+    facing: east
+  platform:
+    kind: spawn
+    name: Kaigan Station (Wakaba Line platform)
+    at: [23, 10]
+    floor: -11
+    facing: north
+  board_a:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [-16, 10]
+    floor: -11
+    returnSpawn: platform
+  board_b:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [-6, 10]
+    floor: -11
+    returnSpawn: platform
+  board_c:
+    kind: station
+    name: Wakaba Line 若葉線
+    at: [29.5, 10]
+    floor: -11
+    returnSpawn: platform

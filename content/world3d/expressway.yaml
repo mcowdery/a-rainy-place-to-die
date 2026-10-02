@@ -28,7 +28,8 @@ routes:
 # The suspension bridge (a look: its decks are the routes above and, below, the street bridge in roads.yaml).
 suspension:
   - { col: 28, from: 22.1, to: 22.9, width: 36, name: 汐見大橋 }
-# Ramps, in the outside (left) lane of a route, over the inner lane of the avenue below: route, leg (from point
+# Ramps, joining the outside (left) lane of a route, their feet in the inner lane of the avenue below (beside the
+# median; high up they swing out beside the deck, on arms from its piers): route, leg (from point
 # `leg` to the next), block (which 128 m block of that leg, from its start in the direction of travel). An
 # on-ramp rises from the start of its block; an off-ramp comes down to the end of its block. name: the district,
 # for the signs.

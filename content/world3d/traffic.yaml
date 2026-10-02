@@ -25,3 +25,35 @@ buses:
     rect: [21, 10, 25, 13]
     buses: 2
     stops: [朝霧北, 朝霧駅西口, 都庁通り, 朝霧西]
+# Feeder lines out of the core (a bus from a station round the neighbourhoods the trains don't reach), each
+# on proper streets (raised pavements) all round. Stops: north, east, south, west edge.
+  - id: suido
+    name: 学園坂・水道町循環
+    en: GAKUENZAKA–SUIDŌ-CHŌ LOOP
+    rect: [25, 5, 31, 9]
+    buses: 1
+    stops: [水道町北, 水道町, 学園坂下東, 学園坂下]
+  - id: dome
+    name: ドーム線
+    en: DOME LINE
+    rect: [32, 6, 33, 10]
+    buses: 1
+    stops: [ドーム北, 東都ドーム前, 電光町北, 水道町東]
+  - id: port
+    name: 港循環
+    en: PORT LOOP
+    rect: [28, 18, 35, 21]
+    buses: 1
+    stops: [海岸通り, 中央卸売市場前, 湾岸道路, 海岸駅前]
+  - id: kasumi
+    name: 霞町循環
+    en: KASUMI-CHŌ LOOP
+    rect: [21, 14, 26, 21]
+    buses: 1
+    stops: [霞町西, 霞町駅前, 港南, 朝霧南]
+  - id: takanodai
+    name: 鷹ノ台循環
+    en: TAKANODAI LOOP
+    rect: [17, 4, 22, 6]
+    buses: 1
+    stops: [鷹ノ台上, 鷹ノ台東, 鷹ノ台下, 鷹ノ台西]

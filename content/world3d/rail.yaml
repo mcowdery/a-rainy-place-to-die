@@ -12,7 +12,8 @@ lines:
     letter: T
     color: '#10a060'
     kind: train
-    pts: [[26, 6], [26, 17]]
+    # (Its ends stop short of the junctions at rows 6 and 17, each on a pier with buffer stops.)
+    pts: [[26, 6.2], [26, 16.8]]
   # The Kawabata Line (川端線): east from Kaburo's east side over Denkō-chō and across the river to the old town.
   - id: kawabata
     name: 川端線

@@ -180,6 +180,20 @@ describe('the expressway over the avenues', () => {
     }
   });
 
+  it('keeps every ramp foot in the inner lane, beside the median, and the kerb lane open past it', () => {
+    for (const r of ex.roads.filter((q) => q.kind === 'ramp')) {
+      // Wherever it's low enough to be a walled embankment: between the median (1.2 m from the line) and the
+      // lane line, clear of the kerb lane (its traffic drives 10 m out).
+      for (let i = 0; i < r.x.length; i++) {
+        if (r.y[i] > 5.2) continue;
+        const across = Math.abs(r.tx[i]) > 0.7 ? r.z[i] : r.x[i];
+        const lat = Math.abs(across - Math.round(across / 128) * 128);
+        expect(lat - r.half, `${r.id} ${i}`).toBeGreaterThan(1.2);
+        expect(lat + r.half, `${r.id} ${i}`).toBeLessThan(8);
+      }
+    }
+  });
+
   it('keeps the street traffic clear of the piers, the medians and the ramps', { timeout: 30000 }, () => {
     const plan = (mx: number, my: number) => district.plan(mx, my);
     for (const loop of [...carLoops(content.macro, content.traffic, plan, ex.rampColliders()).map((c) => [c.rect, true] as const), ...content.traffic.buses.map((b) => [b.rect, false] as const)]) {

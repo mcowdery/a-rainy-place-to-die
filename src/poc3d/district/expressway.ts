@@ -140,6 +140,20 @@ export interface OnRoad {
 const GRID = 16;
 /** A ramp's run (m): the climb to the deck at under 10% at its steepest. */
 export const RAMP = 240;
+/** A ramp's half-width: one wide lane (6 m between the parapets), room to line up with it at speed. */
+export const RAMP_HALF = 3;
+/**
+ * Where a ramp's foot stands: the avenue's inner lane, its centre this far from the grid line (the 2.4 m median's
+ * edge, a gap, then the ramp), so the kerb lane stays open beside it whatever the route above.
+ */
+export const RAMP_FOOT = 1.2 + 0.4 + RAMP_HALF;
+/**
+ * Along a ramp from its foot (m): it stays in the inner lane while it's an embankment, swings out beside the
+ * deck over [SWING0, SWING1] once it's high enough to clear the street, then angles into the deck's outside lane
+ * over the last 60 m.
+ */
+const SWING0 = 100;
+const SWING1 = 175;
 const smooth = (t: number): number => {
   const c = Math.max(0, Math.min(1, t));
   return c * c * (3 - 2 * c);
@@ -246,27 +260,31 @@ export class Expressway {
       this.roads.push(road);
     }
     this.loop = this.roads.find((r) => r.kind === 'loop') ?? this.roads[0];
-    // Ramps: a single lane outside the deck (on the left), overlapping its edge by 0.6 m so the two join, over
-    // the inner lane of the avenue below (next to its median). Each works within one block of its leg (the 128 m
-    // between two junctions, counted from the leg's start in the direction of travel): an on-ramp's foot is at the
-    // start of its block and the part too low to pass under (a wall to the street) stays inside the block; an
-    // off-ramp comes down to its foot at the end of its block.
-    const rh = 1.9;
+    // Ramps: a single wide lane. Its foot is in the avenue's inner lane beside the median (keep to the inner
+    // lane for the expressway; the kerb lane runs on past it), and it stays there while it's low enough to be a
+    // walled embankment; once it clears the street it swings out to stand beside the deck on its left, overlapping
+    // its edge by 0.6 m, and over the last 60 m angles into the deck's outside lane, so you drive straight on and
+    // merge (or drift out of the lane and off). It's carried on arms from the deck's piers in the median, so
+    // nothing of it stands in a lane. Each works within one block of its leg (the 128 m between two junctions,
+    // counted from the leg's start in the direction of travel): an on-ramp's foot is at the start of its block and
+    // the walled part stays inside the block; an off-ramp comes down to its foot at the end of its block.
+    const rh = RAMP_HALF;
     for (const r of def.ramps) {
       const route = def.routes.find((q) => q.id === r.route)!;
       const { start, dir } = legsOf(route)[r.leg];
       const left: [number, number] = [dir[1], -dir[0]];
-      const off = def.half + rh - 0.6 + (route.offset ?? 0);
+      const beside = def.half + rh - 0.6 + (route.offset ?? 0);
+      const lane = 1.8 + (route.offset ?? 0);
       const s0 = r.block * CELL;
       const a = r.kind === 'on' ? s0 + 16 : s0 + 112 - RAMP;
       const xs: number[] = [];
       const zs: number[] = [];
-      // Where it meets the deck it angles in over the last (first) 60 m, into the deck's outside lane, so you
-      // drive straight on and merge (or drift out of the lane and off).
-      const lane = 1.8;
       for (let d = 0; d <= RAMP; d++) {
-        const k = r.kind === 'on' ? smooth((d - (RAMP - 60)) / 60) : 1 - smooth(d / 60);
-        const o = off - (off - lane - (route.offset ?? 0)) * k;
+        // Metres from the foot.
+        const f = r.kind === 'on' ? d : RAMP - d;
+        const swing = smooth((f - SWING0) / (SWING1 - SWING0));
+        const merge = smooth((f - (RAMP - 60)) / 60);
+        const o = RAMP_FOOT + (beside - RAMP_FOOT) * swing + (lane - beside) * merge;
         xs.push(start[0] + dir[0] * (a + d) + left[0] * o);
         zs.push(start[1] + dir[1] * (a + d) + left[1] * o);
       }

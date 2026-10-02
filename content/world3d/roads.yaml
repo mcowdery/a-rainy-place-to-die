@@ -25,7 +25,9 @@ avenues:
 # The way to Shiomi-jima: Shiomi-dōri down to the seawall, over the bridge, and on across the island (the
 # expressway's branch over it, its ramps on the island).
   - { name: 汐見通り SHIOMI-DŌRI, col: 28, from: 21, to: 22, width: 32, median: 2.4 }
-  - { name: 汐見通り SHIOMI-DŌRI, col: 28, from: 23, to: 26, width: 32, median: 2.4 }
+  - { name: 汐見通り SHIOMI-DŌRI, col: 28, from: 23, to: 25, width: 32, median: 2.4 }
+# (Its last block 20 m: the Wakaba Line's Shiomi-jima station under it, 10 m from its centre.)
+  - { name: 汐見通り SHIOMI-DŌRI, col: 28, from: 25, to: 26, width: 20, median: 2.4 }
 # The way to the airport: Kūkō-dōri down through the container terminal, over the bridge, into Hanejima.
   - { name: 空港通り KŪKŌ-DŌRI, col: 8, from: 21, to: 22, width: 32, median: 2.4 }
   - { name: 空港通り KŪKŌ-DŌRI, col: 8, from: 23, to: 25, width: 32, median: 2.4 }

@@ -27,7 +27,7 @@ import type { Placed3 } from './stamps';
  * Collision rects for a landmark you can walk into or through, at a walker's floor height (street level
  * is 0, a basement is below -1); null means its footprint is solid.
  */
-export function landmarkColliders(p: Placed3, floor = 0): Rect[] | null {
+export function landmarkColliders(p: Placed3, floor = 0, kerb: number | null = null): Rect[] | null {
   const a = asagiri(p);
   if (a) return floor < -1 ? [] : asagiriColliders(a, p.building, floor);
   switch (p.stamp.landmark) {
@@ -46,7 +46,7 @@ export function landmarkColliders(p: Placed3, floor = 0): Rect[] | null {
     case 'discount':
       return discountColliders(p.building);
     case 'station':
-      return stationColliders(p.building, floor);
+      return stationColliders(p.building, floor, kerb);
     case 'subway':
       return subwayColliders(p.building, floor, p.stamp.passage);
     case 'rotary':

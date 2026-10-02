@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { splitByTile } from './tiles';
 import { passengerMesh, type PassengerSpot } from './people';
-import type { RailKind, RailLine3 } from '../district/rail';
+import { portalOffset, type RailKind, type RailLine3, type RoadUnder } from '../district/rail';
 import { leftOf } from '../district/rail';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 import { PLATFORM_Y, RAIL_Y, STATION, type StationNames } from './station';
@@ -27,7 +27,7 @@ const TRAIN_HALF = (CARS * CAR + (CARS - 1) * GAP) / 2;
 const V_MAX: Readonly<Record<RailKind, number>> = { train: 17, monorail: 20 };
 const ACCEL = 1.0;
 const DWELL = 16;
-const LAYOVER = 12;
+const LAYOVER = 24;
 /** Piers stand this far apart along the line, and never in a junction (this near a grid corner). */
 const PIER_STEP: Readonly<Record<RailKind, number>> = { train: 24, monorail: 20 };
 const JUNCTION_CLEAR = 17;
@@ -60,24 +60,48 @@ const nearJunction = (x: number, z: number): boolean => {
   return dx < JUNCTION_CLEAR && dz < JUNCTION_CLEAR;
 };
 
-/** The piers' places along the line (s), outside the stations and junctions. */
+/** The piers' places along the line (s), outside the stations and junctions, and one under each end. */
 function pierPlaces(line: RailLine3, stations: readonly RailStation[]): number[] {
   const out: number[] = [];
   const step = PIER_STEP[line.kind];
-  for (let s = step / 2; s < line.path.length; s += step) {
-    if (stations.some((st) => s > st.s0 - 2 && s < st.s1 + 2)) continue;
+  const L = line.path.length;
+  const clear = (s: number): boolean => !stations.some((st) => s > st.s0 - 2 && s < st.s1 + 2);
+  if (clear(2)) out.push(2);
+  for (let s = step / 2; s < L; s += step) {
+    if (!clear(s) || s < 8 || s > L - 8) continue;
     const p = line.path.at(s);
     if (!nearJunction(p.x, p.z)) out.push(s);
   }
+  if (clear(L - 2)) out.push(L - 2);
   return out;
 }
 
+/** A pier column's half-width across the line (a portal frame's columns are slimmer than a single one). */
+const COLUMN: Readonly<Record<RailKind, number>> = { train: 0.5, monorail: 0.4 };
+
+/**
+ * How the pier at s stands: one column on the line (`off` 0: in the road's median, or with no road under it),
+ * or a portal frame (門型橋脚), a column at the back of each pavement and a beam across under the deck,
+ * so the carriageway under the line is clear (`off`: the columns' distance from the line).
+ */
+function pierAt(line: RailLine3, s: number, under: RoadUnder | null): { x: number; z: number; hx: number; hz: number; off: number } {
+  const h = line.path.at(s);
+  const road = under?.(h.x, h.z, Math.abs(h.hz) > Math.abs(h.hx)) ?? null;
+  const off = road && !road.median ? portalOffset(road) : 0;
+  return { x: h.x, z: h.z, hx: h.hx, hz: h.hz, off };
+}
+
 /** The ground-level colliders of a line's piers (the stations add their own). */
-export function viaductPiers(line: RailLine3, stations: readonly RailStation[]): { x: number; y: number; w: number; h: number }[] {
-  const half = line.kind === 'monorail' ? 0.7 : 1.2;
-  return pierPlaces(line, stations).map((s) => {
-    const p = line.path.at(s);
-    return { x: p.x - half, y: p.z - half, w: half * 2, h: half * 2 };
+export function viaductPiers(line: RailLine3, stations: readonly RailStation[], under: RoadUnder | null = null): { x: number; y: number; w: number; h: number }[] {
+  return pierPlaces(line, stations).flatMap((s) => {
+    const p = pierAt(line, s, under);
+    if (!p.off) {
+      const half = line.kind === 'monorail' ? 0.7 : 1.2;
+      return [{ x: p.x - half, y: p.z - half, w: half * 2, h: half * 2 }];
+    }
+    const c = COLUMN[line.kind];
+    const [lx, lz] = [p.hz, -p.hx];
+    return [1, -1].map((side) => ({ x: p.x + lx * p.off * side - c, y: p.z + lz * p.off * side - c, w: c * 2, h: c * 2 }));
   });
 }
 
@@ -96,29 +120,87 @@ function run(d: number, vmax: number): { T: number; at: (t: number) => number } 
   };
 }
 
-type Leg = { kind: 'run'; from: number; to: number; T: number; at: (t: number) => number } | { kind: 'wait'; s: number; T: number; hidden?: boolean };
+type Leg = { kind: 'run'; from: number; to: number; T: number; at: (t: number) => number } | { kind: 'wait'; s: number; T: number; dir: number; doors: boolean };
 
-/** A direction's schedule: layover (hidden) at the start, runs between stops with dwells, hidden at the end. */
-function schedule(stops: readonly number[], vmax: number): { legs: Leg[]; period: number } {
-  const legs: Leg[] = [{ kind: 'wait', s: stops[0], T: LAYOVER, hidden: true }];
-  for (let i = 0; i + 1 < stops.length; i++) {
-    const r = run(Math.abs(stops[i + 1] - stops[i]), vmax);
-    legs.push({ kind: 'run', from: stops[i], to: stops[i + 1], T: r.T, at: r.at });
-    if (i + 2 < stops.length) legs.push({ kind: 'wait', s: stops[i + 1], T: DWELL });
-  }
+/** A crossover's length (m): the train eases across the 4.4 m between the tracks over it. */
+const CROSS = 36;
+
+/**
+ * Where a line's trains turn back at each end. Past a terminal station with room enough beyond it (a stub of
+ * track), they run on past the platform, cross over to the other track and stand at the end of the stub; where the
+ * station is the end of the line, they cross over before it and stand at its platform on the departure track.
+ * `stop`: where the train stands to turn; `zone`: the crossover, [s0, s1] along the line. Trains keep left, so a
+ * train going up (increasing s) is on the +TRACK side and coming down on the -TRACK side; through a crossover
+ * the track is +TRACK at its low end and -TRACK at its high end (up trains cross into the high end's stub or
+ * platform, down trains into the low end's).
+ */
+export interface Turnback {
+  readonly stop: number;
+  readonly zone: readonly [number, number];
+  readonly station: boolean;
+}
+export interface Turnbacks {
+  readonly lo: Turnback;
+  readonly hi: Turnback;
+}
+
+export function turnbacks(L: number, stations: readonly { readonly s: number; readonly s0: number; readonly s1: number }[]): Turnbacks {
+  const byS = [...stations].sort((a, b) => a.s - b.s);
+  const room = 2 * TRAIN_HALF + CROSS + 10;
+  const first = byS[0];
+  const last = byS[byS.length - 1];
+  const lo: Turnback = !first || first.s0 >= room
+    ? { stop: TRAIN_HALF, zone: first ? [first.s0 - 8 - CROSS, first.s0 - 8] : [2 * TRAIN_HALF + 4, 2 * TRAIN_HALF + 4 + CROSS], station: false }
+    : { stop: first.s, zone: [first.s1 + 8, first.s1 + 8 + CROSS], station: true };
+  const hi: Turnback = !last || L - last.s1 >= room
+    ? { stop: L - TRAIN_HALF, zone: last ? [last.s1 + 8, last.s1 + 8 + CROSS] : [L - 2 * TRAIN_HALF - 4 - CROSS, L - 2 * TRAIN_HALF - 4], station: false }
+    : { stop: last.s, zone: [last.s0 - 8 - CROSS, last.s0 - 8], station: true };
+  return { lo, hi };
+}
+
+/** The lateral offset of the track a train going `dir` is on at s (left of the line's heading), crossovers included. */
+export function trackAt(tb: Turnbacks, s: number, dir: number): number {
+  const across = (z: readonly [number, number]): number => TRACK * (1 - 2 * smoothstep((s - z[0]) / (z[1] - z[0])));
+  if (dir > 0) return s <= tb.hi.zone[0] ? TRACK : across(tb.hi.zone);
+  return s >= tb.lo.zone[1] ? -TRACK : across(tb.lo.zone);
+}
+
+function smoothstep(t: number): number {
+  const c = Math.max(0, Math.min(1, t));
+  return c * c * (3 - 2 * c);
+}
+
+/**
+ * A train's round trip: up the line from the low end's turnback to the high end's, a dwell at every station
+ * between, a layover there (in view: at a stub, or with the doors open at a terminal platform), then back down.
+ */
+function schedule(tb: Turnbacks, stations: readonly { readonly s: number }[], vmax: number): { legs: Leg[]; period: number } {
+  const between = stations.map((st) => st.s).filter((s) => s > tb.lo.stop + 1 && s < tb.hi.stop - 1).sort((a, b) => a - b);
+  const legs: Leg[] = [];
+  const leg = (stops: number[], dir: number, end: Turnback): void => {
+    for (let i = 0; i + 1 < stops.length; i++) {
+      const r = run(Math.abs(stops[i + 1] - stops[i]), vmax);
+      legs.push({ kind: 'run', from: stops[i], to: stops[i + 1], T: r.T, at: r.at });
+      if (i + 2 < stops.length) legs.push({ kind: 'wait', s: stops[i + 1], T: DWELL, dir, doors: true });
+    }
+    // Turning: facing the way it'll leave.
+    legs.push({ kind: 'wait', s: end.stop, T: LAYOVER, dir: -dir, doors: end.station });
+  };
+  leg([tb.lo.stop, ...between, tb.hi.stop], 1, tb.hi);
+  leg([tb.hi.stop, ...[...between].reverse(), tb.lo.stop], -1, tb.lo);
   return { legs, period: legs.reduce((t, l) => t + l.T, 0) };
 }
 
-function where(legs: readonly Leg[], t: number): { s: number; hidden: boolean; doors: number } {
+function where(legs: readonly Leg[], t: number): { s: number; dir: number; doors: number } {
   for (const l of legs) {
     if (t < l.T) {
-      if (l.kind === 'wait') return { s: l.s, hidden: l.hidden === true, doors: l.hidden ? 0 : dwellDoors(t, l.T) };
-      return { s: l.from + Math.sign(l.to - l.from) * l.at(t), hidden: false, doors: 0 };
+      if (l.kind === 'wait') return { s: l.s, dir: l.dir, doors: l.doors ? dwellDoors(t, l.T) : 0 };
+      return { s: l.from + Math.sign(l.to - l.from) * l.at(t), dir: Math.sign(l.to - l.from), doors: 0 };
     }
     t -= l.T;
   }
   const last = legs[legs.length - 1];
-  return { s: last.kind === 'run' ? last.to : last.s, hidden: true, doors: 0 };
+  return { s: last.kind === 'run' ? last.to : last.s, dir: 1, doors: 0 };
 }
 
 /**
@@ -361,6 +443,8 @@ interface Ride2 {
 export class TrainSystem {
   readonly group = new THREE.Group();
   private readonly trains: Train[] = [];
+  private readonly tb: Turnbacks;
+  private readonly dests: { up: StationNames; down: StationNames };
   private readonly rideTrain: THREE.Group;
   private time = 0;
   private ride: { from: RailStation; to: RailStation; t: number; T: number; at: (t: number) => number; resolve: () => void } | null = null;
@@ -375,7 +459,10 @@ export class TrainSystem {
     city: THREE.Material,
     /** The new cars (?transit=new): their materials. Without, the district's cars and standing rides. */
     cars: CarMaterials | null = null,
+    /** The road under the line (where its piers stand: in a median, or a portal frame over the carriageway). */
+    private readonly under: RoadUnder | null = null,
   ) {
+    this.tb = turnbacks(line.path.length, stations);
     this.group.add(this.buildViaduct(city));
     const byS0 = [...stations].sort((a, b) => a.s - b.s);
     const first = byS0[0]?.names ?? { jp: '', en: '' };
@@ -390,18 +477,15 @@ export class TrainSystem {
       setsByGroup.set(t.group, t);
       return t.group;
     };
-    // Two trains each way, half a period apart.
-    const byS = [...stations].sort((a, b) => a.s - b.s);
-    const L = line.path.length;
-    for (const dir of [1, -1]) {
-      const stops = [dir > 0 ? TRAIN_HALF : L - TRAIN_HALF, ...(dir > 0 ? byS : [...byS].reverse()).map((s) => s.s), dir > 0 ? L - TRAIN_HALF : TRAIN_HALF];
-      const { legs, period } = schedule(stops, V_MAX[line.kind]);
-      for (const k of [0, 0.5]) {
-        const cars = set(dir);
-        this.group.add(cars);
-        this.trains.push({ cars, set: setsByGroup.get(cars) ?? null, dir, legs, period, offset: period * k + (dir > 0 ? 7 : 0) });
-      }
+    // Four trains shuttling the line, a quarter of the round trip apart (as often as two each way), each turning
+    // back at the ends over a crossover rather than vanishing.
+    const { legs, period } = schedule(this.tb, stations, V_MAX[line.kind]);
+    for (const k of [0, 0.25, 0.5, 0.75]) {
+      const cars = set(1);
+      this.group.add(cars);
+      this.trains.push({ cars, set: setsByGroup.get(cars) ?? null, dir: 0, legs, period, offset: period * k });
     }
+    this.dests = { up: last, down: first };
     this.rideTrain = set();
     this.rideSet = setsByGroup.get(this.rideTrain) ?? null;
     this.rideTrain.visible = false;
@@ -512,9 +596,14 @@ export class TrainSystem {
     const rideDir = this.ride ? Math.sign(this.ride.to.s - this.ride.from.s) : this.ride2 ? this.ride2.timeline.dir : 0;
     for (const tr of this.trains) {
       const p = where(tr.legs, (this.time + tr.offset) % tr.period);
-      tr.cars.visible = this.running && !p.hidden && !(rideDir !== 0 && tr.dir === rideDir);
+      // Turned round: its destination on the screens.
+      if (p.dir !== tr.dir) {
+        tr.dir = p.dir;
+        tr.set?.setScreens(null, p.dir > 0 ? this.dests.up : this.dests.down);
+      }
+      tr.cars.visible = this.running && !(rideDir !== 0 && tr.dir === rideDir);
       if (tr.cars.visible) {
-        this.pose(tr.cars, p.s, tr.dir);
+        this.pose(tr.cars, p.s, tr.dir, true);
         tr.set?.setDoors(1, p.doors);
         tr.set?.cull(camera.position);
       }
@@ -540,12 +629,23 @@ export class TrainSystem {
   }
 
   /** Each car on the track at its own place along the line (so the set bends round the curves). */
-  private pose(cars: THREE.Group, s: number, dir: number): void {
-    cars.children.forEach((car, k) => {
-      const h = this.line.path.at(s + dir * (k - 1) * (CAR + GAP));
+  /**
+   * Each car on its track at s (the middle car's centre), facing dir. Timetabled trains follow the crossovers
+   * (`crossing`); a ride's train keeps to its own track (the platform side its doors open on).
+   */
+  private pose(cars: THREE.Group, s: number, dir: number, crossing = false): void {
+    const at = (q: number): [number, number] => {
+      const h = this.line.path.at(q);
       const [lx, lz] = leftOf(h);
-      car.position.set(h.x + dir * TRACK * lx, RAIL_Y, h.z + dir * TRACK * lz);
-      car.rotation.y = Math.atan2(dir * h.hx, dir * h.hz);
+      const o = crossing ? trackAt(this.tb, q, dir) : dir * TRACK;
+      return [h.x + o * lx, h.z + o * lz];
+    };
+    cars.children.forEach((car, k) => {
+      const c = s + dir * (k - 1) * (CAR + GAP);
+      const [fx, fz] = at(c + dir * CAR * 0.4);
+      const [bx, bz] = at(c - dir * CAR * 0.4);
+      car.position.set((fx + bx) / 2, RAIL_Y, (fz + bz) / 2);
+      car.rotation.y = Math.atan2(fx - bx, fz - bz);
     });
   }
 
@@ -631,17 +731,67 @@ export class TrainSystem {
         for (const o of [-TRACK, TRACK]) mb.beam([a.x + la * o, 12.2, a.z + lza * o], [b.x + lb * o, 12.2, b.z + lzb * o], 0.03);
       }
     }
-    // Piers: a column and a cap (a train line); a column and a T-head under both beams (a monorail). They reach
-    // below the ground, into the water where the line crosses it.
+    // Piers: a column and a cap (a train line); a column and a T-head under both beams (a monorail); over a road
+    // without a median, a portal frame: a column on each pavement and a beam across. They reach below the
+    // ground, into the water where the line crosses it.
     set(0x9a9894);
     for (const s of pierPlaces(this.line, this.stations)) {
-      const h = path.at(s);
-      if (mono) {
-        obox(mb, h.x, h.z, h.hx, h.hz, -0.65, 0.65, -0.65, 0.65, -3, 6.1);
-        obox(mb, h.x, h.z, h.hx, h.hz, -0.6, 0.6, -3.1, 3.1, 6.1, 6.9, true);
+      const p = pierAt(this.line, s, this.under);
+      if (p.off) {
+        const c = COLUMN[this.line.kind];
+        const [y0, y1] = mono ? [5.9, 6.9] : [5.7, 6.8];
+        for (const side of [1, -1]) obox(mb, p.x, p.z, p.hx, p.hz, -c, c, side * p.off - c, side * p.off + c, -3, y0);
+        obox(mb, p.x, p.z, p.hx, p.hz, mono ? -0.55 : -0.7, mono ? 0.55 : 0.7, -p.off - c, p.off + c, y0, y1, true);
+      } else if (mono) {
+        obox(mb, p.x, p.z, p.hx, p.hz, -0.65, 0.65, -0.65, 0.65, -3, 6.1);
+        obox(mb, p.x, p.z, p.hx, p.hz, -0.6, 0.6, -3.1, 3.1, 6.1, 6.9, true);
       } else {
-        obox(mb, h.x, h.z, h.hx, h.hz, -1.2, 1.2, -0.8, 0.8, -3, 6.2);
-        obox(mb, h.x, h.z, h.hx, h.hz, -1.4, 1.4, -4.5, 4.5, 6.2, 6.8, true);
+        obox(mb, p.x, p.z, p.hx, p.hz, -1.2, 1.2, -0.8, 0.8, -3, 6.2);
+        obox(mb, p.x, p.z, p.hx, p.hz, -1.4, 1.4, -4.5, 4.5, 6.2, 6.8, true);
+      }
+    }
+    // The crossovers where the trains turn back: a track (a monorail: a beam) easing from one side to the other.
+    for (const zone of [this.tb.lo.zone, this.tb.hi.zone]) {
+      const P = (q: number): [number, number] => {
+        const h = path.at(q);
+        const [lx, lz] = leftOf(h);
+        const o = TRACK * (1 - 2 * smoothstep((q - zone[0]) / (zone[1] - zone[0])));
+        return [h.x + o * lx, h.z + o * lz];
+      };
+      for (let q = zone[0] - 3; q < zone[1] + 3; q += 1.5) {
+        const [ax, az] = P(q);
+        const [bx, bz] = P(q + 1.5);
+        const len = Math.hypot(bx - ax, bz - az);
+        const hx = (bx - ax) / len;
+        const hz = (bz - az) / len;
+        const cx = (ax + bx) / 2;
+        const cz = (az + bz) / 2;
+        if (mono) {
+          set(0xc8c4bc);
+          obox(mb, cx, cz, hx, hz, -len / 2 - 0.05, len / 2 + 0.05, -0.43, 0.43, 6.9, RAIL_Y - 0.01, true);
+          continue;
+        }
+        set(0x3a3a3c);
+        obox(mb, cx, cz, hx, hz, -len / 2 - 0.05, len / 2 + 0.05, -1.3, 1.3, DECK_TOP, DECK_TOP + 0.09);
+        set(0xb0b0b4);
+        for (const r of [-0.53, 0.53]) obox(mb, cx, cz, hx, hz, -len / 2 - 0.05, len / 2 + 0.05, r - 0.035, r + 0.035, DECK_TOP + 0.09, RAIL_Y + 0.005);
+      }
+    }
+    // The ends of the line (a train line): an end wall across the deck, and a buffer stop on each track.
+    if (!mono) {
+      for (const end of [0, path.length]) {
+        if (inStation(end === 0 ? 0.5 : end - 0.5)) continue;
+        const h = path.at(end);
+        const d = end === 0 ? -1 : 1;
+        set(0x8a8a86);
+        obox(mb, h.x, h.z, h.hx, h.hz, Math.min(0, d * 0.4), Math.max(0, d * 0.4), -5, 5, 6.8, DECK_TOP + 1.2, true);
+        for (const b of [-TRACK, TRACK]) {
+          set(0xc8a020);
+          obox(mb, h.x, h.z, h.hx, h.hz, Math.min(-d * 2.2, -d * 1.2), Math.max(-d * 2.2, -d * 1.2), b - 1.0, b + 1.0, DECK_TOP + 0.1, DECK_TOP + 1.1, true);
+          set(0x2a2a2a);
+          obox(mb, h.x, h.z, h.hx, h.hz, Math.min(-d * 2.4, -d * 2.2), Math.max(-d * 2.4, -d * 2.2), b - 0.9, b - 0.5, DECK_TOP + 0.6, DECK_TOP + 0.9, true);
+          obox(mb, h.x, h.z, h.hx, h.hz, Math.min(-d * 2.4, -d * 2.2), Math.max(-d * 2.4, -d * 2.2), b + 0.5, b + 0.9, DECK_TOP + 0.6, DECK_TOP + 0.9, true);
+        }
       }
     }
     // In 256 m tiles, so the line is culled a stretch at a time rather than drawn whole from anywhere.
