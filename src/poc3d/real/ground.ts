@@ -1,5 +1,5 @@
 import { intersect, overlaps, type Rect } from '../../core/coords';
-import { isRiverWalk, type CellPlan3, type Road3 } from '../district/plan';
+import { isRiverWalk, isVerge, type CellPlan3, type Road3 } from '../district/plan';
 import { KIND, lin, type MeshBuilder } from './meshBuilder';
 import type { OpenLayout } from './openLots';
 
@@ -30,6 +30,15 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rec
   for (const piece of subtract(cell, holes)) slab(piece, -0.2, 0, KIND.lot, KIND.lot, 0x6a6862);
   for (const r of plan.roads) slab(r.rect, 0, 0.02, KIND.asphalt, KIND.asphalt, r.kind === 'coast' ? 0x5a5e62 : 0x2a2a2e, r.sidewalk > 0 ? Math.min(63, Math.round(r.sidewalk * 2)) + (r.vertical ? 64 : 0) : 0);
   // Riverside walks: paved a step up from the street (plan.ts RIVER_WALK).
+  // The city's edge: a grass verge a step up from the outer street, a low guardrail along its far side.
+  for (const r of plan.roads) {
+    if (!isVerge(r)) continue;
+    slab(r.rect, 0, 0.14, KIND.grass, KIND.grass, 0x4a5a34);
+    const q = r.rect;
+    const out = r.vertical ? q.x + q.w / 2 > cell.x + cell.w / 2 : q.y + q.h / 2 > cell.y + cell.h / 2;
+    const rail = r.vertical ? { x: out ? q.x + q.w - 0.25 : q.x, y: q.y, w: 0.25, h: q.h } : { x: q.x, y: out ? q.y + q.h - 0.25 : q.y, w: q.w, h: 0.25 };
+    slab(rail, 0.14, 0.85, KIND.plain, KIND.plain, 0xa8acb0);
+  }
   // Along the water, the flood wall (a knee-high concrete parapet, as on the Sumida).
   for (const r of plan.roads) {
     if (!isRiverWalk(r)) continue;

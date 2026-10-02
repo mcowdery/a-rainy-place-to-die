@@ -30,6 +30,8 @@ export interface Road3 {
   readonly median: number;
   /** A waterfront walk (a 'coast' strip along a river or the bay: plan.ts RIVER_WALK). */
   readonly water?: 'river' | 'bay';
+  /** The city's edge: a planted verge (a 'coast' strip) between the outer street and the land beyond. */
+  readonly verge?: boolean;
 }
 
 export interface Sign3 {
@@ -199,6 +201,8 @@ export const RIVER_WALK = 8;
 const RIVER_ROAD = 12;
 /** A riverside walk: a coast strip wider than a plain one. */
 export const isRiverWalk = (r: Road3): boolean => r.water !== undefined;
+/** The city's edge (land beyond not built: unzoned cells, the hills): a planted verge, then the outer street. */
+export const isVerge = (r: Road3): boolean => r.verge === true;
 const FLOOR_H = 3;
 
 export const NEON_SIGN_COLORS = [0xff5fc8, 0x4fe3ff, 0xffe45f, 0x6bff8a, 0xff4f4f, 0xb48cff] as const;
@@ -435,6 +439,11 @@ export function planCell3(
   /** Cell edges widened to boulevards (edgeKey), e.g. the approaches to a scramble crossing. */
   /** Cell edges built to their own width (avenues, a scramble crossing's approaches): edgeKey to spec. */
   edges?: ReadonlyMap<string, EdgeSpec>,
+  /**
+   * Whether a cell is built (district/model.ts): a side whose neighbour isn't (an unzoned cell, the hills past
+   * the map) is the city's edge, with an outer street behind a planted verge, the cross streets ending at it.
+   */
+  built?: (mx: number, my: number) => boolean,
 ): CellPlan3 | null {
   const kind = macro.kindAt(mx, my);
   if (!isLand(kind)) return null;
@@ -470,7 +479,7 @@ export function planCell3(
   // Per side: the edge road built there (to trim at a river bank), whether it carries on over a bridge, and the
   // river banks.
   const edgeRoads: Partial<Record<keyof typeof insets, { i: number; bridge: boolean }>> = {};
-  const banks: [keyof typeof insets, 'river' | 'bay'][] = [];
+  const banks: [keyof typeof insets, 'river' | 'bay' | 'edge'][] = [];
   const held: (keyof typeof insets)[] = [];
   for (const [side, nx, ny, vertical] of sides) {
     const n = macro.kindAt(nx, ny);
@@ -487,6 +496,15 @@ export function planCell3(
     // A waterfront a set piece holds keeps its plain edge, but its cross streets still end where the walk
     // beside it would begin, level with the next cell's.
     if (n === 'water') held.push(side);
+    // The city's edge (the land beyond not built): the verge and the outer street, as a waterfront's.
+    if (n !== 'water' && built && !built(nx, ny)) {
+      if (!reserved.some((q) => overlaps(q, bandRect))) {
+        banks.push([side, 'edge']);
+        insets[side] = band;
+        continue;
+      }
+      held.push(side);
+    }
     if (!isLand(n)) {
       const r = side === 'w' ? { x: R.x, y: R.y, w: COAST, h: CELL } : side === 'e' ? { x: R.x + CELL - COAST, y: R.y, w: COAST, h: CELL }
         : side === 'n' ? { x: R.x, y: R.y, w: CELL, h: COAST } : { x: R.x, y: R.y + CELL - COAST, w: CELL, h: COAST };
@@ -522,7 +540,7 @@ export function planCell3(
         ? end === 'n' ? { ...walk, y: walk.y + cut, h: walk.h - cut } : { ...walk, h: walk.h - cut }
         : end === 'w' ? { ...walk, x: walk.x + cut, w: walk.w - cut } : { ...walk, w: walk.w - cut };
     }
-    roads.push({ ...road(walk, RIVER_WALK, vertical, true), water });
+    roads.push(water === 'edge' ? { ...road(walk, RIVER_WALK, vertical, true), verge: true } : { ...road(walk, RIVER_WALK, vertical, true), water });
     roads.push(road(at(RIVER_WALK, RIVER_ROAD), RIVER_ROAD, vertical));
   }
   // The cross streets: cut back to the waterfront street's far kerb (not into the walk or the water).

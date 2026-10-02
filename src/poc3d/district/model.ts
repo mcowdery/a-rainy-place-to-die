@@ -83,7 +83,7 @@ export class DistrictModel {
     if (!p) {
       const cellRect: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
       const reserved = [...this.placed.flatMap((q) => [reservedRect(q), plazaRect(q) ?? []].flat()), ...this.extraReserved].filter((r) => overlaps(r, cellRect));
-      p = planCell3(this.macro, mx, my, reserved, this.seed, this.zones.at(mx, my), this.edges)!;
+      p = planCell3(this.macro, mx, my, reserved, this.seed, this.zones.at(mx, my), this.edges, (x, y) => this.has(x, y))!;
       this.plans.set(k, p);
     }
     return p;

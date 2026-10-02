@@ -110,9 +110,12 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
       for (let my = by; my < by + BLOCK; my++) {
         for (let mx = bx; mx < bx + BLOCK; mx++) {
           const inMap = mx >= 0 && my >= 0 && mx < macro.cols && my < macro.rows;
-          if (inMap ? macro.kindAt(mx, my) !== 'void' || built(mx, my) : kind(mx, my) === 'water' || my >= macro.rows || mx >= macro.cols + pad) continue;
+          // The hills past the city, and land in the map no district builds (unzoned residential cells round
+          // the edge): the woods and the fringe of houses carry on over it rather than bare ground.
+          const unzoned = inMap && macro.kindAt(mx, my) === 'residential' && !built(mx, my);
+          if (inMap ? (macro.kindAt(mx, my) !== 'void' && !unzoned) || built(mx, my) : kind(mx, my) === 'water' || my >= macro.rows || mx >= macro.cols + pad) continue;
           const level = terrain.level(mx, my);
-          if (level <= 0) continue;
+          if (level <= 0 && !unzoned) continue;
           const x0 = mx * cell;
           const z0 = my * cell;
           // The foot of the hills (the first cells out): rows of houses on the rising ground, trees between.

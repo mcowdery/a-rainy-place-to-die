@@ -1,6 +1,6 @@
 import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng, u01 } from '../../core/hash';
-import { frontSpan, isRiverWalk, type Building3, type CellPlan3, type Road3 } from '../district/plan';
+import { frontSpan, isRiverWalk, isVerge, type Building3, type CellPlan3, type Road3 } from '../district/plan';
 import { frontFrame, styleFor } from './buildings';
 import { shopLight, TRADES } from './shops';
 import type { Light } from './lightmap';
@@ -150,6 +150,18 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
   for (const r of plan.roads) {
     if (isRiverWalk(r)) {
       riverWalk(r);
+      continue;
+    }
+    if (isVerge(r)) {
+      // The city's edge: a row of trees along the verge (camphors, evergreen, screening what's beyond).
+      const q = r.rect;
+      const t0 = r.vertical ? q.y : q.x;
+      const t1 = r.vertical ? q.y + q.h : q.x + q.w;
+      const c = r.vertical ? q.x + q.w / 2 : q.y + q.h / 2;
+      for (let t = t0 + 4; t < t1 - 3; t += 8) {
+        const [x, z] = r.vertical ? [c, t] : [t, c];
+        if (mine(x, z)) props.push({ kind: 'tree', species: 'camphor', x, z, nx: 0, nz: 1, radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8, size: 0.9 });
+      }
       continue;
     }
     if (r.kind === 'coast') continue;
