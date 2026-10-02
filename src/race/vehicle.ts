@@ -57,6 +57,8 @@ export interface CarSpec {
   readonly turbo?: number;
   /** Limited-slip differential 0-1: how much sideways grip the rear keeps while spinning (open: half). */
   readonly lsd?: number;
+  /** Half length and half width for walls (absent: a car's, 2.15 x 0.85; a motorcycle is far smaller). */
+  readonly size?: readonly [number, number];
 }
 
 export interface Assists {
@@ -345,7 +347,7 @@ export class Car {
     this.x += (nfx * u + nlx * w) * dt;
     this.z += (nfz * u + nlz * w) * dt;
     // Walls: pushed back inside, the velocity into the wall taken off (a little bounce), the spin damped.
-    const hit = ground.collide(this.x, this.z, this.h, 2.15, 0.85);
+    const hit = ground.collide(this.x, this.z, this.h, S.size?.[0] ?? 2.15, S.size?.[1] ?? 0.85);
     if (hit) {
       this.x += hit.px;
       this.z += hit.pz;

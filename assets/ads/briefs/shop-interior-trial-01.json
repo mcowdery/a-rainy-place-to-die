@@ -1,0 +1,15 @@
+{
+  "batch": "shop-interior-trial-01",
+  "purpose": "Trial: a Studio-painted storefront interior in the VN's look, to compare in the city against the atlas interiors with mob figures. One trade (izakaya). Seen through the glass, the photo is reprojected onto the shop's room (back wall in the middle, walls, floor and ceiling round it), so it must be a straight-on, one-point-perspective view from the doorway.",
+  "use": "sign",
+  "defaults": { "lora": null, "variants": 3, "width": 1536, "height": 864 },
+  "items": [
+    {
+      "id": "izakaya_interior",
+      "notes": "Must be one-point perspective with the vanishing point dead centre and the camera at standing eye height in the doorway, so the reprojection lines up. No people right in front of the camera.",
+      "style": "photorealistic cinematic film still, neo-noir, 1980s Tokyo city pop mood, 35mm film grain, deep focus, everything sharp",
+      "subject": "interior of a small old Japanese izakaya at night seen straight in from the open doorway, a long wooden counter running across the back of the room with red stools and a few salarymen sitting with their backs to us, the cook in a white jacket behind the counter, paper menu strips hanging on the back wall, sake bottles on shelves, red paper lanterns hanging from a dark wooden ceiling, worn concrete floor, warm amber light",
+      "composition": "strict one-point perspective, symmetrical, camera at eye height looking straight ahead at the back wall, vanishing point exactly in the centre of the frame, side walls receding evenly on both sides, ceiling at the top and floor at the bottom of the frame, nothing in the foreground"
+    }
+  ]
+}

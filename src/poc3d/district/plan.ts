@@ -58,6 +58,8 @@ export interface Building3 {
   /** A corner lot's corner cut at the junction (sumikiri): which footprint corner, and the cut's leg in metres. */
   readonly cut?: { readonly corner: Corner; readonly size: number };
   readonly hue?: number;
+  /** Its shop sign's text and colour, if it has one (the shop is what its sign says: real/shops.ts). */
+  readonly sign?: { readonly text: string; readonly color: number };
   /** The zone it was generated in (look and ads); absent for stamps and zone-less districts. */
   readonly zone?: Zone3;
 }
@@ -612,8 +614,9 @@ function towerBlock(block: Rect, f: Fill): void {
     const cx = front === 'east' ? site.x + back + w / 2 : front === 'west' ? site.x + site.w - back - w / 2 : site.x + site.w / 2 + jx;
     const cz = front === 'south' ? site.y + back + d / 2 : front === 'north' ? site.y + site.h - back - d / 2 : site.y + site.h / 2 + jz;
     const b: Building3 = { id: f.idBase + f.buildings.length, x: cx, z: cz, w, d, h: pickFloors(style, rnd) * FLOOR_H, front, ...(f.zone ? { zone: f.zone } : {}) };
-    f.buildings.push(b);
-    if (rnd.chance(style.signChance)) f.signs.push(makeSign(b, style, rnd));
+    const sign = rnd.chance(style.signChance) ? makeSign(b, style, rnd) : null;
+    f.buildings.push(withSign(b, sign));
+    if (sign) f.signs.push(sign);
   }
 }
 
@@ -713,8 +716,9 @@ function fillBlock(block: Rect, f: Fill): void {
       const corner: Corner | null = lotFront === 'west' ? (front === 'north' ? 'nw' : 'sw') : lotFront === 'east' ? (front === 'north' ? 'ne' : 'se') : null;
       const cut = corner && cutSize > 0 && height <= 45 && Math.min(x1 - x0, z1 - z0) >= 6 ? { cut: { corner, size: cutSize } } : {};
       const b: Building3 = { id: idBase + buildings.length, x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, h: height, front: lotFront, ...cut, ...(zone ? { zone } : {}) };
-      buildings.push(b);
-      if (rnd.chance(style.signChance)) signs.push(makeSign(b, style, rnd));
+      const sign = rnd.chance(style.signChance) ? makeSign(b, style, rnd) : null;
+      buildings.push(withSign(b, sign));
+      if (sign) signs.push(sign);
     }
   }
 }
@@ -772,6 +776,9 @@ export function frontSpan(b: Pick<Building3, 'w' | 'd' | 'front' | 'cut'>): [num
   const [a, e] = FACE_ENDS[b.front];
   return c.corner === a ? [c.size, fw] : c.corner === e ? [0, fw - c.size] : [0, fw];
 }
+
+/** A building with its sign's text and colour (what its shop is: real/shops.ts). */
+const withSign = (b: Building3, sign: Sign3 | null): Building3 => (sign ? { ...b, sign: { text: sign.text, color: sign.color } } : b);
 
 function makeSign(b: Building3, style: DistrictStyle3, rnd: Rng): Sign3 {
   const text = rnd.pick(style.signWords);

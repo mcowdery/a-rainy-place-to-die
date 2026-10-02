@@ -1,6 +1,7 @@
 import { hash, rng, type Rng } from '../../core/hash';
 import { frontPoint, frontSpan, frontWidth, type Building3, type Corner } from '../district/plan';
 import { EMIT, KIND, lin, scale3, type MeshBuilder } from './meshBuilder';
+import { HUES, hueOfColor, pickTrade, shopFlags, TRADE, TRADES } from './shops';
 
 /**
  * Realistic building styles and geometry. Everything is a pure function of the building (its id seeds
@@ -30,8 +31,11 @@ export interface RealStyle {
   readonly ratio: number;
   readonly winH: number;
   readonly shopOpen: boolean;
-  /** 0 warm, 1 cool white, 2 colourful, 3 dim bar. */
+  /** The shops' mood: 0 warm, 1 cool white, 2 colourful, 3 dim bar. */
   readonly shopPal: number;
+  /** What the shop is (shops.ts TRADE) and its own colour (an index into HUES; its sign's). */
+  readonly trade: number;
+  readonly hue: number;
   readonly flags: number;
   readonly parapet: number;
   readonly cornice: boolean;
@@ -112,21 +116,29 @@ export function styleFor(b: Building3): RealStyle {
   const shopPal = stamp ? 3 : weighted(rnd, look?.shops ?? [[40, 0], [30, 1], [15, 2], [15, 3]]);
   const darkFrame = rnd.chance(0.4) || type === WIN.curtain;
   const litBias = rnd.int(0, 7);
-  const flags = (shopOpen ? 1 : 0) + shopPal * 2 + (darkFrame ? 8 : 0) + litBias * 16 + (tiled ? 128 : 0) + (home ? HOME_FLAG : 0);
+  // The shop: what its sign says, else what its zone and mood suggest (from its own hash).
+  const [s0, s1] = frontSpan(b);
+  const { trade, hue } = stamp
+    ? { trade: TRADE.bar, hue: hueOfColor(b.hue!) }
+    : pickTrade({ id: b.id, sign: b.sign, words: b.zone?.style.signWords, colors: b.zone?.style.signColors, mood: shopPal, front: s1 - s0 - 0.7, tower: b.h >= 45 || type === WIN.curtain });
+  const flags = (shopOpen ? 1 : 0) + shopPal * 2 + (darkFrame ? 8 : 0) + litBias * 16 + (tiled ? 128 : 0) + (home ? HOME_FLAG : 0) + (home ? 0 : shopFlags(trade, hue));
   s = {
     wall: lin(wallHex),
     trim: lin(rnd.pick(TRIMS)),
-    accent: stamp ? lin(b.hue!) : lin(rnd.pick(ACCENTS)),
+    // (The pick stays so the rolls after it don't move; an awning takes the shop's own colour.)
+    accent: stamp ? lin(b.hue!) : (rnd.pick(ACCENTS), scale3(HUES[hue], 0.8)),
     type,
     bay,
     ratio,
     winH,
     shopOpen,
     shopPal,
+    trade,
+    hue,
     flags,
     parapet: 0.6 + rnd.float() * 0.5,
     cornice: rnd.chance(0.3) && !roof,
-    awning: shopOpen && rnd.chance(0.35),
+    awning: shopOpen && rnd.chance(0.35) && TRADES[trade].awning,
     home,
     roof,
   };

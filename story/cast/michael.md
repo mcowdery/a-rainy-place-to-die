@@ -14,7 +14,7 @@ he comes from, how he freed Mack, why he helps, what he wants.
 
 The hints, for the player to notice or not:
 - He never seems to age.
-- He knows things he can't (Mack's daughter's name; where Mack is).
+- He knows things he can't (what Megumi used to call Mack; where Mack is).
 - Clocks stop when he's in the room.
 - The order's machines won't touch him, or can't.
 

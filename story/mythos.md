@@ -10,7 +10,8 @@ never outright. Most of the story stays grounded; this is the part that isn't.
   and his own pleasures.
 - **Satan** is behind him, but only alluded to: never shown, never even talked about.
 - **He has no face.** Mack doesn't know what he looks like, and neither does the player: whenever he's shown,
-  his face is blocked or blurred (a reflection, a shadow, a hand, a smeared photograph). All anyone knows is
+  his face is blocked or blurred (a reflection, a shadow, a hand, a smeared photograph). Even Mack's
+  reconstructions can't render him: a blur, a void. All anyone knows is
   that he's Japanese, very wealthy, and that when he speaks, people listen.
 - **He is the figure the detective hunts**: Red John-like, elusive, everywhere, with followers. Every glimpse
   the detective gets of him is a glimpse of the man behind it all.
@@ -35,8 +36,13 @@ the player something about him.
   enables it, as it did for the sadistic aristocrats of history.
 - **Victims.** Men the circle has cuckolded: the men another man took a woman from, whom he counts as the bottom
   of the hierarchy. Never women; the women are his instrument, not his target. Never the men who did the taking.
-- **Method** (what he does to kill): the circle does the work first. Seduction, the recording, the man's ruin
-  delivered to him (the video sent to Minato). Then he's taken, at night, by the order's people.
+- **Method** (what he does to kill): the circle does the work first: the seduction, the recording. Then he comes
+  himself, by text, before the end: an unknown number posing as someone who knows the wrong being done to the man,
+  an ally. He feeds the man dread, then a false alarm and an apology, so relief comes and the end lands harder.
+  He delivers the ruin himself, without a word (the video sent to Minato). Then he keeps texting, mocking, sending
+  more, and finally lures the man out with a message forged in the woman's own name, from her own account, which
+  her phone shows she never sent.
+  The number doesn't exist.
 - **Signature** (what he does because he needs to): humiliation, layer by layer: the woman, the pride, the body,
   the life. The mutilation degrades; it isn't needed to kill. And the 200, small, somewhere near.
 - **Staging.** Every scene is dressed as something ordinary (a suicide, a murder-suicide, an accident), and the
@@ -44,6 +50,8 @@ the player something about him.
 - **Why.** Status, total and final: nothing of the man's rank is left. It's the cuckolding's psychology carried
   to its last step: the consensual game's humiliation, turned into a predator's. And it's pride, the sin that
   holds others beneath it.
+- **Mack.** At the end he gives Mack his own humiliation, in person: a recording of the night Mack, in a love
+  hotel bed, told a woman of the circle where his wife would be.
 - **His weakness.** He needs the humiliation to land. A man who has already forgiven, who has nothing left to be
   humiliated by, breaks the game (the oyabun, in autumn). Humility can't be humiliated.
 
@@ -66,10 +74,13 @@ they know it or not. It serves the man behind it.
     the order's name or something it refers to constantly.
   - **天降会 Amakudari-kai**, "those who descended from heaven". *Amakudari* is also the real word for
     bureaucrats retiring into cushy company posts, so it passes for ordinary corruption.
-  - **明星会 Myōjō-kai**, the Morning Star Society. 明けの明星, the morning star, is Lucifer's name in the
-    Japanese Bible (Isaiah 14:12).
+  - **黎明会 Reimei-kai**, the Society of the Dawn. Isaiah 14:12, in the Japanese colloquial Bible: 「黎明の子、明けの
+    明星よ、あなたは天から落ちてしまった」, "son of the dawn, morning star, you have fallen from heaven". Taken from
+    the fall of Lucifer, and only that: "morning star" alone is also a title of Christ and of Mary (a famous
+    Catholic school is 暁星, for Mary), so it isn't used. (It replaced 明星会 Myōjō-kai, which echoed Kabukichō's
+    Myojo 56 building fire of 2001.)
   - **Proposed:** each layer knows a different name and thinks it's the whole thing. The tangled cultists
-    worship as the **Myōjō-kai**; officials, politicians and executives who serve it know it as the
+    worship as the **Reimei-kai**; officials, politicians and executives who serve it know it as the
     **Amakudari-kai**, a network of favours; only the top speaks of **the Two Hundred**, and the player hears
     that name last.
 
@@ -82,7 +93,8 @@ they know it or not. It serves the man behind it.
 - **The detective is puzzled by it.** He sees people worshipping, praying to *something*, and doesn't fully
   understand what.
 - The dragon gives the Beast its power (Revelation 13:2): Ryujin Kogyo, "dragon god", whose dragon crowns the
-  mega-sign on the crossing. An allusion, not a plot point.
+  mega-sign on the crossing. An allusion, not a plot point. The neon dragon is red, for the great red dragon of
+  Revelation 12:3, and the mega-sign's corner sign between its screens is red with it.
 
 ## The Nephilim, transhumanism, and the state
 

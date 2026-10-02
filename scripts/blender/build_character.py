@@ -33,7 +33,7 @@ The definition (all keys but body optional):
   max_tex                largest texture side unless a part says otherwise (default 1024)
   skin, eyes, eyebrows, eyelashes, hair:  {"asset": name, ...part settings}
   clothes                [{"asset": name, ...part settings}]
-  garments               [{"type": "apron" | "headband" | "hair_cards", ...}]: see garments.py
+  garments               [{"type": "apron" | "headband" | "hair_cards" | "jacket", ...}]: see garments.py
   compare                a head-and-shoulders render framed like a reference photo, side by side
                          with it, for likeness work: see render_compare
 Part settings:
@@ -898,6 +898,8 @@ def main():
     if d['body'].get('sculpt'):
         sculpt(basemesh, bpy.data.objects[name + '.' + d['eyes']['asset']], d['body']['sculpt'])
     height = mb.standing_height(basemesh)
+    # Garments made from the whole skin (the jacket) come before the clothes' masks are applied.
+    made = garments.prepare(d.get('garments', []), name, rig, basemesh, tmpdir)
 
     # MPFB names everything after the character: <name>.body, <name>.<asset folder>.
     parts = []  # (object, settings)
@@ -932,6 +934,7 @@ def main():
         decimate(obj, part.get('decimate'))
     decimate(body, d['body'].get('decimate'), d['body'].get('protect', 'head'))
 
+    meshes += made
     for g in d.get('garments', []):
         meshes += garments.build(g, name, rig, body, meshes, L, tmpdir)
 

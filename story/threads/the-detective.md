@@ -3,9 +3,10 @@
 What runs under every season: his search for his wife, the blackmail, Michael, his memory coming back, and
 the figure behind it all. See [cast/mc.md](../cast/mc.md) for who he is.
 
-## His first night (day 1, Friday 22:00)
+## His first night (day 1, the small hours)
 
-Straight after the opening's message, the story cuts here.
+Straight after the cold open (Minato at the river, his phone lighting up), the same night, the story cuts here. (The game's day 1 starts here rather than
+at Friday 22:00.)
 
 1. **The room.** A themed room at Hotel Rouge. The standard edition opens after (the uncensored edition's scene
    comes before it, from Grok's brief). The married woman dresses and talks about her husband, away on
@@ -14,12 +15,14 @@ Straight after the opening's message, the story cuts here.
 2. **The message.** They leave separately. In the street his phone buzzes: KAIWA, from the Cash One collector.
    A still of the two of them in that room, tonight, from above the bed. "Monday. Same as always."
 3. **The walk.** The player walks him home, the first control of the detective: out of the Love District,
-   through the back alleys, past Cash One's posters, to Manga Café Tsukiyo and booth 17. Sirens pass, heading
-   north toward the university. He doesn't look up.
-4. **The morning.** The TV on the café's wall: a Tōto University student killed an upper-year student and then
-   himself, in a flat in the student town. A jealous boy, the newsreader says. A girl survived.
-5. **The door.** A few days later, the student's mother at the door of Kirishima Investigations in Kawabata: the police closed it in
-   a day, and she doesn't believe it. Minato's case begins.
+   through the back alleys, past Cash One's posters, to Manga Café Tsukiyo and booth 17.
+4. **Monday night.** Sirens pass, heading north toward the university. Mack doesn't look up.
+5. **Tuesday morning.** The TV on the café's wall: a Tōto University student killed an upper-year student and then
+   himself, in a flat in the student town: a fight between students, the newsreader says. A girl survived.
+6. **The door.** A few days later, the student's mother at the door of Kirishima Investigations in Kawabata: the police closed it in
+   a day, and she doesn't believe it. **Proposed:** she brings his phone, which the police gave back with his
+   things. Mack reads it, and so does the player: the stranger's messages, Koharu's unanswered ones, and the one
+   from Koharu that Koharu never sent. Minato's case begins.
 
 **The married woman** doesn't matter yet: a name, a ring she takes off in the lift, a husband away on business.
 
@@ -32,8 +35,9 @@ payment brings a visit and a threat to send his wife everything, not a game over
 
 **Proposed.** What saves her is the thing his name means: 誠, *makoto*, sincerity. The order's circle offers her
 forgiveness, which is a lie. Mack can't forgive her and doesn't pretend to. He gives her the one thing he has
-never given a woman: the truth. He tells her about the night his daughter died, the phone switched off in a love
-hotel, the first person he has ever told. Not absolution: company in the same sin. That's what she can't get
+never given a woman: the truth. He tells her what he is: a man searching for his wife from other women's beds, who
+can't stop and doesn't know why; the first person he has ever told. (The worst of it, that his lust is how Megumi
+was taken, he doesn't remember until the end.) Not absolution: company in the same sin. That's what she can't get
 from the order, and it's what brings her out.
 
 - **Spring:** she despises him, and he uses her testimony; she's a witness, nothing more. He sleeps around.

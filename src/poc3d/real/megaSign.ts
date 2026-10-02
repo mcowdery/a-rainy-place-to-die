@@ -369,14 +369,14 @@ export function buildMegaSign(u: CityUniforms, city: THREE.Material): MegaSign {
     screenLight(mid(wrap.faceA), LOW.y0, LOW.y1, LOW.w, 2),
     screenLight(mid(wrap.faceB), LOW.y0, LOW.y1, LOW.w, 3),
   );
-  // The corner sign: pink text on black, about a third lit.
+  // The corner sign: red text on black, about a third lit.
   const corner = wrap.at(mid(wrap.arc));
   lights.push({
     centre: corner.p.clone().addScaledVector(corner.n, 0.35).setY((MAIN.y0 + MAIN.y1) / 2),
     normal: corner.n.clone(),
     halfW: 3,
     halfH: (MAIN.y1 - MAIN.y0) / 2,
-    colour: (_t, neon, out) => out.setRGB(1.0, 0.25, 0.7).multiplyScalar(0.3 * (1.6 + 1.6 * neon)),
+    colour: (_t, neon, out) => out.setRGB(1.0, 0.0, 0.02).multiplyScalar(0.3 * (1.6 + 1.6 * neon)),
   });
 
   // Vertical 歌舞路 LED sign on the corner, between the two main screens.
@@ -388,7 +388,7 @@ export function buildMegaSign(u: CityUniforms, city: THREE.Material): MegaSign {
     ['歌', '舞', '路'].forEach((ch, i) => g.fillText(ch, 155, 70 + i * 130));
   });
   bezel(wrap.arc[0] - 0.4, wrap.arc[1] + 0.4, MAIN.y0 - 0.4, MAIN.y1 + 0.4);
-  const cornerMesh = new THREE.Mesh(strip(wrap, wrap.arc[0] - 0.3, wrap.arc[1] + 0.3, MAIN.y0, MAIN.y1, 0.3, 0), ledMaterial(u, sign, [62, 80], new THREE.Color(1.0, 0.25, 0.7), 0));
+  const cornerMesh = new THREE.Mesh(strip(wrap, wrap.arc[0] - 0.3, wrap.arc[1] + 0.3, MAIN.y0, MAIN.y1, 0.3, 0), ledMaterial(u, sign, [62, 80], new THREE.Color(1.0, 0.0, 0.02), 0));
   // Ticker: amber news crawl all the way round (one canvas width per ~40 m).
   const ticker = textCanvas(4096, 128, (g) => {
     g.font = "bold 104px 'Yu Gothic', 'Meiryo', sans-serif";

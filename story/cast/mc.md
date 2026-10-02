@@ -1,36 +1,29 @@
-# The detective (the MC)
+# Mack (the MC)
 
 **Role:** the main character, a detective. The thread through every season's story, though the stories are often not
 about him.
 **Home:** the housing ladder (see below). Starts in booth 17 at Manga Café Tsukiyo, Kaburo (`tsukiyo.booth_17`,
 `tsukiyo.sleep`).
-**Office:** Kōpo Kawabata, room 201, in the old town (`kopo.case_board`, `kopo.mailbox`): the
-worn wooden block with the case board, built as "the detective's". He works there and sleeps in booth 17.
-It's the office of 霧島探偵事務所 Kirishima Investigations (the agency on Kaburo's posters, "missing
-persons, cheating spouses, discretion"), run for forty years by an old detective, now ill and half retired, who
-hires Mack off the books soon after the story begins: the room, the agency's name on the door, its phone, its
-clients. Japan in this era doesn't license private detectives, so nobody asks for papers. The old man is
-rarely there, so Mack still works alone; when he's gone, the agency passes to Mack, and in the end to Koharu.
-The agency keeps the Kirishima name; the old detective is a new character, not the prototype's. **Open:** his
-name, and his story.
-**Name:** 真壁 誠 **Makabe Makoto**, his mother's name, as the family register has it: *makabe*, a
-true wall; *makoto*, sincerity, truth (the truth he's after, and the sincerity he never had with his wife). His
-American father called him **Mack**, and so does everyone who knows him: it's what the story calls him. Being legally dead, he lives on forged papers as a foreign resident: a
-dead Japanese cop hiding as a foreigner. They were in his coat when Michael got him out, a
-residence card with his photo and his father's surname; Michael has never mentioned them. Other surname candidates: 御堂 Midō, 榊 Sakaki,
-黒崎 Kurosaki.
-**Heritage:** half-American: an American father, a Japanese mother (his wife is Japanese), born and
-raised in Tōto. At 22 Japan made him choose one nationality, and he chose Japan (only a citizen can be a Tōto
-cop). Japan never quite chose him back: English spoken at him in the konbini, *gaijin* from other cops, patrolmen
-asking for a residence card he never had to carry. Too Japanese for Americans, too foreign for Japan. He stands
-out in any crowd, which is no help to a dead man hiding from the order. His father served at a US base in Japan.
-**Open:** his father's story, and whether it leads into the American thread.
-**Looks:** very attractive. In Japan his mixed looks are prized and still marked as other; they got him the women,
-and so fed what ruined him. The order rebuilt his face from photos: his, and a little too
-perfect, better-looking than he ever was alive. Only just: people notice he's handsome, not that he's wrong. It's
-never so uncanny that it makes him unattractive; at most, now and then, someone who knew him before looks twice.
+**Office:** Kōpo Kawabata, room 201, in the old town (`kopo.case_board`, `kopo.mailbox`): the office of
+霧島探偵事務所 Kirishima Investigations (the agency on Kaburo's posters, "missing persons, cheating spouses,
+discretion"), run for forty years by an old detective, now ill and half retired, who hires Mack off the books soon
+after the story begins: the room, the name on the door, the phone, the clients. Japan in this era doesn't license
+private detectives, so nobody asks for papers. The old man is rarely there, so Mack still works alone; when he's
+gone, the agency passes to Mack, and in the end to Koharu. **Proposed:** Mack was once his client: the
+foreigner who came, desperate, to pay him to find a missing wife, and whom he failed. He recognises Mack the day he
+walks in, and hires him without saying why. He knows more about Mack's past than he tells. **Open:** his name.
+**Heritage:** American. A foreigner in Tōto, who never learned Japanese (Megumi did the talking; see
+[language.md](../language.md)). He stands out in any crowd, which is no help to a dead man hiding from the order.
+**Name:** **Mack** is what he remembers being called, and it's what the story calls him. **Proposed:** his real
+name, which he doesn't remember at the start, is **Daniel McAllister** (**Open**). His papers (in his coat when Michael got him
+out, a residence card under a name he doesn't recognise; Michael has never mentioned them) make him someone else.
+Megumi called him 誠 *Makoto*, "sincerity", half as a joke, half as a hope.
+**Looks:** very attractive. In Japan a foreigner's good looks are prized and still marked as other; they got him the
+women, and so fed what ruined him. The order rebuilt his face from photos: his, and a little too perfect,
+better-looking than he ever was alive. Only just: people notice he's handsome, not that he's wrong; at most,
+someone who knew him before looks twice.
 **Age:** 41. He died at 39, a year and a half before the story; he escaped about six months ago.
-**Look:** **Open.**
+**Look:** **Open.** **Proposed** (the showroom model, `mack`, built to try it): dark hair swept back, grey eyes; a black tee, dark jeans, black boots, and a black leather single-rider jacket with a stand collar worn open (the bōsōzoku leader's, from the arrival; a Japanese cut, not the films' jacket). **Open:** whether the gang's name or a slogan is embroidered on its back, and in what kanji; the shotgun: a sawn-off lever-action (the nod to *Terminator 2*) or a sawn-off side-by-side (what a Japanese hunting licence covers, likelier in a yakuza stash).
 
 ## Who he is
 
@@ -53,7 +46,7 @@ never so uncanny that it makes him unattractive; at most, now and then, someone 
       yakuza stash, and sunglasses that hide eyes that don't quite react to light.
     - *The mirror* (*The Terminator*): repairing himself, cutting into his own arm or eye in the mirror.
     - *The face* (*RoboCop*): the first time he sees what they made of his face, and the memories it brings back.
-    - *The family* (*RoboCop*): walking through the empty flat where his wife and daughter used to live.
+    - *The family* (*RoboCop*): walking through the empty flat where he and Megumi used to live.
     - *His sight* (*RoboCop*, *The Terminator*): the targeting view through his eyes, as the game's own view in
       fights.
 - **Stronger than a man, powerless against the order.** His body makes him stronger than any human, but not
@@ -61,8 +54,8 @@ never so uncanny that it makes him unattractive; at most, now and then, someone 
   they are, and how little even he can do.
 - **A detective because he has to know.** Most of his memory is gone. He knows what happened to him, and that
   someone is out there (a Red John-like figure: the man behind it all, [mythos.md](../mythos.md)) with some kind
-  of organisation behind him. Finding the truth
-  is why he does this work.
+  of organisation behind him. Finding the truth, and Megumi, is why he does this work. He isn't good at it, at first; he learns it, because
+  he has to find her.
 - Not rich. He struggles with his own life, and the story shows it.
 - **A complex, sinful man.** Even while he looks for his wife, he drowns his sorrow in his vices. We meet him in
   bed with a married woman. He redeems himself as the story goes on.
@@ -80,46 +73,76 @@ never so uncanny that it makes him unattractive; at most, now and then, someone 
   dangerous for anyone close (see [dating.md](../dating.md)). That holds until the very end.
 - **The married woman** he's with when we meet him: someone who doesn't matter, for now. She may return.
 
-## Where his body came from
+## His past (which he doesn't remember)
 
-1. **Before.** A Tōto cop, honest in a bought department, but with vices, and mistakes that ruined him: debt.
-   His vices were lust: hostess clubs, then soaplands, then a string of affairs and one mistress
-   he kept in a flat he couldn't afford. The money went on women; the debt went to Cash One. He borrowed from a loan shark who, unknown to
-   him, fronts for the order, and in the fine print signed his body as collateral. He chose it.
-2. **His wife and child.** Something tragic happened to them. His wife may still be alive somewhere, and he's
-   looking for her.
-   - **Their daughter**, seven, fell ill: a fever that turned into something worse overnight. His wife called him
-     again and again from the hospital. He was in a love hotel with his phone off. The girl died before morning.
-   - **His wife**, 真壁 恵 **Makabe Megumi**. *Megumi* means grace, blessing (恵み is the word the
-     Japanese Bible uses for grace): the grace he never earned, and the thing he's chasing without knowing it.
-     She never forgave him, and he never forgave himself; the debts grew as he drowned it. After his "death" she
-     collected the insurance and vanished: gone from their flat, no word to her family.
-   - **What happened to her** has nothing to do with the order. She has disappeared, and has most likely been
-     trafficked; or she's dead. Mack doesn't know, and the story may not tell, perhaps not in the first game.
-     She's what keeps him fighting when finding the order seems impossible. Her story is never erotic, in
-     either edition.
-3. **The death.** He was killed on a case the order wanted buried, which also collected the collateral.
-4. **The machine.** He was rebuilt as a tool for the order to use. Losing most of his memory is a side effect of
-   dying and being built that way.
-5. **The escape.** He broke out, helped by **Michael** ([michael.md](michael.md)): a mysterious, knightly
-   figure who got him out and helped him get back on his feet, but tells him almost nothing and only shows up
-   now and then. Perhaps an angel; never said.
-6. **Now.** He's regained pieces of his memory: enough to know what happened, and that the figure and the
-   organisation exist. More comes back as the year goes on.
-   - He's legally dead: no ID, no lease, hence booth 17.
-   - In the order's books he's property. What hunts him is sent to repossess him, not kill him: cold, robotic
-     later models, his "siblings" (the Terminator element), far stronger than he is.
+Most of this is gone when the story starts: Mack and the player learn it together, over the year.
+
+1. **Nobody, before.** An American who never amounted to much: no good job, no plan, a string of bars and bad
+   decisions. He met Megumi in the States, where she'd come to study journalism, and she saw something in him
+   nobody else did. She was his grace even then.
+2. **Megumi**, 真壁 恵 Makabe Megumi. *Megumi* means grace, blessing (恵み is the word the Japanese Bible uses for
+   grace). She came home to Tōto for a job on the 東都新聞 Tōto Shimbun, one of the first women on its police beat,
+   and Mack followed her. She did everything: the flat, the forms, the language. She called him 誠 *Makoto*,
+   "sincerity", half as a joke, half as a hope.
+3. **Tōto, the first months.** He job-hunted and took whatever he could find without Japanese: teaching English at
+   a conversation school, nights on the door of a foreigners' bar in Kaburo. The night world, the women, the lust
+   he'd had all his life, found him there.
+4. **Megumi's case.** She stumbled onto rich men's parties and the girls who vanished from them: the circle, the
+   200. Her paper didn't want it. She kept going.
+5. **His fault** (he doesn't remember this until the very end). The woman he was sleeping with was the circle's. He talked in bed: about his wife
+   and her story, where she'd be, when. They took Megumi on a night he was with that woman. He never forgave
+   himself; he never told anyone.
+6. **Looking for her.** Useless at it, desperate, he borrowed from Cash One to pay a private detective (the old
+   man at Kirishima Investigations), and in the loan's fine print signed his body as collateral. Then he went
+   looking himself, got close to something, and was killed, the death dressed as an accident: "American drowned
+   in Tōto Bay". The same night collected the collateral: his body went to the order's programme.
+7. **What happened to her.** Taken because of her story; most likely trafficked, or dead. Mack doesn't know, and
+   the story may not tell, perhaps not in the first game. Her story is never erotic, in either edition.
+8. **The machine.** He was rebuilt as a tool for the order to use, and lost most of his memory doing it.
+9. **The escape.** He broke out, helped by **Michael** ([michael.md](michael.md)), who tells him almost nothing.
+10. **Now.** He's legally dead: no ID of his own, no lease, hence booth 17. In the order's books he's property.
+    What hunts him is sent to repossess him, not kill him: cold, robotic later models, his "siblings" (the
+    Terminator element), far stronger than he is.
+
+**What it makes of him.** He wasn't skilled before and isn't now: the machine gives him a body and eyes, not a
+detective's mind. He learns the work as he goes, because he has to find her. The man he becomes is the one she
+saw in him.
+
+### What he knows, and when the rest comes back
+
+His memory comes back a season at a time (the timings **Proposed**).
+
+| When | What comes back | How |
+|---|---|---|
+| Day 1 | That he died and was rebuilt; Michael; a faceless man and an organisation. Megumi's face and name, and that she was taken, so he looks for her. That people called him Mack. Not his full name, not how they came to Tōto, not her case, not his part in it. | What he woke up with |
+| Spring | His name; that she was a reporter. | The kōban officer finds his file: the missing-person report he filed for his wife, and his own death a few months later. Her byline in the Tōto Shimbun's archive, which he can't read. The old detective's look: Mack was his client. |
+| Spring finale | A fragment he can't place: a woman's perfume that isn't Megumi's, a hotel ceiling, a phone ringing that he doesn't answer. | His reconstruction of Minato's last night breaks into his own, for a moment. It means nothing to him yet. |
+| Summer | Her story: the circle, the 200. | Her notebooks, in Japanese he can't read; Koharu reads them to him. |
+| Autumn | How he died and was made, and the collateral he chose. | The hospital basement; Cash One's contract, with his signature. |
+| Winter, the end | **His part.** The woman in his bed was the circle's; he told her where his wife would be; they took Megumi on a night he was with her. All year he hunted the people who took her, and he handed her to them. | The faceless man shows it to him: a recording of that night (the circle films everything), Mack in the bed telling the woman where his wife would be. The memory comes back with it, near the very end. The spring fragment finally makes sense. |
 
 ## What he can do
 
 - **Spy and investigate better than a human:** see through cameras, and more. **Open:** the full list.
-- **Investigate the past.** Not necessarily a narrative device. His reconstruction: from the
-  evidence (cameras, traces, what people said), his machine mind rebuilds what happened, and the player plays it
-  as the person it happened to. A reconstruction can be wrong, and later evidence can show it: the noir twist of
-  having played what he *thought* happened.
-- **The story characters' side.** The player controls the story characters and sees through their eyes.
-  In the present, the story simply cuts to them (the story character at home tonight); the past
-  comes through his reconstructions. Nothing needs explaining.
+- **The reconstruction** (decided). From the evidence, his machine mind rebuilds what happened, and the player plays
+  it as the person it happened to: the game's way into every story character's point of view. Its rules keep it a
+  tool for the mystery, never a solution:
+  1. **It only rebuilds what the evidence supports.** Cameras, phone records, objects, what witnesses said. Where
+     there's no evidence there are gaps: static, grey, missing time. Each piece of evidence Mack finds unlocks or
+     fills in a stretch. Investigation is how you earn a reconstruction.
+  2. **It believes the evidence, lies included.** If a witness lies, the reconstruction shows the lie. The forged
+     message in Koharu's name plays as Koharu sending it, until Mack proves she didn't, and then that moment
+     glitches and rebuilds. The player has to doubt what they've played.
+  3. **It shows behaviour, not minds.** What people did and said, not what they thought. Inner lives come through
+     what they left behind: texts, a tape, the people who knew them.
+  4. **It can't see the order.** Its people scrub the cameras, and the faceless man can't be rendered: a blur, a
+     void, even here. Mack literally can't see him.
+  5. **It costs him.** Running one strains his body (heat, pain, a nosebleed of oil), and his own memories bleed in
+     (the spring fragment: a perfume, a hotel ceiling, a phone he doesn't answer).
+  6. **It came from the enemy.** The order built him to profile people and harvest their lives, and this is that
+     tool. He hunts them with their own weapon, and it shows him what they let it.
+- **The story characters' side.** In the present, the story can simply cut to them (the story character at home
+  tonight); the past comes through his reconstructions.
 
 ## What the game already gives him
 

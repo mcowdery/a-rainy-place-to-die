@@ -10,6 +10,11 @@ import { KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Pose } from '../real/people';
 import { Character, CHARACTERS, setCharacterEnvironment } from '../models/characters';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { FpMode } from './fpMode';
+import { buildShotgun, SHOTGUN_KINDS } from '../models/shotgun';
+import { buildBosozoku } from '../models/bosozoku';
+import type { Bike } from '../models/bikeKit';
+import { buildCruiser, CRUISER_LOOKS } from '../models/cruiser';
 import { addVehicle, addVehicleLow, addWheel, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, WORK_TYPES, type VehicleSpec, type VehicleType } from '../models/vehicles';
 import { Lightmap, paintLights, type Light } from '../real/lightmap';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
@@ -592,7 +597,8 @@ castPad.color = lin(0x8a867e);
 castPad.box(0, CAST_Z, 0, 0.15, Math.max(6, CHARACTERS.length * 2.2 + 2), 5, KIND.sidewalk);
 genRoot.new.add(new THREE.Mesh(castPad.build()!, city));
 const pmrem = new THREE.PMREMGenerator(renderer);
-setCharacterEnvironment(pmrem.fromScene(new RoomEnvironment(), 0.04).texture);
+const charEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+setCharacterEnvironment(charEnv);
 const cast: Character[] = [];
 CHARACTERS.forEach((name, i) => {
   const x = (i - (CHARACTERS.length - 1) / 2) * 2.2;
@@ -608,6 +614,63 @@ CHARACTERS.forEach((name, i) => {
     .catch((e: unknown) => console.warn(`character ${name}:`, e));
 });
 if (CHARACTERS.length > 0) genItems.new.push({ name: 'the cast', group: 'Characters', at: new THREE.Vector3(0, 1, CAST_Z), size: 3 + CHARACTERS.length, view: FRONT_VIEW });
+// Mack's shotguns (models/shotgun.ts), side by side on a stand at the end of the cast's pad.
+{
+  const gx = Math.max(6, CHARACTERS.length * 2.2 + 2) / 2 + 1.4;
+  const stand = new MeshBuilder();
+  stand.kind = KIND.plain;
+  stand.color = lin(0x2c2a28);
+  stand.box(gx, CAST_Z, 0.15, 0.95, 1.2, 0.8, KIND.plain);
+  genRoot.new.add(new THREE.Mesh(stand.build()!, city));
+  SHOTGUN_KINDS.forEach((k, i) => {
+    const gun = buildShotgun(k, charEnv);
+    gun.root.userData.shotgun = k;
+    // Lying on its right side across the stand, muzzle to the left, as on a gun dealer's table.
+    gun.root.rotation.set(0, -Math.PI / 2, Math.PI / 2);
+    gun.root.position.set(gx + 0.06, 1.2, CAST_Z - 0.18 + i * 0.36);
+    genRoot.new.add(gun.root);
+    label('new', `shotgun: ${k}`, gx, 1.42, CAST_Z - 0.18 + i * 0.36);
+    genItems.new.push({ name: `shotgun: ${k}`, group: 'Characters', at: new THREE.Vector3(gx + 0.1, 1.2, CAST_Z - 0.18 + i * 0.36), size: 0.42, view: new THREE.Vector3(0.05, 0.75, 0.66).normalize() });
+  });
+}
+// Bikes you can ride in first person (E by one).
+const rideable: Bike[] = [];
+// Mack's bike (models/bosozoku.ts), on the pad beyond the guns, turned three-quarters to the front.
+{
+  const bx = Math.max(6, CHARACTERS.length * 2.2 + 2) / 2 + 4.2;
+  const bike = buildBosozoku(charEnv);
+  bike.root.position.set(bx, 0.15, CAST_Z);
+  bike.root.rotation.y = -0.6;
+  bike.steer.quaternion.setFromAxisAngle(bike.steerAxis, 0.25);
+  genRoot.new.add(bike.root);
+  rideable.push(bike);
+  label('new', 'bike: Seika Shiden 400F (bōsōzoku)', bx, 2.0, CAST_Z);
+  genItems.new.push({ name: 'bike: bōsōzoku', group: 'Characters', at: new THREE.Vector3(bx, 0.8, CAST_Z), size: 1.6, view: new THREE.Vector3(-0.6, 0.25, 0.75).normalize() });
+}
+// The cruiser (models/cruiser.ts) beside it, in each of its colours.
+(Object.keys(CRUISER_LOOKS) as (keyof typeof CRUISER_LOOKS)[]).forEach((name, i) => {
+  const bx = Math.max(6, CHARACTERS.length * 2.2 + 2) / 2 + 6.8 + i * 2.6;
+  const bike = buildCruiser(charEnv, CRUISER_LOOKS[name]);
+  bike.root.position.set(bx, 0.15, CAST_Z);
+  bike.root.rotation.y = -0.6;
+  bike.steer.quaternion.setFromAxisAngle(bike.steerAxis, 0.25);
+  genRoot.new.add(bike.root);
+  rideable.push(bike);
+  label('new', `bike: Kaiun Raijin 1600 (${name})`, bx, 1.7, CAST_Z);
+  genItems.new.push({ name: `bike: cruiser (${name})`, group: 'Characters', at: new THREE.Vector3(bx, 0.7, CAST_Z), size: 1.7, view: new THREE.Vector3(-0.6, 0.25, 0.75).normalize() });
+});
+// First person as Mack (models/firstPerson.ts), on the cast's pad facing them. The floors: the cast pad and
+// the people's pavement are 0.15 m up.
+const castHalfW = Math.max(6, CHARACTERS.length * 2.2 + 2) / 2;
+const fpFloor = (x: number, z: number): number =>
+  (Math.abs(x) < castHalfW && Math.abs(z - CAST_Z) < 2.5) || (x > -10 && x < 28 && z > 6 && z < 34) ? 0.15 : 0;
+const fp = new FpMode(scene, camera, renderer.domElement, controls, charEnv, fpFloor);
+fp.bikes = rideable;
+const enterFp = (): void => void fp.enter(0.6, CAST_Z + 2.2, 0);
+(window as unknown as { __fp: unknown }).__fp = fp.script();
+// For scripted shots of a model on its own: three, the showroom's scene, the gun builder and the characters' light.
+(window as unknown as { __lab: unknown }).__lab = { THREE, scene, buildShotgun, buildBosozoku, buildCruiser, CRUISER_LOOKS, env: charEnv };
+if (new URLSearchParams(location.search).has('fp')) enterFp();
 const tPeople = performance.now() - t0 - tCars;
 
 // ---- Previous generation (for comparison) ----
@@ -737,6 +800,8 @@ function renderPanel(): void {
     section(g);
     for (const it of genItems[gen].filter((i) => i.group === g)) button(it.name, false, () => focus(it));
   }
+  section('First person');
+  button(fp.active ? 'back to orbiting (V)' : 'Mack, first person (V)', fp.active, () => (fp.active ? fp.exit() : enterFp(), setTimeout(renderPanel, 50)));
   section('View');
   button('overview', false, () => focus({ name: '', group: '', at: new THREE.Vector3(0, 1, 8), size: 20, view: new THREE.Vector3(0.3, 0.6, 0.75).normalize() }));
 }
@@ -748,6 +813,12 @@ const keys = new Set<string>();
 let turntable = false;
 let wire = false;
 window.addEventListener('keydown', (e) => {
+  if (fp.active) return;
+  if (e.code === 'KeyV') {
+    enterFp();
+    setTimeout(renderPanel, 50);
+    return;
+  }
   keys.add(e.code);
   if (e.code === 'Digit1') applyMode('studio');
   if (e.code === 'Digit2') applyMode('night');
@@ -780,6 +851,7 @@ const fwd = new THREE.Vector3();
 const right = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.1);
+  if (fp.active) keys.clear();
   const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 14 : 4) * dt;
   camera.getWorldDirection(fwd);
   right.crossVectors(fwd, camera.up).normalize();
@@ -796,7 +868,7 @@ renderer.setAnimationLoop(() => {
     controls.target.add(move);
     glide = null;
   }
-  if (glide) {
+  if (glide && !fp.active) {
     const t = Math.min(1, (performance.now() - glide.t0) / 600);
     const k = t * t * (3 - 2 * t);
     controls.target.lerpVectors(glide.from, glide.to, k);
@@ -804,13 +876,14 @@ renderer.setAnimationLoop(() => {
     if (t >= 1) glide = null;
   }
   controls.autoRotate = turntable;
-  controls.update();
+  if (fp.active) fp.update(dt);
+  else controls.update();
   cityU.uTime.value = performance.now() / 1000;
   ghost.uniforms.uTime.value = performance.now() / 1000;
   for (const c of cast) c.update(dt);
   composer.render(dt);
   labels.render(scene, camera);
-  $('hud').textContent = [
+  $('hud').textContent = fp.active ? fp.hud() : [
     `MODEL SHOWROOM · ${gen === 'new' ? 'NEW models (under review)' : 'previous models (district)'} · ${mode} lighting · built cars ${tCars.toFixed(0)} ms, people ${tPeople.toFixed(0)} ms`,
     'click a model to focus it · left-drag orbit · right-drag pan · wheel zoom · WASD / Q E fly (Shift faster)',
     `M new/previous models · 1 studio · 2 night · 3 day · L labels · X wireframe${wire ? ' (on)' : ''} · B bloom${bloom.enabled ? '' : ' (off)'} · R turntable${turntable ? ' (on)' : ''}`,

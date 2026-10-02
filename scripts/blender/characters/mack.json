@@ -1,0 +1,90 @@
+{
+  "name": "mack",
+  "out": "assets/characters/mack.glb",
+  "preview": "assets/characters/previews/mack.png",
+  "body": {
+    "gender": 1,
+    "years": 41,
+    "height_cm": 192,
+    "muscle": 0.82,
+    "weight": 0.62,
+    "proportions": 0.75,
+    "race": {"caucasian": 1},
+    "targets": {
+      "head-square": 0.35,
+      "chin-prominent-incr": 0.3,
+      "chin-width-incr": 0.25,
+      "lr-cheek-bones-incr": 0.2,
+      "lr-cheek-volume-decr": 0.35,
+      "nose-scale-vert-incr": 0.1,
+      "nose-hump-decr": 0.3,
+      "eyebrows-trans-down": 0.2,
+      "eyebrows-angle-down": 0.25,
+      "lr-eye-height2-decr": 0.2,
+      "mouth-scale-horiz-incr": 0.05,
+      "measure-neck-circ-incr": 0.35,
+      "measure-shoulder-dist-incr": 0.3
+    },
+    "decimate": 0.7
+  },
+  "max_tex": 1024,
+  "skin": {
+    "asset": "middleage_caucasian_male",
+    "max_tex": 2048,
+    "roughness": 0.55,
+    "ops": [
+      {"op": "grade", "saturation": 0.85},
+      {"op": "smooth", "radius": 2, "amount": 0.3},
+      {"op": "colorize", "color": "#17130f", "contrast": 0.5, "uvmask": "under_hair", "amount": 0.9}
+    ]
+  },
+  "eyes": {"asset": "high-poly", "color": "grey", "roughness": 0.35},
+  "eyebrows": {"asset": "eyebrow010", "double_sided": true},
+  "eyelashes": {"asset": "eyelashes01", "double_sided": true},
+  "hair": {
+    "asset": "culturalibre_hair_02",
+    "roughness": 0.5,
+    "double_sided": true,
+    "ops": [
+      {"op": "colorize", "color": "#16130f", "contrast": 0.6}
+    ]
+  },
+  "clothes": [
+    {
+      "asset": "male_casualsuit06",
+      "roughness": 0.85,
+      "metallic": 0,
+      "decimate": 0.55,
+      "delete_where": "(abs(x) > 0.24 and z > 1.25) or (v < 0.43 and z < 1.17 and (abs(x) > 0.1 or y > 0.0))",
+      "ops": [
+        {"op": "colorize", "color": "#1a1a1d", "contrast": 0.25, "rect": [0, 0, 1, 0.43]},
+        {"op": "colorize", "color": "#23272f", "contrast": 0.85, "rect": [0, 0.43, 0.82, 1], "sat": [0.15, 1]}
+      ]
+    },
+    {
+      "asset": "toigo_ankle_boots_male",
+      "roughness": 0.4,
+      "metallic": 0,
+      "ops": [
+        {"op": "colorize", "color": "#141313", "contrast": 0.7}
+      ]
+    }
+  ],
+  "garments": [
+    {
+      "type": "jacket",
+      "over": ["male_casualsuit06"],
+      "color": "#151313",
+      "roughness": 0.55,
+      "specular": 0.45,
+      "grain": 0.3,
+      "grain_tile": 0.035,
+      "smooth": 24,
+      "hem": -0.05,
+      "open_top": 0.035,
+      "open_bottom": 0.075,
+      "collar": 0.035,
+      "decimate": 0.45
+    }
+  ]
+}

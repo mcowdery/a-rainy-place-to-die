@@ -39,6 +39,9 @@ export interface CarView {
   /** Placed and turned like the car; the body is its child (hidden for the bumper camera). */
   readonly obj: THREE.Group;
   readonly body: THREE.Mesh;
+  /** The side windows (children of the body; their y lowers them into the doors: `rollWindows`). Left is the
+   * car's left (+x), the passenger's side; right the driver's. */
+  readonly windows: { readonly left: THREE.Mesh | null; readonly right: THREE.Mesh | null };
   readonly wheels: { m: THREE.Mesh; front: boolean; roll: number }[];
   /** Wheel radius (m), for turning them. */
   readonly r: number;
@@ -47,8 +50,17 @@ export interface CarView {
 export function buildCar(look: Look, material: THREE.Material): CarView {
   const { type } = look;
   const mb = new MeshBuilder(1 << 17);
-  addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type, paint: look.paint, paint2: look.paint2 ?? undefined, detail: 0.05, wheels: false, livery: look.livery ?? undefined });
+  const glass = { left: new MeshBuilder(1 << 12), right: new MeshBuilder(1 << 12) };
+  addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type, paint: look.paint, paint2: look.paint2 ?? undefined, detail: 0.05, wheels: false, livery: look.livery ?? undefined, sideWindows: glass });
   const body = new THREE.Mesh(mb.build()!, material);
+  const pane = (b: MeshBuilder): THREE.Mesh | null => {
+    const g = b.build();
+    if (!g) return null;
+    const m = new THREE.Mesh(g, material);
+    body.add(m);
+    return m;
+  };
+  const windows = { left: pane(glass.left), right: pane(glass.right) };
   const obj = new THREE.Group();
   obj.rotation.order = 'YXZ';
   obj.add(body);
@@ -63,7 +75,22 @@ export function buildCar(look: Look, material: THREE.Material): CarView {
   const lv = look.livery;
   if (lv) addLiveryText(body, type, lv.number, lv.banner);
   if (look.neon != null) addUnderglow(body, type, look.neon);
-  return { obj, body, wheels, r: W.r };
+  return { obj, body, windows, wheels, r: W.r };
+}
+
+/** How far a side window drops fully down (m): into the door, out of sight. */
+const WINDOW_DROP = 0.42;
+
+/** Rolls the side windows: 0 up, 1 fully down (each eased by the caller). */
+export function rollWindows(v: CarView, left: number, right: number): void {
+  if (v.windows.left) {
+    v.windows.left.position.y = -WINDOW_DROP * left;
+    v.windows.left.visible = left < 0.98;
+  }
+  if (v.windows.right) {
+    v.windows.right.position.y = -WINDOW_DROP * right;
+    v.windows.right.visible = right < 0.98;
+  }
 }
 
 /** The door roundels (a number in a white disc) and the windscreen banner, as canvas-textured quads. */

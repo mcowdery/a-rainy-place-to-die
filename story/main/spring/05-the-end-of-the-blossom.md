@@ -10,7 +10,7 @@ The spring finale. **Character:** Koharu, the girlfriend who survived the openin
   finally tells him lead to the circle that bought the videos: rich men, a party, the phrase "the two hundred".
   For a moment, in the background of a recording, a man: the first glimpse of the figure behind it all.
 - **The offer.** A gentle circle of women finds Koharu and offers what she can't find anywhere: forgiveness.
-  They are the Myōjō-kai's followers, the order's lowest rung.
+  They are the Reimei-kai's followers, the order's lowest rung.
 - **The end of spring.** The last blossom falls. The number 200 turns up where only Mack will see it: they
   know he's looking.
 - **The machine.** **Proposed:** the reason they know is Monday. Cash One's collectors got greedy, someone above

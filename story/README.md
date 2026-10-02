@@ -20,6 +20,7 @@ It's plain Markdown in git, next to the content it points at (node ids in `conte
 | [main/](main/README.md) | The main story: one per season, in chapters, with its lead, reveal and machine |
 | [side/](side/README.md) | Optional side content: side cases, side stories, and the pool of ideas not yet placed |
 | [threads/](threads/README.md) | Plot threads: what happens, the clues, the flags, the scenes |
+| [language.md](language.md) | Mack's lost Japanese, and the mechanic: the English arriving in parentheses as he learns |
 | [dating.md](dating.md) | The open world's dating: one-night stands and short stories, how they play, the rules |
 | [timeline.md](timeline.md) | Chapters (one per season), the map by season, what each season brings |
 | [flags.md](flags.md) | Every flag: what the engine owns, what the story sets, where each is set and read |

@@ -15,7 +15,7 @@ import { splat, type TargetHit, type Targets } from './targets';
  */
 
 export interface Weapon {
-  readonly id: 'pistol' | 'paint';
+  readonly id: 'pistol' | 'paint' | 'shotgun';
   readonly label: string;
   readonly mag: number;
   /** Seconds to reload, between shots; auto fires while the trigger is held. */
@@ -31,6 +31,9 @@ export interface Weapon {
 export const WEAPONS: readonly Weapon[] = [
   { id: 'pistol', label: '黒星 Type 54', mag: 8, reload: 1.8, interval: 0.14, auto: false, spread: 0.005, speed: 0, kick: 0.02 },
   { id: 'paint', label: 'Paintball', mag: 60, reload: 2.6, interval: 0.11, auto: true, spread: 0.01, speed: 88, kick: 0.003 },
+  // Mack's sawn-off: its shells, lever and pose are his rig's (the page fires it: `blast`); the spread is the
+  // pellets' cone.
+  { id: 'shotgun', label: 'Sawn-off lever-action', mag: 5, reload: 2.2, interval: 0.6, auto: false, spread: 0.04, speed: 0, kick: 0.06 },
 ];
 
 const DEG = Math.PI / 180;
@@ -137,7 +140,7 @@ export interface FireContext {
   readonly carVel: THREE.Vector3;
   /** Shooting through the passenger window from the driver's seat; the car's slide (rad) and speed, which open the spread. */
   readonly across: boolean;
-  /** From the hip (not aiming): far wider spread, no assist. */
+  /** From the hip (not aiming): twice the spread, no assist. */
   readonly hip: boolean;
   readonly slide: number;
   readonly speed: number;
@@ -184,7 +187,7 @@ export class Shooting {
   private readonly flashSprite: THREE.Sprite;
   private flashT = 0;
   private readonly guns: Record<Weapon['id'], THREE.Group>;
-  private readonly muzzleZ: Record<Weapon['id'], number> = { pistol: 0.2, paint: 0.52 };
+  private readonly muzzleZ: Record<Weapon['id'], number> = { pistol: 0.2, paint: 0.52, shotgun: 0.6 };
   private paintNext = 0;
   /**
    * Cars that can be shot (invisible hit volumes with `userData.id`; never the shooter's own), and what to do
@@ -297,8 +300,10 @@ export class Shooting {
       new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.12, 12).translate(0, 0.14, 0.06), hopper),
       new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.09, 0.04).rotateX(-0.25).translate(0, -0.03, 0.0), body),
     );
-    this.arm.add(pistol, paint);
-    this.guns = { pistol, paint };
+    // (The shotgun is in Mack's hand, not on this arm.)
+    const shotgun = new THREE.Group();
+    this.arm.add(pistol, paint, shotgun);
+    this.guns = { pistol, paint, shotgun };
     this.arm.visible = false;
     this.pickWeapon(0);
   }
@@ -410,6 +415,8 @@ export class Shooting {
   fire(ctx: FireContext, held: boolean): number {
     const W = this.weapon;
     if (held && !W.auto) return 0;
+    // The shotgun is Mack's to fire (his rig's shells and lever; the page calls `blast`).
+    if (W.id === 'shotgun') return 0;
     if (this.reloading > 0 || this.cooldown > 0) return 0;
     const muzzle = this.muzzle(new THREE.Vector3());
     if (this.ammo[this.weaponIndex] <= 0) {
@@ -505,6 +512,52 @@ export class Shooting {
 
   private miss(): void {
     this.streak = 0;
+  }
+
+  /**
+   * A shotgun's blast from `muzzle` along `dir`: `pellets` hitscan rays in a cone of half-angle `spread`, each
+   * striking a target, a car or the ground; one shot and (if any pellet struck) one hit in the tally, each
+   * pellet's points scored. Out of the page's own gun (Mack's, models/firstPerson.ts), so no ammo here.
+   */
+  blast(muzzle: THREE.Vector3, dir: THREE.Vector3, pellets: number, spread: number, mult: number, why: string): void {
+    this.shots++;
+    this.events.push({ kind: 'pistol', at: muzzle.clone() });
+    this.flashAt(muzzle);
+    let struck = false;
+    let points = 0;
+    let base = 0;
+    for (let i = 0; i < pellets; i++) {
+      const d = dir.clone().normalize();
+      jitter(d, spread);
+      const p = this.pick(muzzle, d, 220);
+      if (i === 0) this.showTracer(muzzle, p.point);
+      if (p.target) {
+        const b = this.targets.hit(p.target, 'bullet');
+        base += b;
+        points += Math.round(b * mult);
+        struck = true;
+        const plate = p.target.target.kind === 'plate';
+        this.burst(p.point, plate ? [3, 1.6, 0.5] : [0.92, 0.9, 0.84], plate ? 8 : 5, plate ? 4 : 2, p.target.normal);
+        if (i % 3 === 0) this.events.push({ kind: plate ? 'ding' : 'paper', at: p.point });
+      } else if (p.body) {
+        struck = true;
+        this.burst(p.point, [3, 1.8, 0.7], 6, 4, p.body.normal);
+        this.onBody?.(p.body, 'bullet');
+      } else if (p.ground) {
+        this.mark(p.point, 'hole');
+        if (i % 2 === 0) this.burst(p.point, [0.55, 0.5, 0.45], 5, 2.5);
+      }
+    }
+    if (struck) {
+      this.hits++;
+      this.streak++;
+      this.bestStreak = Math.max(this.bestStreak, this.streak);
+      this.hitMark = 0.25;
+      if (points > 0) {
+        this.score += points;
+        this.scored.push({ points, base, mult, why });
+      }
+    } else this.miss();
   }
 
   /** Clean the targets and the ground, and start the score again. */
@@ -649,7 +702,7 @@ export class Shooting {
 
 /** A shot's spread (rad, the cone's half-angle): it opens with the slide and the speed, across the car and from the hip. */
 export function spreadOf(W: Weapon, c: { slide: number; speed: number; across: boolean; hip: boolean }): number {
-  return W.spread * (1 + Math.abs(c.slide) * 2.5 + c.speed / 30) * (c.across ? 2.5 : 1) * (c.hip ? 6 : 1);
+  return W.spread * (1 + Math.abs(c.slide) * 2.5 + c.speed / 30) * (c.across ? 2.5 : 1) * (c.hip ? 2 : 1);
 }
 
 /** Turn a unit vector by a random angle within a cone of half-angle a. */

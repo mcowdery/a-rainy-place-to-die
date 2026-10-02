@@ -226,6 +226,12 @@ export class FirstPerson {
     }
   }
 
+  /** The view's pitch (radians, up positive) when it's a shift of the image rather than the camera's own
+   * (shear mode); undefined when the camera pitches. */
+  get viewPitch(): number | undefined {
+    return this.shearOn ? Math.atan(this.shear * this.tanHalfFov()) : undefined;
+  }
+
   /** Rebuild the projection with the vertical shift (an off-axis frustum; depth is unaffected). */
   private applyProjection(): void {
     this.camera.updateProjectionMatrix();

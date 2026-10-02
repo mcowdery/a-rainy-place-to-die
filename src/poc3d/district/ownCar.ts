@@ -11,6 +11,7 @@ import type { DrivenVehicle, TrafficSystem } from '../real/traffic';
 import type { Expressway } from './expressway';
 import { DRY, weatherAfter, weatherBefore, weatherGrip, type RoadWeather } from './roadGrip';
 import { assistsBy, loadTuning, tunedBy, type Tuning } from '../../race/tuning';
+import { BIKES, type BikeId } from '../../race/bikeRide';
 import {
   DIRECT,
   impactDamage,
@@ -58,12 +59,16 @@ export interface DeckObstacle {
  * crumples and scrapes there; a flat tyre drops its corner and a damaged one wobbles), is listed for the HUD
  * (`hits`), costs power (the front) and grip (the tyres), and is kept with the car in the profile; a totalled
  * car won't go (`onTotaled`; the garage repairs it).
+ *
+ * Or your motorcycle (`bike`: race/bikeRide.ts' BIKES): the same model, ground and crashing, its own spec and
+ * saved spot (`citypop.city.bike`); no dents or damage yet; the page draws it and its rider (`onPose`).
  */
 
 /** The city: road assists, but with room to slide (the expressway's long bends). */
 export const CITY_ASSISTS: Assists = { ...ROAD_ASSISTS, maxSlide: (38 * Math.PI) / 180 };
 
 const SAVE_KEY = 'citypop.city.car';
+const BIKE_SAVE_KEY = 'citypop.city.bike';
 /** The car's centre line is probed with small circles (what can stop it), its sides with more (drive through). */
 const CL = 0.35;
 const SIDE = 0.55;
@@ -112,7 +117,14 @@ export class OwnCar {
   private readonly smokeLife: Float32Array;
   private smokeNext = 0;
   /** The damage showing on the car (race/dents.ts), redone when it changes. */
-  private readonly dents: Dents;
+  private readonly dents: Dents | null;
+  /** A motorcycle (else a car), its half length and width, where it's kept. */
+  readonly bike: BikeId | null;
+  private readonly hl: number;
+  private readonly hw: number;
+  private readonly saveKey: string;
+  /** A bike's drawing each frame (the page's: race/bikeRide.ts), called from `pose`. */
+  onPose: ((dt: number) => void) | null = null;
   private reshape = true;
   private unsaved = false;
   private keptT = 0;
@@ -127,22 +139,42 @@ export class OwnCar {
     atHome = false,
     /** The lie of the land (terrain.ts): the street's height on the hills. */
     private readonly terrain: Terrain = Terrain.FLAT,
+    bike: BikeId | null = null,
   ) {
+    this.bike = bike;
+    this.saveKey = bike ? BIKE_SAVE_KEY : SAVE_KEY;
     const height = (x: number, z: number): number => this.ex?.at(x, z, this.sim.y)?.height ?? this.terrain.height(x, z);
-    const mine = currentCar(loadProfile());
-    this.carId = mine.id;
-    this.parts = partsOf(mine);
-    const m = model(mine.type);
-    this.name = `${m.maker} ${m.name}`;
-    // Its parts, and the driving tuning on top (race/tuning.ts; the debug menu's Car: tune driving).
-    this.baseSpec = tunedSpec(mine.type, mine.parts);
     const tuning = loadTuning();
-    this.sim = new Car(tunedBy(this.baseSpec, tuning), assistsBy(CITY_ASSISTS, 'road', tuning));
-    this.view = buildCar({ type: mine.type, paint: mine.paint, paint2: mine.paint2, livery: mine.livery, neon: mine.neonFitted ? mine.neon : null }, material);
-    this.sound.configure(m.sound);
-    const zs = wheelLayout(mine.type).spots.map((s) => s.z);
-    this.wheelAlong = [Math.min(...zs), Math.max(...zs)];
-    this.dents = new Dents(this.view);
+    if (bike) {
+      // A motorcycle: its spec and sound; the view is a holder the page puts the bike in (onPose draws it).
+      const def = BIKES[bike];
+      this.carId = '';
+      this.parts = newParts();
+      this.name = def.name;
+      this.baseSpec = def.spec;
+      this.sim = new Car(tunedBy(this.baseSpec, tuning), assistsBy(CITY_ASSISTS, 'road', tuning));
+      this.view = { obj: new THREE.Group(), body: new THREE.Mesh(), windows: { left: null, right: null }, wheels: [], r: 0.33 };
+      this.sound.configure(def.sound);
+      this.wheelAlong = [-0.78, 0.86];
+      this.dents = null;
+      [this.hl, this.hw] = def.spec.size ?? [1.15, 0.45];
+    } else {
+      const mine = currentCar(loadProfile());
+      this.carId = mine.id;
+      this.parts = partsOf(mine);
+      const m = model(mine.type);
+      this.name = `${m.maker} ${m.name}`;
+      // Its parts, and the driving tuning on top (race/tuning.ts; the debug menu's Car: tune driving).
+      this.baseSpec = tunedSpec(mine.type, mine.parts);
+      this.sim = new Car(tunedBy(this.baseSpec, tuning), assistsBy(CITY_ASSISTS, 'road', tuning));
+      this.view = buildCar({ type: mine.type, paint: mine.paint, paint2: mine.paint2, livery: mine.livery, neon: mine.neonFitted ? mine.neon : null }, material);
+      this.sound.configure(m.sound);
+      const zs = wheelLayout(mine.type).spots.map((s) => s.z);
+      this.wheelAlong = [Math.min(...zs), Math.max(...zs)];
+      this.dents = new Dents(this.view);
+      this.hl = HL;
+      this.hw = HW;
+    }
     this.ground = {
       height,
       normal: (x, z) => {
@@ -158,7 +190,7 @@ export class OwnCar {
     let at = home;
     if (!atHome) {
       try {
-        const s = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null') as { x: number; z: number; h: number; y?: number } | null;
+        const s = JSON.parse(localStorage.getItem(this.saveKey) ?? 'null') as { x: number; z: number; h: number; y?: number } | null;
         if (s && [s.x, s.z, s.h].every(Number.isFinite)) at = s;
         if (s && Number.isFinite(s.y)) this.sim.y = s.y!;
       } catch {
@@ -171,7 +203,7 @@ export class OwnCar {
     this.sim.place(at.x, at.z, at.h, this.ground);
     // Left up on the expressway: back up there (its height at that spot).
     this.sim.y = this.ex?.at(at.x, at.z, y0)?.height ?? this.sim.y;
-    this.vehicle = traffic.addOwn(this.view.obj, 2.2, 1.8, this.name, at.x, at.z, Math.sin(at.h), Math.cos(at.h));
+    this.vehicle = traffic.addOwn(this.view.obj, this.hl + 0.05, this.hw * 2, this.name, at.x, at.z, Math.sin(at.h), Math.cos(at.h));
     this.sync();
     // Engine smoke (grey puffs from under the bonnet), for a car with a smashed front.
     const N = 90;
@@ -319,7 +351,7 @@ export class OwnCar {
     const hit = this.contact as { kind: HitKind; along: number; across: number; nx: number; nz: number } | null;
     if (hit?.kind === 'wall') this.glance(dt, hit.nx, hit.nz);
     if (hit && hit.kind !== 'person') {
-      const shares = sectionsAt(hit.along, hit.across, HL, HW, this.wheelAlong);
+      const shares = sectionsAt(hit.along, hit.across, this.hl, this.hw, this.wheelAlong);
       // A real hit costs by the speed into it (and a little by the speed at all: a glancing knock); sliding
       // along a wall, a scrape.
       const d = impactDamage(this.sim.bump) + (this.sim.bump > 2 ? 0.05 * this.sim.speed : 0);
@@ -361,7 +393,8 @@ export class OwnCar {
 
   /** Damage `d` to the parts by their shares: kept, shown on the car, and listed for the HUD. */
   private take(shares: Partial<Parts>, d: number): void {
-    if (d <= 0) return;
+    // (A bike takes no damage yet.)
+    if (d <= 0 || this.bike) return;
     for (const [k, v] of Object.entries(shares) as [Section, number][]) {
       const before = this.parts[k];
       this.parts[k] = Math.min(WRECKED, before + d * v);
@@ -383,10 +416,11 @@ export class OwnCar {
     const s = this.sim;
     const fx = Math.sin(s.h);
     const fz = Math.cos(s.h);
-    const hl = HL - 0.3;
+    const hl = this.hl - 0.3;
+    const side = this.bike ? 0.3 : SIDE;
     const now = new Map<'car' | 'pole' | 'soft', [number, number][]>();
     for (const f of [hl, hl / 3, -hl / 3, -hl]) {
-      for (const lat of [0, SIDE, -SIDE]) {
+      for (const lat of [0, side, -side]) {
         const k = this.kindAt(s.x + fx * f + fz * lat, s.z + fz * f - fx * lat, CL);
         if ((k !== 'car' && k !== 'pole' && k !== 'soft') || k === stopped) continue;
         const at = now.get(k) ?? [];
@@ -401,7 +435,7 @@ export class OwnCar {
         // The parts touching it share the knock (a probe out at the side stands for the side's skin).
         const shares: Partial<Parts> = {};
         for (const [a, lat] of where) {
-          for (const [sec, v] of Object.entries(sectionsAt(a, lat === 0 ? 0 : Math.sign(lat) * HW, HL, HW, this.wheelAlong)) as [Section, number][]) {
+          for (const [sec, v] of Object.entries(sectionsAt(a, lat === 0 ? 0 : Math.sign(lat) * this.hw, this.hl, this.hw, this.wheelAlong)) as [Section, number][]) {
             shares[sec] = (shares[sec] ?? 0) + v / where.length;
           }
         }
@@ -434,13 +468,17 @@ export class OwnCar {
 
   /** Every frame: the body on the ground, the wheels turning, the damage showing, the smoke of a smashed front. */
   pose(dt: number): void {
+    if (this.bike) {
+      this.onPose?.(dt);
+      return;
+    }
     poseCar(this.view, this.sim, this.ground);
     turnWheels(this.view, this.sim, dt);
     const P = this.parts;
-    this.dents.tyres(P);
+    this.dents?.tyres(P);
     if (this.reshape) {
       this.reshape = false;
-      this.dents.apply(P);
+      this.dents?.apply(P);
     }
     const s = this.sim;
     const heavy = Math.max(0, (P.front - 45) / 55);
@@ -493,7 +531,7 @@ export class OwnCar {
     this.saveT = 0;
     if (this.unsaved) this.keepCondition();
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ x: this.sim.x, z: this.sim.z, h: this.sim.h, y: this.sim.y }));
+      localStorage.setItem(this.saveKey, JSON.stringify({ x: this.sim.x, z: this.sim.z, h: this.sim.h, y: this.sim.y }));
     } catch {
       /* this session only */
     }

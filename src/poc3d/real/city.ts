@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { screenLightGlsl, screenUniforms, type ScreenUniforms } from './screenLight';
+import { shopGlsl } from './shopShader';
+import { TRADE } from './shops';
 
 /** Cars whose headlights light the city (the nearest to the camera). */
 export const CAR_LIGHTS = 16;
@@ -68,6 +70,9 @@ export interface CityUniforms extends ScreenUniforms {
   /** Daylight reaching room interiors (unlit rooms read as dim by day, black by night). */
   uRoomAmbient: { value: THREE.Color };
   tLight: { value: THREE.Texture | null };
+  /** The storefront interiors' atlas (shopAtlas.ts): colour and mask; null leaves shops dark inside. */
+  tShopCol: { value: THREE.Texture | null };
+  tShopMask: { value: THREE.Texture | null };
   /** Lightmap placement: (x0, z0, 1 / width, 1 / depth) in metres. */
   uLightRect: { value: THREE.Vector4 };
   /** Fades the lightmap out between these max-norm distances from the camera (m); (0, 0) for none (lightmap.ts). */
@@ -103,6 +108,8 @@ export function cityUniforms(): CityUniforms {
     uHorizon: { value: new THREE.Color(0x2a2230) },
     uRoomAmbient: { value: new THREE.Color(0x000000) },
     tLight: { value: null },
+    tShopCol: { value: null },
+    tShopMask: { value: null },
     uLightRect: { value: new THREE.Vector4(0, 0, 1, 1) },
     uLightFade: { value: new THREE.Vector2(0, 0) },
     uLightGain: { value: 1 },
@@ -398,6 +405,7 @@ const common = /* glsl */ `
   float flick(float id) {
     return uFlicker > 0.5 && h2(vec2(id, floor(uTime * 12.0))) > 0.99 ? 0.1 : 1.0;
   }
+  ${shopGlsl()}
 `;
 
 const surface = /* glsl */ `
@@ -417,6 +425,8 @@ const surface = /* glsl */ `
   float sMetal = 0.0;
   vec3 sEmit = vec3(0.0);
   vec3 Vw = normalize(vWPos - cameraPosition);
+  // A pixel's angle (for the shop interiors' texture detail), while the derivatives are still defined.
+  float pxAng = max(length(fwidth(Vw)), 1e-5);
   vec3 Nw = normalize(vWNor);
   bool groundKind = kindF > 6.5;
   float cosV = clamp(-dot(Vw, Nw), 0.0, 1.0);
@@ -591,81 +601,155 @@ const surface = /* glsl */ `
         if (!frame) sEmit = mix(refl * fresnel(cosV), vec3(1.0, 0.82, 0.55) * 0.35, inLit);
       }
     } else if (isFront && v < GF) {
-      // Storefront: pillars, fascia, then glass (open) or a shutter (closed).
-      float pil = 0.35;
+      // Storefront (shops.ts, shopShader.ts): pillars, a fascia, then the shop's glazing with what's inside it
+      // (its trade's room), or a shutter. At a tower's foot a lobby, bank or showroom runs its glass up to the
+      // first floor.
+      int tr = int(mod(floor(vFlags / 512.0), 32.0) + 0.5);
+      if (tr == 0 && shopPal > 2.5) tr = ${TRADE.bar};
+      vec3 hue = SHOP_HUES[int(mod(floor(vFlags / 16384.0), 8.0) + 0.5)];
+      vec4 gz = SHOP_GLASS[tr];
+      bool towerFoot = (type > 1.5 && type < 2.5) || floors >= 12.0;
+      bool tallFront = towerFoot && (tr == ${TRADE.lobby} || tr == ${TRADE.bank} || tr == ${TRADE.hotel} || tr == ${TRADE.fashion} || tr == ${TRADE.gym} || tr == ${TRADE.cafe});
+      float gTop = tallFront ? 3.95 : 2.95;
+      float fasc = tallFront ? 4.1 : 3.05;
+      float pil = tallFront ? 0.25 : 0.35;
       float sw = faceW - 2.0 * pil;
       float sx = u - pil;
+      bool woodF = (gz.y > 0.5 && gz.y < 1.5) || gz.y > 2.5;
+      vec3 woodC = vec3(0.2, 0.11, 0.05) * (0.85 + 0.3 * h1(vBid + 13.0));
+      vec3 frameC = woodF ? woodC : darkFrame ? vec3(0.05) : vec3(0.42, 0.44, 0.47);
+      float hb = h1(vBid + 57.0);
+      vec3 L = shopLightOf(tr, hue, shopPal, h1(vBid + 21.0));
       if (sx < 0.0 || sx > sw) {
-        albedo = wallCol * 0.9;
-      } else if (v > 3.05) {
-        albedo = mix(vec3(0.02), wallCol * 0.45, h1(vBid + 3.0));
-        sRough = 0.45;
-      } else if (shopOpen) {
-        float nm = max(1.0, floor(sw / 1.6));
-        float mw = sw / nm;
-        float mx = sx - floor(sx / mw) * mw;
-        if (mx < 0.05 || mx > mw - 0.05 || v < 0.28 || v > 2.95) {
-          albedo = vec3(0.05);
-          sMetal = 0.7;
-          sRough = 0.35;
+        albedo = tallFront ? wallCol * 0.7 : wallCol * 0.9;
+        // A barber's pole turning on the pillar by the door.
+        float pu = u - 0.17;
+        if (tr == ${TRADE.salon} && hb < 0.4 && abs(pu) < 0.09 && v > 1.2 && v < 2.4) {
+          float band = fract((pu / 0.09) * 0.25 + v * 2.2 - uTime * 0.6);
+          vec3 pc = band < 0.33 ? vec3(0.85, 0.08, 0.06) : band < 0.5 ? vec3(0.95) : band < 0.83 ? vec3(0.08, 0.2, 0.7) : vec3(0.95);
+          bool cap = v < 1.28 || v > 2.32;
+          albedo = cap ? vec3(0.7) : pc * (0.7 + 0.3 * (1.0 - abs(pu) / 0.09));
+          sRough = 0.2;
+          sMetal = cap ? 0.8 : 0.0;
+          if (!cap) sEmit = pc * 0.5 * uLamps;
+        }
+      } else if (v > fasc) {
+        // The fascia: the brand's stripes in a lightbox (convenience stores, drugstores), a lit panel in the shop's
+        // colour (electronics, games), dark wood (the old shops and counters), the shop's colour painted (cafés,
+        // boutiques), stone (lobbies, banks), or plain dark.
+        if (tr == ${TRADE.konbini} || tr == ${TRADE.drugstore}) {
+          float fy = (v - fasc) / (GF - fasc);
+          albedo = fy > 0.18 && fy < 0.34 ? hue : fy > 0.34 && fy < 0.42 ? mix(hue, vec3(1.0), 0.55) : vec3(0.92);
+          sEmit = albedo * (0.12 + 0.7 * uLamps);
+          sRough = 0.3;
+        } else if (tr == ${TRADE.electronics} || tr == ${TRADE.arcade} || tr == ${TRADE.pachinko} || tr == ${TRADE.karaoke} || tr == ${TRADE.hobby} || tr == ${TRADE.maid}) {
+          bool rim = v < fasc + 0.05 || v > GF - 0.05;
+          albedo = rim ? vec3(0.08) : hue * 0.7;
+          if (!rim) sEmit = hue * (0.08 + 0.9 * uLamps);
+          sRough = 0.3;
+        } else if (woodF || tr == ${TRADE.snack}) {
+          albedo = woodC * (0.85 + 0.3 * step(0.5, fract(v / 0.19))) * (0.9 + 0.2 * vnoise(vec2(u * 3.0, v * 40.0)));
+          sRough = 0.7;
+        } else if (tr == ${TRADE.cafe} || tr == ${TRADE.bakery} || tr == ${TRADE.florist} || tr == ${TRADE.salon} || tr == ${TRADE.books} || tr == ${TRADE.fashion}) {
+          albedo = mix(hue, wallCol, 0.45) * 0.55;
+          sRough = 0.5;
+        } else if (tallFront || tr == ${TRADE.lobby} || tr == ${TRADE.bank}) {
+          albedo = wallCol * 0.6;
+          sRough = 0.4;
         } else {
-          float face;
-          vec3 hp = roomHit(vec3(sx, v, 0.0), rd, sw, 3.0, 6.0, face);
-          float hs = h1(vBid + 21.0);
-          vec3 L = shopPal < 0.5 ? vec3(1.0, 0.78, 0.5) : shopPal < 1.5 ? vec3(0.92, 0.97, 1.0)
-            : shopPal < 2.5 ? (hs < 0.5 ? vec3(1.0, 0.45, 0.8) : vec3(0.4, 0.85, 1.0)) : vec3(1.0, 0.5, 0.22) * 0.7;
-          vec3 c;
-          bool bar = shopPal > 2.5;
-          if (bar) {
-            // Bar: a wooden counter across the back, backlit shelves of bottles above it, wood panelling,
-            // dark floor and a few warm pendant lights.
-            vec3 wood = vec3(0.16, 0.08, 0.035);
-            if (face < 0.5) {
-              if (hp.y < 1.0) c = wood * (0.8 + 0.4 * step(0.5, fract(hp.x / 0.9)));
-              else if (hp.y < 1.08) c = vec3(0.9, 0.6, 0.25);
-              else if (hp.y > 1.3 && hp.y < 2.3) {
-                float row = floor((hp.y - 1.3) / 0.5);
-                float ly = hp.y - 1.3 - row * 0.5;
-                float slot = floor(hp.x / 0.11);
-                float hb = h3(vec3(vBid, slot, row));
-                bool bottle = fract(hp.x / 0.11) < 0.6 && ly > 0.04 && ly < 0.2 + 0.2 * hb;
-                vec3 glass = hb < 0.4 ? vec3(1.0, 0.55, 0.15) : hb < 0.7 ? vec3(0.3, 0.8, 0.35) : vec3(0.9, 0.9, 0.8);
-                c = ly < 0.04 ? vec3(0.9, 0.7, 0.4) : bottle ? glass * 2.2 : vec3(0.7, 0.4, 0.18) * (0.6 + 0.8 * ly);
-              } else c = wood * 0.6;
-            } else if (face < 1.5) {
-              c = wood * (0.9 + 0.3 * step(0.5, fract(hp.z / 0.8)));
-            } else if (face < 2.5) {
-              vec2 cp = vec2(fract(hp.x / 1.6) - 0.5, fract(-hp.z / 2.0) - 0.5);
-              c = length(cp) < 0.08 ? vec3(4.0) : vec3(0.08);
-            } else {
-              c = wood * 0.7;
-            }
-          } else if (face < 0.5) {
-            // Back wall: shelves of goods.
-            float shelf = floor(hp.y / 0.42);
-            vec3 goods = vec3(h3(vec3(vBid, floor(hp.x / 0.3), shelf)), h3(vec3(shelf, vBid, floor(hp.x / 0.3) + 5.0)), h3(vec3(floor(hp.x / 0.3), shelf, vBid + 9.0)));
-            c = fract(hp.y / 0.42) < 0.15 || hp.y > 2.2 ? vec3(0.8) : mix(vec3(0.5), goods, 0.8);
-          } else if (face < 1.5) {
-            c = vec3(0.7, 0.7, 0.68);
-          } else if (face < 2.5) {
-            // Ceiling: rows of fluorescent tubes.
-            bool tube = fract(hp.x / 1.2) < 0.1 && fract(-hp.z / 1.5) < 0.5;
-            c = tube ? vec3(3.0) : vec3(0.8);
-          } else {
-            c = vec3(0.55, 0.55, 0.52) * (0.8 + 0.2 * step(0.5, fract(hp.x / 0.6 + floor(-hp.z / 0.6) * 0.5)));
-          }
-          float depthT = -hp.z / 6.0;
-          vec3 interior = c * L * mix(0.9, 0.5, depthT) * max(uLamps, 0.55);
+          albedo = mix(vec3(0.02), wallCol * 0.45, h1(vBid + 3.0));
+          sRough = 0.45;
+        }
+      } else if (v > gTop) {
+        // The head rail under the fascia.
+        albedo = frameC;
+        sMetal = woodF ? 0.0 : 0.6;
+        sRough = woodF ? 0.7 : 0.4;
+      } else if (shopOpen) {
+        float nm = max(1.0, floor(sw / gz.x + 0.5));
+        float mw = sw / nm;
+        float bi = floor(sx / mw);
+        float mx = sx - bi * mw;
+        bool door = bi == floor(h1(vBid + 31.0) * nm);
+        float ft = gz.y > 1.5 && gz.y < 2.5 ? 0.02 : woodF ? 0.07 : 0.05;
+        bool frame = mx < ft || mx > mw - ft || v > gTop - ft;
+        // Old shops have a transom bar; the solid lower panel stops at the door, which runs down to a kick plate.
+        bool transom = woodF && abs(v - 2.2) < 0.035;
+        float lowTop = door ? 0.1 : gz.z;
+        if (frame || transom) {
+          albedo = frameC;
+          sMetal = woodF ? 0.0 : 0.7;
+          sRough = woodF ? 0.7 : 0.35;
+        } else if (v < lowTop) {
+          albedo = woodF ? woodC * (0.85 + 0.3 * step(0.5, fract(mx / 0.15))) : tr == ${TRADE.bar} || tr == ${TRADE.snack} || tr == ${TRADE.lounge} ? vec3(0.06) : mix(frameC, wallCol, 0.5) * 0.8;
+          sMetal = woodF ? 0.0 : 0.3;
+          sRough = 0.5;
+        } else {
           float F = fresnel(cosV);
-          albedo = vec3(0.02);
-          sRough = 0.06;
-          sEmit = interior * (1.0 - F) + refl * F;
+          float cw = mw - 2.0 * ft;
+          float cx = mx - ft;
+          bool covered = true;
+          if (door && v > 2.05 && (tr == ${TRADE.noodles} || tr == ${TRADE.izakaya} || (tr == ${TRADE.craft} && hb < 0.6))) {
+            // Noren over the door of a noodle shop, an izakaya or an old shop: cloth in the shop's colour (deep
+            // indigo in most), split in three, the shop's mark in white.
+            vec3 cloth = mix(hue, vec3(0.04, 0.06, 0.2), hb < 0.5 ? 0.75 : 0.25);
+            float slit = fract(cx / (cw / 3.0));
+            float ring = abs(length(vec2(cx - cw * 0.5, v - 2.48)) - 0.12);
+            albedo = slit < 0.02 ? vec3(0.02) : ring < 0.022 && cw > 0.5 ? vec3(0.92) : cloth * (0.85 + 0.15 * sin(cx * 25.0));
+            sRough = 0.9;
+            sEmit = albedo * L * 0.12 * uLamps;
+          } else if (gz.y > 2.5 && !door && v < 2.2 && fract(cx / 0.06) < 0.48) {
+            // Wooden lattice (kōshi) across an old shop's panels.
+            albedo = woodC * 1.15;
+            sRough = 0.7;
+          } else if (tr == ${TRADE.estate} && !door && v > 0.85 && v < 2.45 && fract(cx / 0.26) > 0.08 && fract((v - 0.85) / 0.34) > 0.06 && h2(floor(vec2(cx / 0.26, (v - 0.85) / 0.34)) + vBid) < 0.88) {
+            // An estate agent's listings taped over the glass: a plan and a price on each.
+            vec2 sf = fract(vec2(cx / 0.26, (v - 0.85) / 0.34));
+            albedo = vec3(0.92, 0.92, 0.88);
+            if (sf.y > 0.82) albedo = h2(floor(vec2(cx / 0.26, (v - 0.85) / 0.34)) + 3.0) < 0.5 ? vec3(0.8, 0.1, 0.08) : hue;
+            else if (sf.y > 0.25 && sf.y < 0.75 && sf.x > 0.18 && sf.x < 0.92 && (fract(sf.x * 3.0) < 0.12 || fract(sf.y * 3.0) < 0.12)) albedo = vec3(0.35);
+            else if (sf.y < 0.2 && fract(sf.x * 9.0) < 0.6) albedo = vec3(0.4);
+            sRough = 0.8;
+            // Paper on the glass, the shop's light shining through it.
+            sEmit = albedo * L * 0.55 * max(uLamps, 0.3);
+          } else if ((tr == ${TRADE.konbini} || tr == ${TRADE.drugstore} || tr == ${TRADE.electronics} || tr == ${TRADE.hobby} || tr == ${TRADE.karaoke} || tr == ${TRADE.pachinko}) && !door && h3(vec3(vBid, bi, 3.0)) < 0.4 && v > 1.0 && v < 1.75 && cx > 0.15 && cx < cw - 0.15) {
+            // Posters and sale bills on the glass.
+            float ph = h3(vec3(vBid, bi, 5.0));
+            albedo = ph < 0.3 ? vec3(1.0, 0.85, 0.1) : ph < 0.55 ? vec3(0.85, 0.1, 0.08) : ph < 0.8 ? hue : vec3(0.95);
+            if (abs(v - 1.38) < 0.12 && fract(cx * 5.0) < 0.6) albedo = ph < 0.3 ? vec3(0.85, 0.1, 0.08) : vec3(0.95);
+            sRough = 0.6;
+            sEmit = albedo * L * 0.6 * max(uLamps, 0.3);
+          } else covered = false;
+          if (!covered) {
+            // Frosted film: a band at eye height with a stripe in the shop's colour (clinic, bank, maid café), or
+            // most of the glass (a snack bar, the mahjong parlour; a love hotel's, all but its door): milky,
+            // glowing with the light behind it.
+            bool fullFrost = tr == ${TRADE.snack} || tr == ${TRADE.mahjong} || tr == ${TRADE.lovehotel};
+            bool frost = gz.w > 0.5 && (fullFrost ? v < 2.15 && !(door && tr == ${TRADE.lovehotel}) : !door && v > 1.05 && v < 1.5);
+            if (frost) {
+              float stripe = fullFrost ? step(abs(v - 1.9), 0.015) : step(abs(v - 1.27), 0.03);
+              albedo = mix(fullFrost ? vec3(0.32, 0.33, 0.34) : vec3(0.55, 0.57, 0.58), hue, stripe);
+              sRough = 0.35;
+              sEmit = mix(L * (fullFrost ? 0.14 : 0.25) * max(uLamps, 0.45), hue * 0.5 * max(uLamps, 0.3), stripe) + refl * F * 0.5;
+            } else {
+              vec3 interior = shopInterior(vec2(sx, v), rd, sw, tr, vBid, hue, L, length(vWPos - cameraPosition), pxAng) * max(uLamps, 0.55);
+              // At a tower's foot the glass is tinted like the curtain wall above it.
+              if (towerFoot) interior *= vec3(0.75, 0.85, 0.88);
+              albedo = vec3(0.02);
+              sRough = 0.06;
+              sEmit = interior * (1.0 - F) + refl * F;
+              // The door's pull handle, and the opening hours on it.
+              if (door && !woodF && v > 0.85 && v < 1.35 && abs(mx - (mw - 0.14)) < 0.015) { albedo = vec3(0.7); sMetal = 0.9; sRough = 0.25; sEmit = vec3(0.0); }
+              else if (door && v > 1.45 && v < 1.58 && abs(cx - cw * 0.5) < 0.09) { albedo = abs(v - 1.55) < 0.02 ? hue : vec3(0.92); sRough = 0.7; sEmit = L * 0.08; }
+            }
+          }
         }
       } else {
-        // Roll-down shutter.
+        // Roll-down shutter; some painted in the shop's colour.
         float rib = fract(v / 0.09);
         float ribFade = 1.0 - smoothstep(0.008, 0.025, fwUV.y);
-        albedo = vec3(0.4, 0.41, 0.43) * (1.0 - 0.3 * ribFade * smoothstep(0.3, 0.5, abs(rib - 0.5))) * (0.8 + 0.4 * n1);
+        vec3 sc = hb < 0.25 ? mix(hue, vec3(0.5), 0.5) : vec3(0.4, 0.41, 0.43);
+        albedo = sc * (1.0 - 0.3 * ribFade * smoothstep(0.3, 0.5, abs(rib - 0.5))) * (0.8 + 0.4 * n1);
         sMetal = 0.4;
         sRough = 0.5;
       }

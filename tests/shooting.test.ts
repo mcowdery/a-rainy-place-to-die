@@ -39,17 +39,21 @@ describe('shooting practice', () => {
     expect(nearestShot(170 * DEG, 0).side).toBe('driver');
   });
 
-  it('spreads wider across the car and far wider from the hip', () => {
+  it('spreads wider across the car and from the hip', () => {
     const [pistol] = WEAPONS;
     const at = { slide: 0, speed: 0, across: false, hip: false };
     const base = spreadOf(pistol, at);
     expect(spreadOf(pistol, { ...at, across: true })).toBeGreaterThan(base * 2);
-    expect(spreadOf(pistol, { ...at, hip: true })).toBeGreaterThan(base * 5);
+    expect(spreadOf(pistol, { ...at, hip: true })).toBeGreaterThan(base * 1.5);
+    expect(spreadOf(pistol, { ...at, hip: true })).toBeLessThan(spreadOf(pistol, { ...at, across: true }));
     expect(spreadOf(pistol, { ...at, slide: 0.5, speed: 20 })).toBeGreaterThan(base);
   });
 
-  it('has a pistol and a paintball marker', () => {
-    expect(WEAPONS.map((w) => w.id)).toEqual(['pistol', 'paint']);
+  it("has a pistol, a paintball marker and Mack's shotgun", () => {
+    expect(WEAPONS.map((w) => w.id)).toEqual(['pistol', 'paint', 'shotgun']);
+    // The shotgun is fired by Mack's rig, a pellet cone wider than the pistol's.
+    expect(WEAPONS[2].auto).toBe(false);
+    expect(WEAPONS[2].spread).toBeGreaterThan(WEAPONS[0].spread);
     const [pistol, paint] = WEAPONS;
     expect(pistol.speed).toBe(0);
     expect(pistol.auto).toBe(false);

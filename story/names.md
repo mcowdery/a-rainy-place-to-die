@@ -36,16 +36,17 @@ Wangan**, "bayshore", runs along the port); the mountain passes 黒神峠 Kuroka
 | Name | Who | Where |
 |---|---|---|
 | The man behind it all | No face: always blocked or blurred. Japanese, very wealthy, listened to. | — |
-| **Mack** (真壁 誠 Makabe Makoto) | The detective, the MC. Half-American, dead and rebuilt by the order, a lone wolf who sleeps around. | Kaburo (booth 17), Kawabata (office) |
-| **Megumi** (真壁 恵 Makabe Megumi) | Mack's wife; vanished after his "death", probably trafficked, maybe dead. He's looking for her. | Unknown |
-| Mack's daughter | Died at seven, the night his phone was off. | — |
+| **Mack** (Daniel McAllister, proposed) | The detective, the MC. An American, once the Tōto Shimbun's crime reporter; dead and rebuilt by the order, without his memory or his Japanese; a lone wolf who sleeps around. | Kaburo (booth 17), Kawabata (office) |
+| **Megumi** (真壁 恵 Makabe Megumi) | Mack's wife, a Tōto Shimbun crime reporter; taken because of the story she was chasing (the circle), probably trafficked, maybe dead. He's looking for her. | Unknown |
 | Mack's father | An American who served at a US base in Japan. | — |
 | The old detective | Runs Kirishima Investigations (the agency on Kaburo's posters); ill, half retired; hires Mack off the books. | Kawabata (the office) |
 | **Michael** | The mysterious, knightly figure who freed Mack; perhaps an angel, never said. Very powerful. | Unknown |
 | The married woman | Mack's bed on the first night. Doesn't matter, yet. | — |
 | **Minato** (佐伯 湊 Saeki Minato) | The university student in the opening. Dies that night; the police call it a murder-suicide (proposed: the faceless man killed him). | Gakuenzaka |
-| **Koharu** (小春) | Minato's childhood friend and girlfriend; survives; later helps at Mack's agency. | Gakuenzaka, then Kaburo |
-| **Jingūji** (神宮寺 玲 Jingūji Rei) | The senpai who seduced Koharu and sent the video. | Gakuenzaka |
+| **Koharu** (小春) | Minato's childhood friend and girlfriend, 22, from the house next door in Kawabata; survives; later helps at Mack's agency. | Gakuenzaka, then Kaburo |
+| **Jingūji** (神宮寺 玲 Jingūji Rei) | The senpai, 24: Asagiri money (his father's at Hakkodo), the TA in Minato's seminar; known mostly by reputation and rumour. Seduced Koharu and sent the video. | Gakuenzaka |
+| **Tanaka** (田中) | Minato's seminar classmate, loud, worships Jingūji: the rumour mill. | Gakuenzaka |
+| **Misaki** (美咲) | Another classmate, quieter; warns Minato sideways. | Gakuenzaka |
 | Kuroneko's mama | Runs BAR 黒猫 in Hoshikuzu Yokocho; takes Koharu in; one of Mack's few close people. | Kaburo |
 | **Rui** | The No.1 host at Club Adonis (an idea). | Kaburo |
 | **Natsumi** | A nurse, Rui's regular, sold into debt (an idea). | Kaburo |
@@ -57,13 +58,16 @@ Wangan**, "bayshore", runs along the port); the mountain passes 黒神峠 Kuroka
 | **Tesshin** (竜胆 鉄心 Rindō Tesshin, proposed) | The Rindō-gumi's oyabun, in his seventies, dying. | Kawabata, the hospital |
 | The salaryman, the CEO, the idol manager, the teacher | Story characters, unnamed yet. | Nishihara, Asagiri, Denkō-chō, Sakuragaoka |
 
-**Groups:** the order (its followers call it **明星会 Myōjō-kai**, "the Morning Star Society"; officials know it
+**Groups:** the order (its followers call it **黎明会 Reimei-kai**, "the Society of the Dawn"; officials know it
 as **天降会 Amakudari-kai**, "those who descended from heaven"; the top speaks of **二百人衆 the Two Hundred**);
 **竜胆組 the Rindō-gumi** ("gentian family"), the old yakuza family; **竜神興業 Ryujin Kogyo** ("dragon god
 enterprises"), the yakuza front company; **Stella Production**, the idol agency; **Cash One**, the loan shark
 whose collectors blackmail Mack; the triad (unnamed); **公安 Kōan**, Japan's Public Security police.
 
 ## Remembering names
+
+Decided since: the language mechanic ([language.md](language.md)) does this as gameplay: names start in
+Japanese, and their readings and English handles arrive as Mack learns them, and the phone keeps a record.
 
 **Proposed**, for players as much as for us:
 

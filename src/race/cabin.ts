@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { EYE, WINDOW } from './shooting';
 
 /**
- * The car's cabin as the driver sees it, shown only while shooting across the car from the driver's seat: the
- * passenger door round its open window (the window is exactly `WINDOW`, so what it frames is what you can
+ * The car's cabin as the driver sees it, shown only while shooting from the driver's seat: the passenger door
+ * and his own round their open windows (the window is exactly `WINDOW`, so what it frames is what you can
  * hit), the roof lining, the A-pillars either side of the windscreen, the dashboard with its lit gauges, the
  * centre console, the steering wheel, the passenger seat, the mirror and the bulkhead behind. In the car's
  * frame (+x its left, +z forward), a child of the car.
@@ -37,8 +37,13 @@ export function buildCabin(): THREE.Group {
   box(metal, X - 0.03, X - 0.02, W.y0 - 0.006, W.y0, W.z0, W.z1);
   box(leather, X - 0.13, X, 0.6, 0.67, -0.3, 0.45);
   box(metal, X - 0.02, X, 0.74, 0.76, 0.3, 0.42);
-  // The driver's door (behind you to the right, glimpsed turning) and the roof lining.
-  box(trim, -X - 0.06, -X, 0.28, 1.3, -0.85, 1.1);
+  // The driver's door round its open window (the passenger's mirrored: his arm goes out of it), and the
+  // roof lining.
+  box(trim, -X - 0.06, -X, 0.28, W.y0, -0.85, 1.1);
+  box(trim, -X - 0.06, -X, W.y1, 1.3, -0.85, 1.1);
+  box(trim, -X - 0.06, -X, W.y0, W.y1, W.z1, 1.1);
+  box(trim, -X - 0.06, -X + 0.03, W.y0, W.y1, -0.85, W.z0);
+  box(leather, -X, -X + 0.13, 0.6, 0.67, -0.3, 0.45);
   box(liner, -0.8, 0.8, 1.24, 1.28, -0.9, 0.52);
   // A-pillars, raking down from the roof to the scuttle either side of the open windscreen.
   for (const s of [-1, 1]) box(trim, s * 0.8 - 0.05, s * 0.8 + 0.05, 1.06, 1.12, 0.47, 1.13, 0.43);

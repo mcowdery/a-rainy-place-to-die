@@ -6,8 +6,8 @@ import { KIND, lin, type MeshBuilder } from './meshBuilder';
  * The Kaburo dragon: a giant neon-tube sculpture coiled one and a half times around the mega-sign's roof,
  * rising into a neck that leans out over the crossing, the head chasing a glowing pearl.
  *
- * Built like a real neon sculpture: the body is a wireframe of glass tubes (pink side rails, cyan dorsal
- * and belly lines, lighter hoops every couple of metres, gold dorsal spikes), with legs, a head drawn in
+ * Built like a real neon sculpture: the body is a wireframe of glass tubes (scarlet side rails, crimson
+ * dorsal and belly lines, lighter red hoops every couple of metres, gold dorsal spikes), with legs, a head drawn in
  * outline (jaws, brow, glowing eyes, forked horns, mane, long whiskers) and a pearl. Dark steel pylons hold
  * it off the roof. A pulse travels along the tubes from tail to head; by day the tubes are dim glass.
  *
@@ -17,9 +17,11 @@ import { KIND, lin, type MeshBuilder } from './meshBuilder';
 
 type V3 = [number, number, number];
 
-const PINK: V3 = [1.0, 0.2, 0.62];
-const PINK_LIGHT: V3 = [1.0, 0.5, 0.85];
-const CYAN: V3 = [0.2, 0.85, 1.0];
+// The great red dragon of Revelation 12: red all over, its rails a bright scarlet, its dorsal and belly lines,
+// legs and whiskers a deeper crimson, the hoops a lighter red; gold stays for the spikes, horns and claws.
+const RED: V3 = [1.0, 0.0, 0.02];
+const RED_LIGHT: V3 = [1.0, 0.1, 0.08];
+const CRIMSON: V3 = [0.7, 0.0, 0.05];
 const GOLD: V3 = [1.0, 0.68, 0.22];
 const EYE: V3 = [1.0, 0.95, 0.7];
 const PEARL: V3 = [1.0, 0.88, 0.95];
@@ -189,10 +191,10 @@ export function buildDragon(mb: MeshBuilder, half: number, corner: readonly [num
     return { t, p, tan, side, u, r: bodyR(t) };
   });
   const rail = (f: (s: (typeof samples)[number]) => THREE.Vector3): V3[] => samples.filter((_, i) => i % 4 === 0).map((s) => f(s).toArray() as V3);
-  T.tube(rail((s) => s.p.clone().addScaledVector(s.side, s.r)), 0.15, PINK, 3.2, 0, 1);
-  T.tube(rail((s) => s.p.clone().addScaledVector(s.side, -s.r)), 0.15, PINK, 3.2, 0, 1);
-  T.tube(rail((s) => s.p.clone().addScaledVector(s.u, s.r * 0.9)), 0.1, CYAN, 3.0, 0, 1);
-  T.tube(rail((s) => s.p.clone().addScaledVector(s.u, -s.r * 0.8)), 0.1, CYAN, 2.6, 0, 1);
+  T.tube(rail((s) => s.p.clone().addScaledVector(s.side, s.r)), 0.15, RED, 3.2, 0, 1);
+  T.tube(rail((s) => s.p.clone().addScaledVector(s.side, -s.r)), 0.15, RED, 3.2, 0, 1);
+  T.tube(rail((s) => s.p.clone().addScaledVector(s.u, s.r * 0.9)), 0.1, CRIMSON, 3.0, 0, 1);
+  T.tube(rail((s) => s.p.clone().addScaledVector(s.u, -s.r * 0.8)), 0.1, CRIMSON, 2.6, 0, 1);
 
   // Hoops every ~1.8 m, dorsal spikes, pylons.
   const len = curve.getLength();
@@ -204,7 +206,7 @@ export function buildDragon(mb: MeshBuilder, half: number, corner: readonly [num
       const a = (j / 12) * Math.PI * 2;
       ring.push(s.p.clone().addScaledVector(s.side, Math.cos(a) * s.r).addScaledVector(s.u, Math.sin(a) * s.r * 0.88).toArray() as V3);
     }
-    T.tube(ring, 0.06, PINK_LIGHT, 2.4, s.t, s.t, true, 5);
+    T.tube(ring, 0.06, RED_LIGHT, 2.4, s.t, s.t, true, 5);
     if (h % 2 === 0 && s.t > 0.08) {
       const base = s.p.clone().addScaledVector(s.u, s.r * 0.9);
       const tip = base.clone().addScaledVector(s.u, s.r * 0.9).addScaledVector(s.tan, -0.6);
@@ -227,7 +229,7 @@ export function buildDragon(mb: MeshBuilder, half: number, corner: readonly [num
     const hip = s.p.clone().addScaledVector(out, s.r);
     const knee = hip.clone().addScaledVector(out, 1.1).add(new THREE.Vector3(0, 0.7, 0)).addScaledVector(s.tan, 0.6);
     const foot = hip.clone().addScaledVector(out, 2.1).add(new THREE.Vector3(0, -Math.min(hip.y - 0.5, 1.8), 0)).addScaledVector(s.tan, 1.0);
-    T.tube([hip, knee, foot].map((v) => v.toArray() as V3), 0.11, CYAN, 3.0, t, t);
+    T.tube([hip, knee, foot].map((v) => v.toArray() as V3), 0.11, CRIMSON, 3.0, t, t);
     for (const k of [-1, 0, 1]) {
       const toe = foot.clone().addScaledVector(s.tan, 0.7).addScaledVector(out, 0.35 * k).add(new THREE.Vector3(0, -0.25, 0));
       const tip = toe.clone().addScaledVector(s.tan, 0.35).add(new THREE.Vector3(0, -0.3, 0));
@@ -245,19 +247,19 @@ export function buildDragon(mb: MeshBuilder, half: number, corner: readonly [num
   const H = (f: number, u: number, s: number): V3 => end.p.clone().addScaledVector(F, f * HS).addScaledVector(U, u * HS).addScaledVector(S, s * HS).toArray() as V3;
   const head = (pts: [number, number, number][], r: number, c: V3, gain = 3.4): void => T.tube(pts.map(([f, u, s]) => H(f, u, s)), r * 1.4, c, gain, 1, 1);
   for (const sd of [-1, 1]) {
-    head([[0, 0.9, 0.75 * sd], [1.5, 1.05, 0.65 * sd], [3.0, 0.75, 0.48 * sd], [4.2, 0.55, 0.3 * sd], [4.6, 0.35, 0]], 0.13, PINK);
-    head([[0, -0.55, 0.65 * sd], [1.8, -0.95, 0.52 * sd], [3.5, -1.35, 0.3 * sd], [3.9, -1.45, 0]], 0.12, PINK);
+    head([[0, 0.9, 0.75 * sd], [1.5, 1.05, 0.65 * sd], [3.0, 0.75, 0.48 * sd], [4.2, 0.55, 0.3 * sd], [4.6, 0.35, 0]], 0.13, RED);
+    head([[0, -0.55, 0.65 * sd], [1.8, -0.95, 0.52 * sd], [3.5, -1.35, 0.3 * sd], [3.9, -1.45, 0]], 0.12, RED);
     head([[0.4, 1.2, 0.85 * sd], [1.5, 1.5, 0.75 * sd], [2.4, 1.15, 0.58 * sd]], 0.1, GOLD);
-    head([[4.0, 0.7, 0.3 * sd], [4.3, 0.95, 0.42 * sd], [4.1, 1.05, 0.25 * sd]], 0.07, CYAN);
+    head([[4.0, 0.7, 0.3 * sd], [4.3, 0.95, 0.42 * sd], [4.1, 1.05, 0.25 * sd]], 0.07, CRIMSON);
     // Teeth.
     for (const f of [1.6, 2.4, 3.2]) head([[f, 0.6, 0.5 * sd], [f + 0.2, 0.25, 0.45 * sd], [f + 0.4, 0.6, 0.42 * sd]], 0.05, [1, 1, 1], 2.6);
     // Forked horns sweeping back.
     head([[0.3, 1.3, 0.55 * sd], [-0.8, 2.2, 0.85 * sd], [-2.2, 3.0, 1.05 * sd], [-3.4, 3.25, 1.25 * sd]], 0.11, GOLD);
     head([[-1.4, 2.6, 0.95 * sd], [-1.7, 3.3, 0.95 * sd], [-2.1, 3.7, 0.9 * sd]], 0.08, GOLD);
     // Long flowing whiskers.
-    head([[4.0, 0.35, 0.4 * sd], [3.4, 0.1, 1.2 * sd], [2.0, -0.7, 2.4 * sd], [0.2, -0.4, 3.2 * sd], [-1.8, -1.4, 3.8 * sd], [-3.2, -0.7, 4.4 * sd]], 0.07, CYAN, 3.2);
+    head([[4.0, 0.35, 0.4 * sd], [3.4, 0.1, 1.2 * sd], [2.0, -0.7, 2.4 * sd], [0.2, -0.4, 3.2 * sd], [-1.8, -1.4, 3.8 * sd], [-3.2, -0.7, 4.4 * sd]], 0.07, CRIMSON, 3.2);
     // Mane.
-    for (let m = 0; m < 4; m++) head([[-0.2 - m * 0.5, 0.9 - m * 0.3, 0.45 * sd], [-1.2 - m * 0.5, 1.7 - m * 0.4, 1.0 * sd], [-1.9 - m * 0.5, 1.4 - m * 0.4, 1.3 * sd]], 0.07, CYAN, 3.0);
+    for (let m = 0; m < 4; m++) head([[-0.2 - m * 0.5, 0.9 - m * 0.3, 0.45 * sd], [-1.2 - m * 0.5, 1.7 - m * 0.4, 1.0 * sd], [-1.9 - m * 0.5, 1.4 - m * 0.4, 1.3 * sd]], 0.07, CRIMSON, 3.0);
     T.sphere(H(1.55, 1.0, 0.72 * sd), 0.36, EYE, 7);
   }
   // The pearl the dragon chases, with swirling flames.

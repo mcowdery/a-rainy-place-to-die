@@ -68,6 +68,13 @@ function source(name: string): Promise<THREE.Group> {
   return p;
 }
 
+/** A fresh copy of a character's model with its own skeleton, in its rest pose (A-pose), for posing yourself. */
+export async function loadCharacterModel(name: string): Promise<THREE.Object3D> {
+  const src = await source(name);
+  const { clone } = await import('three/examples/jsm/utils/SkeletonUtils.js');
+  return clone(src);
+}
+
 /** Idle tuning: how much each motion moves (radians) and how fast (seconds a cycle). */
 const IDLE = {
   breath: { period: 4.2, chest: 0.018, shoulders: 0.012 },
@@ -115,9 +122,7 @@ export class Character {
 
   /** Loads a character by name (a fresh copy with its own skeleton). */
   static async load(name: string, seed = 0): Promise<Character> {
-    const src = await source(name);
-    const { clone } = await import('three/examples/jsm/utils/SkeletonUtils.js');
-    return new Character(name, clone(src), seed);
+    return new Character(name, await loadCharacterModel(name), seed);
   }
 
   /** From the A-pose to standing at rest: upper arms down by the sides, forearms a little forward. */

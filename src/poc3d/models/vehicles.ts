@@ -390,6 +390,11 @@ export interface VehicleSpec {
   readonly marks?: number;
   /** A work vehicle's company (index into WORK_LIVERIES), over the one `marks` would pick. */
   readonly company?: number;
+  /**
+   * The side windows into builders of their own (so they can roll down: race/carView.ts): `left` is the side
+   * (fz, 0, -fx) points to (the car's left), `right` the other. The body keeps the openings.
+   */
+  readonly sideWindows?: { readonly left: MeshBuilder; readonly right: MeshBuilder };
 }
 
 /** Text geometry for vehicles that carry lettering (taxi ads, delivery boxes). */
@@ -716,7 +721,16 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
       const j1 = (j + 1) % R;
       const k = j < H - 1 ? j : R - j - 1; // mirror the segment index for the left half
       classify(xm, k, hood);
-      mb.quadN(P(...grid[i][j]), P(...grid[i + 1][j]), P(...grid[i + 1][j1]), P(...grid[i][j1]), N(normals[i][j]), N(normals[i + 1][j]), N(normals[i + 1][j1]), N(normals[i][j1]));
+      // A side window into its own builder, when asked (the body keeps the opening).
+      const out = spec.sideWindows && k === 6 && mb.kind === KIND.glass ? (grid[i][j][2] + grid[i][j1][2] > 0 ? spec.sideWindows.left : spec.sideWindows.right) : mb;
+      if (out !== mb) {
+        out.kind = mb.kind;
+        out.color = mb.color;
+        out.style = mb.style;
+        out.flags = mb.flags;
+        out.id = mb.id;
+      }
+      out.quadN(P(...grid[i][j]), P(...grid[i + 1][j]), P(...grid[i + 1][j1]), P(...grid[i][j1]), N(normals[i][j]), N(normals[i + 1][j]), N(normals[i + 1][j1]), N(normals[i][j1]));
     }
   }
   // End caps (the rear of the kei truck's cab, the front and rear faces of the others).

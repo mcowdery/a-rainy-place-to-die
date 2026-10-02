@@ -6,12 +6,13 @@ slip away to the women's circle all summer. The player is her: the bar, the regu
 ## The story
 
 - **The mama's past.** Her own story, told by the bar: what she did to own it, who she lost.
-- **Koharu**, in the Myōjō-kai's circle, comes to the bar less and less. The mama asks Mack to bring her back.
+- **Koharu**, in the Reimei-kai's circle, comes to the bar less and less. The mama asks Mack to bring her back.
 - **The festival.** The old town's summer festival: portable shrines through the lanes, yatai, lanterns, bon
   odori in a square. The circle is there too, kind women in white, gathering the lonely.
 - **The fireworks.** On the river night, under the fireworks, Mack finds Koharu, and does the one thing the
-  circle can't: he tells her the truth. The night his daughter died; the phone switched off in a love hotel;
-  the first person he's ever told. Not forgiveness. Company in the same sin. She comes home.
+  circle can't: he tells her the truth. He's looking for his wife, who may be dead, and every night he's in
+  some other woman's bed, and he can't stop, and he doesn't know why. The first person he's ever told. (He
+  doesn't yet know the worst of it: that comes at the end.) Not forgiveness. Company in the same sin. She comes home.
 
 ## Themes
 

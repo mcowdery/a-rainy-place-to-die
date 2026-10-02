@@ -11,7 +11,7 @@ least one person behind who can come back.
 
 ## The detective
 
-[mc.md](mc.md): 真壁 誠 Makabe Makoto, **Mack**, the MC and the thread through every season's story.
+[mc.md](mc.md): **Mack** (Daniel McAllister, proposed), an American, the MC and the thread through every season's story.
 
 ## Close to Mack
 

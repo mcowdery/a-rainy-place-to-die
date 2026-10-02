@@ -25,8 +25,8 @@ the first 200s.
 
 - **No.1** (a [side case](no1.md)): Rui, the No.1 host at Club Adonis; his regular Natsumi sold into debt by
   Cash One. Sex as commerce, the hierarchy of beauty. Stays: Rui, an informant.
-- **Papers** (now [spring, chapter 3](../main/spring/03-papers.md)): a young kōban officer stops Mack for his papers, then finds his photo on
-  the wall of fallen officers. Corruption, belonging. Stays: an ally in the police.
+- **Papers** (now [spring, chapter 3](../main/spring/03-papers.md)): a young kōban officer stops Mack for his papers, then finds his obituary in
+  an old police file. Corruption, belonging. Stays: an ally in the police.
 - **The end of the blossom** (now [spring, chapter 5](../main/spring/05-the-end-of-the-blossom.md)): Koharu's finale; the order's circle offers her
   forgiveness.
 - **Monday.** The player is one of Mack's own blackmailers: the Cash One collector, at the bottom of his own

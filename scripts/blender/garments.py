@@ -1,7 +1,8 @@
-"""Garments modelled in bpy, for what no free MakeHuman asset covers well: a maid's apron and a
-frilled headband (katyusha). Built in the character's rest pose (A-pose, facing -Y, Z up) on top of
-the finished clothes, by casting rays at them, so they follow whatever body and dress they're
-given; then weighted to the rig from what they lie on.
+"""Garments modelled in bpy, for what no free MakeHuman asset covers well: a maid's apron, a
+frilled headband (katyusha), card hair and a leather rider jacket. Built in the character's rest
+pose (A-pose, facing -Y, Z up) on top of the finished clothes, by casting rays at them, so they
+follow whatever body and dress they're given; then weighted to the rig from what they lie on (the
+jacket instead keeps the skin's own weights).
 
 In a character definition ("garments": [...]):
   {"type": "apron", "over": ["<asset>", ...], "color": "#f4f2ee", ...}
@@ -16,7 +17,16 @@ In a character definition ("garments": [...]):
   {"type": "hair_cards", "on": "<hair asset>", "fringe": {...}, "locks": {...}, ...}
       alpha-card hair over a base hair asset: a wispy fringe and long side locks, with a strand
       texture made here (see build_hair_cards)
-Everything is single-sided with double-sided materials; only the hair cards have a texture.
+  {"type": "jacket", "over": ["<asset>", ...], "color": "#151313", ...}
+      a leather rider jacket shaped from the skin itself (made by prepare(), before the clothes mask
+      the body; see prepare_jacket): worn open, a stand collar, zips, a turned-in lip on its edges,
+      a grain normal map. hem (metres above the pelvis bone), neck, neck_tilt, cuff_back,
+      open_top, open_bottom (half-widths of the opening), collar, zip, thickness, min_off, gap,
+      smooth, radial (how much the torso goes out from its axis rather than along the skin's
+      normals), drape_below, drape_slope (see drape), smooth_after, decimate, roughness,
+      specular, grain, grain_tile, zip_color, zip_top; debug_colors paints the turned-in lip red
+      and the collar blue and prints the faces per material
+Everything is single-sided with double-sided materials; only the hair cards and the jacket have a texture.
 """
 import math
 
@@ -737,7 +747,370 @@ def build_hair_cards(g, name, rig, body, meshes, L, tmpdir):
     return obj
 
 
+# --- the rider jacket --------------------------------------------------------------------------
+#
+# Shaped from the body itself rather than laid over it: a copy of the skin (taken before the clothes
+# mask it) cut at the hips, the neck and the wrists, opened down the front, pushed out over what it's
+# worn on and smoothed so it bridges hollows as cloth does. Its vertices are the body's, so it keeps
+# the body's skin weights exactly and bends with the arms as the skin does. Then a stand collar, the
+# zip down each front edge, a turned-in lip on every edge (so it reads as leather with thickness, not
+# a sheet), a grain normal map, and the skin it hides on the arms masked away.
+
+def bone_head(rig, b):
+    return np.array(rig.matrix_world @ rig.data.bones[b].head_local)
+
+
+def body_rest_coords(basemesh):
+    # The skin's vertices with the shape keys mixed in and no modifiers (indices match the mesh).
+    saved = [(m, m.show_viewport) for m in basemesh.modifiers]
+    for m, _ in saved:
+        m.show_viewport = False
+    dg = bpy.context.evaluated_depsgraph_get()
+    ev = basemesh.evaluated_get(dg)
+    me = ev.to_mesh()
+    co = np.empty(len(me.vertices) * 3)
+    me.vertices.foreach_get('co', co)
+    ev.to_mesh_clear()
+    for m, v in saved:
+        m.show_viewport = v
+    mw = np.array(basemesh.matrix_world)
+    return co.reshape(-1, 3) @ mw[:3, :3].T + mw[:3, 3]
+
+
+def jacket_planes(g, rig):
+    """The cuts that shape the jacket, as {name: (point, normal)}: what lies on the normal's side goes.
+    The neckline tilts so it sits lower at the front; the sleeves end just short of the wrist."""
+    hip, neck = bone_head(rig, 'pelvis'), bone_head(rig, 'neck_01')
+    a = math.radians(g.get('neck_tilt', 25))
+    planes = {
+        'hem': (np.array([0.0, 0.0, hip[2] + g.get('hem', 0.0)]), np.array([0.0, 0.0, -1.0])),
+        'neck': (neck + np.array([0.0, 0.0, g.get('neck', 0.0)]), np.array([0.0, -math.sin(a), math.cos(a)])),
+    }
+    for s in 'lr':
+        elbow, wrist = bone_head(rig, 'lowerarm_' + s), bone_head(rig, 'hand_' + s)
+        d = (wrist - elbow) / np.linalg.norm(wrist - elbow)
+        planes['wrist_' + s] = (wrist - d * g.get('cuff_back', 0.02), d)
+    return planes
+
+
+def beyond(co, planes, rig, margin=0.0):
+    """Per point: past any of the jacket's cuts (by more than -margin; a positive margin cuts deeper)."""
+    out = np.zeros(len(co), dtype=bool)
+    for k, (p, n) in planes.items():
+        d = (co - p) @ n + margin
+        if k.startswith('wrist_'):
+            side = np.sign(bone_head(rig, 'hand_' + k[-1])[0])
+            out |= (d > 0) & (co[:, 0] * side > 0.25)
+        else:
+            out |= d > 0
+    return out
+
+
+def leather_grain(path, size=256, cells=70, seed=7):
+    """A tileable leather grain as a tangent-space normal map: pebbled cells (Voronoi, F2 - F1) with
+    creases between them and a fine noise over it."""
+    rng = np.random.default_rng(seed)
+    pts = rng.random((cells, 2))
+    yy, xx = np.mgrid[0:size, 0:size] / size
+    d = np.full((size, size, 2), 9.0)
+    for ox in (-1, 0, 1):
+        for oy in (-1, 0, 1):
+            for p in pts:
+                dist = np.hypot(xx - p[0] - ox, yy - p[1] - oy)
+                d1 = np.minimum(d[..., 0], dist)
+                d[..., 1] = np.where(dist < d[..., 0], d[..., 0], np.minimum(d[..., 1], dist))
+                d[..., 0] = d1
+    h = np.clip((d[..., 1] - d[..., 0]) * cells ** 0.5 * 1.6, 0, 1) ** 0.5
+    h = h + 0.15 * rng.random((size, size))
+    gx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 2.2
+    gy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 2.2
+    n = np.stack([-gx, -gy, np.ones_like(h)], axis=2)
+    n /= np.linalg.norm(n, axis=2, keepdims=True)
+    px = np.concatenate([n * 0.5 + 0.5, np.ones((size, size, 1))], axis=2).astype(np.float32)
+    img = bpy.data.images.new('leather_grain', size, size, alpha=False)
+    img.colorspace_settings.name = 'Non-Color'
+    img.pixels.foreach_set(px.ravel())
+    img.filepath_raw = path
+    img.file_format = 'PNG'
+    img.save()
+    return img
+
+
+def leather_material(name, g, tmpdir):
+    import os
+    mat = material(name, g.get('color', '#151313'), g.get('roughness', 0.42))
+    nt = mat.node_tree
+    bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs['Specular IOR Level'].default_value = g.get('specular', 0.55)
+    tex = nt.nodes.new('ShaderNodeTexImage')
+    tex.image = leather_grain(os.path.join(tmpdir or '.', 'leather_grain.png'))
+    nm = nt.nodes.new('ShaderNodeNormalMap')
+    nm.inputs['Strength'].default_value = g.get('grain', 0.5)
+    nt.links.new(tex.outputs['Color'], nm.inputs['Color'])
+    nt.links.new(nm.outputs['Normal'], bsdf.inputs['Normal'])
+    return mat
+
+
+def box_uvs(me, tile):
+    """UVs by box projection, `tile` metres to a repeat: each face on the plane its normal faces most."""
+    if not me.uv_layers:
+        me.uv_layers.new(name='UVMap')
+    uv = me.uv_layers.active.data
+    for f in me.polygons:
+        ax = int(np.argmax(np.abs(f.normal)))
+        a, b = [(1, 2), (0, 2), (0, 1)][ax]
+        for li in f.loop_indices:
+            co = me.vertices[me.loops[li].vertex_index].co
+            uv[li].uv = (co[a] / tile, co[b] / tile)
+
+
+def drape(pos, top_z, hem_z, slope, half_w=0.21, dz=0.01, sectors=64):
+    """Cloth hanging from the torso: round a vertical axis, each direction's radius may only shrink by
+    `slope` per metre going down from top_z to the hem, so hollows below (the small of the back, the
+    waist) are bridged. Only the torso (|x| < half_w, below top_z) moves, and only outward."""
+    sel = (np.abs(pos[:, 0]) < half_w) & (pos[:, 2] < top_z) & (pos[:, 2] >= hem_z - dz)
+    if sel.sum() < 10:
+        return pos
+    P = pos[sel]
+    cy = 0.5 * (P[:, 1].min() + P[:, 1].max())
+    th = np.arctan2(P[:, 1] - cy, P[:, 0])
+    r = np.hypot(P[:, 0], P[:, 1] - cy)
+    zb = np.clip(np.floor((P[:, 2] - (hem_z - dz)) / dz).astype(int), 0, None)
+    tb = ((th + math.pi) / (2 * math.pi) * sectors).astype(int) % sectors
+    nz = int(zb.max()) + 1
+    R = np.full((nz, sectors), -1.0)
+    np.maximum.at(R, (zb, tb), r)
+    # Down from the top: each row at least the row above, less the taper.
+    for k in range(nz - 2, -1, -1):
+        R[k] = np.maximum(R[k], np.where(R[k + 1] > 0, R[k + 1] - slope * dz, -1.0))
+    want = R[zb, tb]
+    k = np.maximum(want, r) / np.maximum(r, 1e-6)
+    out = pos.copy()
+    out[sel, 0] = P[:, 0] * k
+    out[sel, 1] = cy + (P[:, 1] - cy) * k
+    return out
+
+
+def prepare_jacket(g, name, rig, basemesh):
+    import bmesh
+    planes = jacket_planes(g, rig)
+    co = body_rest_coords(basemesh)
+    bones = {b.name for b in rig.data.bones}
+    gi = basemesh.vertex_groups['body'].index
+    on_body = np.zeros(len(co), dtype=bool)
+    for v in basemesh.data.vertices:
+        on_body[v.index] = any(e.group == gi and e.weight > 0.5 for e in v.groups)
+
+    # The skin the sleeves hide (the torso's is already under the tee): masked off the body, keeping a
+    # few centimetres inside each cuff so no gap opens there when the arm bends.
+    hidden = on_body & ~beyond(co, planes, rig, margin=0.035) & (np.abs(co[:, 0]) > 0.2)
+    vg = basemesh.vertex_groups.new(name='Delete.' + name + '.jacket')
+    vg.add([int(i) for i in np.nonzero(hidden)[0]], 1.0, 'REPLACE')
+    mask = basemesh.modifiers.new('Delete.jacket', 'MASK')
+    mask.vertex_group = vg.name
+    mask.invert_vertex_group = True
+
+    # A copy of the skin, unmasked and with the shapes baked in.
+    jac = basemesh.copy()
+    jac.data = basemesh.data.copy()
+    jac.name = name + '.jacket'
+    bpy.context.scene.collection.objects.link(jac)
+    jac.modifiers.clear()
+    if jac.data.shape_keys:
+        jac.shape_key_clear()
+    inv = np.array(jac.matrix_world.inverted())
+    jac.data.vertices.foreach_set('co', (co @ inv[:3, :3].T + inv[:3, 3]).ravel())
+    for vgrp in list(jac.vertex_groups):
+        if vgrp.name not in bones:
+            jac.vertex_groups.remove(vgrp)
+
+    bm = bmesh.new()
+    bm.from_mesh(jac.data)
+    bm.verts.ensure_lookup_table()
+    keep = on_body & ~beyond(co, planes, rig, margin=-0.03)
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if not all(keep[v.index] for v in f.verts)], context='FACES')
+    # Clean cuts: bisect along each plane and drop what's past it.
+    for k, (p, n) in planes.items():
+        geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
+        if k.startswith('wrist_'):
+            side = np.sign(bone_head(rig, 'hand_' + k[-1])[0])
+            fs = [f for f in bm.faces if all(v.co.x * side > 0.25 for v in f.verts)]
+            geom = list({e for f in fs for e in f.edges}) + list({v for f in fs for v in f.verts}) + fs
+        bmesh.ops.bisect_plane(bm, geom=geom, plane_co=Vector(p), plane_no=Vector(n), clear_outer=True)
+
+    # Open down the front: from open_top (half-width at the neck) to open_bottom at the hem.
+    neck_z, hem_z = planes['neck'][0][2], planes['hem'][0][2]
+    w_top, w_bot = g.get('open_top', 0.035), g.get('open_bottom', 0.075)
+
+    def half_open(z):
+        t = np.clip((neck_z - z) / (neck_z - hem_z), 0, 1)
+        return w_top + (w_bot - w_top) * t
+    front = [f for f in bm.faces if f.calc_center_median().y < -0.03 and abs(f.calc_center_median().x) < 0.2]
+    for s in (1, -1):
+        t = Vector((s * (w_bot - w_top), 0, hem_z - neck_z))
+        n = Vector((t.z, 0, -t.x)).normalized()
+        geom = list({e for f in front for e in f.edges}) + list({v for f in front for v in f.verts}) + front
+        bmesh.ops.bisect_plane(bm, geom=geom, plane_co=Vector((s * w_top, 0, neck_z)), plane_no=n)
+        front = [f for f in bm.faces if f.calc_center_median().y < -0.03 and abs(f.calc_center_median().x) < 0.2]
+    bmesh.ops.delete(bm, geom=[f for f in front if abs(f.calc_center_median().x) < half_open(f.calc_center_median().z)], context='FACES')
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+
+    # Out over what it's worn on: along each normal past the outermost of the clothes there (found by
+    # casting in from outside, so a tee over a waistband counts, not the waistband), at least min_off,
+    # then smoothed with that as a floor, which rounds it over the shoulders and bridges hollows.
+    bm.normal_update()
+    bm.verts.ensure_lookup_table()
+    base = np.array([tuple(v.co) for v in bm.verts])
+    nrm = np.array([tuple(v.normal) for v in bm.verts])
+    # Round the torso, out from its axis more than along the skin's normal: in the hollows (between the
+    # buttocks, under the shoulder blades) the skin's normals point sideways and would fold the leather.
+    top_z = bone_head(rig, 'upperarm_l')[2] - g.get('drape_below', 0.12)
+    torso = (np.abs(base[:, 0]) < 0.21) & (base[:, 2] < top_z)
+    cy = 0.5 * (base[torso, 1].min() + base[torso, 1].max()) if torso.any() else 0.0
+    radial = np.stack([base[:, 0], base[:, 1] - cy, np.zeros(len(base))], axis=1)
+    radial /= np.maximum(np.linalg.norm(radial, axis=1, keepdims=True), 1e-6)
+    w = g.get('radial', 0.7)
+    nrm[torso] = (1 - w) * nrm[torso] + w * radial[torso]
+    nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-6)
+    surf = Surface([object_by_asset(name, a) for a in g.get('over', [])]) if g.get('over') else None
+    off = np.full(len(base), g.get('min_off', 0.012))
+    reach = 0.07
+    if surf is not None:
+        for i in range(len(base)):
+            loc, _ = surf.cast(base[i] + nrm[i] * reach, -nrm[i], reach + 0.002)
+            if loc is not None:
+                off[i] = max(off[i], reach - (Vector(loc) - Vector(base[i] + nrm[i] * reach)).length + g.get('gap', 0.008))
+    pos = base + nrm * off[:, None]
+    nbrs = [[e.other_vert(v).index for e in v.link_edges] for v in bm.verts]
+    edge = np.array([v.is_boundary for v in bm.verts])
+    edge_nbrs = [[e.other_vert(v).index for e in v.link_edges if e.is_boundary] for v in bm.verts]
+    for _ in range(g.get('smooth', 14)):
+        avg = np.array([pos[(edge_nbrs[i] if edge[i] else nbrs[i]) or [i]].mean(axis=0) for i in range(len(pos))])
+        pos = 0.5 * pos + 0.5 * avg
+        out = np.einsum('ij,ij->i', pos - base, nrm)
+        pos += nrm * np.maximum(off - out, 0)[:, None]
+    # Leather hangs: below the armpits it falls from the chest and shoulder blades, tapering in only a
+    # little, instead of following the small of the back in and bulging out again over the waistband.
+    # Then a few more smoothing passes, with what the drape pushed out as the new floor.
+    pos = drape(pos, bone_head(rig, 'upperarm_l')[2] - g.get('drape_below', 0.12), hem_z, g.get('drape_slope', 0.12))
+    off = np.maximum(off, np.einsum('ij,ij->i', pos - base, nrm))
+    for _ in range(g.get('smooth_after', 6)):
+        avg = np.array([pos[(edge_nbrs[i] if edge[i] else nbrs[i]) or [i]].mean(axis=0) for i in range(len(pos))])
+        pos = 0.5 * pos + 0.5 * avg
+        out = np.einsum('ij,ij->i', pos - base, nrm)
+        pos += nrm * np.maximum(off - out, 0)[:, None]
+    for v, p in zip(bm.verts, pos):
+        v.co = Vector(p)
+    bm.to_mesh(jac.data)
+    bm.free()
+
+    # Fewer triangles: the skin's density is more than leather needs.
+    if g.get('decimate', 0.45) < 1:
+        mod = jac.modifiers.new('Decimate', 'DECIMATE')
+        mod.ratio = g.get('decimate', 0.45)
+        mod.use_symmetry = True
+        mod.symmetry_axis = 'X'
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = jac
+        jac.select_set(True)
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+
+    bm = bmesh.new()
+    bm.from_mesh(jac.data)
+    bm.normal_update()
+    neck = bone_head(rig, 'neck_01')
+
+    def boundary(pred):
+        return [e for e in bm.edges if e.is_boundary and pred(e)]
+
+    def along(e):
+        d = e.verts[1].co - e.verts[0].co
+        return abs(d.z) / max(d.length, 1e-9)
+
+    def extrude(edges, move, mat):
+        res = bmesh.ops.extrude_edge_only(bm, edges=edges)
+        made = [x for x in res['geom'] if isinstance(x, bmesh.types.BMVert)]
+        faces = [x for x in res['geom'] if isinstance(x, bmesh.types.BMFace)]
+        for f in faces:
+            f.material_index = mat
+            # Wound like the face it hangs from (a shared edge runs opposite ways round two faces that
+            # agree), so it shades as the same sheet folded, not inside out.
+            for lp in f.loops:
+                other = lp.link_loop_radial_next
+                if other is not lp and other.face not in faces:
+                    if other.vert == lp.vert:
+                        f.normal_flip()
+                    break
+        # Each new vertex comes from the old one it's joined to by an edge that isn't boundary-only.
+        for v in made:
+            src = next((e.other_vert(v) for e in v.link_edges if e.other_vert(v) not in made), None)
+            if src is not None:
+                v.co = move(src)
+        return made
+
+    # The zip down each front edge: a strip of teeth turned toward the middle.
+    zip_w = g.get('zip', 0.009)
+    zips = boundary(lambda e: along(e) > 0.6 and all(abs(v.co.x) < 0.14 and v.co.y < -0.02 and hem_z + 0.005 < v.co.z < neck_z - g.get('zip_top', 0.06) for v in e.verts))
+    if zips:
+        extrude(zips, lambda s: s.co + Vector((-np.sign(s.co.x) * zip_w, -0.001, 0)), 1)
+    # The stand collar, up from the neckline and a little out from the neck.
+    up = Vector((0, -0.18, 1)).normalized()
+    # The neckline: every edge lying on the neck's cut (it slopes down at the front, so not by level).
+    np_co, np_n = planes['neck']
+
+    # (Pushed out over the clothes, its edge sits a little off the cut; the front's edges run down.)
+    def on_neck(v):
+        return abs((np.array(v.co) - np_co) @ np_n) < 0.025
+    neckline = boundary(lambda e: along(e) < 0.85 and all(on_neck(v) for v in e.verts))
+    if neckline:
+        def collar(s):
+            r = Vector((s.co.x, s.co.y - neck[1], 0)).normalized()
+            return s.co + up * g.get('collar', 0.045) + r * 0.008
+        extrude(neckline, collar, 3 if g.get('debug_colors') else 0)
+    # A lip turned in along every edge, so the leather has a thickness.
+    bm.normal_update()
+    lip = g.get('thickness', 0.006)
+    extrude(boundary(lambda e: True), lambda s: s.co - s.normal * lip, 2 if g.get('debug_colors') else 0)
+    bm.to_mesh(jac.data)
+    bm.free()
+
+    # Clearing the slots resets every face's material index: keep them.
+    mat_idx = np.zeros(len(jac.data.polygons), dtype=np.int32)
+    jac.data.polygons.foreach_get('material_index', mat_idx)
+    jac.data.materials.clear()
+    jac.data.materials.append(leather_material(name + '.leather', g, g.get('_tmpdir')))
+    zm = material(name + '.zip', g.get('zip_color', '#34322f'), 0.35)
+    next(n for n in zm.node_tree.nodes if n.type == 'BSDF_PRINCIPLED').inputs['Metallic'].default_value = 1.0
+    jac.data.materials.append(zm)
+    if g.get('debug_colors'):
+        # Checking what's what: the lip red, the collar blue.
+        jac.data.materials.append(material(name + '.dbg_lip', '#ff0000', 0.5))
+        jac.data.materials.append(material(name + '.dbg_collar', '#0040ff', 0.5))
+    jac.data.polygons.foreach_set('material_index', mat_idx)
+    box_uvs(jac.data, g.get('grain_tile', 0.06))
+    if g.get('debug_colors'):
+        idx = np.zeros(len(jac.data.polygons), dtype=int)
+        jac.data.polygons.foreach_get('material_index', idx)
+        print('JACKET_DEBUG faces by material', np.bincount(idx).tolist(), 'zips', len(zips), 'neckline', len(neckline))
+    jac.data.update()
+    skin_to(jac, rig)
+    return jac
+
+
+def prepare(gs, name, rig, basemesh, tmpdir=None):
+    """Garments made from the whole skin, before the clothes mask it (build() comes after). Returns the
+    meshes made."""
+    out = []
+    for g in gs:
+        if g['type'] == 'jacket':
+            g['_tmpdir'] = tmpdir
+            out.append(prepare_jacket(g, name, rig, basemesh))
+    return out
+
+
 def build(g, name, rig, body, meshes, L=None, tmpdir=None):
+    if g['type'] == 'jacket':
+        return []  # made in prepare()
     if g['type'] == 'apron':
         return [build_apron(g, name, rig, body)]
     if g['type'] == 'headband':

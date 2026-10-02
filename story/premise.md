@@ -8,7 +8,7 @@ A large, walkable city in an alternate-reality Japan, 東都 Tōto (a Tokyo that
 city-pop look and feel: neon on wet streets, a bubble-era disco on the harbour, idols on every screen. The era
 just is; the story never explains its history.
 
-The MC is a detective, more machine than man: the enemy killed him and rebuilt him as a tool, and he escaped
+The MC is Mack, an American detective in a city whose language he's lost, more machine than man: the enemy killed him and rebuilt him as a tool, and he escaped
 with most of his memory gone. He knows someone is out there, and an organisation behind him, and he works as a
 detective to find the truth, and his missing wife. He mostly works alone, though he knows half the city and is
 friendly with most of it. The story is often not about him: each
@@ -64,6 +64,11 @@ Two kinds, and the difference is the point:
 How they're fought: car gunfights are already in the game (the race venues' battles, with pistols and
 paintball) and are one of the main ways. More guns, fights in the city, and fights on foot are to come.
 
+## Language
+
+Decided: Mack starts the game without Japanese (the rebuild took it with his memory), and the player is lost with
+him; as he learns, the English arrives in parentheses. See [language.md](language.md).
+
 ## Morality
 
 Decided: a morality system. Sleeping around a lot brings it down. It affects his relationships (how people
@@ -108,7 +113,7 @@ their grey areas and, sometimes, their shock.
   their starting place.
 - **Nihilism and sin.** What people do when they believe nothing matters, and what it costs them.
 - **Racial tension.** Foreigners in a country that is fairly homogeneous: the stares, the assumptions, who
-  belongs. On purpose, and felt from the inside too: the detective is half-American (see
+  belongs. On purpose, and felt from the inside too: the detective is an American who has lost his Japanese (see
   [cast/mc.md](cast/mc.md)).
 - **Immigration.** A serious theme, not shied away from, from a conservative-leaning point of view: the strain
   on Japan, the crime rings that exploit it, and the states and elites who push it. There are good people in

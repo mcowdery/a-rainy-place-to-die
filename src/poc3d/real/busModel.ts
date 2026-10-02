@@ -10,7 +10,7 @@ import { passengerMesh } from './people';
 let busCount = 0;
 
 /**
- * The city bus, second generation (review in models.html; `?transit=new` in the district): a Japanese non-step bus
+ * The city bus, second generation (approved: the district's default, `?transit=old` for the old one): a Japanese non-step bus
  * (after the Toei and city operators' buses, invented), built to be ridden. Outside: a cream body with the line's
  * colour, a dark window band, LED destination boards front, side and back, plug doors on the kerb side. Inside:
  * the low front half with the driver, the fare box and the seats on the wheel housings, the fold-ups by the

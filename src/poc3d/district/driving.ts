@@ -246,6 +246,11 @@ export class Driving {
     cam.lookAt(c.x + c.dx * 3, (c.bus ? 2.2 : 1.1) + this.floor, c.z + c.dz * 3);
   }
 
+  /** Looking about from the vehicle (rad): yaw left positive, pitch up positive (a bike's views use them). */
+  get look(): { yaw: number; pitch: number } {
+    return { yaw: this.orbitYaw, pitch: this.lookPitch };
+  }
+
   /** km/h, for the dashboard. */
   get kmh(): number {
     return Math.abs(this.car?.v ?? 0) * 3.6;

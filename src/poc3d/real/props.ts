@@ -2,6 +2,7 @@ import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng, u01 } from '../../core/hash';
 import { frontSpan, type Building3, type CellPlan3, type Road3 } from '../district/plan';
 import { frontFrame, styleFor } from './buildings';
+import { shopLight, TRADES } from './shops';
 import type { Light } from './lightmap';
 import { addCar, addCarLow } from './cars';
 import { carMixFor, pickCar } from '../district/carMix';
@@ -239,13 +240,13 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
     const [s0, s1] = frontSpan(b);
     const sw = s1 - s0;
     if (s.shopOpen) {
-      const color: C3 = s.shopPal === 0 ? [1.0, 0.78, 0.5] : s.shopPal === 1 ? [0.85, 0.92, 1.0] : s.shopPal === 2 ? (b.id % 2 ? [1.0, 0.45, 0.8] : [0.4, 0.85, 1.0]) : [0.9, 0.4, 0.2];
+      const color: C3 = shopLight(s.trade, s.hue);
       lights.push({
         x: f.p[0] + f.r[0] * (s0 + 0.4),
         z: f.p[2] + f.r[2] * (s0 + 0.4),
         r: 0,
         color,
-        i: s.shopPal === 3 ? 0.3 : 0.6,
+        i: TRADES[s.trade].spill,
         band: { dx: f.r[0] * (sw - 0.8), dz: f.r[2] * (sw - 0.8), nx: f.n[0], nz: f.n[2], depth: 4.5 },
       });
     }
