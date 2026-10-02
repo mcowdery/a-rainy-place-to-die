@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { overlaps, pad, type Rect } from '../src/core/coords';
-import { TIMES, WEATHERS } from '../src/atmosphere/rules';
+import { WEATHERS } from '../src/atmosphere/rules';
+import { LIGHT_LOOKS } from '../src/poc3d/district/clock';
+import { SKY_LOOKS } from '../src/poc3d/district/atmosphere';
 import { loadDistrictContent } from '../src/poc3d/district/content';
 import { CELL, DISTRICTS3, planCell3, STYLES3 } from '../src/poc3d/district/plan';
 import { DistrictModel } from '../src/poc3d/district/model';
@@ -133,9 +135,39 @@ describe('3D stamps and atmosphere', () => {
   });
 
   it('resolves every time/weather combination for Kaburo', () => {
-    for (const t of TIMES) for (const w of WEATHERS) expect(Object.keys(content.atmosphere.resolve('neon', t, w))).toHaveLength(19);
+    for (const t of LIGHT_LOOKS) for (const w of WEATHERS) for (const sky of SKY_LOOKS) expect(Object.keys(content.atmosphere.resolve('neon', t, w, sky))).toHaveLength(22);
+    // The looks between the times start from their base's: golden hour is still day (no lamps), the blue hour dusk's
+    // (lamps and neon on), and each changes the sky.
+    const a = content.atmosphere;
+    expect(a.resolve('neon', 'golden', 'clear').lamps).toBe(a.resolve('neon', 'day', 'clear').lamps);
+    expect(a.resolve('neon', 'bluehour', 'clear').neon).toBe(a.resolve('neon', 'dusk', 'clear').neon);
+    for (const l of ['morning', 'golden', 'bluehour'] as const) expect(a.resolve('neon', l, 'clear').sky).not.toBe(a.resolve('neon', l === 'bluehour' ? 'dusk' : 'day', 'clear').sky);
+    // Overcast skies have no sunset glow.
+    expect(a.resolve('neon', 'dusk', 'rain').sunGlow).toBe(0);
+    expect(a.resolve('neon', 'dusk', 'clear').sunGlow).toBeGreaterThan(0);
+    // The physical sky by day and at sunset, none at night in any weather, little under cloud.
+    expect(a.resolve('neon', 'dusk', 'clear').phys).toBe(1);
+    for (const w of WEATHERS) for (const sky of SKY_LOOKS) expect(a.resolve('neon', 'night', w, sky).phys).toBe(0);
+    expect(a.resolve('neon', 'day', 'rain').phys).toBeLessThan(0.2);
     expect(content.atmosphere.resolve('neon', 'night', 'clear').neon).toBe('flicker');
     expect(content.atmosphere.resolve('neon', 'day', 'rain').rain).toBeGreaterThan(0);
+  });
+
+  it('lays the noir and deep skies over the night and leaves the day alone', () => {
+    const a = content.atmosphere;
+    for (const sky of ['noir', 'deep'] as const) {
+      for (const w of WEATHERS) expect(a.resolve('neon', 'night', w, sky).horizon).not.toBe(a.resolve('neon', 'night', w).horizon);
+      expect(a.resolve('neon', 'day', 'clear', sky)).toEqual(a.resolve('neon', 'day', 'clear'));
+      expect(a.resolve('neon', 'night', 'clear', sky).stars).toBeLessThan(0.1);
+    }
+    // Deep is darker than noir overhead and along the horizon.
+    const lum = (c: number): number => ((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255);
+    expect(lum(a.resolve('neon', 'night', 'clear', 'deep').horizon)).toBeLessThan(lum(a.resolve('neon', 'night', 'clear', 'noir').horizon));
+    // Kaburo's own night rule still applies under it.
+    expect(a.resolve('neon', 'night', 'clear', 'noir').neon).toBe('flicker');
+    // A city's sky: only the brightest stars through its light.
+    expect(a.resolve('neon', 'night', 'clear', 'noir').stars).toBeLessThan(0.1);
+    expect(a.resolve('neon', 'night', 'clear').stars).toBe(1);
   });
 });
 

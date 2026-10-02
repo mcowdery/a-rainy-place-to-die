@@ -1,6 +1,7 @@
 import YAML from 'yaml';
 import { CELL_CHARS, type CellKind } from '../../gen/macro';
 import { applicableRules, checkMatch, type RuleMatch, type TimeOfDay, type Weather } from '../../atmosphere/rules';
+import { LIGHT_LOOKS, type LightLook } from './clock';
 
 /**
  * 3D atmosphere: (district, time, weather) -> scene lighting and effects, using the same layered rule
@@ -36,11 +37,27 @@ export interface Atmosphere3 {
   readonly cloudDark: number;
   /** Wet air 0-1: how much the street lamps' light cones show (rain, fog, mist). */
   readonly haze: number;
+  /**
+   * How much of the star field shows on a clear night, 0-1: 1 is a dark sky's (about two thousand), a city's light
+   * leaves only the brightest few dozen (~0.02), none low down where its glow is thickest.
+   */
+  readonly stars: number;
+  /**
+   * The glow on the horizon round the sun (sRGB, added to the sky on the sun's side, low down, and to the clouds
+   * there: sunrise and sunset colour), with a faint band of it opposite; black for none.
+   */
+  readonly sunGlow: number;
+  /**
+   * How much of the sky (and the light's colours) is the physical sky's (real/skyModel.ts: computed from where the sun
+   * is) rather than these colours: 1 clear by day and through sunrise and sunset, 0 at night (the city's own sky) and
+   * mostly 0 under cloud; between at the blue hour.
+   */
+  readonly phys: number;
 }
 
 type Key = keyof Atmosphere3;
-const COLOR_KEYS: readonly Key[] = ['sky', 'horizon', 'fog', 'hemiSky', 'hemiGround', 'sunColor', 'cloudLit', 'cloudDark'];
-const NUMBER_KEYS: readonly Key[] = ['fogNear', 'fogFar', 'hemi', 'sun', 'windowLit', 'rain', 'lamps', 'exposure', 'clouds', 'haze'];
+const COLOR_KEYS: readonly Key[] = ['sky', 'horizon', 'fog', 'hemiSky', 'hemiGround', 'sunColor', 'cloudLit', 'cloudDark', 'sunGlow'];
+const NUMBER_KEYS: readonly Key[] = ['fogNear', 'fogFar', 'hemi', 'sun', 'windowLit', 'rain', 'lamps', 'exposure', 'clouds', 'haze', 'stars', 'phys'];
 const ALL_KEYS: readonly Key[] = [...COLOR_KEYS, ...NUMBER_KEYS, 'neon'];
 
 interface Rule3 {
@@ -48,16 +65,38 @@ interface Rule3 {
   readonly set: Partial<Atmosphere3>;
 }
 
+/**
+ * Looks for the sky (the K panel's Sky, ?sky=): `citypop` is the rules alone; any other is the file's `skies:` entry
+ * of that name, rules laid over them (each by the same matching), so a look changes only what it sets.
+ */
+export const SKY_LOOKS = ['noir', 'deep', 'citypop'] as const;
+
+/** The looks between the story's times of day (clock.ts LIGHT_LOOKS) and the time each starts from. */
+export const LOOK_BASE: Partial<Record<LightLook, TimeOfDay>> = { morning: 'day', golden: 'day', bluehour: 'dusk' };
+export type SkyLook = (typeof SKY_LOOKS)[number];
+
 export class AtmosphereTable3 {
   private cache = new Map<string, Atmosphere3>();
 
-  constructor(private readonly rules: readonly Rule3[]) {}
+  constructor(
+    private readonly rules: readonly Rule3[],
+    private readonly skies: ReadonlyMap<string, readonly Rule3[]> = new Map(),
+  ) {}
 
-  resolve(district: CellKind, time: TimeOfDay, weather: Weather): Atmosphere3 {
-    const key = `${district}|${time}|${weather}`;
+  resolve(district: CellKind, time: LightLook, weather: Weather, sky: SkyLook = 'citypop'): Atmosphere3 {
+    const key = `${district}|${time}|${weather}|${sky}`;
     let a = this.cache.get(key);
     if (!a) {
-      a = Object.assign({}, ...applicableRules(this.rules, district, time, weather).map((r) => r.set)) as Atmosphere3;
+      const base = LOOK_BASE[time];
+      if (base) {
+        // A look between the story's times: its base's atmosphere, then the rules naming it (the sky look's last).
+        const own = (rules: readonly Rule3[]): Rule3[] => applicableRules(rules.filter((r) => r.match.time === time), district, time as TimeOfDay, weather);
+        a = Object.assign({}, this.resolve(district, base, weather, sky), ...[...own(this.rules), ...own(this.skies.get(sky) ?? [])].map((r) => r.set)) as Atmosphere3;
+      } else {
+        const t = time as TimeOfDay;
+        const over = applicableRules(this.skies.get(sky) ?? [], district, t, weather);
+        a = Object.assign({}, ...[...applicableRules(this.rules, district, t, weather), ...over].map((r) => r.set)) as Atmosphere3;
+      }
       this.cache.set(key, a);
     }
     return a;
@@ -77,10 +116,12 @@ export function parseAtmosphere3(file: string, text: string, errors: string[]): 
   const list = (doc as { rules?: unknown })?.rules;
   if (!Array.isArray(list)) return err('expected rules: [...]'), null;
   const districts = new Set<string>(Object.values(CELL_CHARS));
-  const rules: Rule3[] = list.map((raw: Record<string, unknown>, i) => {
-    const at = `rule ${i}`;
+  const parseRules = (list: Record<string, unknown>[], prefix: string): Rule3[] => list.map((raw, i) => {
+    const at = `${prefix}rule ${i}`;
     const match = (raw.match ?? {}) as Record<string, unknown>;
-    checkMatch(match, districts, (m) => err(`${at}: ${m}`));
+    // (A look between the story's times is a time here too: checked here, the rest by the shared check.)
+    if (match.time !== undefined && !LIGHT_LOOKS.includes(match.time as LightLook)) err(`${at}: unknown time '${String(match.time)}'`);
+    checkMatch({ ...match, time: undefined }, districts, (m) => err(`${at}: ${m}`));
     const set: Record<string, unknown> = {};
     for (const [k, v] of Object.entries((raw.set ?? {}) as Record<string, unknown>)) {
       if (!ALL_KEYS.includes(k as Key)) err(`${at}: unknown key '${k}'`);
@@ -97,10 +138,20 @@ export function parseAtmosphere3(file: string, text: string, errors: string[]): 
     }
     return { match: match as RuleMatch, set: set as Partial<Atmosphere3> };
   });
+  const rules = parseRules(list, '');
+  const skies = new Map<string, Rule3[]>();
+  const skyDoc = (doc as { skies?: unknown }).skies ?? {};
+  if (typeof skyDoc !== 'object' || skyDoc === null || Array.isArray(skyDoc)) err('skies must map a look to its rules');
+  else
+    for (const [name, l] of Object.entries(skyDoc)) {
+      if (!SKY_LOOKS.includes(name as SkyLook) || name === 'citypop') err(`skies: unknown look '${name}' (one of ${SKY_LOOKS.filter((n) => n !== 'citypop').join(', ')})`);
+      else if (!Array.isArray(l)) err(`skies.${name}: expected a list of rules`);
+      else skies.set(name, parseRules(l, `skies.${name} `));
+    }
   const base = rules.find((r) => Object.keys(r.match).length === 0);
   if (!base) err('needs a base rule with an empty match');
   else for (const k of ALL_KEYS) if (!(k in base.set)) err(`base rule is missing '${k}'`);
-  return errors.length > before ? null : new AtmosphereTable3(rules);
+  return errors.length > before ? null : new AtmosphereTable3(rules, skies);
 }
 
 /**

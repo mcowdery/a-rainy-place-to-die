@@ -1,5 +1,7 @@
 import { MOB_LOOK_NAMES, type MobLook } from '../real/people';
 import { GRADE_NAMES, type GradeName } from '../real/grade';
+import { SKY_LOOKS, type SkyLook } from './atmosphere';
+import { MOON_SHAPES, type MoonShape } from '../real/sky';
 
 /**
  * Weather and lighting settings to play with, on top of the (district, time, weather) atmosphere: rain
@@ -49,6 +51,16 @@ export interface MoodSettings {
   quality: Quality;
   /** How the people in the streets look (real/people.ts MOB_LOOKS). */
   mob: MobLook;
+  /** The sky's look (atmosphere.yaml `skies`): noir drains the colour from the night, deep is a city's ink-black one, citypop the violet one. */
+  sky: SkyLook;
+  /**
+   * The sky's colours by day and through sunrise and sunset: computed from where the sun is (real/skyModel.ts), the
+   * computed sky in the painted colours (tinted), half and half in the painted colours (mixed), or painted (the
+   * atmosphere's own). Nights are painted either way.
+   */
+  skyColors: SkyColors;
+  /** The moon's look (real/sky.ts MOON_SHAPE): the lunar calendar's, or full, a phase, hazy, or the old disc. */
+  moonShape: MoonShape;
 }
 
 export const QUALITIES = ['high', 'medium', 'low'] as const;
@@ -64,10 +76,24 @@ export const QUALITY: Record<Quality, { detail: number; mid: number; traffic: nu
   low: { detail: 170, mid: 70, traffic: 200, carLod: 40, people: 120 },
 };
 
+export const SKY_COLORS = ['computed', 'tinted', 'mixed', 'painted'] as const;
+export type SkyColors = (typeof SKY_COLORS)[number];
+/**
+ * What each sky colours setting takes from the computed sky (real/skyModel.ts): `sky`, how much of the sky's light
+ * (its brightness round the sun, its gradient, the twilight); `light`, whether the light on the city takes its colours
+ * too; `tint`, whether the computed sky is recoloured in the painted palette for the time of day (pink sunsets).
+ */
+export const SKY_COLOR_MODE: Record<SkyColors, { sky: number; light: number; tint: number }> = {
+  computed: { sky: 1, light: 1, tint: 0 },
+  tinted: { sky: 1, light: 0, tint: 1 },
+  mixed: { sky: 0.5, light: 0, tint: 1 },
+  painted: { sky: 0, light: 0, tint: 0 },
+};
+
 export const RESOLUTIONS = ['auto', '100', '85', '70', '55'] as const;
 export type Resolution = (typeof RESOLUTIONS)[number];
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, resolution: 'auto', quality: 'high', mob: 'solid' };
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, resolution: 'auto', quality: 'high', mob: 'solid', sky: 'deep', skyColors: 'painted', moonShape: 'calendar' };
 const SHADOW_COUNTS = [0, 2, 4, 8];
 const SAVED_KEY = 'city-popper.district.mood';
 
@@ -108,6 +134,12 @@ function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettin
   if (q && QUALITIES.includes(q)) m.quality = q;
   const mb = params.get('mob') as MobLook | null;
   if (mb && MOB_LOOK_NAMES.includes(mb)) m.mob = mb;
+  const sk = params.get('sky') as SkyLook | null;
+  if (sk && SKY_LOOKS.includes(sk)) m.sky = sk;
+  const sc = params.get('skyColors') as SkyColors | null;
+  if (sc && SKY_COLORS.includes(sc)) m.skyColors = sc;
+  const ms = params.get('moonShape') as MoonShape | null;
+  if (ms && MOON_SHAPES.includes(ms)) m.moonShape = ms;
   return m;
 }
 
@@ -133,6 +165,9 @@ function moodParams(m: MoodSettings, base: MoodSettings, into = new URLSearchPar
   set('res', m.resolution, base.resolution);
   set('quality', m.quality, base.quality);
   set('mob', m.mob, base.mob);
+  set('sky', m.sky, base.sky);
+  set('skyColors', m.skyColors, base.skyColors);
+  set('moonShape', m.moonShape, base.moonShape);
   return into;
 }
 
@@ -200,6 +235,9 @@ export class MoodPanel {
     const fromM = (m: number): number => Math.log(m) / Math.log(300);
     this.slider('focus', 'Focus', 0, 1, 0.005, () => (s.focus === null ? -1 : fromM(s.focus)), (v) => (s.focus = toM(v)), (v) => (v < 0 ? 'auto (centre of view)' : `${toM(v) < 10 ? toM(v).toFixed(1) : Math.round(toM(v))} m`), () => (s.focus = null));
     this.choice('shadows', 'Lamp shadows', SHADOW_COUNTS.map(String), () => String(s.shadows), (v) => (s.shadows = Number(v)));
+    this.choice('sky', 'Sky', SKY_LOOKS, () => s.sky, (v) => (s.sky = v as SkyLook));
+    this.choice('skyColors', 'Sky colours', SKY_COLORS, () => s.skyColors, (v) => (s.skyColors = v as SkyColors));
+    this.choice('moonShape', 'Moon', MOON_SHAPES, () => s.moonShape, (v) => (s.moonShape = v as MoonShape));
     this.choice('grade', 'Grade', GRADE_NAMES, () => s.grade, (v) => (s.grade = v as GradeName));
     this.choice('res', 'Resolution %', RESOLUTIONS, () => s.resolution, (v) => (s.resolution = v as Resolution));
     this.choice('quality', 'Detail', QUALITIES, () => s.quality, (v) => (s.quality = v as Quality));

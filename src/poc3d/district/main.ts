@@ -10,7 +10,7 @@ import { outlookAt } from './forecast';
 import { WeatherApp } from './weatherApp';
 import { puddleAt, weatherGrip, wheelsOf as carWheels, type RoadWeather } from './roadGrip';
 import { blendAtmosphere } from './atmosphere';
-import { clockAt, clockLabel, DAY, lateAt, phaseAt, RATE, sleepUntil, START_MINUTE, sunDirAt, TIMES_OF_DAY, untilMinute, blendAt, type NamedTime } from './clock';
+import { clockAt, clockLabel, DAY, lateAt, phaseAt, RATE, sleepUntil, START_MINUTE, sunDirAt, sunAt, moonnessAt, moonAt, starsAt, DAYLIGHT, type MoonNow, TIMES_OF_DAY, untilMinute, blendAt, type NamedTime } from './clock';
 import { buildEdges } from '../real/edges';
 import { railReserved } from './rail';
 import * as THREE from 'three';
@@ -46,6 +46,7 @@ import { railStation, TrainSystem, viaductPiers, type RailStation } from '../rea
 import { SubwaySystem } from '../real/subway';
 import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../real/subwayStation';
 import { buildRotary, type RotaryBuilt } from '../real/rotary';
+import { ShopAtlas } from '../real/shopAtlas';
 import { interiorFor, type Interior } from '../real/interiors';
 import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem, type DrivenVehicle, setTrafficGround, useNewBuses } from '../real/traffic';
@@ -77,7 +78,7 @@ import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater,
 import { TrackMap, type Wheel } from '../real/tracks';
 import { setTreeSink, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { LITTER, WIPERS } from '../real/city';
-import { moodFromUrl, MoodPanel, QUALITY } from './moodPanel';
+import { moodFromUrl, MoodPanel, QUALITY, SKY_COLOR_MODE } from './moodPanel';
 import { carLoops, routeFor, scrambleKeys, Signals } from './traffic';
 import { carMixFor, CITY_CARS } from './carMix';
 import { CAR } from './cabin';
@@ -94,13 +95,18 @@ import { addFigure, GhostBuilder, ghostMaterial, setMobLook, setPassengerMateria
 import { SignAtlas, signMaterial } from '../real/signs';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { TAXI_ADS } from '../models/ads';
-import { Sky } from '../real/sky';
+import { MOON_SHAPE, MOON_SHAPES, Sky } from '../real/sky';
+import { SKY_AZ, SKY_EL, SkyModel, type SkyStats } from '../real/skyModel';
 import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
 import { signTexts } from './model';
 import { CELL, DISTRICTS3, STYLES3 } from './plan';
 import type { Node3 } from './stamps';
 import { District, LIGHTMAP_WINDOW } from './world';
+import { FirstPersonRig } from '../models/firstPerson';
+import { BikeRide } from '../../race/bikeRide';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { Crosshair } from '../models/crosshair';
 
 /**
  * Kaburo (Neon Core), generated at full scale from the L0 map and streamed in chunks, rendered
@@ -133,6 +139,8 @@ const FLAG_HEAT = 'world.heat';
 const FLAG_TYPHOON = 'world.typhoon';
 const FLAG_TYPHOON_AT = 'world.typhoon_at';
 const FLAG_HEAT_UNTIL = 'world.heat_until';
+/** Settled weather (no heat wave or typhoon of the forecast's own) until this minute (the story's, or the debug menu's plain summer). */
+const FLAG_SETTLED_UNTIL = 'world.settled_until';
 const HEAT_HAZE = new THREE.Color(0xfff4e0);
 const HEAT_ZENITH = new THREE.Color(0x3f86d8);
 const HEAT_SUN = new THREE.Color(0xfff2d6);
@@ -162,7 +170,7 @@ async function run(): Promise<void> {
   const startSeason: Season = isSeason(params.get('season')) ? (params.get('season') as Season) : params.get('weather') === 'snow' ? 'winter' : 'spring';
   // The weather follows the forecast (district/forecast.ts) unless it's held: ?weather= (and the benchmark) hold it.
   const holdWeather = params.has('weather') || bench;
-  const flags = new FlagStore({ [FLAG_CLOCK]: startTotal, [FLAG_TIME]: phaseAt(startMinute), [FLAG_WEATHER]: params.get('weather') ?? (bench ? 'clear' : outlookAt(startTotal, startSeason).weather), [FLAG_WEATHER_HOLD]: holdWeather, [FLAG_RAIN_AMOUNT]: bench || params.has('weather') ? 0.45 : outlookAt(startTotal, startSeason).amount || 0.45, [FLAG_SEASON_START]: 0, [FLAG_LATE]: lateAt(startMinute), [FLAG_SEASON]: startSeason });
+  const flags = new FlagStore({ [FLAG_CLOCK]: startTotal, [FLAG_TIME]: phaseAt(startMinute, DAYLIGHT[startSeason]), [FLAG_WEATHER]: params.get('weather') ?? (bench ? 'clear' : outlookAt(startTotal, startSeason).weather), [FLAG_WEATHER_HOLD]: holdWeather, [FLAG_RAIN_AMOUNT]: bench || params.has('weather') ? 0.45 : outlookAt(startTotal, startSeason).amount || 0.45, [FLAG_SEASON_START]: 0, [FLAG_LATE]: lateAt(startMinute), [FLAG_SEASON]: startSeason });
   // ?load=<slot>: a saved game (save/save.ts). Its world's flags now; its character's car, money, place and phone
   // as each of those is set up below.
   const loadSlot = params.get('load') as Slot | null;
@@ -187,6 +195,48 @@ async function run(): Promise<void> {
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x000000, 60, 620);
   const sky = new Sky();
+  // The physical sky's table (real/skyModel.ts: the clear sky for every height of the sun), computed in a worker
+  // (about a second; the atmosphere's own sky until it's in), and the slice of it for the sun now; how much the sky
+  // and the light's colours follow it (the atmosphere's phys).
+  let skyModel: SkyModel | null = null;
+  const skySlice = new Float32Array(SKY_AZ * SKY_EL * 4);
+  let sunEl = 0.5;
+  let phys = 0;
+  let physLight = 0;
+  let skyStats: SkyStats | null = null;
+  const skyWorker = new Worker(new URL('../real/skyWorker.ts', import.meta.url), { type: 'module' });
+  skyWorker.onmessage = (e: MessageEvent<{ data: Float32Array; sun: Float32Array }>): void => {
+    skyModel = new SkyModel(e.data);
+    skyWorker.terminate();
+    // (The next frame resolves the atmosphere again with it: whether it's in is part of the atmosphere's key.)
+  };
+  const fogBase = new THREE.Color();
+  const physTmp = new THREE.Color();
+  const fogRgb: [number, number, number] = [0, 0, 0];
+  const scratchV = new THREE.Vector3();
+  /**
+   * The per-channel factors that turn a computed sky colour's hue into a painted one's, keeping the computed
+   * brightness (for the painted palette over the computed sky: Sky colours tinted and mixed).
+   */
+  const hueRatio = (painted: THREE.Color, computed: readonly number[], out: THREE.Vector3): void => {
+    const lp = 0.2126 * painted.r + 0.7152 * painted.g + 0.0722 * painted.b;
+    const lc = 0.2126 * computed[0] + 0.7152 * computed[1] + 0.0722 * computed[2];
+    if (lp < 1e-5 || lc < 1e-5) return void out.set(1, 1, 1);
+    const k = [painted.r, painted.g, painted.b].map((p, i) => Math.max(0.15, Math.min(6, p / lp / Math.max(computed[i] / lc, 0.02))));
+    // (Clamped factors can move the brightness a little: put it back.)
+    const l = 0.2126 * computed[0] * k[0] + 0.7152 * computed[1] * k[1] + 0.0722 * computed[2] * k[2];
+    out.set(k[0], k[1], k[2]).multiplyScalar(lc / l);
+  };
+  /** A colour turned toward the physical sky's hue (k of the way), keeping its own brightness. */
+  const tintToward = (c: THREE.Color, rgb: readonly number[], k: number): void => {
+    const l = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    if (l < 1e-6 || k <= 0) return;
+    const own = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    c.lerp(physTmp.setRGB((rgb[0] / l) * own, (rgb[1] / l) * own, (rgb[2] / l) * own), k);
+  };
+  // (The moon's size and glow scales, from the debug menu's Moon, kept in links: ?moonSize=1.5&moonGlow=2.)
+  if (params.has('moonSize')) sky.moonSize = Math.min(4, Math.max(0.25, Number(params.get('moonSize')) || sky.moonSize));
+  if (params.has('moonGlow')) sky.moonGlow = Math.min(5, Math.max(0, Number(params.get('moonGlow')) || 0));
   scene.add(sky.mesh);
   const hemi = new THREE.HemisphereLight();
   const sun = new THREE.DirectionalLight();
@@ -235,6 +285,10 @@ async function run(): Promise<void> {
   // The lightmap wraps round a 16-cell window (2 km) about the camera, so it doesn't grow with the city.
   const lightmap = new Lightmap(renderer, { x: b.minX - M, y: b.minZ - M, w: b.maxX - b.minX + 2 * M, h: b.maxZ - b.minZ + 2 * M }, CELL, LIGHTMAP_WINDOW);
   cityU.tLight.value = lightmap.texture;
+  // The storefronts' interiors, painted once.
+  const shopAtlas = new ShopAtlas(renderer);
+  cityU.tShopCol.value = shopAtlas.color;
+  cityU.tShopMask.value = shopAtlas.mask;
   cityU.uLightRect.value = lightmap.uniformRect;
   cityU.uLightFade.value.set(...lightmap.fade);
   // The mob, lit by the street lightmap as the city is.
@@ -369,8 +423,11 @@ async function run(): Promise<void> {
     });
   // The new trains (real/trainCar.ts, under review): walk about inside while they run. ?transit=new turns them on.
   const transitNew = params.get('transit') === 'new';
-  const carMats: CarMaterials | null = transitNew ? { city, glass: carGlass(), ads: taxiAds } : null;
-  useNewBuses(carMats);
+  // The new bus (real/busModel.ts, approved): boarded and ridden standing or seated. ?transit=old brings back the old.
+  const busesNew = params.get('transit') !== 'old';
+  const busMats: CarMaterials | null = busesNew ? { city, glass: carGlass(), ads: taxiAds } : null;
+  const carMats: CarMaterials | null = transitNew ? busMats : null;
+  useNewBuses(busMats);
   const trainLines = new Map(rails.map((l) => [l.id, new TrainSystem(l, railStations.filter((s) => s.line === l.id), city, carMats)]));
   for (const t of trainLines.values()) {
     scene.add(t.group);
@@ -410,9 +467,9 @@ async function run(): Promise<void> {
       const p = plan(Math.floor(x / CELL), Math.floor(z / CELL));
       return p ? carMixFor(p.style, p.kind) : CITY_CARS;
     },
-    carMats,
+    busMats,
   );
-  if (debug && transitNew) {
+  if (debug && busesNew) {
     // Checks: stand at the front door of a bus that's standing at a stop with its doors open (true if there is one).
     (window as unknown as { __gotoBus: () => boolean }).__gotoBus = () => {
       const vs = (traffic as unknown as { vehicles: { obj: THREE.Object3D; dx: number; dz: number; bus2?: unknown }[] }).vehicles;
@@ -612,6 +669,34 @@ async function run(): Promise<void> {
   controls.setShearMode(false);
   controls.fly = params.get('fly') === '1';
   controls.floorAt = district.floorAt;
+  // Mack's body under the camera (models/firstPerson.ts): his arms, legs and boots when you look down, his
+  // shadow on the street. Hands free; X draws the shotgun (the right button raises it; no firing in the city,
+  // shooting there is undecided). Scaled so his eyes are at the camera's height. Its muzzle-flash light stays
+  // out of the scene: a new light recompiles every city shader.
+  let mack: FirstPersonRig | null = null;
+  const crosshair = new Crosshair();
+  let mackSpeed = 0;
+  const mackLast = new THREE.Vector3();
+  if (!bench) {
+    void FirstPersonRig.load('mack').then((r) => {
+      r.armed = false;
+      r.fitEye(1.7);
+      r.object.remove(r.flashLight);
+      r.object.visible = false;
+      scene.add(r.object);
+      mack = r;
+    }).catch((e: unknown) => console.warn('Mack\'s body:', e));
+  }
+  // The right button raises the shotgun while it's out.
+  document.addEventListener('mousedown', (e) => {
+    if (e.button === 2 && mack?.armed && controls.look.isLocked) mack.aiming = true;
+  });
+  document.addEventListener('mouseup', (e) => {
+    if (e.button === 2 && mack) mack.aiming = false;
+  });
+  document.addEventListener('contextmenu', (e) => {
+    if (controls.look.isLocked) e.preventDefault();
+  });
   /** Walking about inside a moving train (the new cars). */
   const rider = new CabinRider(camera, controls);
   /** The ride you're walking about in: the train's system, and what to call when you're off. */
@@ -793,7 +878,7 @@ async function run(): Promise<void> {
   let clockStopped = false;
   // The forecast's weather last applied: a new spell changes the weather (so a change by hand lasts till then).
   const num = (k: string): number | null => (typeof flags.get(k) === 'number' ? (flags.get(k) as number) : null);
-  const outlookNow = (total = Math.floor(clockTotal)) => outlookAt(total, season(), Number(flags.get(FLAG_SEASON_START) ?? 0), { typhoonAt: num(FLAG_TYPHOON_AT), heatUntil: num(FLAG_HEAT_UNTIL) });
+  const outlookNow = (total = Math.floor(clockTotal)) => outlookAt(total, season(), Number(flags.get(FLAG_SEASON_START) ?? 0), { typhoonAt: num(FLAG_TYPHOON_AT), heatUntil: num(FLAG_HEAT_UNTIL), settledUntil: num(FLAG_SETTLED_UNTIL) });
   // The forecast's own wind (a typhoon's), and how far it turns the setting's direction.
   let forecastWind = 0;
   let forecastTurn = 0;
@@ -801,7 +886,7 @@ async function run(): Promise<void> {
   const syncClockFlags = (): void => {
     const total = Math.floor(clockTotal);
     flags.set(FLAG_CLOCK, total);
-    flags.set(FLAG_TIME, phaseAt(total % DAY));
+    flags.set(FLAG_TIME, phaseAt(total % DAY, DAYLIGHT[season()]));
     flags.set(FLAG_LATE, lateAt(total % DAY));
     const o = outlookNow(total);
     flags.set(FLAG_TSUYU, o.tsuyu);
@@ -858,13 +943,41 @@ async function run(): Promise<void> {
   // Atmosphere: re-applied whenever (district, time, weather) changes.
   let atm!: Atmosphere3;
   let atmKey = '';
+  let neonLevel = 1;
+  /** The sky look and the moon shape the atmosphere was resolved with (changing either in the panels re-resolves it). */
+  let atmSky = mood.sky;
+  let atmMoon = mood.moonShape;
+  /**
+   * The moon now: on the lunar calendar (clock.ts moonAt), or a shape picked by hand standing where the moon always
+   * stood (high in the north-west, up all night), so any shape can be looked at on any night.
+   */
+  let moonNow: MoonNow = moonAt(START_MINUTE);
+  const placeMoon = (): void => {
+    const cal = moonAt(clockTotal);
+    if (mood.moonShape === 'calendar') moonNow = cal;
+    else {
+      const l = Math.hypot(-0.35, 0.7, -0.55);
+      moonNow = { ...cal, dir: [-0.35 / l, 0.7 / l, -0.55 / l], up: 1, light: MOON_SHAPE[mood.moonShape].light };
+    }
+  };
+  /** The season's day length (clock.ts DAYLIGHT): when the sun rises and sets, and how high it goes. */
+  const daylight = () => DAYLIGHT[season()];
   const applyAtmosphere = (): void => {
     const minute = Math.floor(clockTotal) % DAY;
-    const key = `${minute}|${weather()}`;
+    const key = `${minute}|${weather()}|${mood.sky}|${mood.moonShape}|${season()}|${skyModel ? 1 : 0}`;
     if (key === atmKey) return;
     atmKey = key;
-    const bl = blendAt(minute);
-    atm = blendAtmosphere(content.atmosphere.resolve('neon', bl.a, weather()), content.atmosphere.resolve('neon', bl.b, weather()), bl.f);
+    atmSky = mood.sky;
+    atmMoon = mood.moonShape;
+    placeMoon();
+    const dl = daylight();
+    const bl = blendAt(minute, dl);
+    const atmA = content.atmosphere.resolve('neon', bl.a, weather(), mood.sky);
+    const atmB = content.atmosphere.resolve('neon', bl.b, weather(), mood.sky);
+    atm = blendAtmosphere(atmA, atmB, bl.f);
+    // (The neon fades in and out across the blend rather than switching half way.)
+    const neonOf = (x: Atmosphere3): number => (x.neon === 'off' ? 0 : 1);
+    neonLevel = neonOf(atmA) + (neonOf(atmB) - neonOf(atmA)) * bl.f;
     const fog = scene.fog as THREE.Fog;
     fog.color.setHex(atm.fog);
     fog.near = atm.fogNear;
@@ -883,14 +996,23 @@ async function run(): Promise<void> {
     sun.shadow.autoUpdate = sunShadow > 0;
     // (Drawn at least once, so the map exists for the shaders that read it: a night start never draws it otherwise.)
     if (!sun.shadow.map) sun.shadow.needsUpdate = true;
-    const d = sunDirAt(minute);
+    const d = sunDirAt(minute, moonNow.dir, dl);
     sky.uniforms.uSunDir.value.set(d[0], d[1], d[2]).normalize();
+    sky.uniforms.uMoon.value = moonnessAt(minute, dl);
+    sky.uniforms.uMoonDir.value.set(...moonNow.dir);
+    sky.uniforms.uMoonUp.value = moonNow.up;
+    const sunNow = sunAt(minute, dl);
+    sunEl = Math.asin(Math.max(-1, Math.min(1, sunNow.dir[1])));
+    if (skyModel) sky.setPhysical(skyModel.slice(sunEl, skySlice));
+    sky.uniforms.uSunPos.value.set(...sunNow.dir);
+    sky.uniforms.uSunUp.value = sunNow.up;
     sky.uniforms.uZenith.value.setHex(atm.sky);
     sky.uniforms.uHorizon.value.setHex(atm.horizon);
     sky.uniforms.uSunColor.value.setHex(atm.sunColor).multiplyScalar(1 - 0.75 * atm.lamps);
     sky.uniforms.uDisc.value = clear ? 1 : 0;
-    sky.uniforms.uStars.value = clear ? Math.max(0, Math.min(1, (atm.lamps - 0.7) / 0.3)) : 0;
+    sky.uniforms.uStars.value = clear ? starsAt(minute, dl) : 0;
     sky.uniforms.uCover.value = atm.clouds;
+    sky.uniforms.uStarField.value = atm.stars;
     sky.uniforms.uCloudLit.value.setHex(atm.cloudLit);
     sky.uniforms.uCloudDark.value.setHex(atm.cloudDark);
     cityU.uZenith.value.setHex(atm.sky);
@@ -899,7 +1021,7 @@ async function run(): Promise<void> {
     cityU.uWindowLit.value = atm.windowLit;
     cityU.uLamps.value = atm.lamps;
     cityU.uLightGain.value = 1.4 * atm.lamps;
-    cityU.uNeon.value = atm.neon === 'off' ? 0 : 1;
+    cityU.uNeon.value = neonLevel;
     cityU.uFlicker.value = atm.neon === 'flicker' ? 1 : 0;
     renderer.toneMappingExposure = atm.exposure;
     applyMood();
@@ -921,6 +1043,8 @@ async function run(): Promise<void> {
   const lastWalker = new THREE.Vector3().copy(camera.position);
   let cycleTick = 1;
   const applyMood = (): void => {
+    // (A new sky look resolves the atmosphere again, which comes back here.)
+    if (mood.sky !== atmSky || mood.moonShape !== atmMoon) return applyAtmosphere();
     const fog = scene.fog as THREE.Fog;
     // How hard it rains: the forecast's (a drizzle to a downpour), eased in and out each frame; the K panel's
     // setting at once.
@@ -937,7 +1061,11 @@ async function run(): Promise<void> {
     // At night the moon has no shadows (they only switch on for a strong sun), so it lights every wall facing it
     // evenly; the atmosphere keeps it faint. The slider overrides it: 1.0 is the old, brighter moon (0.22).
     const night = atm.lamps > 0.5;
-    sun.intensity = (night && mood.moon !== null ? mood.moon * 0.22 : atm.sun) * keep;
+    // (A crescent gives far less moonlight than a full moon, and a set moon none: the moon's light scales it as night
+    // takes over the sky.)
+    sky.setMoonShape(mood.moonShape, moonNow.phase);
+    const moonShare = 1 - sky.uniforms.uMoon.value * (1 - moonNow.light);
+    sun.intensity = (night && mood.moon !== null ? mood.moon * 0.22 : atm.sun) * keep * moonShare;
     sunBase = sun.intensity;
     base.zenith.setHex(atm.sky).multiplyScalar(1 - 0.85 * d);
     base.horizon.setHex(atm.horizon).multiplyScalar(1 - 0.85 * d);
@@ -961,17 +1089,46 @@ async function run(): Promise<void> {
       hemi.groundColor.lerp(HEAT_GROUND, 0.5 * h);
       base.hemi *= 1 + 0.1 * h;
     }
+    // The physical sky (real/skyModel.ts): as much as the sky is physical, the light takes its colours from it, the fill
+    // from the sky over the ground and the sun's from what's left of its light through the air (the colours change;
+    // the balance of light stays the atmosphere's). A heat wave keeps more of its own white-hot sky.
+    // With the painted palette over it (Sky colours tinted and mixed), the computed sky keeps its light but takes the
+    // painted colours for the time of day, and the light on the city keeps the painted colours.
+    const mode = SKY_COLOR_MODE[mood.skyColors];
+    phys = skyModel ? atm.phys * mode.sky * (1 - 0.6 * heatHaze) : 0;
+    physLight = phys * mode.light;
+    sky.uniforms.uPhys.value = phys;
+    sky.uniforms.uPhysGain.value = 1 - 0.85 * d;
+    skyStats = skyModel ? skyModel.stats(sunEl, skySlice) : null;
+    sky.uniforms.uTint.value = mode.tint;
+    if (skyStats) {
+      tintToward(hemi.color, skyStats.fill, physLight);
+      tintToward(sun.color, skyStats.sun, physLight * (1 - sky.uniforms.uMoon.value));
+      hueRatio(base.horizon, skyStats.horizon, sky.uniforms.uTintH.value);
+      hueRatio(base.zenith, skyStats.zenith, sky.uniforms.uTintZ.value);
+    }
+    fogBase.copy(fog.color);
     // The sun (or moon) for the leaves' glow against it.
     cityU.uSunDir.value.copy(sky.uniforms.uSunDir.value as THREE.Vector3).normalize();
     cityU.uSunCol.value.copy(sun.color).multiplyScalar(sun.intensity);
     base.cloudLit.setHex(atm.cloudLit).multiplyScalar(1 - 0.7 * d);
     sky.uniforms.uCloudDark.value.setHex(atm.cloudDark).multiplyScalar(1 - 0.7 * d);
     // (Autumn skies are cloudier.)
-    const clouds = flags.get(FLAG_TSUYU) === true ? atm.clouds + (1 - atm.clouds) * 0.75 : season() === 'autumn' ? atm.clouds + (1 - atm.clouds) * 0.4 : atm.clouds;
-    sky.uniforms.uCover.value = rainAmount > 0 ? Math.max(clouds, 0.75 + rainAmount * 0.25) : clouds * (1 - 0.75 * heatHaze);
-    sky.uniforms.uStars.value = time() === 'night' && rainAmount === 0 && weather() === 'clear' ? 1 - d * 0.5 : 0;
+    // (The rainy season's grey skies are the forecast's; weather picked by hand is as picked.)
+    const clouds = flags.get(FLAG_TSUYU) === true && flags.get(FLAG_WEATHER_HOLD) !== true ? atm.clouds + (1 - atm.clouds) * 0.75 : season() === 'autumn' ? atm.clouds + (1 - atm.clouds) * 0.4 : atm.clouds;
+    // (Rain brings a full overcast; as it eases off the overcast thins with it rather than vanishing at the end.)
+    const overcast = Math.min(1, rainAmount / 0.15);
+    const dry = clouds * (1 - 0.75 * heatHaze);
+    sky.uniforms.uCover.value = dry + (Math.max(dry, 0.75 + rainAmount * 0.25) - dry) * overcast;
+    sky.uniforms.uStars.value = rainAmount === 0 && weather() === 'clear' ? starsAt(Math.floor(clockTotal) % DAY, daylight()) * (1 - d * 0.5) : 0;
+    sky.uniforms.uSunGlow.value.setHex(atm.sunGlow).multiplyScalar(1 - 0.85 * d);
+    // (What the city reflects, and the sea meets at the horizon: the physical sky's as much as the sky is.)
     cityU.uZenith.value.copy(base.zenith);
     cityU.uHorizon.value.copy(base.horizon);
+    if (skyStats) {
+      cityU.uZenith.value.lerp(physTmp.setRGB(...skyStats.zenith).multiplyScalar(1 - 0.85 * d), physLight);
+      cityU.uHorizon.value.lerp(physTmp.setRGB(...skyStats.horizon).multiplyScalar(1 - 0.85 * d), physLight);
+    }
     cityU.uRoomAmbient.value.setHex(atm.hemiSky).multiplyScalar(atm.hemi * 0.12 * keep);
     cityU.uWindowLit.value = atm.windowLit * (1 - 0.85 * d);
     // Wet streets: straight to the target when set up (a scene starts wet), then eased per frame.
@@ -1100,7 +1257,7 @@ async function run(): Promise<void> {
   const interact = async (): Promise<void> => {
     if (driving.car) return exitCar();
     if (taxiHere()) return getInTaxi();
-    const bus = transitNew && !rider.active ? traffic.busToBoard(camera.position) : null;
+    const bus = busesNew && !rider.active ? traffic.busToBoard(camera.position) : null;
     if (bus) return boardBus(bus);
     const n = target();
     if (n) return use(n);
@@ -1150,6 +1307,8 @@ async function run(): Promise<void> {
       // (A new season starts now: summer opens with its rainy season.)
       flags.set(FLAG_SEASON_START, Math.floor(clockTotal));
       applySeason();
+      // (The day's length changes with it, and the story's time of day by it.)
+      flags.set(FLAG_TIME, phaseAt(Math.floor(clockTotal) % DAY, DAYLIGHT[season()]));
     }
     // Snow means winter (the forecast only snows then; snow set by hand, from R, the debug menu or the story,
     // brings the winter with it: bare trees, the snowy mountains).
@@ -1193,9 +1352,9 @@ async function run(): Promise<void> {
         splashT.set(key, 0.4);
       } else splashT.set(key, deepest > 0.3 ? t : Math.min(t, 0));
     };
-    if (driving.own && !ownCar.aloft()) {
-      const c = ownCar.sim;
-      through(ownCar, carWheels(c, 1.3, -1.25, 0.75), c.y, Math.sin(c.h), Math.cos(c.h), c.u, true);
+    if (driving.own && !ownNow().aloft()) {
+      const c = ownNow().sim;
+      through(ownNow(), driving.own === ownBike ? carWheels(c, 0.8, -0.8, 0.01) : carWheels(c, 1.3, -1.25, 0.75), c.y, Math.sin(c.h), Math.cos(c.h), c.u, true);
     }
     for (const v of traffic.movingNear(cp, 60)) {
       const f = Math.max(0.6, v.half - 0.8);
@@ -1218,7 +1377,7 @@ async function run(): Promise<void> {
   };
   const updateSnowTraffic = (dt: number, snowing: boolean): void => {
     const moving = snowCover > 0.02 ? traffic.movingNear(camera.position, 130) : [];
-    const own = driving.own && !ownCar.aloft() ? ownCar.sim : null;
+    const own = driving.own === ownCar && !ownCar.aloft() ? ownCar.sim : null;
     const wipers = cityU.uWipers.value;
     let n = 0;
     if (own && n < WIPERS) wipers[n++].set(own.x, own.z, own.h, own.y);
@@ -1328,6 +1487,28 @@ async function run(): Promise<void> {
     params.get('car') === 'home',
     content.terrain,
   );
+  // Your motorcycle (race/bikeRide.ts: the Kaiun Raijin 1600, black), on the same handling as the car: parked
+  // in the bay beside it, facing out; E by it gets on (Mack seated, first person; Q third), X draws his shotgun.
+  const bikeHome = bay ? { x: bay.x - bay.nz * 1.9, z: bay.z + bay.nx * 1.9, h: Math.atan2(bay.nx, bay.nz) } : { x: camera.position.x + 6, z: camera.position.z, h: 0 };
+  const ownBike = new OwnCar(
+    city,
+    traffic,
+    bikeHome,
+    (x, z, r, self) => (npcBlocked(x, z, r) ? 'person' : traffic.blocked(x, z, r, self) ? 'car' : district.obstacle(x, z, r)),
+    expressway,
+    () => exTraffic.obstacles,
+    params.get('bike') === 'home',
+    content.terrain,
+    'cruiser',
+  );
+  const bikeEnv = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  const bikeModel = BikeRide.buildBike('cruiser', bikeEnv);
+  ownBike.view.obj.add(bikeModel.root);
+  const bikeRide = BikeRide.from('cruiser', bikeModel, null);
+  ownBike.onPose = (dt) => bikeRide.pose(ownBike.sim, ownBike.ground, dt);
+  ownBike.pose(0);
+  /** What you're driving or riding of your own (the car or the bike). */
+  const ownNow = (): OwnCar => (driving.own === ownBike ? ownBike : ownCar);
   // Back from a pass (race.html's 'Back to the city'): on the loop just past that exit's corner, driving.
   const back = params.get('from');
   const exitRoad = back ? expressway.roads.find((r) => r.kind === 'spur' && r.id === back) : undefined;
@@ -1519,10 +1700,21 @@ async function run(): Promise<void> {
       return;
     }
     traffic.take(car);
-    driving.enter(car, car === ownCar.vehicle ? ownCar : null);
+    const onBike = car === ownBike.vehicle;
+    driving.enter(car, car === ownCar.vehicle ? ownCar : onBike ? ownBike : null);
     controls.held = true;
     controls.mouseLook = false;
-    toast(`${car.label} · W/S drive · A/D steer · Space handbrake · Q camera · E get out`, 5);
+    if (onBike) {
+      // On the bike: his eyes (Q: behind it), hands on the bars.
+      driving.view = 'bumper';
+      bikeRide.rig = mack;
+      if (mack) {
+        mack.armed = false;
+        mack.aiming = false;
+        mack.mounted = bikeModel;
+      }
+      toast(`${car.label} · W/S throttle · brake · A/D steer · Space rear brake · Q first / third person · X shotgun · E get off`, 5);
+    } else toast(`${car.label} · W/S drive · A/D steer · Space handbrake · Q camera · E get out`, 5);
   };
   const exitCar = (): void => {
     // Totalled up on the expressway: the tow truck takes you both down (you to your garage too).
@@ -1538,6 +1730,10 @@ async function run(): Promise<void> {
     const spot = driving.exitSpot((x, z) => !district.blocked(x, z, 0.4, 0) && !traffic.blocked(x, z, 0.4) && !npcBlocked(x, z, 0.4));
     if (!spot) return toast('No room to get out here.');
     traffic.leave(driving.car!);
+    if (driving.own === ownBike && mack) {
+      mack.mounted = null;
+      mack.setHeadless(true);
+    }
     driving.leave();
     camera.position.set(spot.x, 1.7, spot.z);
     lastWalker.copy(camera.position);
@@ -1557,6 +1753,15 @@ async function run(): Promise<void> {
     return ownCar.name;
   };
   if (debug) (window as unknown as { __drive: () => string; __own: OwnCar }).__drive = driveHere;
+  // ?debug=1: window.__ride() gets on your bike (brought to where you stand if it's more than 15 m off).
+  if (debug)
+    (window as unknown as { __ride: () => string; __bike: unknown }).__ride = () => {
+      const yaw = (lookYaw() * Math.PI) / 180;
+      if (Math.hypot(ownBike.sim.x - camera.position.x, ownBike.sim.z - camera.position.z) > 15) ownBike.place(camera.position.x, camera.position.z, Math.atan2(-Math.sin(yaw), -Math.cos(yaw)));
+      enterCar(ownBike.vehicle);
+      return ownBike.name;
+    };
+  if (debug) (window as unknown as { __bike: unknown }).__bike = { own: ownBike, ride: bikeRide, driving };
   if (exitRoad) enterCar(ownCar.vehicle);
   if (me?.driving && !exitRoad) enterCar(ownCar.vehicle);
   if (debug) (window as unknown as { __own: OwnCar; __ex: Expressway }).__own = ownCar;
@@ -1755,6 +1960,7 @@ async function run(): Promise<void> {
             const go = (x: Season, start: number): void => {
               flags.set(FLAG_HEAT_UNTIL, false);
               flags.set(FLAG_TYPHOON_AT, false);
+              flags.set(FLAG_SETTLED_UNTIL, false);
               flags.set(FLAG_SEASON, x);
               flags.set(FLAG_SEASON_START, start);
             };
@@ -1769,10 +1975,10 @@ async function run(): Promise<void> {
             return [
               { label: SEASON_NAMES.spring, on: () => season() === 'spring', run: () => go('spring', now) },
               { label: '夏 梅雨 rainy season', on: () => o.tsuyu, run: () => { go('summer', now); auto(); } },
-              { label: '夏 summer', on: () => season() === 'summer' && !o.tsuyu && !o.heat && o.typhoon === 0, run: () => { go('summer', now - 7 * DAY); auto(); } },
+              { label: '夏 summer', on: () => season() === 'summer' && !o.tsuyu && !o.heat && o.typhoon === 0, run: () => { go('summer', now - 7 * DAY); flags.set(FLAG_SETTLED_UNTIL, now + 3 * DAY); auto(); } },
               { label: '夏 猛暑 heat wave', on: () => o.heat, run: () => { go('summer', now - 7 * DAY); flags.set(FLAG_HEAT_UNTIL, now + 2 * DAY); auto(); } },
               { label: '台風 typhoon', on: () => o.typhoon > 0, run: () => { if (season() !== 'summer' && season() !== 'autumn') go('summer', now - 7 * DAY); flags.set(FLAG_TYPHOON_AT, now - 8 * 60); auto(); } },
-              { label: SEASON_NAMES.autumn, on: () => season() === 'autumn' && o.typhoon === 0, run: () => { go('autumn', now - 20 * DAY); auto(); } },
+              { label: SEASON_NAMES.autumn, on: () => season() === 'autumn' && o.typhoon === 0, run: () => { go('autumn', now - 20 * DAY); flags.set(FLAG_SETTLED_UNTIL, now + 3 * DAY); auto(); } },
               { label: SEASON_NAMES.winter, on: () => season() === 'winter', run: () => go('winter', now) },
             ];
           },
@@ -1822,6 +2028,40 @@ async function run(): Promise<void> {
           ],
         },
         { title: 'Moving', items: () => [{ label: 'fly (F)', on: () => controls.fly, run: () => (controls.fly = !controls.fly) }] },
+        {
+          // The moon's shape (also the K panel's Moon), its size and the glow round it; look at it; copy the look as
+          // URL settings.
+          title: () => {
+            const m = moonAt(clockTotal);
+            return `Moon · age ${m.age.toFixed(1)} d · ${Math.round(m.lit * 100)}% lit${m.up < 0.01 ? ' · set' : ''}`;
+          },
+          items: () => [
+            ...MOON_SHAPES.map((m) => ({ label: m, on: () => mood.moonShape === m, run: () => {
+              mood.moonShape = m;
+              applyMood();
+              panel.refresh();
+            } })),
+            { label: 'look at it', run: () => {
+              const d = sky.uniforms.uMoonDir.value;
+              controls.setView((Math.atan2(-d.x, -d.z) * 180) / Math.PI, (Math.asin(Math.min(1, d.y)) * 180) / Math.PI);
+            } },
+            { label: 'copy settings', run: () => {
+              const q = `moonShape=${mood.moonShape}&moonSize=${sky.moonSize.toFixed(2)}&moonGlow=${sky.moonGlow.toFixed(2)}`;
+              void navigator.clipboard?.writeText(q);
+              toast(`Copied: ${q}`);
+            } },
+          ],
+          sliders: () => [
+            { label: 'Size', min: 0.25, max: 4, step: 0.05, get: () => sky.moonSize, set: (v) => {
+              sky.moonSize = v;
+              sky.setMoonShape(mood.moonShape, moonNow.phase);
+            }, format: (v) => `x${v.toFixed(2)} (${(2 * (MOON_SHAPE[mood.moonShape].r || 0.0095) * v * 180 / Math.PI).toFixed(2)}° across; real 0.52°)` },
+            { label: 'Glow', min: 0, max: 5, step: 0.05, get: () => sky.moonGlow, set: (v) => {
+              sky.moonGlow = v;
+              sky.setMoonShape(mood.moonShape, moonNow.phase);
+            }, format: (v) => (v < 0.01 ? 'off' : `x${v.toFixed(2)}`) },
+          ],
+        },
       ], {
         find: (q): DebugHit[] => {
           const t = q.toLowerCase();
@@ -2184,6 +2424,11 @@ async function run(): Promise<void> {
       setInvertY(!controls.invertY, true);
       toast(controls.invertY ? 'Mouse Y inverted (mouse up looks down) · I to switch back' : 'Mouse Y normal (mouse up looks up) · I to invert');
     }
+    if (e.code === 'KeyX' && mack && (!driving.car || driving.own === ownBike) && !inVn) {
+      mack.armed = !mack.armed;
+      if (!mack.armed) mack.aiming = false;
+      toast(mack.armed ? 'Shotgun out · right button raises it · X puts it away' : 'Shotgun put away');
+    }
     if (e.code === 'KeyC') {
       mood.grade = GRADE_NAMES[(GRADE_NAMES.indexOf(mood.grade) + 1) % GRADE_NAMES.length];
       grade.grade = mood.grade;
@@ -2323,6 +2568,10 @@ async function run(): Promise<void> {
       clockTotal += dt * RATE;
       if (Math.floor(clockTotal) !== before) syncClockFlags();
     }
+    // The atmosphere for the new minute (or weather) first, before anything below works from it: the sky's colours,
+    // the fog's reach, the lightning and the light underground are all set per frame from what it resolves, and
+    // applied after them it showed for a frame at their unadjusted values (a faint flash in the distance each minute).
+    applyAtmosphere();
     if (!bench) {
       phoneUi.update(phone.update(dt));
       phone.clock = Math.floor(clockTotal) % DAY;
@@ -2332,6 +2581,7 @@ async function run(): Promise<void> {
     const cp0 = camera.position;
     if (!inVn) driving.update(dt);
     ownCar.pose(inVn ? 0 : dt);
+    ownBike.pose(inVn ? 0 : dt);
     if (taxiRide && !inVn) rideTaxi(dt);
     else meterEl.style.display = 'none';
     // Walked away from the taxi you hailed: it gives up after a while and drives on.
@@ -2339,7 +2589,7 @@ async function run(): Promise<void> {
     if (hail && !taxiRide && !taxiPicker.open && Math.hypot(hail.taxi.x - camera.position.x, hail.taxi.z - camera.position.z) > 60) traffic.releaseHail();
     // The expressway: its traffic (slowing for you in its lane), the sodium lamps' light at night, and the
     // tunnels at the end of the exits (drive in: you're at that pass).
-    const onLoop = ownCar.onExpressway() ? expressway.at(ownCar.sim.x, ownCar.sim.z, ownCar.sim.y) : null;
+    const onLoop = ownNow().onExpressway() ? expressway.at(ownNow().sim.x, ownNow().sim.z, ownNow().sim.y) : null;
     const rivalOn = race ? expressway.at(race.rival.car.x, race.rival.car.z, race.rival.car.y) : null;
     exTraffic.update(inVn ? 0 : dt, onLoop && onLoop.road === expressway.loop ? { i: onLoop.i, lateral: onLoop.lateral, v: ownCar.sim.u } : null, rivalOn && rivalOn.road === expressway.loop ? [{ i: rivalOn.i, lateral: rivalOn.lateral, v: race!.rival.car.u }] : []);
     updateRace(dt);
@@ -2348,11 +2598,12 @@ async function run(): Promise<void> {
     (sodium.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
     sodium.visible = cityU.uLamps.value > 0.05;
     edges.update(camera.position, cityU.uLamps.value);
-    const tunnel = driving.own ? expressway.portal(ownCar.sim.x, ownCar.sim.z, ownCar.sim.y) : null;
+    const tunnel = driving.own ? expressway.portal(ownNow().sim.x, ownNow().sim.z, ownNow().sim.y) : null;
     if (tunnel && !leavingFor) {
       leavingFor = tunnel.venue!;
       ownCar.save();
-      void fadeTo(1).then(() => (location.href = `race.html?venue=${tunnel.venue}&mode=free&from=${tunnel.id}`));
+      ownNow().save();
+      void fadeTo(1).then(() => (location.href = `race.html?venue=${tunnel.venue}&mode=free&from=${tunnel.id}${driving.own === ownBike ? '&ride=cruiser' : ''}`));
     }
     updateGps(dt);
     autosaveIn -= dt;
@@ -2363,13 +2614,34 @@ async function run(): Promise<void> {
     if (driving.bump > 2) audio.bump(driving.bump);
     dash.style.display = driving.car ? 'block' : 'none';
     if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}`;
-    damageHud.update(inVn ? 0 : dt, driving.own ? ownCar : null);
+    damageHud.update(inVn ? 0 : dt, driving.own === ownCar ? ownCar : null);
     const onFoot = !driving.car && !controls.fly && !inVn && !rider.active && Math.abs(camAbove() - 1.7) < 1.2;
     let wvx = dt > 0 ? (cp0.x - lastWalker.x) / dt : 0;
     let wvz = dt > 0 ? (cp0.z - lastWalker.z) / dt : 0;
     // Faster than anyone runs: a teleport or a ride, not a step.
     if (Math.hypot(wvx, wvz) > 12) wvx = wvz = 0;
     const walkers = onFoot ? [{ x: cp0.x, z: cp0.z, vx: wvx, vz: wvz }] : [];
+    const riding = driving.own === ownBike;
+    if (riding) {
+      // Seen in first person too (the driving's bumper view would hide it), Mack on it, the camera his.
+      ownBike.vehicle.hideBody = false;
+      const lk = driving.look;
+      const h = ownBike.sim.h;
+      bikeRide.update(ownBike.sim, camera, { third: driving.view === 'chase', aiming: !!mack?.aiming, aimYaw: h + lk.yaw, aimPitch: lk.pitch, orbitYaw: lk.yaw, lookPitch: lk.pitch }, inVn ? 0 : dt, dt, groundAt);
+    }
+    if (mack) {
+      const shown = !driving.car && !controls.fly && !inVn && !rider.active && !taxiRide;
+      mack.object.visible = shown || riding;
+      crosshair.update((shown || riding) && mack.armed, mack.aim, dt);
+      if (shown) {
+        // His gait from how fast you're going: the game's walk (4.5 m/s) is his walk, its run (9) his run.
+        const v = dt > 0 ? Math.hypot(cp0.x - mackLast.x, cp0.z - mackLast.z) / dt : 0;
+        mackSpeed += ((v > 12 ? 0 : v) - mackSpeed) * Math.min(1, dt * 10);
+        const gait = mackSpeed <= 4.5 ? mackSpeed / 3 : 1.5 + ((mackSpeed - 4.5) / 4.5) * 2.7;
+        mack.update(dt, camera, gait, camera.position.y - 1.7, controls.viewPitch);
+      }
+    }
+    mackLast.copy(camera.position);
     lastWalker.set(cp0.x, cp0.y, cp0.z);
     traffic.update(dt, camera.position, walkers);
     if (cabin?.bus) {
@@ -2393,8 +2665,10 @@ async function run(): Promise<void> {
     // Streets wet through over ~20-60 s of rain (faster when heavy) and dry over a few minutes.
     const wetTarget = mood.wetness ?? (rainAmount > 0 ? 1 : 0);
     // Rain comes and goes over ten seconds or so (a shower's start, the end of a spell).
-    if (Math.abs(rainTarget - rainAmount) > 1e-3) {
-      rainAmount += Math.max(-dt / 10, Math.min(dt / 10, rainTarget - rainAmount));
+    // (It lands exactly on the target: a trace left over kept the storm clouds and the wet streets after the rain.)
+    if (rainAmount !== rainTarget) {
+      const step = dt / 10;
+      rainAmount = Math.abs(rainTarget - rainAmount) <= step ? rainTarget : rainAmount + Math.sign(rainTarget - rainAmount) * step;
       applyMood();
     }
     const wetRate = mood.wetness !== null ? 2 : wetTarget > wetness ? 0.015 + 0.05 * rainAmount : 0.006;
@@ -2414,6 +2688,7 @@ async function run(): Promise<void> {
       const onBridge = content.bridges.some((b) => ownCar.sim.x >= b.road.rect.x && ownCar.sim.x <= b.road.rect.x + b.road.rect.w && ownCar.sim.z >= b.road.rect.y && ownCar.sim.z <= b.road.rect.y + b.road.rect.h);
       const road: RoadWeather = { wet: Math.max(0, wetness), snow: snowCover, leaves: season() === 'autumn' ? 1 : 0, wind: [windVec.x / 3.2, windVec.y / 3.2] };
       ownCar.weather = { ...road, exposure: ownCar.aloft() || onBridge ? 1 : 0.45 };
+      ownBike.weather = { ...road, exposure: ownBike.aloft() || onBridge ? 1 : 0.45 };
       if (race) race.rival.weather = { ...road, exposure: 1 };
       const fog = weather() === 'fog' ? 1 : 0;
       const cond = { speed: 1 - 0.1 * road.wet - 0.3 * snowCover - 0.15 * fog, gap: 1 + 0.3 * road.wet + 0.9 * snowCover + 0.3 * fog, grip: weatherGrip(road) };
@@ -2487,7 +2762,7 @@ async function run(): Promise<void> {
       const shimmer = flags.get(FLAG_HEAT) === true && weather() === 'clear' && !inside && cp.y > -2 ? day * (1 - rainAmount) * lowDown : 0;
       grade.heat(shimmer, (hz.y + 1) / 2, overlay.depth, camera.near, camera.far);
       // The sun's glare (clear days, strongest in a heat wave): where the sun is on the screen, if in front.
-      const sd = sky.uniforms.uSunDir.value as THREE.Vector3;
+      const sd = sky.uniforms.uSunPos.value as THREE.Vector3;
       const sp = new THREE.Vector3().copy(cp).addScaledVector(sd, 1000).project(camera);
       const inFront = fwd.dot(sd) > 0 && sd.y > 0.02;
       const clearSky = weather() === 'clear' && rainAmount < 0.05 && !inside && cp.y > -2;
@@ -2528,6 +2803,19 @@ async function run(): Promise<void> {
     sky.uniforms.uZenith.value.copy(base.zenith);
     sky.uniforms.uHorizon.value.copy(base.horizon);
     sky.uniforms.uCloudLit.value.copy(base.cloudLit);
+    // The fog takes the physical sky's colour along the horizon where you're looking (warm toward a sunset, blue away).
+    if (phys > 0) {
+      const f = camera.getWorldDirection(scratchV);
+      const sp = sky.uniforms.uSunPos.value;
+      const fl = Math.hypot(f.x, f.z) || 1;
+      const sl = Math.hypot(sp.x, sp.z) || 1;
+      SkyModel.at(skySlice, 0.02, Math.acos(Math.max(-1, Math.min(1, (f.x * sp.x + f.z * sp.z) / (fl * sl)))), fogRgb);
+      // (In the painted palette when the sky is.)
+      const th = sky.uniforms.uTintH.value;
+      const tk = sky.uniforms.uTint.value;
+      physTmp.setRGB(fogRgb[0] * (1 + (th.x - 1) * tk), fogRgb[1] * (1 + (th.y - 1) * tk), fogRgb[2] * (1 + (th.z - 1) * tk));
+      (scene.fog as THREE.Fog).color.copy(fogBase).lerp(physTmp.multiplyScalar(0.9 * (1 - 0.85 * mood.darkness)), phys * 0.85);
+    }
     fitFog();
     // Sound follows the same weather: what's overhead, the wind, the nearest cars.
     const cover = aboard() ? 'enclosed' : district.shelterAt(cp.x, cp.z, cp.y)?.enclosed ? 'enclosed' : inside ? 'roof' : 'open';
@@ -2553,7 +2841,6 @@ async function run(): Promise<void> {
     const built = district.update(camera.position, 2);
     builtThisWindow += built;
     const tUpd = performance.now();
-    applyAtmosphere();
     for (const n of nodes) {
       const m = npcMeshes.get(n.id);
       if (m) m.visible = visibleNode(n);
@@ -2629,7 +2916,7 @@ async function run(): Promise<void> {
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
-        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? (t.sleep ? 'Sleep until morning' : 'Look') : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : taxiHere() ? '[E] Get in the taxi' : transitNew && !rider.active && traffic.busToBoard(camera.position) ? `[E] Board the bus · ¥${BUS_FARE}` : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
+        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? (t.sleep ? 'Sleep until morning' : 'Look') : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : taxiHere() ? '[E] Get in the taxi' : busesNew && !rider.active && traffic.busToBoard(camera.position) ? `[E] Board the bus · ¥${BUS_FARE}` : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
         `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · F fly · I invert mouse Y · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look${debugMenu ? ' · ` debug menu' : ''}`,
       ].join('\n');
       builtThisWindow = 0;

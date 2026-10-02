@@ -70,11 +70,17 @@ export interface Outlook {
   readonly after: boolean;
 }
 
-/** The story's (or the debug menu's) say: a typhoon that began at this minute, a heat wave until this minute. */
+/**
+ * The story's (or the debug menu's) say: a typhoon that began at this minute, a heat wave until this minute, settled
+ * weather (no heat wave and no typhoon of the forecast's own) until this minute. A forced heat wave or typhoon still
+ * comes when settled.
+ */
 export interface ForecastForce {
   readonly typhoonAt?: number | null;
   readonly heatUntil?: number | null;
+  readonly settledUntil?: number | null;
 }
+const settled = (total: number, force: ForecastForce): boolean => force.settledUntil != null && total < force.settledUntil;
 
 /** When the typhoon over this minute began, if one is (or just was) passing: its start minute. */
 function typhoonStart(total: number, season: Season, seasonStart: number, force: ForecastForce): number | null {
@@ -82,7 +88,7 @@ function typhoonStart(total: number, season: Season, seasonStart: number, force:
   if (force.typhoonAt != null && total >= force.typhoonAt && total < force.typhoonAt + len) return force.typhoonAt;
   const seasonDay = Math.floor((total - seasonStart) / DAY);
   const inSeason = (season === 'summer' && seasonDay >= TSUYU_DAYS) || (season === 'autumn' && seasonDay < TYPHOON_AUTUMN_DAYS);
-  if (!inSeason) return null;
+  if (!inSeason || settled(total, force)) return null;
   // This window's and the one before (a typhoon can run on across the line).
   const w0 = Math.floor(total / (TYPHOON_WINDOW * DAY));
   for (const w of [w0, w0 - 1]) {
@@ -102,7 +108,7 @@ export function outlookAt(total: number, season: Season, seasonStart = 0, force:
   const seasonDay = Math.floor((total - seasonStart) / DAY);
   const tsuyu = season === 'summer' && seasonDay >= 0 && seasonDay < TSUYU_DAYS;
   // Heat waves in runs of three days, about half of high summer.
-  const heat = (season === 'summer' && !tsuyu && rnd(Math.floor(day / 3), s, 0x4ea7) < 0.5) || (force.heatUntil != null && total < force.heatUntil);
+  const heat = (season === 'summer' && !tsuyu && !settled(total, force) && rnd(Math.floor(day / 3), s, 0x4ea7) < 0.5) || (force.heatUntil != null && total < force.heatUntil);
   const o = ODDS[tsuyu ? 'tsuyu' : heat ? 'heat' : season];
   const m = (((total % DAY) + DAY) % DAY);
   // The temperature: the day's low before dawn, its high at two in the afternoon, a little different each day.

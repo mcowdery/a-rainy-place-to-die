@@ -6,8 +6,10 @@ One year, one chapter a season, starting in spring. The story turns the season w
 ## The calendar the game keeps
 
 - Day 1 is a **Friday**, starting at **22:00**. So day 7 is the first Thursday, day 8 the next Friday.
-- Times of day the story reads (`world.time`): day, dusk, night, dawn; `world.late` after the last train
-  (00:40) until 05:00.
+- Times of day the story reads (`world.time`): day, dusk, night, dawn, following the season's sunrise and sunset
+  (Tokyo's: about 05:15 to 18:10 in spring, 04:35 to 19:00 in summer, 05:45 to 17:15 in autumn, 06:50 to 16:45 in
+  winter), so a winter evening at 18:00 is night and a summer one still day; `world.late` after the last train
+  (00:40) until 05:00, all year.
 - A scene can ask for a time: `time_morning` (07:00), `time_noon`, `time_evening` (18:00), `time_night` (22:00),
   `time_late` (01:30). The clock runs on to it.
 - Sleeping (booth 17, the futon) runs to 07:00 and autosaves.
@@ -68,12 +70,14 @@ Every chapter ends with **one big reveal about the order** and **one big battle 
 
 ### Chapter 1: Spring
 
-- **The opening: [spring, chapter 1](main/spring/01-osananajimi.md).** Not the detective's story: a university student, his
-  girlfriend (his childhood friend) and a smooth-talking man. Warm and happy with subtle signs, then the
-  message with the pictures. Dark and shocking on purpose, to set the tone.
-- **Then the detective**, straight after: in bed with a married woman, while looking for his wife.
-- The opening is the week before day 1 (Saturday to Friday, full cherry blossom); its message arrives just before
-  22:00 on Friday, and the detective's story starts at 22:00: day 1.
+- **The cold open:** a young man at the river with lanterns, waiting; ten o'clock passes; his phone lights up.
+  No context.
+- **Then the detective**, the same night: in bed with a married woman, while looking for his wife. Day 1 starts
+  here, in the small hours after that Friday.
+- **The first case ([spring, chapter 1](main/spring/01-osananajimi.md)):** that young man, Minato, his girlfriend
+  (his childhood friend) and a smooth-talking man. His week before day 1 (Saturday to Friday, full cherry blossom)
+  is played in Mack's reconstructions as the evidence turns up: warm and happy with subtle signs, then the
+  betrayal, discovered.
 - The rest of spring: [main/spring.md](main/spring.md).
 
 ### Chapter 2: Summer

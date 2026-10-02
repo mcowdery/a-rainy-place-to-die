@@ -17,7 +17,7 @@ this list.
 | Flag | Values | What it is |
 |---|---|---|
 | `world.clock` | minutes | Minutes since day 1, Friday 22:00 |
-| `world.time` | `dawn` `day` `dusk` `night` | The time of day as the story and nodes read it |
+| `world.time` | `dawn` `day` `dusk` `night` | The time of day as the story and nodes read it, by the season's sunrise and sunset (dawn from 30 min before sunrise to 45 after, dusk from 45 min before sunset to 50 after) |
 | `world.late` | bool | After the last train (00:40) until 05:00 |
 | `world.season` | `spring` `summer` `autumn` `winter` | The season (the story's chapter) |
 | `world.season_start` | minute | When the season began (the rainy season's start) |
@@ -29,6 +29,7 @@ this list.
 | `world.heat_until` | minute | A forced heat wave's end |
 | `world.typhoon` | bool | A typhoon is passing |
 | `world.typhoon_at` | minute | A forced typhoon's start |
+| `world.settled_until` | minute | Settled weather (no heat wave or typhoon of the forecast's own) until then |
 
 ## Requests the story makes (the game acts, then clears them)
 

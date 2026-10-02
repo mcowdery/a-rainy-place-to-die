@@ -1,6 +1,8 @@
 # (district, time, weather) -> 3D lighting and effects. Same layering as the 2D table: more specific
 # rules override less specific ones; ties go to file order. The base rule must set every key.
-# time: dawn | day | dusk | night    weather: clear | rain | fog | snow
+# time: dawn | day | dusk | night, or the looks between them (clock.ts keyframes, round sunrise and sunset): morning and
+# golden start from day's rules, bluehour from dusk's; their rules change only what they set.
+# weather: clear | rain | fog | snow
 # Colours are sRGB; sun/hemi are light intensities; lamps 0-1 switches street lighting (and the shop and
 # sign glow on the pavement); exposure feeds the tone mapper.
 rules:
@@ -25,15 +27,35 @@ rules:
       cloudLit: '#f4f0ec'
       cloudDark: '#a8b4c4'
       haze: 0
+      stars: 1
+      sunGlow: '#000000'
+      # (How much of the sky is the physical sky's, computed from the sun: real/skyModel.ts.)
+      phys: 1
 
   - match: { time: dawn }
-    set: { sky: '#3a4a78', horizon: '#f0a080', fog: '#a08890', hemiSky: '#a0a8d0', sunColor: '#ffb890', sun: 1.6, hemi: 0.7, windowLit: 0.15, lamps: 0.5, exposure: 1.15, fogFar: 750, cloudLit: '#f0a888', cloudDark: '#4a4a6a', haze: 0.2 }
+    set: { sky: '#3a4a78', horizon: '#d8a090', sunGlow: '#ff9a68', fog: '#a08890', hemiSky: '#a0a8d0', sunColor: '#ffb890', sun: 1.6, hemi: 0.7, windowLit: 0.15, lamps: 0.5, exposure: 1.0, fogFar: 750, cloudLit: '#f0a888', cloudDark: '#4a4a6a', haze: 0.2 }
 
   - match: { time: dusk }
-    set: { sky: '#1c2448', horizon: '#d86848', fog: '#58384a', hemiSky: '#8a90c0', hemiGround: '#40302a', sunColor: '#ff8a50', sun: 1.1, hemi: 0.45, windowLit: 0.35, neon: 'on', lamps: 1, exposure: 1.15, fogNear: 80, fogFar: 650, clouds: 0.45, cloudLit: '#e07858', cloudDark: '#2a2440', haze: 0.25 }
+    set: { sky: '#1c2448', horizon: '#8a5868', sunGlow: '#ff7038', fog: '#58384a', hemiSky: '#8a90c0', hemiGround: '#40302a', sunColor: '#ff8a50', sun: 1.1, hemi: 0.45, windowLit: 0.35, neon: 'on', lamps: 1, exposure: 1.15, fogNear: 80, fogFar: 650, clouds: 0.45, cloudLit: '#e07858', cloudDark: '#2a2440', haze: 0.25 }
+
+  # The crisp hour or two after sunrise: clear, cool light, a low sun, the haze lifting.
+  - match: { time: morning, weather: clear }
+    set: { sky: '#4a86cc', horizon: '#c4d8e6', sunGlow: '#3a2a1a', fog: '#b0c2d0', sunColor: '#fff0d8', sun: 2.6, hemi: 1.15, exposure: 0.9, haze: 0.12, cloudLit: '#f8f2ea' }
+
+  # Golden hour, the hour before sunset: a low warm sun, long shadows, the sky still blue overhead.
+  - match: { time: golden, weather: clear }
+    set: { sky: '#4670b0', horizon: '#e8c8a0', sunGlow: '#c87a30', fog: '#c4b094', hemiSky: '#c0c4d4', hemiGround: '#6a5440', sunColor: '#ffbe78', sun: 2.4, hemi: 0.95, windowLit: 0.1, exposure: 0.95, haze: 0.15, cloudLit: '#ffd8b0', cloudDark: '#8a8090' }
+  - match: { time: golden, weather: rain }
+    set: { sky: '#56585e', horizon: '#8a7c74', cloudLit: '#9a8a82', sunColor: '#e0b090' }
+
+  # The blue hour, after sunset and before dawn: the sky a deep blue, the last glow low where the sun went, the
+  # lamps and the neon on.
+  - match: { time: bluehour, weather: clear }
+    set: { phys: 0.85, sky: '#121c42', horizon: '#3a4a7c', sunGlow: '#8a3a22', fog: '#262c44', hemiSky: '#5060a0', hemiGround: '#2a2630', sunColor: '#8090c0', sun: 0.2, hemi: 0.32, windowLit: 0.38, exposure: 1.15, clouds: 0.4, cloudLit: '#4a4a78', cloudDark: '#141828', haze: 0.3 }
 
   - match: { time: night }
     set:
+      phys: 0
       sky: '#03050c'
       horizon: '#2c1e2a'
       fog: '#15111a'
@@ -55,10 +77,10 @@ rules:
       haze: 0.3
 
   - match: { weather: rain }
-    set: { rain: 0.05, fogFar: 380, sky: '#5a6068', horizon: '#80868c', fog: '#70767c', sun: 0.5, hemi: 1.1, exposure: 1.0, clouds: 0.95, cloudLit: '#8a9098', cloudDark: '#4a5058', haze: 0.5 }
+    set: { phys: 0.12, sunGlow: '#000000', rain: 0.05, fogFar: 380, sky: '#5a6068', horizon: '#80868c', fog: '#70767c', sun: 0.5, hemi: 1.1, exposure: 1.0, clouds: 0.95, cloudLit: '#8a9098', cloudDark: '#4a5058', haze: 0.5 }
 
   - match: { time: night, weather: rain }
-    set: { sky: '#05070c', horizon: '#34283a', fog: '#1c1a22', sun: 0.02, hemi: 0.18, exposure: 1.1, cloudLit: '#4a3040', cloudDark: '#0c0a10', haze: 1 }
+    set: { phys: 0, sky: '#05070c', horizon: '#34283a', fog: '#1c1a22', sun: 0.02, hemi: 0.18, exposure: 1.1, cloudLit: '#4a3040', cloudDark: '#0c0a10', haze: 1 }
 
   - match: { time: dusk, weather: rain }
     set: { sky: '#1a1e2c', horizon: '#5a3a40', fog: '#3a3038', sun: 0.35, hemi: 0.35, exposure: 1.35, cloudLit: '#6a4048', cloudDark: '#1e1a26', haze: 0.8 }
@@ -67,10 +89,10 @@ rules:
     set: { sky: '#3a4050', horizon: '#8a7a80', fog: '#6a6470', sun: 0.4, hemi: 0.5, exposure: 1.15, cloudLit: '#8a7a80', cloudDark: '#3a3a48', haze: 0.6 }
 
   - match: { weather: fog }
-    set: { fogNear: 10, fogFar: 200, sky: '#8a9098', horizon: '#9aa0a8', fog: '#8a9098', sun: 1.2, clouds: 0.8, haze: 0.8 }
+    set: { phys: 0.08, sunGlow: '#000000', fogNear: 10, fogFar: 200, sky: '#8a9098', horizon: '#9aa0a8', fog: '#8a9098', sun: 1.2, clouds: 0.8, haze: 0.8 }
 
   - match: { time: night, weather: fog }
-    set: { sky: '#101018', horizon: '#2a2430', fog: '#1e1c24', sun: 0.02, cloudLit: '#3a2c38', cloudDark: '#101018', haze: 1.2 }
+    set: { phys: 0, sky: '#101018', horizon: '#2a2430', fog: '#1e1c24', sun: 0.02, cloudLit: '#3a2c38', cloudDark: '#101018', haze: 1.2 }
 
   - match: { time: dusk, weather: fog }
     set: { sky: '#3a3040', horizon: '#6a4a50', fog: '#4a3a44', sun: 0.4 }
@@ -81,10 +103,10 @@ rules:
   # Snow (winter weather): a pale overcast by day, and at night the low cloud glowing with the city's light, the
   # air thick with it; snow settles on what faces up (real/city.ts uSnow) and falls round you (weather.ts Drift).
   - match: { weather: snow }
-    set: { rain: 0, fogNear: 30, fogFar: 300, sky: '#9aa2aa', horizon: '#b8bec4', fog: '#aab0b6', sun: 0.45, hemi: 1.25, exposure: 1.05, clouds: 1, cloudLit: '#c0c6cc', cloudDark: '#8a9098', haze: 0.6 }
+    set: { phys: 0.15, sunGlow: '#000000', rain: 0, fogNear: 30, fogFar: 300, sky: '#9aa2aa', horizon: '#b8bec4', fog: '#aab0b6', sun: 0.45, hemi: 1.25, exposure: 1.05, clouds: 1, cloudLit: '#c0c6cc', cloudDark: '#8a9098', haze: 0.6 }
 
   - match: { time: night, weather: snow }
-    set: { sky: '#141620', horizon: '#4a4250', fog: '#2e2c36', sun: 0.02, hemi: 0.32, exposure: 1.15, cloudLit: '#6a5a68', cloudDark: '#1a1820', haze: 1.1 }
+    set: { phys: 0, sky: '#141620', horizon: '#4a4250', fog: '#2e2c36', sun: 0.02, hemi: 0.32, exposure: 1.15, cloudLit: '#6a5a68', cloudDark: '#1a1820', haze: 1.1 }
 
   - match: { time: dusk, weather: snow }
     set: { sky: '#3a3e4c', horizon: '#7a6a72', fog: '#5a5460', sun: 0.3, hemi: 0.5, exposure: 1.2, cloudLit: '#8a7a82', cloudDark: '#3a3844' }
@@ -98,3 +120,35 @@ rules:
 
   - match: { district: neon, time: day }
     set: { windowLit: 0.12 }
+
+# Sky looks (the K panel's Sky, ?sky=noir|deep|citypop), laid over the rules above by the same matching; `citypop` is the rules alone.
+skies:
+  # Noir: the colour drained out of the night. A neutral black overhead, the city's glow on the horizon a smoky
+  # sodium grey rather than violet, the low cloud lit dirty grey from below, a silver moon and a neutral fill. And a
+  # city's sky: its light leaves only the brightest few dozen stars, high up, none near the glowing horizon.
+  noir:
+    - match: { time: night }
+      set: { sky: '#030303', horizon: '#2a2826', fog: '#121212', hemiSky: '#383a3e', hemiGround: '#201e1c', sunColor: '#c8ccd2', cloudLit: '#353331', cloudDark: '#050505', clouds: 0.45, stars: 0.02 }
+    - match: { time: night, weather: rain }
+      set: { sky: '#050505', horizon: '#32302e', fog: '#1a1a1a', cloudLit: '#403e3b', cloudDark: '#0a0909' }
+    - match: { time: night, weather: fog }
+      set: { sky: '#0e0e0e', horizon: '#292827', fog: '#1d1c1b', cloudLit: '#353432', cloudDark: '#0e0e0e' }
+    - match: { time: night, weather: snow }
+      set: { sky: '#121212', horizon: '#43413f', fog: '#2c2b2a', cloudLit: '#5c5956', cloudDark: '#181818' }
+    # (Noir's blue hour: the blue drained to grey, an ember of the glow where the sun went.)
+    - match: { time: bluehour, weather: clear }
+      set: { phys: 0.1, sky: '#0c0c0e', horizon: '#2a2928', sunGlow: '#3a2a20', fog: '#161616', hemiSky: '#3a3c40', hemiGround: '#201e1c', sunColor: '#b8bcc4', cloudLit: '#353331', cloudDark: '#080808', stars: 0.02 }
+  # Deep: a city night without the noir smoke. The same colourless palette and the city's few bright stars, but the
+  # sky ink black almost to the horizon, only a thin grey glow along it, the low cloud barely showing against it.
+  deep:
+    - match: { time: night }
+      set: { sky: '#000000', horizon: '#121212', fog: '#090909', hemiSky: '#34363a', hemiGround: '#1c1b1a', sunColor: '#c8ccd2', cloudLit: '#1a1918', cloudDark: '#020202', clouds: 0.35, stars: 0.02 }
+    - match: { time: night, weather: rain }
+      set: { sky: '#020202', horizon: '#1a1a1a', fog: '#111111', cloudLit: '#242322', cloudDark: '#050505' }
+    - match: { time: night, weather: fog }
+      set: { sky: '#080808', horizon: '#181818', fog: '#141414', cloudLit: '#222120', cloudDark: '#080808' }
+    - match: { time: night, weather: snow }
+      set: { sky: '#0a0a0a', horizon: '#2c2b2a', fog: '#1e1e1e', cloudLit: '#3c3a38', cloudDark: '#0e0e0e' }
+    # (Deep's blue hour: a muted slate going to black, a low ember where the sun went.)
+    - match: { time: bluehour, weather: clear }
+      set: { phys: 0.2, sky: '#080a10', horizon: '#1e222c', sunGlow: '#4a2a1c', fog: '#111317', hemiSky: '#363a44', hemiGround: '#1c1b1a', sunColor: '#b8bcc8', cloudLit: '#22242c', cloudDark: '#040506', clouds: 0.35, stars: 0.02 }

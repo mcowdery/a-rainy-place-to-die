@@ -131,4 +131,16 @@ describe('forecast', () => {
     const t = 5000 * DAY + 14 * 60;
     expect(outlookAt(t, 'summer', LATE, { heatUntil: t + DAY }).heat).toBe(true);
   });
+
+  it('keeps the weather settled when told to: no heat wave or typhoon of its own, a forced one still comes', () => {
+    for (let d = 0; d < 60; d++) {
+      const t = (5000 + d) * DAY + 14 * 60;
+      const o = outlookAt(t, 'summer', LATE, { settledUntil: t + 1 });
+      expect(o.heat).toBe(false);
+      expect(o.typhoon).toBe(0);
+    }
+    const t = 5000 * DAY + 14 * 60;
+    expect(outlookAt(t, 'summer', LATE, { settledUntil: t + DAY, heatUntil: t + DAY }).heat).toBe(true);
+    expect(outlookAt(t, 'summer', LATE, { settledUntil: t + DAY, typhoonAt: t - 60 }).typhoon).toBeGreaterThan(0);
+  });
 });

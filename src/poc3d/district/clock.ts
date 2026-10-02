@@ -29,19 +29,53 @@ export const TIMES_OF_DAY = {
 export type NamedTime = keyof typeof TIMES_OF_DAY;
 
 /**
- * The light's keyframes through the day (minute, look): night until first light, dawn, the long day, dusk, night.
- * Between two keyframes the atmosphere blends from one look to the next.
+ * The light's looks (the 3D atmosphere's `time:`): the story's four times of day, and three more for the light
+ * between them: morning (the crisp hour or two after sunrise), golden (the hour before sunset) and blue hour (the
+ * twilight after sunset and before dawn). Each extra look starts from its base's rules (atmosphere.ts LOOK_BASE)
+ * and changes what its own rules set.
  */
-export const KEYFRAMES: readonly (readonly [number, TimeOfDay])[] = [
-  [0, 'night'],
-  [4 * 60 + 30, 'night'],
-  [5 * 60 + 30, 'dawn'],
-  [7 * 60, 'day'],
-  [16 * 60 + 30, 'day'],
-  [18 * 60, 'dusk'],
-  [19 * 60 + 30, 'night'],
-  [DAY, 'night'],
-];
+export const LIGHT_LOOKS = ['dawn', 'day', 'dusk', 'night', 'morning', 'golden', 'bluehour'] as const;
+export type LightLook = (typeof LIGHT_LOOKS)[number];
+
+/**
+ * The day's length by season, from Tokyo's sky (sunrise and sunset in minutes, the sun's height at noon in
+ * radians): April, July, October and January. The light's keyframes and the sun's path follow them, so winter
+ * evenings are dark by five and summer's light lasts till seven.
+ */
+export interface DayLight {
+  readonly rise: number;
+  readonly set: number;
+  readonly noon: number;
+}
+export const DAYLIGHT: Readonly<Record<'spring' | 'summer' | 'autumn' | 'winter', DayLight>> = {
+  spring: { rise: 5 * 60 + 15, set: 18 * 60 + 10, noon: 1.08 },
+  summer: { rise: 4 * 60 + 35, set: 18 * 60 + 58, noon: 1.33 },
+  autumn: { rise: 5 * 60 + 45, set: 17 * 60 + 15, noon: 0.86 },
+  winter: { rise: 6 * 60 + 50, set: 16 * 60 + 45, noon: 0.58 },
+};
+/** (The story begins in spring; the functions below take a season's daylight and default to spring's.) */
+const SPRING = DAYLIGHT.spring;
+
+/**
+ * The light's keyframes through a day (minute, look), round sunrise and sunset: night, the blue hour before dawn,
+ * dawn as the sun rises, morning, the long day, golden hour, dusk as it sets, the blue hour after, night. Between
+ * two keyframes the atmosphere blends from one look to the next.
+ */
+export function keyframes(dl: DayLight = SPRING): readonly (readonly [number, LightLook])[] {
+  const k: (readonly [number, LightLook])[] = [
+    [dl.rise - 80, 'night'],
+    [dl.rise - 40, 'bluehour'],
+    [dl.rise, 'dawn'],
+    [dl.rise + 70, 'morning'],
+    [dl.rise + 160, 'day'],
+    [dl.set - 150, 'day'],
+    [dl.set - 60, 'golden'],
+    [dl.set, 'dusk'],
+    [dl.set + 35, 'bluehour'],
+    [dl.set + 80, 'night'],
+  ];
+  return [[0, 'night'], ...k, [DAY, 'night']];
+}
 
 /** The last train leaves at 00:40; the first at 05:00 (終電 to 始発: stations shut between). */
 export const LAST_TRAIN = 40;
@@ -69,21 +103,27 @@ export function untilMinute(total: number, minute: number): number {
   return d === 0 ? DAY : d;
 }
 
-/** The time of day's look, for the flag the story reads: the nearest keyframe's (dawn and dusk round their peaks). */
-export function phaseAt(minute: number): TimeOfDay {
+/**
+ * The time of day the story reads (the `world.time` flag; nodes' conditions and scenes), by the season's sunrise and
+ * sunset: dawn from half an hour before sunrise to 45 minutes after, day until 45 minutes before sunset, dusk until
+ * 50 minutes after it, then night. So a winter evening at half past five is already dusk going on night, and a summer
+ * one still light.
+ */
+export function phaseAt(minute: number, dl: DayLight = SPRING): TimeOfDay {
   const m = ((minute % DAY) + DAY) % DAY;
-  if (m >= 5 * 60 && m < 6 * 60 + 30) return 'dawn';
-  if (m >= 6 * 60 + 30 && m < 17 * 60 + 15) return 'day';
-  if (m >= 17 * 60 + 15 && m < 19 * 60) return 'dusk';
+  if (m >= dl.rise - 30 && m < dl.rise + 45) return 'dawn';
+  if (m >= dl.rise + 45 && m < dl.set - 45) return 'day';
+  if (m >= dl.set - 45 && m < dl.set + 50) return 'dusk';
   return 'night';
 }
 
-/** The two looks to blend at a minute, and how far from the first to the second (0-1, eased). */
-export function blendAt(minute: number): { a: TimeOfDay; b: TimeOfDay; f: number } {
+/** The two looks to blend at a minute (on a season's daylight), and how far from the first to the second (0-1, eased). */
+export function blendAt(minute: number, dl: DayLight = SPRING): { a: LightLook; b: LightLook; f: number } {
   const m = ((minute % DAY) + DAY) % DAY;
-  for (let i = 0; i + 1 < KEYFRAMES.length; i++) {
-    const [m0, a] = KEYFRAMES[i];
-    const [m1, b] = KEYFRAMES[i + 1];
+  const frames = keyframes(dl);
+  for (let i = 0; i + 1 < frames.length; i++) {
+    const [m0, a] = frames[i];
+    const [m1, b] = frames[i + 1];
     if (m >= m0 && m < m1) {
       const x = (m - m0) / (m1 - m0);
       return { a, b, f: a === b ? 0 : x * x * (3 - 2 * x) };
@@ -95,16 +135,101 @@ export function blendAt(minute: number): { a: TimeOfDay; b: TimeOfDay; f: number
 type V3 = readonly [number, number, number];
 const MOON: V3 = [-0.35, 0.7, -0.55];
 
-/** Toward the sun by day (up from the east at 06:00, high in the south at noon, down in the west at 18:00), the moon by night. */
-export function sunDirAt(minute: number): [number, number, number] {
-  const m = ((minute % DAY) + DAY) % DAY;
+/** The synodic month: new moon to new moon, in days. */
+export const SYNODIC = 29.530589;
+/** The moon's age (days since new) when the story begins: full, for the first night. */
+export const MOON_AGE_AT_START = SYNODIC / 2;
+
+export interface MoonNow {
+  /** Days since the new moon (0 to SYNODIC). */
+  readonly age: number;
+  /** Degrees from full, signed: waxing positive (lit from the right, the west), waning negative; ±180 new. */
+  readonly phase: number;
+  /** The share of the disc lit (0 new, 1 full). */
+  readonly lit: number;
+  /** Toward the moon (unit; below the horizon when it's set). */
+  readonly dir: [number, number, number];
+  /** How far it's up: 0 set, 1 clear of the horizon (eased over its rising and setting). */
+  readonly up: number;
+  /** Its light on the city as a share of a full moon's high up (the lit share, and a half moon is far dimmer than half a full one). */
+  readonly light: number;
+}
+
+/**
+ * The lunar calendar, from minutes since the story began: the moon's age and phase (full on the first night), and
+ * where it is: it follows the sun's path round the sky (clock.ts sunDirAt) a share of a day behind by its age, so it
+ * rises about 50 minutes later each day: a new moon travels with the sun (dark nights), a first quarter is high at
+ * dusk and sets about midnight, a full moon rises at dusk and is highest at midnight, a last quarter rises about
+ * midnight.
+ */
+export function moonAt(total: number): MoonNow {
+  const age = (((MOON_AGE_AT_START + (total - START_MINUTE) / DAY) % SYNODIC) + SYNODIC) % SYNODIC;
+  const phase = 180 - (age / SYNODIC) * 360;
+  const lit = (1 + Math.cos((phase * Math.PI) / 180)) / 2;
+  const m = ((((total % DAY) - (age / SYNODIC) * DAY) % DAY) + DAY) % DAY;
   const a = ((m - 6 * 60) / (12 * 60)) * Math.PI;
-  const sun: V3 = [Math.cos(a) * 0.9, Math.max(0.12, Math.sin(a) * 0.85 + 0.12), 0.35 + Math.sin(a) * 0.1];
-  // Handing over between the sun and the moon over two hours round dusk and dawn (they're far apart in the sky).
-  const moonness = m >= 20 * 60 || m < 3 * 60 + 30 ? 1 : m >= 18 * 60 ? (m - 18 * 60) / 120 : m < 5 * 60 + 30 ? 1 - (m - (3 * 60 + 30)) / 120 : 0;
-  const d = [0, 1, 2].map((i) => sun[i] * (1 - moonness) + MOON[i] * moonness) as [number, number, number];
+  const y = Math.sin(a) * 0.85;
+  const v = [Math.cos(a) * 0.9, y, 0.35 + Math.sin(a) * 0.1];
+  const l = Math.hypot(v[0], v[1], v[2]);
+  const t = Math.max(0, Math.min(1, (y + 0.02) / 0.12));
+  const up = t * t * (3 - 2 * t);
+  return { age, phase, lit, dir: [v[0] / l, v[1] / l, v[2] / l], up, light: lit ** 1.5 * up };
+}
+
+/**
+ * The sun's angle along its path (0 rising in the east, π/2 at noon, π setting in the west, on round below the
+ * horizon through the night), from a season's sunrise and sunset.
+ */
+function sunAngle(minute: number, dl: DayLight): number {
+  const m = ((minute % DAY) + DAY) % DAY;
+  const dayLen = dl.set - dl.rise;
+  const nightLen = DAY - dayLen;
+  if (m >= dl.rise && m <= dl.set) return ((m - dl.rise) / dayLen) * Math.PI;
+  const after = m > dl.set ? m - dl.set : m + DAY - dl.set;
+  return Math.PI + (after / nightLen) * Math.PI;
+}
+
+/**
+ * Where the sun really is (unit; below the horizon at night) and how far it's up (0 set, 1 risen), for its disc, the
+ * sky's glow round it and how dark the night is: an arc from the east over the south (as high at noon as the
+ * season's sun) to the west.
+ */
+export function sunAt(minute: number, dl: DayLight = SPRING): { dir: [number, number, number]; up: number } {
+  const a = sunAngle(minute, dl);
+  const y = Math.sin(a) * Math.sin(dl.noon);
+  const dir: [number, number, number] = [Math.cos(a), y, Math.sin(a) * Math.cos(dl.noon)];
+  const t = Math.max(0, Math.min(1, (y + 0.02) / 0.1));
+  return { dir, up: t * t * (3 - 2 * t) };
+}
+
+/** How far the light in the sky is the moon's (0-1): handing over as the sun goes down through the twilight, and back. */
+export function moonnessAt(minute: number, dl: DayLight = SPRING): number {
+  const y = sunAt(minute, dl).dir[1];
+  const t = Math.max(0, Math.min(1, (0.1 - y) / 0.65));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Toward the sun by day, the moon by night (`moon`: moonAt's direction; a fixed one high in the north-west without
+ * it), handing over through the twilight. The key light never comes from low down: the low sun and a moon below the
+ * horizon still light the city from a little above it (the moon's strength is the caller's: MoonNow.light).
+ */
+export function sunDirAt(minute: number, moon: readonly number[] = MOON, dl: DayLight = SPRING): [number, number, number] {
+  const s = sunAt(minute, dl).dir;
+  const sun: V3 = [s[0] * 0.9, Math.max(0.12, s[1]), s[2] + 0.1];
+  const moonness = moonnessAt(minute, dl);
+  const ml = Math.hypot(moon[0], Math.max(0.2, moon[1]), moon[2]);
+  const mn = [moon[0] / ml, Math.max(0.2, moon[1]) / ml, moon[2] / ml];
+  const d = [0, 1, 2].map((i) => sun[i] * (1 - moonness) + mn[i] * moonness) as [number, number, number];
   const l = Math.hypot(...d) || 1;
   return [d[0] / l, d[1] / l, d[2] / l];
+}
+
+/** How dark the sky is for stars (0 day to 1 night): they come out as the sun sinks through the twilight. */
+export function starsAt(minute: number, dl: DayLight = SPRING): number {
+  const y = sunAt(minute, dl).dir[1];
+  const t = Math.max(0, Math.min(1, (-0.1 - y) / 0.2));
+  return t * t * (3 - 2 * t);
 }
 
 /** After the last train and before the first. */

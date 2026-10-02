@@ -10,10 +10,22 @@ export interface DebugItem {
   /** Marks the current choice (the season now, the weather now...). */
   readonly on?: () => boolean;
 }
+export interface DebugSlider {
+  readonly label: string;
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
+  readonly get: () => number;
+  readonly set: (v: number) => void;
+  /** The value as shown beside the label. */
+  readonly format?: (v: number) => string;
+}
 export interface DebugSection {
   /** (A function for a title that changes: the clock.) */
   readonly title: string | (() => string);
   readonly items: () => readonly DebugItem[];
+  /** Sliders under the buttons (double-click one to reset it to where it was when the menu drew). */
+  readonly sliders?: () => readonly DebugSlider[];
 }
 export interface DebugHit {
   readonly label: string;
@@ -140,6 +152,7 @@ export class DebugMenu {
           });
           row.append(b);
         }
+        for (const sl of s.sliders?.() ?? []) row.append(this.slider(sl));
         return row.parentElement!;
       }),
     );
@@ -188,6 +201,34 @@ export class DebugMenu {
       borderRadius: '5px', padding: '6px 8px', font: 'inherit',
     });
     return i;
+  }
+
+  /** A labelled range input, full width; it sets as it moves and updates its own label (no redraw, so a drag holds). */
+  private slider(sl: DebugSlider): HTMLDivElement {
+    const wrap = document.createElement('div');
+    Object.assign(wrap.style, { width: '100%', marginTop: '4px' });
+    const label = document.createElement('div');
+    const fmt = (v: number): string => `${sl.label}  ${sl.format ? sl.format(v) : v.toFixed(2)}`;
+    label.textContent = fmt(sl.get());
+    const r = document.createElement('input');
+    r.type = 'range';
+    r.min = String(sl.min);
+    r.max = String(sl.max);
+    r.step = String(sl.step);
+    r.value = String(sl.get());
+    const start = sl.get();
+    Object.assign(r.style, { width: '100%', accentColor: '#7cffb0' });
+    const apply = (v: number): void => {
+      sl.set(v);
+      label.textContent = fmt(v);
+    };
+    r.addEventListener('input', () => apply(Number(r.value)));
+    r.addEventListener('dblclick', () => {
+      r.value = String(start);
+      apply(start);
+    });
+    wrap.append(label, r);
+    return wrap;
   }
 
   private button(label: string, on: boolean): HTMLButtonElement {
