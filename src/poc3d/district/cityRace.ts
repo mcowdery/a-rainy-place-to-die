@@ -89,6 +89,8 @@ export function parseRaces(file: string, text: string, errors: string[]): RaceDe
 export class RacePath {
   readonly road: Road;
   readonly length: number;
+  /** The road sample the race starts at. */
+  private readonly start: number;
   private readonly n: number;
 
   constructor(
@@ -98,14 +100,16 @@ export class RacePath {
     const road = ex.roads.find((r) => r.id === def.road);
     if (!road) throw new Error(`race ${def.id}: no expressway road '${def.road}'`);
     this.road = road;
+    // (`start` is metres along the route as written; a trimmed route's samples begin further on.)
+    this.start = def.start - (road.trim?.[0] ?? 0);
     this.n = road.x.length;
     const one = def.length === 'lap' ? this.n : def.length;
-    this.length = def.length === 'lap' ? one * def.laps : Math.min(one, road.closed ? Infinity : this.n - 1 - def.start);
+    this.length = def.length === 'lap' ? one * def.laps : Math.min(one, road.closed ? Infinity : this.n - 1 - this.start);
   }
 
   /** The road sample at s metres from the start. */
   index(s: number): number {
-    const i = Math.floor(this.def.start + Math.max(0, Math.min(this.length, s)));
+    const i = Math.floor(this.start + Math.max(0, Math.min(this.length, s)));
     return this.road.closed ? ((i % this.n) + this.n) % this.n : Math.min(this.n - 1, i);
   }
 

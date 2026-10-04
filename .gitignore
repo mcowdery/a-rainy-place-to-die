@@ -11,6 +11,8 @@ adult/
 .env.krea
 # Generated ad candidates awaiting review (approved ones move to assets/ads/source/)
 assets/ads/pending/
+# Generated music awaiting review (scripts/radio/generate.py; approved tracks move to assets/radio/<station>/)
+assets/radio_pending/
 debug-shots/
 
 # Python bytecode (scripts/blender)

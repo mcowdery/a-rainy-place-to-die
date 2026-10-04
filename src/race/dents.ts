@@ -11,6 +11,8 @@ import type { CarView } from './carView';
 export class Dents {
   private readonly pos: Float32Array;
   private readonly col: Float32Array | null;
+  /** The lamps over the lenses (carView.ts), as built: they crumple with the body under them. */
+  private readonly lamps: { geo: THREE.BufferGeometry; pos: Float32Array }[];
   private readonly minZ: number;
   private readonly maxZ: number;
   private readonly maxX: number;
@@ -19,6 +21,7 @@ export class Dents {
     const geo = view.body.geometry;
     this.pos = Float32Array.from(geo.attributes.position.array as ArrayLike<number>);
     this.col = geo.attributes.color ? Float32Array.from(geo.attributes.color.array as ArrayLike<number>) : null;
+    this.lamps = Object.values(view.lamps).filter((m): m is THREE.Mesh => !!m).map((m) => ({ geo: m.geometry, pos: Float32Array.from(m.geometry.attributes.position.array as ArrayLike<number>) }));
     let minZ = Infinity;
     let maxZ = -Infinity;
     let maxX = 0;
@@ -35,10 +38,13 @@ export class Dents {
   /** Reshape the body for these parts (from the car as built, so it can be undone by a repair). */
   apply(P: Parts): void {
     const geo = this.view.body.geometry;
+    this.reshape(P, geo, this.pos, this.col);
+    for (const l of this.lamps) this.reshape(P, l.geo, l.pos, null);
+  }
+
+  private reshape(P: Parts, geo: THREE.BufferGeometry, O: Float32Array, C: Float32Array | null): void {
     const pos = geo.attributes.position.array as Float32Array;
-    const col = geo.attributes.color?.array as Float32Array | undefined;
-    const O = this.pos;
-    const C = this.col;
+    const col = C ? (geo.attributes.color?.array as Float32Array | undefined) : undefined;
     const { minZ, maxZ, maxX } = this;
     const sm = (v: number): number => {
       const c = Math.max(0, Math.min(1, v));
@@ -72,7 +78,7 @@ export class Dents {
       }
     }
     geo.attributes.position.needsUpdate = true;
-    if (geo.attributes.color) geo.attributes.color.needsUpdate = true;
+    if (col) geo.attributes.color.needsUpdate = true;
   }
 
   /**

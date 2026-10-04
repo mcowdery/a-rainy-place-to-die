@@ -125,7 +125,9 @@ export class ChunkBuilder {
     // People as numbers (the main thread draws them instanced), standing on the lie of the land.
     const around = [];
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) around.push(...(m.plan(mx + dx, my + dy)?.roads ?? []));
-    const crowd = cellCrowd(plan, m.detail(mx, my)!, m.plazas(mx, my), this.signals, around);
+    // The set pieces are solid to the crowd: the small, closed ones whole, all of them by their walls and fixtures.
+    const solid = m.crowdSolids(mx, my);
+    const crowd = cellCrowd(plan, m.detail(mx, my)!, m.plazas(mx, my), this.signals, around, solid.stamps, solid.fixtures);
     return { mx, my, stage, meshes: {}, crowd: packFigures(crowd, raised ? (x, z) => T.height(x, z) : null), people: crowd.length, ms: performance.now() - t0 };
   }
 }

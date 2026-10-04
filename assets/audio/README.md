@@ -10,9 +10,15 @@ dropped in this folder replaces its synthesized part. Use `.ogg`, `.mp3`, `.wav`
 | `wind_loop` | wind | a loop of steady wind; its level and filtering still follow the gusts |
 | `tyre_hiss` | cars passing on a wet road | a loop of tyre spray/hiss (not a single pass-by) |
 | `thunder_1`, `thunder_2`, ... | thunder | single claps and rolls; one is picked at random per strike |
-| `step_hard_1`, `step_hard_2`, ... | footsteps on roads, pavements and floors | single dry steps (shoe on concrete), trimmed tight; one is picked at random per step |
-| `step_grass_1`, ... | footsteps on lawns | single steps on grass |
-| `step_gravel_1`, ... | footsteps on gravel and earth (playgrounds, vacant lots, the shrine) | single steps on gravel |
+| `step_<surface>_1`, `step_<surface>_2`, ... | footsteps on that surface, in any footwear | single dry steps, trimmed tight; one is picked at random per step |
+| `step_<surface>_<footwear>_1`, ... | footsteps on that surface in that footwear | used before the plain `step_<surface>_*` ones |
+| `step_hard_1`, ... | footsteps on `asphalt`, `paving` and `tile` without recordings of their own | single dry steps (shoe on concrete) |
+
+Surfaces (`src/poc3d/district/footing.ts`): `asphalt` (roads, car parks), `paving` (pavements, plazas, concrete
+floors), `tile` (shops, stations, lobbies), `wood` (boards), `tatami`, `carpet`, `metal` (a train's or bus's floor),
+`grass`, `gravel` (park paths, vacant lots, the shrine), `earth` (playgrounds, the building site), `snow`.
+Footwear: `boots`, `shoes` (dress shoes), `bare`. So `step_gravel_boots_1.ogg`, `step_tile_bare_2.ogg`,
+`step_wood_1.ogg`. Record one foot's step only: a landing plays it heavier, and a wet street adds its own splash.
 
 Levels still follow the rain, wind and cover (roof, indoors), so the recordings should be fairly even.
 Free CC0 recordings: freesound.org (filter the licence to Creative Commons 0), or sonniss.com's GDC bundles.

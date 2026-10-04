@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { edition } from '@edition';
+import { faceDepth, isFaceless, shadowFace } from './faceShadow';
 
 /**
  * The cast as modelled characters (the mob is real/people.ts). Each is a skinned glTF built in Blender
@@ -13,10 +15,11 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
  * base pose, so they work whatever the rig's bone rolls are.
  */
 
-const FILES = import.meta.glob('../../../assets/characters/*.glb', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+/** The built models by name, as this edition ships them (src/edition: the demo leaves some out). */
+const FILES = edition.characters;
 
 /** The characters that have been built (file names without .glb). */
-export const CHARACTERS: readonly string[] = Object.keys(FILES).map((k) => k.replace(/^.*\/(.+)\.glb$/, '$1')).sort();
+export const CHARACTERS: readonly string[] = Object.keys(FILES).sort();
 
 const loader = new GLTFLoader();
 const cache = new Map<string, Promise<THREE.Group>>();
@@ -33,7 +36,7 @@ export function setCharacterEnvironment(tex: THREE.Texture | null): void {
 function source(name: string): Promise<THREE.Group> {
   let p = cache.get(name);
   if (!p) {
-    const url = Object.entries(FILES).find(([k]) => k.endsWith(`/${name}.glb`))?.[1];
+    const url = FILES[name];
     if (!url) return Promise.reject(new Error(`no character '${name}' in assets/characters/`));
     p = loader.loadAsync(url).then((g) => {
       g.scene.traverse((o) => {
@@ -61,6 +64,7 @@ function source(name: string): Promise<THREE.Group> {
           }
         }
       });
+      if (isFaceless(name)) shadowFace(g.scene);
       return g.scene;
     });
     cache.set(name, p);
@@ -72,7 +76,9 @@ function source(name: string): Promise<THREE.Group> {
 export async function loadCharacterModel(name: string): Promise<THREE.Object3D> {
   const src = await source(name);
   const { clone } = await import('three/examples/jsm/utils/SkeletonUtils.js');
-  return clone(src);
+  const copy = clone(src);
+  faceDepth(copy);
+  return copy;
 }
 
 /** Idle tuning: how much each motion moves (radians) and how fast (seconds a cycle). */

@@ -80,7 +80,7 @@ MakeHuman macros and targets.
 | Skin | `middleage_caucasian_male` (graded, smoothed) | makehuman_system_assets | makehuman_system | CC0 |
 | Eyes | `high-poly` with the `grey` material | makehuman_system_assets | makehuman_system | CC0 |
 | Eyebrows | `eyebrow010` | makehuman_system_assets | makehuman_system | CC0 |
-| Hair | `culturalibre_hair_02` (recoloured near-black) | hair01 pack | culturalibre | CC0 |
+| Hair | a short cut combed back, shaped from the scalp with its strand texture, normal map and cards generated, for this project, in `scripts/blender/garments.py` (`haircut`) | this repository | this project | ours |
 | Tee, jeans | `male_casualsuit06` (the tee recoloured black with its logo gone and its sleeves cut away under the jacket; the jeans dark indigo) | makehuman_system_assets | makehuman_system | CC0 |
 | Boots | `toigo_ankle_boots_male` (recoloured black) | shoes01 pack | MargaretToigo (MRT) | CC0 |
 | Leather jacket | shaped from the body and its grain normal map generated, for this project, in `scripts/blender/garments.py` (`jacket`) | this repository | this project | ours |

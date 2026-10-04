@@ -5,6 +5,8 @@ export interface GuideFrom {
   readonly x: number;
   readonly z: number;
   readonly mode: NavMode;
+  /** Driving: the way the car faces (unit x, z), so the route sets out that way where it can. */
+  readonly heading?: readonly [number, number];
 }
 
 export interface GuideDest {
@@ -51,7 +53,7 @@ export class Guide {
   reroute(from: GuideFrom): void {
     if (!this.dest) return;
     this.mode = from.mode;
-    this.route = this.grid(from.mode).route(from.x, from.z, this.dest.x, this.dest.z);
+    this.route = this.grid(from.mode).route(from.x, from.z, this.dest.x, this.dest.z, from.heading);
     this.routedAt = this.now();
     this.changed();
   }

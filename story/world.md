@@ -30,6 +30,14 @@ the station edge. Where the story starts: the MC's bed is a manga café booth he
 - LIVE HOUSE 地下室: the basement venue where the underground idols play.
 - Manga Café Tsukiyo: 24 hours; booth 17 is the MC's (the first rung of the housing ladder).
 - Yotaka Garage: the MC's rented unit in a railway arch by the Toto Line, where the car lives.
+- 歌舞路交番 Kaburo Kōban: the police box at the back of the square across the crossing from the mega-sign, a
+  clock tower on its corner, the wanted posters on its side wall; the young officer of spring's "Papers" stands
+  guard at its door. Walk-in: the front room, the counter and its bell.
+- キャッシュ・ワン Cash One and 質 マルヨシ Maruyoshi: one mixed-tenant building in the back alleys. The pawn shop at
+  street level (the noir hub: things, and what people know); a mahjong parlour, 雀荘 東風荘, on the second floor;
+  Cash One's office on the third, up a narrow stair from its own street door, where Mack pays every Monday. Its
+  sign is on the roof. (Where the office is, and Maruyoshi under it, was placed with the build: say so if the
+  story wants them elsewhere.)
 
 | Node | Kind | Name | Scene |
 |---|---|---|---|
@@ -47,6 +55,14 @@ the station edge. Where the story starts: the MC's bed is a manga café booth he
 | `tsukiyo.sleep` | hotspot | Booth 17 (sleep until morning) | — |
 | `tsukiyo.clerk` | npc | The night clerk | — |
 | `city_garage.door` | door | Your garage (opens the garage screen) | — |
+| `koban.officer` | npc | The officer at the kōban door | — |
+| `koban.wanted` | hotspot | 指名手配 (the wanted posters) | — |
+| `koban.counter` | hotspot | The counter (ring the bell) | — |
+| `cash_one.collector` | npc | A Cash One collector (at the counter, 3F) | — |
+| `cash_one.payment` | hotspot | Cash One's counter (Monday's payment) | — |
+| `cash_one.pawnbroker` | npc | The pawnbroker (質 マルヨシ) | — |
+| `cash_one.pawn_case` | hotspot | The display case (watches, rings) | — |
+| `cash_one.mahjong` | door | 雀荘 東風荘 (2F) | — |
 
 ## 朝霧 Asagiri: towers and the terminal
 
@@ -96,6 +112,9 @@ manga, eroge, cosplay and hentai culture. Opens in summer, the season of the con
 |---|---|---|---|
 | `idol_theatre.lift` | door | Theatre lift to 8F (STELLA THEATER) | — |
 | `idol_theatre.flyer` | npc | Maid handing out flyers | — |
+| `maid_cafe.tout` | npc | Maid handing out flyers (めいどかふぇ ♡ぴゅあ♡, on the pavement) | — |
+| `maid_cafe.maid` | npc | The maid at the door (upstairs in the café) | — |
+| `maid_cafe.menu` | hotspot | The menu (萌え萌えオムライス) | — |
 | `game_tower.crane` | hotspot | The crane game | — |
 | `game_tower.regular` | npc | Arcade regular | — |
 | `manager_flat.schedule` | hotspot | The girls' week (the idol manager's whiteboard) | — |
@@ -187,12 +206,44 @@ station, wheel and hall, Ebisu-jima's car meets, and the airport on Hanejima.
 
 ## 霞町 Kasumi-chō: south of the core
 
-Mid-rise homes, offices, a shopping street, a park. Planned story places: the hospital, the cemetery avenue, the
-fire station, the batting centre, the redevelopment site, the MC's one-room flat (ladder rung 3). No story
-nodes yet.
+Mid-rise homes, offices, a shopping street, a park. Planned story places still to build: the fire station, the
+batting centre, the MC's one-room flat (ladder rung 3).
+
+- 霞町霊園 Kasumi Reien (**Proposed:** the name), the cemetery avenue, on Kasumi-dōri in the park's quarter: a walled
+  cemetery, a paved avenue under cherry trees from its stone gate to a large family plot at the far end, blocks of
+  family graves either side; the flower and incense shop and the water station by the gate; in the far corner the
+  mound of stones nobody tends (無縁塚). Autumn opens here at higan. Whose the family plot is, the city doesn't
+  say (no name is carved on it).
+- The redevelopment site (霞町一丁目地区再開発; the board calls the tower KASUMI GATE TOWER and names no
+  developer: that's **Open** in factions.md), on Kasumi-dōri: hoardings, a gate with a guard, site offices, a
+  crane, and a shored pit you look down into. At its bottom a corner is fenced off under blue tarps behind a
+  notice, 埋蔵文化財 調査中 立入禁止 (a cultural-property survey, the city's board of education): the sealing of
+  mythos.md. What's under the tarps is never shown by the city.
+
+- 霞町総合病院 Kasumi General Hospital (**Proposed:** the name, given with the build), on Kasumi-dōri under the
+  monorail: autumn's hospital. Walk-in: the lobby; elevators up to the ward on 5F (the nurse station, the day
+  room, room 501 at the corridor's end, the private room) and down to B1 (the morgue, and at the corridor's end a
+  steel door to B2, authorised personnel only). What is behind that door is the story's (autumn, chapter 3); the
+  city only has the door.
+
+| Node | Kind | Name | Scene |
+|---|---|---|---|
+| `hospital.reception` | npc | The receptionist | — |
+| `hospital.nurse` | npc | The nurse at the station (5F) | — |
+| `hospital.room_501` | door | Room 501 · 特別室 (the private room) | — |
+| `hospital.morgue` | hotspot | 霊安室 (the morgue, B1) | — |
+| `hospital.sealed` | door | The steel door (B2 · authorised personnel only) | — |
+| `hospital.emergency` | door | 救急入口 (the emergency entrance) | — |
+| `reien.flower_seller` | npc | The flower seller (by the cemetery gate) | — |
+| `reien.water` | hotspot | 水汲み場 (buckets and ladles) | — |
+| `reien.family_grave` | hotspot | The family grave at the avenue's end | — |
+| `reien.muenzuka` | hotspot | 無縁塚 (the stones nobody tends) | — |
+| `kasumi_site.guard` | npc | The gate guard | — |
+| `kasumi_site.notice` | hotspot | 建築計画のお知らせ (the planning notice) | — |
+| `kasumi_site.pit` | hotspot | The excavation (blue tarps at the bottom) | — |
+| `kasumi_site.office` | door | 現場事務所 (the site office) | — |
 
 ## Open
 
 - **Open:** which places the first chapter uses, and which wait for later chapters.
-- **Open:** Maruyoshi the pawn shop and the kōban (police box) are in Kaburo's plan as story sources but aren't
-  built yet.
+- Maruyoshi the pawn shop and the kōban, Kaburo's planned story sources, are built (`cash_one`, `koban`).

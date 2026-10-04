@@ -9,4 +9,4 @@ landmark: idol_theatre
 nodes:
   front: { kind: spawn, name: STELLA THEATER (Denkō-chō), at: [8, 12], facing: east, view: [-90, 14] }
   lift: { kind: door, name: Theatre lift to 8F, at: [4, 0.6], returnSpawn: front }
-  flyer: { kind: npc, name: Maid handing out flyers, at: [2, 3.5], figure: { body: woman, pose: wave, hair: long, color: '#ffc8e8' } }
+  flyer: { kind: npc, name: Maid handing out flyers, at: [2, 3.5], figure: { body: woman, pose: wave, hair: long, long: true, outfit: maid, color: '#ffc8e8' } }

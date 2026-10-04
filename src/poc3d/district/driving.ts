@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { Head, loadView, lookInto, nextView, outside, placeInCar, saveView, turnedEye, type DriveViewId } from '../../race/driveCam';
+import type { Controls } from '../../race/vehicle';
+import type { CarInterior } from '../models/carInterior';
 import type { DrivenVehicle } from '../real/traffic';
 import type { OwnCar } from './ownCar';
 
@@ -6,8 +9,10 @@ import type { OwnCar } from './ownCar';
  * Driving a vehicle you've taken the wheel of (E by a car stopped in traffic). A kinematic bicycle model: the
  * rear wheels don't slide, the front ones steer, so the car turns about a point on the rear axle's line (no
  * drifting), the steering winds in at a finite rate and has less lock at speed. W accelerates, S brakes and
- * then reverses, A/D steer, Space is the handbrake, Q switches between the chase camera and a bumper camera,
- * the mouse looks round (the view swings back to straight ahead). You get out by the driver's door, on the
+ * then reverses, A/D steer, Space is the handbrake, Q cycles the cameras (race/driveCam.ts: chase, far chase, the
+ * cockpit (the car's cabin, `interior`, models/carInterior.ts), the bonnet, the bumper; remembered), Z looks back,
+ * the mouse looks round (the view swings back to straight ahead). The page places the camera (`placeCamera`) once
+ * the car's been posed for the frame. You get out by the driver's door, on the
  * right (Japan drives on the left).
  * Collisions stop the car (with a knock back); the traffic system keeps drawing it and stops for it.
  * Your own car (ownCar.ts) drives on the racing model instead: grip, slides, its tuning; the same keys.
@@ -22,6 +27,9 @@ const SPECS = {
 const STEER_RATE = 1.9;
 const CENTRE_RATE = 3.2;
 
+/** The keys that drive: any of them takes the wheel back from auto drive. */
+const DRIVE_KEYS: ReadonlySet<string> = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);
+
 export type Collide = (x: number, z: number, r: number) => boolean;
 
 export class Driving {
@@ -30,8 +38,29 @@ export class Driving {
   own: OwnCar | null = null;
   /** Held at the line (a race's countdown): the car kept still, the throttle ignored. */
   hold = false;
-  /** 'chase' behind the car, or 'bumper': low at the front looking out, the body hidden (no interior yet). */
-  view: 'chase' | 'bumper' = 'chase';
+  /** The camera (race/driveCam.ts). On a bike, 'cockpit' is his eyes and the chase views behind it. */
+  view: DriveViewId = loadView();
+  /** On a bike: Q switches between his eyes and behind it. */
+  bike = false;
+  /** The cabin of the car you're driving (shown in the cockpit view), when it has one. */
+  interior: CarInterior | null = null;
+  /** The lamps (0 day, 1 night), for the dials' backlight. */
+  lamps = 0;
+  /** Called when Q changes the view. */
+  onView: ((v: DriveViewId) => void) | null = null;
+  /** The pedals as they're pressed now (0-1; yours or auto drive's), for the cabin's pedals and the driver's feet. */
+  readonly pedals = { throttle: 0, brake: 0, handbrake: false };
+  /**
+   * Auto drive (district/autoDrive.ts): the controls for your own car this step, in place of the keys (null: the
+   * keys). A driving key while it's on calls `onOverride`: you take the wheel back.
+   */
+  pilot: ((dt: number) => Controls | null) | null = null;
+  onOverride: (() => void) | null = null;
+  private readonly head = new Head();
+  private lookBack = 0;
+  private bendYaw = 0;
+  private readonly frame = new THREE.Object3D();
+  private baseFov = 0;
   /** A knock this frame (speed of the impact, m/s), for a sound and a shake; 0 if none. */
   bump = 0;
   /** Keys held (from the keyboard; tests press them directly). */
@@ -56,7 +85,13 @@ export class Driving {
       if (!this.car) return;
       this.keys.add(e.code);
       if (e.code === 'Space') e.preventDefault();
-      if (e.code === 'KeyQ') this.view = this.view === 'chase' ? 'bumper' : 'chase';
+      if (this.pilot && DRIVE_KEYS.has(e.code)) this.onOverride?.();
+      if (e.code === 'KeyQ') {
+        this.view = nextView(this.view, this.bike);
+        if (!this.bike) saveView(this.view);
+        this.head.reset();
+        this.onView?.(this.view);
+      }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
@@ -74,10 +109,14 @@ export class Driving {
     return this.car?.bus ? SPECS.bus : SPECS.car;
   }
 
-  /** Take the wheel of `car` (already handed over by the traffic system). */
-  enter(car: DrivenVehicle, own: OwnCar | null = null): void {
+  /** Take the wheel of `car` (already handed over by the traffic system); on a bike, his eyes to begin with. */
+  enter(car: DrivenVehicle, own: OwnCar | null = null, bike = false): void {
     this.car = car;
     this.own = own;
+    this.bike = bike;
+    this.view = bike ? 'cockpit' : loadView();
+    this.head.reset();
+    this.baseFov = this.camera.fov;
     if (own) {
       own.sound.start();
       own.sound.setVolume(1);
@@ -114,6 +153,9 @@ export class Driving {
 
   leave(): void {
     if (this.car) this.car.hideBody = false;
+    if (this.interior) this.interior.group.visible = false;
+    this.interior = null;
+    this.setFov(this.baseFov || this.camera.fov);
     this.own?.park();
     this.own = null;
     this.car = null;
@@ -146,7 +188,10 @@ export class Driving {
     const turn = Number(k.has('KeyD') || k.has('ArrowRight')) - Number(k.has('KeyA') || k.has('ArrowLeft'));
     if (this.own) {
       // Your car: the racing model does it all (it collides, slides and knocks by itself).
-      this.own.drive(dt, this.hold ? { throttle: 0, brake: 0, steer: -turn, handbrake: false } : { throttle: gas ? 1 : 0, brake: brake ? 1 : 0, steer: -turn, handbrake: hand });
+      const auto = this.hold ? null : (this.pilot?.(dt) ?? null);
+      const c = auto ?? (this.hold ? { throttle: 0, brake: 0, steer: -turn, handbrake: false } : { throttle: gas ? 1 : 0, brake: brake ? 1 : 0, steer: -turn, handbrake: hand });
+      Object.assign(this.pedals, { throttle: c.throttle, brake: c.brake, handbrake: c.handbrake });
+      this.own.drive(dt, c);
       // Held at the line: still (the brake at a standstill would engage reverse).
       if (this.hold) this.own.sim.u = this.own.sim.w = this.own.sim.r = 0;
       const knock = this.own.knock;
@@ -154,9 +199,9 @@ export class Driving {
         this.bump = knock;
         this.shake = Math.min(1, knock / 8);
       }
-      this.placeCamera(dt);
       return;
     }
+    Object.assign(this.pedals, { throttle: gas ? 1 : 0, brake: brake ? 1 : 0, handbrake: hand });
     let v = c.v;
     // Longitudinal: drive, brake, reverse, roll to a stop.
     let a: number;
@@ -201,54 +246,140 @@ export class Driving {
     c.acc = (v - c.v) / dt;
     c.v = v;
     c.curv = v >= 0 ? curv : -curv;
-    this.placeCamera(dt);
   }
 
-  private chaseTarget(): THREE.Vector3 {
+  private chaseTarget(turn = 0): THREE.Vector3 {
     const c = this.car!;
-    const back = c.bus ? 12 : 6.4;
-    const up = c.bus ? 4.4 : 2.5;
-    const a = Math.atan2(c.dx, c.dz) + this.orbitYaw;
+    const far = this.view === 'far' && !this.bike;
+    const back = (c.bus ? 12 : 6.4) * (far ? 1.45 : 1);
+    const up = (c.bus ? 4.4 : 2.5) + (far ? 1.2 : 0);
+    const a = Math.atan2(c.dx, c.dz) + this.orbitYaw + turn;
     // Looking up swings the camera down behind the car (and looking down lifts it), about the car.
     const elev = -this.lookPitch;
     return new THREE.Vector3(c.x - Math.sin(a) * back * Math.cos(elev), this.floor + up + Math.sin(elev) * back, c.z - Math.cos(a) * back * Math.cos(elev));
   }
 
-  private placeCamera(dt: number): void {
+  private setFov(f: number): void {
+    if (Math.abs(this.camera.fov - f) < 0.01) return;
+    this.camera.fov = f;
+    this.camera.updateProjectionMatrix();
+  }
+
+  /**
+   * The car's frame, posed: your car's own object (posed by its owner before this is called); a vehicle the
+   * traffic draws is posed later in the frame, so its frame is made here from where it is.
+   */
+  private carFrame(): THREE.Object3D {
     const c = this.car!;
+    if (this.own) return this.own.view.obj;
+    const f = this.frame;
+    f.position.set(c.x, this.floor, c.z);
+    f.rotation.set(0, Math.atan2(c.dx, c.dz), 0);
+    f.updateMatrixWorld();
+    return f;
+  }
+
+  /** Places the camera for the view (call once the car's been posed this frame). */
+  placeCamera(dt: number): void {
+    const c = this.car;
+    if (!c) return;
     this.mouseIdle += dt;
     // Let go of the mouse and the view swings back to straight ahead.
     if (this.mouseIdle > 1.2) {
       const ease = 1 - Math.exp(-dt * 2.5);
       this.orbitYaw -= this.orbitYaw * ease;
-      if (this.view === 'chase') this.lookPitch -= this.lookPitch * ease;
+      if (outside(this.view)) this.lookPitch -= this.lookPitch * ease;
     }
     this.shake = Math.max(0, this.shake - dt * 3);
     const jolt = (): number => (Math.random() - 0.5) * this.shake * 0.25;
     const cam = this.camera;
-    c.hideBody = this.view === 'bumper';
-    if (this.view === 'bumper') {
-      // Low at the front of the car, looking out along the road.
+    // Z looks back (over the shoulder from inside; the chase cameras swing round in front).
+    this.lookBack += ((this.keys.has('KeyZ') ? 1 : 0) - this.lookBack) * Math.min(1, dt * 9);
+    const back = this.lookBack * this.lookBack * (3 - 2 * this.lookBack) * Math.PI;
+    const view: DriveViewId = this.bike ? (outside(this.view) ? 'chase' : 'bumper') : this.view;
+    const L = this.interior?.layout ?? null;
+    const inside = view === 'cockpit' && (!!L || c.bus);
+    c.hideBody = view === 'bumper' || (view === 'cockpit' && !inside);
+    if (this.interior) this.interior.group.visible = inside;
+    const speed = Math.abs(this.own ? this.own.sim.u : c.v);
+    const base = this.baseFov || 68;
+    // (The cockpit keeps the walker's field of view: any wider shows more city, and the city's cost is its geometry.)
+    if (!this.bike) this.setFov(base + (view === 'far' ? -6 : 0) + Math.min(6, speed * 0.14));
+    if (inside || view === 'hood') {
+      const frame = this.carFrame();
+      const sim = this.own?.sim;
+      // Accelerations in the car's frame (forward, and to the left: a right-hand bend's is to the right).
+      const ax = sim ? sim.ax : c.acc;
+      const ay = sim ? sim.ay : -c.v * c.v * c.curv;
+      if (inside) {
+        this.head.update(dt, ax, ay, speed, this.bump);
+        this.bendYaw += (lookInto(sim ? sim.steer : this.steer, speed, sim ? sim.slide : 0) - this.bendYaw) * Math.min(1, dt * 3);
+        // (A bus has no cabin of ours: its driver's seat, front right, over the new bus's own inside.)
+        const eye = L ? L.eye.clone() : new THREE.Vector3(-0.72, 2.3, c.half - 1.15);
+        const look = THREE.MathUtils.clamp(this.orbitYaw, -2.2, 2.2) + this.bendYaw + back;
+        placeInCar(cam, frame, turnedEye(eye, look).add(this.head.offset), look, this.lookPitch - 0.06, 0.5);
+        if (this.interior) {
+          const gear = sim ? sim.gear : c.v < -0.1 ? 0 : 1;
+          const rpm = sim ? 900 + sim.rev * (this.interior.redline - 900) : 800 + Math.min(1, Math.abs(c.v) / 20) * 2600;
+          this.interior.update(
+            {
+              steer: sim ? sim.steer : this.steer,
+              ax,
+              ay,
+              kmh: speed * 3.6,
+              rpm,
+              gear,
+              throttle: this.pedals.throttle,
+              brake: this.pedals.brake,
+              handbrake: this.pedals.handbrake,
+              // (The city: he drives as people do, one hand on the wheel when nothing asks for two.)
+              slide: sim?.slide,
+              calm: true,
+              lamps: this.lamps,
+              bump: this.bump,
+              boost: sim?.spec.turbo ? sim.boost : undefined,
+            },
+            dt,
+          );
+        }
+      } else {
+        // On the bonnet (a vehicle without a cabin's numbers: over its front).
+        const at = L ? L.hood : new THREE.Vector3(0, c.bus ? 2.6 : 1.25, c.half - (c.bus ? 0.4 : 1.1));
+        placeInCar(cam, frame, at, this.orbitYaw + back, this.lookPitch - 0.04);
+      }
+      this.camPos.copy(this.chaseTarget());
+      return;
+    }
+    if (view === 'bumper' || view === 'cockpit') {
+      // Low at the front of the car, looking out along the road (and a car without a cabin's cockpit view).
       const h = (c.bus ? 1.9 : 0.95) + this.floor;
       cam.position.set(c.x + c.dx * (c.half - 0.2) + jolt(), h + jolt(), c.z + c.dz * (c.half - 0.2));
-      const a = Math.atan2(c.dx, c.dz) + this.orbitYaw;
+      const a = Math.atan2(c.dx, c.dz) + this.orbitYaw + back;
       cam.lookAt(cam.position.x + Math.sin(a), h + Math.tan(this.lookPitch - 0.02), cam.position.z + Math.cos(a));
       this.camPos.copy(this.chaseTarget());
       return;
     }
     // Chase: follow a point behind (eased, so turns and stops show), pulled in if a wall is in the way.
-    const want = this.chaseTarget();
-    this.camPos.lerp(want, 1 - Math.exp(-dt * 5));
+    const want = this.chaseTarget(back);
+    this.camPos.lerp(want, 1 - Math.exp(-dt * (this.lookBack > 0.05 ? 12 : 5)));
     const pivot = new THREE.Vector3(c.x, (c.bus ? 2.6 : 1.3) + this.floor, c.z);
     let t = 1;
     while (this.floor < 2 && t > 0.25 && this.collide(pivot.x + (this.camPos.x - pivot.x) * t, pivot.z + (this.camPos.z - pivot.z) * t, 0.3)) t -= 0.08;
     cam.position.set(pivot.x + (this.camPos.x - pivot.x) * t + jolt(), pivot.y + (this.camPos.y - pivot.y) * t + jolt(), pivot.z + (this.camPos.z - pivot.z) * t);
-    cam.lookAt(c.x + c.dx * 3, (c.bus ? 2.2 : 1.1) + this.floor, c.z + c.dz * 3);
+    const la = Math.atan2(c.dx, c.dz) + back;
+    cam.lookAt(c.x + Math.sin(la) * 3, (c.bus ? 2.2 : 1.1) + this.floor, c.z + Math.cos(la) * 3);
   }
 
   /** Looking about from the vehicle (rad): yaw left positive, pitch up positive (a bike's views use them). */
   get look(): { yaw: number; pitch: number } {
     return { yaw: this.orbitYaw, pitch: this.lookPitch };
+  }
+
+  /** Turns the look as the mouse would (for scripts: main.ts `__look`); it eases back ahead as after the mouse. */
+  setLook(yaw: number, pitch: number): void {
+    this.orbitYaw = yaw;
+    this.lookPitch = THREE.MathUtils.clamp(pitch, -0.6, 0.5);
+    this.mouseIdle = 0;
   }
 
   /** km/h, for the dashboard. */

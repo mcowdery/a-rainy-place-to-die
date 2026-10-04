@@ -2,7 +2,7 @@
 # rules override less specific ones; ties go to file order. The base rule must set every key.
 # time: dawn | day | dusk | night, or the looks between them (clock.ts keyframes, round sunrise and sunset): morning and
 # golden start from day's rules, bluehour from dusk's; their rules change only what they set.
-# weather: clear | rain | fog | snow
+# weather: clear | rain | fog | snow    season (optional): spring | summer | autumn | winter (the rule applies only then)
 # Colours are sRGB; sun/hemi are light intensities; lamps 0-1 switches street lighting (and the shop and
 # sign glow on the pavement); exposure feeds the tone mapper.
 rules:
@@ -52,6 +52,29 @@ rules:
   # lamps and the neon on.
   - match: { time: bluehour, weather: clear }
     set: { phys: 0.85, sky: '#121c42', horizon: '#3a4a7c', sunGlow: '#8a3a22', fog: '#262c44', hemiSky: '#5060a0', hemiGround: '#2a2630', sunColor: '#8090c0', sun: 0.2, hemi: 0.32, windowLit: 0.38, exposure: 1.15, clouds: 0.4, cloudLit: '#4a4a78', cloudDark: '#141828', haze: 0.3 }
+
+  # The seasons' sunrises and sunsets (spring is the rules above): summer hazy and warm, the glow deep orange and the
+  # distance soft; autumn amber; winter cold and clear, a gold glow in crisp air and the city seen far off.
+  - match: { time: dawn, weather: clear, season: summer }
+    set: { sky: '#40507a', horizon: '#d8a890', sunGlow: '#ffa070', fog: '#a89090', haze: 0.3, fogFar: 650 }
+  - match: { time: golden, weather: clear, season: summer }
+    set: { sky: '#5a78a8', horizon: '#ecc8a0', sunGlow: '#d88038', fog: '#c8b498', haze: 0.25, fogFar: 700 }
+  - match: { time: dusk, weather: clear, season: summer }
+    set: { sky: '#2a2650', horizon: '#a86058', sunGlow: '#ff6428', fog: '#6a4048', haze: 0.35, fogFar: 560, cloudLit: '#e8806a' }
+  - match: { time: bluehour, weather: clear, season: summer }
+    set: { sky: '#1a1c48', horizon: '#4a4478', sunGlow: '#9a3a24', fog: '#2c2a46' }
+  - match: { time: golden, weather: clear, season: autumn }
+    set: { horizon: '#f0c088', sunGlow: '#e08a30', sunColor: '#ffb468', cloudLit: '#ffcc90' }
+  - match: { time: dusk, weather: clear, season: autumn }
+    set: { sky: '#1a2246', horizon: '#9a5c58', sunGlow: '#ff7a30', cloudLit: '#f08a5a' }
+  - match: { time: dawn, weather: clear, season: winter }
+    set: { sky: '#2c3e78', horizon: '#c8a0a8', sunGlow: '#ffb080', fog: '#8a8aa0', haze: 0.1, fogFar: 900 }
+  - match: { time: golden, weather: clear, season: winter }
+    set: { sky: '#3a68b8', horizon: '#e0c8b8', sunGlow: '#d89048', sunColor: '#ffcc98', fog: '#b4b0b8', haze: 0.05, fogFar: 1000 }
+  - match: { time: dusk, weather: clear, season: winter }
+    set: { sky: '#141c4a', horizon: '#9a6478', sunGlow: '#ff9048', fog: '#4a3a52', haze: 0.1, fogFar: 800, cloudLit: '#e09080' }
+  - match: { time: bluehour, weather: clear, season: winter }
+    set: { sky: '#0e1846', horizon: '#34448a', sunGlow: '#7a3a30', fog: '#1e2440' }
 
   - match: { time: night }
     set:

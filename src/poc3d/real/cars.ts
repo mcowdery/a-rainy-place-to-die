@@ -68,7 +68,7 @@ export function addCar(mb: MeshBuilder, c: CarSpec, signs?: VehicleSigns): void 
   mb.append(model, c.x, c.z, fx, fz);
   if (!livery) mb.recolor(from, lin(PLACEHOLDER), lin(paint));
   if (ad) mb.recolor(from, lin(WRAP_PLACEHOLDER), lin(ad.wrap ?? paint));
-  if (signs) addVehicleMarks(mb, { x: c.x, z: c.z, fx, fz, type: picked.type, paint, marks: c.variant, ad }, signs);
+  if (signs) addVehicleMarks(mb, { x: c.x, z: c.z, fx, fz, type: picked.type, paint, marks: c.variant, ad, lamps: false }, signs);
   mb.kind = KIND.plain;
   mb.style = [0, 0, 0, 0];
 }

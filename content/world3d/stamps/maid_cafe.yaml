@@ -1,0 +1,18 @@
+# めいどかふぇ ♡ぴゅあ♡ (Maid Café Pure) in Denkō-chō's maid café lanes, on Denkō-dōri (real/maidCafe.ts, kind
+# maid_cafe): a narrow pastel building, an anime goods shop at street level, the café up a straight stair on the
+# second floor, offices above; a maid with flyers by the A-board on the pavement. You walk in through the street
+# door and up (or E at it: straight up to the café), and out the way you came (or E at the café's door).
+id: maid_cafe
+name: めいどかふぇ ♡ぴゅあ♡
+footprint: [16, 10]
+height: 20
+front: west
+landmark: maid_cafe
+nodes:
+  front: { kind: spawn, name: めいどかふぇ ♡ぴゅあ♡ (Denkō-chō), at: [5, 6], facing: east, view: [-90, 12] }
+  entrance: { kind: door, name: めいどかふぇ ♡ぴゅあ♡ 2F, at: [1.5, 0.8], returnSpawn: inside, through: true }
+  inside: { kind: spawn, name: めいどかふぇ ♡ぴゅあ♡ (inside), at: [3.3, -14.6], floor: 4.35, facing: west, view: [80, -8] }
+  leave: { kind: door, name: the street, at: [1.4, -13.2], floor: 4.35, returnSpawn: front, through: true }
+  tout: { kind: npc, name: Maid handing out flyers, at: [4.6, 1.7], figure: { body: woman, pose: wave, hair: long, long: true, outfit: maid, color: '#ffc8e8', turn: 0.7 } }
+  maid: { kind: npc, name: The maid at the door, at: [4.1, -13.0], floor: 4.2, figure: { body: woman, pose: wave, hair: long, long: true, outfit: maid, color: '#ffd8ec', turn: -1.571 } }
+  menu: { kind: hotspot, name: The menu (萌え萌えオムライス), at: [6.6, -13.3], floor: 4.35 }

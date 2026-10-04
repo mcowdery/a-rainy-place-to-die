@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { edition } from '@edition';
 import { kaburoArt } from '../src/edition/art';
 import { edition as demo } from '../src/edition/demo';
-import { DEMO_HIDDEN_ART } from '../src/edition/demoArt';
+import { characters } from '../src/edition/characters';
+import { DEMO_HIDDEN_ART, DEMO_HIDDEN_CHARACTERS } from '../src/edition/demoArt';
 import { applyPhoneOverlays } from '../src/edition/phoneOverlay';
 import { edition as uncensored } from '../src/edition/uncensored';
 import { applyVnOverlays } from '../src/edition/vnOverlay';
@@ -62,6 +63,12 @@ describe('editions', () => {
     expect(ads.some((a) => DEMO_HIDDEN_ART.has(a.art))).toBe(false);
     expect(ads.length).toBe(ALL_DISTRICT_ADS.filter((a) => !DEMO_HIDDEN_ART.has(a.art)).length);
     for (const a of ads) expect(demo.kaburoArt[a.art], a.art).toBeTruthy();
+  });
+  it('the demo leaves out exactly the hidden cast models (Mack nude)', () => {
+    for (const name of DEMO_HIDDEN_CHARACTERS) expect(characters[name], `${name} is a real file`).toBeTruthy();
+    const kept = Object.keys(characters).filter((n) => !DEMO_HIDDEN_CHARACTERS.has(n)).sort();
+    expect(Object.keys(demo.characters).sort()).toEqual(kept);
+    expect(Object.keys(edition.characters).sort()).toEqual(Object.keys(characters).sort());
   });
 });
 

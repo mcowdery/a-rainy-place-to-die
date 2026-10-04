@@ -1,0 +1,94 @@
+{
+  "batch": "noir-01",
+  "defaults": { "duration": 180, "takes": 2, "steps": 8 },
+  "items": [
+    {
+      "id": "tail_lights",
+      "station": "noir",
+      "title": "Tail Lights",
+      "caption": "1980s neo-noir film score, instrumental. Slow, sultry alto saxophone melody over warm analog synthesizer pads, round fretless bass, electric piano with chorus effect, soft electronic drums with a gated reverb snare. Lonely, seductive, a city seen through a rain-streaked windscreen at night. Polished, spacious 1980s studio sound. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 72,
+      "key": "A minor",
+      "duration": 190,
+      "seed": 3101
+    },
+    {
+      "id": "stakeout",
+      "station": "noir",
+      "title": "Stakeout",
+      "caption": "1960s crime jazz instrumental, tense and stylish. A prowling upright bass ostinato, bongos and brushed snare, tremolo electric guitar, vibraphone, flute lead, muted brass stabs that build suspense. Detective television theme mood, watching a doorway from a parked car. Warm vintage analog recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 124,
+      "key": "E minor",
+      "duration": 170,
+      "seed": 3202
+    },
+    {
+      "id": "cigarette_and_neon",
+      "station": "noir",
+      "title": "Cigarette and Neon",
+      "caption": "Classic film noir love theme, instrumental. Sultry alto saxophone lead over a lush string orchestra, soft upright bass, gentle brushed drums, harp and celesta touches, a slow romantic melody with a dark undertone. Smoky, fatalistic, glamorous. Warm vintage orchestral recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 60,
+      "key": "F minor",
+      "duration": 185,
+      "seed": 3303
+    },
+    {
+      "id": "dead_letter",
+      "station": "noir",
+      "title": "Dead Letter",
+      "caption": "Solo piano, dark and sparse, film noir mood. A slow, lonely melody with bluesy inflections and long silences, low bass notes left to ring with the sustain pedal, a slightly worn upright piano in an empty room. Bleak, haunted, three in the morning. Intimate close recording with natural room reverb. No vocals, no other instruments.",
+      "lyrics": "[Instrumental]",
+      "bpm": 58,
+      "key": "B minor",
+      "duration": 170,
+      "seed": 3404
+    },
+    {
+      "id": "blue_hour_kawabata",
+      "station": "noir",
+      "title": "Blue Hour, Kawabata",
+      "caption": "Slow minor blues instrumental, late-night jazz. Woody clarinet lead in its low register, hollow-body electric guitar answering with quiet bluesy phrases, upright bass, brushed drums. Weary, tender, an old neighbourhood by the river before dawn. Warm vintage analog sound with room ambience. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 66,
+      "key": "G minor",
+      "duration": 185,
+      "seed": 3505
+    },
+    {
+      "id": "rindo",
+      "station": "noir",
+      "title": "竜胆 Rindō",
+      "caption": "Dark Japanese noir instrumental. Breathy shakuhachi bamboo flute lead and plucked koto over a slow walking upright bass, soft brushed drums and low sparse piano chords, a distant taiko drum hit now and then. Ominous, dignified, a yakuza film at night. Warm analog recording with deep reverb. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 64,
+      "key": "D minor",
+      "duration": 180,
+      "seed": 3606
+    },
+    {
+      "id": "the_informant",
+      "station": "noir",
+      "title": "The Informant",
+      "caption": "Cool noir jazz instrumental with a twangy baritone electric guitar drenched in tremolo and spring reverb, walking upright bass, rim clicks and ride cymbal, a quiet Hammond organ pad, a muted trumpet answering the guitar. Shady, sly, a meeting in a back-alley bar. Warm vintage analog sound. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 92,
+      "key": "C minor",
+      "duration": 175,
+      "seed": 3707
+    },
+    {
+      "id": "three_am_expressway",
+      "station": "noir",
+      "title": "3 A.M. Expressway",
+      "caption": "1980s neo-noir driving music, instrumental. A steady pulsing analog synthesizer bass sequence, dark sustained synth pads, glassy electric piano chords, a distant reverberant saxophone, restrained electronic drums. Cold, hypnotic, sodium lights passing overhead on an empty elevated highway. Spacious 1980s film score production. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 100,
+      "key": "F# minor",
+      "duration": 195,
+      "seed": 3808
+    }
+  ]
+}

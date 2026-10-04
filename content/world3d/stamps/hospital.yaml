@@ -1,0 +1,26 @@
+# 霞町総合病院 Kasumi General Hospital on 霞通り Kasumi-dōri, under the monorail (real/kasumi.ts, kind hospital):
+# a forecourt with a canopied drop-off and the emergency bay, a glass lobby in a two-storey podium, a nine-storey
+# ward tower. You walk into the lobby; the elevators (station nodes) go up to the ward on 5F (the nurse station,
+# the day room, room 501 at the corridor's end: a story door) and down to B1 (the morgue, and at the corridor's end
+# the sealed door to B2: a story door).
+id: hospital
+name: 霞町総合病院 Kasumi General Hospital
+footprint: [64, 46]
+height: 38
+front: south
+landmark: hospital
+nodes:
+  front: { kind: spawn, name: 霞町総合病院 Kasumi General Hospital, at: [32, 3], facing: north, view: [0, 12] }
+  lobby: { kind: spawn, name: 霞町総合病院 (lobby), at: [32, -31.4], facing: south }
+  ward: { kind: spawn, name: 霞町総合病院 (5F ward), at: [32, -32.2], floor: 15.6, facing: south }
+  basement: { kind: spawn, name: 霞町総合病院 (B1), at: [32, -32.2], floor: -4.5, facing: south }
+  lift_ward: { kind: station, name: 5F 病棟 Ward, at: [30, -33.3], returnSpawn: ward }
+  lift_b1: { kind: station, name: B1, at: [34, -33.3], returnSpawn: basement }
+  lift_from_ward: { kind: station, name: 1F Lobby, at: [32, -33.4], floor: 15.6, returnSpawn: lobby }
+  lift_from_b1: { kind: station, name: 1F Lobby, at: [32, -33.4], floor: -4.5, returnSpawn: lobby }
+  reception: { kind: npc, name: The receptionist, at: [17.2, -19], figure: { body: woman, pose: stand, hair: bun, color: '#8a8e96', turn: 1.571 } }
+  nurse: { kind: npc, name: The nurse at the station, at: [32, -26.6], floor: 15.45, figure: { body: woman, pose: stand, hair: bun, color: '#8e9098', turn: 3.1416 } }
+  room_501: { kind: door, name: Room 501 · 特別室, at: [54.3, -29.5], floor: 15.6, returnSpawn: ward }
+  morgue: { kind: hotspot, name: 霊安室 (the morgue), at: [19.6, -28.7], floor: -4.5 }
+  sealed: { kind: door, name: The steel door (B2 · authorised personnel only), at: [14.8, -29.5], floor: -4.5, returnSpawn: basement }
+  emergency: { kind: door, name: 救急入口 (the emergency entrance), at: [55, -13.2], returnSpawn: front }

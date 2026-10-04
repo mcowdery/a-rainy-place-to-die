@@ -81,6 +81,7 @@ export function stationColliders(b: Building3, floor: number, kerb: number | nul
       R(40, fw - 0.3, 5.9, 6.1),
       R(STAIR.u0, STAIR.u1, STAIR.t0 - 0.2, STAIR.t0),
       R(STAIR.u0, STAIR.u1, STAIR.t1, STAIR.t1 + 0.2),
+      R(STAIR.u1 - 0.2, STAIR.u1, STAIR.t0, STAIR.t1),
       ...piersU(kerb).flatMap((u) => (kerb === null ? [R(u - 1.2, u + 1.2, STATION.line - 0.8, STATION.line + 0.8)] : pierTs(kerb).map((t) => R(u - 0.5, u + 0.5, t - 0.5, t + 0.5)))),
     ];
   }
@@ -178,8 +179,16 @@ export function buildStation(b: Building3, city: THREE.Material, names: StationN
   box(CLAD, 0, fw, depth - 0.3, depth, 0, 8.3);
   for (let u = 0; u <= fw; u += 3) if (u < 18 || u > 28) box(0x3a3c40, u - 0.06, u + 0.06, 0, 0.3, 0, 8.3);
   box(0x3a3c40, 0, fw, 0, 0.3, 3.4, 3.6);
-  box(0xf0f0ee, 0.3, fw - 0.3, 0.3, depth - 0.3, 7.9, 8.3, true);
-  for (const t of [3, 9, 15, 21]) glow([1.3, 1.35, 1.4], 1, fw - 1, t - 0.1, t + 0.1, 7.86, 7.9);
+  // The ceiling, open over the stair like the upper concourse's floor above it (the light strip over it stops too);
+  // it stops at the outside of the stair's side walls, which rise through it.
+  box(0xf0f0ee, 0.3, STAIR.u0, 0.3, depth - 0.3, 7.9, 8.3, true);
+  box(0xf0f0ee, STAIR.u0, fw - 0.3, 0.3, STAIR.t0 - 0.2, 7.9, 8.3, true);
+  box(0xf0f0ee, STAIR.u0, fw - 0.3, STAIR.t1 + 0.2, depth - 0.3, 7.9, 8.3, true);
+  box(0xf0f0ee, STAIR.u1, fw - 0.3, STAIR.t0 - 0.2, STAIR.t1 + 0.2, 7.9, 8.3, true);
+  for (const t of [3, 9, 15, 21]) {
+    const over = t > STAIR.t0 - 0.2 && t < STAIR.t1 + 0.2;
+    for (const [u0, u1] of over ? [[1, STAIR.u0], [STAIR.u1, fw - 1]] : [[1, fw - 1]]) glow([1.3, 1.35, 1.4], u0, u1, t - 0.1, t + 0.1, 7.86, 7.9);
+  }
   // Ticket machines with lit screens, the fare map above them.
   for (let u = 4.4; u < 14; u += 2) {
     lit(0xe8e8e4, u - 0.8, u + 0.8, 0.3, 1.0, 0, 1.6);
@@ -217,11 +226,13 @@ export function buildStation(b: Building3, city: THREE.Material, names: StationN
   lit(CLAD, STAIR.u0, STAIR.u1, STAIR.t1, STAIR.t1 + 0.2, 0, PLATFORM_Y + 1.1);
   // Upper concourse: the floor slab (with the stair opening), benches, a kiosk, a big window on the street.
   lit(0xc8c4bc, UPPER.u0, STAIR.u0, 0, depth, 8.3, PLATFORM_Y);
-  lit(0xc8c4bc, STAIR.u0, UPPER.u1, 0, STAIR.t0, 8.3, PLATFORM_Y);
-  lit(0xc8c4bc, STAIR.u0, UPPER.u1, STAIR.t1, depth, 8.3, PLATFORM_Y);
-  lit(0xc8c4bc, STAIR.u1, UPPER.u1, STAIR.t0, STAIR.t1, 8.3, PLATFORM_Y);
-  box(0x9aa0a6, STAIR.u0 - 0.3, STAIR.u1, STAIR.t0 - 0.3, STAIR.t0, PLATFORM_Y, PLATFORM_Y + 1.1);
-  box(0x9aa0a6, STAIR.u0 - 0.3, STAIR.u1, STAIR.t1, STAIR.t1 + 0.3, PLATFORM_Y, PLATFORM_Y + 1.1);
+  lit(0xc8c4bc, STAIR.u0, UPPER.u1, 0, STAIR.t0 - 0.2, 8.3, PLATFORM_Y);
+  lit(0xc8c4bc, STAIR.u0, UPPER.u1, STAIR.t1 + 0.2, depth, 8.3, PLATFORM_Y);
+  lit(0xc8c4bc, STAIR.u1, UPPER.u1, STAIR.t0 - 0.2, STAIR.t1 + 0.2, 8.3, PLATFORM_Y);
+  // The rail round the opening: a skin outside the stair's side walls (which rise through it), and across its low end.
+  box(0x9aa0a6, STAIR.u0, STAIR.u1, STAIR.t0 - 0.3, STAIR.t0 - 0.2, PLATFORM_Y, PLATFORM_Y + 1.1);
+  box(0x9aa0a6, STAIR.u0, STAIR.u1, STAIR.t1 + 0.2, STAIR.t1 + 0.3, PLATFORM_Y, PLATFORM_Y + 1.1);
+  box(0x9aa0a6, STAIR.u0 - 0.3, STAIR.u0, STAIR.t0 - 0.3, STAIR.t1 + 0.3, PLATFORM_Y, PLATFORM_Y + 1.1);
   lit(CLAD, UPPER.u0 - 0.3, UPPER.u0, 0, depth, PLATFORM_Y, 16);
   lit(CLAD, UPPER.u1, UPPER.u1 + 0.3, 0, depth, PLATFORM_Y, 16);
   for (const t of [4, 10, 20]) glow([1.3, 1.35, 1.4], UPPER.u0 + 1, UPPER.u1 - 1, t - 0.1, t + 0.1, 15.5, 15.55);

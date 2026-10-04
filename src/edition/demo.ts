@@ -1,5 +1,5 @@
 import kaiwa from '../../content/phone/kaiwa.yaml?raw';
-import { byName, type Edition, NO_STORY } from './types';
+import { byModel, byName, type Edition, NO_STORY } from './types';
 
 /**
  * The gameplay demo (see types.ts): no story, only KAIWA's welcome on the phone, and Kaburo's ad art without the
@@ -30,6 +30,12 @@ const art = import.meta.glob(
   { eager: true, query: '?url', import: 'default' },
 ) as Record<string, string>;
 
+/** The cast's models without DEMO_HIDDEN_CHARACTERS (demoArt.ts): Mack nude, for the arrival. */
+const models = import.meta.glob(['../../assets/characters/*.glb', '!**/mack_nude.glb'], { eager: true, query: '?url', import: 'default' }) as Record<
+  string,
+  string
+>;
+
 export const edition: Edition = {
   name: 'demo',
   narrative: false,
@@ -37,4 +43,5 @@ export const edition: Edition = {
   story: { ...NO_STORY, phoneFiles: { 'kaiwa.yaml': kaiwa } },
   overlay: NO_STORY,
   kaburoArt: byName(art),
+  characters: byModel(models),
 };

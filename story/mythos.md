@@ -107,7 +107,22 @@ Allusions, not main plot points:
   folklore has a giant, Daidarabotchi.
 - The flood tunnel (shaft 3's steel door, 立入禁止) opens onto the pillared hall people call the underground
   temple. Something sleeps there.
-- **Open:** what the transhumanist programme is, who runs it for the order, and what it does to people.
+- **The programme makes two things.**
+  - **Machines**, the common kind: only machines, with nothing human in them. The order's tools and hunters.
+  - **Hybrids**, very rare: a human mind in a machine body. This is what the programme is for: the superior
+    human. Mack is one, among the first that worked ([cast/mc.md](cast/mc.md)); a few others serve the order
+    still.
+  - A hybrid keeps a will, so it can refuse. That's how Mack got out.
+  - **The body they want** (the lean, not settled: the hybrids are trial runs for the men at the top, who want
+    such bodies for themselves). No ageing, no sickness, no death; light, durable materials, the best of the
+    best; a predator's body that can fight and spy on people; every sense enhanced; pain under control. The
+    debtors whose bodies Cash One collects are what they practise on. **Open:** whether hybrids are also built
+    as tools (spies, assassins), or only as trials.
+  - **Proposed:** the one thing not solved is the memory, which the rebuild takes; until it is, nobody at the
+    top will cross over.
+  - **Proposed:** the allusion, never stated: flesh mixed with what isn't human, as the Watchers' children
+    were. "As it was in the days of Noah."
+- **Open:** who runs the programme for the order, and what else it does to people.
 
 ## Cosmic horror
 

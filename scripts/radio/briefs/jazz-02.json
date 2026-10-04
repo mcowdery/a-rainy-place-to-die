@@ -1,0 +1,117 @@
+{
+  "batch": "jazz-02",
+  "defaults": { "duration": 180, "takes": 2, "steps": 8 },
+  "items": [
+    {
+      "id": "blue_door_bop",
+      "station": "kissa",
+      "title": "Blue Door Bop",
+      "caption": "Fast bebop jazz quartet instrumental. Agile alto saxophone playing a quick angular head and a blazing solo, fast walking upright bass, crisp ride cymbal with snare and bass drum accents, sharp piano comping and a piano solo. Exciting, virtuosic, a packed basement club. Warm vintage live recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 208,
+      "key": "F major",
+      "duration": 170,
+      "seed": 4101
+    },
+    {
+      "id": "shiomi_bossa",
+      "station": "kissa",
+      "title": "Shiomi Bossa",
+      "caption": "Bossa nova jazz instrumental. Soft nylon-string guitar playing syncopated bossa chords, a warm flute melody, gentle piano fills, upright bass, light brushed drums with rim clicks and shaker. Relaxed, elegant, a sea breeze through an open cafe window. Warm natural recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 126,
+      "key": "D major",
+      "duration": 185,
+      "seed": 4202
+    },
+    {
+      "id": "kaburo_soul",
+      "station": "kissa",
+      "title": "Kaburo Soul",
+      "caption": "Soul jazz instrumental with a greasy shuffle groove. Hammond organ with rotary speaker playing the bluesy lead and bass pedals, clean hollow-body guitar comping and soloing, gritty tenor saxophone, backbeat drums. Funky, earthy, good-humoured. Warm vintage analog recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 112,
+      "key": "C minor",
+      "duration": 180,
+      "seed": 4303
+    },
+    {
+      "id": "tuesday_at_the_kissa",
+      "station": "kissa",
+      "title": "Tuesday at the Kissa",
+      "caption": "Medium swing jazz piano trio instrumental. Acoustic grand piano with a singing melodic touch and rich chord voicings, walking upright bass, light swinging brushes and ride cymbal, a bass solo and trading fours with the drums. Easygoing, warm, a quiet afternoon in a jazz cafe. Intimate natural recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 136,
+      "key": "Eb major",
+      "duration": 185,
+      "seed": 4404
+    },
+    {
+      "id": "asagiri_morning",
+      "station": "kissa",
+      "title": "Asagiri Morning",
+      "caption": "Modal jazz quartet instrumental. Soprano saxophone lead with long searching phrases, piano playing open quartal chords, a rolling upright bass vamp, loose polyrhythmic drums with shimmering cymbals. Spiritual, spacious, building in intensity. Warm vintage analog recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 150,
+      "key": "D minor",
+      "duration": 195,
+      "seed": 4505
+    },
+    {
+      "id": "wangan_mambo",
+      "station": "kissa",
+      "title": "Wangan Mambo",
+      "caption": "Latin jazz instrumental. Congas, timbales and cowbell over a clave rhythm, a driving piano montuno, punchy trumpet and trombone horn lines, upright bass tumbao, a trumpet solo and a percussion break. Festive, hot, danceable. Warm vintage live recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 104,
+      "key": "G minor",
+      "duration": 180,
+      "seed": 4606
+    },
+    {
+      "id": "sakura_waltz",
+      "station": "kissa",
+      "title": "Sakura Waltz",
+      "caption": "Jazz waltz instrumental, lyrical and light. Piano and hollow-body guitar sharing a graceful melody, upright bass, soft brushed drums in three-four time, a guitar solo then a piano solo. Wistful, gentle, cherry petals falling on a quiet street. Intimate natural recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 132,
+      "key": "A major",
+      "timesignature": "3",
+      "duration": 180,
+      "seed": 4707
+    },
+    {
+      "id": "toto_express",
+      "station": "kissa",
+      "title": "Tōto Express",
+      "caption": "Big band swing instrumental. A full saxophone section trading riffs with bright trumpets and trombones, a shouting brass chorus, walking upright bass, swinging drums with big fills, rhythm guitar chords, a tenor saxophone solo and a trumpet solo. Exuberant, powerful, dance hall energy. Warm vintage recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 168,
+      "key": "Bb major",
+      "duration": 175,
+      "seed": 4808
+    },
+    {
+      "id": "a_letter_from_yunagi",
+      "station": "kissa",
+      "title": "A Letter from Yūnagi",
+      "caption": "Warm jazz ballad instrumental. Mellow flugelhorn lead with a soft round tone, tender piano accompaniment, upright bass playing long notes, whisper-quiet brushed drums, a short piano solo. Nostalgic, hopeful, sunset over the sea. Intimate natural recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 64,
+      "key": "Eb major",
+      "duration": 190,
+      "seed": 4909
+    },
+    {
+      "id": "takanodai_stroll",
+      "station": "kissa",
+      "title": "Takanodai Stroll",
+      "caption": "Jazz guitar trio instrumental, medium swing with a bluesy feel. Warm hollow-body electric guitar playing the melody in octaves and a relaxed single-note solo, walking upright bass, swinging ride cymbal and brushes. Easy, sunny, strolling downhill on a Sunday. Warm vintage analog recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 120,
+      "key": "G major",
+      "duration": 180,
+      "seed": 5010
+    }
+  ]
+}

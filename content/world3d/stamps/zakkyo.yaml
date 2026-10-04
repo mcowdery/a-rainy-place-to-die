@@ -1,0 +1,20 @@
+# A mixed-tenant building (雑居ビル) in Kaburo's back alleys (real/cashOne.ts, kind zakkyo), five storeys on an 8 m
+# front: 質 マルヨシ Maruyoshi, the pawn shop, at street level (walk in); a mahjong parlour on 2F (a story door off the
+# stair's landing); キャッシュ・ワン Cash One, the loan shark whose collectors blackmail Mack, on 3F (walk up the narrow
+# stair from its own street door, or E there); a vacant floor and a snack bar above. Cash One's sign is on the roof.
+id: zakkyo
+name: キャッシュ・ワン / 質 マルヨシ
+footprint: [14, 8]
+height: 18
+front: east
+landmark: zakkyo
+nodes:
+  front: { kind: spawn, name: Cash One / 質 マルヨシ (back alleys), at: [4, 7], facing: west, view: [90, 14] }
+  stairs: { kind: door, name: キャッシュ・ワン 3F, at: [0.9, 0.8], returnSpawn: office, through: true }
+  office: { kind: spawn, name: Cash One (3F), at: [2.3, -1.0], floor: 7.2, facing: north }
+  leave: { kind: door, name: the street, at: [0.8, -0.9], floor: 7.2, returnSpawn: front, through: true }
+  collector: { kind: npc, name: A Cash One collector, at: [4.6, -4.4], floor: 7.05, figure: { body: man, pose: stand, hair: short, outfit: suit, color: '#1a1a20' } }
+  payment: { kind: hotspot, name: Cash One's counter (Monday's payment), at: [4.6, -2.6], floor: 7.2 }
+  pawnbroker: { kind: npc, name: The pawnbroker (質 マルヨシ), at: [5.4, -11.2], figure: { body: elder, pose: stand, hair: none, color: '#3a3428' } }
+  pawn_case: { kind: hotspot, name: The display case (watches, rings), at: [5.0, -3.4] }
+  mahjong: { kind: door, name: 雀荘 東風荘 (2F), at: [1.25, -10.1], floor: 3.6, returnSpawn: front }

@@ -6,8 +6,8 @@
     "gender": 1,
     "years": 41,
     "height_cm": 192,
-    "muscle": 0.82,
-    "weight": 0.62,
+    "muscle": 1.0,
+    "weight": 0.66,
     "proportions": 0.75,
     "race": {"caucasian": 1},
     "targets": {
@@ -22,10 +22,21 @@
       "eyebrows-angle-down": 0.25,
       "lr-eye-height2-decr": 0.2,
       "mouth-scale-horiz-incr": 0.05,
-      "measure-neck-circ-incr": 0.35,
-      "measure-shoulder-dist-incr": 0.3
+      "measure-neck-circ-incr": 0.55,
+      "measure-shoulder-dist-incr": 0.5,
+      "torso-muscle-pectoral-incr": 0.8,
+      "torso-muscle-dorsi-incr": 0.7,
+      "torso-vshape-incr": 0.6,
+      "lr-upperarm-muscle-incr": 0.8,
+      "lr-upperarm-shoulder-muscle-incr": 0.7,
+      "lr-lowerarm-muscle-incr": 0.6,
+      "measure-upperarm-circ-incr": 0.4,
+      "lr-upperleg-muscle-incr": 0.6,
+      "lr-lowerleg-muscle-incr": 0.5,
+      "stomach-tone-incr": 0.8,
+      "measure-waist-circ-decr": 0.3
     },
-    "decimate": 0.7
+    "decimate": 0.72
   },
   "max_tex": 1024,
   "skin": {
@@ -33,22 +44,15 @@
     "max_tex": 2048,
     "roughness": 0.55,
     "ops": [
-      {"op": "grade", "saturation": 0.85},
+      {"op": "grade", "saturation": 0.85, "gain": [0.97, 0.9, 0.82]},
       {"op": "smooth", "radius": 2, "amount": 0.3},
-      {"op": "colorize", "color": "#17130f", "contrast": 0.5, "uvmask": "under_hair", "amount": 0.9}
+      {"op": "colorize", "color": "#17130f", "contrast": 0.5, "uvmask": "under_hair", "amount": 0.9},
+      {"op": "grade", "gain": [0.58, 0.52, 0.5], "uvmask": "cavity", "amount": 0.6}
     ]
   },
   "eyes": {"asset": "high-poly", "color": "grey", "roughness": 0.35},
   "eyebrows": {"asset": "eyebrow010", "double_sided": true},
   "eyelashes": {"asset": "eyelashes01", "double_sided": true},
-  "hair": {
-    "asset": "culturalibre_hair_02",
-    "roughness": 0.5,
-    "double_sided": true,
-    "ops": [
-      {"op": "colorize", "color": "#16130f", "contrast": 0.6}
-    ]
-  },
   "clothes": [
     {
       "asset": "male_casualsuit06",
@@ -85,6 +89,16 @@
       "open_bottom": 0.075,
       "collar": 0.035,
       "decimate": 0.45
+    },
+    {
+      "type": "haircut",
+      "color": "#16130f",
+      "reach": 0.15,
+      "roughness": 0.5,
+      "specular": 0.45,
+      "hairline": [[0, 26], [30, 26], [50, 24], [62, 22], [70, 14], [78, 0], [84, -10], [90, 4], [96, 10],
+                   [104, 8], [110, -10], [116, -30], [124, -42], [140, -50], [160, -54], [180, -54]],
+      "cards": {"count": 300, "length": [0.035, 0.07], "lift": 0.0018, "width": 0.016}
     }
   ]
 }

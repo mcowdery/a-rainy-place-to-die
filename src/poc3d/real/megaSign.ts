@@ -102,7 +102,7 @@ function screenMaterialRaw(atlas: THREE.Texture): THREE.ShaderMaterial {
       #include <fog_pars_vertex>
       attribute float aScreen;
       varying vec2 vUv;
-      varying float vScreen;
+      flat varying float vScreen;
       void main() {
         vUv = uv;
         vScreen = aScreen;
@@ -118,7 +118,8 @@ function screenMaterialRaw(atlas: THREE.Texture): THREE.ShaderMaterial {
       uniform float uTime;
       uniform float uNeon;
       varying vec2 vUv;
-      varying float vScreen;
+      // Flat: an interpolated 3.0 comes out a hair under 3 at some pixels, and the int() below then picks the ad before.
+      flat varying float vScreen;
       vec3 slot(int i, vec2 uv) {
         vec4 r = uSlots[i];
         return texture2D(tAtlas, vec2(mix(r.x, r.z, uv.x), mix(r.w, r.y, uv.y))).rgb;

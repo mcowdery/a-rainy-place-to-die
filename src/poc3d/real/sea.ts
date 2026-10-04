@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { MacroMap } from '../../gen/macro';
 import type { Bridge3 } from '../district/roads';
 import type { Terrain } from '../district/terrain';
+import { poolTexture } from './expressway';
+import { WATER_ALPHA, WATER_GLSL } from './waterGlsl';
 
 /**
  * The sea and the land round the city. Water over every L0 water cell (the bay, the river down to it), a little
@@ -21,15 +23,30 @@ export interface Sea {
   readonly material: THREE.MeshStandardMaterial;
   /** Snow lying on the land round the city (0-1, as the city's uSnow). */
   setSnow(amount: number): void;
+  /** The street lamps (0-1, as the city's uLamps): the bridges' lamps and their light on the deck. */
+  setLamps(on: number): void;
+}
+
+/** What the water's shader takes from the city's (real/city.ts' uniforms): the sky's colours, the clock, the wind. */
+export interface WaterSky {
+  readonly uHorizon: { value: THREE.Color };
+  readonly uZenith: { value: THREE.Color };
+  readonly uTime: { value: number };
+  readonly uWind: { value: THREE.Vector3 };
 }
 
 /**
- * Water reflecting the sky's horizon colour, more the lower you look across it, and fully between these
- * distances from the camera (m), so the open sea meets the sky's horizon without a seam.
+ * The water's surface (waterGlsl.ts): rippled by the wind, so the sun and moon glitter on it; the sky in the
+ * ripples by Fresnel (what stands by the water is put in them by the reflection pass, ssr.ts, which finds water
+ * by the alpha written here); and all the sky's horizon colour between these distances from the camera (m), so
+ * the open sea meets the sky's horizon without a seam.
  */
-function horizonFade(m: THREE.Material, horizon: { value: THREE.Color }, from = 700, to = 1120): void {
+function waterSurface(m: THREE.Material, sky: WaterSky, from = 700, to = 1120): void {
   m.onBeforeCompile = (shader) => {
-    shader.uniforms.uHorizon = horizon;
+    shader.uniforms.uHorizon = sky.uHorizon;
+    shader.uniforms.uZenith = sky.uZenith;
+    shader.uniforms.uTime = sky.uTime;
+    shader.uniforms.uWind = sky.uWind;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         varying vec3 vSeaWorld;`)
@@ -38,22 +55,32 @@ function horizonFade(m: THREE.Material, horizon: { value: THREE.Color }, from = 
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         varying vec3 vSeaWorld;
-        uniform vec3 uHorizon;`)
+        uniform vec3 uHorizon;
+        uniform vec3 uZenith;
+        uniform float uTime;
+        uniform vec3 uWind;
+        ${WATER_GLSL}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        vec3 seaN = waterNormal(waterSlope(vSeaWorld.xz, uTime, uWind, waterFoot(vSeaWorld, cameraPosition)));
+        normal = normalize((viewMatrix * vec4(seaN, 0.0)).xyz);`)
       .replace('#include <fog_fragment>', `#include <fog_fragment>
-        // The sky's horizon in the water: more the lower you look across it (Fresnel), and all of it at the
-        // edge of the view, where it meets the sky.
+        // The sky in the ripples: more the lower you look across them (Fresnel), and all the horizon's colour at
+        // the edge of the view, where the water meets the sky.
         vec3 toSea = normalize(vSeaWorld - cameraPosition);
-        float grazing = pow(1.0 - clamp(abs(toSea.y), 0.0, 1.0), 4.0) * 0.85;
+        float seaF = waterFresnel(clamp(-dot(toSea, seaN), 0.0, 1.0));
+        gl_FragColor.rgb = gl_FragColor.rgb * (1.0 - seaF) + waterSky(reflect(toSea, seaN), uHorizon, uZenith) * seaF;
         float edge = smoothstep(${from.toFixed(1)}, ${to.toFixed(1)}, distance(vSeaWorld.xz, cameraPosition.xz));
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, uHorizon, max(grazing, edge));`);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, uHorizon, edge);
+        gl_FragColor.a = ${WATER_ALPHA.toFixed(1)};`);
   };
-  m.customProgramCacheKey = () => `horizon-${from}-${to}`;
+  m.customProgramCacheKey = () => `water-${from}-${to}`;
 }
 
-export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: number) => boolean, horizon: { value: THREE.Color }, bridges: readonly Bridge3[] = [], terrain?: Terrain): Sea {
+export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: number) => boolean, sky: WaterSky, bridges: readonly Bridge3[] = [], terrain?: Terrain): Sea {
   const group = new THREE.Group();
-  const material = new THREE.MeshStandardMaterial({ color: 0x0c1c26, roughness: 0.12, metalness: 0.35 });
-  horizonFade(material, horizon);
+  // (Rough enough that the sun's glitter on a ripple doesn't overflow the scene's half floats.)
+  const material = new THREE.MeshStandardMaterial({ color: 0x0c1c26, roughness: 0.24, metalness: 0.35 });
+  waterSurface(material, sky);
   const pos: number[] = [];
   const quad = (x0: number, z0: number, x1: number, z1: number): void => {
     pos.push(x0, SEA_LEVEL, z0, x0, SEA_LEVEL, z1, x1, SEA_LEVEL, z1, x0, SEA_LEVEL, z0, x1, SEA_LEVEL, z1, x1, SEA_LEVEL, z0);
@@ -186,9 +213,19 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
   ground.receiveShadow = true;
   ground.frustumCulled = false;
   group.add(ground);
-  // The bridges' decks take snow on what faces up, as the city's streets do.
+  // The bridges' decks take snow on what faces up, as the city's streets do. They're outside the lightmap, so
+  // their lamps light the deck with pools of light (additive decals, as the expressway's), on with the lamps.
   const deckSnow = { value: 0 };
-  for (const b of bridges) group.add(bridgeDeck(b, deckSnow));
+  const heads = new THREE.MeshStandardMaterial({ color: 0xffe2b0, roughness: 0.85, emissive: 0xffe2b0, emissiveIntensity: 1.4 });
+  const pools: [number, number][] = [];
+  for (const b of bridges) group.add(bridgeDeck(b, deckSnow, heads, pools));
+  const poolMat = new THREE.MeshBasicMaterial({ map: poolTexture(), color: new THREE.Color(0.24, 0.19, 0.12), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+  const lit = new THREE.InstancedMesh(new THREE.PlaneGeometry(13, 13).rotateX(-Math.PI / 2), poolMat, pools.length);
+  const m4 = new THREE.Matrix4();
+  pools.forEach(([x, z], i) => lit.setMatrixAt(i, m4.makeTranslation(x, 0.03, z)));
+  lit.frustumCulled = false;
+  group.add(lit);
+  let lamps = -1;
   const bare = new THREE.Color(0x2e3228);
   const white = new THREE.Color(0xa4a8b0);
   let snow = -1;
@@ -200,6 +237,13 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
       snow = amount;
       landMat.color.copy(bare).lerp(white, amount);
       deckSnow.value = amount;
+    },
+    setLamps(on) {
+      if (Math.abs(on - lamps) < 0.01) return;
+      lamps = on;
+      heads.emissiveIntensity = 0.05 + 1.35 * on;
+      poolMat.opacity = on;
+      lit.visible = pools.length > 0 && on > 0.05;
     },
   };
 }
@@ -222,22 +266,22 @@ function snowy(m: THREE.MeshStandardMaterial, snow: { value: number }, keep: num
   };
 }
 
-function bridgeDeck(b: Bridge3, snow: { value: number }): THREE.Group {
+function bridgeDeck(b: Bridge3, snow: { value: number }, heads: THREE.MeshStandardMaterial, pools: [number, number][]): THREE.Group {
   const g = new THREE.Group();
   const r = b.road;
   const q = r.rect;
   const v = r.vertical;
   const W = v ? q.w : q.h;
   const L = v ? q.h : q.w;
-  // Local frame: along (a, 0..L) and across (c, -W/2..W/2) to world boxes.
-  const box = (a0: number, a1: number, c0: number, c1: number, y0: number, y1: number, color: number, emissive = 0): void => {
-    const cx = v ? q.x + W / 2 + (c0 + c1) / 2 : q.x + (a0 + a1) / 2;
-    const cz = v ? q.y + (a0 + a1) / 2 : q.y + W / 2 + (c0 + c1) / 2;
+  const world = (a: number, c: number): [number, number] => (v ? [q.x + W / 2 + c, q.y + a] : [q.x + a, q.y + W / 2 + c]);
+  // Local frame: along (a, 0..L) and across (c, -W/2..W/2) to world boxes. A lamp head takes the shared material.
+  const box = (a0: number, a1: number, c0: number, c1: number, y0: number, y1: number, color: number, head = false): void => {
+    const [cx, cz] = world((a0 + a1) / 2, (c0 + c1) / 2);
     const sx = v ? c1 - c0 : a1 - a0;
     const sz = v ? a1 - a0 : c1 - c0;
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85, emissive: emissive ? color : 0x000000, emissiveIntensity: emissive });
+    const mat = head ? heads : new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
     // (The carriageway keeps a little less, as the streets do: city.ts.)
-    if (!emissive) snowy(mat, snow, color === 0x26262a ? 0.8 : 1);
+    if (!head) snowy(mat, snow, color === 0x26262a ? 0.8 : 1);
     const m = new THREE.Mesh(new THREE.BoxGeometry(sx, y1 - y0, sz), mat);
     m.position.set(cx, (y0 + y1) / 2, cz);
     m.receiveShadow = true;
@@ -265,7 +309,9 @@ function bridgeDeck(b: Bridge3, snow: { value: number }): THREE.Group {
     for (const s of [-1, 1]) {
       const c = s * (W / 2 - sw + 0.5);
       box(a - 0.1, a + 0.1, c - 0.1, c + 0.1, 0.15, 8, 0x5a5e62);
-      box(a - 0.4, a + 0.4, c - 0.25, c + 0.25, 7.8, 8.05, 0xffe2b0, 1.4);
+      box(a - 0.4, a + 0.4, c - 0.25, c + 0.25, 7.8, 8.05, 0xffe2b0, true);
+      // The pool centred a little out over the carriageway, under the head's reach.
+      pools.push(world(a, s * (W / 2 - sw - 2.5)));
     }
   }
   return g;

@@ -2,7 +2,8 @@ import { Terrain } from './terrain';
 import * as THREE from 'three';
 import { wheelLayout } from '../models/vehicles';
 import { model, tunedSpec } from '../../race/catalog';
-import { buildCar, poseCar, turnWheels, type CarView } from '../../race/carView';
+import { buildCar, poseCar, setLamps, turnWheels, type CarView } from '../../race/carView';
+import { CarInterior } from '../models/carInterior';
 import { Dents } from '../../race/dents';
 import { currentCar, loadProfile, saveProfile } from '../../race/profile';
 import { CarSound } from '../../race/sound';
@@ -60,6 +61,9 @@ export interface DeckObstacle {
  * (`hits`), costs power (the front) and grip (the tyres), and is kept with the car in the profile; a totalled
  * car won't go (`onTotaled`; the garage repairs it).
  *
+ * Its lights are the page's to switch (`lamps`: the headlamps and tail lamps, with the brake lights and reversing
+ * lamps from how it's driven; `beam`: where they shine from, for the city shader); parked, they're off.
+ *
  * Or your motorcycle (`bike`: race/bikeRide.ts' BIKES): the same model, ground and crashing, its own spec and
  * saved spot (`citypop.city.bike`); no dents or damage yet; the page draws it and its rider (`onPose`).
  */
@@ -92,6 +96,9 @@ export class OwnCar {
   water = 0;
   readonly sim: Car;
   readonly view: CarView;
+  /** How to fit its cabin (models/carInterior.ts), built the first time it's wanted; a bike has none. */
+  private readonly cabinFor: (() => CarInterior) | null;
+  private cabin: CarInterior | null = null;
   readonly vehicle: DrivenVehicle;
   readonly ground: Ground;
   readonly name: string;
@@ -110,6 +117,8 @@ export class OwnCar {
   readonly hits: { part: Section; amount: number }[] = [];
   /** A knock this frame for the sound and the camera (m/s). */
   knock = 0;
+  /** The brake pedal's down and slowing the car (the brake lights), as last driven. */
+  braking = false;
   onTotaled: (() => void) | null = null;
   /** Engine smoke from a smashed front (world space: add it to the scene). */
   readonly smoke: THREE.Points;
@@ -142,7 +151,8 @@ export class OwnCar {
     bike: BikeId | null = null,
   ) {
     this.bike = bike;
-    this.saveKey = bike ? BIKE_SAVE_KEY : SAVE_KEY;
+    // (The cruiser keeps the first bike's key; the others their own.)
+    this.saveKey = !bike ? SAVE_KEY : bike === 'cruiser' ? BIKE_SAVE_KEY : `${BIKE_SAVE_KEY}.${bike}`;
     const height = (x: number, z: number): number => this.ex?.at(x, z, this.sim.y)?.height ?? this.terrain.height(x, z);
     const tuning = loadTuning();
     if (bike) {
@@ -153,10 +163,11 @@ export class OwnCar {
       this.name = def.name;
       this.baseSpec = def.spec;
       this.sim = new Car(tunedBy(this.baseSpec, tuning), assistsBy(CITY_ASSISTS, 'road', tuning));
-      this.view = { obj: new THREE.Group(), body: new THREE.Mesh(), windows: { left: null, right: null }, wheels: [], r: 0.33 };
+      this.view = { type: 'sports', obj: new THREE.Group(), body: new THREE.Mesh(), windows: { left: null, right: null }, wheels: [], r: 0.33, wipers: [], lamps: {} };
       this.sound.configure(def.sound);
       this.wheelAlong = [-0.78, 0.86];
       this.dents = null;
+      this.cabinFor = null;
       [this.hl, this.hw] = def.spec.size ?? [1.15, 0.45];
     } else {
       const mine = currentCar(loadProfile());
@@ -171,7 +182,9 @@ export class OwnCar {
       this.sound.configure(m.sound);
       const zs = wheelLayout(mine.type).spots.map((s) => s.z);
       this.wheelAlong = [Math.min(...zs), Math.max(...zs)];
+      setLamps(this.view, { head: false, tail: false });
       this.dents = new Dents(this.view);
+      this.cabinFor = () => new CarInterior(mine.type, material, { rpmMax: m.sound.maxRpm, turbo: !!this.baseSpec.turbo });
       this.hl = HL;
       this.hw = HW;
     }
@@ -237,6 +250,20 @@ export class OwnCar {
     );
     this.smoke.frustumCulled = false;
     this.pose(0);
+  }
+
+  /** Its cabin (models/carInterior.ts), for the cockpit view: fitted the first time it's asked for; a bike has none. */
+  get interior(): CarInterior | null {
+    if (!this.cabin && this.cabinFor) {
+      this.cabin = this.cabinFor();
+      this.view.obj.add(this.cabin.group);
+    }
+    return this.cabin;
+  }
+
+  /** Its half length and half width (m). */
+  get size(): readonly [number, number] {
+    return [this.hl, this.hw];
   }
 
   /** Overall condition, 0 like new to 100 totalled (crash.ts `overall`). */
@@ -343,6 +370,7 @@ export class OwnCar {
     c = wasTotaled
       ? { throttle: 0, brake: 0.6, steer: c.steer, handbrake: c.handbrake }
       : { ...c, throttle: c.throttle * powerLeft(P), steer: Math.max(-1, Math.min(1, c.steer + tyrePull(P))) };
+    this.braking = (c.brake > 0 && this.sim.u > 0.5) || (c.throttle > 0 && this.sim.u < -0.5);
     this.contact = null;
     this.sim.update(dt, c, this.ground);
     weatherAfter(this.sim, dt, water, this.weather);
@@ -496,6 +524,28 @@ export class OwnCar {
     this.smoke.geometry.attributes.life.needsUpdate = true;
   }
 
+  /**
+   * Its lamps (a car's; a bike's are its model's materials, the page's): the headlamps and tail lamps on or off,
+   * and while it's `driven` the brake lights and the reversing lamps.
+   */
+  lamps(on: boolean, driven: boolean): void {
+    setLamps(this.view, { head: on, tail: on, brake: driven && this.braking, reverse: driven && this.sim.gear === 0 });
+  }
+
+  /**
+   * Where its lights shine from, for the city shader (real/city.ts uMyCar, uMyDir): its centre on the ground and how
+   * far ahead its nose is; the way it points, the road's slope along that and half the lamps' spacing.
+   */
+  beam(car: THREE.Vector4, dir: THREE.Vector4): void {
+    const s = this.sim;
+    const fx = Math.sin(s.h);
+    const fz = Math.cos(s.h);
+    const e = 2.5;
+    const slope = (this.ground.height(s.x + fx * e, s.z + fz * e) - this.ground.height(s.x - fx * e, s.z - fz * e)) / (2 * e);
+    car.set(s.x, s.y, s.z, this.hl);
+    dir.set(fx, fz, slope, this.bike ? 0 : 0.62);
+  }
+
   /** Repaired: like new again. */
   repair(): void {
     Object.assign(this.parts, newParts());
@@ -540,6 +590,7 @@ export class OwnCar {
   /** Stop the engine (getting out): its sound fades to nothing. */
   park(): void {
     this.sim.u = this.sim.w = this.sim.r = 0;
+    this.braking = false;
     this.sync();
     this.sound.setVolume(0);
     this.save();

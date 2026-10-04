@@ -5,7 +5,9 @@
 # routes: each a list of L0 grid points [col, row] (its corners), driven in that order; loop: true closes it back
 # to its first point (the inner loop, clockwise on the map: east along its north side). deck: the road surface's
 # height (m; clear of the Toto Line's viaduct, 8 m, and its trains); radius: the corners (m, tight, Shuto-like);
-# half: the deck's half-width (two lanes and a shoulder).
+# half: the deck's half-width (two lanes and a shoulder). trim: [start, end], metres of deck left off an open
+# route's ends: where nothing runs on past its last ramp or junction the deck stops there behind an end wall,
+# rather than running on to its point as a dead stub (its ramps are still placed from the points).
 name: 東都高速
 nameEn: TOTO EXPRESSWAY
 deck: 15
@@ -17,14 +19,17 @@ routes:
 # a block in from the seawall, each two-way: a route each way, offset left of the line, decks side by side.
   - { id: r1_s, name: 1号線 南行, nameEn: ROUTE 1 SOUTH, loop: false, offset: 5.2, pts: [[24, 13], [24, 21]] }
   - { id: r1_n, name: 1号線 北行, nameEn: ROUTE 1 NORTH, loop: false, offset: 5.2, pts: [[24, 21], [24, 13]] }
-  - { id: wangan_e, name: 湾岸線 東行, nameEn: WANGAN EAST, loop: false, offset: 5.2, pts: [[7, 21], [41, 21]] }
-  - { id: wangan_w, name: 湾岸線 西行, nameEn: WANGAN WEST, loop: false, offset: 5.2, pts: [[41, 21], [7, 21]] }
-# The airport branch off the Wangan's west end, over the Hanejima bridge's upper deck.
-  - { id: airport_s, name: 空港線 南行, nameEn: AIRPORT SOUTH, loop: false, offset: 5.2, pts: [[8, 21], [8, 24]] }
-  - { id: airport_n, name: 空港線 北行, nameEn: AIRPORT NORTH, loop: false, offset: 5.2, pts: [[8, 24], [8, 21]] }
-# The branch off the Wangan over the Shiomi bridge's upper deck to Shiomi-jima.
-  - { id: shiomi_s, name: 汐見線 南行, nameEn: SHIOMI SOUTH, loop: false, offset: 5.2, pts: [[28, 21], [28, 24]] }
-  - { id: shiomi_n, name: 汐見線 北行, nameEn: SHIOMI NORTH, loop: false, offset: 5.2, pts: [[28, 24], [28, 21]] }
+# (Its west end is the airport branch's junction at col 8: nothing runs on to col 7.)
+  - { id: wangan_e, name: 湾岸線 東行, nameEn: WANGAN EAST, loop: false, offset: 5.2, pts: [[7, 21], [41, 21]], trim: [116, 0] }
+  - { id: wangan_w, name: 湾岸線 西行, nameEn: WANGAN WEST, loop: false, offset: 5.2, pts: [[41, 21], [7, 21]], trim: [0, 116] }
+# The airport branch off the Wangan's west end, over the Hanejima bridge's upper deck. The deck ends at the bridge's
+# island end (row 23); its ramps run on down Kūkō-dōri to their feet before row 24.
+  - { id: airport_s, name: 空港線 南行, nameEn: AIRPORT SOUTH, loop: false, offset: 5.2, pts: [[8, 21], [8, 24]], trim: [0, 122] }
+  - { id: airport_n, name: 空港線 北行, nameEn: AIRPORT NORTH, loop: false, offset: 5.2, pts: [[8, 24], [8, 21]], trim: [122, 0] }
+# The branch off the Wangan over the Shiomi bridge's upper deck to Shiomi-jima. The deck ends past the bridge's
+# cable anchors, mid-block, between its ramps.
+  - { id: shiomi_s, name: 汐見線 南行, nameEn: SHIOMI SOUTH, loop: false, offset: 5.2, pts: [[28, 21], [28, 24]], trim: [0, 64] }
+  - { id: shiomi_n, name: 汐見線 北行, nameEn: SHIOMI NORTH, loop: false, offset: 5.2, pts: [[28, 24], [28, 21]], trim: [64, 0] }
 # The suspension bridge (a look: its decks are the routes above and, below, the street bridge in roads.yaml).
 suspension:
   - { col: 28, from: 22.1, to: 22.9, width: 36, name: 汐見大橋 }

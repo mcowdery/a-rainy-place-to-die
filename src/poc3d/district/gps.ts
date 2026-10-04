@@ -14,7 +14,9 @@ import type { CellPlan3, Road3 } from './plan';
  *   alleys or lanes too tight for a car.
  * A route snaps its ends to the nearest road it may use, then A* over the graph (driving prefers the avenues,
  * and every turn costs a little, so routes run along the big roads with few turns, as a GPS's do); its points
- * are the ends, where they meet the road, and the junctions where it turns.
+ * are the ends, where they meet the road, and the junctions where it turns. Driving keeps to what a car can do
+ * (`driveNodes`): no doubling back in the road, and along an avenue's median no turning across it (where it's
+ * unbroken a side street is left in, left out; you set out along the carriageway you're on).
  *
  * Walks of up to `WALK_GRID` metres go over a grid instead (`NavGrid`, built over just the area round the
  * trip), which crosses plazas and parks and cuts through the gaps between buildings. `Router` picks. Pure:
@@ -38,8 +40,8 @@ export interface NavSource {
   /** Set pieces' footprints (stamps). */
   readonly blocked: readonly Rect[];
   readonly cell: number;
-  /** Roads outside any cell's plan (street bridges over the water). */
-  readonly bridges?: readonly { readonly road: Road3 }[];
+  /** Roads outside any cell's plan (street bridges over the water), each with its median strip if it has one. */
+  readonly bridges?: readonly { readonly road: Road3; readonly median?: Rect | null }[];
 }
 
 export type NavMode = 'walk' | 'drive';
@@ -65,11 +67,22 @@ interface Edge {
   readonly cls: RoadClass;
   /** An avenue or boulevard (driving prefers them, as a GPS does). */
   readonly fast: boolean;
+  /** Its road has a raised median down the middle. */
+  readonly med: boolean;
+  /** Its road runs inside a block (not along a cell's edge). */
+  readonly inner: boolean;
 }
 
 /** Driving along an avenue costs this much a metre against a street's 1; each turn costs `TURN` metres. */
 const FAST = 0.8;
 const TURN: Readonly<Record<NavMode, number>> = { drive: 40, walk: 6 };
+/**
+ * Driving: a street inside a block costs this much a metre (the cell-edge roads are the through roads: wider, with
+ * the traffic, and nothing parked along them; cars parked both sides of a back street can leave no way through).
+ */
+const INNER = 2.2;
+/** Driving: setting out the way the car isn't facing costs this many metres (it means turning round in the road). */
+const ABOUT = 260;
 
 /** Where a point meets the nearest usable road: the edge, how far along it (0 at a, 1 at b), the point. */
 interface Snap {
@@ -185,7 +198,7 @@ export class RoadNet {
       const b = this.node(bx, bz);
       if (a === b) continue;
       const e = this.edges.length;
-      this.edges.push({ a, b, len: Math.hypot(bx - ax, bz - az), cls, fast: r.kind === 'boulevard' });
+      this.edges.push({ a, b, len: Math.hypot(bx - ax, bz - az), cls, fast: r.kind === 'boulevard', med: r.median > 0, inner: Math.abs(c - Math.round(c / C) * C) > 0.01 });
       this.adj[a].push(e);
       this.adj[b].push(e);
       for (let my = Math.floor(Math.min(az, bz) / C); my <= Math.floor(Math.max(az, bz) / C); my++) {
@@ -245,23 +258,25 @@ export class RoadNet {
   /**
    * The route from (ax, az) to (bx, bz): a polyline (world x, z) from the start, where it meets the road, the
    * junctions where it turns, where it leaves the road, to the end; null if there's no way (or an end is
-   * nowhere near a usable road).
+   * nowhere near a usable road). `facing` (driving): the way the car faces (unit x, z): the route sets out that
+   * way along the road when going round the block isn't much further.
    */
-  route(ax: number, az: number, bx: number, bz: number): [number, number][] | null {
+  route(ax: number, az: number, bx: number, bz: number, facing?: readonly [number, number]): [number, number][] | null {
     const s = this.snapEdge(ax, az, this.reach());
     const t = this.snapEdge(bx, bz, this.reach());
     if (!s || !t) return null;
-    const cost = (e: number): number => {
-      const E = this.edges[e];
-      const c = COST[this.mode][E.cls];
-      return this.mode === 'drive' && E.fast ? c * FAST : c;
-    };
+    // On foot: over the junctions, every turn costing a little.
+    const cost = (e: number): number => COST.walk[this.edges[e].cls];
     // The direction each node was reached in (for the turn penalty: fewer, simpler turns, as a GPS gives).
     const heading = new Map<number, [number, number]>();
     const turnCost = (n: number, dx: number, dz: number): number => {
       const h = heading.get(n);
       return h && h[0] * dx + h[1] * dz < 0.7 ? TURN[this.mode] : 0;
     };
+    if (this.mode === 'drive') {
+      const nodes = this.driveNodes(s, t, ax, az, facing);
+      return nodes && this.polyline([[ax, az], [s.x, s.z], ...nodes.map((n) => [this.xs[n], this.zs[n]] as [number, number]), [t.x, t.z], [bx, bz]]);
+    }
     const S = this.edges[s.e];
     const T = this.edges[t.e];
     const START = -1;
@@ -270,9 +285,7 @@ export class RoadNet {
     const from = new Map<number, number>();
     const closed = new Set<number>();
     const heap = new MinHeap();
-    // (The heuristic prices the rest at the cheapest rate, avenues, so it never overestimates.)
-    const hMul = this.mode === 'drive' ? FAST : 1;
-    const hOf = (n: number): number => Math.hypot(this.xs[n] - t.x, this.zs[n] - t.z) * hMul;
+    const hOf = (n: number): number => Math.hypot(this.xs[n] - t.x, this.zs[n] - t.z);
     const relax = (n: number, cst: number, prev: number, dir?: [number, number]): void => {
       if (cst < (g.get(n) ?? Infinity)) {
         g.set(n, cst);
@@ -302,15 +315,136 @@ export class RoadNet {
         if (closed.has(m)) continue;
         const dx = (this.xs[m] - this.xs[n]) / E.len;
         const dz = (this.zs[m] - this.zs[n]) / E.len;
-        relax(m, gn + E.len * (this.mode === 'drive' && E.fast ? c * FAST : c) + turnCost(n, dx, dz), n, [dx, dz]);
+        relax(m, gn + E.len * c + turnCost(n, dx, dz), n, [dx, dz]);
       }
     }
     if (!from.has(GOAL)) return null;
     const nodes: number[] = [];
     for (let n = from.get(GOAL)!; n !== START; n = from.get(n)!) nodes.push(n);
     nodes.reverse();
-    const pts: [number, number][] = [[ax, az], [s.x, s.z], ...nodes.map((n) => [this.xs[n], this.zs[n]] as [number, number]), [t.x, t.z], [bx, bz]];
-    // Drop repeats, and the junctions the way only runs straight through (keeping the ends as they are).
+    return this.polyline([[ax, az], [s.x, s.z], ...nodes.map((n) => [this.xs[n], this.zs[n]] as [number, number]), [t.x, t.z], [bx, bz]]);
+  }
+
+  /** Whether an avenue's median runs unbroken through (x, z). */
+  private medianAt(x: number, z: number): boolean {
+    const C = this.src.cell;
+    const inside = (q: Rect): boolean => x > q.x - 0.2 && x < q.x + q.w + 0.2 && z > q.y - 0.2 && z < q.y + q.h + 0.2;
+    for (let my = Math.floor((z - 1) / C); my <= Math.floor((z + 1) / C); my++) {
+      for (let mx = Math.floor((x - 1) / C); mx <= Math.floor((x + 1) / C); mx++) if (this.src.plan(mx, my)?.medians.some(inside)) return true;
+    }
+    return (this.src.bridges ?? []).some((b) => !!b.median && inside(b.median));
+  }
+
+  private readonly shut = new Map<number, boolean>();
+
+  /**
+   * Driving: the junctions from the start's road to the end's, by what a car can do. The search is over the ways
+   * along each stretch of road (a stretch and a direction), so a turn is known for what it is: every turn costs
+   * `TURN`, there's no doubling back, and where a median runs unbroken through a junction the only ways on are
+   * straight along the avenue or a left turn (traffic keeps left: a right turn or going straight over would cross
+   * it). Setting out from a spot on an avenue with a median, you go the way of the carriageway you're on.
+   */
+  private driveNodes(from: Snap, t: Snap, ax: number, az: number, facing?: readonly [number, number]): number[] | null {
+    const E = this.edges;
+    let s = from;
+    const cost = (e: number): number => COST.drive[E[e].cls] * (E[e].fast ? FAST : E[e].inner && E[e].cls === 'main' ? INNER : 1);
+    // A way: a stretch (k >> 1) and a direction (0: a to b, 1: b to a).
+    const head = (k: number): number => (k & 1 ? E[k >> 1].a : E[k >> 1].b);
+    const dirOf = (k: number): [number, number] => {
+      const h = head(k);
+      const q = k & 1 ? E[k >> 1].b : E[k >> 1].a;
+      const L = E[k >> 1].len || 1;
+      return [(this.xs[h] - this.xs[q]) / L, (this.zs[h] - this.zs[q]) / L];
+    };
+    const shutAt = (n: number): boolean => {
+      let v = this.shut.get(n);
+      if (v === undefined) this.shut.set(n, (v = this.medianAt(this.xs[n], this.zs[n])));
+      return v;
+    };
+    /** What turning from way k1 onto way k2 at junction n costs; Infinity where a car can't. */
+    const turn = (n: number, k1: number, k2: number): number => {
+      const d1 = dirOf(k1);
+      const d2 = dirOf(k2);
+      const dot = d1[0] * d2[0] + d1[1] * d2[1];
+      // (x east, z south: a negative cross product turns left.)
+      const cross = d1[0] * d2[1] - d1[1] * d2[0];
+      if (shutAt(n) && !(E[k1 >> 1].med && E[k2 >> 1].med && dot > 0.7) && !(cross < -0.3)) return Infinity;
+      return dot < 0.7 ? TURN.drive : 0;
+    };
+    // Snapped to the end of a side street where it meets an avenue's median, the car is on the avenue (the street
+    // stops at its kerb): it sets out along the avenue.
+    if (!E[s.e].med) {
+      const n = s.t < 0.5 ? E[s.e].a : E[s.e].b;
+      const e = Math.hypot(this.xs[n] - s.x, this.zs[n] - s.z) < 1 && shutAt(n) ? this.adj[n].find((q) => E[q].med) : undefined;
+      if (e !== undefined) s = { e, t: E[e].a === n ? 0 : 1, x: this.xs[n], z: this.zs[n] };
+    }
+    const S = E[s.e];
+    const T = E[t.e];
+    const START = -1;
+    const GOAL = -2;
+    const g = new Map<number, number>();
+    const prev = new Map<number, number>();
+    const closed = new Set<number>();
+    const heap = new MinHeap();
+    const hOf = (n: number): number => Math.hypot(this.xs[n] - t.x, this.zs[n] - t.z) * FAST;
+    const relax = (k: number, cst: number, was: number): void => {
+      if (cst < (g.get(k) ?? Infinity)) {
+        g.set(k, cst);
+        prev.set(k, was);
+        heap.push(k, cst + (k === GOAL ? 0 : hOf(head(k))));
+      }
+    };
+    // Behind the car (the way along the road to (x, z) is against its heading): the cost of turning round.
+    const about = (x: number, z: number): number => {
+      if (!facing) return 0;
+      const dx = x - s.x;
+      const dz = z - s.z;
+      const L = Math.hypot(dx, dz);
+      return L > 1 && (dx * facing[0] + dz * facing[1]) / L < -0.5 ? ABOUT : 0;
+    };
+    // On an avenue with a median: only the way of the carriageway you're on (you're on its left).
+    const mayStart = (k: number): boolean => {
+      if (!S.med || !this.medianAt(s.x, s.z)) return true;
+      const d = dirOf(k);
+      return (ax - s.x) * d[1] - (az - s.z) * d[0] > -0.3;
+    };
+    for (const dir of [0, 1]) {
+      const k = s.e * 2 + dir;
+      if (!mayStart(k)) continue;
+      relax(k, (dir ? s.t : 1 - s.t) * S.len * cost(s.e) + about(this.xs[head(k)], this.zs[head(k)]), START);
+    }
+    // Both on the same stretch of road: straight along it.
+    if (s.e === t.e && mayStart(s.e * 2 + (t.t > s.t ? 0 : 1))) relax(GOAL, Math.abs(s.t - t.t) * S.len * cost(s.e) + about(t.x, t.z), START);
+    while (heap.size) {
+      const k = heap.pop();
+      if (k === GOAL) break;
+      if (closed.has(k)) continue;
+      closed.add(k);
+      const gk = g.get(k)!;
+      const n = head(k);
+      // Onto the end's stretch from this junction.
+      if ((n === T.a || n === T.b) && k >> 1 !== t.e) {
+        const tc = turn(n, k, t.e * 2 + (n === T.a ? 0 : 1));
+        if (tc < Infinity) relax(GOAL, gk + tc + (n === T.a ? t.t : 1 - t.t) * T.len * cost(t.e), k);
+      }
+      this.ensureAround(this.xs[n], this.zs[n]);
+      for (const e of this.adj[n]) {
+        const c = cost(e);
+        if (c <= 0 || e === k >> 1) continue;
+        const k2 = e * 2 + (E[e].a === n ? 0 : 1);
+        if (closed.has(k2)) continue;
+        const tc = turn(n, k, k2);
+        if (tc < Infinity) relax(k2, gk + E[e].len * c + tc, k);
+      }
+    }
+    if (!prev.has(GOAL)) return null;
+    const nodes: number[] = [];
+    for (let k = prev.get(GOAL)!; k !== START; k = prev.get(k)!) nodes.push(head(k));
+    return nodes.reverse();
+  }
+
+  /** A route's points: repeats dropped, and the junctions the way only runs straight through (the ends kept as they are). */
+  private polyline(pts: [number, number][]): [number, number][] {
     const out: [number, number][] = [pts[0]];
     for (let i = 1; i < pts.length; i++) {
       const p = pts[i];
@@ -527,14 +661,14 @@ export class Router {
     return new NavGrid(this.src, { minX: x - m, maxX: x + m, minZ: z - m, maxZ: z + m }).snap(x, z);
   }
 
-  route(ax: number, az: number, bx: number, bz: number): [number, number][] | null {
+  route(ax: number, az: number, bx: number, bz: number, heading?: readonly [number, number]): [number, number][] | null {
     if (this.mode === 'walk' && Math.hypot(bx - ax, bz - az) <= WALK_GRID) {
       const m = 160;
       const grid = new NavGrid(this.src, { minX: Math.min(ax, bx) - m, maxX: Math.max(ax, bx) + m, minZ: Math.min(az, bz) - m, maxZ: Math.max(az, bz) + m });
       const r = grid.route(ax, az, bx, bz);
       if (r) return r;
     }
-    return this.net.route(ax, az, bx, bz);
+    return this.net.route(ax, az, bx, bz, heading);
   }
 }
 

@@ -1,3 +1,4 @@
+import type { HelmetLook } from './helmet';
 import * as THREE from 'three';
 
 /**
@@ -31,6 +32,42 @@ export interface Bike {
     /** Which way each palm faces on its grip (a steering wheel's rim: toward its middle); else down. */
     readonly palmL?: THREE.Vector3;
     readonly palmR?: THREE.Vector3;
+    /**
+     * Which way each hand points along its fingers before they close (across the grip): a steering wheel's rim is
+     * held from the driver's side, the fingers out over its edge and round behind it; else ahead over the bar.
+     */
+    readonly fwdL?: THREE.Vector3;
+    readonly fwdR?: THREE.Vector3;
+    /** How far each thumb closes (0-1; a wheel's rim: hooked round its inside), and the grip's thickness (m). */
+    readonly thumb?: number;
+    readonly gripThick?: number;
+    /** Where the grip lies in the hand (`HandHold.seat`): metres along it from the wrist, and off the palm. */
+    readonly gripSeat?: readonly [number, number];
+    /** Each thumb hooked round its grip (`HandHold.thumbRest`): where on the grip's section its first joint lies (from the grip's middle), and the side it goes on round to. */
+    readonly thumbL?: THREE.Vector3;
+    readonly thumbR?: THREE.Vector3;
+    readonly thumbRoundL?: THREE.Vector3;
+    readonly thumbRoundR?: THREE.Vector3;
+    /**
+     * A car's pedals, in place of pegs: where the ball of each foot is (the frame's; its owner moves them each
+     * frame: onto a pedal, pressing it), the heel resting on the floor (its height).
+     */
+    readonly pedals?: { readonly l: THREE.Vector3; readonly r: THREE.Vector3; readonly floor: number };
+    /**
+     * A car's gear lever: where its knob is (the frame's; its owner moves it), and how far the left hand has gone
+     * over to it from its grip (0 on the wheel, 1 on the knob).
+     */
+    readonly shift?: {
+      readonly at: THREE.Vector3;
+      k: number;
+      /** A lever lying along the car (the handbrake), held across it from above: how far the hold is that kind (0-1), the way the fingers point over it and the way it runs (the frame's). */
+      turn?: number;
+      readonly fwd?: THREE.Vector3;
+      readonly rod?: THREE.Vector3;
+    };
+    /** How far the rider leans forward (rad: a sports bike's tuck), and whether he wears a helmet on it. */
+    readonly tuck?: number;
+    readonly helmet?: boolean | HelmetLook;
   };
   /** The lamps' materials, to switch on at night. */
   readonly lamps: { readonly head: THREE.MeshStandardMaterial; readonly tail: THREE.MeshStandardMaterial };

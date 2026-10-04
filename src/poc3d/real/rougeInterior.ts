@@ -185,6 +185,14 @@ export function rougeLayout(b: Building3): Omit<Interior, 'group'> {
   };
 }
 
+/**
+ * Covered (no rain inside): the keep, all three storeys and the stair, to its roof; out to its walls' outer faces
+ * (0.3 m), so a slanting streak's tail can't lean in through a wall.
+ */
+export function rougeShelters(b: Building3): { rect: Rect; y0: number; y1: number; enclosed: boolean }[] {
+  return [{ rect: localRect(localFrame(b), IN.u0 - 0.3, IN.u1 + 0.3, IN.t0 - 0.3, IN.t1 + 0.3), y0: -1, y1: 15, enclosed: true }];
+}
+
 // ---- Geometry ----
 
 const CARPET = 0x4a1424;
@@ -545,6 +553,8 @@ function* stairs(d: Draw): Generator<void> {
   }
   d.W(DAMASK, DIVIDER[0], DIVIDER[1], DIVIDER[2], DIVIDER[3], 0, 14.1);
   d.W(DAMASK, WELL_WALL[0], WELL_WALL[1], WELL_WALL[2], WELL_WALL[3], 0, 14.1);
+  // The well's own ceiling over the top floor (the storeys' ceilings leave the well open).
+  d.W(0x2a1420, WELL[0], WELL[1], WELL[2], WELL[3], ROUGE_FLOORS[2] + CEIL, 15, true);
   // The rail round the well on the top floor.
   d.k.pane(ST.u0, IN.u1, 10, 11.0, ST.lane2[1] + 0.02);
   d.k.paneT(ST.u1, ST.lane2[0], ST.lane2[1], 10, 11.0);

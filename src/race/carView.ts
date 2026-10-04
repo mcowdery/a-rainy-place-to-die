@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { addVehicle, addWheel, liveryAnchors, wheelLayout, type CarType } from '../poc3d/models/vehicles';
+import { wiperGeometry, wiperLayout, wiperMatrix, wiperSwing } from '../poc3d/models/wipers';
 import { MeshBuilder } from '../poc3d/real/meshBuilder';
 import { decalTexture, EYE } from './shooting';
 import type { Car, Ground } from './vehicle';
@@ -36,6 +37,8 @@ export interface Look {
 }
 
 export interface CarView {
+  /** Its model (models/carInterior.ts fits a cabin inside it). */
+  readonly type: CarType;
   /** Placed and turned like the car; the body is its child (hidden for the bumper camera). */
   readonly obj: THREE.Group;
   readonly body: THREE.Mesh;
@@ -45,14 +48,59 @@ export interface CarView {
   readonly wheels: { m: THREE.Mesh; front: boolean; roll: number }[];
   /** Wheel radius (m), for turning them. */
   readonly r: number;
+  /** Its two windscreen wipers (children of the body; `setWipers` swings them). */
+  readonly wipers: THREE.Mesh[];
+  /**
+   * Its lamps, glowing meshes over the lenses (children of the body; `setLamps` switches them): the headlamps and
+   * tail lamps (on as built), the brake lights and the reversing lamps (off).
+   */
+  readonly lamps: { readonly [K in LampId]?: THREE.Mesh };
+}
+
+export type LampId = 'head' | 'tail' | 'brake' | 'reverse';
+
+/** The lamps' glow (bright enough to bloom); the brake lights as the traffic's (real/traffic.ts). */
+const LAMP_GLOW: Record<LampId, readonly [number, number, number]> = { head: [5.7, 5.4, 4.8], tail: [1.8, 0.04, 0.03], brake: [3.2, 0.12, 0.06], reverse: [3.4, 3.4, 3.2] };
+const lampMats = new Map<LampId, THREE.MeshBasicMaterial>();
+const lampMat = (id: LampId): THREE.MeshBasicMaterial => {
+  let m = lampMats.get(id);
+  if (!m) {
+    // (Pulled toward the eye: they lie a few millimetres off the lenses under them.)
+    m = new THREE.MeshBasicMaterial({ color: new THREE.Color(...LAMP_GLOW[id]), polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    lampMats.set(id, m);
+  }
+  return m;
+};
+
+/** Switches a car's lamps; one left out stays as it is. */
+export function setLamps(v: CarView, on: { readonly [K in LampId]?: boolean }): void {
+  for (const id of Object.keys(on) as LampId[]) {
+    const m = v.lamps[id];
+    if (m) m.visible = on[id]!;
+  }
+}
+
+/** A car's brake lights and reversing lamps from how it's moving (one the game drives: there are no pedals to read). */
+export function lampsByMotion(v: CarView, c: Car): void {
+  setLamps(v, { brake: c.ax < -2.5 && c.u > 1, reverse: c.gear === 0 });
 }
 
 export function buildCar(look: Look, material: THREE.Material): CarView {
   const { type } = look;
   const mb = new MeshBuilder(1 << 17);
   const glass = { left: new MeshBuilder(1 << 12), right: new MeshBuilder(1 << 12) };
-  addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type, paint: look.paint, paint2: look.paint2 ?? undefined, detail: 0.05, wheels: false, livery: look.livery ?? undefined, sideWindows: glass });
+  const lit = { head: new MeshBuilder(1 << 10), tail: new MeshBuilder(1 << 10), brake: new MeshBuilder(1 << 10), reverse: new MeshBuilder(1 << 10) };
+  addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type, paint: look.paint, paint2: look.paint2 ?? undefined, detail: 0.05, wheels: false, livery: look.livery ?? undefined, sideWindows: glass, lampParts: lit }, undefined, lit.brake);
   const body = new THREE.Mesh(mb.build()!, material);
+  const lamps: { [K in LampId]?: THREE.Mesh } = {};
+  for (const id of ['head', 'tail', 'brake', 'reverse'] as const) {
+    const g = lit[id].build();
+    if (!g) continue;
+    const m = new THREE.Mesh(g, lampMat(id));
+    m.visible = id === 'head' || id === 'tail';
+    body.add(m);
+    lamps[id] = m;
+  }
   const pane = (b: MeshBuilder): THREE.Mesh | null => {
     const g = b.build();
     if (!g) return null;
@@ -72,10 +120,28 @@ export function buildCar(look: Look, material: THREE.Material): CarView {
     body.add(m);
     return { m, front: w.front, roll: 0 };
   });
+  // The wipers, at rest along the windscreen's foot.
+  wiperGeo ??= wiperGeometry();
+  const wipers = ([0, 1] as const).map((k) => {
+    const m = new THREE.Mesh(wiperGeo!, material);
+    m.matrixAutoUpdate = false;
+    wiperMatrix(wiperLayout(type), k, 0, m.matrix);
+    body.add(m);
+    return m;
+  });
   const lv = look.livery;
   if (lv) addLiveryText(body, type, lv.number, lv.banner);
   if (look.neon != null) addUnderglow(body, type, look.neon);
-  return { obj, body, windows, wheels, r: W.r };
+  return { type, obj, body, windows, wheels, r: W.r, wipers, lamps };
+}
+
+let wiperGeo: THREE.BufferGeometry | null = null;
+
+/** Swings a car's wipers to where they are at `phase` (models/wipers.ts: in sweeps; 1 or more is at rest). */
+export function setWipers(v: CarView, phase: number): void {
+  const L = wiperLayout(v.type);
+  const swing = wiperSwing(phase);
+  v.wipers.forEach((m, k) => wiperMatrix(L, k as 0 | 1, swing, m.matrix));
 }
 
 /** How far a side window drops fully down (m): into the door, out of sight. */

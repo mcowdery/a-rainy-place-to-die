@@ -49,6 +49,9 @@ export class Crowd {
     if (this.umbrellas !== this.umbrellasShown) {
       this.umbrellasShown = this.umbrellas;
       this.dirty = true;
+      // Those carrying one hold it up (the umbrella hangs off that arm: people.ts buildUmbrella).
+      const u = (this.material as THREE.ShaderMaterial).uniforms?.uUmbrella;
+      if (u) u.value = this.umbrellas ? 1 : 0;
     }
     if (!this.dirty) return;
     this.dirty = false;

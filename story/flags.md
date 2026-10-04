@@ -36,7 +36,14 @@ this list.
 | Flag | Effect |
 |---|---|
 | `time_morning` `time_noon` `time_evening` `time_night` `time_late` | Run the clock on to 07:00, 12:00, 18:00, 22:00 or 01:30 |
+| `time_dawn` `time_dusk` | Run the clock on to the season's sunrise or sunset (dusk at 16:45 in winter, 18:58 in summer) |
 | `season_spring` `season_summer` `season_autumn` `season_winter` | Turn the season (a chapter change) |
+
+## States the story keeps (the game acts while they're true)
+
+| Flag | Effect |
+|---|---|
+| `following_koharu` `following_detective` | That person follows Mack: behind him on foot, in his car's passenger seats when he drives (`src/poc3d/district/followers.ts`). Mob figures stand in for both until they're modelled; the debug menu's Followers toggles them. Set it when they come with him, clear it when they part. |
 
 ## Story flags
 

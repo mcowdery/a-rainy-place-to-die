@@ -30,6 +30,13 @@ export interface RouteDef {
    * (in the median), under both decks.
    */
   readonly offset?: number;
+  /**
+   * Metres of deck left off its start and its end (an open route's): where nothing runs on past its last ramp or
+   * junction, the deck stops there behind an end wall instead of running on to its point as a dead stub. Its
+   * ramps are still placed from the points; each must join the deck that's left, and stand beside it while it's
+   * up on arms from the deck's piers.
+   */
+  readonly trim?: readonly [number, number];
 }
 
 export interface ExpresswayDef {
@@ -62,7 +69,7 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
   }
   const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
   for (const k of ['deck', 'radius', 'half']) if (!num(d[k]) || (d[k] as number) <= 0) err(`${k}: a positive number`);
-  const routes = new Map<string, { loop: boolean; legs: number[] }>();
+  const routes = new Map<string, { loop: boolean; legs: number[]; trim: [number, number] }>();
   if (!Array.isArray(d.routes) || d.routes.length === 0) err('routes: a list');
   else
     d.routes.forEach((r: Record<string, unknown>, i: number) => {
@@ -79,7 +86,14 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
         if (a[0] !== b[0] && a[1] !== b[1]) err(`routes[${i}]: leg ${k} must run along a grid line`);
         legs.push(Math.hypot(b[0] - a[0], b[1] - a[1]) * CELL);
       }
-      routes.set(r.id as string, { loop: r.loop as boolean, legs });
+      const trim = (r.trim ?? [0, 0]) as [number, number];
+      if (r.trim !== undefined) {
+        const whole = Array.isArray(trim) && trim.length === 2 && trim.every((v) => Number.isInteger(v) && v >= 0);
+        const last = legs.length - 1;
+        if (!whole || r.loop) return err(`routes[${i}]: trim is [start, end], whole metres off an open route's ends`);
+        if (trim[0] > legs[0] - 40 || trim[1] > legs[last] - 40 || (last === 0 && trim[0] + trim[1] > legs[0] - 40)) return err(`routes[${i}]: trim leaves no deck`);
+      }
+      routes.set(r.id as string, { loop: r.loop as boolean, legs, trim });
     });
   if (!Array.isArray(d.ramps)) err('ramps: a list');
   else
@@ -88,7 +102,13 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
       const R = routes.get(r.route);
       if (!R) return err(`ramps[${i}]: no route ${r.route}`);
       const leg = R.legs[r.leg as number];
-      if (leg === undefined || (r.block as number) < 0 || ((r.block as number) + 1) * CELL > leg) err(`ramps[${i}]: route ${r.route} has no leg ${r.leg} block ${r.block}`);
+      if (leg === undefined || (r.block as number) < 0 || ((r.block as number) + 1) * CELL > leg) return err(`ramps[${i}]: route ${r.route} has no leg ${r.leg} block ${r.block}`);
+      // Where it needs the deck (along its leg): from where it's up on arms from the deck's piers to where it joins.
+      const a = r.kind === 'on' ? (r.block as number) * CELL + 16 : (r.block as number) * CELL + 112 - RAMP;
+      const [d0, d1] = r.kind === 'on' ? [a + RAMP - RAMP_ARMS, a + RAMP] : [a, a + RAMP_ARMS];
+      const from = r.leg === 0 ? R.trim[0] : 0;
+      const to = leg - (r.leg === R.legs.length - 1 ? R.trim[1] : 0);
+      if (d0 < from || d1 > to) err(`ramps[${i}]: route ${r.route}'s trim leaves no deck beside ramp ${r.id}`);
     });
   if (!Array.isArray(d.exits)) err('exits: a list');
   else
@@ -98,6 +118,7 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
       if (!R) return err(`exits[${i}]: no route ${x.route}`);
       const n = R.loop ? R.legs.length : R.legs.length + 1;
       if ((x.at as number) < 0 || (x.at as number) >= n || (!R.loop && x.at !== n - 1)) err(`exits[${i}]: at must be a corner of the loop, or an open route's last point`);
+      else if (R.trim[1] > 0) err(`exits[${i}]: route ${x.route}'s end is trimmed off`);
     });
   if (errors.length > before) return null;
   return d as unknown as ExpresswayDef;
@@ -126,6 +147,11 @@ export interface Road {
   readonly hill?: number;
   /** Metres left of its grid line (a two-way route's decks): its piers stand back on the line. */
   readonly offset?: number;
+  /**
+   * A route whose deck stops short of its points (`RouteDef.trim`): the metres left off its start and its end.
+   * Sample i is `trim[0] + i` metres along the route as written; a trimmed end is closed by an end wall.
+   */
+  readonly trim?: readonly [number, number];
 }
 
 /** Where a point is on the network. */
@@ -152,6 +178,8 @@ export const RAMP_FOOT = 1.2 + 0.4 + RAMP_HALF;
  * deck over [SWING0, SWING1] once it's high enough to clear the street, then angles into the deck's outside lane
  * over the last 60 m.
  */
+/** How far back from the deck (m along it) a ramp is still high enough to stand on arms from the deck's piers. */
+const RAMP_ARMS = 130;
 const SWING0 = 100;
 const SWING1 = 175;
 const smooth = (t: number): number => {
@@ -255,7 +283,14 @@ export class Expressway {
           L.z[i] = base.z[i] - base.tx[i] * off;
         }
       }
-      const road = makeRoad(r.id, r.loop ? 'loop' : 'route', L.x, L.z, () => D, def.half, r.loop, { sign: r.name, ...(off ? { offset: off } : {}) });
+      // The deck stops short of a point nothing runs on past (its ramps are placed from the points all the same).
+      const [t0, t1] = r.loop ? [0, 0] : (r.trim ?? [0, 0]);
+      const cut = t0 > 0 || t1 > 0;
+      if (cut) {
+        L.x = L.x.slice(t0, L.x.length - t1);
+        L.z = L.z.slice(t0, L.z.length - t1);
+      }
+      const road = makeRoad(r.id, r.loop ? 'loop' : 'route', L.x, L.z, () => D, def.half, r.loop, { sign: r.name, ...(off ? { offset: off } : {}), ...(cut ? { trim: [t0, t1] as const } : {}) });
       routeRoads.set(r.id, road);
       this.roads.push(road);
     }
@@ -464,7 +499,9 @@ export class Expressway {
       const start = road.kind === 'spur' ? 40 : 0;
       // An offset deck's piers stand back on its grid line (the median), under both of a two-way route's decks.
       const o = road.offset ?? 0;
-      for (let i = start; i < road.x.length; i += 32) out.push({ x: road.x[i] - road.tz[i] * o, z: road.z[i] + road.tx[i] * o, top: road.y[i] - 1.2 });
+      // (Every 32 m of the route as written, so a trimmed deck's piers still stand with the other deck's.)
+      const lead = road.trim?.[0] ?? 0;
+      for (let i = start + ((32 - (lead % 32)) % 32); i < road.x.length; i += 32) out.push({ x: road.x[i] - road.tz[i] * o, z: road.z[i] + road.tx[i] * o, top: road.y[i] - 1.2 });
     }
     return out;
   }

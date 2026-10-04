@@ -7,6 +7,7 @@ import { Kit, neonText, text } from './kit';
 import type { Light } from './lightmap';
 import { localFrame, localRect, toWorld } from './localFrame';
 import { EMIT, KIND } from './meshBuilder';
+import { buildMaidCafe, maidCafeColliders, maidCafeLights, maidCafeShelters } from './maidCafe';
 
 /**
  * 電光町 Denkō-chō's set pieces (the whole-city plan: docs/city-plan.md), registered with the kit landmarks
@@ -18,8 +19,9 @@ import { EMIT, KIND } from './meshBuilder';
  * - car_park: 電光町パーキング, a multi-storey car park you can drive up: two floors and a rooftop, switchback
  *   ramps at either end, landings joining them to the floors (their decks join the expressway's network for
  *   driving: `carParkDecks`); the rooftop is open for drifting.
+ * - maid_cafe: めいどかふぇ ♡ぴゅあ♡, the maid café up a stair over an anime goods shop, walk-in (maidCafe.ts).
  */
-export const DENKO_KINDS = ['idol_theatre', 'arcade', 'car_park'] as const;
+export const DENKO_KINDS = ['idol_theatre', 'arcade', 'car_park', 'maid_cafe'] as const;
 export type DenkoKind = (typeof DENKO_KINDS)[number];
 
 type C3 = [number, number, number];
@@ -95,6 +97,8 @@ export function denkoColliders(kind: DenkoKind, b: Building3): Rect[] {
       for (let u = 13; u < 60; u += 12) out.push(R(u - 1, u + 1, 31, 36));
       return out;
     }
+    case 'maid_cafe':
+      return maidCafeColliders(b);
   }
 }
 
@@ -108,6 +112,8 @@ export function denkoShelters(kind: DenkoKind, b: Building3): { rect: Rect; y0: 
       return [R(0.5, 17.5, 0, 7, 0, 5)];
     case 'car_park':
       return [R(PARK.u0, PARK.u1, PARK.t0, PARK.t1, 0, PARK.levels[2] - 0.4)];
+    case 'maid_cafe':
+      return maidCafeShelters(b);
   }
 }
 
@@ -124,6 +130,8 @@ export function denkoLights(kind: DenkoKind, b: Building3): Light[] {
       return [L(9, 2, 10, [1.0, 0.4, 0.5], 1.0), L(9, -3, 8, [0.6, 0.5, 1.0], 0.6)];
     case 'car_park':
       return [L(20, 20, 12, [0.85, 0.95, 1.0], 0.7), L(50, 20, 12, [0.85, 0.95, 1.0], 0.7), L(PARK.east, -3, 6, [1.0, 0.85, 0.5], 0.7)];
+    case 'maid_cafe':
+      return maidCafeLights(b);
   }
 }
 
@@ -138,7 +146,8 @@ function car(k: Kit, u: number, t: number, du: number, dt: number, paint: number
   addCar(k.mb, { x, z, fx: k.f.r[0] * du - k.f.n[0] * dt, fz: k.f.r[2] * du - k.f.n[2] * dt, variant, type: 'sedan', paint });
 }
 
-export const DENKO_BUILDERS: Record<DenkoKind, (k: Kit) => ((camera: THREE.Vector3, dt: number) => void) | void> = {
+export const DENKO_BUILDERS: Record<DenkoKind, (k: Kit, id: string, part: (name: string) => Kit) => ((camera: THREE.Vector3, dt: number) => void) | void> = {
+  maid_cafe: buildMaidCafe,
   // ---- STELLA THEATER: a narrow nine-storey tower (the theatre on the eighth floor), its banner down the face,
   // the goods shop at street level, the queue along the pavement with light sticks, the end-of-line sign ----
   idol_theatre(k) {

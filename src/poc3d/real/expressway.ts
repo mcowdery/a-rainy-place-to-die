@@ -103,6 +103,37 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
         mb.color = lin(CONCRETE);
         const h = road.half;
         quad(L(i, h, -1.2), L(i, -h, -1.2), L(i, -h), L(i, h), [road.tx[i] * s, 0, road.tz[i] * s]);
+        // A deck that stops short of its route's point (`Road.trim`): an end wall across it, parapet to parapet.
+        // Where the traffic comes at it (the route's end), yellow-and-black boards on the wall, amber flashers on
+        // top and the last of the lanes hatched off; everything has left by the ramp before it.
+        if (!road.trim?.[i === 0 ? 0 : 1]) continue;
+        const ax = Math.abs(road.tx[i]);
+        const az = Math.abs(road.tz[i]);
+        const y = road.y[i];
+        const P = (lat: number, out: number): [number, number] => [road.x[i] + road.tz[i] * lat + road.tx[i] * s * out, road.z[i] - road.tx[i] * lat + road.tz[i] * s * out];
+        const [wx, wz] = P(0, 0.125);
+        box(CONCRETE, wx, wz, y - 1.2, y + 1.05, az * (2 * h + 0.5) + ax * 0.25, ax * (2 * h + 0.5) + az * 0.25);
+        if (i === 0) continue;
+        for (let k = 0; k < 13; k++) {
+          const [bx, bz] = P((k - 6) * 0.7, -0.03);
+          mb.kind = KIND.gloss;
+          mb.color = lin(k % 2 ? 0x141414 : 0xe8c020);
+          mb.box(bx, bz, y + 0.2, y + 0.95, az * 0.7 + ax * 0.06, ax * 0.7 + az * 0.06, KIND.gloss, true);
+        }
+        mb.kind = KIND.emit;
+        mb.style = [EMIT.lamp, 0, 0, 0];
+        mb.color = [2.0, 1.1, 0.1];
+        for (const lat of [-3, 0, 3]) {
+          const [fx, fz] = P(lat, 0.125);
+          mb.box(fx, fz, y + 1.05, y + 1.25, 0.22, 0.22, KIND.emit, true);
+        }
+        mb.style = [0, 0, 0, 0];
+        mb.kind = KIND.paint;
+        mb.color = lin(0xe8e8e0);
+        for (let k = 3; k <= 36 && i - k - 1 >= 0; k += 3) {
+          const w = h - 1.2;
+          quad(L(i - k - 1, w, 0.02), L(i - k, w, 0.02), L(i - k, -w, 0.02), L(i - k - 1, -w, 0.02), [0, 1, 0]);
+        }
       }
     }
     if (road.kind === 'spur') portal(mb, road);

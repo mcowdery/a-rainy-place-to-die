@@ -1,6 +1,6 @@
 import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng, u01 } from '../../core/hash';
-import { frontSpan, isRiverWalk, isVerge, type Building3, type CellPlan3, type Road3 } from '../district/plan';
+import { frontSpan, isRiverWalk, isVerge, throughMouths, type Building3, type CellPlan3, type Road3 } from '../district/plan';
 import { frontFrame, styleFor } from './buildings';
 import { shopLight, TRADES } from './shops';
 import type { Light } from './lightmap';
@@ -78,12 +78,17 @@ const POLE_SPACING = 27;
 const LAMP_COLOR: C3 = [1.0, 0.8, 0.55];
 const POLE_LAMP: C3 = [0.8, 0.9, 1.0];
 
-/** Along-road spans of r not covered by crossing roads (with a margin), in the road's own axis. */
-function freeSpans(r: Road3, roads: readonly Road3[], margin: number): [number, number][] {
+/**
+ * Along-road spans of r not covered by crossing roads (with a margin), in the road's own axis; with `side`
+ * (-1 the low edge, 1 the high), only those reaching that side's pavement (throughMouths: a street's mouth).
+ */
+function freeSpans(r: Road3, roads: readonly Road3[], margin: number, side = 0): [number, number][] {
   const q = r.rect;
+  const s = r.sidewalk;
+  const band: Rect = side === 0 ? q : r.vertical ? { ...q, x: side < 0 ? q.x : q.x + q.w - s, w: s } : { ...q, y: side < 0 ? q.y : q.y + q.h - s, h: s };
   let spans: [number, number][] = [r.vertical ? [q.y, q.y + q.h] : [q.x, q.x + q.w]];
   for (const o of roads) {
-    if (o === r || o.vertical === r.vertical || o.kind === 'coast' || !overlaps(o.rect, q)) continue;
+    if (o === r || o.vertical === r.vertical || o.kind === 'coast' || !overlaps(o.rect, band)) continue;
     const [a, b] = r.vertical ? [o.rect.y - margin, o.rect.y + o.rect.h + margin] : [o.rect.x - margin, o.rect.x + o.rect.w + margin];
     spans = spans.flatMap(([s, e]) => (b <= s || a >= e ? [[s, e]] : ([[s, a], [b, e]] as [number, number][]).filter(([p, t]) => t - p > 2)));
   }
@@ -97,6 +102,8 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
   const cell = plan.rect;
   const mine = (x: number, z: number): boolean => x >= cell.x && z >= cell.y && x < cell.x + cell.w && z < cell.y + cell.h;
   const buildings = [...plan.buildings, ...extraBuildings];
+  // Streets reaching through the pavements at their mouths: no lamps or trees there.
+  const reach = throughMouths(plan.roads);
   // In front of a stamp (its entrance and forecourt): no street trees or hedges.
   const stampFronts = extraBuildings.map((b) => frontFrame(b));
   const beforeStamp = (x: number, z: number): boolean => stampFronts.some((f) => {
@@ -190,7 +197,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       const stopClear = (t: number): boolean => !edgeRoad || Math.abs((((t % CELL3) + CELL3) % CELL3) - CELL3 / 2) > 7;
       const bladeClear = (x: number, z: number, m: number): boolean => !plan.signs.some((g) => g.vertical && Math.hypot(g.x - x, g.z - z) < m);
       for (const side of [-1, 1]) {
-        for (const [s, e] of freeSpans(r, plan.roads, 2)) {
+        for (const [s, e] of freeSpans(r, reach, 2, side)) {
           // Street lamps on both pavements at the kerb, staggered; street trees between them (always on
           // boulevards, by the zone's streetTrees elsewhere), and on wide pavements a clipped hedge along
           // the kerb between lamp and tree.

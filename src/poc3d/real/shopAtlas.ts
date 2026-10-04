@@ -301,7 +301,7 @@ class MobSprites {
 function spriteFigure(kind: MobKind, r: Rng, x: number, floor: number): FigureSpec {
   const elder = kind !== 'maid' && kind !== 'run' && kind !== 'mannequin' && r.chance(0.12);
   const body: Body = kind === 'maid' ? 'woman' : elder ? 'elder' : r.chance(0.5) ? 'man' : 'woman';
-  const outfit: Outfit = kind === 'maid' ? 'maid' : elder ? r.pick(['plain', 'long'] as const) : r.pick(['plain', 'plain', 'suit', 'long', 'suit', 'work', 'backpack'] as const);
+  const outfit: Outfit = kind === 'maid' ? 'maid' : elder ? r.pick(['plain', 'long'] as const) : r.pick(['plain', 'plain', 'suit', 'long', 'suit', 'work', 'otaku'] as const);
   const hair: Hair = kind === 'mannequin' ? 'none' : body === 'woman' ? r.pick(['long', 'bun', 'short'] as const) : body === 'elder' ? r.pick(['none', 'short', 'hat'] as const) : r.pick(['short', 'short', 'cap', 'none'] as const);
   const sit = kind === 'sitFront' || kind === 'sitBack';
   const back = kind === 'standBack' || kind === 'sitBack';

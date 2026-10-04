@@ -32,7 +32,16 @@ export interface Road3 {
   readonly water?: 'river' | 'bay';
   /** The city's edge: a planted verge (a 'coast' strip) between the outer street and the land beyond. */
   readonly verge?: boolean;
+  /**
+   * Its junction boxes: the spans [from, to] along its length where other streets cross it (`junctionSpans`).
+   * Set by the model on cell-edge roads (`agreeJunctions`), which are in two cells' plans; absent, they're the
+   * plan's own cross streets.
+   */
+  readonly boxes?: readonly Span[];
 }
+
+/** A span [from, to] along a road's length (z for a north-south road, x for an east-west one). */
+export type Span = readonly [number, number];
 
 export interface Sign3 {
   readonly text: string;
@@ -203,6 +212,95 @@ const RIVER_ROAD = 12;
 export const isRiverWalk = (r: Road3): boolean => r.water !== undefined;
 /** The city's edge (land beyond not built: unzoned cells, the hills): a planted verge, then the outer street. */
 export const isVerge = (r: Road3): boolean => r.verge === true;
+
+/**
+ * The roads with each street that ends at another's side carried on through that road's pavement to its kerb.
+ * A street splitting a cell's interior stops flush with the road it meets (touching, not overlapping), so
+ * without this the pavement would run on across its mouth. For the ground (pavement cut, corners rounded) and
+ * the street furniture (none in the mouth); the asphalt and paint keep the plan's rects.
+ */
+export function throughMouths(roads: readonly Road3[]): Road3[] {
+  const EPS = 0.05;
+  return roads.map((o) => {
+    if (o.kind === 'coast') return o;
+    let q = o.rect;
+    for (const r of roads) {
+      if (r === o || r.vertical === o.vertical || r.sidewalk <= 0 || r.kind === 'coast') continue;
+      const R = r.rect;
+      // Its width must lie along r's length.
+      const [a, b, A, B] = o.vertical ? [q.x, q.x + q.w, R.x, R.x + R.w] : [q.y, q.y + q.h, R.y, R.y + R.h];
+      if (a < A - EPS || b > B + EPS) continue;
+      const s = r.sidewalk;
+      if (o.vertical) {
+        if (Math.abs(q.y - (R.y + R.h)) < EPS) q = { ...q, y: q.y - s, h: q.h + s };
+        else if (Math.abs(q.y + q.h - R.y) < EPS) q = { ...q, h: q.h + s };
+      } else if (Math.abs(q.x - (R.x + R.w)) < EPS) q = { ...q, x: q.x - s, w: q.w + s };
+      else if (Math.abs(q.x + q.w - R.x) < EPS) q = { ...q, w: q.w + s };
+    }
+    return q === o.rect ? o : { ...o, rect: q };
+  });
+}
+
+/** Junction boxes closer than this along a road are one junction: no room between them for a crossing and a stop line. */
+const BOX_GAP = 10;
+
+/** Where a plan's other streets cross a road, as spans along it. */
+function crossSpans(r: Road3, roads: readonly Road3[]): Span[] {
+  const out: Span[] = [];
+  for (const o of roads) {
+    if (o === r || o.vertical === r.vertical || o.kind === 'coast' || !overlaps(o.rect, r.rect)) continue;
+    out.push(r.vertical ? [o.rect.y, o.rect.y + o.rect.h] : [o.rect.x, o.rect.x + o.rect.w]);
+  }
+  return out;
+}
+
+/** Spans in order, those overlapping or within BOX_GAP of each other joined. */
+function joinSpans(spans: readonly Span[]): Span[] {
+  const out: [number, number][] = [];
+  for (const [a, b] of [...spans].sort((p, q) => p[0] - q[0])) {
+    const last = out[out.length - 1];
+    if (last && a - last[1] < BOX_GAP) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+
+/**
+ * The junction boxes along a road: the spans along its length where other streets cross it, in order. The
+ * crossings, stop lines and lane lines (real/ground.ts), the medians' ends and the people waiting to cross
+ * (real/people.ts) all stand off these. `roads` is the road's plan's.
+ */
+export function junctionSpans(r: Road3, roads: readonly Road3[]): readonly Span[] {
+  return r.boxes ?? joinSpans(crossSpans(r, roads));
+}
+
+/**
+ * A cell's plan with its cell-edge roads' junction boxes agreed with the cells across them, and its medians cut
+ * to them. A cell-edge road is planned by both cells it runs between, each drawing its own half, and each
+ * knows only its own cross streets: at a grid corner, the street on its side of the line, which is often wider
+ * or narrower than the one carrying on across it (hashed widths; an avenue ending or narrowing there; a
+ * waterfront street on one side only). Left to themselves the two halves put the crossing, the stop line and
+ * the median's nose at different places. So both take the same boxes: every cross street of either cell.
+ * `neighbours`: the plans (as planCell3 made them) of the cells west, east, north and south, null where none.
+ */
+export function agreeJunctions(plan: CellPlan3, neighbours: readonly (CellPlan3 | null)[]): CellPlan3 {
+  const R = plan.rect;
+  const on = (a: number, b: number): boolean => Math.abs(a - b) < 0.01;
+  const line = (r: Road3): number => (r.vertical ? r.rect.x + r.rect.w / 2 : r.rect.y + r.rect.h / 2);
+  const roads = plan.roads.map((r) => {
+    if (r.kind === 'coast') return r;
+    const c = line(r);
+    // The cell across it: west, east, north or south of this one.
+    const side = r.vertical ? (on(c, R.x) ? 0 : on(c, R.x + R.w) ? 1 : -1) : on(c, R.y) ? 2 : on(c, R.y + R.h) ? 3 : -1;
+    const across = side < 0 ? null : neighbours[side];
+    // The same road in that cell's plan (its rect may differ: one cell may end it short at a waterfront).
+    const twin = across?.roads.find((t) => t.kind !== 'coast' && t.vertical === r.vertical && on(line(t), c));
+    if (!across || !twin) return r;
+    return { ...r, boxes: joinSpans([...crossSpans(r, plan.roads), ...crossSpans(twin, across.roads)]) };
+  });
+  return { ...plan, roads, medians: medianRects(roads) };
+}
+
 const FLOOR_H = 3;
 
 export const NEON_SIGN_COLORS = [0xff5fc8, 0x4fe3ff, 0xffe45f, 0x6bff8a, 0xff4f4f, 0xb48cff] as const;
@@ -589,11 +687,10 @@ function medianRects(roads: readonly Road3[]): Rect[] {
     if (!r.median) continue;
     const q = r.rect;
     const strip: Rect = r.vertical ? { x: q.x + q.w / 2 - r.median / 2, y: q.y, w: r.median, h: q.h } : { x: q.x, y: q.y + q.h / 2 - r.median / 2, w: q.w, h: r.median };
-    // Along the road: the spans between the crossings.
+    // Along the road: the spans between the junction boxes.
     let spans: [number, number][] = [r.vertical ? [q.y, q.y + q.h] : [q.x, q.x + q.w]];
-    for (const o of roads) {
-      if (o === r || o.vertical === r.vertical || o.kind === 'coast' || !overlaps(o.rect, q)) continue;
-      const [a, b] = r.vertical ? [o.rect.y - 4, o.rect.y + o.rect.h + 4] : [o.rect.x - 4, o.rect.x + o.rect.w + 4];
+    for (const [ja, jb] of junctionSpans(r, roads)) {
+      const [a, b] = [ja - 4, jb + 4];
       spans = spans.flatMap(([s, e]) => [[s, Math.min(e, a)], [Math.max(s, b), e]] as [number, number][]).filter(([s, e]) => e - s > 1);
     }
     for (const [s, e] of spans) out.push(r.vertical ? { x: strip.x, y: s, w: strip.w, h: e - s } : { x: s, y: strip.y, w: e - s, h: strip.h });

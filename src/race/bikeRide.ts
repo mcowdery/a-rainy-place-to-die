@@ -4,7 +4,10 @@ import type { Bike } from '../poc3d/models/bikeKit';
 import { buildBosozoku } from '../poc3d/models/bosozoku';
 import { setCharacterEnvironment } from '../poc3d/models/characters';
 import { buildCruiser, CRUISER_LOOKS } from '../poc3d/models/cruiser';
-import { FirstPersonRig } from '../poc3d/models/firstPerson';
+import type { FirstPersonRig } from '../poc3d/models/firstPerson';
+import { loadDressed } from '../poc3d/models/wardrobe';
+import type { ShotgunKind } from '../poc3d/models/shotgun';
+import { buildSportBike, SPORT_LOOKS } from '../poc3d/models/sportbike';
 import type { SoundProfile } from './catalog';
 import type { Car, CarSpec, Ground } from './vehicle';
 
@@ -18,13 +21,15 @@ import type { Car, CarSpec, Ground } from './vehicle';
  * third person behind the bike with his head shown.
  */
 
-export type BikeId = 'cruiser' | 'cruiser-silver' | 'bosozoku';
+export type BikeId = 'cruiser' | 'cruiser-silver' | 'bosozoku' | 'hayate' | 'hayate-white' | 'hayate-red';
 
 export interface BikeDef {
   readonly name: string;
   readonly spec: CarSpec;
   readonly sound: SoundProfile;
   readonly build: (env: THREE.Texture | null) => Bike;
+  /** The gun Mack carries on it (X draws it): the cruiser's shotgun, the sports bike's Type 54. */
+  readonly gun: ShotgunKind;
 }
 
 /** The Kaiun Raijin 1600: heavy, torquey, long; slides when provoked and holds a slide on the throttle. */
@@ -53,13 +58,37 @@ const CRUISER_SPEC: CarSpec = {
   size: [1.15, 0.45],
 };
 
+/** The Ōmi Hayate 900RR: light, short, a lot of power, quick to turn; grips harder, slides when you make it. */
+const SPORT_SPEC: CarSpec = {
+  ...CRUISER_SPEC,
+  mass: 290,
+  a: 0.72,
+  b: 0.68,
+  cgHeight: 0.6,
+  power: 95000,
+  maxDrive: 4200,
+  brake: 1.15,
+  brakeFront: 0.72,
+  drag: 0.26,
+  gripFront: 1.15,
+  gripRear: 1.14,
+  lock: 0.5,
+  lockHalf: 26,
+  steerRate: 3.6,
+  shift: [16, 27, 37, 47, 56, 999],
+  size: [1.05, 0.4],
+};
+
 /** The bōsōzoku 400: lighter, revvier, less pull. */
 const BOSO_SPEC: CarSpec = { ...CRUISER_SPEC, mass: 300, a: 0.74, b: 0.7, power: 38000, maxDrive: 3300, gripRear: 1.04, lock: 0.6, shift: [12, 20, 28, 36, 999], size: [1.05, 0.42] };
 
 export const BIKES: Record<BikeId, BikeDef> = {
-  cruiser: { name: 'Kaiun Raijin 1600', spec: CRUISER_SPEC, sound: { maxRpm: 5600, fire: 1, buzz: 0.2 }, build: (env) => buildCruiser(env, CRUISER_LOOKS.black) },
-  'cruiser-silver': { name: 'Kaiun Raijin 1600 (silver)', spec: CRUISER_SPEC, sound: { maxRpm: 5600, fire: 1, buzz: 0.2 }, build: (env) => buildCruiser(env, CRUISER_LOOKS.silver) },
-  bosozoku: { name: 'Seika Shiden 400F', spec: BOSO_SPEC, sound: { maxRpm: 10500, fire: 2, buzz: 0.6 }, build: (env) => buildBosozoku(env) },
+  cruiser: { name: 'Kaiun Raijin 1600', spec: CRUISER_SPEC, sound: { maxRpm: 5600, fire: 1, buzz: 0.2 }, build: (env) => buildCruiser(env, CRUISER_LOOKS.black), gun: 'lever' },
+  'cruiser-silver': { name: 'Kaiun Raijin 1600 (silver)', spec: CRUISER_SPEC, sound: { maxRpm: 5600, fire: 1, buzz: 0.2 }, build: (env) => buildCruiser(env, CRUISER_LOOKS.silver), gun: 'lever' },
+  bosozoku: { name: 'Seika Shiden 400F', spec: BOSO_SPEC, sound: { maxRpm: 10500, fire: 2, buzz: 0.6 }, build: (env) => buildBosozoku(env), gun: 'lever' },
+  hayate: { name: 'Ōmi Hayate 900RR', spec: SPORT_SPEC, sound: { maxRpm: 11500, fire: 2, buzz: 0.75 }, build: (env) => buildSportBike(env, SPORT_LOOKS.black), gun: 'pistol' },
+  'hayate-white': { name: 'Ōmi Hayate 900RR (white)', spec: SPORT_SPEC, sound: { maxRpm: 11500, fire: 2, buzz: 0.75 }, build: (env) => buildSportBike(env, SPORT_LOOKS.white), gun: 'pistol' },
+  'hayate-red': { name: 'Ōmi Hayate 900RR (red and black)', spec: SPORT_SPEC, sound: { maxRpm: 11500, fire: 2, buzz: 0.75 }, build: (env) => buildSportBike(env, SPORT_LOOKS.redblack), gun: 'pistol' },
 };
 
 export function bikeIdOf(p: string | null): BikeId | null {
@@ -92,12 +121,34 @@ export class BikeRide {
   private readonly eye = new THREE.PerspectiveCamera();
   lean = 0;
   private shots = 0;
+  /** The gun he had before he got on, back in his hand when he gets off. */
+  private footGun: ShotgunKind = 'lever';
   private readonly chase = new THREE.Vector3();
   private chaseSet = false;
 
   private constructor(readonly id: BikeId, bike: Bike) {
     this.def = BIKES[id];
     this.bike = bike;
+  }
+
+  /** Seats a rider on this bike: its gun to hand (put away), its helmet on if it has one. */
+  mount(rig: FirstPersonRig): void {
+    this.rig = rig;
+    this.shots = rig.shotsFired;
+    rig.mounted = this.bike;
+    rig.armed = false;
+    rig.aiming = false;
+    this.footGun = rig.kind;
+    rig.setKind(this.def.gun);
+    rig.setHelmet(this.bike.rider.helmet ?? rig.wornHelmet ?? false);
+  }
+
+  /** The rider gets off: the bike's helmet comes off (his own stays on), his own gun back in hand. */
+  unmount(): void {
+    if (!this.rig) return;
+    this.rig.mounted = null;
+    this.rig.setHelmet(this.rig.wornHelmet ?? false);
+    this.rig.setKind(this.footGun);
   }
 
   /** Over a bike and a rider made elsewhere (the city's: its own rig, the bike in its parent). */
@@ -124,15 +175,12 @@ export class BikeRide {
     const ride = new BikeRide(id, BikeRide.buildBike(id, env));
     scene.add(ride.bike.root);
     setCharacterEnvironment(env);
-    void FirstPersonRig.load('mack', env).then((rig) => {
+    void loadDressed(env).then((rig) => {
       // Its own muzzle light stays out (a new light recompiles every shader); the page's shooting flashes.
       rig.object.remove(rig.flashLight);
-      rig.armed = false;
-      rig.mounted = ride.bike;
       dimEnv(rig.object);
       scene.add(rig.object);
-      ride.rig = rig;
-      ride.shots = rig.shotsFired;
+      ride.mount(rig);
     });
     return ride;
   }
@@ -180,7 +228,8 @@ export class BikeRide {
     const eyePos = rig ? rig.seatBody(this.bike) : this.bike.root.localToWorld(new THREE.Vector3(0, 1.55, 0.2));
     this.eye.position.copy(eyePos);
     if (v.aiming && rig?.armed) this.eye.quaternion.setFromEuler(new THREE.Euler(v.aimPitch, v.aimYaw + Math.PI, 0, 'YXZ'));
-    else this.eye.quaternion.copy(bikeQ).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(v.lookPitch - 0.08, v.orbitYaw, 0, 'YXZ')));
+    // (Tucked in on a sports bike the view drops a little, the screen and the dash at its foot.)
+    else this.eye.quaternion.copy(bikeQ).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(v.lookPitch - 0.08 - 0.12 * (this.bike.rider.tuck ?? 0), v.orbitYaw, 0, 'YXZ')));
     this.eye.updateMatrixWorld();
     if (rig) {
       rig.setHeadless(!v.third);

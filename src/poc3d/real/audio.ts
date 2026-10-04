@@ -2,17 +2,28 @@
  * The city's sound, in WebAudio: rain, wind, thunder and wet tyres. Everything is synthesized from noise
  * so it works with no files, but a recording dropped into assets/audio/ replaces its synthesized part
  * (see assets/audio/README.md): rain_loop, rain_roof_loop, wind_loop, tyre_hiss (loops), thunder_1..n and
- * step_<hard|grass|gravel>_1..n (footsteps; a splash joins in on wet ground).
+ * step_<surface>[_<footwear>]_1..n (footsteps; a splash joins in on wet ground).
  *
  * - Rain: a bed of filtered noise (a distant hiss and a nearer body) whose level and brightness follow
- *   the rain, plus close patter (short random clicks, panned). Under a roof the bed is low-passed and a
- *   hollow drumming and drips join in; fully indoors (a shop, a basement) it's heavily muffled.
+ *   the rain, plus close patter (short random clicks, panned). Under a roof the bed is duller and a
+ *   hollow drumming and drips join in; indoors (a shop, a basement) it's the rain through the walls: the hiss
+ *   gone, the body of it left, quiet.
+ * - Cover: the outside is heard three ways at once (as it is, from under a roof, through walls) and going in
+ *   or out crossfades between them over `COVER_FADE` (no filter is swept: the top of the sound fades out), the
+ *   close drops, the drumming and the drips moving with the same fade.
  * - Wind: band-passed noise following the gusts; a resonant howl on top in a gale.
  * - Thunder: a crack for close strikes, a long low roll for far ones, delayed by distance (340 m/s).
  * - Tyres and engines: for the nearest cars, a tyre hiss (loud on wet roads) and an engine whose pitch
  *   follows speed, gears and throttle, idling at the lights, with Doppler as they pass.
+ * - Footsteps: one for each surface (district/footing.ts) in each kind of footwear, on the foot that lands,
+ *   modelled in real/stepSynth.ts (rendered a few of each as they're first needed) with a little of the space
+ *   round them.
+ * - In a car's cabin the world outside is dulled and quieter, and the rain drums on the roof.
  * The context starts on the first click (browsers need a gesture).
  */
+
+import type { Footwear, Surface } from '../district/footing';
+import { renderSplash, renderStep } from './stepSynth';
 
 const recordings = import.meta.glob('../../../assets/audio/*.{ogg,mp3,wav,m4a}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const recording = (name: string): string | null => Object.entries(recordings).find(([k]) => k.split('/').pop()!.replace(/\.\w+$/, '') === name)?.[1] ?? null;
@@ -41,28 +52,85 @@ export interface AudioFrame {
   /** Nearest vehicles (position, velocity, speed, acceleration, bus), nearest first; how wet the road is 0-1. */
   readonly cars: readonly { readonly x: number; readonly z: number; readonly vx: number; readonly vz: number; readonly speed: number; readonly acc: number; readonly bus: boolean }[];
   readonly wet: number;
+  /** How far inside a car's cabin the listener is (0 out in the open, 1 shut in): the world outside is muffled. */
+  readonly cabin?: number;
+  /** The cabin's damping (0 none: as outside; 0.5 as built; 1 nearly everything shut out), and how loud the rain
+   * drums on the car's roof (1 as built). Only the car: buildings have their own cover. */
+  readonly cabinDamp?: number;
+  readonly cabinRoof?: number;
   /** Summer: the cicadas' daytime chorus (0-1, louder in a heat wave and among trees), and the higurashi at dusk. */
   readonly cicadas?: number;
   readonly higurashi?: number;
 }
 
 const TYRE_VOICES = 3;
+/** Going in under cover or back out, and getting into a car's cabin: seconds for the sound to cross over. */
+const COVER_FADE = 0.9;
+const CABIN_FADE = 0.6;
+/** How loud the outside is through walls. */
+const INDOOR_LEVEL = 0.4;
+
+/** A filter in a chain: its type, frequency, Q and (shelves) its gain in dB. */
+type Filter = readonly [type: BiquadFilterType, hz: number, q: number, db?: number];
+/** A bus heard several ways at once (CityAudio.blend): what feeds it, and each way's level. */
+interface Blend {
+  readonly input: GainNode;
+  readonly gains: readonly GainNode[];
+}
+
+/** A footstep: what's on the feet, which foot (panned a little its way), how much of a run it is (0..1), how full
+ * the stride (0..1), how wet the ground, what's overhead, and for a landing the fall's speed (m/s). */
+export interface StepOptions {
+  readonly footwear: Footwear;
+  readonly foot?: 'l' | 'r';
+  readonly run: number;
+  readonly weight?: number;
+  readonly wet: number;
+  /** How deep in a puddle this foot lands (0 none, 1 the middle of one: roadGrip.ts `puddleAt`). */
+  readonly puddle?: number;
+  readonly cover: 'open' | 'roof' | 'enclosed';
+  readonly volume: number;
+  readonly land?: number;
+}
+
+/** How many different steps of each kind are kept (rendered one at a time, as they're first wanted). */
+const STEP_VARIANTS = 6;
+/** A step's level against the rest of the city's sound, and how much of the space round it is heard with it. */
+const STEP_LEVEL = 0.3;
+const STEP_ROOM = { open: 0.07, roof: 0.16, enclosed: 0.3 } as const;
+
+/** Recordings made before the surfaces were told apart: step_hard_* stands in for these. */
+const HARD: ReadonlySet<Surface> = new Set(['asphalt', 'paving', 'tile']);
+/** Ground that holds water: a step on it wet has a tsk of it, and in a puddle splashes. */
+const PUDDLED: ReadonlySet<Surface> = new Set(['asphalt', 'paving', 'gravel', 'earth']);
 
 export class CityAudio {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
+  private music!: GainNode;
+  /** The world outside (weather, traffic, insects): as it is, or through a car's glass. */
+  private world!: Blend;
   private noise!: AudioBuffer;
   private clicks: AudioBuffer[] = [];
   private buffers = new Map<string, AudioBuffer>();
   private thunderBuffers: AudioBuffer[] = [];
   private stepBuffers = new Map<string, AudioBuffer[]>();
+  /** Synthesized steps by kind (real/stepSynth.ts), the one last played, and the space a step sounds in. */
+  private readonly stepRendered = new Map<string, AudioBuffer[]>();
+  private stepLast: AudioBuffer | null = null;
+  private stepRoom!: ConvolverNode;
   // Rain bed.
   private bedGain!: GainNode;
   private bedHiss!: BiquadFilterNode;
   private bedBody!: BiquadFilterNode;
   private bedHissGain!: GainNode;
   private bedBodyGain!: GainNode;
-  private cover!: BiquadFilterNode;
+  /** Everything out of doors: as it is, from under a roof, or through walls. */
+  private cover!: Blend;
+  /** Where the listener is, each easing toward the frame's (0..1): inside walls, under any roof, in a cabin. */
+  private indoorT = 0;
+  private roofT = 0;
+  private cabinT = 0;
   private patterBus!: GainNode;
   private roofGain!: GainNode;
   // Wind.
@@ -87,6 +155,12 @@ export class CityAudio {
     return this.ctx !== null;
   }
 
+  /** Where music joins the graph (real/radio.ts): under the master volume, beside the city's sound. Null until
+   * the context has started. */
+  musicOut(): { ctx: AudioContext; out: AudioNode } | null {
+    return this.ctx ? { ctx: this.ctx, out: this.music } : null;
+  }
+
   /** Creates the audio graph (call from a user gesture). Safe to call again (resumes). */
   start(): void {
     if (this.ctx) {
@@ -100,6 +174,11 @@ export class CityAudio {
     comp.threshold.value = -14;
     comp.ratio.value = 4;
     this.master.connect(comp).connect(ctx.destination);
+    // Music (the car's radio) goes round the compressor: the city's sound mustn't pump it.
+    this.music = ctx.createGain();
+    this.music.gain.value = 0;
+    this.music.connect(ctx.destination);
+    this.world =this.blend(this.master, [[], [['lowpass', 1100, 0.5], ['highshelf', 3000, 0, -9]]]);
     // A few seconds of white noise, and short click grains of different lengths.
     const len = ctx.sampleRate * 4;
     this.noise = ctx.createBuffer(2, len, ctx.sampleRate);
@@ -107,6 +186,19 @@ export class CityAudio {
       const d = this.noise.getChannelData(c);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     }
+    // The space round a footstep: a short dark echo (noise dying away over half a second, its top rolled off).
+    this.stepRoom = ctx.createConvolver();
+    const room = ctx.createBuffer(2, Math.round(ctx.sampleRate * 0.5), ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = room.getChannelData(c);
+      let low = 0;
+      for (let i = Math.round(ctx.sampleRate * 0.006); i < d.length; i++) {
+        low += ((Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.07)) - low) * 0.45;
+        d[i] = low;
+      }
+    }
+    this.stepRoom.buffer = room;
+    this.stepRoom.connect(this.master);
     for (const ms of [6, 10, 16, 26]) {
       const n = Math.round((ctx.sampleRate * ms) / 1000);
       const b = ctx.createBuffer(1, n, ctx.sampleRate);
@@ -114,15 +206,13 @@ export class CityAudio {
       for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.exp((-i / n) * 5);
       this.clicks.push(b);
     }
-    // Everything rainy goes through the cover filter (open: bright; roof: dull; enclosed: very dull).
-    this.cover = ctx.createBiquadFilter();
-    this.cover.type = 'lowpass';
-    this.cover.frequency.value = 18000;
-    this.cover.connect(this.master);
+    // Everything out of doors goes through the cover: bright in the open, duller under a roof, and through walls
+    // only its middle (the rumble under it and the hiss over it taken off).
+    this.cover = this.blend(this.world.input, [[], [['lowpass', 3200, 0.5]], [['highpass', 110, 0.5], ['lowpass', 950, 0.5], ['highshelf', 2600, 0, -14]]]);
     // Rain bed: two filtered noise layers.
     this.bedGain = ctx.createGain();
     this.bedGain.gain.value = 0;
-    this.bedGain.connect(this.cover);
+    this.bedGain.connect(this.cover.input);
     this.bedHiss = ctx.createBiquadFilter();
     this.bedHiss.type = 'highpass';
     this.bedHiss.frequency.value = 2200;
@@ -136,7 +226,7 @@ export class CityAudio {
     this.loop(this.noise, 1.3).connect(this.bedBody).connect(this.bedBodyGain).connect(this.bedGain);
     // Patter (close drops) and roof drumming.
     this.patterBus = ctx.createGain();
-    this.patterBus.connect(this.cover);
+    this.patterBus.connect(this.cover.input);
     this.roofGain = ctx.createGain();
     this.roofGain.gain.value = 0;
     const roofLp = ctx.createBiquadFilter();
@@ -150,19 +240,19 @@ export class CityAudio {
     this.windBand.type = 'bandpass';
     this.windBand.frequency.value = 300;
     this.windBand.Q.value = 0.6;
-    this.loop(this.noise, 2.1).connect(this.windBand).connect(this.windGain).connect(this.master);
+    this.loop(this.noise, 2.1).connect(this.windBand).connect(this.windGain).connect(this.cover.input);
     this.howlGain = ctx.createGain();
     this.howlGain.gain.value = 0;
     this.howlBand = ctx.createBiquadFilter();
     this.howlBand.type = 'bandpass';
     this.howlBand.frequency.value = 600;
     this.howlBand.Q.value = 5;
-    this.loop(this.noise, 3.3).connect(this.howlBand).connect(this.howlGain).connect(this.master);
+    this.loop(this.noise, 3.3).connect(this.howlBand).connect(this.howlGain).connect(this.cover.input);
     // Train: a low rumble with the rail joints' rhythm.
     // Cicadas. The aburazemi: a bright sizzle, noise through a narrow band near 4.5 kHz, buzzed at ~50 Hz.
     this.cicadaGain = ctx.createGain();
     this.cicadaGain.gain.value = 0;
-    this.cicadaGain.connect(this.master);
+    this.cicadaGain.connect(this.cover.input);
     const sizzleBand = ctx.createBiquadFilter();
     sizzleBand.type = 'bandpass';
     sizzleBand.frequency.value = 4000;
@@ -195,7 +285,7 @@ export class CityAudio {
       const gain = ctx.createGain();
       gain.gain.value = 0;
       const pan = ctx.createStereoPanner();
-      this.loop(this.noise, 0.4 + i).connect(band).connect(gain).connect(pan).connect(this.cover);
+      this.loop(this.noise, 0.4 + i).connect(band).connect(gain).connect(pan).connect(this.cover.input);
       // The engine: a low sawtooth and a detuned square an octave down (the firing rumble), filtered
       // brighter under load; pitch follows the revs, Doppler as it passes.
       const engine = ctx.createGain();
@@ -216,6 +306,43 @@ export class CityAudio {
       this.tyres.push({ gain, pan, band, engine, osc, lp });
     }
     void this.loadRecordings();
+    // The steps most likely to come first (the street, walking, and its wet), rendered while the page is idle, so
+    // the first footfall doesn't wait on a render.
+    const first: (() => void)[] = [];
+    for (const footwear of ['boots', 'shoes', 'bare'] as const) for (const surface of ['paving', 'asphalt'] as const) first.push(() => void this.stepBuffer(surface, footwear, false, false));
+    for (const depth of [0, 0.45, 1] as const) first.push(() => void this.splashBuffer(depth, false));
+    const next = (): void => {
+      first.shift()?.();
+      if (first.length) setTimeout(next, 150);
+    };
+    setTimeout(next, 500);
+  }
+
+  /**
+   * A bus heard several ways at once: its sound down each chain of filters in parallel (an empty chain: as it is),
+   * each with its own level, into `out`; the first is on to begin with. Moving between them is a crossfade, so a
+   * change of place fades the top of the sound out rather than sweeping a filter down through it.
+   */
+  private blend(out: AudioNode, chains: readonly (readonly Filter[])[]): Blend {
+    const ctx = this.ctx!;
+    const input = ctx.createGain();
+    const gains = chains.map((chain, i) => {
+      let node: AudioNode = input;
+      for (const [type, hz, q, db] of chain) {
+        const b = ctx.createBiquadFilter();
+        b.type = type;
+        b.frequency.value = hz;
+        b.Q.value = q;
+        if (db !== undefined) b.gain.value = db;
+        node.connect(b);
+        node = b;
+      }
+      const g = ctx.createGain();
+      g.gain.value = i === 0 ? 1 : 0;
+      node.connect(g).connect(out);
+      return g;
+    });
+    return { input, gains };
   }
 
   /** A looping noise (or recording) source, started at an offset so layers don't line up. */
@@ -246,14 +373,11 @@ export class CityAudio {
       const b = await load(url);
       if (b) this.thunderBuffers.push(b);
     }
-    for (const surface of ['hard', 'grass', 'gravel']) {
-      const list: AudioBuffer[] = [];
-      for (const [k, url] of Object.entries(recordings)) {
-        if (!new RegExp(`/step_${surface}_\\d+\\.\\w+$`).test(k)) continue;
-        const b = await load(url);
-        if (b) list.push(b);
-      }
-      if (list.length) this.stepBuffers.set(surface, list);
+    // Footsteps: step_<surface>_<n>, or step_<surface>_<footwear>_<n> for one kind of footwear.
+    for (const [k, url] of Object.entries(recordings)) {
+      const name = /\/step_([a-z_]+)_\d+\.\w+$/.exec(k)?.[1];
+      const b = name ? await load(url) : null;
+      if (b) this.stepBuffers.set(name!, [...(this.stepBuffers.get(name!) ?? []), b]);
     }
     // Swap in: a recorded rain bed replaces both noise layers; wind and tyres replace their noise sources.
     const rain = this.buffers.get('rain_loop');
@@ -312,85 +436,89 @@ export class CityAudio {
   }
 
   /**
-   * A footstep (or a landing, land > 0: the fall speed in m/s). Hard ground is a heel-toe scuff with a
-   * soft thump; grass a dull brush; gravel a crunch of small grains; on wet ground a splash joins in.
-   * Indoors (enclosed) it's closer and duller. Recordings step_<surface>_1..n replace the synthesis.
+   * A synthesized step of this kind (real/stepSynth.ts: the strike ringing the shoe and the floor, the weight
+   * behind it, the sole's roll, the ground's own texture). `STEP_VARIANTS` of each are kept: the first is rendered
+   * when it's first wanted (up to ~10 ms, once a kind) and the rest one at a time while the page is idle; the
+   * same one never plays twice running.
    */
-  step(surface: 'hard' | 'grass' | 'gravel', o: { run: boolean; wet: number; cover: 'open' | 'roof' | 'enclosed'; volume: number; land?: number }): void {
+  private stepBuffer(surface: Surface, footwear: Footwear, run: boolean, land: boolean): AudioBuffer {
+    const ctx = this.ctx!;
+    return this.rendered(`${surface}|${footwear}|${run ? 'run' : 'walk'}|${land ? 'land' : ''}`, (seed) => renderStep(surface, footwear, { run, land, seed, sampleRate: ctx.sampleRate }));
+  }
+
+  /** A foot in water (real/stepSynth.ts `renderSplash`): wet ground's tsk (depth 0), a shallow puddle, a deep one. */
+  private splashBuffer(depth: 0 | 0.45 | 1, run: boolean): AudioBuffer {
+    const ctx = this.ctx!;
+    return this.rendered(`splash|${depth}|${run ? 'run' : 'walk'}`, (seed) => renderSplash({ depth, run, seed, sampleRate: ctx.sampleRate }));
+  }
+
+  private rendered(key: string, make: (seed: number) => Float32Array): AudioBuffer {
+    const ctx = this.ctx!;
+    let list = this.stepRendered.get(key);
+    if (!list) {
+      const made: AudioBuffer[] = (list = []);
+      this.stepRendered.set(key, made);
+      const render = (): void => {
+        const data = make(Math.floor(Math.random() * 0xffffffff));
+        const b = ctx.createBuffer(1, data.length, ctx.sampleRate);
+        b.getChannelData(0).set(data);
+        made.push(b);
+      };
+      render();
+      const idle = typeof requestIdleCallback === 'function' ? (f: () => void): unknown => requestIdleCallback(f, { timeout: 2000 }) : (f: () => void): unknown => setTimeout(f, 120);
+      const more = (): void => {
+        render();
+        if (made.length < STEP_VARIANTS) idle(more);
+      };
+      idle(more);
+    }
+    let b = list[Math.floor(Math.random() * list.length)];
+    if (list.includes(this.stepLast!) && b === this.stepLast && list.length > 1) b = list[(list.indexOf(b) + 1) % list.length];
+    if (!key.startsWith('splash')) this.stepLast = b;
+    return b;
+  }
+
+  /**
+   * A footstep on a surface (district/footing.ts) in a kind of footwear, on one foot (panned a little its way),
+   * or a landing (`land`: both feet, heavier). The sound is real/stepSynth.ts's, with a little of the space round
+   * it (more under a roof, most in a room). Out on wet ground the water joins in: a faint tsk where it's only
+   * wet, a splash where the foot lands in a puddle (`puddle`, bigger the deeper), the step under it dulled by the
+   * water. Recordings replace the synthesis:
+   * step_<surface>_<footwear>_<n>, else step_<surface>_<n> (step_hard_<n> for asphalt, paving and tile).
+   */
+  step(surface: Surface, o: StepOptions): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
     const land = o.land ?? 0;
-    const level = o.volume * (o.run ? 0.42 : 0.3) * (land > 0 ? 1.4 + Math.min(1, land / 6) : 1) * (0.85 + Math.random() * 0.3);
+    const bare = o.footwear === 'bare';
     const out = ctx.createGain();
-    out.gain.value = level;
+    out.gain.value = o.volume * STEP_LEVEL * (0.5 + 0.5 * (o.weight ?? 1)) * (land > 0 ? 1 + 0.4 * Math.min(1, land / 6) : 1) * (0.85 + Math.random() * 0.3);
     const pan = ctx.createStereoPanner();
-    pan.pan.value = (Math.random() - 0.5) * 0.25;
-    const tone = ctx.createBiquadFilter();
-    tone.type = 'lowpass';
-    tone.frequency.value = o.cover === 'enclosed' ? 3200 : 9000;
-    out.connect(tone).connect(pan).connect(this.master);
-    const files = this.stepBuffers.get(surface);
-    if (files?.length) {
-      const s = ctx.createBufferSource();
-      s.buffer = files[Math.floor(Math.random() * files.length)];
-      s.playbackRate.value = 0.92 + Math.random() * 0.16;
-      s.connect(out);
-      s.start(t);
-    } else {
-      // Noise through a band, with an envelope: a grain of the step.
-      const burst = (at: number, f: number, q: number, peak: number, len: number, type: BiquadFilterType = 'bandpass'): void => {
-        const s = ctx.createBufferSource();
-        s.buffer = this.noise;
-        const b = ctx.createBiquadFilter();
-        b.type = type;
-        b.frequency.value = f;
-        b.Q.value = q;
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0, at);
-        g.gain.linearRampToValueAtTime(peak, at + 0.004);
-        g.gain.exponentialRampToValueAtTime(0.0001, at + len);
-        s.connect(b).connect(g).connect(out);
-        s.start(at, Math.random() * 3);
-        s.stop(at + len + 0.02);
-      };
-      // The body of the step: a short low thump.
-      const o1 = ctx.createOscillator();
-      o1.frequency.setValueAtTime(land > 0 ? 70 : 95, t);
-      o1.frequency.exponentialRampToValueAtTime(40, t + 0.08);
-      const g1 = ctx.createGain();
-      g1.gain.setValueAtTime(0, t);
-      g1.gain.linearRampToValueAtTime(surface === 'hard' ? 0.5 : 0.35, t + 0.005);
-      g1.gain.exponentialRampToValueAtTime(0.0001, t + (land > 0 ? 0.16 : 0.09));
-      o1.connect(g1).connect(out);
-      o1.start(t);
-      o1.stop(t + 0.2);
-      if (surface === 'hard') {
-        // Heel, then toe.
-        burst(t, 2400 + Math.random() * 900, 1.2, 0.9, 0.045);
-        burst(t + (o.run ? 0.03 : 0.05), 3200 + Math.random() * 900, 1.4, 0.5, 0.035);
-      } else if (surface === 'grass') {
-        burst(t, 700 + Math.random() * 300, 0.6, 0.6, 0.12, 'lowpass');
-        burst(t + 0.03, 1800, 0.8, 0.25, 0.08);
-      } else {
-        for (let i = 0; i < 7; i++) burst(t + Math.random() * 0.08, 3000 + Math.random() * 3000, 3, 0.35 + Math.random() * 0.3, 0.012 + Math.random() * 0.012);
-        burst(t, 900, 0.7, 0.3, 0.09);
-      }
-    }
-    if (o.wet > 0.3 && o.cover === 'open' && surface !== 'grass') {
-      // A splash: bright noise with a little tail.
-      const s = ctx.createBufferSource();
-      s.buffer = this.noise;
-      const hp = ctx.createBiquadFilter();
-      hp.type = 'highpass';
-      hp.frequency.value = 1600;
+    pan.pan.value = (o.foot === 'l' ? -0.14 : o.foot === 'r' ? 0.14 : 0) + (Math.random() - 0.5) * 0.12;
+    out.connect(pan).connect(this.master);
+    const send = ctx.createGain();
+    send.gain.value = STEP_ROOM[o.cover];
+    pan.connect(send).connect(this.stepRoom);
+    const files = this.stepBuffers.get(`${surface}_${o.footwear}`) ?? this.stepBuffers.get(surface) ?? (HARD.has(surface) ? this.stepBuffers.get('hard') : undefined);
+    const s = ctx.createBufferSource();
+    s.buffer = files?.length ? files[Math.floor(Math.random() * files.length)] : this.stepBuffer(surface, o.footwear, o.run > 0.5, land > 0);
+    // (A recording is the same every time, so it's varied more than a rendered step, which never is.)
+    s.playbackRate.value = files?.length ? 0.92 + Math.random() * 0.16 : 0.97 + Math.random() * 0.06;
+    const water = o.cover === 'open' && PUDDLED.has(surface);
+    const puddle = water ? Math.min(1, o.puddle ?? 0) : 0;
+    const dry = ctx.createGain();
+    dry.gain.value = 1 - 0.5 * puddle;
+    s.connect(dry).connect(out);
+    s.start(t);
+    if (water && (puddle > 0.15 || o.wet > 0.3)) {
+      const w = ctx.createBufferSource();
+      w.buffer = this.splashBuffer(puddle > 0.6 ? 1 : puddle > 0.15 ? 0.45 : 0, o.run > 0.5 || land > 0);
+      w.playbackRate.value = (bare ? 1.06 : 1) * (0.95 + Math.random() * 0.1);
       const g = ctx.createGain();
-      g.gain.setValueAtTime(0, t + 0.01);
-      g.gain.linearRampToValueAtTime(0.5 * Math.min(1, o.wet), t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-      s.connect(hp).connect(g).connect(out);
-      s.start(t + 0.01, Math.random() * 3);
-      s.stop(t + 0.2);
+      g.gain.value = puddle > 0.15 ? (0.8 + 0.6 * puddle) * (land > 0 ? 1.3 : 1) : 0.7 * Math.min(1, o.wet);
+      w.connect(g).connect(out);
+      w.start(t);
     }
   }
 
@@ -436,7 +564,7 @@ export class CityAudio {
     lp.frequency.value = 900 + 2600 * near;
     const p = ctx.createStereoPanner();
     p.pan.value = Math.max(-1, Math.min(1, pan));
-    lp.connect(p).connect(this.master);
+    lp.connect(p).connect(this.cover.input);
     const [f1, f2] = bus ? [311, 392] : [415, 523];
     const blasts: [number, number][] = bus ? [[0, 0.7]] : [[0, 0.28], [0.36, 0.42]];
     for (const [at, len] of blasts) {
@@ -509,7 +637,7 @@ export class CityAudio {
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     const pn = ctx.createStereoPanner();
     pn.pan.value = Math.max(-0.9, Math.min(0.9, pan));
-    n.connect(bp).connect(g).connect(pn).connect(this.cover);
+    n.connect(bp).connect(g).connect(pn).connect(this.cover.input);
     n.start(t, Math.random() * 3, dur + 0.05);
   }
 
@@ -536,7 +664,7 @@ export class CityAudio {
     }
     const pn = ctx.createStereoPanner();
     pn.pan.value = Math.random() * 1.6 - 0.8;
-    o.connect(g).connect(pn).connect(this.master);
+    o.connect(g).connect(pn).connect(this.cover.input);
     o.start(t);
     o.stop(t + pulses / rate + 0.3);
   }
@@ -591,7 +719,7 @@ export class CityAudio {
     const level = 0.35 + 0.65 * near;
     const pan = ctx.createStereoPanner();
     pan.pan.value = Math.max(-0.8, Math.min(0.8, panTo));
-    pan.connect(this.cover);
+    pan.connect(this.cover.input);
     if (this.thunderBuffers.length) {
       const s = ctx.createBufferSource();
       s.buffer = this.thunderBuffers[Math.floor(Math.random() * this.thunderBuffers.length)];
@@ -648,55 +776,77 @@ export class CityAudio {
     const t = ctx.currentTime;
     const set = (p: AudioParam, v: number, tc = 0.25): void => void p.setTargetAtTime(v, t, tc);
     set(this.master.gain, f.volume * 0.9, 0.1);
-    const r = f.rain;
+    set(this.music.gain, f.volume, 0.1);
+    // Where the listener is, eased: a change of place is one crossfade, and everything that depends on it (the
+    // muffling, the close drops, the drumming overhead, the drips) moves with it.
+    const ramp = (v: number, to: number, secs: number): number => v + THREE_clamp(to - v, -f.dt / secs, f.dt / secs);
+    const ease = (x: number): number => x * x * (3 - 2 * x);
     const enclosed = f.cover === 'enclosed' || f.train;
-    const roof = f.cover === 'roof';
-    // Cover: out in the open everything is bright; under a roof dull; inside walls very dull.
-    set(this.cover.frequency, enclosed ? 420 : roof ? 2600 : 16000, 0.15);
-    const bedLevel = r <= 0 ? 0 : (0.12 + 0.55 * r) * (enclosed ? 0.35 : 1);
+    this.indoorT = ramp(this.indoorT, enclosed ? 1 : 0, COVER_FADE);
+    this.roofT = ramp(this.roofT, enclosed || f.cover === 'roof' ? 1 : 0, COVER_FADE);
+    this.cabinT = ramp(this.cabinT, THREE_clamp(f.cabin ?? 0, 0, 1), CABIN_FADE);
+    // Inside walls; under a roof with its sides open; out in the open. (They sum to one: what all three ways
+    // share, the low end, holds steady through a fade.)
+    const indoor = ease(this.indoorT);
+    const roof = ease(this.roofT) * (1 - indoor);
+    const open = 1 - indoor - roof;
+    set(this.cover.gains[0].gain, open, 0.03);
+    set(this.cover.gains[1].gain, roof, 0.03);
+    set(this.cover.gains[2].gain, indoor * INDOOR_LEVEL, 0.03);
+    // In a car's cabin the world outside comes through the glass: its top taken off, and quieter.
+    // (Its damping: up to a half, how much of the outside is heard through the glass rather than clear; and all
+    // the way, how quiet it is through it: 0.6 at a half, 0.2 at full.)
+    const damp = THREE_clamp(f.cabinDamp ?? 0.5, 0, 1);
+    const cabin = ease(this.cabinT) * Math.min(1, damp * 2);
+    set(this.world.gains[0].gain, 1 - cabin, 0.03);
+    set(this.world.gains[1].gain, cabin * (1 - 0.8 * damp), 0.03);
+    const r = f.rain;
+    const bedLevel = r <= 0 ? 0 : 0.12 + 0.55 * r;
     set(this.bedGain.gain, bedLevel);
     set(this.bedHissGain.gain, 0.5 + 0.5 * r);
     set(this.bedBodyGain.gain, 0.25 + 0.9 * r * r);
     set(this.bedHiss.frequency, 3200 - 1400 * r);
     this.levels.bed = bedLevel;
     // Patter: drops close by, more of them in heavy rain; none indoors, fewer under a roof.
-    const patterRate = r <= 0 || enclosed ? 0 : (20 + 160 * r) * (roof ? 0.25 : 1);
+    const patterRate = r <= 0 ? 0 : (20 + 160 * r) * (open + 0.25 * roof) * (1 - cabin);
     this.patterDebt += patterRate * f.dt;
     this.levels.patter = patterRate;
     while (this.patterDebt >= 1) {
       this.patterDebt -= 1;
       this.grain(this.patterBus, 0.05 + Math.random() * 0.12 * (0.5 + r), 0.6 + Math.random() * 1.2, Math.random() * 1.8 - 0.9);
     }
-    // Roof drumming and drips under cover.
-    const drumRate = roof && r > 0 ? 30 + 90 * r : 0;
-    set(this.roofGain.gain, roof && r > 0 ? 0.6 + 0.6 * r : 0, 0.2);
+    // Roof drumming and drips under cover (a car's roof too).
+    const drum = Math.max(roof, ease(this.cabinT) * (1 - indoor) * (f.cabinRoof ?? 1));
+    const drumRate = r > 0 ? (30 + 90 * r) * drum : 0;
+    set(this.roofGain.gain, r > 0 ? (0.6 + 0.6 * r) * drum : 0, 0.2);
     this.levels.roof = drumRate;
     this.roofDebt += drumRate * f.dt;
     while (this.roofDebt >= 1) {
       this.roofDebt -= 1;
       this.grain(this.roofGain, 0.15 + Math.random() * 0.25, 0.3 + Math.random() * 0.35, Math.random() * 1.4 - 0.7);
     }
-    this.dripDebt += (roof || (enclosed && f.cover === 'enclosed')) && r > 0 ? (roof ? 1.4 : 0.3) * f.dt : 0;
+    // (Drips off the roof's edge; indoors a few, faint, not aboard a train.)
+    this.dripDebt += r > 0 ? (1.4 * roof + (f.train ? 0 : 0.3 * indoor)) * f.dt : 0;
     while (this.dripDebt >= 1) {
       this.dripDebt -= 1;
-      this.drip(roof ? 0.08 : 0.03);
+      this.drip(roof > indoor ? 0.08 : 0.03);
     }
     // Wind: level and pitch with the gusts; the howl only in a gale. Low and soft, with no floor, so a
     // breeze is barely heard (not a constant hiss), and slow to follow the gusts, so it swells and ebbs
     // instead of fluttering with their quick wobble.
     const w = f.wind * f.gust;
-    const windLevel = w <= 0.01 ? 0 : 0.32 * w * w * (enclosed ? 0.25 : 1);
+    const windLevel = w <= 0.01 ? 0 : 0.32 * w * w;
     set(this.windGain.gain, windLevel, 1.2);
     set(this.windBand.frequency, 160 + 420 * w, 1.5);
-    set(this.howlGain.gain, Math.max(0, w - 0.6) * 0.22 * (enclosed ? 0.3 : 1), 1.2);
+    set(this.howlGain.gain, Math.max(0, w - 0.6) * 0.22, 1.2);
     set(this.howlBand.frequency, 340 + 420 * w + 40 * Math.sin(t * 0.4), 1);
     this.levels.wind = windLevel;
-    // Cicadas: the chorus swells and ebbs; muffled indoors, quiet in the rain.
+    // Cicadas: the chorus swells and ebbs; quiet in the rain (and, like the wind, shut out by the cover indoors).
     // (Kept low, a background to the day: it comes in waves with lulls between, never a constant whine.)
-    const cic = (f.cicadas ?? 0) * (enclosed ? 0.15 : roof ? 0.6 : 1) * (1 - Math.min(1, r * 2));
+    const cic = (f.cicadas ?? 0) * (1 - 0.4 * roof) * (1 - Math.min(1, r * 2));
     const wave = Math.max(0, Math.sin(t * 0.13) * 0.6 + Math.sin(t * 0.047 + 1.1) * 0.5 + 0.15);
     set(this.cicadaGain.gain, cic * 0.012 * Math.min(1, wave), 2.5);
-    const hig = (f.higurashi ?? 0) * (enclosed ? 0.25 : 1) * (1 - Math.min(1, r * 2));
+    const hig = (f.higurashi ?? 0) * (1 - 0.75 * indoor) * (1 - Math.min(1, r * 2));
     this.higurashiDebt += hig * f.dt * 0.12;
     if (this.higurashiDebt >= 1) {
       this.higurashiDebt = -Math.random() * 0.6;
@@ -729,7 +879,7 @@ export class CityAudio {
       set(v.osc[0].frequency, revs * doppler, 0.08);
       set(v.osc[1].frequency, revs * 0.5 * doppler * 1.01, 0.08);
       set(v.lp.frequency, 180 + 900 * throttle + c.speed * 20, 0.1);
-      set(v.engine.gain, (c.bus ? 0.16 : 0.1) * near * (0.35 + 0.65 * throttle) * (f.cover === 'enclosed' ? 0.3 : 1), 0.1);
+      set(v.engine.gain, (c.bus ? 0.16 : 0.1) * near * (0.35 + 0.65 * throttle), 0.1);
       tyreSum += level;
       set(v.gain.gain, level, 0.1);
       // Pan: how far right of the view the car is (yaw 0 looks toward -z; the right is then +x).

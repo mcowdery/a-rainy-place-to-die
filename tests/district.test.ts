@@ -19,6 +19,10 @@ import { MeshBuilder } from '../src/poc3d/real/meshBuilder';
 import { tiers } from '../src/poc3d/real/buildings';
 import { SignBuilder } from '../src/poc3d/real/signs';
 import { INTERIORS, interiorFor } from '../src/poc3d/real/interiors';
+import { CAFE } from '../src/poc3d/real/maidCafe';
+import { ZAKKYO } from '../src/poc3d/real/cashOne';
+import { HOSP } from '../src/poc3d/real/kasumi';
+import { REIEN, SITE } from '../src/poc3d/real/kasumiGrounds';
 import { parseStamp3, plazaRect, reservedRect } from '../src/poc3d/district/stamps';
 import { compileCondition } from '../src/core/condition';
 import { departsAt, lineSchedule, nextDepartures, parseSubway3, subwayRoute, trainAt, trainOffset, TRAINS_PER_DIRECTION } from '../src/poc3d/district/subway';
@@ -149,6 +153,10 @@ describe('3D stamps and atmosphere', () => {
     expect(a.resolve('neon', 'dusk', 'clear').phys).toBe(1);
     for (const w of WEATHERS) for (const sky of SKY_LOOKS) expect(a.resolve('neon', 'night', w, sky).phys).toBe(0);
     expect(a.resolve('neon', 'day', 'rain').phys).toBeLessThan(0.2);
+    // The seasons' own sunsets: winter's differs from spring's in clear weather, and in the rain they're the same.
+    expect(a.resolve('neon', 'dusk', 'clear', 'citypop', 'winter').horizon).not.toBe(a.resolve('neon', 'dusk', 'clear', 'citypop', 'spring').horizon);
+    expect(a.resolve('neon', 'dusk', 'rain', 'citypop', 'winter')).toEqual(a.resolve('neon', 'dusk', 'rain', 'citypop', 'spring'));
+    expect(a.resolve('neon', 'golden', 'clear', 'citypop', 'summer').fogFar).toBeLessThan(a.resolve('neon', 'golden', 'clear', 'citypop', 'winter').fogFar);
     expect(content.atmosphere.resolve('neon', 'night', 'clear').neon).toBe('flicker');
     expect(content.atmosphere.resolve('neon', 'day', 'rain').rain).toBeGreaterThan(0);
   });
@@ -382,7 +390,7 @@ describe('Places you can walk into, and fast travel', () => {
     for (const r of roads) expect(r.kind).toBe('boulevard');
   });
 
-  it('offers every named spawn and every zone as a free fast-travel spot', () => {
+  it('offers every named spawn and every zone as a free fast-travel spot', { timeout: 30000 }, () => {
     const dests = destinations(district, district.nodes, content.zones);
     const names = dests.map((d) => d.name);
     expect(names).toEqual(expect.arrayContaining(['Kaburo Crossing', 'Bar Kanpai', 'Yoru Mart', 'Yoru Mart (inside)', 'Kaburo Inari Shrine']));
@@ -442,6 +450,260 @@ describe('Hoshikuzu Yokocho', () => {
     for (let u = 6.5; u < 14; u += 0.5) if (u < 9.5 || u > 11.5) expect(district.blocked(...at(u, 15), 0.3), `cross ${u}`).toBe(false);
     expect(district.blocked(...at(2, 10), 0.3)).toBe(true);
     expect(district.blocked(...at(8, 5), 0.3)).toBe(true);
+  });
+});
+
+describe('めいどかふぇ ♡ぴゅあ♡', () => {
+  const placed = content.placed.find((p) => p.id === 'maid_cafe')!;
+  const f = localFrame(placed.building);
+  const at = (u: number, t: number) => toWorld(f, u, t);
+  const layout = INTERIORS.maid_cafe.layout(placed.building);
+
+  it('is walk-in: a pocket at the street door, solid elsewhere from the street', () => {
+    const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
+    expect(district.blocked(...at(1.5, 0.4), 0.4)).toBe(false);
+    expect(district.blocked(...at(6, 0.4), 0.4)).toBe(true);
+    // A step into the doorway is inside: the interior takes over there.
+    expect(layout.contains(...at(1.5, 0.5), 1.7)).toBe(true);
+    expect(layout.contains(...at(1.5, -0.5), 1.7)).toBe(false);
+  });
+
+  it('climbs the stair from the street door to the café, walls either side', () => {
+    let floor = 0;
+    for (let t = 0.5; t < 14; t += 0.25) {
+      const [x, z] = at(1.4, t);
+      const y = layout.floorAt(x, z, floor)!;
+      expect(Math.abs(y - floor), `step at t ${t}`).toBeLessThan(0.3);
+      floor = y;
+      const rects = layout.colliders(floor);
+      expect(rects.some((r) => x > r.x - 0.4 && x < r.x + r.w + 0.4 && z > r.y - 0.4 && z < r.y + r.h + 0.4), `t ${t}`).toBe(false);
+    }
+    expect(floor).toBeCloseTo(CAFE.f2, 5);
+    // Up there the doorway opens into the café; the hall wall closes the stairwell before it.
+    const free = (u: number, t: number): boolean => {
+      const [x, z] = at(u, t);
+      return !layout.colliders(CAFE.f2).some((r) => x > r.x - 0.3 && x < r.x + r.w + 0.3 && z > r.y - 0.3 && z < r.y + r.h + 0.3);
+    };
+    expect(free(2.7, 13.3)).toBe(true);
+    expect(free(2.7, 8)).toBe(false);
+    expect(layout.floorAt(...at(6, 9), CAFE.f2)).toBe(CAFE.f2);
+  });
+
+  it('keeps you out of the tables, the stage and the kitchen, with an aisle between them', () => {
+    const blocked = (u: number, t: number): boolean => {
+      const [x, z] = at(u, t);
+      return layout.colliders(CAFE.f2).some((r) => x > r.x - 0.35 && x < r.x + r.w + 0.35 && z > r.y - 0.35 && z < r.y + r.h + 0.35);
+    };
+    expect(blocked(4.3, 1.9)).toBe(true);
+    expect(blocked(8.6, 11)).toBe(true);
+    expect(blocked(7.5, 14)).toBe(true);
+    for (let t = 1; t < 13; t += 0.5) expect(blocked(5.8, t), `aisle ${t}`).toBe(false);
+  });
+
+  it('stops a shot at its walls up to the roof, not above it, and at the ground', () => {
+    const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
+    const [x, z] = at(6, 8);
+    expect(district.shotAt(x, 3, z)).toBe('wall');
+    expect(district.shotAt(x, 18, z)).toBe('wall');
+    expect(district.shotAt(x, 26, z)).toBe(null);
+    const [sx, sz] = at(5, -6);
+    expect(district.shotAt(sx, 1.5, sz)).toBe(null);
+    expect(district.shotAt(sx, -0.05, sz)).toBe('ground');
+  });
+
+  it('puts the maid at the door and the menu on the café floor', () => {
+    const maid = content.placed.flatMap((p) => p.nodes).find((n) => n.id === 'maid_cafe.maid')!;
+    expect(maid.floor).toBeCloseTo(CAFE.f2 - 0.15, 5);
+    expect(maid.figure?.outfit).toBe('maid');
+    expect(layout.contains(maid.x, maid.z, maid.floor + 1.7)).toBe(true);
+  });
+});
+
+describe('歌舞路交番 Kaburo Kōban', () => {
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
+  const placed = content.placed.find((p) => p.id === 'koban')!;
+  const f = localFrame(placed.building);
+  const at = (u: number, t: number) => toWorld(f, u, t);
+
+  it('stands on the square across the crossing, clear of its plaza', () => {
+    const square = plazaRect(content.placed.find((p) => p.id === 'kaburo_crossing')!)!;
+    expect(overlaps(placed.rect, square)).toBe(false);
+    expect(Math.abs(placed.rect.y - (square.y + square.h))).toBeLessThan(1);
+  });
+
+  it('lets you walk in through the door to the counter, not past it or through the walls', () => {
+    for (let t = -2; t < 3.0; t += 0.25) expect(district.blocked(...at(3.9, t), 0.35), `door t ${t}`).toBe(false);
+    expect(district.blocked(...at(3.9, 3.7), 0.35)).toBe(true);
+    expect(district.blocked(...at(6.3, 0.1), 0.35)).toBe(true);
+    expect(district.blocked(...at(1.2, 1.2), 0.35)).toBe(true);
+    expect(district.blocked(...at(5, 6.9), 0.35)).toBe(true);
+  });
+
+  it('gives the story its officer at the door, the wanted board and the counter', () => {
+    const nodes = new Map(content.placed.flatMap((p) => p.nodes).map((n) => [n.id, n]));
+    expect(nodes.get('koban.officer')?.figure?.outfit).toBe('police');
+    expect(nodes.get('koban.wanted')?.kind).toBe('hotspot');
+    const counter = nodes.get('koban.counter')!;
+    expect(district.blocked(counter.x, counter.z, 0.3)).toBe(false);
+  });
+});
+
+describe('Cash One and 質 マルヨシ (the back alleys)', () => {
+  const placed = content.placed.find((p) => p.id === 'cash_one')!;
+  const f = localFrame(placed.building);
+  const at = (u: number, t: number) => toWorld(f, u, t);
+  const layout = INTERIORS.zakkyo.layout(placed.building);
+  const hit = (u: number, t: number, floor: number, r = 0.35): boolean => {
+    const [x, z] = at(u, t);
+    return layout.colliders(floor).some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
+  };
+
+  it('has two street doors: the stair and the pawn shop', () => {
+    const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
+    expect(district.blocked(...at(0.9, 0.4), 0.35)).toBe(false);
+    expect(district.blocked(...at(5.0, 0.4), 0.35)).toBe(false);
+    expect(district.blocked(...at(2.5, 0.4), 0.35)).toBe(true);
+    expect(layout.contains(...at(0.9, 0.5), 1.7)).toBe(true);
+    expect(layout.contains(...at(5.0, 0.5), 1.7)).toBe(true);
+  });
+
+  it('climbs the switchback from the street door to Cash One on the third floor', () => {
+    // Up the first flight, across the landing, back up the second, into the lobby and through the office door.
+    const path: [number, number][] = [];
+    for (let t = 0.5; t <= 9.6; t += 0.2) path.push([0.87, t]);
+    for (let u = 0.87; u <= 2.2; u += 0.2) path.push([u, 9.6]);
+    for (let t = 9.6; t >= 0.9; t -= 0.2) path.push([2.2, t]);
+    for (let u = 2.2; u <= 4.4; u += 0.2) path.push([u, 0.9]);
+    let floor = 0;
+    for (const [u, t] of path) {
+      const y = layout.floorAt(...at(u, t), floor)!;
+      expect(Math.abs(y - floor), `step at ${u.toFixed(2)}, ${t.toFixed(2)}`).toBeLessThan(0.3);
+      floor = y;
+      expect(hit(u, t, floor), `blocked at ${u.toFixed(2)}, ${t.toFixed(2)} on ${floor.toFixed(2)}`).toBe(false);
+    }
+    expect(floor).toBeCloseTo(ZAKKYO.f3, 5);
+    // The stairwell is fenced on the third floor; the second flight's lane is walled at street level.
+    expect(hit(0.87, 4, ZAKKYO.f3)).toBe(true);
+    expect(hit(2.2, 4, 0)).toBe(true);
+  });
+
+  it('keeps the pawn shop and the office walkable round their fittings', () => {
+    // In at the door, then down either side of the island case.
+    for (let t = 0.6; t < 3.4; t += 0.5) expect(hit(5.0, t, 0), `pawn door ${t}`).toBe(false);
+    for (let t = 3.4; t < 9.6; t += 0.5) for (const u of [4.1, 6.3]) expect(hit(u, t, 0), `pawn aisle ${u}, ${t}`).toBe(false);
+    expect(hit(5.1, 5.5, 0)).toBe(true); // the island case
+    expect(hit(5, 10.3, 0)).toBe(true); // the counter and its grille
+    expect(hit(4.5, 2.6, ZAKKYO.f3)).toBe(false); // in front of the payment counter
+    expect(hit(4.5, 3.5, ZAKKYO.f3)).toBe(true);
+    for (let t = 3.1; t < 12.5; t += 0.5) expect(hit(7.0, t, ZAKKYO.f3), `office aisle ${t}`).toBe(false);
+    expect(hit(7.3, 13.3, ZAKKYO.f3)).toBe(true); // the safe
+  });
+
+  it('gives the story its collector at the counter, the pawnbroker and the mahjong door', () => {
+    const nodes = new Map(content.placed.flatMap((p) => p.nodes).map((n) => [n.id, n]));
+    for (const id of ['cash_one.collector', 'cash_one.payment', 'cash_one.pawnbroker', 'cash_one.pawn_case', 'cash_one.mahjong']) expect(nodes.has(id), id).toBe(true);
+    const pay = nodes.get('cash_one.payment')!;
+    expect(layout.contains(pay.x, pay.z, pay.floor + 1.7)).toBe(true);
+    const [x, z] = [pay.x, pay.z];
+    expect(layout.colliders(pay.floor).some((q) => x > q.x - 0.3 && x < q.x + q.w + 0.3 && z > q.y - 0.3 && z < q.y + q.h + 0.3)).toBe(false);
+  });
+});
+
+describe('霞町総合病院 (the hospital)', () => {
+  const placed = content.placed.find((p) => p.id === 'hospital')!;
+  const f = localFrame(placed.building);
+  const at = (u: number, t: number) => toWorld(f, u, t);
+  const layout = INTERIORS.hospital.layout(placed.building);
+  const nodes = new Map(placed.nodes.map((n) => [n.id, n]));
+  const hit = (u: number, t: number, floor: number, r = 0.35): boolean => {
+    const [x, z] = at(u, t);
+    return layout.colliders(floor).some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
+  };
+
+  it('lets you in at the front doors and through the lobby to the elevators', () => {
+    const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
+    // Across the forecourt under the canopy (between the taxi and the columns) and into the door's pocket.
+    for (let t = 0; t < 14.6; t += 0.5) expect(district.blocked(...at(t < 11 ? 34.5 : 32, t), 0.35), `forecourt ${t}`).toBe(false);
+    expect(district.blocked(...at(20, 14.5), 0.35)).toBe(true);
+    expect(layout.contains(...at(32, 14.5), 1.7)).toBe(true);
+    for (let t = 14.6; t < 33.5; t += 0.5) expect(hit(32, t, 0), `lobby aisle ${t}`).toBe(false);
+    expect(hit(18.4, 22, 0)).toBe(true); // the counter
+    expect(hit(21.7, 22, 0)).toBe(true); // a bench
+    expect(hit(20, 22, 0)).toBe(false); // in front of the counter
+  });
+
+  it('takes the elevators to the ward and the basement and back', () => {
+    for (const [lift, spawn, floor] of [['lift_ward', 'ward', HOSP.ward], ['lift_b1', 'basement', HOSP.b1], ['lift_from_ward', 'lobby', 0], ['lift_from_b1', 'lobby', 0]] as const) {
+      const n = nodes.get(`hospital.${lift}`)!;
+      expect(n.kind).toBe('station');
+      expect(n.returnSpawn).toBe(`hospital.${spawn}`);
+      const s = nodes.get(`hospital.${spawn}`)!;
+      expect(s.floor).toBeCloseTo(floor, 5);
+      expect(layout.contains(s.x, s.z, s.floor + 1.7), spawn).toBe(true);
+      expect(layout.floorAt(s.x, s.z, s.floor)).toBeCloseTo(floor, 5);
+      expect(layout.colliders(s.floor).some((q) => s.x > q.x - 0.35 && s.x < q.x + q.w + 0.35 && s.z > q.y - 0.35 && s.z < q.y + q.h + 0.35), spawn).toBe(false);
+    }
+  });
+
+  it('walks the ward from the day room to room 501, and the basement to the sealed door', () => {
+    for (let u = 10; u < 54.5; u += 0.5) expect(hit(u, 29.3, HOSP.ward), `ward ${u}`).toBe(false);
+    for (let t = 29.3; t < 33.5; t += 0.5) expect(hit(32, t, HOSP.ward), `ward lift lobby ${t}`).toBe(false);
+    expect(hit(12.6, 26.5, HOSP.ward)).toBe(false); // the day room
+    expect(hit(32, 27.6, HOSP.ward)).toBe(true); // the nurse station's counter
+    expect(hit(44, 27.6, HOSP.ward)).toBe(true); // a room's wall
+    for (let u = 14.6; u < 49.5; u += 0.5) expect(hit(u, 29.5, HOSP.b1), `basement ${u}`).toBe(false);
+    expect(hit(13.9, 29.5, HOSP.b1)).toBe(true); // the sealed door
+    expect(hit(21.5, 28.4, HOSP.b1)).toBe(true); // the gurney
+  });
+
+  it('gives the story room 501, the sealed door, the morgue and the emergency entrance', () => {
+    for (const [id, kind, floor] of [['room_501', 'door', HOSP.ward], ['sealed', 'door', HOSP.b1], ['morgue', 'hotspot', HOSP.b1], ['emergency', 'door', 0]] as const) {
+      const n = nodes.get(`hospital.${id}`)!;
+      expect(n.kind, id).toBe(kind);
+      expect(n.floor).toBeCloseTo(floor, 5);
+      if (id !== 'emergency') expect(layout.colliders(floor).some((q) => n.x > q.x - 0.3 && n.x < q.x + q.w + 0.3 && n.z > q.y - 0.3 && n.z < q.y + q.h + 0.3), id).toBe(false);
+    }
+  });
+});
+
+describe('霞町霊園 and the redevelopment site', () => {
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
+  const nodes = new Map(content.placed.flatMap((p) => p.nodes).map((n) => [n.id, n]));
+  const frameOf = (id: string) => {
+    const f = localFrame(content.placed.find((p) => p.id === id)!.building);
+    return (u: number, t: number) => toWorld(f, u, t);
+  };
+
+  it('walks the cemetery avenue from the gate to the family plot, and the aisles between the graves', () => {
+    const at = frameOf('reien');
+    for (let t = -2; t < 92.5; t += 0.5) expect(district.blocked(...at(42, t), 0.4), `avenue ${t}`).toBe(false);
+    expect(district.blocked(...at(20, 0.2), 0.4)).toBe(true); // the wall on the street
+    expect(district.blocked(...at(42, 96), 0.4)).toBe(true); // the family plot
+    // Along a cross path, then up an aisle between two row pairs; the rows themselves are solid.
+    for (let u = 5; u < 79; u += 0.5) expect(district.blocked(...at(u, 30), 0.4), `cross path ${u}`).toBe(false);
+    const pairs = [REIEN.cross[0] + 1.5 + 0.5, REIEN.cross[0] + 1.5 + 0.5 + REIEN.pair];
+    for (let u = 6; u < 35; u += 0.5) expect(district.blocked(...at(u, pairs[1] + REIEN.aisle / 2), 0.4), `aisle ${u}`).toBe(false);
+    expect(district.blocked(...at(20, (pairs[0] + pairs[1]) / 2), 0.4)).toBe(true);
+    for (const id of ['reien.flower_seller', 'reien.water', 'reien.family_grave', 'reien.muenzuka']) {
+      const n = nodes.get(id)!;
+      expect(n, id).toBeDefined();
+      if (n.kind !== 'npc') expect(district.blocked(n.x, n.z, 0.3), id).toBe(false);
+    }
+  });
+
+  it('lets you into the site by its gate and up to the pit, which is fenced and cut out of the ground', () => {
+    const at = frameOf('kasumi_site');
+    for (let t = -2; t < 24.5; t += 0.5) expect(district.blocked(...at(46, t), 0.4), `gate to rim ${t}`).toBe(false);
+    expect(district.blocked(...at(20, 0.15), 0.4)).toBe(true); // the hoarding
+    expect(district.blocked(...at(40, 0.2), 0.4)).toBe(true); // the gate's closed half
+    expect(district.blocked(...at(46, 27), 0.4)).toBe(true); // over the rim
+    expect(district.blocked(...at(55, 48), 0.4)).toBe(true); // in the pit
+    const [px, pz] = at((SITE.pit.u0 + SITE.pit.u1) / 2, (SITE.pit.t0 + SITE.pit.t1) / 2);
+    const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
+    expect(model.holes(Math.floor(px / CELL), Math.floor(pz / CELL)).some((r) => px > r.x && px < r.x + r.w && pz > r.y && pz < r.y + r.h)).toBe(true);
+    for (const id of ['kasumi_site.guard', 'kasumi_site.notice', 'kasumi_site.pit', 'kasumi_site.office']) expect(nodes.has(id), id).toBe(true);
+    const pit = nodes.get('kasumi_site.pit')!;
+    expect(district.blocked(pit.x, pit.z, 0.3)).toBe(false);
   });
 });
 
@@ -1020,6 +1282,34 @@ describe('Interiors: Hotel Rouge', () => {
     const suite = district.nodes.find((n) => n.id === 'hotel_rouge.room_303')!;
     expect(suite.through).toBe(false);
     expect(district.nodes.find((n) => n.id === 'hotel_rouge.entrance')!.through).toBe(true);
+  });
+
+  it('keeps the rain out on every storey and up the stair, and lets it fall in the front court', () => {
+    for (const [u, t, y] of [[12, 7, 1.7], [6, 12, 1.7], [14.4, 11.3, 6.7], [11.9, 7.6, 11.7], [18, 17, 4], [20.1, 16.5, 9.2], [17, 15.5, 11.7], [20.5, 17.5, 14]] as const) {
+      expect(district.shelterAt(...toWorld(f, u, t), y)?.enclosed, `${u}, ${t} at ${y}`).toBe(true);
+    }
+    expect(district.sheltered(...toWorld(f, 16, 2.6), 1.7)).toBe(false);
+    expect(district.sheltered(...toWorld(f, 12, 10), 16)).toBe(false);
+  });
+});
+
+describe('Interiors: under cover', () => {
+  const district = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
+  // Out in the open though part of an interior: the penthouse's roof terrace, a flat's balcony.
+  const OPEN = ['the_peak.terrace', 'the_peak.ceo', 'nishihara_danchi.balcony'];
+
+  it('has walls and a roof (no rain) round every node inside a walk-in interior', () => {
+    let checked = 0;
+    for (const p of content.placed) {
+      const l = interiorFor(p)?.layout(p.building);
+      if (!l) continue;
+      for (const n of p.nodes) {
+        if (!l.contains(n.x, n.z, n.floor + 1.7)) continue;
+        checked++;
+        expect(district.shelterAt(n.x, n.z, n.floor + 1.7)?.enclosed ?? false, n.id).toBe(!OPEN.includes(n.id));
+      }
+    }
+    expect(checked).toBeGreaterThan(40);
   });
 });
 

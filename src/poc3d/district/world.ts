@@ -5,6 +5,7 @@ import type { OcclusionBox } from '../real/occlusion';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import type { Lightmap } from '../real/lightmap';
 import { KIND } from '../real/meshBuilder';
+import { offKerb, pavementCorners, type PavementCorner } from '../real/ground';
 import { propBlocked, propDist, type Prop } from '../real/props';
 import { CAR_PROPS, SOFT_PROPS, WALL_PROPS } from './crash';
 import { rawBytes, rawTriangles, toGeometry } from '../real/rawGeometry';
@@ -12,7 +13,7 @@ import type { SignAtlas } from '../real/signs';
 import type { ChunkBuilt, Stage } from './chunkBuild';
 import type { WorkerIn } from './chunkWorker';
 import { DistrictModel } from './model';
-import { CELL, cellKey, DISTRICTS3, STYLES3, type Building3, type CellPlan3 } from './plan';
+import { CELL, cellKey, DISTRICTS3, isRiverWalk, isVerge, STYLES3, throughMouths, type Building3, type CellPlan3, type Road3 } from './plan';
 import type { Node3, Placed3 } from './stamps';
 import type { ZoneMap } from './zones';
 import type { Avenues, Bridge3 } from './roads';
@@ -21,6 +22,7 @@ import { roadUnder } from './rail';
 import { stationKerb } from '../real/station';
 import type { Rect } from '../../core/coords';
 import type { Interior } from '../real/interiors';
+import { floorLevel, groundSurface, indoorSurface, type Surface } from './footing';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
 export const LOAD_RADIUS = 620;
@@ -98,6 +100,9 @@ const stageStats = (): { count: number; msTotal: number; msMax: number } => ({ c
  * then the crowd within GHOST_BUILD. The main thread only turns finished arrays into meshes, within a
  * per-frame time budget, so streaming never stalls a frame on generation.
  */
+/** What a shot meets (District.shotAt). */
+export type ShotHit = 'ground' | 'wall' | 'car' | 'pole' | 'soft';
+
 export class District {
   readonly root = new THREE.Group();
   readonly nodes: readonly Node3[];
@@ -216,6 +221,64 @@ export class District {
     return this.terrain.height(x, z);
   };
 
+  /** Each cell's pavement corners (real/ground.ts), for what's past their rounded kerbs. */
+  private readonly kerbs = new Map<number, readonly PavementCorner[]>();
+  private kerbCorners(mx: number, my: number, reach: readonly Road3[]): readonly PavementCorner[] {
+    const k = cellKey(mx, my);
+    let c = this.kerbs.get(k);
+    if (!c) this.kerbs.set(k, (c = pavementCorners(reach)));
+    return c;
+  }
+
+  /**
+   * The height of the paving above the ground at (x, z), at street level: raised pavements and plazas 0.15,
+   * a median 0.18, a riverside walk 0.12, a verge 0.14, a carriageway 0.02, lots 0 (real/ground.ts). For feet: the
+   * walker's eye is set from the ground (floorAt), the body stands on this. (Open lots: their own ground's top.)
+   */
+  pavingAt(x: number, z: number): number {
+    return this.pavingOf(x, z).top;
+  }
+
+  /** The paving at (x, z) at street level: its height above the ground, and what it's made of (for footsteps). */
+  private pavingOf(x: number, z: number): { top: number; surface: Surface } {
+    const mx = Math.floor(x / CELL);
+    const my = Math.floor(z / CELL);
+    const p = this.model.plan(mx, my);
+    if (!p) return { top: 0, surface: 'paving' };
+    const inR = (q: Rect): boolean => x >= q.x && x <= q.x + q.w && z >= q.y && z <= q.y + q.h;
+    if (p.medians.some(inR)) return { top: 0.18, surface: 'grass' };
+    // Inside a carriageway (a road less its pavements): the road.
+    const carriage = (r: Road3): boolean => {
+      if (!inR(r.rect)) return false;
+      const s = r.sidewalk;
+      return r.vertical ? x > r.rect.x + s && x < r.rect.x + r.rect.w - s : z > r.rect.y + s && z < r.rect.y + r.rect.h - s;
+    };
+    // (A building's own lot, its setback and yard, is paved.)
+    let top = 0;
+    let surface: Surface = 'paving';
+    const raise = (t: number, s: Surface): void => {
+      if (t > top) [top, surface] = [t, s];
+    };
+    // (Streets ending at a road's side reach through its pavement: the mouth is road.)
+    const reach = throughMouths(p.roads);
+    for (const r of p.roads) {
+      if (!inR(r.rect)) continue;
+      if (isRiverWalk(r)) raise(0.12, 'paving');
+      else if (isVerge(r)) raise(0.14, 'grass');
+      else if (r.sidewalk > 0 && !carriage(r) && !reach.some((o) => o !== r && o.vertical !== r.vertical && o.kind !== 'coast' && carriage(o))) raise(0.15, 'paving');
+      else raise(0.02, 'asphalt');
+    }
+    // (Past a corner's rounded kerb it's the road.)
+    if (top === 0.15 && this.kerbCorners(mx, my, reach).some((c) => offKerb(c, x, z))) [top, surface] = [0.02, 'asphalt'];
+    if (top < 0.15 && this.model.plazas(mx, my).some(inR)) [top, surface] = [0.15, 'paving'];
+    for (const o of this.model.detail(mx, my)?.open ?? []) {
+      for (const g of o.ground) {
+        if (inR(g.rect)) raise(g.top, g.kind === KIND.grass ? 'grass' : g.kind === KIND.gravel ? (g.earth ? 'earth' : 'gravel') : g.kind === KIND.asphalt ? 'asphalt' : 'paving');
+      }
+    }
+    return { top, surface };
+  }
+
   /** Height above the ground (the terrain) at (x, z): 0 at street level anywhere, on a hill or not. */
   aboveGround(x: number, z: number, y: number): number {
     return y - this.terrain.height(x, z);
@@ -303,28 +366,26 @@ export class District {
   }
 
   /**
-   * What's underfoot at a world position (for footsteps): lawn, earth and gravel (parks, playgrounds,
-   * vacant lots, the shrine precinct), or hard ground (roads, pavements, paving, floors).
+   * What's underfoot at a world position (for footsteps; district/footing.ts), `floor` the feet's height above
+   * the ground there: a set piece's floors (inside it, on its storeys, in its basement) and its own grounds, else
+   * the street's: carriageway, pavement, lawn, a park's paths, a playground's earth. Off the street outside any
+   * set piece it's a deck above (the expressway, a viaduct) or a tiled passage below.
    */
-  surfaceAt(x: number, z: number, floor = 0): 'hard' | 'grass' | 'gravel' {
-    if (Math.abs(floor) > 0.5) return 'hard';
-    for (const p of this.model.placed) {
-      const r = p.rect;
-      if (p.stamp.landmark === 'shrine' && x >= r.x && x <= r.x + r.w && z >= r.y && z <= r.y + r.h) return 'gravel';
+  surfaceAt(x: number, z: number, floor = 0): Surface {
+    const ground = this.terrain.height(x, z);
+    const p = this.model.placed.find(({ rect: r }) => x >= r.x && x <= r.x + r.w && z >= r.y && z <= r.y + r.h);
+    if (p) {
+      // (A set piece's levels are from its footing: on a hill it stands level at its lowest corner.)
+      const level = floorLevel(floor + ground - this.footingOf(p));
+      const kind = p.stamp.landmark;
+      if (level !== 'street' || this.interiors.has(p.id) || this.shelterAt(x, z, floor + ground + 1)?.enclosed) return indoorSurface(kind, level);
+      const own = groundSurface(kind);
+      if (own) return own;
+    } else {
+      const level = floorLevel(floor);
+      if (level !== 'street') return level === 'above' ? 'asphalt' : 'tile';
     }
-    const d = this.model.detail(Math.floor(x / CELL), Math.floor(z / CELL));
-    let top = -1;
-    let kind: number = KIND.asphalt;
-    for (const o of d?.open ?? []) {
-      for (const g of o.ground) {
-        const r = g.rect;
-        if (g.top > top && x >= r.x && x <= r.x + r.w && z >= r.y && z <= r.y + r.h) {
-          top = g.top;
-          kind = g.kind;
-        }
-      }
-    }
-    return kind === KIND.grass ? 'grass' : kind === KIND.gravel ? 'gravel' : 'hard';
+    return this.pavingOf(x, z).surface;
   }
 
   get cells(): readonly (readonly [number, number])[] {
@@ -385,8 +446,11 @@ export class District {
     return this.bridges.some((b) => b.median !== null && x > b.median.x - r && x < b.median.x + b.median.w + r && z > b.median.y - r && z < b.median.y + b.median.h + r);
   }
 
-  /** Collision: outside the district, inside a building footprint (this cell or a neighbour), a stamp or a prop. */
-  blocked = (x: number, z: number, r: number, floorAbs = 0): boolean => {
+  /**
+   * Collision: outside the district, inside a building footprint (this cell or a neighbour), a stamp or a prop.
+   * `onFoot`: the avenues' medians are a kerb you step up onto (pavingAt), not a wall.
+   */
+  blocked = (x: number, z: number, r: number, floorAbs = 0, onFoot = false): boolean => {
     // (Levels are relative to the ground: street level on a hill is still 0.)
     const floor = floorAbs - this.terrain.height(x, z);
     const inRects = (rs: readonly Rect[]): boolean => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
@@ -397,7 +461,7 @@ export class District {
     if (floor < -1) return (floor > -8 ? this.basementColliders : this.deepColliders).some(inRects) || inside();
     if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? [])) || inside();
     if (!this.inDistrict(x, z)) return true;
-    if (this.onBridgeMedian(x, z, r)) return true;
+    if (!onFoot && this.onBridgeMedian(x, z, r)) return true;
     const mx = Math.floor(x / CELL);
     const my = Math.floor(z / CELL);
     const hit = (b: Pick<Building3, 'x' | 'z' | 'w' | 'd'>): boolean => Math.abs(x - b.x) < b.w / 2 + r && Math.abs(z - b.z) < b.d / 2 + r;
@@ -405,8 +469,8 @@ export class District {
       for (let dx = -1; dx <= 1; dx++) {
         const p = this.model.plan(mx + dx, my + dy);
         if (p?.buildings.some(hit)) return true;
-        // An avenue's median (raised, planted, the expressway's piers in it): only crossed at junctions.
-        if (p?.medians.length && inRects(p.medians)) return true;
+        // An avenue's median (raised, planted, the expressway's piers in it): driven across only at junctions.
+        if (!onFoot && p?.medians.length && inRects(p.medians)) return true;
         const d = this.model.detail(mx + dx, my + dy);
         if (d && (propBlocked(d.props, x, z, r) || inRects(d.solids))) return true;
       }
@@ -450,6 +514,89 @@ export class District {
     }
     return found;
   };
+
+  /**
+   * What a shot meets at a point in the air (real/gunfire.ts): the `ground` (or a floor), a building's or set
+   * piece's walls up to its height (`wall`), and near the ground parked cars, poles and hedges; null for open air.
+   * Vehicles in traffic are the traffic's. For one point; a shot marching along a line uses `shotProbe`.
+   */
+  shotAt = (x: number, y: number, z: number): ShotHit | null => this.shotProbe(x, z, x, z, 0)(x, y, z);
+
+  /**
+   * `shotAt` for points along a shot's line from (ax, az) to (bx, bz) and within `pad` of it: what could be hit
+   * there is gathered once (buildings, set pieces, props, open-lot solids, medians, the expressway's piers), so
+   * each step of the march only tests that short list.
+   */
+  shotProbe(ax: number, az: number, bx: number, bz: number, pad: number): (x: number, y: number, z: number) => ShotHit | null {
+    const box: Rect = { x: Math.min(ax, bx) - pad, y: Math.min(az, bz) - pad, w: Math.abs(bx - ax) + 2 * pad, h: Math.abs(bz - az) + 2 * pad };
+    const touches = (q: Rect, m = 0): boolean => q.x - m < box.x + box.w && q.x + q.w + m > box.x && q.y - m < box.y + box.h && q.y + q.h + m > box.y;
+    const buildings: Building3[] = [];
+    const props: Prop[] = [];
+    const solids: Rect[] = [];
+    const medians: Rect[] = [];
+    for (let my = Math.floor(box.y / CELL) - 1; my <= Math.floor((box.y + box.h) / CELL) + 1; my++)
+      for (let mx = Math.floor(box.x / CELL) - 1; mx <= Math.floor((box.x + box.w) / CELL) + 1; mx++) {
+        const p = this.model.plan(mx, my);
+        if (!p) continue;
+        for (const b of p.buildings) if (touches({ x: b.x - b.w / 2, y: b.z - b.d / 2, w: b.w, h: b.d })) buildings.push(b);
+        for (const q of p.medians) if (touches(q)) medians.push(q);
+        const d = this.model.detail(mx, my);
+        if (!d) continue;
+        for (const q of d.props) if (q.solid !== false && touches({ x: q.x, y: q.z, w: 0, h: 0 }, q.radius + (q.half ?? 0))) props.push(q);
+        for (const q of d.solids) if (touches(q)) solids.push(q);
+      }
+    const stamps = this.model.placed.map((p, i) => ({ p, i })).filter(({ p }) => touches(p.rect, 24));
+    const walls = stamps.filter(({ p }) => touches(p.rect, 2));
+    const extra = [...this.extraColliders, ...this.stampColliders.slice(this.model.placed.length).flat()].filter((q) => touches(q));
+    // Floors (platforms, decks, basements, an interior's storeys): the interiors you're in, the landmarks near the line.
+    const landmarks = stamps.filter(({ p }) => p.stamp.landmark).map(({ p }) => p);
+    const floorNear = (x: number, z: number, current: number): number | null => {
+      for (const it of this.interiors.values()) {
+        const y = it.floorAt(x, z, current);
+        if (y !== null) return y;
+      }
+      for (const p of landmarks) {
+        const r = p.rect;
+        if (x < r.x - 24 || x > r.x + r.w + 24 || z < r.y - 24 || z > r.y + r.h + 24) continue;
+        const base = this.footingOf(p);
+        const y = landmarkFloor(p, x, z, current - base);
+        if (y !== null) return y + base;
+      }
+      return null;
+    };
+    return (x, y, z) => {
+      const ground = this.terrain.height(x, z);
+      const above = y - ground;
+      if (above < 0) return 'ground';
+      if (above < 12) {
+        const f = floorNear(x, z, y);
+        if (f !== null && y < f - 0.02) return 'ground';
+      }
+      if (above < -1) return this.blocked(x, z, 0, y) ? 'wall' : null;
+      if (!this.inDistrict(x, z)) return null;
+      const inRect = (q: Rect): boolean => x > q.x && x < q.x + q.w && z > q.y && z < q.y + q.h;
+      for (const { p, i } of walls) {
+        // Inside, an interior's walls and fixtures on the shot's level (else the ground floor's, or the footprint).
+        const rects = this.interiors.get(p.id)?.colliders(Math.max(0, above - 1.2)) ?? this.stampColliders[i];
+        if (above < p.building.h && rects.some(inRect)) return 'wall';
+      }
+      if (above < 16 && extra.some(inRect)) return 'wall';
+      for (const b of buildings) if (above < b.h && Math.abs(x - b.x) < b.w / 2 && Math.abs(z - b.z) < b.d / 2) return 'wall';
+      if (above > 4.5) return null;
+      if (above < 3 && solids.some(inRect)) return 'wall';
+      let found: ShotHit | null = null;
+      for (const q of props) {
+        if (propDist(q, x, z) >= q.radius) continue;
+        if (WALL_PROPS.has(q.kind)) return 'wall';
+        // Cars and hedges are low; poles, lamps and trees stand taller.
+        const k = SOFT_PROPS.has(q.kind) ? 'soft' : CAR_PROPS.has(q.kind) ? 'car' : 'pole';
+        if (k === 'pole' || above < 1.4) found = found === 'car' || (found === 'pole' && k === 'soft') ? found : k;
+      }
+      if (found) return found;
+      if (above < 1.0 && medians.some(inRect)) return 'soft';
+      return null;
+    };
+  }
 
   /** More street-level colliders from outside the plan (the expressway's piers and ramp walls). */
   readonly extraColliders: Rect[] = [];

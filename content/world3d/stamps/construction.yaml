@@ -1,0 +1,17 @@
+# The redevelopment site (霞町一丁目地区再開発), on 霞通り Kasumi-dōri (real/kasumiGrounds.ts, kind construction):
+# white hoardings with the project's board and notices, a half-open gate and its guard hut, prefab site offices,
+# stacks of steel, an excavator and a crawler crane, and a shored pit 8 m deep you look down into from the rim.
+# At the pit's bottom a corner is sealed under blue tarps behind a survey notice: what's under them is the story's.
+id: construction
+name: 霞町一丁目 再開発現場 (the redevelopment site)
+footprint: [90, 80]
+height: 44
+front: south
+landmark: construction
+nodes:
+  front: { kind: spawn, name: The redevelopment site (Kasumi-chō), at: [46, 5], facing: north, view: [0, 14] }
+  rim: { kind: spawn, name: The redevelopment site (at the pit), at: [46, -22], facing: north, view: [0, -18] }
+  guard: { kind: npc, name: The gate guard, at: [50.6, 1.2], figure: { body: man, pose: stand, hair: none, outfit: work, color: '#3a3e44', turn: -0.5 } }
+  notice: { kind: hotspot, name: 建築計画のお知らせ (the planning notice), at: [32.5, 1.0] }
+  pit: { kind: hotspot, name: The excavation (blue tarps at the bottom), at: [46, -24.9] }
+  office: { kind: door, name: 現場事務所 (the site office), at: [13, -5.4], returnSpawn: front }

@@ -25,7 +25,9 @@
     "vn:import": "node scripts/vn/vn.mjs import",
     "vn:keys": "node scripts/vn/keys.mjs",
     "vn:try": "node scripts/vn/try.mjs",
-    "phone:clip": "node scripts/phone/record_clip.mjs"
+    "face:lab": "\"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe\" --python scripts/blender/face_lab.py --",
+    "phone:clip": "node scripts/phone/record_clip.mjs",
+    "radio:index": "node scripts/radio/index.mjs"
   },
   "dependencies": {
     "three": "^0.186.1",

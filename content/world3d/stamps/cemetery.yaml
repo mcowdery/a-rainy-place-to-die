@@ -1,0 +1,18 @@
+# 霞町霊園 Kasumi Reien, the cemetery avenue (real/kasumiGrounds.ts, kind cemetery; after Aoyama's): a walled cemetery
+# on 霞通り Kasumi-dōri. A stone gate, a paved avenue up the middle under cherry trees and stone lanterns, blocks of
+# family graves either side, cross paths; by the gate the flower and incense shop, the water station, six jizō;
+# at the avenue's end a large family plot, and in the far corner the mound of stones nobody tends (無縁塚).
+# Autumn opens here at higan.
+id: cemetery
+name: 霞町霊園 Kasumi Reien
+footprint: [84, 100]
+height: 4
+front: south
+landmark: cemetery
+nodes:
+  front: { kind: spawn, name: 霞町霊園 Kasumi Reien (the cemetery avenue), at: [42, 4], facing: north, view: [0, 4] }
+  avenue: { kind: spawn, name: 霞町霊園 (on the avenue), at: [42, -44], facing: north }
+  flower_seller: { kind: npc, name: The flower seller, at: [37.5, -6.4], figure: { body: elder, pose: stand, hair: bun, long: true, color: '#4a4640', turn: 1.571 } }
+  water: { kind: hotspot, name: 水汲み場 (buckets and ladles), at: [53, -2.6] }
+  family_grave: { kind: hotspot, name: The family grave at the avenue's end, at: [42, -92.4] }
+  muenzuka: { kind: hotspot, name: 無縁塚 (the stones nobody tends), at: [75, -85.6] }

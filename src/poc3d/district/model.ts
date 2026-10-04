@@ -1,13 +1,15 @@
 import { Terrain } from './terrain';
-import { intersect, overlaps, type Rect } from '../../core/coords';
+import { intersect, overlaps, pad, type Rect } from '../../core/coords';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import { cellDetail, type CellDetail } from '../real/props';
-import { CELL, cellKey, edgeKey, planCell3, STYLES3, type Building3, type CellPlan3 } from './plan';
+import { agreeJunctions, CELL, cellKey, edgeKey, planCell3, STYLES3, type Building3, type CellPlan3 } from './plan';
 import { plazaRect, reservedRect, type Placed3 } from './stamps';
 import { ZoneMap } from './zones';
 import type { Avenues, EdgeSpec } from './roads';
 import { SCRAMBLE_ROAD } from './plan';
-import { landmarkHoles } from './landmarks';
+import { landmarkColliders, landmarkHoles } from './landmarks';
+import { roadUnder } from './rail';
+import { stationKerb } from '../real/station';
 import { vehicleTexts } from '../models/vehicles';
 
 /**
@@ -21,6 +23,8 @@ export class DistrictModel {
   readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   private readonly cellSet = new Set<number>();
   private readonly plans = new Map<number, CellPlan3>();
+  /** Each cell's plan as planned alone (planCell3), before its junctions are agreed with its neighbours'. */
+  private readonly alone = new Map<number, CellPlan3>();
   private readonly details = new Map<number, CellDetail>();
   readonly placedByCell = new Map<number, Placed3[]>();
   /** Cell edges built to their own width: the avenues, and a scramble crossing's approaches (at least 18 m). */
@@ -81,10 +85,23 @@ export class DistrictModel {
     if (!this.cellSet.has(k)) return null;
     let p = this.plans.get(k);
     if (!p) {
+      // The roads along its edges are in the next cells' plans too: one junction box for both (agreeJunctions).
+      p = agreeJunctions(this.planAlone(mx, my)!, [this.planAlone(mx - 1, my), this.planAlone(mx + 1, my), this.planAlone(mx, my - 1), this.planAlone(mx, my + 1)]);
+      this.plans.set(k, p);
+    }
+    return p;
+  }
+
+  /** A cell's plan as planCell3 makes it, knowing only its own streets. */
+  private planAlone(mx: number, my: number): CellPlan3 | null {
+    const k = cellKey(mx, my);
+    if (!this.cellSet.has(k)) return null;
+    let p = this.alone.get(k);
+    if (!p) {
       const cellRect: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
       const reserved = [...this.placed.flatMap((q) => [reservedRect(q), plazaRect(q) ?? []].flat()), ...this.extraReserved].filter((r) => overlaps(r, cellRect));
       p = planCell3(this.macro, mx, my, reserved, this.seed, this.zones.at(mx, my), this.edges, (x, y) => this.has(x, y))!;
-      this.plans.set(k, p);
+      this.alone.set(k, p);
     }
     return p;
   }
@@ -172,6 +189,42 @@ export class DistrictModel {
 
   stamps(mx: number, my: number): readonly Placed3[] {
     return this.placedByCell.get(cellKey(mx, my)) ?? [];
+  }
+
+  private readonly streetCache = new Map<Placed3, readonly Rect[] | null>();
+  /**
+   * A set piece's own collision at street level (landmarks.ts: the walls and fixtures of one you can walk into
+   * or through; a station's piers where its road has them); null where its footprint is solid.
+   */
+  streetColliders(p: Placed3): readonly Rect[] | null {
+    let c = this.streetCache.get(p);
+    if (c === undefined) {
+      c = landmarkColliders(p, 0, p.stamp.landmark === 'station' ? stationKerb(p.building, roadUnder((mx, my) => this.plan(mx, my))) : null);
+      this.streetCache.set(p, c);
+    }
+    return c;
+  }
+
+  /**
+   * What of the set pieces round a cell (its own and its neighbours') is solid to the crowd (people.ts cellCrowd).
+   * `stamps`: the footprints of small, closed ones (a kōban on a square, a café's front); the big ones keep their
+   * forecourts and grounds inside their footprints, and the yokocho and the shrine are walked through.
+   * `fixtures`: what stands in and about any of them, by its own collision (a store's racks out on the pavement
+   * under its arcade, a station's piers, a precinct's walls), where it reaches this cell.
+   */
+  crowdSolids(mx: number, my: number): { stamps: Rect[]; fixtures: Rect[] } {
+    const cell: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
+    const stamps: Rect[] = [];
+    const fixtures: Rect[] = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (const p of this.stamps(mx + dx, my + dy)) {
+          if (p.rect.w * p.rect.h <= 400 && p.stamp.landmark !== 'yokocho' && p.stamp.landmark !== 'shrine') stamps.push(p.rect);
+          for (const q of this.streetColliders(p) ?? []) if (overlaps(pad(q, 1), cell)) fixtures.push(q);
+        }
+      }
+    }
+    return { stamps, fixtures };
   }
 
   /** The cell's buildings with a plain mass (generated ones and non-landmark stamps). */

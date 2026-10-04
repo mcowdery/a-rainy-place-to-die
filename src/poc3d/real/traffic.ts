@@ -410,6 +410,8 @@ interface Vehicle extends DrivenVehicle {
   /** Seconds stopped for someone in the road, and until the horn can sound again. */
   waited: number;
   hornIn: number;
+  /** A car's model (its wipers: models/wipers.ts); a bus has none. */
+  carType?: CarType;
   /** Its wheels (drawn by `Wheels`) and how far they've turned (rad). */
   readonly wheels: WheelLayout;
   turned: number;
@@ -577,6 +579,7 @@ export class TrafficSystem {
         };
         add(obj, m.brake, route, m.half, m.width, false, driver, s0, m.label, m.wheels);
         this.vehicles[this.vehicles.length - 1].lod = { full: m.geo, low: m.low, marks, isLow: false };
+        this.vehicles[this.vehicles.length - 1].carType = pick.type;
       }
     }
     const glass = new THREE.MeshStandardMaterial({ color: 0x9ab4bc, transparent: true, opacity: 0.22, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true });
@@ -980,16 +983,21 @@ export class TrafficSystem {
     return false;
   }
 
+  /** Your own vehicle's slot in the list `fillLights` last wrote (its beams are its owner's: uMyLamps), or -1. */
+  ownLight = -1;
+
   /**
    * Writes the vehicles nearest the camera into the city shader's headlight list: (x, z, dx, dz), front
-   * direction normalised. Visible vehicles only (the others are far away anyway).
+   * direction normalised. Visible vehicles only (the others are far away anyway); your own, only while you drive
+   * it (parked, its lights are off).
    */
   fillLights(camera: THREE.Vector3, out: THREE.Vector4[]): number {
     const near = this.vehicles
-      .filter((v) => v.obj.visible && !v.aloft)
+      .filter((v) => v.obj.visible && !v.aloft && !(v.own && v.mode === 'parked'))
       .map((v) => ({ v, d: (v.x - camera.x) ** 2 + (v.z - camera.z) ** 2 }))
       .sort((a, b) => a.d - b.d)
       .slice(0, out.length);
+    this.ownLight = near.findIndex(({ v }) => v.own);
     near.forEach(({ v }, i) => {
       // The light list takes the car's centre; buses are longer, so move their origin forward.
       const k = v.bus ? v.half - 2.4 : 0;
@@ -1001,15 +1009,15 @@ export class TrafficSystem {
   /**
    * The vehicles out driving on the street within r of a point (stopped at a light too), nearest first (not your own
    * car, which has its own owner, nor any up on the deck): for their wipers and their tyre tracks in the snow. y is
-   * the ground under them.
+   * the ground under them; `type` a car's model, `obj` its body (posed) and `low` whether it's drawn as its far model.
    */
-  movingNear(p: THREE.Vector3, r: number): { key: object; x: number; z: number; y: number; dx: number; dz: number; v: number; half: number; width: number; bus: boolean }[] {
-    const out: { key: object; x: number; z: number; y: number; dx: number; dz: number; v: number; half: number; width: number; bus: boolean; d: number }[] = [];
+  movingNear(p: THREE.Vector3, r: number): { key: object; x: number; z: number; y: number; dx: number; dz: number; v: number; half: number; width: number; bus: boolean; type: CarType | null; obj: THREE.Object3D; low: boolean }[] {
+    const out: { key: object; x: number; z: number; y: number; dx: number; dz: number; v: number; half: number; width: number; bus: boolean; type: CarType | null; obj: THREE.Object3D; low: boolean; d: number }[] = [];
     for (const v of this.vehicles) {
       if (v.own || v.aloft || !v.obj.visible || v.mode === 'parked' || (v.mode === 'traffic' && !v.live)) continue;
       const d = (v.x - p.x) ** 2 + (v.z - p.z) ** 2;
       if (d > r * r) continue;
-      out.push({ key: v, x: v.x, z: v.z, y: v.obj.position.y, dx: v.dx, dz: v.dz, v: v.v, half: v.half, width: v.width, bus: v.bus, d });
+      out.push({ key: v, x: v.x, z: v.z, y: v.obj.position.y, dx: v.dx, dz: v.dz, v: v.v, half: v.half, width: v.width, bus: v.bus, type: v.carType ?? null, obj: v.obj, low: !!v.lod?.isLow, d });
     }
     return out.sort((a, b) => a.d - b.d);
   }
@@ -1123,6 +1131,20 @@ export class TrafficSystem {
     v.v = 0;
     v.acc = 0;
     v.curv = 0;
+  }
+
+  /**
+   * Every vehicle on the street within r of a point but `except` (parked ones and the one waiting for you too): where
+   * it is, the way it points, its speed along that and its size. For a driver that isn't in the traffic's loops
+   * (district/autoDrive.ts).
+   */
+  around(x: number, z: number, r: number, except: DrivenVehicle | null = null): { x: number; z: number; dx: number; dz: number; v: number; half: number; width: number }[] {
+    const out: { x: number; z: number; dx: number; dz: number; v: number; half: number; width: number }[] = [];
+    for (const o of this.vehicles) {
+      if (o === except || o.aloft || !o.live || Math.abs(o.x - x) > r || Math.abs(o.z - z) > r) continue;
+      out.push({ x: o.x, z: o.z, dx: o.dx, dz: o.dz, v: o.v, half: o.half, width: o.width });
+    }
+    return out;
   }
 
   /** Metres to the nearest other vehicle ahead of a driven one in its lane (within `reach`), else Infinity. */

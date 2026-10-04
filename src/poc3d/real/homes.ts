@@ -111,6 +111,12 @@ export function homeLayout(b: Building3, plans: readonly HomePlan[], ground: rea
   };
 }
 
+/** Covered (no rain inside): each flat's box, floor to ceiling (not its balcony, which is open to the sky). */
+export function homeShelters(b: Building3, plans: readonly HomePlan[]): { rect: Rect; y0: number; y1: number; enclosed: boolean }[] {
+  const f = localFrame(b);
+  return plans.map((p) => ({ rect: localRect(f, p.box[0], p.box[1], p.box[2], p.box[3]), y0: p.y - 0.3, y1: p.y + p.h + 0.3, enclosed: true }));
+}
+
 export interface Flat {
   readonly plan: HomePlan;
   readonly look: { readonly wall: number; readonly ceiling: number; readonly floor?: number };

@@ -1,5 +1,6 @@
 import { askAge } from './ageGate';
 import { kaburoArt } from './art';
+import { characters } from './characters';
 import { after, byFolder, story } from './story';
 import type { Edition } from './types';
 
@@ -26,4 +27,5 @@ export const edition: Edition = {
     phoneMedia: after('adult/content/phone/', phoneMedia),
   },
   kaburoArt,
+  characters,
 };

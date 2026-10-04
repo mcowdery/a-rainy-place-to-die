@@ -1,5 +1,7 @@
 # 3D stamp placements. cell = L0 macro cell [col, row]; offset = metres from the cell's NW corner to the
 # stamp footprint's NW corner. Node ids become "<id>.<node>" (e.g. bar_kanpai.door). Never reuse an id.
+# Add new placements at the end: a stamp's building id is its index here (900000 + i), and its look and ads are
+# hashed from it, so inserting one earlier changes every set piece after it.
 - id: bar_kanpai
   stamp: bar_kanpai
   cell: [29, 12]
@@ -358,3 +360,34 @@
   stamp: station_airport
   cell: [8, 23]
   offset: [50, 94]
+# めいどかふぇ ♡ぴゅあ♡ in Denkō-chō's maid café lanes, on Denkō-dōri.
+- id: maid_cafe
+  stamp: maid_cafe
+  cell: [34, 8]
+  offset: [12, 44]
+# 歌舞路交番: Kaburo's kōban at the back of the square across the crossing from the mega-sign, facing it.
+- id: koban
+  stamp: koban
+  cell: [29, 12]
+  offset: [106, 40]
+# The back alleys' mixed-tenant building: 質 マルヨシ (the pawn shop) and キャッシュ・ワン Cash One on 3F.
+- id: cash_one
+  stamp: zakkyo
+  cell: [26, 10]
+  offset: [104, 30]
+# 霞町総合病院 on Kasumi-dōri (the hospital of the whole-city plan, [23, 15]).
+# (Its entrance falls midway between two of the monorail's pavement piers, which stand every 20 m.)
+- id: hospital
+  stamp: hospital
+  cell: [23, 15]
+  offset: [34, 72]
+# 霞町霊園, the cemetery avenue, in Kasumi Park's cell ([19, 15]) on Kasumi-dōri.
+- id: reien
+  stamp: cemetery
+  cell: [19, 15]
+  offset: [12, 18]
+# The redevelopment site ([32, 15]) on Kasumi-dōri.
+- id: kasumi_site
+  stamp: construction
+  cell: [32, 15]
+  offset: [14, 38]

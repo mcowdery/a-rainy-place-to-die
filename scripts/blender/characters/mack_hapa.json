@@ -1,0 +1,51 @@
+{
+  "base": "mack.json",
+  "name": "mack_hapa",
+  "about": "A trial: Mack half Japanese (MakeHuman's ancestry half East Asian, its Asian skin, a softer brow and nose bridge, an East Asian eyelid fold, dark brown eyes), in his leathers",
+  "out": "assets/characters/mack_hapa.glb",
+  "preview": "assets/characters/previews/mack_hapa.png",
+  "body": {
+    "race": {"asian": 0.5, "caucasian": 0.5},
+    "targets": {
+      "head-square": 0.35,
+      "chin-prominent-incr": 0.3,
+      "chin-width-incr": 0.25,
+      "lr-cheek-bones-incr": 0.35,
+      "lr-cheek-volume-decr": 0.35,
+      "nose-scale-vert-incr": 0.1,
+      "nose-hump-decr": 0.5,
+      "eyebrows-trans-down": 0.2,
+      "eyebrows-angle-down": 0.25,
+      "lr-eye-height2-decr": 0.3,
+      "mouth-scale-horiz-incr": 0.05,
+      "measure-neck-circ-incr": 0.55,
+      "measure-shoulder-dist-incr": 0.5,
+      "torso-muscle-pectoral-incr": 0.8,
+      "torso-muscle-dorsi-incr": 0.7,
+      "torso-vshape-incr": 0.6,
+      "lr-upperarm-muscle-incr": 0.8,
+      "lr-upperarm-shoulder-muscle-incr": 0.7,
+      "lr-lowerarm-muscle-incr": 0.6,
+      "measure-upperarm-circ-incr": 0.4,
+      "lr-upperleg-muscle-incr": 0.6,
+      "lr-lowerleg-muscle-incr": 0.5,
+      "stomach-tone-incr": 0.8,
+      "measure-waist-circ-decr": 0.3,
+      "lr-eye-epicanthus-in": 0.4,
+      "lr-eye-eyefold-down": 0.3,
+      "nose-scale-depth-decr": 0.15
+    }
+  },
+  "skin": {
+    "asset": "middleage_asian_male",
+    "max_tex": 2048,
+    "roughness": 0.55,
+    "ops": [
+      {"op": "grade", "saturation": 0.85, "gain": [0.97, 0.92, 0.86]},
+      {"op": "smooth", "radius": 2, "amount": 0.3},
+      {"op": "colorize", "color": "#17130f", "contrast": 0.5, "uvmask": "under_hair", "amount": 0.9},
+      {"op": "grade", "gain": [0.58, 0.52, 0.5], "uvmask": "cavity", "amount": 0.6}
+    ]
+  },
+  "eyes": {"asset": "high-poly", "color": "brown", "roughness": 0.35, "ops": [{"op": "grade", "saturation": 0.6, "gain": [0.55, 0.5, 0.46], "lum": [0, 0.45]}]}
+}

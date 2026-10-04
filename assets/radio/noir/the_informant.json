@@ -1,0 +1,21 @@
+{
+  "file": "the_informant_1.flac",
+  "id": "the_informant",
+  "take": 1,
+  "station": "noir",
+  "title": "The Informant",
+  "artist": "東都ナイト・アンサンブル",
+  "caption": "Cool noir jazz instrumental with a twangy baritone electric guitar drenched in tremolo and spring reverb, walking upright bass, rim clicks and ride cymbal, a quiet Hammond organ pad, a muted trumpet answering the guitar. Shady, sly, a meeting in a back-alley bar. Warm vintage analog sound. No vocals.",
+  "lyrics": "[Instrumental]",
+  "language": "",
+  "bpm": 92,
+  "key": "C minor",
+  "seconds": 175.0,
+  "seed": 3707,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-03 20:30",
+  "took": 55,
+  "batch": "noir-01",
+  "model": "acestep-v15-turbo"
+}

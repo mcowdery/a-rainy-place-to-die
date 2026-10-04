@@ -1,0 +1,79 @@
+{
+  "batch": "jazz-01",
+  "defaults": { "duration": 180, "takes": 2, "steps": 8 },
+  "items": [
+    {
+      "id": "rain_on_kaburo",
+      "station": "jazz",
+      "title": "Rain on Kaburo",
+      "artist": "",
+      "caption": "Slow film noir jazz ballad, instrumental. Smoky tenor saxophone lead with a breathy tone, soft brushed drums, warm upright double bass, sparse late-night piano chords, the natural reverb of a small empty club. Melancholy, intimate, a rainy city at two in the morning. Recorded live, warm vintage analog sound. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 62,
+      "key": "C minor",
+      "duration": 190,
+      "seed": 2101
+    },
+    {
+      "id": "yotaka",
+      "station": "jazz",
+      "title": "夜鷹 Nighthawk",
+      "artist": "",
+      "caption": "Cool jazz quartet instrumental, late-night and noir. Muted trumpet lead with a harmon mute, walking upright bass, light swinging ride cymbal and brushes, understated piano comping, a short piano solo. Cool, detached, a detective walking empty streets. Warm vintage analog recording with room ambience. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 118,
+      "key": "F minor",
+      "duration": 180,
+      "seed": 2202
+    },
+    {
+      "id": "kasumi_blue",
+      "station": "jazz",
+      "title": "Kasumi Blue",
+      "artist": "",
+      "caption": "Jazz piano trio instrumental, reflective and lyrical. Acoustic grand piano playing a tender modal melody with rich impressionist chords, soft upright bass, delicate brushed drums and cymbals. Quiet, bittersweet, the last customers in a bar before dawn. Intimate live recording, warm and natural. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 72,
+      "key": "D minor",
+      "timesignature": "3",
+      "duration": 190,
+      "seed": 2303
+    },
+    {
+      "id": "room_201",
+      "station": "jazz",
+      "title": "Room 201",
+      "artist": "",
+      "caption": "Noir cool jazz instrumental with vibraphone. Shimmering vibraphone lead with slow motor tremolo, walking upright bass, brushed snare and soft ride cymbal, hollow-body jazz guitar playing quiet chords, a brief bass solo. Suspenseful, smoky, a private eye's office at night. Warm vintage analog sound. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 96,
+      "key": "G minor",
+      "duration": 180,
+      "seed": 2404
+    },
+    {
+      "id": "last_call_at_kanpai",
+      "station": "jazz",
+      "title": "Last Call at Kanpai",
+      "artist": "",
+      "caption": "Hard bop jazz quintet instrumental, swinging and bluesy. Tenor saxophone and trumpet playing the head in unison, confident walking upright bass, crisp swinging drums with ride cymbal and snare accents, bluesy piano comping, a fiery tenor saxophone solo then a trumpet solo. Lively, a crowded small club late at night. Warm vintage live recording. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 148,
+      "key": "Bb major",
+      "duration": 180,
+      "seed": 2505
+    },
+    {
+      "id": "harbor_fog",
+      "station": "jazz",
+      "title": "Harbor Fog",
+      "artist": "",
+      "caption": "Dark jazz noir instrumental, very slow and atmospheric. Deep baritone saxophone long notes, bowed and plucked upright bass, sparse brushed drums with lots of space, a distant Rhodes electric piano with tremolo, low reverb like an empty warehouse by the docks. Brooding, ominous, fog over the harbour. Warm analog sound. No vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 56,
+      "key": "E minor",
+      "duration": 200,
+      "seed": 2606
+    }
+  ]
+}

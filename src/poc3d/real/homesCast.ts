@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 import type { Rect } from '../../core/coords';
 import type { Building3 } from '../district/plan';
-import { type Flat, printed, type Home, type HomePlan, homeInterior, homeLayout } from './homes';
+import { type Flat, printed, type Home, type HomePlan, homeInterior, homeLayout, homeShelters } from './homes';
 import type { Interior } from './interiors';
 import { kawabataColliders } from './kawabata';
 import { text } from './kit';
@@ -597,4 +597,10 @@ export function homeFor(placementId: string): { build: (b: Building3, city: THRE
     range: 50,
     keep: true,
   };
+}
+
+/** A placement's flats as covered volumes (no rain inside them), none if it holds no home. */
+export function homeSheltersFor(placementId: string, b: Building3): { rect: Rect; y0: number; y1: number; enclosed: boolean }[] {
+  const def = HOMES[placementId];
+  return def ? homeShelters(b, def.flats.map((f) => f.plan)) : [];
 }

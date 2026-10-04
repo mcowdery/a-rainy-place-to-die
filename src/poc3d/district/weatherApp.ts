@@ -1,13 +1,15 @@
 import type { Weather } from '../../atmosphere/rules';
 import type { PhoneApp } from '../../phone/ui';
-import { DAY, hhmm, WEEKDAYS, WEEKDAYS_EN, weekdayOf } from './clock';
+import { DAY, hhmm, SYNODIC, WEEKDAYS, WEEKDAYS_EN, weekdayOf, type DayLight, type MoonNow } from './clock';
 import type { Outlook } from './forecast';
 
 /**
  * 天気 Tenki, the phone's weather app (an invented one, no real brands): the forecast (district/forecast.ts) for
  * Tōto. Now (the weather as it is, the temperature, the rainy season or a heat wave with its heatstroke warning),
  * the next 24 hours by the hour (sky, temperature, rain), and the next five days (the sky through the day, high and
- * low, the chance of rain). The forecast is the weather to come, so it's right, unless the story holds the weather.
+ * low, the chance of rain), and the sun and the moon (sunrise and sunset by the season, tonight's moon on the lunar
+ * calendar: its phase and its old name, its age, when it rises and sets; at night the sky's icon is the moon's phase
+ * while it's up). The forecast is the weather to come, so it's right, unless the story holds the weather.
  */
 export interface WeatherSource {
   /** Minutes since the story began. */
@@ -18,6 +20,26 @@ export interface WeatherSource {
   current(): { weather: Weather; amount: number };
   /** 春 spring ... */
   season(): string;
+  /** The moon at a minute (clock.ts moonAt). */
+  moon(total: number): MoonNow;
+  /** The season's sunrise and sunset. */
+  daylight(): DayLight;
+}
+
+/** The phase's symbol (northern sky: a waxing moon lit on the right). */
+const PHASES = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'];
+const phaseIcon = (age: number): string => PHASES[Math.round((age / SYNODIC) * 8) % 8];
+/** The moon's old names by its age in days, with an English gloss. */
+function moonName(age: number): [string, string] {
+  if (age < 1.5 || age >= 28) return ['新月', 'New moon'];
+  if (age < 5.5) return ['三日月', 'Crescent'];
+  if (age < 9.4) return ['上弦の月', 'First quarter'];
+  if (age < 13.3) return ['十三夜', 'Waxing gibbous'];
+  if (age < 15.3) return ['満月', 'Full moon'];
+  if (age < 16.5) return ['十六夜', 'Izayoi, the night after'];
+  if (age < 20.4) return ['寝待月', 'Waning gibbous'];
+  if (age < 24.4) return ['下弦の月', 'Last quarter'];
+  return ['有明月', 'Waning crescent'];
 }
 
 const LABEL: Record<string, [string, string]> = {
@@ -86,6 +108,12 @@ export class WeatherApp implements PhoneApp {
     const o = this.src.at(now);
     const cur = this.src.current();
     const k = kind(o, minute, cur.weather, cur.amount);
+    // At night the sky's icon is the moon's phase while it's up, the stars once it's set.
+    const nightIcon = (t: number): string => {
+      const m = this.src.moon(t);
+      return m.up > 0.2 ? phaseIcon(m.age) : '✨';
+    };
+    const icon = k === 'night' ? nightIcon(now) : ICON[k];
     const tags: string[] = [];
     if (o.tsuyu) tags.push('<span class="wx-tag wx-tsuyu">梅雨 rainy season</span>');
     if (o.heat) tags.push('<span class="wx-tag wx-heat">猛暑 heat wave</span>');
@@ -102,7 +130,7 @@ export class WeatherApp implements PhoneApp {
       const m = t % DAY;
       const hk = kind(q, m);
       const wet = q.weather === 'rain' || q.weather === 'snow' ? `${Math.round(q.amount * 8 + 1)} mm` : '';
-      hours.push(`<div class="wx-hour"><div class="wx-h">${hhmm(m).slice(0, 2)}時</div><div class="wx-i">${ICON[hk]}</div><div class="wx-t">${Math.round(q.temp)}°</div><div class="wx-r">${wet}</div></div>`);
+      hours.push(`<div class="wx-hour"><div class="wx-h">${hhmm(m).slice(0, 2)}時</div><div class="wx-i">${hk === 'night' ? nightIcon(t) : ICON[hk]}</div><div class="wx-t">${Math.round(q.temp)}°</div><div class="wx-r">${wet}</div></div>`);
     }
     // The next five days: the sky through the day, high and low, the chance of rain (the share of its daytime
     // hours with some).
@@ -140,15 +168,56 @@ export class WeatherApp implements PhoneApp {
     root.innerHTML = `
       <div class="wx-now wx-${k}">
         <div class="wx-place">東都市 TŌTO · ${this.src.season()} · ${hhmm(minute)}</div>
-        <div class="wx-big"><span class="wx-icon">${ICON[k]}</span><span class="wx-temp">${Math.round(o.temp)}°</span></div>
+        <div class="wx-big"><span class="wx-icon">${icon}</span><span class="wx-temp">${Math.round(o.temp)}°</span></div>
         <div class="wx-cond">${LABEL[k][0]} <span>${LABEL[k][1]}</span></div>
         <div class="wx-tags">${tags.join('')}</div>
       </div>
       <div class="wx-sec">24時間 Next 24 hours</div>
       <div class="wx-hours">${hours.join('')}</div>
       <div class="wx-sec">週間 This week</div>
-      <div class="wx-days">${days.join('')}</div>`;
+      <div class="wx-days">${days.join('')}</div>
+      <div class="wx-sec">月と太陽 Sun &amp; moon</div>
+      ${this.sunMoon(now)}`;
   }
+
+  /** Tonight's moon (its phase, old name, age, how much of it is lit, when it rises and sets) and the sun's day. */
+  private sunMoon(now: number): string {
+    const m = this.src.moon(now);
+    const [jp, en] = moonName(m.age);
+    const times = moonTimes((t) => this.src.moon(t), now);
+    const at = (dt: number | null): string => (dt === null ? '—' : `${dt >= DAY - (now % DAY) ? '明日 ' : ''}${hhmm((now + dt) % DAY)}`);
+    const dl = this.src.daylight();
+    return `<div class="wx-sm">
+        <div class="wx-moon"><div class="wx-mi">${phaseIcon(m.age)}</div><div>
+          <div class="wx-mn">${jp}<span>${en}</span></div>
+          <div class="wx-ms">月齢 age ${m.age.toFixed(1)} · ${Math.round(m.lit * 100)}% lit${m.up > 0.2 ? ' · up now' : ''}</div>
+        </div></div>
+        <div class="wx-times">
+          <div>月の出 Moonrise <b>${at(times.rise)}</b></div><div>月の入 Moonset <b>${at(times.set)}</b></div>
+          <div>日の出 Sunrise <b>${hhmm(dl.rise)}</b></div><div>日の入 Sunset <b>${hhmm(dl.set)}</b></div>
+        </div>
+      </div>`;
+  }
+}
+
+export interface MoonTimes {
+  /** Minutes from now to the next moonrise and moonset (within two days), or null. */
+  readonly rise: number | null;
+  readonly set: number | null;
+}
+
+/** When the moon next rises and sets, from now (it crosses the horizon going up, then coming down). */
+export function moonTimes(moon: (total: number) => MoonNow, now: number): MoonTimes {
+  let rise: number | null = null;
+  let set: number | null = null;
+  let prev = moon(now).dir[1] > 0;
+  for (let t = 5; t <= 2 * DAY && (rise === null || set === null); t += 5) {
+    const up = moon(now + t).dir[1] > 0;
+    if (up && !prev && rise === null) rise = t;
+    if (!up && prev && set === null) set = t;
+    prev = up;
+  }
+  return { rise, set };
 }
 
 let styled = false;
@@ -189,6 +258,14 @@ function injectStyle(): void {
   .wx-dt { font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
   .wx-dt b { color: #ffb08a; }
   .wx-dc { font-size: 11px; color: #7ec0ff; text-align: right; }
+  .wx-sm { margin: 0 10px 16px; padding: 10px 12px; border-radius: 10px; background: #172030; display: grid; gap: 8px; }
+  .wx-moon { display: flex; align-items: center; gap: 12px; }
+  .wx-mi { font-size: 34px; }
+  .wx-mn { font-size: 15px; font-weight: 700; }
+  .wx-mn span { font-size: 11.5px; font-weight: 400; color: #c8d4ea; margin-left: 4px; }
+  .wx-ms { font-size: 11.5px; color: #9aaccc; margin-top: 2px; }
+  .wx-times { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .wx-times b { color: #c8d4ea; font-weight: 600; }
   `;
   document.head.append(s);
 }

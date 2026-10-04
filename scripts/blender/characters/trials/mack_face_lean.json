@@ -1,0 +1,30 @@
+{
+  "base": "../mack.json",
+  "name": "mack_face_lean",
+  "about": "A trial of Mack's face: The hawk (an Eastwood or Henriksen face): long and lean, hollow cheeks under high cheekbones, a long hooked nose, a narrow squint, thin lips.",
+  "preview": "debug-shots/faces_american/lean.png",
+  "body": {
+    "targets": {
+      "head-square": 0.0,
+      "chin-prominent-incr": 0.25,
+      "chin-width-incr": 0.0,
+      "lr-cheek-bones-incr": 0.6,
+      "lr-cheek-volume-decr": 0.7,
+      "nose-scale-vert-incr": 0.3,
+      "nose-hump-decr": 0.0,
+      "eyebrows-trans-down": 0.3,
+      "eyebrows-angle-down": 0.35,
+      "lr-eye-height2-decr": 0.45,
+      "mouth-scale-horiz-incr": 0.1,
+      "head-oval": 0.4,
+      "head-scale-vert-incr": 0.2,
+      "head-scale-horiz-decr": 0.15,
+      "chin-height-incr": 0.3,
+      "nose-hump-incr": 0.3,
+      "nose-curve-convex": 0.4,
+      "nose-scale-horiz-decr": 0.2,
+      "mouth-upperlip-volume-decr": 0.4,
+      "mouth-lowerlip-volume-decr": 0.3
+    }
+  }
+}

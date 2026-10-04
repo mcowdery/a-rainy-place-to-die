@@ -2,10 +2,13 @@ import * as THREE from 'three';
 import { screenLightGlsl, screenUniforms, type ScreenUniforms } from './screenLight';
 import { shopGlsl } from './shopShader';
 import { TRADE } from './shops';
+import { WIPER_GLSL } from '../models/wipers';
+import { CAR_RAIN_GLSL } from './carRainGlsl';
+import { WATER_ALPHA, WATER_GLSL } from './waterGlsl';
 
 /** Cars whose headlights light the city (the nearest to the camera). */
 export const CAR_LIGHTS = 16;
-/** Moving cars near the camera whose wipers clear their windscreens of snow. */
+/** Moving cars near the camera whose wipers clear their windscreens of rain and snow. */
 export const WIPERS = 8;
 /** Trees near the camera dropping petals or leaves (on the ground under them; weather.ts Drift has them falling). */
 export const LITTER = 32;
@@ -49,8 +52,23 @@ export interface CityUniforms extends ScreenUniforms {
   uCars: { value: THREE.Vector4[] };
   uCarCount: { value: number };
   uHeadlights: { value: number };
-  /** Moving cars whose wipers are going: (x, z, heading, ground y), and how many (snow off their windscreens). */
+  /**
+   * Your own car's lights (district/ownCar.ts `beam`), brighter and longer than the traffic's and at its own height
+   * (the expressway, the hills): uMyCar is its centre on the ground (x, y, z) and how far ahead of that its nose is;
+   * uMyDir the way it points (x, z), the road's slope along that, and half the lamps' spacing (a bike's one lamp: 0);
+   * uMyLamps the dipped beam, the main beam, the red behind (the tail lamps 1, braking more) and the reversing
+   * lamps. uCarSkip is its slot in uCars (its beams are these instead), or -1.
+   */
+  uMyCar: { value: THREE.Vector4 };
+  uMyDir: { value: THREE.Vector4 };
+  uMyLamps: { value: THREE.Vector4 };
+  uCarSkip: { value: number };
+  /** Moving cars whose wipers are going: (x, z, heading, ground y), and how many (rain and snow off their
+   * windscreens); each one's glass and pivots (models/wipers.ts `wiperUniforms`), and the beat (in sweeps). */
   uWipers: { value: THREE.Vector4[] };
+  uWiperGlass: { value: THREE.Vector4[] };
+  uWiperPivots: { value: THREE.Vector4[] };
+  uWiperBeat: { value: number };
   uWiperCount: { value: number };
   /**
    * Tyre tracks in the snow (tracks.ts): a texture wrapped round a window about the camera, R the track, G its
@@ -97,7 +115,14 @@ export function cityUniforms(): CityUniforms {
     uCars: { value: Array.from({ length: CAR_LIGHTS }, () => new THREE.Vector4()) },
     uCarCount: { value: 0 },
     uHeadlights: { value: 0 },
+    uMyCar: { value: new THREE.Vector4() },
+    uMyDir: { value: new THREE.Vector4(0, 1, 0, 0.62) },
+    uMyLamps: { value: new THREE.Vector4() },
+    uCarSkip: { value: -1 },
     uWipers: { value: Array.from({ length: WIPERS }, () => new THREE.Vector4()) },
+    uWiperGlass: { value: Array.from({ length: WIPERS }, () => new THREE.Vector4()) },
+    uWiperPivots: { value: Array.from({ length: WIPERS }, () => new THREE.Vector4()) },
+    uWiperBeat: { value: 1 },
     uWiperCount: { value: 0 },
     tTracks: { value: null },
     uTrackRect: { value: new THREE.Vector4(0, 0, 1, 0) },
@@ -122,7 +147,10 @@ export function cityUniforms(): CityUniforms {
  * the crowns). models/trees.ts tags every vertex of a tree with its height above the tree's foot (style.w =
  * -(0.01 + height), plain kind). The tree bends like a stem, more the higher up (height²): a lean downwind that
  * grows with the strength squared, gusts sweeping through downwind, a rocking of its own and a little sideways,
- * and the leaves flutter on top. A breeze barely stirs them; in a typhoon the crowns thrash a metre or so.
+ * and the leaves flutter on top. A breeze barely stirs them. In a storm (strength past ~0.7, a typhoon's ~1.2)
+ * they're bent hard over and held there, let up and slammed back as each gust front passes, the crowns whipping
+ * and the leaves streaming: a couple of metres at a street tree's top. Every pace is fixed and only the amounts
+ * follow the strength (a pace that followed it would jump the phase as the wind rose).
  */
 const swayVertex = /* glsl */ `
   #ifndef USE_INSTANCING
@@ -133,18 +161,31 @@ const swayVertex = /* glsl */ `
     vec2 swD = uWind.xy;
     float swBend = swH * swH / 64.0;
     float swAlong = dot(swP.xz, swD);
-    // A gust: a wave running downwind through the trees, stronger every so often.
+    // How much of a storm it is: nothing in a breeze, all of it at a typhoon's height.
+    float swStorm = smoothstep(0.7, 1.25, swS);
+    // A gust: a wave running downwind through the trees, stronger every so often; in a storm, fronts that come
+    // through faster and harder on top of it.
     float swGust = (0.55 + 0.45 * sin(uTime * 0.8 - swAlong * 0.07)) * (0.65 + 0.35 * sin(uTime * 0.21 - swAlong * 0.018 + 1.7));
+    float swFront = 0.5 + 0.5 * sin(uTime * 1.7 - swAlong * 0.11 + 0.9 * sin(uTime * 0.37 - swAlong * 0.03));
+    swGust = mix(swGust, 0.35 + 0.65 * swGust + 0.55 * swFront * swFront, swStorm);
     float swPh = dot(swP.xz, vec2(0.13, 0.09));
-    float swLean = swS * swS * 0.35 * (0.3 + swGust);
-    float swRock = sin(uTime * (1.2 + 0.6 * swS) + swPh) * (0.015 + 0.08 * swS + 0.14 * swS * swS) * (0.6 + 0.6 * swGust);
-    float swSide = sin(uTime * 0.85 + swPh * 1.7 + 2.0) * (0.01 + 0.04 * swS + 0.05 * swS * swS);
+    // The lean: with the strength squared, and in a storm bent over and held, more in each gust.
+    float swLean = swS * swS * 0.35 * (0.3 + swGust) + swStorm * (0.45 + 0.75 * swGust);
+    // Rocking: slow in a breeze, quicker as it blows, and in a storm a hard thrash with a shudder through it.
+    float swRock = mix(sin(uTime * 1.2 + swPh), sin(uTime * 2.0 + swPh * 1.3), clamp(swS, 0.0, 1.0)) * (0.015 + 0.08 * swS + 0.14 * swS * swS) * (0.6 + 0.6 * swGust);
+    swRock += (sin(uTime * 2.9 + swPh * 2.1) * 0.22 + sin(uTime * 6.3 + swPh * 3.7) * 0.07) * swStorm * (0.4 + swGust);
+    float swSide = sin(uTime * 0.85 + swPh * 1.7 + 2.0) * (0.01 + 0.04 * swS + 0.05 * swS * swS) + sin(uTime * 2.3 + swPh * 2.9) * 0.16 * swStorm * (0.3 + swGust);
     vec2 swXZ = (swD * (swLean + swRock) + vec2(-swD.y, swD.x) * swSide) * swBend;
     vec3 swW = vec3(swXZ.x, -0.5 * dot(swXZ, swXZ) / max(swH, 1.0), swXZ.y);
     if (aStyle.x > 19.5) {
-      // The leaves flutter, each part of the crown at its own pace.
-      float swF = uTime * (5.0 + 5.0 * swS) + dot(swP, vec3(1.9, 2.7, 1.3));
-      swW += vec3(sin(swF), 0.6 * sin(swF * 1.3 + 1.0), cos(swF * 0.9)) * (0.01 + 0.06 * swS + 0.04 * swS * swS) * min(1.0, swH * 0.3) * (0.5 + swGust);
+      // The leaves flutter, each part of the crown at its own pace: gently, then fast as it blows; in a storm
+      // the crown streams downwind and whips.
+      float swFp = dot(swP, vec3(1.9, 2.7, 1.3));
+      vec3 swFl = mix(vec3(sin(uTime * 5.0 + swFp), 0.6 * sin(uTime * 6.5 + swFp * 1.3 + 1.0), cos(uTime * 4.5 + swFp * 0.9)),
+        vec3(sin(uTime * 10.0 + swFp), 0.6 * sin(uTime * 13.0 + swFp * 1.3 + 1.0), cos(uTime * 9.0 + swFp * 0.9)), clamp(swS, 0.0, 1.0));
+      float swUp = min(1.0, swH * 0.3);
+      swW += swFl * (0.01 + 0.06 * swS + 0.04 * swS * swS + 0.1 * swStorm) * swUp * (0.5 + swGust);
+      swW.xz += swD * (0.25 + 0.2 * sin(uTime * 7.3 + swFp * 0.6)) * swStorm * swUp * (0.3 + swGust);
     }
     // World to the mesh's own frame (landmarks are turned and may be scaled).
     mat3 swM = mat3(modelMatrix);
@@ -155,6 +196,7 @@ const swayVertex = /* glsl */ `
 
 const common = /* glsl */ `
   uniform float uTime;
+  uniform vec3 uWind;
   uniform float uWindowLit;
   uniform float uLamps;
   uniform float uNeon;
@@ -168,7 +210,14 @@ const common = /* glsl */ `
   uniform vec4 uCars[${CAR_LIGHTS}];
   uniform int uCarCount;
   uniform float uHeadlights;
+  uniform vec4 uMyCar;
+  uniform vec4 uMyDir;
+  uniform vec4 uMyLamps;
+  uniform int uCarSkip;
   uniform vec4 uWipers[${WIPERS}];
+  uniform vec4 uWiperGlass[${WIPERS}];
+  uniform vec4 uWiperPivots[${WIPERS}];
+  uniform float uWiperBeat;
   uniform int uWiperCount;
   uniform sampler2D tTracks;
   uniform vec4 uTrackRect;
@@ -183,6 +232,7 @@ const common = /* glsl */ `
     vec3 acc = vec3(0.0);
     for (int i = 0; i < ${CAR_LIGHTS}; i++) {
       if (i >= uCarCount) break;
+      if (i == uCarSkip) continue;
       vec4 c = uCars[i];
       vec2 rel = wp.xz - c.xy;
       if (dot(rel, rel) > 1600.0) continue;
@@ -211,6 +261,46 @@ const common = /* glsl */ `
     }
     return acc * uHeadlights;
   }
+
+  // Your own car's lights: two beams well down the road (dipped: low and wide, to ~60 m; the main beam on to ~140 m
+  // and up the walls), a red glow behind it (more under braking) and a white one reversing. Heights are from the
+  // road's line through the car, so it works up on the expressway and on the hills, and the street a storey under a
+  // deck stays dark.
+  vec3 myLights(vec3 wp, vec3 n, bool ground) {
+    vec2 rel = wp.xz - uMyCar.xz;
+    if (dot(rel, rel) > 25600.0) return vec3(0.0);
+    vec2 d = uMyDir.xy;
+    float fwd = dot(rel, d);
+    float side = dot(rel, vec2(-d.y, d.x));
+    float h = wp.y - uMyCar.y - fwd * uMyDir.z;
+    float above = smoothstep(-4.0, -1.5, h);
+    // What lies flat is lit; walls only where they face the lamps.
+    float lies = ground ? 1.0 : smoothstep(0.5, 0.9, n.y);
+    vec3 acc = vec3(0.0);
+    float along = fwd - uMyCar.w;
+    if (along > 0.0) {
+      float face = mix(clamp(dot(n.xz, -normalize(rel - d * uMyCar.w)), 0.0, 1.0), 1.0, lies);
+      float spread = 0.7 + along * 0.2;
+      float beam = 0.0;
+      for (int k = -1; k <= 1; k += 2) {
+        float o = side - float(k) * uMyDir.w;
+        beam += exp(-o * o / (spread * spread));
+      }
+      // (The road just off the bumper is under the beams, not in them: they land a few metres on.)
+      float off = smoothstep(0.0, 7.0, along);
+      float dip = smoothstep(65.0, 25.0, along) / (1.0 + along * along * 0.004) * exp(-max(h - 0.7 - along * 0.012, 0.0) / 1.3);
+      float mainBeam = smoothstep(4.0, 30.0, along) * smoothstep(150.0, 60.0, along) / (1.0 + along * along * 0.0015) * exp(-max(h - 1.2 - along * 0.06, 0.0) / 3.0);
+      acc += vec3(1.0, 0.92, 0.76) * beam * off * face * (uMyLamps.x * dip * 6.0 + uMyLamps.y * mainBeam * 9.0);
+    }
+    float back = -fwd - uMyCar.w;
+    if (back > 0.0 && back < 16.0) {
+      float face = mix(clamp(dot(n.xz, -normalize(rel)), 0.0, 1.0), 1.0, lies);
+      float low = exp(-max(h - 0.5, 0.0) / 1.2) * face * smoothstep(0.0, 0.9, back);
+      acc += vec3(1.0, 0.05, 0.03) * exp(-side * side / 2.2) * exp(-back * 0.6) * low * 1.1 * uMyLamps.z;
+      acc += vec3(0.95, 0.95, 1.0) * exp(-side * side / 6.0) * exp(-back * 0.28) * low * 2.5 * uMyLamps.w;
+    }
+    return acc * above;
+  }
   uniform vec3 uZenith;
   uniform vec3 uHorizon;
   uniform vec3 uRoomAmbient;
@@ -224,6 +314,7 @@ const common = /* glsl */ `
   flat varying float vBid;
   varying vec3 vWPos;
   varying vec3 vWNor;
+  varying vec3 vLPos;
 
   // Sin-free hashes (Dave Hoskins): stable for large ids.
   float h1(float p) { p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
@@ -254,10 +345,10 @@ const common = /* glsl */ `
     return r.y > 0.0 ? mix(uHorizon, uZenith, sqrt(r.y)) : uHorizon * 0.3;
   }
   float fresnel(float cosT) { return 0.04 + 0.96 * pow(1.0 - cosT, 5.0); }
-  // How much of a windscreen the wipers have cleared: glass facing forward on a moving car near the camera, two
-  // fans pivoting at the foot of the screen (the corners and the wedge between them keep their snow).
-  float wiped(vec3 wp, vec3 n) {
-    float w = 0.0;
+  // What the wipers have cleared of a windscreen (models/wipers.ts: the same fans the blades sweep): glass facing
+  // forward on a moving car near the camera. x: in a blade's fan (the corners and the wedge between the fans keep
+  // what's on them); y: how long ago the blade passed, in sweeps.
+  vec2 wiped(vec3 wp, vec3 n) {
     for (int i = 0; i < ${WIPERS}; i++) {
       if (i >= uWiperCount) break;
       vec4 c = uWipers[i];
@@ -265,15 +356,13 @@ const common = /* glsl */ `
       if (dot(rel, rel) > 9.0) continue;
       vec2 d = vec2(sin(c.z), cos(c.z));
       if (dot(n.xz, d) < 0.12 || dot(rel, d) < 0.0) continue;
-      float lat = dot(rel, vec2(-d.y, d.x));
-      float h = wp.y - c.w;
-      float edge = 0.04 * vnoise(wp.xz * 23.0 + wp.y * 17.0);
-      for (int k = -1; k <= 1; k += 2) {
-        vec2 q = vec2(lat - float(k) * 0.33, (h - 0.9) * 1.7);
-        w = max(w, step(-0.03, q.y) * smoothstep(0.64 + edge, 0.58 + edge, length(q)));
-      }
+      // Across the glass (the car's left positive) and up the blades' plane from its foot.
+      vec4 g = uWiperGlass[i];
+      float s = dot(rel, vec2(d.y, -d.x));
+      float t = (dot(rel, d) - g.x) * cos(g.z) + (wp.y - c.w - g.y) * sin(g.z);
+      return wiperFan(vec2(s, t), uWiperPivots[i].xyz, g.w, uWiperBeat);
     }
-    return w;
+    return vec2(0.0, 9.0);
   }
   // Tyre tracks under a point on the ground (0 none, 1 a fresh track), at about that height.
   float trackAt(vec3 wp) {
@@ -421,6 +510,8 @@ const surface = /* glsl */ `
   // (Foliage: its leaf bump, applied to the lighting normal after three works it out: normalFoliage.)
   float leafy = 0.0;
   vec3 leafBump = vec3(0.0);
+  // (Water: its rippled normal, world space, given to the lighting the same way: the sun's glitter.)
+  vec3 waterN = vec3(0.0);
   float sRough = 0.85;
   float sMetal = 0.0;
   vec3 sEmit = vec3(0.0);
@@ -429,6 +520,9 @@ const surface = /* glsl */ `
   float pxAng = max(length(fwidth(Vw)), 1e-5);
   vec3 Nw = normalize(vWNor);
   bool groundKind = kindF > 6.5;
+  // A car's cabin (models/carInterior.ts: plain, or a mirror's chrome, style.x INDOOR): no fallen leaves, snow or
+  // rain on its seats.
+  bool indoor = (kindF < 0.5 || (kindF > 5.5 && kindF < 6.5)) && vStyle.x > 9.5 && vStyle.x < 10.5;
   float cosV = clamp(-dot(Vw, Nw), 0.0, 1.0);
 
   if (kindF < 0.5) {
@@ -923,12 +1017,45 @@ const surface = /* glsl */ `
     sRough = isGlass ? 0.05 : isChrome ? 0.15 : 0.28;
     sMetal = isGlass ? 0.0 : isChrome ? 1.0 : 0.25;
     sEmit = refl * (isGlass ? vec3(mix(0.06, 1.0, F)) : isChrome ? vColor.rgb * mix(0.55, 1.0, F) : vec3(mix(0.02, 0.7, F)));
-    // Beads of rain on paint and glass, up close.
-    if (uWet > 0.0) {
-      vec2 bq = vWPos.xz * 16.0 + vWPos.y * 9.0;
-      float bead = step(0.82, h2(floor(bq))) * smoothstep(0.32, 0.1, length(fract(bq) - 0.5));
-      float closeC = 1.0 - smoothstep(0.02, 0.06, max(fwW.x, fwW.y));
-      sEmit += (refl * 1.4 + 0.02) * bead * uWet * closeC;
+    // Rain on paint, glass and chrome (carRainGlsl.ts): a wet film, and up close the drops themselves, stuck to
+    // the body (vLPos): beads in two sizes standing on what faces up, and on the sides and the glass drops
+    // running down with a trail and small ones clinging. Each is shaded as a lens: dark where it meets the
+    // paint, the light pooled at its far side, a hard glint on the near one (the sky, and the street's lamps).
+    if (uWet > 0.0 && !indoor) {
+      sEmit += refl * F * 0.25 * uWet;
+      // A pixel's size on the body (m): drops smaller than it fade out.
+      float foot = max(length(fwidth(vLPos)), 1e-5);
+      if (foot < 0.009) {
+        // Which way the body faces here, in its own frame (the facet's: it only picks how the drops lie).
+        vec3 fn = abs(normalize(cross(dFdx(vLPos), dFdy(vLPos))));
+        float seen = 1.0 - smoothstep(0.003, 0.009, foot);
+        float fine = 1.0 - smoothstep(0.0012, 0.0035, foot);
+        vec3 drop;
+        if (fn.y > 0.72) {
+          drop = rainBeads(vLPos.xz / 0.021, 0.42 * uWet, 0.0) * vec3(1.0, 1.0, seen);
+          if (drop.z <= 0.0) drop = rainBeads(vLPos.xz / 0.008 + 17.0, 0.5 * uWet, 31.0) * vec3(1.0, 1.0, fine);
+        } else {
+          vec2 sp = fn.x > fn.z ? vLPos.zy : vLPos.xy;
+          drop = rainRuns(sp, uTime) * vec3(1.0, 1.0, seen * uWet);
+          if (drop.z <= 0.0) drop = rainBeads(sp / vec2(0.011, 0.015) + 5.0, 0.45 * uWet, 53.0) * vec3(1.0, 1.0, 1.0 - smoothstep(0.002, 0.006, foot));
+        }
+        // The wipers' fans are clear behind the blade, the drops coming back until it's round again.
+        if (isGlass && drop.z > 0.0 && uWiperCount > 0) {
+          vec2 wf = wiped(vWPos, Nw);
+          drop.z *= 1.0 - wf.x * (1.0 - smoothstep(0.15, 1.7, wf.y));
+        }
+        if (drop.z > 0.0) {
+          float dl = min(length(drop.xy), 1.0);
+          vec3 glint = refl * 1.2 + lightAt(vWPos.xz) * 0.6 + skyRefl(vec3(0.0, 1.0, 0.0)) * 0.5 + 0.02;
+          float pool = smoothstep(-0.2, 0.9, dot(drop.xy, vec2(0.55, -0.83))) * (1.0 - dl * dl);
+          float spark = 1.0 - smoothstep(0.0, 0.3, length(drop.xy - vec2(-0.3, 0.42)));
+          float rim = smoothstep(0.55, 1.0, dl) * drop.z;
+          albedo *= 1.0 - 0.45 * rim;
+          sEmit *= 1.0 - 0.5 * rim;
+          // (On glass and dark paint there's little under a drop to darken: the light in it carries it.)
+          sEmit += glint * (0.45 * pool + 1.6 * spark + (isGlass ? 0.12 : 0.04)) * drop.z;
+        }
+      }
     }
   } else if (kindF < 3.5) {
     float ch = vStyle.x;
@@ -978,11 +1105,14 @@ const surface = /* glsl */ `
       albedo = vColor.rgb * (0.8 + 0.3 * gn) * (1.0 + 0.35 * stones);
       sRough = 0.95;
     } else {
-      // Water: near black, reflecting the sky by Fresnel.
-      float F = fresnel(clamp(-Vw.y, 0.0, 1.0));
-      albedo = vColor.rgb * 0.3;
-      sRough = 0.06;
-      sEmit += skyRefl(reflect(Vw, vec3(0.0, 1.0, 0.0))) * mix(0.04, 0.9, F);
+      // Water (waterGlsl.ts): its own dark colour, rippled by the wind; the sky in the ripples by Fresnel, the
+      // sun and moon glittering off them (waterN), and what stands round it reflected by the reflection pass
+      // (ssr.ts, which finds water by the alpha written below).
+      waterN = waterNormal(waterSlope(vWPos.xz, uTime, uWind, waterFoot(vWPos, cameraPosition)));
+      float F = waterFresnel(clamp(-dot(Vw, waterN), 0.0, 1.0));
+      albedo = vColor.rgb * 0.45;
+      sRough = 0.2;
+      sEmit += waterSky(reflect(Vw, waterN), uHorizon, uZenith) * F;
     }
     if (uWet > 0.0 && kindF < 12.5) {
       // Puddles form once the ground is wet through (the same noise as ssr.ts, which reflects in them);
@@ -1004,30 +1134,38 @@ const surface = /* glsl */ `
   // Street light from the lightmap, sampled in front of the surface and fading with height.
   vec3 Lm = lightAt(vWPos.xz + Nw.xz * 0.6);
   float hf = groundKind ? 1.0 : exp(-max(vWPos.y - 0.2, 0.0) / 4.5) * 0.8;
+  // (A car's cabin is in the shade of its roof: a little of the street's light, through the windows.)
+  if (indoor) hf *= 0.35;
   sEmit += albedo * Lm * hf;
   // Big screens light what's in front of them in the colour of what they're showing (screenLight.ts).
   if (uScreenCount > 0) sEmit += albedo * screenLight(vWPos + Nw * 0.05, Nw, 1.0) * 0.3183;
-  if (uCarCount > 0 && uHeadlights > 0.0) {
+  if (uCarCount > 0 && uHeadlights > 0.0 && !indoor) {
     vec3 cl = carLights(vWPos, Nw, groundKind);
     sEmit += albedo * cl;
     // A wet road throws the headlights back at you: a glare stretched toward the viewer.
     if (groundKind && uWet > 0.0) sEmit += cl * 0.05 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * 2.0 * uWet;
   }
+  // Your own car's lights (headlamps, the red behind, reversing lamps).
+  if (uMyLamps.x + uMyLamps.y + uMyLamps.z + uMyLamps.w > 0.0 && !indoor) {
+    vec3 ml = myLights(vWPos, Nw, groundKind);
+    sEmit += albedo * ml;
+    if (groundKind && uWet > 0.0) sEmit += ml * 0.1 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * uWet;
+  }
   // Fallen leaves (autumn) and petals (spring) on whatever lies flat (the ground, paving, the tops of things), not on
   // glass, paint, lights, water or the crowns themselves; piled along the ground slabs' edges.
-  if (Nw.y > 0.7 && (uSeason < 0.5 || (uSeason > 1.5 && uSeason < 2.5)) && kindF < 12.5 && !(kindF > 2.5 && kindF < 6.5) && !(kindF < 0.5 && vStyle.x > 19.5)) {
+  if (!indoor && Nw.y > 0.7 && (uSeason < 0.5 || (uSeason > 1.5 && uSeason < 2.5)) && kindF < 12.5 && !(kindF > 2.5 && kindF < 6.5) && !(kindF < 0.5 && vStyle.x > 19.5)) {
     vec4 lit = fallenAt(vWPos, 1.0 - smoothstep(0.03, 0.09, max(fwW.x, fwW.y)), groundKind ? slabEdge(vWPos) : 99.0);
     albedo = mix(albedo, lit.rgb, lit.a);
     sRough = mix(sRough, 0.85, lit.a);
   }
   // Snow on what faces up (roofs, pavements, lawns, the tops of things), patchy as it starts; roads keep less of it.
-  if (uSnow > 0.0 && !(kindF > 2.5 && kindF < 3.5) && !(kindF > 12.5)) {
+  if (uSnow > 0.0 && !indoor && !(kindF > 2.5 && kindF < 3.5) && !(kindF > 12.5)) {
     float up = smoothstep(0.55, 0.9, Nw.y);
     float patchy = smoothstep(0.3, 0.7, vnoise(vWPos.xz * 0.45) * 0.55 + uSnow * 0.75);
     float road = kindF > 6.5 && kindF < 7.5 ? 0.8 : 1.0;
     float sn = up * patchy * road * uSnow;
     // Moving cars have their wipers going; tyres press tracks into it (packed snow, a little greyer and smoother).
-    if (kindF > 4.5 && kindF < 5.5 && uWiperCount > 0) sn *= 1.0 - wiped(vWPos, Nw);
+    if (kindF > 4.5 && kindF < 5.5 && uWiperCount > 0) sn *= 1.0 - wiped(vWPos, Nw).x;
     float trk = groundKind ? trackAt(vWPos) * uSnow : 0.0;
     sn = max(sn, trk * up * 0.85);
     albedo = mix(albedo, vec3(0.62, 0.64, 0.68), sn);
@@ -1135,13 +1273,16 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
         flat varying float vFlags;
         flat varying float vBid;
         varying vec3 vWPos;
-        varying vec3 vWNor;`)
+        varying vec3 vWNor;
+        // (The mesh's own frame: rain on a car stays on the car.)
+        varying vec3 vLPos;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         ${swayVertex}
         vFacade = aFacade;
         vStyle = aStyle;
         vFlags = aFlags;
         vBid = aBuilding;
+        vLPos = position;
         // Instanced meshes (traffic wheels) place each copy with instanceMatrix before the model matrix.
         #ifdef USE_INSTANCING
           vWPos = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
@@ -1151,15 +1292,17 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
           vWNor = normalize(mat3(modelMatrix) * objectNormal);
         #endif`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${common}`)
+      .replace('#include <common>', `#include <common>\n${WIPER_GLSL}\n${common}\n${WATER_GLSL}\n${CAR_RAIN_GLSL}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${surface}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         // normalFoliage: a tree crown's leaf clusters catch the light (city surface: leafBump, world space).
-        if (leafy > 0.5) normal = normalize(normal + (viewMatrix * vec4(leafBump, 0.0)).xyz);`)
+        if (leafy > 0.5) normal = normalize(normal + (viewMatrix * vec4(leafBump, 0.0)).xyz);
+        if (waterN.y > 0.0) normal = normalize((viewMatrix * vec4(waterN, 0.0)).xyz);`)
       .replace('#include <opaque_fragment>', `
         // Never hand the post chain more than a bright highlight's worth of light (or a NaN).
         outgoingLight = clamp(outgoingLight, 0.0, 48.0);
-        #include <opaque_fragment>`)
+        #include <opaque_fragment>
+        if (waterN.y > 0.0) gl_FragColor.a = ${WATER_ALPHA.toFixed(1)};`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
         // Floor for the analytic (sun / moon) lights: a near-mirror GGX lobe on a point light peaks in the
         // tens of thousands, overflows the half-float target and blooms into a huge disc. Mirror-like
@@ -1167,6 +1310,6 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
         roughnessFactor = max(sRough, 0.22);
         metalnessFactor = sMetal;`);
   };
-  m.customProgramCacheKey = () => 'city-v1';
+  m.customProgramCacheKey = () => 'city-v2';
   return m;
 }

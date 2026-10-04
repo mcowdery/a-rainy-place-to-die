@@ -395,6 +395,11 @@ export interface VehicleSpec {
    * (fz, 0, -fx) points to (the car's left), `right` the other. The body keeps the openings.
    */
   readonly sideWindows?: { readonly left: MeshBuilder; readonly right: MeshBuilder };
+  /**
+   * The lamps into builders of their own (so they can be switched: race/carView.ts): the headlamps' lit lenses,
+   * the tail lamps' night layer and the reversing lamps. The body keeps plain glass lenses and the dim red tail.
+   */
+  readonly lampParts?: { readonly head: MeshBuilder; readonly tail: MeshBuilder; readonly reverse: MeshBuilder };
 }
 
 /** Text geometry for vehicles that carry lettering (taxi ads, delivery boxes). */
@@ -528,8 +533,58 @@ const boxer = (mb: MeshBuilder, P: (x: number, y: number, z: number) => V3, N: (
   }
 };
 
+/** A car's body for what's fitted inside it (models/carInterior.ts). */
+export interface BodyShape {
+  readonly type: CarType;
+  readonly L: number;
+  readonly W: number;
+  readonly x0: number;
+  readonly windscreen: Range;
+  readonly rearGlass: Range;
+  readonly sideGlass: Range;
+  readonly pillars: readonly Range[];
+  readonly softTop: boolean;
+  readonly roofInset: number;
+  readonly wheelX: readonly number[];
+  readonly wheelR: number;
+  /** Ground clearance (m). */
+  readonly clear: number;
+  readonly top: (x: number) => number;
+  readonly belt: (x: number) => number;
+  readonly halfW: (x: number) => number;
+  readonly bottom: (x: number) => number;
+  /** The half cross-section at x, (y, z) from the underside's centre up the side to the roof's (11 points; no
+   * wheel arches). */
+  readonly section: (x: number) => [number, number][];
+}
+
+/**
+ * A car's body: its design's glass, pillars and wheels and its shape as functions of x. x runs from the rear;
+ * in the body's own frame (addVehicle at the origin facing +z) a point (x, y, z) is at (z, y, x - L / 2).
+ */
+export function bodyShape(type: CarType): BodyShape {
+  const d = DESIGNS[type];
+  return {
+    type,
+    L: d.L,
+    W: d.W,
+    x0: d.x0,
+    windscreen: d.windscreen,
+    rearGlass: d.rearGlass,
+    sideGlass: d.sideGlass,
+    pillars: d.pillars,
+    softTop: !!d.softTop,
+    roofInset: d.roofInset,
+    wheelX: d.wheelX,
+    wheelR: d.wheelR,
+    clear: d.clear,
+    // (Without the wheel arches cut out of its underside: the cabin's floor runs flat over them.)
+    ...shapeOf(d, false),
+  };
+}
+
 /** A design's body as functions of x: its top line, beltline, half-width, bottom edge and cross-section. */
-function shapeOf(d: Design): {
+function shapeOf(d: Design, arches = true): {
   top: (x: number) => number;
   belt: (x: number) => number;
   halfW: (x: number) => number;
@@ -548,7 +603,7 @@ function shapeOf(d: Design): {
   const bottom = (x: number): number => {
     const e = Math.min(x - d.x0, d.L - x);
     let b = d.clear + Math.max(0, 0.3 - e) * 0.5;
-    for (const wx of d.wheelX) {
+    for (const wx of arches ? d.wheelX : []) {
       const dx = x - wx;
       if (Math.abs(dx) < archR) b = Math.max(b, d.wheelR + Math.sqrt(archR * archR - dx * dx));
     }
@@ -814,9 +869,9 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
   };
   const boxL = boxer(mb, P, N);
 
-  /** The brush for a headlamp's lens: lit on the lamp channel, or (a parked car) plain glass. */
+  /** The brush for a headlamp's lens: lit on the lamp channel, or (a parked car, or one whose lamps are apart) plain glass. */
   const lens = (): void => {
-    const on = spec.lamps !== false;
+    const on = spec.lamps !== false && !spec.lampParts;
     mb.kind = on ? KIND.emit : KIND.gloss;
     mb.style = [on ? EMIT.lamp : 0, 0, 0, 0];
     mb.color = on ? [0.95, 0.9, 0.8] : [0.5, 0.5, 0.48];
@@ -842,6 +897,7 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     // Lens: emissive on the lamp channel, so headlights are on at night and dark glass by day.
     lens();
     panelX(0.002, hy0 + (hy1 - hy0) * 0.25, hy1 - (hy1 - hy0) * 0.25, sd * (hz0 + 0.04), sd * (hz0 + 0.04 + (hz1 - hz0) * 0.35), 1);
+    if (spec.lampParts) panelX(0.004, hy0 + (hy1 - hy0) * 0.25, hy1 - (hy1 - hy0) * 0.25, sd * (hz0 + 0.04), sd * (hz0 + 0.04 + (hz1 - hz0) * 0.35), 1, spec.lampParts.head);
     mb.style = [0, 0, 0, 0];
     // Amber indicator at the outer end.
     mb.kind = KIND.emit;
@@ -866,11 +922,14 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     panelX(0, ty0, ty1, sd * tz0, sd * tz1, -1);
     mb.style = [EMIT.lamp, 0, 0, 0];
     mb.color = [0.3, 0.006, 0.004];
-    if (spec.lamps !== false) panelX(0.001, ty0 + (ty1 - ty0) * 0.35, ty1 - (ty1 - ty0) * 0.15, sd * (tz0 + 0.02), sd * (tz1 - 0.02), -1);
+    if (spec.lampParts) panelX(0.003, ty0 + (ty1 - ty0) * 0.35, ty1 - (ty1 - ty0) * 0.15, sd * (tz0 + 0.02), sd * (tz1 - 0.02), -1, spec.lampParts.tail);
+    else if (spec.lamps !== false) panelX(0.001, ty0 + (ty1 - ty0) * 0.35, ty1 - (ty1 - ty0) * 0.15, sd * (tz0 + 0.02), sd * (tz1 - 0.02), -1);
     mb.style = [EMIT.always, 0, 0, 0];
     mb.color = [0.1, 0.045, 0.0];
     panelX(0.002, ty0, ty0 + (ty1 - ty0) * 0.3, sd * tz0, sd * (tz0 + (tz1 - tz0) * 0.4), -1);
     mb.style = [0, 0, 0, 0];
+    // The reversing lamp: in the lower strip, outboard of the amber.
+    if (spec.lampParts) panelX(0.004, ty0, ty0 + (ty1 - ty0) * 0.3, sd * (tz0 + (tz1 - tz0) * 0.45), sd * (tz0 + (tz1 - tz0) * 0.75), -1, spec.lampParts.reverse);
     if (brake) panelX(0.012, ty0 + (ty1 - ty0) * 0.3, ty1, sd * tz0, sd * tz1, -1, brake);
   }
   mb.kind = KIND.plain;
@@ -945,10 +1004,12 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     for (let i = 0; i < 4; i++) {
       const [ua, va] = tent[i];
       const [ub, vb] = tent[(i + 1) % 4];
-      const lit = i === 1 || i === 3;
+      // Front and back glow, except on a parked taxi (plain tinted plastic).
+      const lit = (i === 1 || i === 3) && spec.lamps !== false;
+      const face = i === 1 || i === 3;
       mb.kind = lit ? KIND.emit : KIND.gloss;
       mb.style = [lit ? EMIT.lamp : 0, 0, 0, 0];
-      mb.color = lit ? glow : BLACK;
+      mb.color = face ? glow : BLACK;
       const nl = Math.hypot(vb - va, ub - ua) || 1;
       const n = N([(vb - va) / nl, -(ub - ua) / nl, 0]);
       mb.quadN(P(ax + ua, ay + va, -0.2), P(ax + ub, ay + vb, -0.2), P(ax + ub, ay + vb, 0.2), P(ax + ua, ay + va, 0.2), n, n, n, n);
@@ -960,9 +1021,11 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
       const n = N([0, 0, Math.sign(zc)]);
       mb.quadN(P(ax - 0.1, ay + 0.025, zc), P(ax + 0.1, ay + 0.025, zc), P(ax + 0.05, ay + 0.19, zc), P(ax - 0.05, ay + 0.19, zc), n, n, n, n);
     }
-    mb.kind = KIND.emit;
-    mb.style = [EMIT.always, 0, 0, 0];
-    mb.color = [0.5, 0.02, 0.02];
+    // The vacancy sign: lit while on the road, dark red plastic parked.
+    const vacant = spec.lamps !== false;
+    mb.kind = vacant ? KIND.emit : KIND.gloss;
+    mb.style = [vacant ? EMIT.always : 0, 0, 0, 0];
+    mb.color = vacant ? [0.5, 0.02, 0.02] : [0.22, 0.02, 0.02];
     const vx0 = d.windscreen[1] - 0.12;
     const vx1 = d.windscreen[1] - 0.04;
     const n = N([0.8, 0.6, 0]);
@@ -994,6 +1057,7 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
       const za = Math.min(z0, z1) + 0.04;
       const zb = Math.max(z0, z1) - 0.04;
       mb.quadN(P(x1 + 0.008, y + 0.04, za), P(x1 + 0.008, y + 0.04, zb), P(x1 + 0.008, y + 0.125, zb), P(x1 + 0.008, y + 0.125, za), n, n, n, n);
+      spec.lampParts?.head.quadN(P(x1 + 0.011, y + 0.04, za), P(x1 + 0.011, y + 0.04, zb), P(x1 + 0.011, y + 0.125, zb), P(x1 + 0.011, y + 0.125, za), n, n, n, n);
       mb.style = [0, 0, 0, 0];
     }
   }
@@ -1162,9 +1226,10 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     mb.kind = KIND.gloss;
     mb.color = BLACK;
     boxL(ax - 0.13, ax + 0.13, ay, ay + 0.05, -0.56, 0.56);
-    mb.kind = KIND.emit;
-    mb.style = [EMIT.always, 0, 0, 0];
-    mb.color = [0.42, 0.02, 0.02];
+    const bar = spec.lamps !== false;
+    mb.kind = bar ? KIND.emit : KIND.gloss;
+    mb.style = [bar ? EMIT.always : 0, 0, 0, 0];
+    mb.color = bar ? [0.42, 0.02, 0.02] : [0.3, 0.02, 0.02];
     for (const sd of [-1, 1]) boxL(ax - 0.11, ax + 0.11, ay + 0.05, ay + 0.15, Math.min(sd * 0.16, sd * 0.55), Math.max(sd * 0.16, sd * 0.55));
     mb.style = [0, 0, 0, 0];
     mb.kind = KIND.gloss;
@@ -1435,7 +1500,8 @@ export function addVehicleMarks(mb: MeshBuilder, spec: VehicleSpec, signs: Vehic
       mb.kind = KIND.chrome;
       mb.color = CHROME;
       boxL(ax - len / 2 + 0.05, ax + len / 2 - 0.05, top(ax), ay, -0.04, 0.04);
-      photos.sb.sign = [0, 1];
+      // A lightbox on the road; parked, its lamp is off (print).
+      photos.sb.sign = [0, spec.lamps === false ? 2 : 1];
       for (const sd of [-1, 1]) {
         const n: [number, number, number] = [s[0] * sd, 0, s[2] * sd];
         const r: [number, number, number] = [n[2], 0, -n[0]];
@@ -1477,7 +1543,7 @@ export function addVehicleMarks(mb: MeshBuilder, spec: VehicleSpec, signs: Vehic
         const h = Math.min(0.36, len * (rect.h / rect.w) * 1.15);
         signs.sb.ink = lin(ad.ink ?? 0x141418);
         signs.sb.plate = lin(ad.plate ?? 0xf2f0e8);
-        signs.sb.sign = [0, 1];
+        signs.sb.sign = [0, spec.lamps === false ? 2 : 1];
         const uv = [rect.u0, rect.v0, rect.u1, rect.v1] as const;
         for (const sd of [-1, 1]) {
           const n: [number, number, number] = [s[0] * sd, 0, s[2] * sd];
@@ -1578,11 +1644,13 @@ function liteWheel(mb: MeshBuilder, P: (x: number, y: number, z: number) => V3, 
     mb.color = [0.018, 0.018, 0.02];
     mb.quadN(at(a0, rimR, 0), at(a1, rimR, 0), at(a1, r, 0.03), at(a0, r, 0.03), out, out, out, out);
     mb.quadN(at(a0, r, 0.03), at(a1, r, 0.03), at(a1, r, tw), at(a0, r, tw), rad(a0), rad(a1), rad(a1), rad(a0));
-    // The face: alternate segments are the spokes (or the hubcap's vents between its dome and the rim).
+    // The face: alternate segments are the spokes (or the hubcap's vents between its dome and the rim). From
+    // the rim in: quadN takes its winding from the first corner's edges, and at the hub they'd have no length
+    // (the face then faced one way on both sides of the car, and was culled on one).
     const dark = i % 2 === 1;
     mb.kind = dark ? KIND.plain : rims === 'steel' ? KIND.gloss : KIND.chrome;
     mb.color = dark ? [0.05, 0.05, 0.055] : rims === 'steel' ? [0.45, 0.46, 0.48] : [0.7, 0.71, 0.73];
-    mb.quadN(at(a0, 0, 0.02), at(a1, 0, 0.02), at(a1, rimR, 0.02), at(a0, rimR, 0.02), out, out, out, out);
+    mb.quadN(at(a0, rimR, 0.02), at(a1, rimR, 0.02), at(a1, 0, 0.02), at(a0, 0, 0.02), out, out, out, out);
   }
 }
 
@@ -1625,8 +1693,9 @@ export function wheel(mb: MeshBuilder, P: (x: number, y: number, z: number) => V
     }
   }
   const out = N([0, 0, sd]);
+  // From the outer edge in, so a disc from the hub (r0 = 0) still has an edge to take its winding from.
   const disc = (r0: number, r1: number, depth: number, a0: number, a1: number): void => {
-    mb.quadN(at(a0, r0, depth), at(a1, r0, depth), at(a1, r1, depth), at(a0, r1, depth), out, out, out, out);
+    mb.quadN(at(a0, r1, depth), at(a1, r1, depth), at(a1, r0, depth), at(a0, r0, depth), out, out, out, out);
   };
   const rimR = r * 0.66;
   for (let i = 0; i < seg * 2; i++) {

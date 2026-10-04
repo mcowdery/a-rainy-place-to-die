@@ -1,9 +1,11 @@
 import * as THREE from 'three';
+import { buildPistol } from './pistol';
 
 /**
- * Mack's shotgun, sawn off, out of a yakuza stash. Two designs under review in the showroom:
- *  - `lever`: a lever-action with an oversized loop lever (the nod to the films: worked one-handed).
- *  - `double`: a side-by-side double, the gun a Japanese hunting licence actually covers.
+ * Mack's shotgun, sawn off, out of a yakuza stash. Two designs were reviewed in the showroom:
+ *  - `lever` (approved, his): a lever-action with an oversized loop lever (the nod to the films: worked one-handed).
+ *  - `double`: a side-by-side double, the gun a Japanese hunting licence actually covers. Not taken; it stays on
+ *    the showroom's stand, out of his hands.
  * Built in metres from side profiles extruded across with rounded edges (receiver, stock, lever),
  * cross-sections extruded along the bore (forends, barrel band) and lathed barrels (tapered, crowned,
  * a dark bore) and a lofted handle (rounded sections along a line). The lever-action after the sawn-off
@@ -15,8 +17,14 @@ import * as THREE from 'three';
  * receiver, above the pistol grip. `grip` and `fore` say where the hands go and how they lie.
  */
 
-export type ShotgunKind = 'lever' | 'double';
-export const SHOTGUN_KINDS: readonly ShotgunKind[] = ['lever', 'double'];
+/** Mack's guns (the name is the shotguns', the first two; the pistol is models/pistol.ts). */
+export type ShotgunKind = 'lever' | 'double' | 'pistol';
+export const SHOTGUN_KINDS: readonly ShotgunKind[] = ['lever', 'double', 'pistol'];
+/** The guns Mack carries (the showroom's G cycles them): the lever-action and the Type 54. */
+export const MACK_GUNS: readonly ShotgunKind[] = ['lever', 'pistol'];
+
+/** A gun's own holds for the rig (models/firstPerson.ts' HOLD, in the camera's frame), where they differ. */
+export type GunHolds = Partial<Record<'low' | 'aim' | 'oneLow' | 'oneAim' | 'run', { readonly pos: THREE.Vector3; readonly rot: THREE.Euler }>>;
 
 /** Where a hand goes on the gun (gun frame): the palm's centre, the palm's normal and the hand's
  * forward (wrist to middle knuckle). */
@@ -32,6 +40,17 @@ export interface HandHold {
   readonly wrap?: { readonly a: THREE.Vector3; readonly b: THREE.Vector3; readonly r: number; readonly rx?: number };
   /** The index finger rests on the trigger instead of closing with the rest. */
   readonly trigger?: boolean;
+  /**
+   * Where the hold lies in the hand: metres along it from the wrist, and off the palm. A gun's grip fills the
+   * palm (the default); something thin (a steering wheel's rim) sits at the fingers' roots.
+   */
+  readonly seat?: readonly [number, number];
+  /**
+   * The thumb hooked round what's held from the side the hand is on (a steering wheel's rim: over its near face
+   * and round its inside): `along` the hold's own line (the hold's frame), `off` where on its section the thumb's
+   * first joint lies (from `at`), `round` the side it goes on round to.
+   */
+  readonly thumbRest?: { readonly along: THREE.Vector3; readonly off: THREE.Vector3; readonly round: THREE.Vector3 };
 }
 
 
@@ -47,6 +66,14 @@ export interface Shotgun {
   /** The lever (lever-action), turning about its pivot's x: 0 shut, about 0.9 thrown. */
   readonly lever: THREE.Object3D | null;
   readonly shells: number;
+  /** Its name; pellets a shot and their cone's half-angle (rad); how hard it kicks (1 a shotgun's). */
+  readonly label?: string;
+  readonly pellets?: number;
+  readonly spread?: number;
+  readonly recoil?: number;
+  /** A pistol's slide, kicked back along +z on a shot. */
+  readonly slide?: THREE.Object3D;
+  readonly holds?: GunHolds;
 }
 
 /** A seeded random for the painted textures. */
@@ -480,6 +507,7 @@ function doubleGun(m: Mats): Shotgun {
 
 /** Builds a shotgun. `env` is an environment map for the steel (it reads as black plastic without one). */
 export function buildShotgun(kind: ShotgunKind, env: THREE.Texture | null = null): Shotgun {
+  if (kind === 'pistol') return buildPistol(env);
   const m = materials(env);
-  return kind === 'lever' ? leverGun(m) : doubleGun(m);
+  return kind === 'lever' ? { ...leverGun(m), label: 'Sawn-off lever-action', pellets: 9, spread: 0.04 } : { ...doubleGun(m), label: 'Sawn-off double', pellets: 9, spread: 0.045 };
 }

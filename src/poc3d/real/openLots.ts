@@ -24,6 +24,8 @@ export interface GroundPiece {
   readonly top: number;
   readonly kind: number;
   readonly hex: number;
+  /** Bare earth (a playground), not gravel: it sounds different underfoot. */
+  readonly earth?: boolean;
 }
 
 export interface OpenLayout {
@@ -210,7 +212,7 @@ function playground(L: Layout, u0: number, t0: number, u1: number, t1: number, o
   const { rnd } = L;
   const w = u1 - u0;
   const d = t1 - t0;
-  L.ground.push({ rect: L.rect(u0, u1, t0, t1), top: own ? 0.05 : 0.11, kind: KIND.gravel, hex: 0x9a8468 });
+  L.ground.push({ rect: L.rect(u0, u1, t0, t1), top: own ? 0.05 : 0.11, kind: KIND.gravel, hex: 0x9a8468, earth: true });
   // Fence: back and sides, and the front either side of a gate.
   const gate = 2.4;
   L.run('fence', u0 + 0.15, t1 - 0.15, u1 - 0.15, t1 - 0.15, 1, 0.08);

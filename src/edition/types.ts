@@ -36,6 +36,10 @@ export interface StoryFiles {
 export const byName = (glob: Record<string, string>): Record<string, string> =>
   Object.fromEntries(Object.entries(glob).map(([p, url]) => [p.slice(p.lastIndexOf('/') + 1).replace(/\.jpg$/, ''), url]));
 
+/** URL by model name, from glTF files keyed by path ("…/mack_suit_black.glb" -> "mack_suit_black"). */
+export const byModel = (glob: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(Object.entries(glob).map(([p, url]) => [p.slice(p.lastIndexOf('/') + 1).replace(/\.glb$/, ''), url]));
+
 export const NO_STORY: StoryFiles = { vnScenes: {}, vnEntries: {}, vnAssets: {}, phoneFiles: {}, phoneMedia: {} };
 
 export interface Edition {
@@ -50,4 +54,6 @@ export interface Edition {
   readonly overlay: StoryFiles;
   /** Kaburo's ad art (assets/ads/kaburo/): URL by name ("09_annaijo_girls"). */
   readonly kaburoArt: Readonly<Record<string, string>>;
+  /** The cast's models (assets/characters/*.glb, models/characters.ts): URL by name ("mack_suit_black"). */
+  readonly characters: Readonly<Record<string, string>>;
 }

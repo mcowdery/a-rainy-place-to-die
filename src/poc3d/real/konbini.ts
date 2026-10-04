@@ -59,13 +59,10 @@ function solids(): Part[] {
   ];
 }
 
-/** Collision rects in world space (walls, fixtures and the browsing customers). */
+/** Collision rects in world space: walls and fixtures (you walk through the browsing customers, as through the mob). */
 export function konbiniColliders(b: Building3): Rect[] {
   const f = localFrame(b);
-  return [
-    ...solids().map((p) => localRect(f, p.u0, p.u1, p.t0, p.t1)),
-    ...CUSTOMERS.map(([u, t]) => localRect(f, u - 0.3, u + 0.3, t - 0.3, t + 0.3)),
-  ];
+  return solids().map((p) => localRect(f, p.u0, p.u1, p.t0, p.t1));
 }
 
 /** Lightmap lights: the fluorescent interior and its spill onto the pavement. */

@@ -5,6 +5,7 @@ import { isLand, type MacroMap } from '../../gen/macro';
 import { ID_PATTERN, type Facing, type NodeKind, type Trigger } from '../../content/stamps';
 import { ASAGIRI_KINDS } from '../real/asagiri';
 import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan';
+import { OUTFITS, type Outfit } from './peopleMix';
 
 /**
  * 3D stamps: hand-authored set pieces for the district renderer (the 3D counterpart of the 2D ASCII-art
@@ -26,7 +27,7 @@ import { CELL, frontPoint, type Building3, type Side, type Sign3 } from './plan'
  * A landmark stamp (landmark: mega_sign) keeps its footprint, collision and forecourt, but its mass is not
  * built by the chunk workers: the main thread adds the landmark itself (see real/megaSign.ts). A node may
  * set view: [yaw, pitch] in degrees for the camera when spawning there (overrides facing). A named spawn is
- * a fast-travel destination. An npc may set figure: { body, pose, hair, long, color, turn } for its ghost
+ * a fast-travel destination. An npc may set figure: { body, pose, hair, long, color, outfit, turn } for its ghost
  * (turn: radians from facing the street). A stamp's name is shown in the HUD while you're inside it.
  * A node's floor (metres, default 0) puts it on a raised level (a station platform). A station stamp gives
  * its names, station: { jp, en }; a station node takes the train to its returnSpawn (the world rides it,
@@ -51,6 +52,8 @@ export interface NodeFigure {
   readonly hair?: 'short' | 'long' | 'bun' | 'hat' | 'cap' | 'none';
   readonly long?: boolean;
   readonly color?: number;
+  /** What they wear (district/peopleMix.ts OUTFITS: a maid's dress, a suit, a school uniform...). */
+  readonly outfit?: Outfit;
   /** Radians, relative to facing the street. */
   readonly turn?: number;
 }
@@ -237,6 +240,7 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
           hair: pick('hair', ['short', 'long', 'bun', 'hat', 'cap', 'none'] as const),
           long: f.long === undefined ? undefined : f.long === true,
           color: f.color === undefined ? undefined : parseInt(String(f.color).slice(1), 16),
+          outfit: pick('outfit', OUTFITS),
           turn: typeof f.turn === 'number' ? f.turn : undefined,
         };
       }

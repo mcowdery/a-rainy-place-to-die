@@ -1,0 +1,24 @@
+{
+  "base": "mack.json",
+  "name": "mack_suit_charcoal",
+  "about": "charcoal suit, white shirt, a dark wine tie: the everyday detective, at home in Asagiri",
+  "out": "assets/characters/mack_suit_charcoal.glb",
+  "preview": "assets/characters/previews/mack_suit_charcoal.png",
+  "without": ["jacket"],
+  "clothes": [
+    {
+      "asset": "male_elegantsuit01",
+      "roughness": 0.8,
+      "metallic": 0,
+      "decimate": 0.5,
+      "ops": [
+        {"op": "colorize", "color": "#34353a", "contrast": 0.85, "rect": [0, 0, 0.73, 1], "lum": [0, 0.45], "orig": true, "sat": [0, 0.15]},
+        {"op": "colorize", "color": "#34353a", "contrast": 0.85, "rect": [0.73, 0, 1, 0.46], "lum": [0, 0.45], "orig": true},
+        {"op": "colorize", "color": "#34353a", "contrast": 0.85, "rect": [0.73, 0.72, 1, 1], "lum": [0, 0.45], "orig": true},
+        {"op": "colorize", "color": "#e9e9ec", "contrast": 0.6, "rect": [0.3, 0, 0.5, 0.47], "lum": [0.45, 1], "orig": true},
+        {"op": "colorize", "color": "#4a1c24", "contrast": 0.2, "poly": [[0.3825, 0.0908], [0.4008, 0.0825], [0.4086, 0.0842], [0.4106, 0.0928], [0.4093, 0.1025], [0.4032, 0.1147], [0.3959, 0.1367], [0.3886, 0.1538], [0.3788, 0.1685], [0.3666, 0.1807], [0.3612, 0.185], [0.3612, 0.1709], [0.3666, 0.1538], [0.3703, 0.1367], [0.3752, 0.1172], [0.38, 0.1025], [0.3813, 0.0957]]}
+      ]
+    },
+    {"asset": "shoes04", "kind": "clothes", "decimate": 0.5, "roughness": 0.35, "metallic": 0, "ops": [{"op": "colorize", "color": "#111012", "contrast": 0.8}]}
+  ]
+}

@@ -21,3 +21,9 @@ export const DEMO_HIDDEN_ART: ReadonlySet<string> = new Set([
   '71_momogen_esthe',
   '81_maid_cafe_pure',
 ]);
+
+/**
+ * Cast models the demo leaves out (it has no story): Mack nude, for the arrival (a smooth, censored body, but
+ * nudity all the same). The demo's own glob (demo.ts) excludes the same files; tests/edition.test.ts checks.
+ */
+export const DEMO_HIDDEN_CHARACTERS: ReadonlySet<string> = new Set(['mack_nude']);

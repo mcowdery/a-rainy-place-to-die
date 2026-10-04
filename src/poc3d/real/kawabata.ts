@@ -425,8 +425,11 @@ export const KAWABATA_BUILDERS: Record<KawabataKind, (k: Kit, id: string, part: 
       const t1 = -12.5;
       k.box(0x3a2a22, u0, u1, t0, t1, -2.4, -0.9);
       k.box(0x6a4a32, u0 + 1.5, u1 - 1.5, t0 + 0.5, t1 - 0.5, -0.9, 1.3);
-      k.glow([1.4, 1.1, 0.7], u0 + 2, u1 - 2, t1 - 0.52, t1 - 0.48, -0.5, 0.9, EMIT.lamp);
-      k.glow([1.4, 1.1, 0.7], u0 + 2, u1 - 2, t0 + 0.48, t0 + 0.52, -0.5, 0.9, EMIT.lamp);
+      // Shoji panes, softly lit (lamp emitters are x6 at night: one strip down the cabin bloomed into a bar).
+      for (let uu = u0 + 2; uu + 1.2 <= u1 - 2; uu += 1.5) {
+        k.glow([0.2, 0.15, 0.08], uu, uu + 1.2, t1 - 0.52, t1 - 0.48, -0.4, 0.8, EMIT.lamp);
+        k.glow([0.2, 0.15, 0.08], uu, uu + 1.2, t0 + 0.48, t0 + 0.52, -0.4, 0.8, EMIT.lamp);
+      }
       roof(k, u0 + 1.2, u1 - 1.2, t0 + 0.3, t1 - 0.3, 1.3, 0.8, 0.5, 0x2a2a2e);
       for (let uu = u0 + 2; uu < u1 - 1.5; uu += 1.6) k.glow([2.2, 0.35, 0.2], uu - 0.2, uu + 0.2, t1 - 0.35, t1 - 0.05, 0.6, 1.1, EMIT.lamp);
       plate(k, 5, 0.9, (u0 + u1) / 2, t1 - 0.2, 1.8, (g, W, H) => {

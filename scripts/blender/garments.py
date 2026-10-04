@@ -17,6 +17,10 @@ In a character definition ("garments": [...]):
   {"type": "hair_cards", "on": "<hair asset>", "fringe": {...}, "locks": {...}, ...}
       alpha-card hair over a base hair asset: a wispy fringe and long side locks, with a strand
       texture made here (see build_hair_cards)
+  {"type": "haircut", "color": "#16130f", "hairline": [...], "volume": {...}, "cards": {...}, ...}
+      a short cut combed back, in place of a hair asset: a shell from the scalp, thicker where the
+      hair is longer, with a strand texture along its flow, and short alpha cards along the same flow
+      to break up its edges (see build_haircut)
   {"type": "jacket", "over": ["<asset>", ...], "color": "#151313", ...}
       a leather rider jacket shaped from the skin itself (made by prepare(), before the clothes mask
       the body; see prepare_jacket): worn open, a stand collar, zips, a turned-in lip on its edges,
@@ -26,7 +30,7 @@ In a character definition ("garments": [...]):
       normals), drape_below, drape_slope (see drape), smooth_after, decimate, roughness,
       specular, grain, grain_tile, zip_color, zip_top; debug_colors paints the turned-in lip red
       and the collar blue and prints the faces per material
-Everything is single-sided with double-sided materials; only the hair cards and the jacket have a texture.
+Everything is single-sided with double-sided materials; only the hair cards, the haircut and the jacket have a texture.
 """
 import math
 
@@ -747,6 +751,279 @@ def build_hair_cards(g, name, rig, body, meshes, L, tmpdir):
     return obj
 
 
+# --- a short haircut ---------------------------------------------------------------------------
+#
+# MakeHuman's short hair assets are thin painted caps with ragged edges, fine face-on and poor from
+# behind, which is where a third-person camera sees a man's head. This is a cut of its own: a shell
+# shaped from the scalp itself (a copy of the skin above the hairline, so it keeps the skin's own
+# weights), thicker where the hair is longer, combed back along a flow from the front hairline over
+# the crown to the nape, with a strand texture and normal map along that flow; and over it short
+# alpha cards laid along the same flow, so the outline breaks up into strands at the hairline, the
+# temples and the nape instead of ending in a hard edge.
+
+def _smoothstep(a, b, x):
+    t = min(1.0, max(0.0, (x - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+
+
+def hair_shell_maps(tmpdir, color, size=256, seed=3, sheen=0.7):
+    """Tileable maps for the shell, strands running along v: a colour (dark with lighter strands
+    and darker gaps between the locks) and a tangent-space normal map of the grooves between them."""
+    import os
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[0:size, 0:size].astype(np.float32)
+    h = np.zeros((size, size), dtype=np.float32)
+    # Locks: broad, soft ridges; then single strands over them.
+    for k in range(28):
+        x0, w, a = rng.uniform(0, size), rng.uniform(5, 12), rng.uniform(0.6, 1.0)
+        wav = rng.uniform(0, 5) * np.sin(2 * np.pi * yy / size * int(rng.integers(1, 3)) + rng.uniform(0, 6.3))
+        dx = (xx - x0 - wav + size / 2) % size - size / 2
+        h += a * np.exp(-(dx / w) ** 2)
+    for k in range(320):
+        x0, w, a = rng.uniform(0, size), rng.uniform(0.7, 1.6), rng.uniform(0.15, 0.5)
+        wav = rng.uniform(0, 3) * np.sin(2 * np.pi * yy / size * int(rng.integers(1, 4)) + rng.uniform(0, 6.3))
+        dx = (xx - x0 - wav + size / 2) % size - size / 2
+        h += a * np.exp(-(dx / w) ** 2)
+    h = (h - h.min()) / (h.max() - h.min())
+    col = np.array(hex_rgb(color)[:3], dtype=np.float32)
+    rgb = col[None, None, :] * (0.55 + sheen * h[..., None])
+    # Back to sRGB for the image (it's read as colour).
+    srgb = np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * np.power(np.maximum(rgb, 0), 1 / 2.4) - 0.055)
+    gx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 3.0
+    gy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 0.6
+    n = np.stack([-gx, -gy, np.ones_like(h)], axis=2)
+    n /= np.linalg.norm(n, axis=2, keepdims=True)
+    out = []
+    for nm, px, colour in (('haircut_color', srgb, True), ('haircut_normal', n * 0.5 + 0.5, False)):
+        img = bpy.data.images.new(nm, size, size, alpha=False)
+        if not colour:
+            img.colorspace_settings.name = 'Non-Color'
+        img.pixels.foreach_set(np.concatenate([px, np.ones((size, size, 1), np.float32)], axis=2).astype(np.float32).ravel())
+        img.filepath_raw = os.path.join(tmpdir or '.', nm + '.png')
+        img.file_format = 'PNG'
+        img.save()
+        out.append(img)
+    return out
+
+
+def build_haircut(g, name, rig, body, meshes, L, tmpdir):
+    """A short haircut combed back (see above). Settings:
+      "color", "roughness", "specular", "normal" (the strand normal map's strength), "sheen", "seed"
+      "hairline": [[phi, theta], ...] the hairline as the elevation above the head's centre (theta,
+                  degrees) by azimuth from the front (phi, 0..180 degrees, the same both sides)
+      "volume": {"sides", "back", "nape", "crown", "front", "edge", "edge_deg"} the hair's
+                  thickness (metres) on the sides, at the back, at the nape, on the crown and just
+                  behind the front hairline, easing to "edge" over the "edge_deg" degrees inside the
+                  hairline
+      "smooth", "relax": passes smoothing the thickness, then the shell
+      "reach": metres from the head's centre the hair may grow (default 0.2; less keeps a thick neck's traps bare)
+      "pole": the flow's source, degrees above the eyes straight ahead (the hair runs away from it)
+      "tile": [u per radian across the flow, v per radian along it] for the shell's maps
+      "cards": {"count", "length": [sides, crown], "width", "lift", "density"} or null for none;
+      "card_color" """
+    import bmesh
+    rng = np.random.default_rng(int(g.get('seed', 11)))
+    eye = (Vector(L['eye_l']) + Vector(L['eye_r'])) / 2
+    skin = Surface([body])
+    # The head's centre: halfway between the brow and the back of the head, a little above the eyes.
+    z0 = eye.z + 0.015
+    back, _ = skin.cast((0, 1.0, z0), (0, -1, 0))
+    front, _ = skin.cast((0, -1.0, z0), (0, 1, 0))
+    c = Vector((0, (front.y + back.y) / 2, z0))
+    hl = np.array(g.get('hairline', [[0, 38], [40, 36], [60, 34], [72, 12], [82, -6], [90, 16], [100, 20],
+                                     [118, 8], [135, -18], [155, -36], [180, -42]]), dtype=float)
+
+    def hairline(phi):
+        return float(np.interp(phi, hl[:, 0], hl[:, 1]))
+
+    def angles(p):
+        d = (Vector(p) - c).normalized()
+        return math.degrees(math.atan2(abs(d.x), -d.y)), math.degrees(math.asin(max(-1.0, min(1.0, d.z))))
+
+    def dirn(phi, theta, sx):
+        ph, th = math.radians(phi), math.radians(theta)
+        return Vector((sx * math.sin(ph) * math.cos(th), -math.cos(ph) * math.cos(th), math.sin(th)))
+
+    def onto(surface, d):
+        return surface.cast(c + d * 0.4, -d, 0.5)
+
+    vol = {'sides': 0.006, 'back': 0.009, 'nape': 0.003, 'crown': 0.014, 'front': 0.02, 'edge': 0.0012, 'edge_deg': 9}
+    vol.update(g.get('volume', {}))
+
+    def thickness(phi, theta):
+        t = vol['sides']
+        t += (vol['back'] - t) * _smoothstep(100, 160, phi)
+        t += (vol['nape'] - t) * _smoothstep(-5, -35, theta) * _smoothstep(110, 150, phi)
+        t += (vol['crown'] - t) * _smoothstep(35, 70, theta)
+        t += (vol['front'] - t) * _smoothstep(55, 15, phi) * _smoothstep(25, 50, theta)
+        return vol['edge'] + (t - vol['edge']) * _smoothstep(0, vol['edge_deg'], theta - hairline(phi))
+
+    # The shell: the skin above the hairline (any face touching it), its outer vertices moved onto the
+    # hairline so the edge follows it smoothly rather than the mesh's edges.
+    sh = body.copy()
+    sh.data = body.data.copy()
+    sh.modifiers.clear()
+    sh.name = sh.data.name = name + '.haircut'
+    bpy.context.scene.collection.objects.link(sh)
+    if sh.data.shape_keys:
+        sh.shape_key_clear()
+    mw = sh.matrix_world.copy()
+    mwi = mw.inverted()
+    bm = bmesh.new()
+    bm.from_mesh(sh.data)
+    inside = {}
+    for v in bm.verts:
+        p = mw @ v.co
+        phi, th = angles(p)
+        inside[v] = ((p - c).length < g.get('reach', 0.2)) and th > hairline(phi)
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if not any(inside[v] for v in f.verts)], context='FACES_ONLY')
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+    for v in bm.verts:
+        p = mw @ v.co
+        phi, th = angles(p)
+        if th < hairline(phi) + 0.2:
+            loc, _ = onto(skin, dirn(phi, hairline(phi) + 0.2, 1 if p.x >= 0 else -1))
+            if loc is not None:
+                v.co = mwi @ loc
+    bm.normal_update()
+    # Out along the normals by the hair's thickness there (smoothed over the mesh, so it swells evenly).
+    bm.verts.ensure_lookup_table()
+    n = len(bm.verts)
+    rot = mw.to_3x3()
+    base = [mw @ v.co for v in bm.verts]
+    nrm = [(rot @ v.normal).normalized() for v in bm.verts]
+    tk = np.array([thickness(*angles(base[i])) for i in range(n)])
+    nbrs = [[e.other_vert(v).index for e in v.link_edges] for v in bm.verts]
+    edge = np.array([v.is_boundary for v in bm.verts])
+    for _ in range(int(g.get('smooth', 6))):
+        avg = np.array([tk[nb].mean() if nb else tk[i] for i, nb in enumerate(nbrs)])
+        tk = np.where(edge, tk, 0.5 * tk + 0.5 * avg)
+    for i, v in enumerate(bm.verts):
+        v.co = mwi @ (base[i] + nrm[i] * tk[i])
+    # A few passes of smoothing over the shell itself (hair bridges the skull's small hollows).
+    for _ in range(int(g.get('relax', 4))):
+        pos = [v.co.copy() for v in bm.verts]
+        for i, v in enumerate(bm.verts):
+            if edge[i] or not nbrs[i]:
+                continue
+            avg = sum((pos[j] for j in nbrs[i]), Vector()) / len(nbrs[i])
+            v.co = pos[i].lerp(avg, 0.5)
+    # Smoothing a curved surface shrinks it: keep every vertex at least most of its thickness off the
+    # scalp, or the thin hair near the hairline sinks under the skin.
+    for i, v in enumerate(bm.verts):
+        p = mw @ v.co
+        loc, sn, _, _ = skin.bvh.find_nearest(p)
+        if loc is None:
+            continue
+        h = (p - loc).dot(sn)
+        floor = 0.85 * tk[i]
+        if h < floor:
+            v.co = mwi @ (p + sn * (floor - h))
+    bm.normal_update()
+
+    # The flow: away from a pole just above the forehead, over the crown and down the back and sides.
+    pole_el = math.radians(g.get('pole', 45))
+    A = Vector((0, -math.cos(pole_el), math.sin(pole_el)))
+    e1 = (Vector((0, 0, 1)) - A * A.z).normalized()
+    e2 = A.cross(e1)
+    tu, tv = g.get('tile', [2.6, 1.6])
+    for layer in list(bm.loops.layers.uv):
+        bm.loops.layers.uv.remove(layer)
+    uv = bm.loops.layers.uv.new('UVMap')
+    for f in bm.faces:
+        for lp in f.loops:
+            d = (mw @ lp.vert.co - c).normalized()
+            al = math.acos(max(-1.0, min(1.0, d.dot(A))))
+            be = math.atan2(d.dot(e2), d.dot(e1))
+            lp[uv].uv = (be * tu, al * tv)
+    bm.to_mesh(sh.data)
+    bm.free()
+    me = sh.data
+    me.materials.clear()
+    col_img, nrm_img = hair_shell_maps(tmpdir, g.get('color', '#16130f'), seed=int(g.get('seed', 11)), sheen=g.get('sheen', 0.7))
+    mat = material(name + '.haircut', g.get('color', '#16130f'), g.get('roughness', 0.5))
+    nt = mat.node_tree
+    bsdf = next(nd for nd in nt.nodes if nd.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs['Specular IOR Level'].default_value = g.get('specular', 0.45)
+    tex = nt.nodes.new('ShaderNodeTexImage')
+    tex.image = col_img
+    nt.links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])
+    ntex = nt.nodes.new('ShaderNodeTexImage')
+    ntex.image = nrm_img
+    nm = nt.nodes.new('ShaderNodeNormalMap')
+    nm.inputs['Strength'].default_value = g.get('normal', 0.8)
+    nt.links.new(ntex.outputs['Color'], nm.inputs['Color'])
+    nt.links.new(nm.outputs['Normal'], bsdf.inputs['Normal'])
+    me.materials.append(mat)
+    me.polygons.foreach_set('use_smooth', [True] * len(me.polygons))
+    me.update()
+    skin_to(sh, rig)
+    out = [sh]
+
+    # Cards over it along the same flow: roots anywhere on the hair, each running back for a few
+    # centimetres just above the shell, stopping at the hairline.
+    cd = g.get('cards', {})
+    if cd is not None:
+        shell = Surface([sh])
+        hexc = g.get('card_color', g.get('color', '#16130f')).lstrip('#')
+        ccol = [int(hexc[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        s1 = strand_texture(name + '_hc1', tmpdir, ccol, seed=int(g.get('seed', 11)) + 5, density=cd.get('density', 1.3), underlayer=False)
+        s2 = strand_texture(name + '_hc2', tmpdir, ccol, seed=int(g.get('seed', 11)) + 6, density=cd.get('density', 1.3) * 0.8, underlayer=False)
+        cmat = card_material(name + '.haircut_cards', join_textures(name + '_haircut_strands', tmpdir, [s1, s2]), g.get('roughness', 0.5), g.get('specular', 0.45))
+        cm = CardMesh()
+        ln_side, ln_crown = cd.get('length', [0.03, 0.06])
+        lo = math.sin(math.radians(-45))
+        made = 0
+        tries = 0
+        step = 0.005
+        while made < int(cd.get('count', 240)) and tries < 20000:
+            tries += 1
+            phi = rng.uniform(0, 180)
+            theta = math.degrees(math.asin(rng.uniform(lo, 1.0)))
+            if theta < hairline(phi) - 1:
+                continue
+            sx = 1 if rng.random() < 0.5 else -1
+            p, nr = onto(shell, dirn(phi, theta, sx))
+            if p is None:
+                continue
+            length = ln_side + (ln_crown - ln_side) * max(_smoothstep(30, 70, theta), _smoothstep(110, 170, phi) * _smoothstep(-20, 10, theta))
+            length *= rng.uniform(0.7, 1.15)
+            lift = cd.get('lift', 0.0012) * rng.uniform(0.6, 1.6)
+            path, norms = [], []
+            q, qn = p, nr
+            for k in range(int(length / step) + 1):
+                path.append(q + qn * lift * (1 + 0.6 * k * step / length))
+                norms.append(qn)
+                d = (q - c).normalized()
+                t = d * d.dot(A) - A
+                t = t - qn * t.dot(qn)
+                if t.length < 1e-6:
+                    break
+                nxt = q + t.normalized() * step
+                q2, qn2 = shell.cast(nxt + qn * 0.03, -qn, 0.06)
+                if q2 is None:
+                    break
+                ph2, th2 = angles(q2)
+                if th2 < hairline(ph2) + 0.5:
+                    break
+                q, qn = q2, qn2
+            if len(path) < 4:
+                continue
+            sides = []
+            for k, pt in enumerate(path):
+                tang = (path[min(k + 1, len(path) - 1)] - path[max(k - 1, 0)]).normalized()
+                sides.append(tang.cross(norms[k]).normalized())
+            w = cd.get('width', 0.016) * rng.uniform(0.8, 1.25)
+            widths = [w * (1 - 0.35 * j / len(path)) for j in range(len(path))]
+            u0 = rng.uniform(0, 0.75)
+            cm.ribbon(path, sides, widths, u0, u0 + 0.25)
+            made += 1
+        cards = cm.build(name + '.haircut_cards', cmat)
+        transfer_weights(cards, [body], rig)
+        out.append(cards)
+    return out
+
+
 # --- the rider jacket --------------------------------------------------------------------------
 #
 # Shaped from the body itself rather than laid over it: a copy of the skin (taken before the clothes
@@ -1117,4 +1394,6 @@ def build(g, name, rig, body, meshes, L=None, tmpdir=None):
         return [build_headband(g, name, rig, body)]
     if g['type'] == 'hair_cards':
         return [build_hair_cards(g, name, rig, body, meshes, L, tmpdir)]
+    if g['type'] == 'haircut':
+        return build_haircut(g, name, rig, body, meshes, L, tmpdir)
     raise SystemExit('Unknown garment ' + g['type'])

@@ -6,8 +6,9 @@ import { splat, type TargetHit, type Targets } from './targets';
  * Shooting from the car (the practice lot's test): a pistol and a paintball marker, fired by the driver.
  * Japanese cars are right-hand drive, so the driver's window is on the right: the arm goes out of it, a wide
  * arc from just ahead round to behind. The passenger's window is across the car: the driver stays in the
- * seat and shoots through it (the camera goes to the driver's eye: cabin.ts), so only what that window frames
- * will do, and the shots are worse (spread, rate). The windscreen and the back are no line of fire.
+ * seat and shoots through it (the camera goes to the driver's eye in the cabin: models/carInterior.ts), so only
+ * what that window frames will do, and the shots are worse (spread, rate). The windscreen and the back are no
+ * line of fire.
  *
  * The pistol (黒星, the Type 54 the yakuza made famous) hits at once, with a flash and a tracer, and has a
  * little aim assist. Paintballs fly: they leave at 88 m/s plus the car's own velocity, drop, and slow, so you
@@ -38,11 +39,13 @@ export const WEAPONS: readonly Weapon[] = [
 
 const DEG = Math.PI / 180;
 
-/** The driver's eye in the car's frame (+x its left, +z forward, metres from its centre on the ground). */
+/** The driver's eye in the car's frame (+x its left, +z forward, metres from its centre on the ground): the coupe's
+ * (models/carInterior.ts' `cockpitLayout` fits each car's; the camera and Mack use that). */
 export const EYE = { x: -0.35, y: 1.07, z: -0.02 } as const;
 /**
  * The passenger window's opening, in the car's frame: the plane x = `x` (the door's inside), between z0 and z1
- * along the car and y0 and y1 up. Shots across the car go through it, and the cabin (cabin.ts) frames it.
+ * along the car and y0 and y1 up. Shots across the car go through it. (The cabin, models/carInterior.ts, shows the
+ * body's own glass, a little longer than this.)
  */
 export const WINDOW = { x: 0.82, z0: -0.26, z1: 0.68, y0: 0.78, y1: 1.23 } as const;
 /**

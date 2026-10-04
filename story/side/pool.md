@@ -59,7 +59,8 @@ the first 200s.
   - *The daughter*: raised behind the plastered wall, wants out of the family. The oyabun hires Mack to find her
     when she runs, or she hires Mack to help her disappear.
   Stays: a debt with the yakuza, for good or ill.
-- **The maid café girl** (Denkō-chō, めいどかふぇ ♡ぴゅあ♡). The "pure" persona she sells and the woman under it;
+- **The maid café girl** (Denkō-chō, めいどかふぇ ♡ぴゅあ♡: built on Denkō-dōri, placement `maid_cafe`; the maid at the
+  door is `maid_cafe.maid`, the tout outside `maid_cafe.tout`). The "pure" persona she sells and the woman under it;
   the regulars who think they own her; one who follows her home. The hierarchy of cuteness, the loneliness on
   both sides of the counter. Her work trades on looking young, so her story stays non-sexual, or she's plainly
   an adult off the clock. Stays: eyes in the electric town.

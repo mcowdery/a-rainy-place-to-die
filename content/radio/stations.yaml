@@ -1,0 +1,92 @@
+# The radio's stations (format: src/poc3d/district/radio.ts). A station's tracks are the files in
+# assets/radio/<id>/; after adding, replacing or removing one, run `npm run radio:index` (it reads each file's
+# length into assets/radio/durations.json) and credit it in assets/radio/CREDITS.md. Stations are invented:
+# no real broadcasters.
+stations:
+  - id: jazz
+    name: TŌTO JAZZ
+    jp: 東都ジャズ
+    freq: '79.5'
+    blurb: Jazz through the night.
+    tracks:
+      - { file: backed_vibes_clean.ogg, title: Backed Vibes, artist: Kevin MacLeod }
+      - { file: cool_vibes.ogg, title: Cool Vibes, artist: Kevin MacLeod }
+      - { file: i_knew_a_guy.ogg, title: I Knew a Guy, artist: Kevin MacLeod }
+      - { file: just_as_soon.ogg, title: Just As Soon, artist: Kevin MacLeod }
+      - { file: walking_along.ogg, title: Walking Along, artist: Kevin MacLeod }
+      - { file: deadly_roulette.ogg, title: Deadly Roulette, artist: Kevin MacLeod }
+      - { file: hard_boiled.ogg, title: Hard Boiled, artist: Kevin MacLeod }
+      - { file: covert_affair.ogg, title: Covert Affair, artist: Kevin MacLeod }
+      - { file: comfortable_mystery.ogg, title: Comfortable Mystery, artist: Kevin MacLeod }
+      - { file: dances_and_dames.ogg, title: Dances and Dames, artist: Kevin MacLeod }
+      - { file: slow_burn.ogg, title: Slow Burn, artist: Kevin MacLeod }
+      - { file: shades_of_spring.ogg, title: Shades of Spring, artist: Kevin MacLeod }
+      - { file: george_street_shuffle.ogg, title: George Street Shuffle, artist: Kevin MacLeod }
+      - { file: lobby_time.ogg, title: Lobby Time, artist: Kevin MacLeod }
+  - id: bay
+    name: FM SHIOMI
+    jp: FM汐見
+    freq: '84.7'
+    blurb: Funk, disco and lounge from the bay.
+    tracks:
+      - { file: funkorama.ogg, title: Funkorama, artist: Kevin MacLeod }
+      - { file: groove_grove.ogg, title: Groove Grove, artist: Kevin MacLeod }
+      - { file: disco_con_tutti.ogg, title: Disco con Tutti, artist: Kevin MacLeod }
+      - { file: stringed_disco.ogg, title: Stringed Disco, artist: Kevin MacLeod }
+      - { file: feelin_good.ogg, title: Feelin Good, artist: Kevin MacLeod }
+      - { file: local_forecast_elevator.ogg, title: Local Forecast (Elevator), artist: Kevin MacLeod }
+      - { file: airport_lounge.ogg, title: Airport Lounge, artist: Kevin MacLeod }
+      - { file: aces_high.ogg, title: Aces High, artist: Kevin MacLeod }
+      - { file: acidjazz.ogg, title: AcidJazz, artist: Kevin MacLeod }
+      - { file: ultralounge.ogg, title: Ultralounge, artist: Kevin MacLeod }
+      - { file: protofunk.ogg, title: Protofunk, artist: Kevin MacLeod }
+      - { file: late_night_radio.ogg, title: Late Night Radio, artist: Kevin MacLeod }
+      - { file: smooth_lovin.ogg, title: Smooth Lovin, artist: Kevin MacLeod }
+      - { file: bossa_antigua.ogg, title: Bossa Antigua, artist: Kevin MacLeod }
+      - { file: kaburo_lights.ogg, title: "歌舞路ライツ", artist: "歌舞路ブギー・クラブ" }
+      - { file: shiomi_breeze.ogg, title: "汐見ブリーズ", artist: "汐見ベイ・フュージョン" }
+  - id: kissa
+    name: JAZZ KISSA
+    jp: ジャズ喫茶
+    freq: '88.3'
+    blurb: Straight-ahead jazz, as in the café with the big speakers.
+    tracks:
+      - { file: last_call_at_kanpai.ogg, title: "Last Call at Kanpai", artist: "Blue Door Five" }
+      - { file: blue_door_bop.ogg, title: "Blue Door Bop", artist: "Blue Door Five" }
+      - { file: shiomi_bossa.ogg, title: "Shiomi Bossa", artist: "Wangan Latin Jazz Club" }
+      - { file: kaburo_soul.ogg, title: "Kaburo Soul", artist: "The Soul Lanterns" }
+      - { file: tuesday_at_the_kissa.ogg, title: "Tuesday at the Kissa", artist: "Kissa House Trio" }
+      - { file: asagiri_morning.ogg, title: "Asagiri Morning", artist: "Asagiri Jazz Workshop" }
+      - { file: wangan_mambo.ogg, title: "Wangan Mambo", artist: "Wangan Latin Jazz Club" }
+      - { file: sakura_waltz.ogg, title: "Sakura Waltz", artist: "Kissa House Trio" }
+      - { file: toto_express.ogg, title: "Tōto Express", artist: "Tōto Swing Orchestra" }
+      - { file: a_letter_from_yunagi.ogg, title: "A Letter from Yūnagi", artist: "Asagiri Jazz Workshop" }
+      - { file: takanodai_stroll.ogg, title: "Takanodai Stroll", artist: "Kissa House Trio" }
+  - id: noir
+    name: RADIO NOCTURNE
+    jp: ラジオ・ノクターン
+    freq: '90.9'
+    blurb: Music for the small hours.
+    tracks:
+      - { file: rain_on_kaburo.ogg, title: "Rain on Kaburo", artist: "The Kasumi Quartet" }
+      - { file: yotaka.ogg, title: "夜鷹 Nighthawk", artist: "夜鷹カルテット" }
+      - { file: kasumi_blue.ogg, title: "Kasumi Blue", artist: "Yotaka Trio" }
+      - { file: room_201.ogg, title: "Room 201", artist: "The Kasumi Quartet" }
+      - { file: harbor_fog.ogg, title: "Harbor Fog", artist: "深夜楽団" }
+      - { file: tail_lights.ogg, title: "Tail Lights", artist: "東都ナイト・アンサンブル" }
+      - { file: stakeout.ogg, title: "Stakeout", artist: "Harbor Lights Orchestra" }
+      - { file: cigarette_and_neon.ogg, title: "Cigarette and Neon", artist: "Harbor Lights Orchestra" }
+      - { file: dead_letter.ogg, title: "Dead Letter", artist: "深夜楽団" }
+      - { file: blue_hour_kawabata.ogg, title: "Blue Hour, Kawabata", artist: "The Kasumi Quartet" }
+      - { file: rindo.ogg, title: "竜胆 Rindō", artist: "深夜楽団" }
+      - { file: the_informant.ogg, title: "The Informant", artist: "東都ナイト・アンサンブル" }
+      - { file: three_am_expressway.ogg, title: "3 A.M. Expressway", artist: "東都ナイト・アンサンブル" }
+  - id: city_pop_radio
+    name: City Pop Radio
+    jp: シティポップ・ラジオ
+    freq: '86.1'
+    blurb: City pop for the night drive.
+    tracks:
+      - { file: shuden_no_ato_de.ogg, title: "終電のあとで", artist: "サンセット・パレード" }
+      - { file: neon_no_ame.ogg, title: "ネオンの雨", artist: "真夜中シアター" }
+      - { file: toto_bay_drive.ogg, title: "東都ベイ・ドライブ", artist: "ルナ・パシフィカ" }

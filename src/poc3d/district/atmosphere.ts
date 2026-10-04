@@ -2,6 +2,7 @@ import YAML from 'yaml';
 import { CELL_CHARS, type CellKind } from '../../gen/macro';
 import { applicableRules, checkMatch, type RuleMatch, type TimeOfDay, type Weather } from '../../atmosphere/rules';
 import { LIGHT_LOOKS, type LightLook } from './clock';
+import { SEASONS, type Season } from './seasons';
 
 /**
  * 3D atmosphere: (district, time, weather) -> scene lighting and effects, using the same layered rule
@@ -61,7 +62,8 @@ const NUMBER_KEYS: readonly Key[] = ['fogNear', 'fogFar', 'hemi', 'sun', 'window
 const ALL_KEYS: readonly Key[] = [...COLOR_KEYS, ...NUMBER_KEYS, 'neon'];
 
 interface Rule3 {
-  readonly match: RuleMatch;
+  /** (Besides district, time and weather, a 3D rule can name a season: it applies only then.) */
+  readonly match: RuleMatch & { readonly season?: Season };
   readonly set: Partial<Atmosphere3>;
 }
 
@@ -83,19 +85,20 @@ export class AtmosphereTable3 {
     private readonly skies: ReadonlyMap<string, readonly Rule3[]> = new Map(),
   ) {}
 
-  resolve(district: CellKind, time: LightLook, weather: Weather, sky: SkyLook = 'citypop'): Atmosphere3 {
-    const key = `${district}|${time}|${weather}|${sky}`;
+  resolve(district: CellKind, time: LightLook, weather: Weather, sky: SkyLook = 'citypop', season: Season = 'spring'): Atmosphere3 {
+    const key = `${district}|${time}|${weather}|${sky}|${season}`;
     let a = this.cache.get(key);
     if (!a) {
+      const now = (rules: readonly Rule3[]): Rule3[] => rules.filter((r) => r.match.season === undefined || r.match.season === season);
       const base = LOOK_BASE[time];
       if (base) {
         // A look between the story's times: its base's atmosphere, then the rules naming it (the sky look's last).
-        const own = (rules: readonly Rule3[]): Rule3[] => applicableRules(rules.filter((r) => r.match.time === time), district, time as TimeOfDay, weather);
-        a = Object.assign({}, this.resolve(district, base, weather, sky), ...[...own(this.rules), ...own(this.skies.get(sky) ?? [])].map((r) => r.set)) as Atmosphere3;
+        const own = (rules: readonly Rule3[]): Rule3[] => applicableRules(now(rules).filter((r) => r.match.time === time), district, time as TimeOfDay, weather);
+        a = Object.assign({}, this.resolve(district, base, weather, sky, season), ...[...own(this.rules), ...own(this.skies.get(sky) ?? [])].map((r) => r.set)) as Atmosphere3;
       } else {
         const t = time as TimeOfDay;
-        const over = applicableRules(this.skies.get(sky) ?? [], district, t, weather);
-        a = Object.assign({}, ...[...applicableRules(this.rules, district, t, weather), ...over].map((r) => r.set)) as Atmosphere3;
+        const over = applicableRules(now(this.skies.get(sky) ?? []), district, t, weather);
+        a = Object.assign({}, ...[...applicableRules(now(this.rules), district, t, weather), ...over].map((r) => r.set)) as Atmosphere3;
       }
       this.cache.set(key, a);
     }
@@ -119,9 +122,12 @@ export function parseAtmosphere3(file: string, text: string, errors: string[]): 
   const parseRules = (list: Record<string, unknown>[], prefix: string): Rule3[] => list.map((raw, i) => {
     const at = `${prefix}rule ${i}`;
     const match = (raw.match ?? {}) as Record<string, unknown>;
-    // (A look between the story's times is a time here too: checked here, the rest by the shared check.)
+    // (A look between the story's times is a time here too, and a rule can name a season: both checked here, the
+    // rest by the shared check.)
     if (match.time !== undefined && !LIGHT_LOOKS.includes(match.time as LightLook)) err(`${at}: unknown time '${String(match.time)}'`);
-    checkMatch({ ...match, time: undefined }, districts, (m) => err(`${at}: ${m}`));
+    if (match.season !== undefined && !SEASONS.includes(match.season as Season)) err(`${at}: unknown season '${String(match.season)}'`);
+    const { time: _t, season: _s, ...rest } = match;
+    checkMatch(rest, districts, (m) => err(`${at}: ${m}`));
     const set: Record<string, unknown> = {};
     for (const [k, v] of Object.entries((raw.set ?? {}) as Record<string, unknown>)) {
       if (!ALL_KEYS.includes(k as Key)) err(`${at}: unknown key '${k}'`);
@@ -136,7 +142,7 @@ export function parseAtmosphere3(file: string, text: string, errors: string[]): 
         set[k] = v;
       }
     }
-    return { match: match as RuleMatch, set: set as Partial<Atmosphere3> };
+    return { match: match as Rule3['match'], set: set as Partial<Atmosphere3> };
   });
   const rules = parseRules(list, '');
   const skies = new Map<string, Rule3[]>();

@@ -358,7 +358,10 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
     for (let k = 1; k <= n; k++) {
       const G: [number, number] = vertical ? [a[0], a[1] + l.d[1] * k * CELL] : [a[0] + l.d[0] * k * CELL, a[1]];
       const proj = (G[0] - pts[i][0]) * l.d[0] + (G[1] - pts[i][1]) * l.d[1];
-      const cross = half(!vertical, vertical ? G[1] : G[0], (vertical ? G[0] : G[1]) - CELL / 2, (vertical ? G[0] : G[1]) + CELL / 2).w;
+      // The junction box's depth: the wider of the crossing road's two arms, either side of this edge's line (the
+      // crossings and stop lines stand off the one box: plan.ts junctionSpans).
+      const [crossLine, here] = vertical ? [G[1], G[0]] : [G[0], G[1]];
+      const cross = Math.max(half(!vertical, crossLine, here - CELL, here).w, half(!vertical, crossLine, here, here + CELL).w);
       const t = k === n ? turnAt[(i + 1) % 4] : null;
       const turn: Junction['turn'] = t ? (t.right ? 'right' : 'left') : null;
       // The stop line: before the crossing road's zebra, and before the turn starts.

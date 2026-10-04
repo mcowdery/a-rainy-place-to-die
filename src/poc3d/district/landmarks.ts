@@ -15,6 +15,9 @@ import { localFrame, localRect } from '../real/localFrame';
 const asagiri = (p: Placed3): AsagiriKind | null => ((ASAGIRI_KINDS as readonly string[]).includes(p.stamp.landmark ?? '') ? (p.stamp.landmark as AsagiriKind) : null);
 import { liveHouseColliders, liveHouseFloor, liveHouseHoles, liveHouseLights } from '../real/liveHouse';
 import { deptHoles } from '../real/deptStore';
+import { siteHoles } from '../real/kasumiGrounds';
+import { homeSheltersFor } from '../real/homesCast';
+import { rougeShelters } from '../real/rougeInterior';
 import type { Building3 } from './plan';
 import type { Placed3 } from './stamps';
 
@@ -97,8 +100,12 @@ export interface Shelter {
   readonly enclosed?: boolean;
 }
 
-/** A landmark's covered volumes: walk-in interiors, canopies, the station, the observatory. */
+/** A landmark's covered volumes: walk-in interiors, canopies, the station, the observatory, the flats in it. */
 export function landmarkShelters(p: Placed3): Shelter[] {
+  return [...kindShelters(p), ...homeSheltersFor(p.id, p.building)];
+}
+
+function kindShelters(p: Placed3): Shelter[] {
   const a = asagiri(p);
   if (a) return asagiriShelters(a, p.building);
   const b = p.building;
@@ -113,7 +120,7 @@ export function landmarkShelters(p: Placed3): Shelter[] {
       // The station building and the platforms under their canopy, out over the tracks.
       return [{ rect: localRect(f, 0, 60, -17.8, 24), y0: -1, y1: 16.6 }];
     case 'love_hotel':
-      return [{ rect: localRect(f, 9, 15, 1.6, 4), y0: 0, y1: 3.3 }];
+      return [{ rect: localRect(f, 9, 15, 1.6, 4), y0: 0, y1: 3.3 }, ...rougeShelters(b)];
     case 'subway':
       return subwayShelters(b);
     case 'rotary':
@@ -134,6 +141,8 @@ export function landmarkHoles(p: Placed3): Rect[] {
       return rotaryHoles(p.building);
     case 'dept_store':
       return deptHoles(p.building);
+    case 'construction':
+      return siteHoles(p.building);
     default:
       return [];
   }

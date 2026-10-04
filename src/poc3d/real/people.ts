@@ -1,13 +1,18 @@
 import * as THREE from 'three';
 import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng, u01, type Rng } from '../../core/hash';
-import { CELL, type CellPlan3, type Road3 } from '../district/plan';
+import { CELL, junctionSpans, type CellPlan3, type Road3 } from '../district/plan';
 import type { Signals } from '../district/traffic';
 import { propDist, type CellDetail } from './props';
 import { toGeometry, type RawGeometry } from './rawGeometry';
 import { CITY_PEOPLE, DISTRICT_PEOPLE, OUTFITS, pickOutfit, type Outfit, type PeopleMix } from '../district/peopleMix';
 
+import { blend, BONES, FOOT_L, FOOT_LEVEL, FOOT_R, ARM_L, ARM_R, FORE_L, FORE_R, HEAD, one, PARENT, PELVIS, pivotsOf, PROPORTIONS, ROOT, scaleRows, SHIN_L, SHIN_R, SPINE, TemplateBuilder, THIGH_L, THIGH_R, type Body, type Hair, type Row, type Template, type V3, type Weight } from './mobRig';
+import { buildShaped, isTeen, TEEN_SCALE } from './mobShape';
+import { modelTemplate, type MobModelDoc } from './mobModels';
+
 export type { Outfit } from '../district/peopleMix';
+export type { Body, Hair } from './mobRig';
 
 /**
  * The mob: the city's passers-by as faint, dark, see-through figures (after COM3D2's "transparent man"),
@@ -29,11 +34,11 @@ export type { Outfit } from '../district/peopleMix';
  * At night the street lightmap lights them, so they show under lamps and by the neon.
  */
 
-type V3 = [number, number, number];
-
-export type Body = 'man' | 'woman' | 'child' | 'elder';
-export type Pose = 'stand' | 'walk' | 'talk' | 'phone' | 'pockets' | 'wave' | 'hold' | 'sit' | 'strap';
-export type Hair = 'short' | 'long' | 'bun' | 'hat' | 'cap' | 'none';
+/**
+ * 'gait' is a figure moved by the game (real/liveFigure.ts: someone following you): standing, walking or running
+ * by its `pace`, its stride at `phase`. 'ride' sits in a car's seat, the legs out ahead (tucked up by `pace`).
+ */
+export type Pose = 'stand' | 'walk' | 'talk' | 'phone' | 'pockets' | 'wave' | 'hold' | 'sit' | 'strap' | 'gait' | 'ride';
 
 export interface FigureSpec {
   readonly x: number;
@@ -59,6 +64,13 @@ export interface FigureSpec {
   readonly y?: number;
   /** Fades in and out with the crowd (default true); false keeps it there (story NPCs). */
   readonly fade?: boolean;
+  /** With `fade` false: it stays whole as you come right up to it too (a passenger in the seat beside you). */
+  readonly close?: boolean;
+  /**
+   * 'gait': how it's moving, 0 standing, 1 walking, 2 running (and between). 'ride': how far the knees are tucked
+   * up, 0 legs out ahead to 1 (a cramped back seat).
+   */
+  readonly pace?: number;
   /**
    * A walker: walks (ex, ez) metres from where it stands at `speed` m/s, fades out at the end, stays away
    * `gap` seconds and comes back to the start. Without it a figure stands (a 'walk' pose then mid-stride).
@@ -76,6 +88,10 @@ export interface FigureSpec {
   };
   /** The fade cycle's seed (people together share one, so they come and go together); else from where it stands. */
   readonly seed?: number;
+  /** Pose 'hold': how far out the holding arm is raised (rad). `holdHands` sets it so two people's hands meet. */
+  readonly reach?: number;
+  /** A modelled figure (real/mobModels.ts, registered with `registerMobModel`) drawn in place of the body's lofted one. */
+  readonly model?: string;
 }
 
 /** The mob's shades: blacks, charcoal, and dark navy, wine, olive and brown. */
@@ -98,182 +114,7 @@ function mobShade(c: V3): V3 {
   return [0, 1, 2].map((i) => 0.05 * (0.55 * (c[i] / m) + 0.45 * g)) as V3;
 }
 
-// ---- Templates ----
-
-/** Bones: indices into the skeleton. */
-const PELVIS = 0, SPINE = 1, HEAD = 2, THIGH_L = 3, SHIN_L = 4, THIGH_R = 5, SHIN_R = 6, ARM_L = 7, FORE_L = 8, ARM_R = 9, FORE_R = 10;
-/** Bone 11, the root: only the walk's bob (an umbrella in the hand rides on it). */
-const ROOT = 11;
-/** The feet (on the shins, held nearly level through the stride so the toes don't dig in). */
-const FOOT_L = 12, FOOT_R = 13;
-const BONES = 14;
-const PARENT = [-1, PELVIS, SPINE, PELVIS, THIGH_L, PELVIS, THIGH_R, SPINE, ARM_L, SPINE, ARM_R, -1, SHIN_L, SHIN_R];
-/** How much of the leg's pitch a foot takes back (1: level; a little less, a toe-off behind and a heel strike ahead). */
-const FOOT_LEVEL = 0.85;
-
-/** A body template in its bind pose (figure frame: x right, y up, z forward, feet at y 0). */
-interface Template {
-  readonly pos: Float32Array;
-  /** Bind-pose normals. */
-  readonly nor: Float32Array;
-  /** 1: mirrored to the figure's side (an umbrella held in the left or right hand). */
-  readonly mirror: number;
-  /** Two bones per vertex and the first one's weight. */
-  readonly b0: Uint8Array;
-  readonly b1: Uint8Array;
-  readonly w: Float32Array;
-  /** Shade multiplier per vertex (clothes below the waist and hair a little darker). */
-  readonly shade: Float32Array;
-  readonly idx: Uint32Array;
-  /** Joint positions, one per bone. */
-  readonly pivot: readonly V3[];
-  /** The bind pose's arm angle away from the body. */
-  readonly armOut: number;
-}
-
-/** [y, half width, half depth, z]: a horizontal cross-section. */
-type Row = readonly [number, number, number, number];
-type Weight = readonly [number, number, number];
-
-class TemplateBuilder {
-  pos: number[] = [];
-  b0: number[] = [];
-  b1: number[] = [];
-  w: number[] = [];
-  shade: number[] = [];
-  idx: number[] = [];
-
-  /**
-   * A loft through rings, each `seg` points round a superellipse (exponent n: 2 an ellipse, more boxy).
-   * Axis 'y': horizontal rings, listed bottom to top, at (cx(y), y, z). Axis 'z': upright rings (feet),
-   * listed back to front, with Row read as [z, half width, half height, y]. With `arc`, only that part of
-   * each ring (angles from +x: pi/2 is the front (+z) for axis y, 3pi/2 the top for axis z), an open sheet.
-   */
-  loft(rows: readonly Row[], cx: (r: Row) => number, weight: (r: Row, i: number, x: number) => Weight, shade: number, seg: number, n = 2, axis: 'y' | 'z' = 'y', arc?: readonly [number, number]): void {
-    const start = this.pos.length / 3;
-    const e = 2 / n;
-    const se = (v: number): number => Math.sign(v) * Math.pow(Math.abs(v), e);
-    // An arc's rings have seg + 1 points and don't close.
-    const pts = arc ? seg + 1 : seg;
-    rows.forEach((r, i) => {
-      const x0 = cx(r);
-      for (let j = 0; j < pts; j++) {
-        const t = arc ? arc[0] + ((arc[1] - arc[0]) * j) / seg : (j / seg) * Math.PI * 2;
-        const c = se(Math.cos(t));
-        const s = se(Math.sin(t));
-        const [b0, b1, w] = weight(r, i, x0 + r[1] * c);
-        if (axis === 'y') this.pos.push(x0 + r[1] * c, r[0], r[3] + r[2] * s);
-        else this.pos.push(x0 + r[1] * c, r[3] - r[2] * s, r[0]);
-        this.b0.push(b0);
-        this.b1.push(b1);
-        this.w.push(w);
-        this.shade.push(shade);
-      }
-    });
-    // (a, c, b), (a, d, c) faces outward: round each ring x turns towards z (axis y) or towards -y
-    // (axis z), the opposite sense to the stacking axis.
-    for (let k = 0; k + 1 < rows.length; k++) {
-      for (let j = 0; j < seg; j++) {
-        const a = start + k * pts + j;
-        const b = start + k * pts + ((j + 1) % pts);
-        const c = start + (k + 1) * pts + ((j + 1) % pts);
-        const d = start + (k + 1) * pts + j;
-        this.idx.push(a, c, b, a, d, c);
-      }
-    }
-  }
-
-  build(pivot: readonly V3[], armOut: number, mirror = 0): Template {
-    const pos = new Float32Array(this.pos);
-    const nor = new Float32Array(pos.length);
-    const I = this.idx;
-    for (let t = 0; t < I.length; t += 3) {
-      const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
-      const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2];
-      const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
-      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-      for (const o of [a, b, c]) {
-        nor[o] += nx;
-        nor[o + 1] += ny;
-        nor[o + 2] += nz;
-      }
-    }
-    for (let i = 0; i < nor.length; i += 3) {
-      const l = Math.hypot(nor[i], nor[i + 1], nor[i + 2]) || 1;
-      nor[i] /= l;
-      nor[i + 1] /= l;
-      nor[i + 2] /= l;
-    }
-    return {
-      pos,
-      nor,
-      mirror,
-      b0: new Uint8Array(this.b0),
-      b1: new Uint8Array(this.b1),
-      w: new Float32Array(this.w),
-      shade: new Float32Array(this.shade),
-      idx: new Uint32Array(this.idx),
-      pivot,
-      armOut,
-    };
-  }
-}
-
-const one = (b: number): Weight => [b, b, 1];
-const blend = (a: number, b: number, w: number): Weight => [a, b, w];
-
-/** Proportions of a body type. Rows are in metres for that body; ys scales the man's heights. */
-interface Proportions {
-  /** Vertical scale against the man's 1.72 m (heights in the shared rows are the man's). */
-  readonly ys: number;
-  /** Torso rows (heights already this body's). */
-  readonly torso: readonly Row[];
-  /** Leg and arm girth against the man's. */
-  readonly leg: number;
-  readonly arm: number;
-  /** Hip joint, shoulder, elbow and wrist x (this body's metres). */
-  readonly hipX: number;
-  readonly shoulderX: number;
-  readonly elbowX: number;
-  readonly wristX: number;
-  /** Head size against the man's. */
-  readonly head: number;
-}
-
-const MAN_TORSO: readonly Row[] = [
-  [0.8, 0.075, 0.07, 0],
-  [0.84, 0.14, 0.1, -0.005],
-  [0.9, 0.168, 0.112, -0.012],
-  [0.98, 0.158, 0.105, -0.006],
-  [1.06, 0.142, 0.095, 0.004],
-  [1.16, 0.15, 0.102, 0.012],
-  [1.26, 0.166, 0.112, 0.018],
-  [1.35, 0.18, 0.108, 0.012],
-  [1.42, 0.178, 0.09, 0],
-  [1.465, 0.12, 0.072, -0.008],
-  [1.5, 0.058, 0.055, -0.012],
-];
-const WOMAN_TORSO: readonly Row[] = [
-  [0.8, 0.07, 0.065, 0],
-  [0.84, 0.14, 0.1, -0.008],
-  [0.9, 0.165, 0.112, -0.016],
-  [0.98, 0.15, 0.1, -0.008],
-  [1.06, 0.118, 0.085, 0.002],
-  [1.16, 0.125, 0.09, 0.008],
-  [1.25, 0.14, 0.108, 0.026],
-  [1.32, 0.148, 0.098, 0.016],
-  [1.4, 0.152, 0.082, 0],
-  [1.455, 0.1, 0.065, -0.008],
-  [1.5, 0.05, 0.048, -0.012],
-];
-const scaleRows = (rows: readonly Row[], ys: number, xs: number): Row[] => rows.map(([y, a, b, z]) => [y * ys, a * xs, b * xs, z * xs]);
-
-const PROPORTIONS: Record<Body, Proportions> = {
-  man: { ys: 1, torso: MAN_TORSO, leg: 1, arm: 1, hipX: 0.092, shoulderX: 0.19, elbowX: 0.215, wristX: 0.235, head: 1 },
-  woman: { ys: 0.93, torso: scaleRows(WOMAN_TORSO, 0.93, 1), leg: 0.95, arm: 0.84, hipX: 0.088, shoulderX: 0.165, elbowX: 0.19, wristX: 0.205, head: 0.94 },
-  child: { ys: 0.6, torso: scaleRows(MAN_TORSO, 0.6, 0.64), leg: 0.66, arm: 0.64, hipX: 0.058, shoulderX: 0.12, elbowX: 0.135, wristX: 0.145, head: 0.8 },
-  elder: { ys: 0.95, torso: scaleRows(MAN_TORSO, 0.95, 0.95), leg: 0.92, arm: 0.92, hipX: 0.088, shoulderX: 0.18, elbowX: 0.205, wristX: 0.222, head: 0.96 },
-};
+// ---- Templates (the skeleton and the loft builder are real/mobRig.ts) ----
 
 // The man's limbs and head; the others are scaled from these.
 const LEG: readonly Row[] = [
@@ -476,14 +317,26 @@ const wears = (b: Body, o: Outfit): boolean => {
   switch (o) {
     case 'plain':
     case 'yukata':
+    case 'puffer':
       return true;
     case 'maid':
+    case 'dress':
+    case 'mini':
+    case 'gown':
       return b === 'woman';
     case 'school':
-    case 'backpack':
+    case 'otaku':
+    case 'shorts':
+    case 'hoodie':
+    // (School sports clothes: a track suit, gym clothes.)
+    case 'track':
+    case 'gym':
       return b !== 'elder';
     case 'work':
     case 'police':
+    case 'office':
+    case 'nurse':
+    case 'doctor':
       return b === 'man' || b === 'woman';
     default:
       return b !== 'child';
@@ -496,39 +349,35 @@ export function outfitOf(s: Pick<FigureSpec, 'body' | 'long' | 'outfit'>): Outfi
   return wears(s.body, o) ? o : s.long && s.body !== 'child' ? 'long' : 'plain';
 }
 
+/**
+ * Which generation of bodies the templates are built as: 'classic', the district's, or 'shaped', the one under
+ * review in the mob showroom (real/mobShape.ts: fuller bodies, women's figures, hair with a hairline). The skeleton is
+ * the same, so one material poses both. Set it before the figures are built (templates are cached per generation).
+ */
+export type MobShape = 'classic' | 'shaped';
+let mobShape: MobShape = 'classic';
+export function setMobShape(shape: MobShape): void {
+  mobShape = shape;
+}
+export const getMobShape = (): MobShape => mobShape;
+
+/** The hair kinds only the shaped generation has, as the classic one draws them. */
+const CLASSIC_HAIR: Partial<Record<Hair, Hair>> = { bob: 'short', ponytail: 'long', twin: 'long' };
+
+/** The outfits only the shaped generation has, as the classic one draws them. */
+const CLASSIC_OUTFIT: Partial<Record<Outfit, Outfit>> = { dress: 'long', mini: 'plain', gown: 'long', shorts: 'plain', hoodie: 'plain', office: 'suit', track: 'plain', nurse: 'plain', doctor: 'long', apron: 'plain', puffer: 'plain', gym: 'plain' };
+
 const templates = new Map<string, Template>();
 
 /** The posable template for a body with its hair and outfit (built once per combination). */
 function template(body: Body, hair: Hair, outfit: Outfit): Template {
   const o = wears(body, outfit) ? outfit : 'plain';
-  const key = `${body}|${hair}|${o}`;
+  const key = `${mobShape}|${body}|${hair}|${o}`;
   let t = templates.get(key);
-  if (!t) templates.set(key, (t = buildTemplate(body, hair, o)));
+  if (!t) templates.set(key, (t = mobShape === 'shaped' ? buildShaped(body, hair, o) : buildTemplate(body, CLASSIC_HAIR[hair] ?? hair, CLASSIC_OUTFIT[o] ?? o)));
   return t;
 }
 
-/** A body's joints (one per bone, the root at the feet) and its bind pose's arm angle away from the body. */
-function pivotsOf(body: Body): { pivot: V3[]; armOut: number } {
-  const P = PROPORTIONS[body];
-  const ys = P.ys;
-  const pivot: V3[] = [
-    [0, 0.95 * ys, 0],
-    [0, 1.06 * ys, 0],
-    [0, 1.5 * ys, -0.01],
-    [-P.hipX, 0.9 * ys, 0],
-    [-P.hipX * 0.93, 0.47 * ys, 0],
-    [P.hipX, 0.9 * ys, 0],
-    [P.hipX * 0.93, 0.47 * ys, 0],
-    [-P.shoulderX, 1.42 * ys, -0.01],
-    [-P.elbowX, 1.13 * ys, -0.02],
-    [P.shoulderX, 1.42 * ys, -0.01],
-    [P.elbowX, 1.13 * ys, -0.02],
-    [0, 0, 0],
-    [-P.hipX * 0.88, 0.08 * ys, 0],
-    [P.hipX * 0.88, 0.08 * ys, 0],
-  ];
-  return { pivot, armOut: Math.atan2(P.wristX - P.shoulderX, (1.42 - 0.865) * ys) };
-}
 
 function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
   const P = PROPORTIONS[body];
@@ -727,7 +576,7 @@ function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
     tb.loft(headRows(VISOR.map(([y, a, b, z]): Row => [y + 0.02, a * 1.05, b * 1.1, z + 0.004])), () => 0, () => one(HEAD), 0.4, 8);
     const [w, d, z] = torsoAt(0.98 * ys);
     tb.loft([[0.955 * ys, w + 0.012, d + 0.012, z], [1.0 * ys, w + 0.012, d + 0.012, z]], () => 0, hips, 0.4, 12, 2.4);
-  } else if (outfit === 'backpack') {
+  } else if (outfit === 'otaku') {
     // A rucksack on the back.
     const ys0 = [1.04, 1.06, 1.36, 1.39].map((y) => y * ys);
     const back = Math.min(...ys0.map((y) => torsoAt(y)[2] - torsoAt(y)[1]));
@@ -738,40 +587,136 @@ function buildTemplate(body: Body, hair: Hair, outfit: Outfit): Template {
 }
 
 /**
- * A clear vinyl umbrella (the konbini kind) for a body, held in the right hand (mirrored for the left): a
- * shallow dome over the head, a little forward and toward the hand, and its shaft down to the hand. On the
- * root bone, so it rides the walk's bob.
+ * The arm holding an umbrella up (the material poses the umbrella's arm so while it rains): the upper arm
+ * near the body, the elbow bent so the fist is in front of the chest, turned a little in.
+ */
+/**
+ * An otaku's hands on the rucksack's straps at the chest, standing or walking (the sculpted generation's, which has
+ * the straps): the elbows a little back, the forearms folded up and turned in to the straps.
+ */
+const STRAP_HOLD = { swing: -0.35, raise: 0.1, bend: 2.5, twist: 0.8 } as const;
+const holdsStraps = (s: Pick<FigureSpec, 'body' | 'long' | 'outfit'>): boolean => mobShape === 'shaped' && outfitOf(s) === 'otaku';
+
+/** A colour from its sRGB hex, in the linear values the material works in. */
+const hex = (h: string): V3 => {
+  const n = parseInt(h.slice(1), 16);
+  const lin = (v: number): number => (v / 255 <= 0.04045 ? v / 255 / 12.92 : Math.pow((v / 255 + 0.055) / 1.055, 2.4));
+  return [lin(n >> 16), lin((n >> 8) & 255), lin(n & 255)];
+};
+
+/**
+ * The mob's colours (the sculpted generation's: real/mobShape.ts tags each vertex, its shade tag x 100 + shade). A
+ * noir city in late Showa Japan: muted, deep and dusty (navy, charcoal, browns, olive, ochre, brick, off-white), no
+ * bright or fluorescent colours. Tags from 2 are parts with a colour of their own, which they keep whatever the
+ * figure's tint and through the one colour.
+ */
+const TAG_COLORS: readonly V3[] = [
+  hex('#1c2740'), // 2 navy: police, a sailor uniform's skirt and collar, a man's kimono, a stethoscope, a maid's dress
+  hex('#9a5c2a'), // 3 a hard hat's orange
+  hex('#b9b6ab'), // 4 off-white: whites, shirts, lenses, aprons and lace, a yukata's cotton
+  hex('#703028'), // 5 brick red: a shop apron, a tie, a sailor scarf, a randoseru
+  hex('#a8201c'), // 6 a nurse's red cross
+  hex('#26402c'), // 7 an otaku's dark green rucksack
+  hex('#5c2830'), // 8 a school's maroon: track suit, bloomers, gym shorts
+  hex('#561820'), // 9 an evening dress's dark red
+  hex('#a8823a'), // 10 ochre: a yukata's sash, a schoolchild's cap
+  hex('#4a3152'), // 11 a woman's kimono, plum
+  hex('#968c40'), // 12 a safety vest's dull yellow
+  hex('#8a7659'), // 13 tan: a trench coat, a long skirt, shorts; brown bags and hats (at a low shade)
+  hex('#4f6478'), // 14 dusty blue: a dress
+  hex('#8a5560'), // 15 a mini skirt's dusty rose
+];
+/**
+ * Everyday clothes: tags 16 (tops), 17 (bottoms) and 18 (suits) take a colour from these by the figure (a hash of
+ * its tint and fade seed, so it keeps them), so plain clothes differ from one person to the next.
+ */
+const CLOTH_TOPS: readonly V3[] = ['#b5b1a5', '#7a7a78', '#232c44', '#4a5a6e', '#9a8a6c', '#4d5234', '#562a2e', '#7d6a44', '#36484a', '#8c6064', '#3a3a3c', '#34443a', '#5a4030', '#c2b99e'].map(hex);
+const CLOTH_BOTTOMS: readonly V3[] = ['#36465e', '#232c40', '#333336', '#857660', '#5e5e60', '#4a3828', '#454a30', '#222224'].map(hex);
+const CLOTH_SUITS: readonly V3[] = ['#323236', '#20283c', '#5a5a5e', '#44362c'].map(hex);
+/** The body: skin (tag 1, a little lighter or darker by the figure), hair (19; an elder's grey), shoes (20). These go to the one colour when it's on. */
+const SKIN_TONE = hex('#b08e74');
+const HAIR_COLORS: readonly V3[] = ['#17161a', '#1e1a18', '#17161a', '#2e221a'].map(hex);
+const ELDER_HAIR: readonly V3[] = ['#7c7c7e', '#a6a6a4', '#5a5a5c'].map(hex);
+const SHOE_COLORS: readonly V3[] = ['#1c1b1c', '#2e2420', '#151516', '#3a2c22'].map(hex);
+const v3Glsl = (c: V3): string => `vec3(${c.map((v) => v.toFixed(4)).join(', ')})`;
+/** GLSL: one of `colors` by h in [0, 1). */
+const pickGlsl = (colors: readonly V3[], h: string): string => colors.map((c, i) => `${i < colors.length - 1 ? `${h} < ${((i + 1) / colors.length).toFixed(4)} ? ` : ''}${v3Glsl(c)}`).join(' : ');
+const TAG_GLSL = TAG_COLORS.map((c, i) => `${i < TAG_COLORS.length - 1 ? `tag < ${i + 2}.5 ? ` : ''}${v3Glsl(c)}`).join(' : ');
+
+const UMBRELLA_HOLD = { swing: -0.05, raise: 0.12, bend: 2.15, side: 0, twist: 0.45 } as const;
+/** The spine's lean the umbrella is built for (the body's own, plus a little: walkers lean more, standers less). */
+const umbrellaLean = (body: Body): number => (body === 'elder' ? 0.2 : 0.02) + 0.02;
+
+/** The right forearm's matrix (bind pose to posed, figure frame) with the arm in UMBRELLA_HOLD, as poseBones builds it. */
+function holdForearm(body: Body): THREE.Matrix4 {
+  const { pivot, armOut } = pivotsOf(body);
+  const L = UMBRELLA_HOLD;
+  const about = (p: V3, r: THREE.Matrix4): THREE.Matrix4 => new THREE.Matrix4().makeTranslation(p[0], p[1], p[2]).multiply(r).multiply(new THREE.Matrix4().makeTranslation(-p[0], -p[1], -p[2]));
+  const spine = about(pivot[SPINE], new THREE.Matrix4().makeRotationX(umbrellaLean(body)));
+  const arm = about(pivot[ARM_R], new THREE.Matrix4().makeRotationX(-L.swing).multiply(new THREE.Matrix4().makeRotationZ(L.raise - armOut)));
+  const fore = about(pivot[FORE_R], new THREE.Matrix4().makeRotationY(-L.twist).multiply(new THREE.Matrix4().makeRotationZ(L.side)).multiply(new THREE.Matrix4().makeRotationX(-L.bend)));
+  return spine.multiply(arm).multiply(fore);
+}
+
+/**
+ * A clear vinyl umbrella (the konbini kind) for a body, held up in the right fist (mirrored for the left): a
+ * shallow dome over the head, its shaft from just below the fist up to the canopy, leaning back so the dome
+ * sits over the head. Laid out where the held arm (UMBRELLA_HOLD) puts the fist, then carried back into the
+ * forearm's bind frame and skinned to the forearm, so it stays in the hand and rides the arm and the body.
  */
 function buildUmbrella(body: Body): Template {
   const child = body === 'child';
   const k = child ? 0.62 : body === 'woman' ? 0.95 : 1;
+  const P = PROPORTIONS[body];
   const tb = new TemplateBuilder();
-  const cx = 0.1 * k;
+  const fore = holdForearm(body);
+  // The fist, held: the hand's middle in the bind pose, posed.
+  const fist = new THREE.Vector3(P.wristX + 0.003, 0.77 * P.ys, 0.01).applyMatrix4(fore);
   const top = 1.95 * k + 0.25;
   const R = child ? 0.42 : 0.52;
-  const prof: [number, number][] = [[top - 0.22, R], [top - 0.14, R * 0.86], [top - 0.05, R * 0.55], [top, R * 0.15], [top + 0.02, 0.005]];
+  // The canopy's crown over the head (a little forward), the shaft from the fist up to it.
+  const crown = new THREE.Vector3(0.05 * k, top, 0.1);
+  const axis = crown.clone().sub(fist).normalize();
+  const len = crown.distanceTo(fist);
+  // Built upright in its own frame (the shaft up y from the handle at y 0), then stood on that axis.
+  const handle = 0.09;
+  const prof: [number, number][] = [[len + handle - 0.22, R], [len + handle - 0.14, R * 0.86], [len + handle - 0.05, R * 0.55], [len + handle, R * 0.15], [len + handle + 0.02, 0.005]];
   // Outside, then the underside a little below, wound the other way so it shows from beneath.
-  tb.loft(prof.map(([y, r]): Row => [y, r, r, 0.1]), () => cx, () => one(ROOT), 1.6, 12);
+  tb.loft(prof.map(([y, r]): Row => [y, r, r, 0]), () => 0, () => one(FORE_R), 1.6, 12);
   const from = tb.idx.length;
-  tb.loft(prof.map(([y, r]): Row => [y - 0.008, r, r, 0.1]), () => cx, () => one(ROOT), 1.6, 12);
+  tb.loft(prof.map(([y, r]): Row => [y - 0.008, r, r, 0]), () => 0, () => one(FORE_R), 1.6, 12);
   for (let i = from; i < tb.idx.length; i += 3) [tb.idx[i + 1], tb.idx[i + 2]] = [tb.idx[i + 2], tb.idx[i + 1]];
-  // The shaft: a thin square tube from the hand up to the canopy.
-  const hand: V3 = [0.2 * k, 1.0 * k, 0.15];
-  const head: V3 = [cx, top, 0.1];
-  const base = tb.pos.length / 3;
-  for (const c of [hand, head]) {
-    for (let j = 0; j < 4; j++) {
-      const q = (j / 4) * Math.PI * 2;
-      tb.pos.push(c[0] + Math.cos(q) * 0.008, c[1], c[2] + Math.sin(q) * 0.008);
-      tb.b0.push(ROOT);
-      tb.b1.push(ROOT);
-      tb.w.push(1);
-      tb.shade.push(1.6);
+  // The shaft: a thin square tube from the handle's end, through the fist, up to the canopy; a thicker grip.
+  const tube = (y0: number, y1: number, r: number): void => {
+    const base = tb.pos.length / 3;
+    for (const y of [y0, y1]) {
+      for (let j = 0; j < 4; j++) {
+        const q = (j / 4) * Math.PI * 2;
+        tb.pos.push(Math.cos(q) * r, y, Math.sin(q) * r);
+        tb.b0.push(FORE_R);
+        tb.b1.push(FORE_R);
+        tb.w.push(1);
+        tb.shade.push(1.6);
+      }
     }
-  }
-  for (let j = 0; j < 4; j++) {
-    const j1 = (j + 1) % 4;
-    tb.idx.push(base + j, base + 4 + j1, base + j1, base + j, base + 4 + j, base + 4 + j1);
+    for (let j = 0; j < 4; j++) {
+      const j1 = (j + 1) % 4;
+      tb.idx.push(base + j, base + 4 + j1, base + j1, base + j, base + 4 + j, base + 4 + j1);
+    }
+  };
+  tube(0, len + handle, 0.008);
+  tube(0, handle * 0.8, 0.016);
+  // Stand it on the axis with the handle's end below the fist, then undo the held forearm.
+  const place = new THREE.Matrix4()
+    .makeTranslation(fist.x - axis.x * handle, fist.y - axis.y * handle, fist.z - axis.z * handle)
+    .multiply(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis)));
+  const toBind = fore.clone().invert().multiply(place);
+  const v = new THREE.Vector3();
+  for (let i = 0; i < tb.pos.length; i += 3) {
+    v.set(tb.pos[i], tb.pos[i + 1], tb.pos[i + 2]).applyMatrix4(toBind);
+    tb.pos[i] = v.x;
+    tb.pos[i + 1] = v.y;
+    tb.pos[i + 2] = v.z;
   }
   const { pivot, armOut } = pivotsOf(body);
   return tb.build(pivot, armOut, 1);
@@ -801,7 +746,11 @@ interface Skeleton {
   legR: Limb;
 }
 
-function skeleton(s: FigureSpec): Skeleton {
+/** Pose 'hold': how far out the holding arm is raised (a child's hand up to a grown-up's), unless the figure says. */
+const holdReach = (s: Pick<FigureSpec, 'body' | 'reach'>): number => s.reach ?? (s.body === 'child' ? 0.75 : 0.26);
+
+/** `hip`: the hip joints' height (the template's). */
+function skeleton(s: FigureSpec, umbrella = false, hip = PROPORTIONS[s.body].ys * 0.9): Skeleton {
   const still: Limb = { swing: 0, raise: 0.1, bend: 0.12 };
   const leg: Limb = { swing: 0, raise: 0.0, bend: 0 };
   const sk: Skeleton = { lean: s.body === 'elder' ? 0.2 : 0.02, drop: 0, armL: { ...still }, armR: { ...still }, legL: { ...leg }, legR: { ...leg } };
@@ -821,7 +770,7 @@ function skeleton(s: FigureSpec): Skeleton {
       gest(sk.armL, -a * 0.7, 0.1, 0.25);
       gest(sk.armR, a * 0.7, 0.1, 0.25);
       sk.lean += 0.04;
-      sk.drop = PROPORTIONS[s.body].ys * 0.9 * (1 - Math.cos(a));
+      sk.drop = hip * (1 - Math.cos(a));
       break;
     }
     case 'talk':
@@ -840,7 +789,7 @@ function skeleton(s: FigureSpec): Skeleton {
       gest(armS, 0.15, 1.3, 0, 1.35);
       break;
     case 'hold':
-      gest(armS, 0.1, s.body === 'child' ? 0.75 : 0.26, 0.1);
+      gest(armS, 0.1, holdReach(s), 0.1);
       break;
     case 'sit':
       // On a seat 0.46 m up: thighs forward, shins down, hands in the lap.
@@ -849,17 +798,92 @@ function skeleton(s: FigureSpec): Skeleton {
       gest(sk.armL, 0.3, 0.08, 0.75);
       gest(sk.armR, 0.3, 0.08, 0.75);
       sk.lean = -0.05;
-      sk.drop = PROPORTIONS[s.body].ys * 0.9 - 0.46;
+      sk.drop = hip - 0.46;
       break;
     case 'strap':
       // Holding a strap overhead.
       gest(armS, 2.75, 0.12, 0.25);
       break;
+    case 'gait': {
+      // Standing, walking or running by its pace (as the material blends them; at rest, no idle routine).
+      const wk = Math.min(1, Math.max(0, s.pace ?? 0));
+      const rn = Math.min(1, Math.max(0, (s.pace ?? 0) - 1));
+      const G = gaitLimbs(s.phase, rn);
+      const mix = (l: Limb, to: Limb): void => gest(l, l.swing + (to.swing - l.swing) * wk, l.raise + (to.raise - l.raise) * wk, l.bend + (to.bend - l.bend) * wk);
+      mix(sk.legL, G.legL);
+      mix(sk.legR, G.legR);
+      mix(sk.armL, G.armL);
+      mix(sk.armR, G.armR);
+      sk.lean += wk * G.lean;
+      sk.drop = wk * hip * G.drop;
+      break;
+    }
+    case 'ride': {
+      // In a car's seat (the hips RIDE_HIP above the cushion): the legs out ahead, the hands in the lap, leaning back.
+      const R = rideLegs(s.pace ?? 0);
+      gest(sk.legL, R.swing, 0.06, R.bend);
+      gest(sk.legR, R.swing, 0.06, R.bend);
+      gest(sk.armL, RIDE_ARM[0], RIDE_ARM[1], RIDE_ARM[2]);
+      gest(sk.armR, RIDE_ARM[0], RIDE_ARM[1], RIDE_ARM[2]);
+      sk.lean = RIDE_LEAN;
+      sk.drop = hip - RIDE_HIP;
+      break;
+    }
     case 'stand':
       gest(sk.legR, 0.03, 0.06, 0.02);
       break;
   }
+  if (holdsStraps(s) && (s.pose === 'stand' || s.pose === 'walk' || s.pose === 'gait')) {
+    const H = STRAP_HOLD;
+    gest(sk.armL, H.swing, H.raise, H.bend, 0, H.twist);
+    gest(sk.armR, H.swing, H.raise, H.bend, 0, H.twist);
+  }
+  if (umbrella) {
+    // Held up in the gesturing hand, unless that one holds someone's hand (as the material does).
+    const H = UMBRELLA_HOLD;
+    gest((s.pose === 'hold' ? -s.side : s.side) > 0 ? sk.armR : sk.armL, H.swing, H.raise, H.bend, H.side, H.twist);
+  }
   return sk;
+}
+
+/** A car seat: the hip joints' height above the cushion (m), and the spine's lean back against the seat (rad). */
+export const RIDE_HIP = 0.1;
+const RIDE_LEAN = -0.22;
+/** A rider's arms (swing, raise, bend): the hands resting on the thighs. */
+const RIDE_ARM = [0.2, 0.06, 0.6] as const;
+/**
+ * A seated rider's legs by how far the knees are tucked up (0-1): the thigh's swing and the knee's bend. Legs out,
+ * the feet are 0.75 m ahead of the hips; tucked, 0.44 m; either way about 0.29 m below them.
+ */
+const rideLegs = (tuck: number): { swing: number; bend: number } => {
+  const k = Math.min(1, Math.max(0, tuck));
+  const swing = 1.7 + 0.3 * k;
+  return { swing, bend: swing - (0.75 - 0.65 * k) };
+};
+
+/** How the walk's cycle is run: the stride's reach (rad), the knee's fold as the leg comes through, the arms. */
+const GAIT = { reach: [0.36, 0.6], fold: 1.15, foldAt: 0.4, arm: [0.7, 1.2], elbow: [0.25, 1.5], lean: [0.04, 0.2] } as const;
+
+/** A 'gait' figure's limbs at full pace (walking, or by `rn` 0-1 running), at `phase` of the stride: as the material's. */
+function gaitLimbs(phase: number, rn: number): { legL: Limb; legR: Limb; armL: Limb; armR: Limb; lean: number; drop: number } {
+  const lerp = (a: readonly [number, number]): number => a[0] + (a[1] - a[0]) * rn;
+  const ph = phase * Math.PI * 2;
+  const amp = lerp(GAIT.reach);
+  const a = Math.sin(ph) * amp;
+  const c = Math.cos(ph + GAIT.foldAt);
+  // Walking, the knee bends as the leg goes back; running, it folds up as the leg comes through.
+  const knee = (back: number, through: number): number => 0.06 + (1 - rn) * 0.24 * Math.min(1, Math.max(0, back)) + rn * (0.15 + GAIT.fold * Math.max(0, through));
+  const sw = lerp(GAIT.arm);
+  const el = lerp(GAIT.elbow);
+  return {
+    legL: { swing: a, raise: 0, bend: knee(-a / amp, c) },
+    legR: { swing: -a, raise: 0, bend: knee(a / amp, -c) },
+    armL: { swing: -a * sw, raise: 0.1, bend: el },
+    armR: { swing: a * sw, raise: 0.1, bend: el },
+    lean: lerp(GAIT.lean),
+    // (As a share of the hips' height: they drop as the legs part; a runner's less, between bounds.)
+    drop: (1 - Math.cos(a)) * (1 - 0.5 * rn),
+  };
 }
 
 const _m = new THREE.Matrix4();
@@ -869,8 +893,8 @@ const boneMats = Array.from({ length: BONES }, () => new THREE.Matrix4());
 const rot = Array.from({ length: BONES }, () => new THREE.Matrix4());
 
 /** Each bone's matrix (bind pose to posed), in the figure frame. */
-function poseBones(T: Template, s: FigureSpec): THREE.Matrix4[] {
-  const sk = skeleton(s);
+function poseBones(T: Template, s: FigureSpec, umbrella = false): THREE.Matrix4[] {
+  const sk = skeleton(s, umbrella, T.pivot[THIGH_L][1]);
   for (const m of rot) m.identity();
   rot[SPINE].makeRotationX(sk.lean);
   rot[HEAD].makeRotationY(s.look).premultiply(_r.makeRotationX(-sk.lean * 0.7));
@@ -897,16 +921,79 @@ function poseBones(T: Template, s: FigureSpec): THREE.Matrix4[] {
 // ---- Templates by index, and figures as data ----
 
 const BODY_LIST: readonly Body[] = ['man', 'woman', 'child', 'elder'];
-const HAIR_LIST: readonly Hair[] = ['short', 'long', 'bun', 'hat', 'cap', 'none'];
-const POSE_LIST: readonly Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold', 'sit', 'strap'];
+const HAIR_LIST: readonly Hair[] = ['short', 'long', 'bun', 'hat', 'cap', 'none', 'bob', 'ponytail', 'twin'];
+const POSE_LIST: readonly Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold', 'sit', 'strap', 'gait', 'ride'];
 
 /** Body templates are 0 to TEMPLATE_COUNT - 1 (body, outfit, hair); the umbrellas follow, one per body. */
 export const TEMPLATE_COUNT = BODY_LIST.length * OUTFITS.length * HAIR_LIST.length;
-export const templateIndex = (s: Pick<FigureSpec, 'body' | 'hair' | 'long' | 'outfit'>): number =>
-  (BODY_LIST.indexOf(s.body) * OUTFITS.length + OUTFITS.indexOf(outfitOf(s))) * HAIR_LIST.length + HAIR_LIST.indexOf(s.hair);
+export const templateIndex = (s: Pick<FigureSpec, 'body' | 'hair' | 'long' | 'outfit' | 'model'>): number =>
+  s.model !== undefined && modelSlot(s.model) >= 0
+    ? TEMPLATE_COUNT + BODY_LIST.length + modelSlot(s.model)
+    : (BODY_LIST.indexOf(s.body) * OUTFITS.length + OUTFITS.indexOf(outfitOf(s))) * HAIR_LIST.length + HAIR_LIST.indexOf(s.hair);
 export const umbrellaIndex = (body: Body): number => TEMPLATE_COUNT + BODY_LIST.indexOf(body);
 
+/**
+ * Modelled figures (real/mobModels.ts): each a template of its own after the umbrellas', and a body of its own in
+ * the material (its joints), after the four lofted ones. Register them before the material is made
+ * (`ghostMaterial` takes their joints then), at most MAX_MOB_MODELS.
+ */
+export const MAX_MOB_MODELS = 252;
+const mobModels: { name: string; doc: MobModelDoc; template: Template }[] = [];
+const modelSlot = (name: string): number => mobModels.findIndex((m) => m.name === name);
+export function registerMobModel(doc: MobModelDoc): void {
+  if (modelSlot(doc.name) >= 0) return;
+  if (mobModels.length >= MAX_MOB_MODELS) throw new Error(`too many mob models (${MAX_MOB_MODELS})`);
+  mobModels.push({ name: doc.name, doc, template: modelTemplate(doc) });
+  if (jointTexture) writeJoints(jointTexture);
+}
+
+/**
+ * Every body's joints for the material, as a texture (a uniform array ran out with the models): a row a body (the
+ * four lofted ones, then the models as registered), a texel a bone (xyz its joint), and the arms' bind angle in
+ * the texel after the bones. One texture for every mob material, rewritten when a model is registered.
+ */
+const JOINT_COLS = 16;
+/** The shaped generation's teens (real/mobShape.ts `isTeen`): a row of joints each after the four bodies' (a girl's, a boy's), before the models'. */
+const TEEN_ROWS = 2;
+const teenRow = (s: Pick<FigureSpec, 'body' | 'long' | 'outfit'>): number => (mobShape === 'shaped' && isTeen(s.body, outfitOf(s)) ? (s.body === 'woman' ? 0 : 1) : -1);
+const JOINT_ROWS = BODY_LIST.length + TEEN_ROWS + MAX_MOB_MODELS;
+let jointTexture: THREE.DataTexture | null = null;
+function writeJoints(tex: THREE.DataTexture): void {
+  const data = tex.image.data as Float32Array;
+  const row = (r: number, pivot: readonly V3[], armOut: number): void => {
+    pivot.forEach((p, b) => data.set([p[0], p[1], p[2], 0], (r * JOINT_COLS + b) * 4));
+    data[(r * JOINT_COLS + BONES) * 4] = armOut;
+  };
+  BODY_LIST.forEach((body, r) => {
+    const p = pivotsOf(body);
+    row(r, p.pivot, p.armOut);
+  });
+  (['woman', 'man'] as const).forEach((body, t) => {
+    const p = pivotsOf(body);
+    const [kx, ky] = TEEN_SCALE[body];
+    row(BODY_LIST.length + t, p.pivot.map((v): V3 => [v[0] * kx, v[1] * ky, v[2] * kx]), p.armOut);
+  });
+  mobModels.forEach((m, i) => row(BODY_LIST.length + TEEN_ROWS + i, m.template.pivot, m.template.armOut));
+  tex.needsUpdate = true;
+}
+function mobJoints(): THREE.DataTexture {
+  if (!jointTexture) {
+    jointTexture = new THREE.DataTexture(new Float32Array(JOINT_COLS * JOINT_ROWS * 4), JOINT_COLS, JOINT_ROWS, THREE.RGBAFormat, THREE.FloatType);
+    jointTexture.minFilter = jointTexture.magFilter = THREE.NearestFilter;
+    jointTexture.generateMipmaps = false;
+    writeJoints(jointTexture);
+  }
+  return jointTexture;
+}
+export const mobModelNames = (): string[] => mobModels.map((m) => m.name);
+/** The template a figure is drawn with: its model's, else its body's with its hair and outfit. */
+function templateOf(s: Pick<FigureSpec, 'body' | 'hair' | 'long' | 'outfit' | 'model'>): Template {
+  const m = s.model === undefined ? -1 : modelSlot(s.model);
+  return m >= 0 ? mobModels[m].template : template(s.body, s.hair, outfitOf(s));
+}
+
 function templateAt(i: number): Template {
+  if (i >= TEMPLATE_COUNT + BODY_LIST.length) return mobModels[i - TEMPLATE_COUNT - BODY_LIST.length].template;
   if (i >= TEMPLATE_COUNT) {
     const body = BODY_LIST[i - TEMPLATE_COUNT];
     let t = templates.get(`umbrella|${body}`);
@@ -930,11 +1017,12 @@ function templateArrays(T: Template): { position: Float32Array; normal: Float32A
   return { position: T.pos, normal: T.nor, aShade: T.shade, aBone, aMirror: new Float32Array(n).fill(T.mirror) };
 }
 
-const geometries = new Map<number, THREE.BufferGeometry>();
+const geometries = new Map<string, THREE.BufferGeometry>();
 
 /** A template as geometry (its bind pose and bones), shared by every figure drawn with it (real/crowd.ts). */
 export function templateGeometry(i: number): THREE.BufferGeometry {
-  let g = geometries.get(i);
+  const key = `${mobShape}|${i}`;
+  let g = geometries.get(key);
   if (g) return g;
   const T = templateAt(i);
   const a = templateArrays(T);
@@ -945,7 +1033,7 @@ export function templateGeometry(i: number): THREE.BufferGeometry {
   g.setAttribute('aBone', new THREE.BufferAttribute(a.aBone, 3));
   g.setAttribute('aMirror', new THREE.BufferAttribute(a.aMirror, 1));
   g.setIndex(new THREE.BufferAttribute(T.idx, 1));
-  geometries.set(i, g);
+  geometries.set(key, g);
   return g;
 }
 
@@ -955,7 +1043,7 @@ export function templateGeometry(i: number): THREE.BufferGeometry {
  */
 export const FIGURE_STRIDE = 20;
 /** The pavements' and plazas' height (real/ground.ts): where a figure stands unless its floor says otherwise. */
-const PAVEMENT = 0.15;
+export const PAVEMENT = 0.15;
 /** The per-figure attributes the material reads, and where each comes from in a figure's numbers. */
 export const FIGURE_ATTRS: readonly { readonly name: string; readonly at: readonly number[] }[] = [
   { name: 'aFig', at: [1, 2, 3, 4] },
@@ -965,9 +1053,9 @@ export const FIGURE_ATTRS: readonly { readonly name: string; readonly at: readon
   { name: 'aTint', at: [16, 17, 18] },
 ];
 
-/** A figure's fade seed in [0, 1): its own or from where it stands; -1 if it never fades. */
+/** A figure's fade seed in [0, 1): its own or from where it stands; -1 if it never fades (-2: nor up close). */
 function figureSeed(s: FigureSpec): number {
-  if (s.fade === false) return -1;
+  if (s.fade === false) return s.close ? -2 : -1;
   return s.seed ?? u01(hash(Math.round(s.x * 10), Math.round(s.z * 10), 0x6057));
 }
 
@@ -977,7 +1065,7 @@ function carriesUmbrella(s: FigureSpec): boolean {
   return h % 100 < 72;
 }
 
-function writeFigure(o: Float32Array, k: number, s: FigureSpec, ground: ((x: number, z: number) => number) | null): void {
+function writeFigure(o: Float32Array, k: number, s: FigureSpec, ground: ((x: number, z: number) => number) | null, umbrella: boolean): void {
   const c = mobShade(s.color);
   const w = s.walk;
   // A figure stands on the raised pavement (0.15 m) plus its own floor (s.y: a step, a storey, or less on open ground).
@@ -989,14 +1077,21 @@ function writeFigure(o: Float32Array, k: number, s: FigureSpec, ground: ((x: num
   o[k + 2] = s.z;
   o[k + 3] = s.yaw;
   o[k + 4] = figureSeed(s);
-  o[k + 5] = BODY_LIST.indexOf(s.body);
+  // (A model has a body of its own in the material: its joints. So has the shaped generation's teen.)
+  const slot = s.model === undefined ? -1 : modelSlot(s.model);
+  const teen = teenRow(s);
+  o[k + 5] = slot >= 0 ? BODY_LIST.length + TEEN_ROWS + slot : teen >= 0 ? BODY_LIST.length + teen : BODY_LIST.indexOf(s.body);
   o[k + 6] = POSE_LIST.indexOf(s.pose);
-  // (+-2: a bag in the left hand, so the routine keeps that hand down.)
+  // (+1: a bag in the left hand, so the routine keeps that hand down; +2: an umbrella to hold up while it rains.)
   const o2 = outfitOf(s);
-  const bag = (o2 === 'suit' && s.body !== 'woman') || (o2 === 'school' && s.body !== 'child');
-  o[k + 7] = (s.side >= 0 ? 1 : -1) * (bag ? 2 : 1);
+  const bag = ((o2 === 'suit' || o2 === 'office') && s.body !== 'woman') || (o2 === 'school' && s.body !== 'child');
+  const held = umbrella && carriesUmbrella(s);
+  // (+4: both hands on a rucksack's straps.)
+  o[k + 7] = (s.side >= 0 ? 1 : -1) * (1 + (bag ? 1 : 0) + (held ? 2 : 0) + (holdsStraps(s) ? 4 : 0));
   o[k + 8] = s.look;
-  o[k + 9] = w?.ex ?? 0;
+  // (A figure moved by the game has no walk of its own: its pace goes in the walk's place.)
+  // (And someone holding a hand: how far out that arm is raised.)
+  o[k + 9] = w?.ex ?? (s.pose === 'gait' || s.pose === 'ride' ? (s.pace ?? 0) : s.pose === 'hold' ? holdReach(s) : 0);
   o[k + 10] = w?.ez ?? 0;
   o[k + 11] = w?.speed ?? 0;
   o[k + 12] = w?.signal ? w.signal.at : s.phase;
@@ -1010,10 +1105,14 @@ function writeFigure(o: Float32Array, k: number, s: FigureSpec, ground: ((x: num
   o[k + 19] = carriesUmbrella(s) ? 1 : 0;
 }
 
-/** Figures as numbers for the instanced crowd, standing on `ground` (the terrain) plus their own floor. */
-export function packFigures(specs: readonly FigureSpec[], ground: ((x: number, z: number) => number) | null = null): Float32Array {
+/**
+ * Figures as numbers for the instanced crowd, standing on `ground` (the terrain) plus their own floor. With
+ * `umbrellas`, those who carry one hold it up while the material's `uUmbrella` is on (the crowd draws the
+ * umbrellas then); baked figures without an umbrella of their own leave it off.
+ */
+export function packFigures(specs: readonly FigureSpec[], ground: ((x: number, z: number) => number) | null = null, umbrellas = true): Float32Array {
   const out = new Float32Array(specs.length * FIGURE_STRIDE);
-  specs.forEach((s, i) => writeFigure(out, i * FIGURE_STRIDE, s, ground));
+  specs.forEach((s, i) => writeFigure(out, i * FIGURE_STRIDE, s, ground, umbrellas));
   return out;
 }
 
@@ -1046,8 +1145,46 @@ export class GhostBuilder {
     return r ? toGeometry(r) : null;
   }
 
+  /**
+   * People standing together come and go together: those who fade and stand within TOGETHER m of one another (up to
+   * TOGETHER_MAX: a couple, a parent and child, a little group, a stretch of a queue) take the first one's fade seed.
+   * (Someone's umbrella stands where they do, so it goes with them.) Walkers who go together are given one seed
+   * where they're made (cellCrowd).
+   */
+  private seeds(): Float32Array {
+    const P = this.parts;
+    const seeds = Float32Array.from(P, (p) => p.f[4]);
+    const taken = new Uint8Array(P.length);
+    const standing = (f: Float32Array): boolean => f[4] >= 0 && f[11] === 0;
+    for (let i = 0; i < P.length; i++) {
+      if (taken[i] || !standing(P[i].f)) continue;
+      const members = [i];
+      taken[i] = 1;
+      let people = 1;
+      for (let m = 0; m < members.length; m++) {
+        const a = P[members[m]].f;
+        for (let j = i + 1; j < P.length; j++) {
+          const b = P[j].f;
+          if (taken[j] || !standing(b) || Math.abs(a[13] - b[13]) > 0.6) continue;
+          const d = Math.hypot(a[1] - b[1], a[2] - b[2]);
+          if (d > TOGETHER) continue;
+          if (d > 0.01) {
+            if (people >= TOGETHER_MAX) continue;
+            people++;
+          }
+          taken[j] = 1;
+          members.push(j);
+          seeds[j] = seeds[i];
+        }
+      }
+    }
+    return seeds;
+  }
+
   raw(ox: number, oz: number): RawGeometry | null {
     if (this.parts.length === 0) return null;
+    const seeds = this.seeds();
+    let pi = 0;
     let nv = 0;
     let ni = 0;
     for (const p of this.parts) {
@@ -1075,6 +1212,7 @@ export class GhostBuilder {
       const f = p.f.slice();
       f[1] -= ox;
       f[2] -= oz;
+      f[4] = seeds[pi++];
       for (const attr of FIGURE_ATTRS) {
         const arr = out[attr.name];
         const m = attr.at.length;
@@ -1103,28 +1241,105 @@ export class GhostBuilder {
   }
 }
 
-/** Adds one figure to gb. */
-export function addFigure(gb: GhostBuilder, s: FigureSpec): void {
-  gb.add(templateIndex(s), packFigures([s]));
+/** How near two standing people are to be together (m), and how many at most come and go as one. */
+const TOGETHER = 1.25;
+const TOGETHER_MAX = 4;
+
+/** The middle of a template's hand in its bind pose (sgn 1 the right, -1 the left): the lowest of what the forearm carries. */
+function handBind(T: Template, sgn: number): THREE.Vector3 {
+  // (Read off the right arm and mirrored: a bag hangs from the left.)
+  let lo = Infinity;
+  for (let i = 0; i < T.b0.length; i++) if (T.b0[i] === FORE_R && (T.b1[i] === FORE_R || T.w[i] > 0.99)) lo = Math.min(lo, T.pos[i * 3 + 1]);
+  const top = lo + 0.045 * (T.pivot[ARM_R][1] / 1.42);
+  const c = new THREE.Vector3();
+  let n = 0;
+  for (let i = 0; i < T.b0.length; i++) {
+    if (T.b0[i] !== FORE_R || (T.b1[i] !== FORE_R && T.w[i] <= 0.99) || T.pos[i * 3 + 1] > top) continue;
+    c.x += T.pos[i * 3];
+    c.y += T.pos[i * 3 + 1];
+    c.z += T.pos[i * 3 + 2];
+    n++;
+  }
+  c.divideScalar(Math.max(1, n));
+  c.x *= sgn;
+  return c;
 }
 
-/** Adds the figure's umbrella to gb if it carries one (the district shows umbrellas only while it rains). */
+/** Where a 'hold' figure's holding hand is, in its own frame (x to its right, z ahead, y above its floor). */
+function heldHand(s: FigureSpec): THREE.Vector3 {
+  const T = templateOf(s);
+  const sgn = s.side >= 0 ? 1 : -1;
+  return handBind(T, sgn).applyMatrix4(poseBones(T, { ...s, pose: 'hold' })[sgn > 0 ? FORE_R : FORE_L]);
+}
+
+/** Where a figure's holding hand is in the world (pose 'hold'): for tests. */
+export function handAt(s: FigureSpec): [number, number, number] {
+  const h = heldHand(s);
+  const fx = Math.sin(s.yaw), fz = Math.cos(s.yaw);
+  return [s.x + fz * h.x + fx * h.z, PAVEMENT + (s.y ?? 0) + h.y, s.z - fx * h.x + fz * h.z];
+}
+
+/**
+ * Two people holding hands, their hands really meeting: `a` where it stands, holding with its `side` hand; `b` set
+ * beside it on that side, facing the same way, holding with the other hand. Whoever's hand hangs lower raises it to
+ * the other's (a child's up to a parent's: `reach`), and b stands where the two hands then coincide. They come and go
+ * together. Worked out on the templates as the generation now set builds them (teens and all).
+ */
+export function holdHands(a: FigureSpec, b: FigureSpec): [FigureSpec, FigureSpec] {
+  const side = a.side >= 0 ? 1 : -1;
+  let A: FigureSpec = { ...a, pose: 'hold', side, reach: 0.26 };
+  let B: FigureSpec = { ...b, pose: 'hold', side: -side, yaw: a.yaw, y: a.y, reach: 0.26 };
+  const ha = heldHand(A).y, hb = heldHand(B).y;
+  // The lower hand comes up to the higher (the arm raised further out lifts the hand).
+  const lift = (s: FigureSpec, to: number): FigureSpec => {
+    let lo = 0.26, hi = 2.2;
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2;
+      if (heldHand({ ...s, reach: mid }).y < to) lo = mid;
+      else hi = mid;
+    }
+    return { ...s, reach: (lo + hi) / 2 };
+  };
+  if (ha < hb) A = lift(A, hb);
+  else B = lift(B, ha);
+  const pa = heldHand(A), pb = heldHand(B);
+  const dx = pa.x - pb.x, dz = pa.z - pb.z;
+  const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw);
+  const seed = a.fade === false ? undefined : (a.seed ?? figureSeed(a));
+  return [{ ...A, seed }, { ...B, x: a.x + fz * dx + fx * dz, z: a.z - fx * dx + fz * dz, fade: a.fade, close: a.close, seed }];
+}
+
+/** Adds one figure to gb (`umbrella`: it holds up its umbrella, if it carries one, while uUmbrella is on: bake that with addUmbrella). */
+export function addFigure(gb: GhostBuilder, s: FigureSpec, umbrella = false): void {
+  gb.add(templateIndex(s), packFigures([s], null, umbrella));
+}
+
+/**
+ * Adds the figure's umbrella to gb if it carries one (it hangs off the arm held up while the material's uUmbrella is
+ * on, so show it only then; add the figure with `addFigure(gb, s, true)`).
+ */
 export function addUmbrella(gb: GhostBuilder, s: FigureSpec): boolean {
   if (!carriesUmbrella(s)) return false;
   gb.add(umbrellaIndex(s.body), packFigures([s]));
   return true;
 }
 
-/** A figure posed as the material poses it at rest (no idle motion), in the world: for tests. */
-export function posedFigure(s: FigureSpec): Float32Array {
-  const T = template(s.body, s.hair, outfitOf(s));
-  const M = poseBones(T, s);
+/**
+ * A figure posed as the material poses it at rest (no idle motion), in the world: for tests. With `umbrella`,
+ * holding it up (the arm only), or with 'canopy' its umbrella instead of the figure.
+ */
+export function posedFigure(s: FigureSpec, umbrella: boolean | 'canopy' = false): Float32Array {
+  const T = umbrella === 'canopy' ? templateAt(umbrellaIndex(s.body)) : templateOf(s);
+  const M = poseBones(T, s, umbrella !== false);
   const n = T.pos.length / 3;
   const out = new Float32Array(n * 3);
   const fx = Math.sin(s.yaw), fz = Math.cos(s.yaw);
+  // (The umbrella mirrored to the hand it's in, on that side's forearm.)
+  const left = umbrella === 'canopy' && (s.pose === 'hold' ? -s.side : s.side) < 0;
   for (let i = 0; i < n; i++) {
-    const x = T.pos[i * 3], y = T.pos[i * 3 + 1], z = T.pos[i * 3 + 2];
-    const e0 = M[T.b0[i]].elements, e1 = M[T.b1[i]].elements;
+    const x = left ? -T.pos[i * 3] : T.pos[i * 3], y = T.pos[i * 3 + 1], z = T.pos[i * 3 + 2];
+    const fore = (b: number): number => (left && (b === ARM_R || b === FORE_R) ? b - 2 : b);
+    const e0 = M[fore(T.b0[i])].elements, e1 = M[fore(T.b1[i])].elements;
     const w = T.w[i], u = 1 - w;
     const px = w * (e0[0] * x + e0[4] * y + e0[8] * z + e0[12]) + u * (e1[0] * x + e1[4] * y + e1[8] * z + e1[12]);
     const py = w * (e0[1] * x + e0[5] * y + e0[9] * z + e0[13]) + u * (e1[1] * x + e1[5] * y + e1[9] * z + e1[13]);
@@ -1134,6 +1349,20 @@ export function posedFigure(s: FigureSpec): Float32Array {
     out[i * 3 + 2] = s.z - fx * px + fz * pz;
   }
   return out;
+}
+
+/** A figure's template as the generation now set builds it: its vertices and triangles. */
+export function figureMesh(s: Pick<FigureSpec, 'body' | 'hair' | 'long' | 'outfit' | 'model'>): { vertices: number; triangles: number } {
+  const T = templateOf(s);
+  return { vertices: T.pos.length / 3, triangles: T.idx.length / 3 };
+}
+
+/** A figure's standing height (hair and hat included) and its hip joints' height (m). */
+export function figureSize(s: Pick<FigureSpec, 'body' | 'hair' | 'long' | 'outfit' | 'model'>): { height: number; hip: number } {
+  const T = templateOf(s);
+  let height = 0;
+  for (let i = 1; i < T.pos.length; i += 3) height = Math.max(height, T.pos[i]);
+  return { height, hip: T.pivot[THIGH_L][1] };
 }
 
 // ---- The material ----
@@ -1176,16 +1405,10 @@ export interface GhostLight {
  * sorting). `uTime` drives the motion and the fades (main.ts sets it).
  */
 export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THREE.ShaderMaterial {
-  const pivots: THREE.Vector3[] = [];
-  const armOut: number[] = [];
-  for (const body of BODY_LIST) {
-    const p = pivotsOf(body);
-    for (const v of p.pivot) pivots.push(new THREE.Vector3(...v));
-    armOut.push(p.armOut);
-  }
   const material = new THREE.ShaderMaterial({
     uniforms: {
-      ...THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uOpacity: { value: 0.72 }, uLift: { value: 1 }, uRim: { value: new THREE.Color(0, 0, 0) }, uPivot: { value: pivots }, uArmOut: { value: armOut } }]),
+      ...THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uOpacity: { value: 0.72 }, uLift: { value: 1 }, uRim: { value: new THREE.Color(0, 0, 0) }, uUmbrella: { value: 0 }, uSkin: { value: 1 }, uStill: { value: 0 }, uFlat: { value: new THREE.Vector4(0, 0, 0, 0) }, uBlack: { value: 0 }, uEdge: { value: 0.2 } }]),
+      tJoints: { value: mobJoints() },
       tLight: light?.tLight ?? { value: null },
       uLightRect: light?.uLightRect ?? { value: new THREE.Vector4(0, 0, 1, 1) },
       uLightFade: light?.uLightFade ?? { value: new THREE.Vector2(0, 0) },
@@ -1196,8 +1419,20 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
     vertexShader: /* glsl */ `
       #include <fog_pars_vertex>
       uniform float uTime;
-      uniform vec3 uPivot[${BODY_LIST.length * BONES}];
-      uniform float uArmOut[${BODY_LIST.length}];
+      // 1 while it rains: those who carry an umbrella hold it up (real/crowd.ts sets it with its umbrellas).
+      uniform float uUmbrella;
+      // How much lighter skin is than the clothes (the shaped generation tags skin: aShade + 100; see vC below).
+      uniform float uSkin;
+      // 1: standing figures only stand easy, no routine (the mob showroom's turnarounds).
+      uniform float uStill;
+      // Every body's joints (mobJoints): a row a body, a texel a bone, the arms' bind angle after the bones.
+      uniform sampler2D tJoints;
+      // One colour for every figure and every part of it (rgb, and how much of it): the mob showroom's single-colour ghost.
+      uniform vec4 uFlat;
+      // 1: everything the one colour, clothes and all (the mob as it first was: all black).
+      uniform float uBlack;
+      float jointRow;
+      vec3 pv(int i) { return texture2D(tJoints, vec2((float(i) + 0.5) / ${JOINT_COLS}.0, (jointRow + 0.5) / ${JOINT_ROWS}.0)).xyz; }
       attribute float aShade;
       attribute vec3 aBone;
       attribute float aMirror;
@@ -1239,17 +1474,17 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
           if (left) l = legL;
           float sg = left ? -1.0 : 1.0;
           int ti = left ? 3 : 5;
-          joint(M, T, rotX(-l.swing) * rotZ(sg * l.raise), uPivot[base + ti]);
+          joint(M, T, rotX(-l.swing) * rotZ(sg * l.raise), pv(ti));
           if (b == ti) return;
-          joint(M, T, rotX(l.bend), uPivot[base + ti + 1]);
+          joint(M, T, rotX(l.bend), pv(ti + 1));
           if (b < 12) return;
-          joint(M, T, rotX(${FOOT_LEVEL.toFixed(3)} * (l.swing - l.bend)), uPivot[base + b]);
+          joint(M, T, rotX(${FOOT_LEVEL.toFixed(3)} * (l.swing - l.bend)), pv(b));
           return;
         }
-        joint(M, T, rotX(lean) * rotZ(spineRoll), uPivot[base + 1]);
+        joint(M, T, rotX(lean) * rotZ(spineRoll), pv(1));
         if (b == 1) return;
         if (b == 2) {
-          joint(M, T, rotX(-lean * 0.7 + headPitch) * rotZ(-spineRoll * 0.8) * rotY(headYaw), uPivot[base + 2]);
+          joint(M, T, rotX(-lean * 0.7 + headPitch) * rotZ(-spineRoll * 0.8) * rotY(headYaw), pv(2));
           return;
         }
         bool left = b <= 8;
@@ -1257,21 +1492,27 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         if (left) l = armL;
         float sg = left ? -1.0 : 1.0;
         int ai = left ? 7 : 9;
-        joint(M, T, rotX(-l.swing) * rotZ(sg * (l.raise - armOut)), uPivot[base + ai]);
+        joint(M, T, rotX(-l.swing) * rotZ(sg * (l.raise - armOut)), pv(ai));
         if (b == ai) return;
-        joint(M, T, rotY(-sg * l.twist) * rotZ(sg * l.side) * rotX(-l.bend), uPivot[base + ai + 1]);
+        joint(M, T, rotY(-sg * l.twist) * rotZ(sg * l.side) * rotX(-l.bend), pv(ai + 1));
       }
 
       /** Which activity (STANDING) a standing figure does in its k-th stretch, by its pose's temperament. */
-      int pickAct(int P, float k, float r, bool bag) {
+      int pickAct(int P, float k, float r, bool bag, bool umb) {
         float h = hh1(k, r);
         int a = 0;
+        if (uStill > 0.5) return 0;
         if (P == 3) a = h < 0.4 ? 2 : h < 0.6 ? 3 : h < 0.72 ? 6 : h < 0.85 ? 1 : 0;
         else if (P == 2) a = h < 0.5 ? 8 : h < 0.62 ? 4 : h < 0.7 ? 5 : h < 0.8 ? 1 : h < 0.85 ? 6 : 0;
         else if (P == 5) a = h < 0.15 ? 9 : h < 0.45 ? 6 : h < 0.65 ? 1 : 0;
         else a = h < 0.27 ? 0 : h < 0.41 ? 1 : h < 0.51 ? 2 : h < 0.6 ? 4 : h < 0.67 ? 5 : h < 0.84 ? 6 : h < 0.89 ? 7 : h < 0.94 ? 3 : 0;
         // Two-handed things aren't for someone holding a bag.
         if (bag && (a == 2 || a == 4 || a == 5)) a = a == 2 ? 3 : 0;
+        // Holding an umbrella up: nothing for that hand (the free one may still glance at the watch or go in a pocket).
+        if (umb) {
+          if (a == 2 || a == 3 || a == 8 || a == 9) a = 6;
+          else if (a == 4 || a == 5 || (bag && a == 7)) a = 0;
+        }
         return a;
       }
 
@@ -1341,10 +1582,16 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         float t = uTime;
         int body = int(aPose.x + 0.5);
         base = body * ${BONES};
-        armOut = uArmOut[body];
+        jointRow = float(body);
+        armOut = pv(${BONES}).x;
         float side = sign(aPose.z);
-        // A bag in the left hand: that hand stays down.
-        bool bag = abs(aPose.z) > 1.5;
+        // |aPose.z| is 1, +1 with a bag in the left hand (that hand stays down), +2 carrying an umbrella.
+        float carry = floor(abs(aPose.z) + 0.5);
+        // (+4: both hands on a rucksack's straps, standing or walking.)
+        bool straps = carry > 4.5;
+        if (straps) carry -= 4.0;
+        bool umb = carry > 2.5 && uUmbrella > 0.5;
+        bool bag = carry - (carry > 2.5 ? 2.0 : 0.0) > 1.5;
         float seed = aFig.w;
         // Each figure's own randomness for its idle motion (seeds can be shared by a group).
         float r = fract(sin(dot(aFig.xy, vec2(12.9898, 78.233))) * 43758.5453);
@@ -1395,6 +1642,8 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         // Mid-stride with nowhere to go (set pieces' figures): they stand and go about the routine instead. (Fixed
         // figures, seed < 0, keep their pose: the showroom, story NPCs.)
         if (P == 1 && !moving && seed >= 0.0) P = 0;
+        // The umbrella's hand: the gesturing one, unless that hand holds someone else's (pose 'hold').
+        float uside = P == 6 ? -side : side;
         Limb still = L3(0.0, 0.1, 0.12);
         Limb leg0 = L3(0.0, 0.0, 0.0);
         armL = still;
@@ -1415,7 +1664,7 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
           armR = L3(a * 0.7, 0.1, 0.25);
           lean += 0.04;
           // The hips drop as far as the swinging legs rise, so the planted foot stays on the ground.
-          drop = uPivot[base + 3].y * (1.0 - cos(a));
+          drop = pv(3).y * (1.0 - cos(a));
           if (moving) {
             // The shoulders turning with the stride, a glance about.
             spineRoll = 0.03 * sin(phase * 6.2832);
@@ -1433,8 +1682,10 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
           Limb g = still;
           bool gest = false;
           if (P == 6) {
-            g = L3(0.1, body == 2 ? 0.75 : 0.26, 0.1);
+            // Holding someone's hand: the arm out by aWalk.x (holdHands sets it so the two hands meet), the body still.
+            g = L3(0.1, aWalk.x, 0.1);
             gest = true;
+            spineRoll = 0.0;
           } else if (P == 7) {
             // Sitting (a seat 0.46 m up): the same as skeleton()'s 'sit', breathing.
             legL = L3(1.45, 0.07, 1.45);
@@ -1443,11 +1694,23 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
             armR = armL;
             lean = -0.05 + 0.01 * breath;
             spineRoll *= 0.3;
-            drop = uPivot[base + 3].y - 0.46;
+            drop = pv(3).y - 0.46;
           } else if (P == 8) {
             // Holding a strap, swaying a little with the ride.
             g = L3(2.75 + 0.04 * sway, 0.12, 0.25);
             gest = true;
+          } else if (P == 10) {
+            // In a car's seat (skeleton()'s 'ride'): the legs out ahead, tucked up by aWalk.x; looking about.
+            float tuck = clamp(aWalk.x, 0.0, 1.0);
+            float sw = 1.7 + 0.3 * tuck;
+            legL = L3(sw, 0.06, sw - (0.75 - 0.65 * tuck));
+            legR = legL;
+            armL = L3(${RIDE_ARM[0].toFixed(2)}, ${RIDE_ARM[1].toFixed(2)}, ${RIDE_ARM[2].toFixed(2)});
+            armR = armL;
+            lean = ${RIDE_LEAN.toFixed(3)} + 0.008 * breath;
+            spineRoll *= 0.3;
+            headYaw = aPose.w + 0.3 * sin(t * 0.19 + r * 17.0) + 0.1 * sin(t * 0.53 + r * 5.0);
+            drop = pv(3).y - ${RIDE_HIP.toFixed(3)};
           } else {
             // Standing: a routine of everyday things a few seconds each (the pose sets the temperament: a talker
             // mostly talks), easing from one to the next.
@@ -1455,8 +1718,8 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
             float tt = t / dur + r * 37.0;
             float k = floor(tt);
             float u = fract(tt) * dur;
-            Act A = act(pickAct(P, k, r, bag), u, k, t, r, side, body);
-            Act B = act(pickAct(P, k + 1.0, r, bag), u - dur, k + 1.0, t, r, side, body);
+            Act A = act(pickAct(P, k, r, bag, umb), u, k, t, r, side, body);
+            Act B = act(pickAct(P, k + 1.0, r, bag, umb), u - dur, k + 1.0, t, r, side, body);
             float w = smoothstep(dur - 1.2, dur, u);
             armL = mixL(A.aL, B.aL, w);
             armR = mixL(A.aR, B.aR, w);
@@ -1473,15 +1736,57 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
             else armL = g;
           }
         }
+        if (P == 9 && aWalk.x > 0.001) {
+          // Moved by the game (gaitLimbs): the standing routine above eased into the walk by its pace (aWalk.x: 1
+          // walking, 2 running), the stride at aWalk.w.
+          float wk = clamp(aWalk.x, 0.0, 1.0);
+          float rn = clamp(aWalk.x - 1.0, 0.0, 1.0);
+          float ph = phase * 6.2832;
+          float amp = mix(${GAIT.reach[0].toFixed(3)}, ${GAIT.reach[1].toFixed(3)}, rn);
+          float a = sin(ph) * amp;
+          float c = cos(ph + ${GAIT.foldAt.toFixed(3)});
+          float kL = 0.06 + (1.0 - rn) * 0.24 * clamp(-a / amp, 0.0, 1.0) + rn * (0.15 + ${GAIT.fold.toFixed(3)} * max(0.0, c));
+          float kR = 0.06 + (1.0 - rn) * 0.24 * clamp(a / amp, 0.0, 1.0) + rn * (0.15 + ${GAIT.fold.toFixed(3)} * max(0.0, -c));
+          float sw = mix(${GAIT.arm[0].toFixed(3)}, ${GAIT.arm[1].toFixed(3)}, rn);
+          float el = mix(${GAIT.elbow[0].toFixed(3)}, ${GAIT.elbow[1].toFixed(3)}, rn);
+          legL = mixL(legL, L3(a, 0.0, kL), wk);
+          legR = mixL(legR, L3(-a, 0.0, kR), wk);
+          armL = mixL(armL, L3(-a * sw, 0.1, el), wk);
+          armR = mixL(armR, L3(a * sw, 0.1, el), wk);
+          lean += wk * mix(${GAIT.lean[0].toFixed(3)}, ${GAIT.lean[1].toFixed(3)}, rn);
+          drop = wk * pv(3).y * (1.0 - cos(a)) * (1.0 - 0.5 * rn);
+          spineRoll = mix(spineRoll, 0.03 * (1.0 + rn) * sin(ph), wk);
+          headYaw = mix(headYaw, aPose.w, wk);
+          headPitch = mix(headPitch, -0.1 * rn, wk);
+        }
+        if (straps && (P == 0 || P == 1 || P == 9)) {
+          Limb h = Limb(${STRAP_HOLD.swing.toFixed(3)}, ${STRAP_HOLD.raise.toFixed(3)}, ${STRAP_HOLD.bend.toFixed(3)}, 0.0, ${STRAP_HOLD.twist.toFixed(3)});
+          armL = h;
+          armR = h;
+        }
+        if (umb) {
+          // The umbrella held up (people.ts UMBRELLA_HOLD, which the umbrella is built on), bobbing a little with
+          // the stride or the breath.
+          float bob = P == 1 ? 0.03 * sin(phase * 12.566) : 0.012 * sin(t * 1.4 + r * 20.0);
+          Limb h = Limb(${UMBRELLA_HOLD.swing.toFixed(3)} + bob, ${UMBRELLA_HOLD.raise.toFixed(3)}, ${UMBRELLA_HOLD.bend.toFixed(3)} - bob, ${UMBRELLA_HOLD.side.toFixed(3)}, ${UMBRELLA_HOLD.twist.toFixed(3)});
+          if (uside > 0.0) armR = h;
+          else armL = h;
+        }
 
-        // Skinned by two bones (an umbrella mirrored to the hand it's in).
-        float m = mix(1.0, side, aMirror);
+        // Skinned by two bones (an umbrella mirrored to the hand it's in, on that side's arm).
+        float m = mix(1.0, uside, aMirror);
         vec3 p = vec3(position.x * m, position.yz);
         vec3 n = vec3(normal.x * m, normal.yz);
         mat3 M0, M1;
         vec3 T0, T1;
-        bone(int(aBone.x + 0.5), M0, T0);
-        bone(int(aBone.y + 0.5), M1, T1);
+        int b0 = int(aBone.x + 0.5);
+        int b1 = int(aBone.y + 0.5);
+        if (aMirror > 0.5 && uside < 0.0) {
+          if (b0 == 9 || b0 == 10) b0 -= 2;
+          if (b1 == 9 || b1 == 10) b1 -= 2;
+        }
+        bone(b0, M0, T0);
+        bone(b1, M1, T1);
         float w = aBone.z;
         vec3 lp = w * (M0 * p + T0) + (1.0 - w) * (M1 * p + T1);
         vec3 ln = normalize(w * (M0 * n) + (1.0 - w) * (M1 * n));
@@ -1492,11 +1797,29 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         vec4 wp = modelMatrix * vec4(local, 1.0);
         vW = wp.xyz;
         vN = normalize(mat3(modelMatrix) * nl);
-        vC = aTint * aShade;
+        // aShade: a tag in the hundreds, then the shade. No tag: the figure's tint. 1 skin, 19 hair, 20 shoes: the body,
+        // coloured, or the one colour when that's on. 2-15: a part with a colour of its own (TAG_COLORS). 16-18: everyday
+        // clothes, a colour by the figure (its top, its bottoms, its suit).
+        float tag = floor(aShade / 100.0 + 0.001);
+        float sh = aShade - tag * 100.0;
+        float hq = fract(sin(dot(aTint, vec3(12.9898, 78.233, 37.719)) * 91.7 + aFig.w * 3.17) * 43758.5453);
+        if (tag > 18.5) {
+          float hh = fract(hq * 5.31 + 0.53);
+          vec3 own = tag < 19.5 ? (body == 3 ? (${pickGlsl(ELDER_HAIR, 'hh')}) : (${pickGlsl(HAIR_COLORS, 'hh')})) : (${pickGlsl(SHOE_COLORS, 'hh')});
+          vC = mix(own * sh, uFlat.rgb, uFlat.a);
+        } else if (tag > 15.5) {
+          float hb = fract(hq * 7.13 + 0.37);
+          float hs = fract(hq * 3.71 + 0.11);
+          vC = (tag < 16.5 ? (${pickGlsl(CLOTH_TOPS, 'hq')}) : tag < 17.5 ? (${pickGlsl(CLOTH_BOTTOMS, 'hb')}) : (${pickGlsl(CLOTH_SUITS, 'hs')})) * sh;
+        } else if (tag > 1.5) vC = (${TAG_GLSL}) * sh;
+        else if (tag > 0.5) vC = mix(${v3Glsl(SKIN_TONE)} * (0.84 + 0.3 * fract(hq * 2.17 + 0.71)) * sh * uSkin, uFlat.rgb, uFlat.a);
+        else vC = mix(aTint * sh, uFlat.rgb, uFlat.a);
+        vC = mix(vC, uFlat.rgb, uBlack);
         // Fade with distance and as you walk into one, by where it stands so it fades whole.
         vec3 c = (modelMatrix * vec4(org.x, ground, org.y, 1.0)).xyz;
         float d = distance(c.xz, cameraPosition.xz);
-        vFade = fade * smoothstep(0.45, 1.2, d) * (1.0 - smoothstep(125.0, 175.0, d));
+        // (seed -2: someone who stays whole right beside you, a passenger in your car.)
+        vFade = fade * (seed < -1.5 ? 1.0 : smoothstep(0.45, 1.2, d)) * (1.0 - smoothstep(125.0, 175.0, d));
         vec4 mvPosition = viewMatrix * wp;
         gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
@@ -1504,6 +1827,8 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
     fragmentShader: /* glsl */ `
       #include <fog_pars_fragment>
       uniform float uOpacity;
+      // How much denser a figure is toward its silhouette (and along every crease: 0 leaves a see-through figure even all over).
+      uniform float uEdge;
       uniform float uLift;
       uniform vec3 uRim;
       uniform sampler2D tLight;
@@ -1538,7 +1863,7 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         }
         // Alpha to coverage has a few steps per pixel (4x MSAA); while a figure fades, a 4x4 ordered dither
         // hides them (steady, the steps only draw a denser edge at the silhouette).
-        float a = (uOpacity + 0.2 * rim) * vFade + (bayer4(gl_FragCoord.xy) - 0.5) * 0.24 * (1.0 - smoothstep(0.92, 1.0, vFade));
+        float a = (uOpacity + uEdge * rim) * vFade + (bayer4(gl_FragCoord.xy) - 0.5) * 0.24 * (1.0 - smoothstep(0.92, 1.0, vFade));
         if (a < 0.02) discard;
         gl_FragColor = vec4(col, clamp(a, 0.0, 1.0));
         #include <fog_fragment>
@@ -1616,7 +1941,7 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
  * talking where a pavement is wide, a few in plazas and parks. Nobody stands in the road (`footingOf`). People
  * together share a fade seed and a walk.
  */
-export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly (Rect & { readonly focus?: readonly [number, number] })[] = [], signals: Signals | null = null, around: readonly Road3[] = plan.roads): FigureSpec[] {
+export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly (Rect & { readonly focus?: readonly [number, number] })[] = [], signals: Signals | null = null, around: readonly Road3[] = plan.roads, stamps: readonly Rect[] = [], fixtures: readonly Rect[] = []): FigureSpec[] {
   const out: FigureSpec[] = [];
   const mix = plan.style.people ?? DISTRICT_PEOPLE[plan.kind] ?? CITY_PEOPLE;
   const person = (rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body?: Body): FigureSpec => randomPerson(rnd, x, z, yaw, pose, body, mix);
@@ -1626,7 +1951,12 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
   const clear = (x: number, z: number): boolean =>
     !detail.props.some((p) => propDist(p, x, z) < p.radius + (p.kind === 'car' ? 1.6 : 0.8)) &&
     !detail.solids.some((q) => inRect(q, x, z, 0.8)) &&
-    !plan.buildings.some((b) => Math.abs(x - b.x) < b.w / 2 + 0.8 && Math.abs(z - b.z) < b.d / 2 + 0.8);
+    !plan.buildings.some((b) => Math.abs(x - b.x) < b.w / 2 + 0.8 && Math.abs(z - b.z) < b.d / 2 + 0.8) &&
+    // Set pieces (stamps, here and next door) are solid to the crowd too, a plaza's kōban or a corner's tower.
+    !stamps.some((q) => inRect(q, x, z, 0.8)) &&
+    // And so is what stands in and about them (their own collision: a store's racks out on the pavement, a
+    // station's piers, a precinct's walls), with the room a walker needs (the controls' radius).
+    !fixtures.some((q) => inRect(q, x, z, 0.4));
   // (The neighbours' roads too: a junction at the cell's corner is partly theirs.)
   const footing = footingOf(around);
   /** Somewhere a person can stand: off the road and the lanes, clear, in this cell. */
@@ -1747,7 +2077,10 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
       const gy = Math.round((r.vertical ? oc : centre) / CELL);
       const signal = signals && onGrid(centre) && onGrid(oc) && width >= 8 ? signals.walkPhase(gx, gy, o.vertical) : null;
       const rnd = rng(hash(Math.round(q.x * 3 + o.rect.x), Math.round(q.y * 3 + o.rect.y), 0x7e5));
-      const [ja, jb] = r.vertical ? [o.rect.y, o.rect.y + o.rect.h] : [o.rect.x, o.rect.x + o.rect.w];
+      // The junction's box along r, which the zebras stand off: the wider of this street and the one carrying on
+      // across r's line in the next cell (plan.ts junctionSpans).
+      const [oa, ob] = r.vertical ? [o.rect.y, o.rect.y + o.rect.h] : [o.rect.x, o.rect.x + o.rect.w];
+      const [ja, jb] = junctionSpans(r, plan.roads).find(([a, b]) => a <= oa + 0.01 && b >= ob - 0.01) ?? [oa, ob];
       for (const [edge, dir] of [[ja, -1], [jb, 1]] as const) {
         const t = edge + dir * 2.1;
         for (const side of [-1, 1]) {

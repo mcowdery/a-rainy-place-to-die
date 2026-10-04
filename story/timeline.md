@@ -11,7 +11,8 @@ One year, one chapter a season, starting in spring. The story turns the season w
   winter), so a winter evening at 18:00 is night and a summer one still day; `world.late` after the last train
   (00:40) until 05:00, all year.
 - A scene can ask for a time: `time_morning` (07:00), `time_noon`, `time_evening` (18:00), `time_night` (22:00),
-  `time_late` (01:30). The clock runs on to it.
+  `time_late` (01:30), or the season's sunrise or sunset: `time_dawn`, `time_dusk` (for a scene that needs the sun
+  going down whatever the season; `time_evening` is light in summer and dark in winter). The clock runs on to it.
 - Sleeping (booth 17, the futon) runs to 07:00 and autosaves.
 
 ## What each season brings to the city

@@ -1,0 +1,16 @@
+# 歌舞路交番 Kaburo Kōban: the police box on the corner of the square across the crossing from the mega-sign
+# (real/kaburoKit.ts, kind koban), facing 夜霧通り Yogiri-dōri. A small two-storey box with a round clock tower on its
+# corner, the red lamp over the door, the wanted posters and the accident tally on its side wall, the area map
+# on a stand, two police bicycles. You walk straight in: the front room with its counter and bell (story hotspot
+# `counter`), the desks behind it. The officer standing guard at the door is a story npc (spring, "Papers").
+id: koban
+name: 歌舞路交番 Kaburo Kōban
+footprint: [8, 7]
+height: 9
+front: north
+landmark: koban
+nodes:
+  front: { kind: spawn, name: 歌舞路交番 Kaburo Kōban, at: [4.5, 9], facing: south, view: [180, 6] }
+  officer: { kind: npc, name: The officer at the kōban door, at: [2.75, 0.9], figure: { body: woman, pose: stand, hair: bun, outfit: police, color: '#1a2a4a' } }
+  wanted: { kind: hotspot, name: 指名手配 (the wanted posters), at: [9.0, -3.6] }
+  counter: { kind: hotspot, name: The counter (ring the bell), at: [5.0, -2.6] }

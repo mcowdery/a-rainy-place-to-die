@@ -476,6 +476,8 @@ export class RainLayers {
 export class StreetWater {
   readonly group = new THREE.Group();
   private readonly u = {
+    /** Round the camera (m): no debris there (the cabin of the car, bus or train you're in). */
+    uKeep: { value: 0 },
     uTime: { value: 0 },
     uCam: { value: new THREE.Vector3() },
     uWet: { value: 0 },
@@ -567,6 +569,7 @@ export class StreetWater {
           uniform vec3 uCam;
           uniform vec2 uWind;
           uniform float uLamps;
+          uniform float uKeep;
           ${lightmapGlsl}
           varying vec3 vCol;
           void main() {
@@ -590,7 +593,7 @@ export class StreetWater {
             // Mostly lying flat, lifting as it hops.
             q.y *= 0.25 + 0.75 * hop;
             vec3 p = c + q;
-            float show = step(0.2, w) * (1.0 - smoothstep(18.0, 25.0, length(p - uCam)));
+            float show = step(0.2, w) * (1.0 - smoothstep(18.0, 25.0, length(p - uCam))) * step(uKeep, length(c.xz - uCam.xz));
             // Paper (white), newsprint (grey) or a plastic bag (the bigger ones, pale), lit by the street.
             vec3 alb = aSeed.w < 0.12 ? vec3(0.8, 0.82, 0.78) : aSeed.z < 0.5 ? vec3(0.9, 0.88, 0.82) : vec3(0.55, 0.55, 0.52);
             vCol = alb * (lightAt(p.xz) * 0.45 + vec3(0.03) + vec3(0.3) * (1.0 - uLamps));
@@ -605,8 +608,12 @@ export class StreetWater {
     this.group.add(drips, debris);
   }
 
-  /** shelters: covered volumes near the camera (the open ones drip from their edges). */
-  update(time: number, camera: THREE.Vector3, wet: number, wind: THREE.Vector2, shelters: readonly (RainShelter & { readonly enclosed?: boolean })[]): void {
+  /**
+   * shelters: covered volumes near the camera (the open ones drip from their edges). keepOut: metres round the
+   * camera the debris stays out of (you're in a vehicle: it blows past, not through the cabin).
+   */
+  update(time: number, camera: THREE.Vector3, wet: number, wind: THREE.Vector2, shelters: readonly (RainShelter & { readonly enclosed?: boolean })[], keepOut = 0): void {
+    this.u.uKeep.value = keepOut;
     this.u.uTime.value = time;
     this.u.uCam.value.copy(camera);
     this.u.uWet.value = wet;
@@ -945,6 +952,8 @@ export class Drift {
     uSkid: { value: new THREE.Vector2() },
     /** The ground's height under the camera (for the skittering ones). */
     uGround: { value: 0 },
+    /** Round the camera (m): nothing drifts there (the cabin of the car you're in). */
+    uKeep: { value: 0 },
   };
 
   constructor(city: CityUniforms) {
@@ -972,6 +981,7 @@ export class Drift {
         uniform vec2 uCarry;
         uniform vec2 uSkid;
         uniform float uGround;
+        uniform float uKeep;
         ${lightmapGlsl}
         varying vec3 vCol;
         varying float vA;
@@ -1009,6 +1019,7 @@ export class Drift {
           float d = -mv.z;
           float reach = snow ? 21.0 : 30.0;
           vA = live * skitA * smoothstep(0.4, 1.5, d) * (1.0 - smoothstep(reach * 0.65, reach, length(p - uCam))) * step(uGround - 0.5, p.y);
+          if (length(p.xz - uCam.xz) < uKeep && abs(p.y - uCam.y) < 1.6) vA = 0.0;
           // Turning (faster in a wind) and tumbling (thin when edge-on).
           float spin = (aSeed.z - 0.5) * 5.0 * (1.0 + windS * 0.4);
           float a = aSeed.y * 6.2832 + uTime * spin;
@@ -1078,9 +1089,13 @@ export class Drift {
     }
   }
 
-  /** Each frame: the camera, the ambient light, the wind (m/s) and the ground's height under the camera. */
-  update(dt: number, camera: THREE.Vector3, ambient: number, wind: THREE.Vector2, ground: number): void {
+  /**
+   * Each frame: the camera, the ambient light, the wind (m/s) and the ground's height under the camera. keepOut:
+   * metres round the camera nothing drifts in (the cabin of the car you're in).
+   */
+  update(dt: number, camera: THREE.Vector3, ambient: number, wind: THREE.Vector2, ground: number, keepOut = 0): void {
     const u = this.u;
+    u.uKeep.value = keepOut;
     u.uTime.value += dt;
     u.uWind.value.copy(wind);
     u.uCarry.value.addScaledVector(wind, dt);

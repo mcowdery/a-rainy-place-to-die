@@ -2,8 +2,16 @@ import * as THREE from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Bike } from '../models/bikeKit';
 import { Crosshair } from '../models/crosshair';
+import type { GlassesKind } from '../models/sunglasses';
+import { FACE_SHADOW } from '../models/faceShadow';
 import { FirstPersonRig } from '../models/firstPerson';
-import { SHOTGUN_KINDS } from '../models/shotgun';
+import { footOffset, THIRD, ThirdPersonCamera } from '../models/thirdPerson';
+import { GLASSES_LABELS, HELMET_LABELS, helmetLook, loadWardrobe, nextFace, nextGlasses, nextHelmet, nextOutfit, outfitById, saveWardrobe } from '../models/wardrobe';
+import { FACE_STYLE_LABELS, type FaceStyle } from '../models/faceShadow';
+import { MACK_GUNS, SHOTGUN_KINDS } from '../models/shotgun';
+import { GORE_LEVELS, saveGore, type Dir, type Melee, type MeleeWeapon } from '../models/melee';
+import { Brawl } from '../models/brawl';
+import { DuelHud } from '../models/duelHud';
 
 /**
  * The showroom's first-person mode, for reviewing Mack's body and guns as the player will see them:
@@ -12,6 +20,17 @@ import { SHOTGUN_KINDS } from '../models/shotgun';
  * E by one of the showroom's bikes gets on (and off): W throttle, S brake (and back, slowly, from a stop),
  * A/D steer; the bike leans into the turn, the view rides with half the lean, the mouse looks about; X draws
  * the shotgun (in the right hand, the left on the bars: raised with the right button, fired with the left).
+ * Fighting (models/brawl.ts): 1 guns, 2 fists, 3 katana; X puts the fists up or draws the sword (and back);
+ * left click attacks the way the mouse is moving (left, right, up, down: a hook either way, an uppercut, a
+ * cross; the sword's cuts from either side, rising or down the middle), or with the mouse still runs the combo;
+ * the right button guards (with the sword, a click from the guard thrusts), F kicks (a stomp on a man on the
+ * floor). A group of thugs (models/thug.ts) comes at you when you pick fists or the katana, and the guns hit
+ * them too; T brings on a fresh group, Y cycles the gore (full, low, off), U the kill-move chance.
+ * O changes his clothes (models/wardrobe.ts), Z his sunglasses (none, wraparounds, aviators, slim), N how his face is
+ * hidden (models/faceShadow.ts), K his motorcycle helmet (none, black, red and black). C, for reviewing the face
+ * only, puts the camera in front of him: front, three quarter, profile, off (in play nothing ever looks him in the face).
+ * Q switches to third person: over his right shoulder, always behind him (his body faces where you look, so
+ * the camera never comes round to his face), closer while aiming, pulled in by walls; on a bike, behind it.
  */
 
 /** A bike being ridden: where it is, its heading (0 faces -z), speed (m/s), steering and lean (radians). */
@@ -25,12 +44,25 @@ interface Ride {
   lean: number;
 }
 
+/** How long after a click the mouse's motion is read for the swing's way (ms): a short wind-up. */
+const SWING_READ = 100;
+
+/** The review mirror's views: none, then the camera's angle round from his front (radians) and distance (metres). */
+const MIRRORS: readonly ({ angle: number; dist: number } | null)[] = [null, { angle: 0, dist: 0.5 }, { angle: 0.75, dist: 0.55 }, { angle: 1.5, dist: 0.6 }];
+
+/** How far round a seated rider you can look in third person (radians each way; his head stays ahead). */
+const RIDE_LOOK_THIRD = 1.1;
+
 /** The ride's numbers: wheelbase, top speed, throttle, brakes, drag, gravity. */
 const RIDE = { wheelbase: 1.64, top: 22, accel: 3.2, brake: 8, drag: 0.35, airDrag: 0.01, g: 9.81, maxLean: (30 * Math.PI) / 180 };
 export class FpMode {
   active = false;
   /** Holds the pose and lets the camera go (scripted shots from outside). */
   frozen = false;
+  /** The body, for the page's censor pass (models/censorPass.ts). */
+  get body(): FirstPersonRig | null {
+    return this.active ? this.rig : null;
+  }
   private rig: FirstPersonRig | null = null;
   private yaw = 0;
   private pitch = 0;
@@ -43,6 +75,26 @@ export class FpMode {
   private riding: Ride | null = null;
   private armedOnFoot = true;
   private readonly crosshair = new Crosshair();
+  /** The fight (made when first needed) and what's in hand: the guns, or fists or the katana. */
+  private brawlNow: Brawl | null = null;
+  private hand: 'gun' | MeleeWeapon = 'gun';
+  /** The mouse's recent motion (for the way an attack goes), and the arrow that shows it. */
+  private readonly motion: { t: number; dx: number; dy: number }[] = [];
+  private readonly dirEl: HTMLDivElement;
+  private dirT = 0;
+  private swingPending = false;
+  /** A kill move's cinematic camera last frame: the eyes to put back before this one. */
+  private cineSaved: { p: THREE.Vector3; q: THREE.Quaternion } | null = null;
+  /** Third person (Q): the camera behind him for each frame's render. */
+  third = false;
+  private readonly thirdCam = new ThirdPersonCamera();
+  /** What he's wearing (models/wardrobe.ts), and a change of clothes on its way (the model loading). */
+  private wardrobe = loadWardrobe();
+  private changing = false;
+  /** The review mirror (C): which of MIRRORS, 0 off. */
+  mirror = 0;
+  private readonly ray = new THREE.Raycaster();
+  private duelHud: DuelHud | null = null;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -59,15 +111,51 @@ export class FpMode {
       /* no storage */
     }
     this.invertY = inv;
+    this.dirEl = document.createElement('div');
+    Object.assign(this.dirEl.style, { position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', opacity: '0', zIndex: '6', color: 'rgba(255,255,255,0.85)', font: 'bold 34px sans-serif', textShadow: '0 0 6px #000' });
+    document.body.appendChild(this.dirEl);
     window.addEventListener('keydown', (e) => {
       if (!this.active) return;
       this.keys.add(e.code);
-      if (e.code === 'KeyG' && this.rig) this.rig.setKind(SHOTGUN_KINDS[(SHOTGUN_KINDS.indexOf(this.rig.kind) + 1) % SHOTGUN_KINDS.length]);
+      this.brawl().sound.resume();
+      if (e.code === 'Digit1') this.pick('gun');
+      if (e.code === 'Digit2') this.pick('fists');
+      if (e.code === 'Digit3') this.pick('katana');
+      if (e.code === 'KeyF' && this.hand !== 'gun' && !this.riding) this.brawl().kick();
+      if (e.code === 'KeyT') this.brawl().spawn(4, this.view());
+      if (e.code === 'KeyB') {
+        if (this.hand === 'gun') this.pick('katana');
+        this.brawl().spawnDuel(this.view());
+      }
+      if (e.code === 'KeyY') {
+        const g = this.brawl().gore;
+        g.level = GORE_LEVELS[(GORE_LEVELS.indexOf(g.level) + 1) % GORE_LEVELS.length];
+        saveGore(g.level);
+      }
+      if (e.code === 'KeyU') {
+        const steps = [0.25, 0.5, 0.8, 1];
+        const b = this.brawl();
+        b.killChance = steps[(steps.findIndex((x) => x >= b.killChance - 1e-3) + 1) % steps.length];
+      }
+      if (e.code === 'KeyG' && this.rig) this.rig.setKind(MACK_GUNS[(MACK_GUNS.indexOf(this.rig.kind) + 1) % MACK_GUNS.length]);
       if (e.code === 'KeyR') this.rig?.reload();
       if (e.code === 'KeyH' && this.rig) this.rig.oneHand = !this.rig.oneHand;
       if (e.code === 'KeyV') this.exit();
+      if (e.code === 'KeyQ') this.third = !this.third;
+      if (e.code === 'KeyO') void this.wear(nextOutfit(this.wardrobe.outfit).id, this.wardrobe.glasses);
+      if (e.code === 'KeyZ') void this.wear(this.wardrobe.outfit, nextGlasses(this.wardrobe.glasses));
+      if (e.code === 'KeyN') this.setFace(nextFace(this.wardrobe.face));
+      if (e.code === 'KeyK') this.setHelmet(nextHelmet(this.wardrobe.helmet));
+      if (e.code === 'KeyC') this.mirror = (this.mirror + 1) % MIRRORS.length;
       if (e.code === 'KeyE') this.toggleRide();
       if (e.code === 'KeyX' && this.rig) {
+        if (this.hand !== 'gun' && !this.riding) {
+          const b = this.brawl();
+          const was = b.melee.drawn;
+          b.melee.toggleDrawn();
+          if (this.hand === 'katana') b.sound.draw(!was);
+          return;
+        }
         this.rig.armed = !this.rig.armed;
         if (!this.rig.armed) this.rig.aiming = false;
       }
@@ -80,19 +168,116 @@ export class FpMode {
         void dom.requestPointerLock();
         return;
       }
+      const b = this.brawl();
+      b.sound.resume();
+      if (this.hand !== 'gun' && !this.riding) {
+        if (e.button === 2) b.guard(true);
+        if (e.button === 0 && !this.swingPending) {
+          // The swing's way is read from the mouse just after the click (you click and swing; what came before
+          // is the wind-up, the other way), or, if it hardly moved, from just before (you moved, then clicked).
+          const at = performance.now();
+          this.swingPending = true;
+          setTimeout(() => {
+            this.swingPending = false;
+            const dir = this.swingDir(at, at + SWING_READ) ?? this.swingDir(at - 140, at);
+            b.attack(dir);
+            if (dir) this.showDir(dir);
+          }, SWING_READ);
+        }
+        return;
+      }
       if (e.button === 2 && this.rig.armed) this.rig.aiming = true;
+      if (e.button === 0 && this.rig.armed && !this.riding && b.tryGunKill(this.rig, this.view())) return;
       if (e.button === 0 && this.rig.armed && this.rig.fire()) this.crosshair.fired();
     });
     dom.addEventListener('mouseup', (e) => {
       if (e.button === 2 && this.rig) this.rig.aiming = false;
+      if (e.button === 2 && this.brawlNow) this.brawlNow.guard(false);
     });
     dom.addEventListener('contextmenu', (e) => {
       if (this.active) e.preventDefault();
     });
     document.addEventListener('mousemove', (e) => {
       if (!this.active || document.pointerLockElement !== dom) return;
+      const now = performance.now();
+      this.motion.push({ t: now, dx: e.movementX, dy: e.movementY });
+      while (this.motion.length > 0 && now - this.motion[0].t > 400) this.motion.shift();
+      if (this.brawlNow && (this.brawlNow.run || this.brawlNow.down > 0)) return;
       this.look(e.movementX * 0.0022, e.movementY * 0.0022 * (this.invertY ? -1 : 1));
     });
+  }
+
+  /** The fight, made when first needed (it needs the scene). */
+  private brawl(): Brawl {
+    if (!this.brawlNow) this.brawlNow = new Brawl(this.scene, this.floorAt, (from, dir, max) => this.probe(from, dir, max), document.body);
+    return this.brawlNow;
+  }
+
+  /** Your view for the fight (it may move you and turn your head). */
+  private view(): { eye: THREE.Vector3; yaw: number; pitch: number } {
+    // Between frames in third person the camera is behind him: the eyes are the ones saved.
+    return { eye: this.cineSaved?.p ?? this.thirdCam.eyes ?? this.camera.position, yaw: this.yaw, pitch: this.pitch };
+  }
+
+  /** The way the mouse moved between two moments (ms, performance.now), if it clearly did. */
+  private swingDir(from: number, to: number): Dir {
+    let dx = 0;
+    let dy = 0;
+    for (const m of this.motion)
+      if (m.t >= from && m.t <= to) {
+        dx += m.dx;
+        dy += m.dy;
+      }
+    if (Math.hypot(dx, dy) < 12) return null;
+    if (Math.abs(dx) > Math.abs(dy)) return dx < 0 ? 'left' : 'right';
+    return dy > 0 ? 'down' : 'up';
+  }
+
+  private showDir(d: Exclude<Dir, null>): void {
+    this.dirEl.textContent = { left: '\u2190', right: '\u2192', up: '\u2191', down: '\u2193' }[d];
+    this.dirT = 0.35;
+  }
+
+  /** A wall within `max` of `from` along `dir`: the showroom's solid things, not people, gore or you. */
+  private probe(from: THREE.Vector3, dir: THREE.Vector3, max: number): { point: THREE.Vector3; normal: THREE.Vector3 } | null {
+    this.ray.set(from, dir.clone().normalize());
+    this.ray.far = max;
+    this.ray.camera = this.camera;
+    const skip = new Set<THREE.Object3D>();
+    if (this.rig) skip.add(this.rig.object);
+    for (const t of this.brawlNow?.thugs ?? []) skip.add(t.root);
+    const hits = this.ray.intersectObjects(this.scene.children, true);
+    for (const h of hits) {
+      const o = h.object as THREE.Mesh;
+      if (!o.isMesh || (o as unknown as THREE.InstancedMesh).isInstancedMesh || !h.face || o.name.startsWith('gore')) continue;
+      let anc: THREE.Object3D | null = o;
+      let skipIt = false;
+      while (anc) {
+        if (skip.has(anc)) skipIt = true;
+        anc = anc.parent;
+      }
+      if (skipIt) continue;
+      const normal = h.face.normal.clone().transformDirection(o.matrixWorld);
+      return { point: h.point.clone(), normal };
+    }
+    return null;
+  }
+
+  /** Guns, fists or the katana in hand; picking a fighting one brings on a group if there's none. */
+  private pick(h: 'gun' | MeleeWeapon): void {
+    this.hand = h;
+    const b = this.brawl();
+    b.hand = h;
+    if (!this.rig) return;
+    if (h === 'gun') {
+      this.rig.melee = null;
+      return;
+    }
+    this.rig.armed = false;
+    this.rig.aiming = false;
+    b.melee.setWeapon(h);
+    this.rig.melee = b.melee;
+    if (b.thugs.length === 0) b.spawn(4, this.view());
   }
 
   private look(dx: number, dy: number): void {
@@ -103,7 +288,10 @@ export class FpMode {
   /** Into first person at (x, z), facing `yaw` (0 looks along -z). */
   async enter(x: number, z: number, yaw: number): Promise<void> {
     if (!this.rig) {
-      this.rig = await FirstPersonRig.load('mack', this.env);
+      this.rig = await FirstPersonRig.load(outfitById(this.wardrobe.outfit).model, this.env);
+      this.rig.setGlasses(this.wardrobe.glasses);
+      this.rig.setFaceStyle(this.wardrobe.face);
+      this.rig.wearHelmet(helmetLook(this.wardrobe.helmet));
       this.scene.add(this.rig.object);
     }
     this.rig.object.visible = true;
@@ -118,12 +306,52 @@ export class FpMode {
     this.camera.position.set(x, this.floorAt(x, z) + this.rig.eyeHeight, z);
   }
 
+  /** Into other clothes or sunglasses: a new model loads and takes over from the one he's in. */
+  /** His motorcycle helmet on foot (models/helmet.ts), or none. */
+  private setHelmet(helmet: (typeof this.wardrobe)['helmet']): void {
+    this.wardrobe = { ...this.wardrobe, helmet };
+    saveWardrobe(this.wardrobe);
+    this.rig?.wearHelmet(helmetLook(helmet));
+  }
+
+  /** How his face is hidden (models/faceShadow.ts). */
+  private setFace(face: FaceStyle): void {
+    this.wardrobe = { ...this.wardrobe, face };
+    saveWardrobe(this.wardrobe);
+    this.rig?.setFaceStyle(face);
+  }
+
+  private async wear(outfit: string, glasses: GlassesKind | null): Promise<void> {
+    if (!this.rig || this.changing) return;
+    this.wardrobe = { ...this.wardrobe, outfit: outfitById(outfit).id, glasses };
+    saveWardrobe(this.wardrobe);
+    const model = outfitById(outfit).model;
+    if (model === this.rig.model) {
+      this.rig.setGlasses(glasses);
+      return;
+    }
+    this.changing = true;
+    try {
+      const next = await FirstPersonRig.load(model, this.env);
+      const old = this.rig;
+      next.takeOver(old);
+      next.setGlasses(glasses);
+      this.scene.remove(old.object);
+      this.scene.add(next.object);
+      this.rig = next;
+    } finally {
+      this.changing = false;
+    }
+  }
+
   exit(): void {
     if (!this.active) return;
     this.active = false;
+    this.restoreEyes();
     if (document.pointerLockElement === this.dom) document.exitPointerLock();
     if (this.rig) this.rig.object.visible = false;
     this.crosshair.update(false, 0, 0);
+    this.duelHud?.update(0, null, 0, false);
     this.controls.enabled = true;
     this.camera.fov = this.savedFov;
     this.camera.updateProjectionMatrix();
@@ -135,6 +363,7 @@ export class FpMode {
 
   /** Gets on the nearest bike within reach, or off the one you're on (stepping off on its left). */
   private toggleRide(): void {
+    this.restoreEyes();
     if (this.riding) {
       const r = this.riding;
       const left = new THREE.Vector3(-Math.cos(r.yaw), 0, Math.sin(r.yaw));
@@ -148,6 +377,7 @@ export class FpMode {
       if (this.rig) {
         this.rig.mounted = null;
         this.rig.armed = this.armedOnFoot;
+        this.rig.setHelmet(this.rig.wornHelmet ?? false);
       }
       return;
     }
@@ -172,6 +402,9 @@ export class FpMode {
       this.rig.armed = false;
       this.rig.aiming = false;
       this.rig.mounted = best;
+      // A sports bike: a helmet on, his pistol to hand; the others his shotgun.
+      this.rig.setHelmet(best.rider.helmet ?? this.rig.wornHelmet ?? false);
+      this.rig.setKind(best.rider.helmet ? 'pistol' : 'lever');
     }
     // The view: ahead along the bike.
     this.yaw = 0;
@@ -213,20 +446,29 @@ export class FpMode {
   update(dt: number): void {
     const rig = this.rig;
     if (!this.active || !rig || this.frozen) return;
-    this.crosshair.update(rig.armed, rig.aim, dt);
+    // Last frame's cinematic or third-person camera: back to the eyes.
+    this.restoreEyes();
+    rig.setHeadless(!this.third && !MIRRORS[this.mirror]);
+    this.crosshair.update(rig.armed && (this.hand === 'gun' || !!this.riding), rig.aim, dt);
+    this.dirT -= dt;
+    this.dirEl.style.opacity = String(Math.max(0, Math.min(1, this.dirT * 4)));
+    // On a bike the guns only.
+    rig.melee = this.hand !== 'gun' && !this.riding && this.brawlNow ? this.brawlNow.melee : null;
     if (this.riding) {
       const r = this.riding;
       this.rideStep(r, dt);
       const eye = rig.seatBody(r.bike);
       this.camera.position.copy(eye);
       // The view: the bike's heading with half its lean, then where you look (the head turns only so far).
-      this.yaw = THREE.MathUtils.clamp(this.yaw, -1.7, 1.7);
+      const most = this.third ? RIDE_LOOK_THIRD : 1.7;
+      this.yaw = THREE.MathUtils.clamp(this.yaw, -most, most);
       this.camera.quaternion
         .setFromAxisAngle(new THREE.Vector3(0, 1, 0), r.yaw)
         .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -r.lean * 0.5))
         .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ')));
       this.camera.updateMatrixWorld();
       rig.update(dt, this.camera, 0, 0);
+      if (this.third) this.thirdCam.place(this.camera, THIRD.ride, dt, this.clear);
       return;
     }
     const move = new THREE.Vector3();
@@ -236,23 +478,86 @@ export class FpMode {
     if (this.keys.has('KeyS')) move.sub(new THREE.Vector3(fx, 0, fz));
     if (this.keys.has('KeyD')) move.add(new THREE.Vector3(-fz, 0, fx));
     if (this.keys.has('KeyA')) move.sub(new THREE.Vector3(-fz, 0, fx));
-    const want = move.lengthSq() > 0 ? (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 4.2 : 1.5) * (rig.aiming ? 0.6 : 1) : 0;
+    const br = this.brawlNow;
+    const locked = !!br && (!!br.run || br.down > 0);
+    const want = move.lengthSq() > 0 && !locked ? (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 4.2 : 1.5) * (rig.aiming || (br?.melee.guard ?? 0) > 0.5 ? 0.6 : 1) : 0;
     this.speed += (want - this.speed) * Math.min(1, dt * 8);
     if (move.lengthSq() > 0) this.camera.position.addScaledVector(move.normalize(), this.speed * dt);
     const floor = this.floorAt(this.camera.position.x, this.camera.position.z);
     this.camera.position.y += (floor + rig.eyeHeight - this.camera.position.y) * Math.min(1, dt * 12);
-    this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+    // The fight: it may move you (a lunge, a kill move carrying you) and turn your head (a kill move's look).
+    let dtW = dt;
+    let shake = 0;
+    let cine: { pos: THREE.Vector3; look: THREE.Vector3 } | null = null;
+    if (br) {
+      const v = this.view();
+      const out = br.step(dt, rig, v);
+      this.yaw = v.yaw;
+      this.pitch = v.pitch;
+      dtW = out.dt;
+      shake = out.shake;
+      cine = out.cine;
+      this.duelHud ??= new DuelHud(document.body);
+      this.duelHud.update(dt, br.duel(v), br.posture / 100, br.stun > 0);
+    }
+    // The view shakes with a blow, given or taken.
+    const sh = shake * shake * 0.03;
+    this.camera.rotation.set(this.pitch + (Math.random() - 0.5) * sh, this.yaw + (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh * 0.5, 'YXZ');
     this.camera.updateMatrixWorld();
-    rig.update(dt, this.camera, this.speed, floor);
+    rig.update(dtW, this.camera, locked ? 0 : this.speed, floor);
+    // A kill move's cinematic angle: rendered from there this frame (his head shown), the eyes put back next.
+    if (cine) {
+      this.cineSaved = { p: this.camera.position.clone(), q: this.camera.quaternion.clone() };
+      rig.setHeadless(false);
+      this.camera.position.copy(cine.pos);
+      this.camera.lookAt(cine.look);
+      this.camera.updateMatrixWorld();
+    } else if (MIRRORS[this.mirror]) {
+      this.mirrorView(MIRRORS[this.mirror]!);
+    } else if (this.third) {
+      this.thirdCam.place(this.camera, footOffset(rig.aim), dt, this.clear);
+    }
   }
+
+  /** The review mirror: the camera in front of his face (round by `angle`), looking at it; the eyes put back next
+   * frame. Never in play. */
+  private mirrorView(m: { angle: number; dist: number }): void {
+    const eye = this.camera.position.clone();
+    this.cineSaved = { p: eye, q: this.camera.quaternion.clone() };
+    const yaw = this.yaw + m.angle;
+    this.camera.position.set(eye.x - Math.sin(yaw) * m.dist, eye.y, eye.z - Math.cos(yaw) * m.dist);
+    this.camera.lookAt(eye.x, eye.y - 0.03, eye.z);
+    this.camera.updateMatrixWorld();
+  }
+
+  /** Puts the camera back at the eyes after a frame rendered from elsewhere (a cinematic, third person). */
+  private restoreEyes(): void {
+    this.thirdCam.restore(this.camera);
+    if (!this.cineSaved) return;
+    this.camera.position.copy(this.cineSaved.p);
+    this.camera.quaternion.copy(this.cineSaved.q);
+    this.camera.updateMatrixWorld();
+    this.cineSaved = null;
+  }
+
+  /** How far the way is clear for the third-person camera: the showroom's solid things. */
+  private readonly clear = (from: THREE.Vector3, dir: THREE.Vector3, max: number): number => {
+    const hit = this.probe(from, dir, max);
+    return hit ? hit.point.distanceTo(from) : max;
+  };
 
   hud(): string {
     const r = this.rig;
     if (r && this.riding) {
-      return `RIDING · ${Math.round(Math.abs(this.riding.u) * 3.6)} km/h · lean ${Math.round((this.riding.lean * 180) / Math.PI)}° · ${r.armed ? `shotgun, ${r.shells} in` : 'hands on the bars'}\nW throttle · S brake (and back from a stop) · A/D steer · mouse look · X shotgun · right button aim · left fire · E get off · V back to orbiting`;
+      return `RIDING · ${Math.round(Math.abs(this.riding.u) * 3.6)} km/h · lean ${Math.round((this.riding.lean * 180) / Math.PI)}° · ${r.armed ? `shotgun, ${r.shells} in` : 'hands on the bars'}\nW throttle · S brake (and back from a stop) · A/D steer · mouse look · X shotgun · right button aim · left fire · E get off · Q third person · V back to orbiting`;
+    }
+    const b = this.brawlNow;
+    if (r && b && (this.hand !== 'gun' || b.thugs.length > 0)) {
+      const keys = this.hand === 'gun' ? '1 guns · 2 fists · 3 katana · right button aim · left fire (close with the shotgun: a kill move) · R reload · G other gun' : `1 guns · 2 fists · 3 katana · X ${this.hand === 'katana' ? 'draw / sheathe' : 'fists up / down'} · left click attack (move the mouse as you click: its way) · right button guard${this.hand === 'katana' ? ' (click from it: thrust)' : ''} · F kick (stomp a man down)`;
+      return `${b.hud()}\n${keys} · T fresh group · B a duel (a swordsman: swing from the side he isn't guarding, tap the guard as his blow lands to deflect, break his posture for a deathblow) · Y gore · U kill-move chance · WASD move · Q third person · V back to orbiting`;
     }
     return r
-      ? `FIRST PERSON · ${r.kind} · ${r.oneHand ? 'one hand' : 'two hands'} · ${r.shells} in · ${document.pointerLockElement === this.dom ? 'mouse look' : 'click to capture the mouse'}\nWASD walk (Shift faster) · E get on a bike · X shotgun / hands free · right button aim · left fire · R reload · G other gun · H one hand / two · Esc frees the mouse · V back to orbiting`
+      ? `FIRST PERSON · ${r.kind} · ${r.oneHand ? 'one hand' : 'two hands'} · ${r.shells} in · ${outfitById(this.wardrobe.outfit).label}${this.wardrobe.glasses ? `, ${GLASSES_LABELS[this.wardrobe.glasses]}` : ''}, face: ${FACE_STYLE_LABELS[this.wardrobe.face]}${this.wardrobe.helmet ? `, ${HELMET_LABELS[this.wardrobe.helmet]}` : ''} · ${document.pointerLockElement === this.dom ? 'mouse look' : 'click to capture the mouse'}\nWASD walk (Shift faster) · E get on a bike · X shotgun / hands free · right button aim · left fire · R reload · G other gun · H one hand / two · Esc frees the mouse · Q third person · O clothes · Z sunglasses · N face · K helmet · C mirror (review) · L labels · V back to orbiting`
       : 'FIRST PERSON · loading Mack...';
   }
 
@@ -277,6 +582,32 @@ export class FpMode {
       riding: () => this.riding,
       key: (code: string, on: boolean) => (on ? this.keys.add(code) : this.keys.delete(code)),
       armed: (on: boolean) => this.rig && (this.rig.armed = on),
+      headless: (on: boolean) => this.rig?.setHeadless(on),
+      third: (on: boolean) => (this.third = on),
+      wear: (outfit: string, glasses: GlassesKind | null = this.wardrobe.glasses) => this.wear(outfit, glasses),
+      face: (f: FaceStyle) => this.setFace(f),
+      helmet: (h: (typeof this.wardrobe)['helmet']) => this.setHelmet(h),
+      mirror: (i: number) => (this.mirror = i),
+      faceShadow: (k: number) => (FACE_SHADOW.value = k),
+      hand: (h: 'gun' | MeleeWeapon) => this.pick(h),
+      attack: (dir: Dir = null) => this.brawl().attack(dir),
+      kick: () => this.brawl().kick(),
+      move: (id: Parameters<Melee['play']>[0]) => this.brawl().melee.play(id),
+      guard: (on: boolean) => this.brawl().guard(on),
+      duel: () => this.brawl().spawnDuel(this.view()),
+      draw: () => this.brawl().melee.toggleDrawn(),
+      melee: () => this.brawl().melee,
+      camera: () => this.camera,
+      brawl: () => this.brawl(),
+      thug: () => this.brawlNow?.thugs[0] ?? null,
+      thugs: () => this.brawlNow?.thugs ?? [],
+      spawn: (n = 4) => this.brawl().spawn(n, this.view()),
+      gore: (level: (typeof GORE_LEVELS)[number]) => (this.brawl().gore.level = level),
+      killChance: (k: number) => (this.brawl().killChance = k),
+      gunKill: () => this.rig && this.brawl().tryGunKill(this.rig, this.view()),
+      probe: (from: THREE.Vector3, dir: THREE.Vector3, max: number) => this.probe(from, dir, max),
+      forceKill: (id: string) => this.rig && this.brawl().forceKill(id, this.rig, this.view()),
+      state: () => this.brawl().state(),
     };
   }
 }

@@ -8,6 +8,9 @@ import { deptInterior, deptLayout } from './deptStore';
 import { penthouseInterior, penthouseLayout } from './penthouse';
 import { homeFor } from './homesCast';
 import { rougeInterior, rougeLayout } from './rougeInterior';
+import { maidCafeInterior, maidCafeLayout } from './maidCafe';
+import { zakkyoInterior, zakkyoLayout } from './cashOne';
+import { hospitalInterior, hospitalLayout } from './kasumi';
 
 /**
  * Door-entered interiors, built at the building's true position (the hybrid approach): while you're inside
@@ -277,6 +280,9 @@ export const INTERIORS: Readonly<Record<string, { build: (b: Building3, city: TH
   dept_store: { build: deptInterior, layout: deptLayout, range: 120 },
   residence: { build: penthouseInterior, layout: penthouseLayout, range: 60, hides: 'crown' },
   love_hotel: { build: rougeInterior, layout: rougeLayout, range: 60 },
+  maid_cafe: { build: maidCafeInterior, layout: maidCafeLayout, range: 50, hides: 'shell' },
+  zakkyo: { build: zakkyoInterior, layout: zakkyoLayout, range: 50, hides: 'shell' },
+  hospital: { build: hospitalInterior, layout: hospitalLayout, range: 110, hides: 'shell' },
 };
 
 /** A placement's interior: its home's flats (real/homesCast.ts) if it has any, else its landmark kind's. */

@@ -1,7 +1,7 @@
 // npm run build:all: typecheck once, build every edition (standard into dist/, uncensored into dist-uncensored/,
 // demo into dist-demo/; src/edition/types.ts), then check each build holds only what its edition should:
-//   - the demo: none of DEMO_HIDDEN_ART's images, no VN stills, no story text (scenes, and chats other than
-//     KAIWA's welcome), no age check;
+//   - the demo: none of DEMO_HIDDEN_ART's images or DEMO_HIDDEN_CHARACTERS' models, no VN stills, no story text
+//     (scenes, and chats other than KAIWA's welcome), no age check;
 //   - standard and demo: nothing from adult/ (its files by name, its overlays' text), no age check;
 //   - uncensored: the age check;
 //   - every build: the __EDITION__ define replaced everywhere.
@@ -43,6 +43,7 @@ for (const f of files(path.join(ROOT, 'adult/content'), (f) => f.endsWith('scene
 for (const f of files(path.join(ROOT, 'adult/content'), (f) => f.endsWith('.yaml'))) collect(YAML.parse(fs.readFileSync(f, 'utf8')), adultText);
 const adultFiles = files(path.join(ROOT, 'adult/content'), (f) => /\.(jpe?g|png|webp|gif|mp4|webm)$/i.test(f)).map((f) => path.parse(f).name);
 const hiddenArt = [...fs.readFileSync(path.join(ROOT, 'src/edition/demoArt.ts'), 'utf8').matchAll(/'(\d{2}_[a-z0-9_]+)'/g)].map((m) => m[1]);
+const hiddenCharacters = [...(fs.readFileSync(path.join(ROOT, 'src/edition/demoArt.ts'), 'utf8').match(/DEMO_HIDDEN_CHARACTERS.*/)?.[0] ?? '').matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]);
 const vnStill = /^s\d+\.fr\d+/;
 
 // ---- Check each build.
@@ -62,6 +63,7 @@ for (const [mode, dir] of Object.entries(BUILDS)) {
   }
   if (mode === 'demo') {
     for (const n of hiddenArt) if (shipped(n)) bad(`ships hidden art ${n}`);
+    for (const n of hiddenCharacters) if (shipped(n)) bad(`ships hidden model ${n}`);
     for (const f of assets) if (vnStill.test(f)) bad(`ships VN still ${f}`);
     for (const t of storyText) if (js.includes(t)) bad(`has story text "${t.slice(0, 40)}"`);
   }

@@ -10,11 +10,12 @@ import { DAMAGE, HEALTH, PAINT_PENALTY, RivalDriver, separateCars, type Arms } f
 import { CircuitRace, gridSlots } from './circuit';
 import { assistsBy, loadTuning, tunedBy, TuningPanel } from './tuning';
 import type { CarType } from '../poc3d/models/vehicles';
-import { addHeadlights, buildCar, CarMarks, hitVolumes, poseCar, turnWheels, type Part } from './carView';
+import { addHeadlights, buildCar, CarMarks, hitVolumes, lampsByMotion, poseCar, setLamps, turnWheels, type Part } from './carView';
 import { loadCourses } from './courses';
 import { buildVenue } from './scene';
 import { GunSound } from './gunSound';
-import { buildCabin } from './cabin';
+import { CarInterior } from '../poc3d/models/carInterior';
+import { Head, loadView, lookInto, nextView, outside, parseView, placeInCar, RearMirror, saveView, turnedEye, VIEW_NAMES, type DriveViewId } from './driveCam';
 import { EYE, nearestShot, Shooting, sideFor, spreadOf, WEAPONS, wrap, type BodyHit, type Side } from './shooting';
 import { model, tunedSpec } from './catalog';
 import { cityReturn, rememberCityReturn } from './cityLink';
@@ -121,10 +122,17 @@ shooting.pointScale = window.innerHeight;
 if (kind !== 'battle') shooting.pickWeapon(WEAPONS.findIndex((w) => w.id === 'shotgun'));
 scene.add(shooting.group);
 carObj.add(shooting.arm);
-// The cabin, for the driver's-eye view when shooting across the car, and the gauges' faint glow on it (the
+// The cabin (models/carInterior.ts), fitted to your car: shown in the cockpit view and when shooting from the
+// driver's eye; the rear-view mirror shows what's behind (driveCam.ts). And the gauges' faint glow on it (the
 // light is always there, only dark outside the view: adding and removing lights recompiles the shaders).
-const cabin = buildCabin();
+const interior = new CarInterior(mine.type, carMat, { rpmMax: mineModel.sound.maxRpm, turbo: !!tunedSpec(mine.type, mine.parts).turbo });
+const cabin = interior.group;
 carObj.add(cabin);
+const mirror = new RearMirror();
+interior.showMirror(mirror.material);
+/** The driver's eyes in this car, and his head thrown about in the cockpit. */
+const eyeAt = interior.layout.eye;
+const head = new Head();
 const cabinLight = new THREE.PointLight(0x9aa8c8, 0, 2.4, 1.5);
 cabinLight.position.set(0.1, 1.15, 0.1);
 carObj.add(cabinLight);
@@ -137,6 +145,8 @@ addHeadlights(carObj);
 // Mack at the wheel (carDriver.ts): seated, his hands on the wheel, his shotgun out of a window (the side
 // windows roll down for any weapon). Not on a bike: the bike carries him itself.
 const driver = ride ? null : CarDriver.create(player, scene, renderer);
+/** The weapon is one of Mack's (his shotgun or his Type 54, in his hand), not the old arm's paintball marker. */
+const hisGun = (): boolean => driver !== null && (shooting.weapon.id === 'shotgun' || shooting.weapon.id === 'pistol');
 // On a bike the two beams come from its one headlamp (in the car's frame: +z forward), a little apart.
 if (ride) {
   let k = 0;
@@ -306,6 +316,7 @@ const updateGp = (dt: number, gdt: number): void => {
   for (const r of gp.rivals) {
     poseCar(r.view, r.car, ground);
     turnWheels(r.view, r.car, gdt);
+    lampsByMotion(r.view, r.car);
   }
 };
 const ordinal = (n: number): string => `${n}${n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'}`;
@@ -561,7 +572,9 @@ composer.addPass(new OutputPass());
 // ---- Input.
 const keys = new Set<string>();
 const sound = new CarSound();
-let view: 'chase' | 'bumper' = params.get('cam') === 'bumper' || (ride && params.get('cam') !== 'chase') ? 'bumper' : 'chase';
+// The camera: ?cam= any view; else the one last picked (a bike: his eyes unless ?cam=chase).
+let view: DriveViewId = parseView(params.get('cam')) ?? (ride ? 'cockpit' : loadView());
+if (ride && !outside(view)) view = 'cockpit';
 let help = true;
 window.addEventListener('keydown', (e) => {
   sound.start();
@@ -577,7 +590,7 @@ window.addEventListener('keydown', (e) => {
   } else {
     if (e.code === 'KeyF' && kind !== 'battle') shooting.pickWeapon(shooting.weaponIndex + 1);
     if (e.code === 'KeyE') {
-      if (shooting.weapon.id === 'shotgun') driver?.rig?.reload();
+      if (hisGun()) driver?.rig?.reload();
       else shooting.reload();
     }
   }
@@ -590,7 +603,13 @@ window.addEventListener('keydown', (e) => {
   }
   keys.add(e.code);
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-  if (e.code === 'KeyQ') view = view === 'chase' ? 'bumper' : 'chase';
+  if (e.code === 'KeyQ') {
+    view = nextView(view, !!ride);
+    if (!ride) saveView(view);
+    toastText = ride ? (outside(view) ? 'Third person' : 'First person') : `Camera: ${VIEW_NAMES[view]}`;
+    toastT = 1.2;
+    head.reset();
+  }
   if (e.code === 'KeyR') {
     // Back on the road where you are, facing the way you were going.
     const n = course.nearest(car.x, car.z);
@@ -657,6 +676,8 @@ let pulled = false;
 /** Mack's aim in the car (carDriver.ts): the point, and the window it's through. */
 let driveAim: THREE.Vector3 | null = null;
 let driveWindow: Side | null = null;
+/** Checks only (__race.calm): he drives as in the city, one-handed when nothing asks for two (racing, he never does). */
+let calmDrive = false;
 /** Checks only (__race.freezeCam): the camera stays where a script put it. */
 let freezeCam = false;
 document.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -761,12 +782,12 @@ const timerEl = document.getElementById('timer')!;
 const helpEl = document.getElementById('help')!;
 // A trial's help is only the driving (no shooting in trials).
 if (kind === 'battle')
-  helpEl.textContent = `W / S  drive · brake     A / D  steer     Space  handbrake     Q  camera     R  back on the road\nRight mouse  aim (the driver's window, on the right, is the wide one)     Left mouse  fire     E  reload     Enter  start again     M  venues     H  hide this\n${arms === 'gun' ? 'Real guns: shoot the red car to pieces, or beat it down.' : `Paintball: every hit you take adds ${PAINT_PENALTY} s to your time.`}`;
-else if (kind === 'trial') helpEl.textContent = 'W / S  drive · brake     A / D  steer     Space  handbrake     Q  camera     R  back on the road\nEnter  start again     M  venues     H  hide this     The blue car is your best run.';
+  helpEl.textContent = `W / S  drive · brake     A / D  steer     Space  handbrake     Q  camera     Z  look back     R  back on the road\nRight mouse  aim (the driver's window, on the right, is the wide one)     Left mouse  fire     E  reload     Enter  start again     M  venues     H  hide this\n${arms === 'gun' ? 'Real guns: shoot the red car to pieces, or beat it down.' : `Paintball: every hit you take adds ${PAINT_PENALTY} s to your time.`}`;
+else if (kind === 'trial') helpEl.textContent = 'W / S  drive · brake     A / D  steer     Space  handbrake     Q  camera     Z  look back     R  back on the road\nEnter  start again     M  venues     H  hide this     The blue car is your best run.';
 if (ride) {
   helpEl.textContent = [
     'W / S  throttle · brake, then reverse     A / D  steer     Space  rear brake (start a slide)     Q  first / third person     R  back on the road',
-    ...(armed ? ['X  shotgun / hands on the bars     Right mouse  raise it (slow motion)     Left mouse  fire     E  reload     T  clean targets'] : []),
+    ...(armed ? [`X  ${ride.def.gun === 'pistol' ? 'pistol' : 'shotgun'} / hands on the bars     Right mouse  raise it (slow motion)     Left mouse  fire     E  reload     T  clean targets`] : []),
     'Click  mouse look (Esc lets go)     I  invert mouse Y     `  tune the handling     M  venues     H  hide this',
   ].join('\n');
 }
@@ -974,6 +995,9 @@ const drawShootingHud = (dt: number, side: Side | null, hip: boolean): void => {
 const camPos = new THREE.Vector3();
 const camLook = new THREE.Vector3();
 let camDir = 0;
+/** Looking back (0-1, eased), and where the cockpit view looks into the bend (rad). */
+let lookBack = 0;
+let cockpitYaw = 0;
 const placeCamera = (dt: number, snap = false): void => {
   const speed = Math.hypot(car.u, car.w);
   const velA = Math.atan2(Math.sin(car.h) * car.u + Math.cos(car.h) * car.w, Math.cos(car.h) * car.u - Math.sin(car.h) * car.w);
@@ -1012,33 +1036,58 @@ const placeCamera = (dt: number, snap = false): void => {
     const rel = wrap(aimYaw - car.h);
     // Mack's shotgun is always aimed from his eyes (his arm out of whichever window, as on the bike); the
     // other weapons only across the car.
-    const his = driver !== null && shooting.weapon.id === 'shotgun';
+    const his = hisGun();
     const left = his || (rel > 32 * (Math.PI / 180) && rel < 165 * (Math.PI / 180));
     pov += ((left ? 1 : 0) - pov) * Math.min(1, dt * 10);
     const k = pov * pov * (3 - 2 * pov);
-    const eye = carObj.localToWorld(new THREE.Vector3(EYE.x, EYE.y, EYE.z));
+    const eye = carObj.localToWorld(eyeAt.clone());
     camera.position.copy(camPos).lerp(eye, k);
     camera.lookAt(camera.position.clone().add(d));
     cabin.visible = pov > 0.5;
     cabinLight.intensity = cabin.visible ? 0.3 : 0;
     return;
   }
-  pov = 0;
-  cabin.visible = false;
-  cabinLight.intensity = 0;
+  // Z looks back (over the left shoulder in the cockpit; the chase cameras swing round in front).
+  lookBack += ((keys.has('KeyZ') ? 1 : 0) - lookBack) * Math.min(1, dt * 9);
+  const backYaw = lookBack * lookBack * (3 - 2 * lookBack) * Math.PI;
+  const inside = view === 'cockpit';
+  pov = inside ? 1 : 0;
+  cabin.visible = inside;
+  cabinLight.intensity = inside ? 0.3 : 0;
+  const fovNow = (inside ? 72 : view === 'far' ? 56 : view === 'chase' ? 62 : 66) + Math.min(8, speed * 0.18);
+  if (Math.abs(camera.fov - fovNow) > 0.05) {
+    camera.fov += (fovNow - camera.fov) * Math.min(1, dt * 4);
+    camera.updateProjectionMatrix();
+  }
+  if (inside) {
+    // At his eyes: thrown about by the car, looking into the bend and along a slide, the roll half held level.
+    head.update(dt, car.ax, car.ay, speed, car.bump);
+    cockpitYaw += (lookInto(car.steer, speed, car.slide) - cockpitYaw) * Math.min(1, dt * 3);
+    const look = THREE.MathUtils.clamp(orbitYaw, -2.2, 2.2) + cockpitYaw + backYaw;
+    placeInCar(camera, carObj, turnedEye(eyeAt.clone(), look).add(head.offset), look, lookPitch - 0.06, 0.5);
+    camPos.copy(camera.position);
+    return;
+  }
+  if (view === 'hood') {
+    placeInCar(camera, carObj, interior.layout.hood, orbitYaw + backYaw, lookPitch - 0.04);
+    camPos.copy(camera.position);
+    return;
+  }
   if (view === 'bumper') {
     const p = new THREE.Vector3(car.x + Math.sin(car.h) * 2.1, car.y + 0.85, car.z + Math.cos(car.h) * 2.1);
-    const a = car.h + orbitYaw;
+    const a = car.h + orbitYaw + backYaw;
     camera.position.copy(p);
     camera.lookAt(p.x + Math.sin(a) * 10, p.y + Math.tan(lookPitch - 0.025) * 10, p.z + Math.cos(a) * 10);
     camPos.copy(camera.position);
     return;
   }
-  // Orbit about the car: looking up swings the camera down behind it (and looking down lifts it).
-  const a = camDir + orbitYaw;
+  // Orbit about the car: looking up swings the camera down behind it (and looking down lifts it); further back
+  // and higher for the far chase.
+  const far = view === 'far';
+  const a = camDir + orbitYaw + backYaw;
   const elev = -lookPitch;
-  const back = (5.8 + Math.min(1.5, speed / 25)) * Math.cos(elev);
-  const target = new THREE.Vector3(car.x - Math.sin(a) * back, car.y + 2.0 + Math.sin(elev) * 6, car.z - Math.cos(a) * back);
+  const back = ((far ? 8.8 : 5.8) + Math.min(1.5, speed / 25)) * Math.cos(elev);
+  const target = new THREE.Vector3(car.x - Math.sin(a) * back, car.y + (far ? 3.3 : 2.0) + Math.sin(elev) * 6, car.z - Math.cos(a) * back);
   target.y = Math.max(target.y, course.height(target.x, target.z) + 0.6);
   camPos.lerp(target, snap || mouseIdle < 0.2 ? 1 - Math.exp(-dt * 25) : 1 - Math.exp(-dt * 7));
   if (snap) camPos.copy(target);
@@ -1168,11 +1217,14 @@ function frame(now: number): void {
   const fx = Math.sin(car.h);
   const fz = Math.cos(car.h);
   poseCar(player, car, ground, 1 - 0.65 * pov);
-  body.visible = view === 'chase' || aiming || hipT > 0;
+  body.visible = view !== 'bumper' || aiming || hipT > 0;
   turnWheels(player, car, gdt);
+  // The brake lights (the pedal's down and it's slowing the car) and the reversing lamps.
+  setLamps(player, { brake: (c.brake > 0 && car.u > 0.5) || (c.throttle > 0 && car.u < -0.5), reverse: car.gear === 0 });
   if (inBattle) {
     poseCar(rivalView, rivalCar, ground);
     turnWheels(rivalView, rivalCar, gdt);
+    lampsByMotion(rivalView, rivalCar);
     // Shot up: smoke from under the bonnet, thicker as it goes, pouring once it's out.
     for (const [c2, hp] of [[car, fight.you], [rivalCar, fight.them]] as const) {
       if (arms === 'gun' && hp < 50 && Math.random() < ((50 - hp) / 50) * 0.8 * (gdt / dt)) puff(c2.x + Math.sin(c2.h) * 1.5, c2.y + 0.9, c2.z + Math.cos(c2.h) * 1.5, Math.sin(c2.h) * c2.u, Math.cos(c2.h) * c2.u);
@@ -1215,14 +1267,15 @@ function frame(now: number): void {
       camera.updateProjectionMatrix();
     }
     ride.pose(car, ground, gdt);
-    ride.update(car, camera, { third: view === 'chase', aiming, aimYaw, aimPitch, orbitYaw, lookPitch }, gdt, dt, (x, z) => course.height(x, z));
+    ride.update(car, camera, { third: outside(view), aiming, aimYaw, aimPitch, orbitYaw, lookPitch }, gdt, dt, (x, z) => course.height(x, z));
     // A shot from Mack's gun: pellets from the muzzle at what's under the crosshair.
     for (let n = ride.newShots(); n > 0; n--) {
       camera.updateMatrixWorld();
       const aimPoint = shooting.pick(camera.position, camera.getWorldDirection(new THREE.Vector3())).point;
       const muzzle = ride.rig!.muzzle();
       const why = [drifting ? 'DRIFT' : '', 'SHOTGUN'].filter(Boolean).join(' ');
-      shooting.blast(muzzle, aimPoint.sub(muzzle), 9, 0.04, drifting ? 2 : 1, why);
+      const g = ride.rig!.gun;
+      shooting.blast(muzzle, aimPoint.sub(muzzle), g.pellets ?? 1, g.spread ?? 0.01, drifting ? 2 : 1, why.replace('SHOTGUN', g.kind === 'pistol' ? 'PISTOL' : 'SHOTGUN'));
       shake = Math.max(shake, 0.35);
       if (aiming) aimPitch += 0.06;
       rideCross.fired();
@@ -1263,7 +1316,7 @@ function frame(now: number): void {
     const armAt = side ? aimPoint : head.clone().addScaledVector(nd, 20);
     driveAim = armAt;
     driveWindow = side ?? n.side;
-    if (shooting.weapon.id === 'shotgun') {
+    if (hisGun()) {
       // His gun, out of the window (the rig fires it; the shot itself is made below, from his muzzle).
       shooting.arm.visible = false;
       if (pulled && side && !fight.youOut && driver) {
@@ -1274,7 +1327,7 @@ function frame(now: number): void {
         if (hip) hipT = 1.2;
       }
     } else shooting.pose(carObj, armAt, side ?? n.side);
-    if (shooting.weapon.id !== 'shotgun' && trigger && side && !fight.youOut) {
+    if (!hisGun() && trigger && side && !fight.youOut) {
       if (hip) hipT = 1.2;
       const across = side === 'across';
       const mult = (drifting ? 2 : 1) * (across ? 1.5 : 1);
@@ -1282,7 +1335,7 @@ function frame(now: number): void {
       const carVel = new THREE.Vector3(Math.sin(car.h) * car.u + Math.cos(car.h) * car.w, 0, Math.cos(car.h) * car.u - Math.sin(car.h) * car.w);
       const kick = shooting.fire({ aimPoint, carVel, across, hip, slide: car.slide, speed: Math.hypot(car.u, car.w), mult, why }, !pulled);
       if (aiming) aimPitch += kick;
-    } else if (shooting.weapon.id !== 'shotgun' && trigger && pulled) {
+    } else if (!hisGun() && trigger && pulled) {
       blockedT = 0.9;
       if (hip) hipT = 1.2;
     }
@@ -1290,7 +1343,12 @@ function frame(now: number): void {
   } else shooting.arm.visible = false;
   if (driver) {
     const out = !ride && (aiming || hipT > 0);
-    driver.update(car, { raised: out && shooting.weapon.id === 'shotgun', window: out ? driveWindow : null, aimPoint: driveAim, pov }, gdt, dt);
+    // His gun to hand: the one the page has chosen.
+    const want = shooting.weapon.id === 'pistol' ? 'pistol' : 'lever';
+    if (driver.rig && driver.rig.kind !== want) driver.rig.setKind(want);
+    // (His hands on the cabin's own wheel as it shows; his feet on the pedals as they're pressed.)
+    driver.cabin = interior;
+    driver.update(car, { raised: out && hisGun(), window: out ? driveWindow : null, aimPoint: driveAim, pov, throttle: c.throttle, brake: c.brake, calm: calmDrive }, gdt, dt);
     // His shots: nine pellets from the muzzle at what's under the crosshair.
     for (let k = driver.newShots(); k > 0; k--) {
       camera.updateMatrixWorld();
@@ -1298,8 +1356,11 @@ function frame(now: number): void {
       const muzzle = driver.rig!.muzzle();
       const across = driveWindow === 'across';
       const mult = (drifting ? 2 : 1) * (across ? 1.5 : 1);
-      const why = [drifting ? 'DRIFT' : '', across ? 'ACROSS' : '', hip ? 'HIP' : '', 'SHOTGUN'].filter(Boolean).join(' ');
-      shooting.blast(muzzle, aimPoint.sub(muzzle), 9, hip ? 0.05 : across ? 0.055 : 0.04, mult, why);
+      const g = driver.rig!.gun;
+      const pistol = g.kind === 'pistol';
+      const why = [drifting ? 'DRIFT' : '', across ? 'ACROSS' : '', hip ? 'HIP' : '', pistol ? '' : 'SHOTGUN'].filter(Boolean).join(' ');
+      const base = g.spread ?? 0.04;
+      shooting.blast(muzzle, aimPoint.sub(muzzle), g.pellets ?? 1, base * (hip ? (pistol ? 6 : 1.25) : across ? (pistol ? 2.5 : 1.4) : 1), mult, why);
       shake = Math.max(shake, 0.3);
       if (aiming) aimPitch += 0.05;
     }
@@ -1318,9 +1379,9 @@ function frame(now: number): void {
   gunSound.play(shooting.events, camera.position);
   shooting.events.length = 0;
   drawShootingHud(dt, side, hip);
-  if (!ride && shooting.weapon.id === 'shotgun' && driver?.rig) {
+  if (!ride && hisGun() && driver?.rig) {
     const r = driver.rig;
-    gunEl.innerHTML = `<div class="name">Sawn-off lever-action</div><div class="ammo">${r.shells === 0 ? 'reloading…' : '▮'.repeat(r.shells) + '▯'.repeat(5 - r.shells)}</div><small>F ${WEAPONS[(shooting.weaponIndex + 1) % WEAPONS.length].label} · E reload · T clean targets</small>`;
+    gunEl.innerHTML = `<div class="name">${r.gun.label ?? ''}</div><div class="ammo">${r.shells === 0 ? 'reloading…' : '▮'.repeat(r.shells) + '▯'.repeat(Math.max(0, r.gun.shells - r.shells))}</div><small>F ${WEAPONS[(shooting.weaponIndex + 1) % WEAPONS.length].label} · E reload · T clean targets</small>`;
   }
   rideCross.update(!!ride?.rig?.armed && !menuOpen, ride?.rig?.aim ?? 0, dt);
   if (ride) {
@@ -1329,8 +1390,8 @@ function frame(now: number): void {
     const r = ride.rig;
     gunEl.style.display = armed ? 'block' : 'none';
     gunEl.innerHTML = r?.armed
-      ? `<div class="name">Sawn-off lever-action</div><div class="ammo">${'▮'.repeat(r.shells)}${'▯'.repeat(5 - r.shells)}</div><small>X put away · E reload · T clean targets</small>`
-      : `<div class="name">Hands on the bars</div><small>X draw the shotgun</small>`;
+      ? `<div class="name">${r.gun.label ?? ''}</div><div class="ammo">${'▮'.repeat(r.shells)}${'▯'.repeat(Math.max(0, r.gun.shells - r.shells))}</div><small>X put away · E reload · T clean targets</small>`
+      : `<div class="name">Hands on the bars</div><small>X draw the ${r?.gun.kind === 'pistol' ? 'pistol' : 'shotgun'}</small>`;
   }
   if (inBattle) drawBattleHud(dt);
   slowEl.style.opacity = (slow * 0.9).toFixed(3);
@@ -1349,6 +1410,11 @@ function frame(now: number): void {
   if (toastT > 0) helpEl.textContent = toastText;
   else if (helpEl.textContent !== HELP) helpEl.textContent = HELP;
   hud.textContent = `${course.def.name} · ${course.def.atmosphere.label} · ${kind === 'gp' ? `race, ${course.def.circuit!.laps} laps · Enter to start again` : kind === 'drift' ? 'drift attack · Enter to start again' : mode === 'free' ? `free drive · ${here === 'lot' ? (course.def.kind === 'wharf' ? 'the wharf' : 'practice lot') : here === 'top' ? 'the viewpoint' : course.loop ? 'the circuit' : 'the pass'}` : kind === 'battle' ? `⚔ battle, ${arms === 'gun' ? 'real guns' : 'paintball'} ${dir === 'up' ? '▲ uphill' : '▼ downhill'}` : `time trial ${mode === 'up' ? '▲ uphill' : '▼ downhill'}${best ? ` · best ${clock(best.time)}` : ''}`} · ${ride ? ride.def.name : mineModel.name} · ${yen(profile.yen)} · M venues`;
+  // The rear-view mirror's picture (without Mack: the mirror looks back past him).
+  if (cabin.visible && !ride) {
+    interior.update({ steer: car.steer, ax: car.ax, ay: car.ay, kmh: Math.hypot(car.u, car.w) * 3.6, rpm: 900 + car.rev * (mineModel.sound.maxRpm - 900), gear: car.gear, throttle: c.throttle, brake: c.brake, handbrake: car.handbrake, lamps: 1, bump: car.bump, boost: car.spec.turbo ? car.boost : undefined }, gdt);
+    mirror.render(renderer, scene, interior.mirror, camera.position, driver?.rig ? [driver.rig.object] : []);
+  }
   composer.render(dt);
   snap.afterRender();
   requestAnimationFrame(frame);
@@ -1379,12 +1445,16 @@ window.addEventListener('resize', () => {
   ride: () => ride,
   driver: () => driver,
   /** Checks only: hold the camera where a script put it. */
+  set calm(on: boolean) {
+    calmDrive = on;
+  },
   set freezeCam(on: boolean) {
     freezeCam = on;
   },
-  view: (v: 'chase' | 'bumper'): void => {
+  view: (v: DriveViewId): void => {
     view = v;
   },
+  interior,
   course,
   keys,
   camera,

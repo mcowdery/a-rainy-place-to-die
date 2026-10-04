@@ -7,7 +7,7 @@ Options after the definition: --preview-only (no GLB), --head-only (only the hea
 --compare-only (only the side-by-side with a reference photo, if the definition has "compare"),
 --no-compare, and
 --view x,y,z,tx,ty,tz out.png (one more render from a camera at x,y,z looking at tx,ty,tz, in
-Blender's frame: Z up, the character facing -Y), for checking a detail.
+Blender's frame: Z up, the character facing -Y), for checking a detail; repeat it for more views.
 
 Uses mpfb_base.py (next to this file) for the MPFB side: the human preset, the height search, the rig.
 On top of that a definition says, per part, how it should look in the game: texture size and edits
@@ -33,7 +33,10 @@ The definition (all keys but body optional):
   max_tex                largest texture side unless a part says otherwise (default 1024)
   skin, eyes, eyebrows, eyelashes, hair:  {"asset": name, ...part settings}
   clothes                [{"asset": name, ...part settings}]
-  garments               [{"type": "apron" | "headband" | "hair_cards" | "jacket", ...}]: see garments.py
+  garments               [{"type": "apron" | "headband" | "hair_cards" | "haircut" | "jacket", ...}]: see garments.py
+  about                  a line saying what the outfit is (for people; the build ignores it)
+  base, without          an outfit of another character: its definition (a path relative to this one) and
+                         the garment types to leave out; only what differs is given (see load_definition)
   compare                a head-and-shoulders render framed like a reference photo, side by side
                          with it, for likeness work: see render_compare
 Part settings:
@@ -147,8 +150,10 @@ def edit_pixels(px, ops):
     """Edits an (h, w, 4) array of sRGB-encoded pixels. Each op can be limited by
     rect [x0, y0, x1, y1] (fractions of the image, top-left origin, as in an image editor),
     poly [[x, y], ...] (the same coordinates), circle [cx, cy, r] (the same),
-    lum [lo, hi] (luminance), sat [lo, hi] (saturation) and uvmask (a mask made from the
-    geometry: "under_hair", the skin the hair covers), and faded with amount (0..1):
+    lum [lo, hi] (luminance; of the image as it came, before any op, with "orig": true, so a recolour
+    that brightens one part doesn't bring it into a later op's range), sat [lo, hi] (saturation) and uvmask (a mask made from the
+    geometry: "under_hair", the skin the hair covers; "cavity", the skin's creases, see cavity_weights), and faded
+    with amount (0..1):
       {"op": "grade", "saturation": s, "gain": "#rrggbb" | [r, g, b], "gamma": g, "lift": l}
       {"op": "colorize", "color": "#rrggbb", "contrast": c}  the colour, with the luminance's
           variation round its median (so weave, folds and strands stay)
@@ -160,6 +165,7 @@ def edit_pixels(px, ops):
     """
     h, w = px.shape[:2]
     rgb = px[..., :3]
+    lum0 = rgb @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
     for op in ops:
         lum = rgb @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
         mask = np.full((h, w), float(op.get('amount', 1.0)), dtype=np.float32)
@@ -185,7 +191,7 @@ def edit_pixels(px, ops):
             rr = np.hypot((xx + 0.5) / w - cx, (1 - (yy + 0.5) / h) - cy)
             mask *= np.clip((cr - rr) / (0.1 * cr), 0, 1)
         if 'lum' in op:
-            mask *= soft_range(lum, *op['lum'])
+            mask *= soft_range(lum0 if op.get('orig') else lum, *op['lum'])
         if 'uvmask' in op:
             m = UV_MASKS.get(op['uvmask'])
             if m is not None:
@@ -311,6 +317,36 @@ def world_verts(obj):
     no = no.reshape(-1, 3) @ mw[:3, :3].T
     no /= np.maximum(np.linalg.norm(no, axis=1, keepdims=True), 1e-9)
     return co, no
+
+
+def cavity_weights(body, radius=0.04, gain=18.0, top=None):
+    """How deep in a crease each vertex is (0..1): the mean height of its neighbours within `radius` above its
+    tangent plane, as a share of the radius, times `gain`. The grooves between muscles (under the pecs, between
+    the delts and the arms, down the abs and the spine) come out, smooth bulges stay 0. MakeHuman's skins have no
+    muscle detail of their own; baked into the skin's colour ("uvmask": "cavity") it gives a built body its
+    definition. Nothing above `top` (the face has its own shading, and Mack's is in shadow anyway)."""
+    from mathutils.kdtree import KDTree
+    co, no = world_verts(body)
+    kd = KDTree(len(co))
+    for i, p in enumerate(co):
+        kd.insert(Vector(p), i)
+    kd.balance()
+    out = np.zeros(len(co), dtype=np.float32)
+    for i, p in enumerate(co):
+        if top is not None and p[2] > top:
+            continue
+        nb = [j for (_, j, _) in kd.find_range(Vector(p), radius) if j != i]
+        if not nb:
+            continue
+        h = (co[nb] - p) @ no[i]
+        out[i] = np.clip(h.mean() / radius * gain, 0, 1)
+    # Smoothed over half the radius, so it reads as soft shading rather than blotches on a decimated mesh.
+    sm = out.copy()
+    for i, p in enumerate(co):
+        nb = [j for (_, j, _) in kd.find_range(Vector(p), radius * 0.5)]
+        if nb:
+            sm[i] = out[nb].mean()
+    return sm
 
 
 def under_hair_weights(body, hair):
@@ -878,12 +914,32 @@ def render_compare(spec, meshes, rig, L):
 
 # --- the build ---------------------------------------------------------------------------------
 
+def load_definition(path):
+    """A character definition. An outfit of another character names it as its "base" (a path relative to this
+    file) and gives only what differs: its keys replace the base's (clothes, name, out, preview...), except
+    "garments", which are added to the base's, less those of the types it lists in "without", and "body", whose
+    keys (and its "targets") replace the base body's one by one."""
+    with open(path, encoding='utf-8') as f:
+        d = json.load(f)
+    if 'base' not in d:
+        return d
+    base = load_definition(os.path.join(os.path.dirname(path), d['base']))
+    drop = set(d.get('without', []))
+    garments = [g for g in base.get('garments', []) if g['type'] not in drop] + d.get('garments', [])
+    out = {**base, **{k: v for k, v in d.items() if k not in ('base', 'without')}}
+    out['garments'] = garments
+    # "body" merges key by key, so an outfit can change one setting (its decimation) and keep the build, and its
+    # "targets" too (a variant changes the face, 0 takes a target out).
+    out['body'] = {**base.get('body', {}), **d.get('body', {})}
+    out['body']['targets'] = {**base.get('body', {}).get('targets', {}), **d.get('body', {}).get('targets', {})}
+    return out
+
+
 def main():
-    argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+    argv =sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     if not argv:
         raise SystemExit('usage: blender -b --python build_character.py -- <character.json> [--preview-only] [--head-only]')
-    with open(argv[0], encoding='utf-8') as f:
-        d = json.load(f)
+    d = load_definition(argv[0])
     preview_only = '--preview-only' in argv or '--compare-only' in argv
     compare_only = '--compare-only' in argv
     name = d['name']
@@ -943,8 +999,17 @@ def main():
     # Masks for texture edits, made from the geometry: the skin under the hair, and any a part
     # defines ("masks": {name: {"expr": ..., "size": px, "blur": px}}, see mask_weights).
     hair_part = next((o for o, p in parts if p is d.get('hair')), None)
+    if hair_part is None:
+        # A haircut garment in place of a hair asset.
+        hair_part = next((o for o in meshes if o.name == name + '.haircut'), None)
     if hair_part is not None:
         UV_MASKS['under_hair'] = uv_mask(body, under_hair_weights(body, hair_part), 1024)
+    # The skin's creases, for a built body's definition (an op with "uvmask": "cavity"; "cavity": {"radius", "gain"}
+    # on the skin tunes it).
+    if any(op.get('uvmask') == 'cavity' for op in d.get('skin', {}).get('ops', [])):
+        cv = d.get('skin', {}).get('cavity', {})
+        top = float(L['chin'][2]) if 'chin' in L else None
+        UV_MASKS['cavity'] = uv_mask(body, cavity_weights(body, cv.get('radius', 0.04), cv.get('gain', 18.0), top), 1024, cv.get('blur', 8))
     for obj, part in [(body, d.get('skin', {}))] + parts:
         for mname, spec in part.get('masks', {}).items():
             UV_MASKS[mname] = uv_mask(obj, mask_weights(obj, spec, L), int(spec.get('size', 1024)), spec.get('blur', 3))
@@ -969,9 +1034,10 @@ def main():
         render_compare(d['compare'], meshes, rig, L)
     if d.get('preview') and not compare_only:
         render_preview(repo_path(d['preview']), meshes, rig, head_only='--head-only' in argv)
-    if '--view' in argv:
-        # A close look from anywhere, for checking a detail: --view x,y,z,tx,ty,tz out.png
-        v = [float(x) for x in argv[argv.index('--view') + 1].split(',')]
+    # Close looks from anywhere, for checking a detail: --view x,y,z,tx,ty,tz out.png (as many as wanted).
+    views = [(argv[i + 1], argv[i + 2]) for i, a in enumerate(argv) if a == '--view']
+    for spec, path in views:
+        v = [float(x) for x in spec.split(',')]
         cam = bpy.context.scene.camera
         if cam is None:
             cam = bpy.data.objects.new('ViewCam', bpy.data.cameras.new('ViewCam'))
@@ -984,7 +1050,7 @@ def main():
         img = render_view(bpy.context.scene, tempfile.mkdtemp(), 'view', 900, 900)
         out = bpy.data.images.new('view', width=900, height=900, alpha=False)
         out.pixels.foreach_set(img.ravel())
-        out.filepath_raw = argv[argv.index('--view') + 2]
+        out.filepath_raw = path
         out.file_format = 'PNG'
         out.save()
 

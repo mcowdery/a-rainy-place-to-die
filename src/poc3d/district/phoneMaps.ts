@@ -9,8 +9,18 @@ import { BASE_RES, type Destination } from './travel';
  * ("Turn left in 40 m") with the distance and time left, for walking or driving. Tap the map to set the
  * destination (a place's dot names it), or pick a place from the list; Clear drops it. Drag pans (the
  * locate button follows you again), the wheel or +/- zoom. It shares the GPS with the M map and the arrows
- * in the street (guide.ts).
+ * in the street (guide.ts). At the wheel of your own car a second row offers auto drive (district/autoDrive.ts):
+ * off, or one of its ways of driving.
  */
+export interface MapsAuto {
+  /** The ways of driving it offers. */
+  readonly options: readonly { readonly id: string; readonly label: string }[];
+  /** Whether it can be offered now (you're at the wheel of your own car), and which is on (null: off). */
+  available(): boolean;
+  current(): string | null;
+  pick(id: string | null): void;
+}
+
 export class PhoneMaps implements PhoneApp {
   readonly id = 'maps';
   readonly name = 'Maps';
@@ -20,6 +30,7 @@ export class PhoneMaps implements PhoneApp {
   private card: HTMLDivElement | null = null;
   private places: HTMLDivElement | null = null;
   private modeChip: HTMLSpanElement | null = null;
+  private autoBar: HTMLDivElement | null = null;
   /** Pixels per metre, the view centre, and whether it follows you. */
   private zoom = 1.6;
   private cx = 0;
@@ -37,6 +48,7 @@ export class PhoneMaps implements PhoneApp {
     private readonly me: () => { x: number; z: number; yaw: number; mode: NavMode },
     private readonly setDest: (d: GuideDest | null) => void,
     private readonly zoneAt: (x: number, z: number) => string | null,
+    private readonly auto: MapsAuto | null = null,
   ) {}
 
   show(screen: HTMLElement): void {
@@ -88,7 +100,26 @@ export class PhoneMaps implements PhoneApp {
         places.append(b);
       }
     }
-    root.append(card, canvas, bar, places);
+    // Auto drive: off, or a way of driving (shown at the wheel of your own car).
+    const autoBar = document.createElement('div');
+    autoBar.className = 'mp-bar mp-auto';
+    autoBar.hidden = true;
+    if (this.auto) {
+      const label = document.createElement('span');
+      label.className = 'mp-autolabel';
+      label.textContent = 'Auto drive';
+      autoBar.append(label);
+      for (const o of [{ id: '', label: 'Off' }, ...this.auto.options]) {
+        const b = document.createElement('button');
+        b.className = 'mp-btn';
+        b.dataset.auto = o.id;
+        b.textContent = o.label;
+        b.addEventListener('click', () => this.auto!.pick(o.id || null));
+        autoBar.append(b);
+      }
+    }
+    this.autoBar = autoBar;
+    root.append(card, canvas, autoBar, bar, places);
     screen.append(root);
     this.canvas = canvas;
     this.card = card;
@@ -137,7 +168,7 @@ export class PhoneMaps implements PhoneApp {
   }
 
   hide(): void {
-    this.canvas = this.card = this.places = this.modeChip = null;
+    this.canvas = this.card = this.places = this.modeChip = this.autoBar = null;
     this.drag = null;
   }
 
@@ -258,6 +289,11 @@ export class PhoneMaps implements PhoneApp {
     const card = this.card!;
     const drive = me.mode === 'drive';
     if (this.modeChip) this.modeChip.textContent = drive ? '🚗 Driving' : '🚶 Walking';
+    if (this.autoBar && this.auto) {
+      this.autoBar.hidden = !this.auto.available();
+      const on = this.auto.current() ?? '';
+      for (const b of this.autoBar.querySelectorAll<HTMLButtonElement>('button')) b.classList.toggle('mp-on', b.dataset.auto === on);
+    }
     const dest = this.guide.dest;
     const route = this.guide.route;
     if (!dest) {
@@ -327,6 +363,9 @@ function injectStyle(): void {
   .mp-bar { display: flex; align-items: center; gap: 5px; padding: 7px 8px; background: #111218; border-top: 1px solid #262833; }
   .mp-btn { font: inherit; font-size: 12px; padding: 6px 9px; border-radius: 12px; border: 1px solid #34364a; background: #1e2030; color: #e0e4f4; cursor: pointer; }
   .mp-btn:hover { background: #2a2e44; }
+  .mp-btn.mp-on { background: #1a6a3a; border-color: #3aa868; color: #fff; }
+  .mp-auto[hidden] { display: none; }
+  .mp-autolabel { font-size: 11px; color: #a8c8e8; margin-right: 2px; }
   .mp-mode { margin-left: auto; font-size: 11px; color: #a8c8e8; }
   .mp-places { position: absolute; left: 0; right: 0; top: 58px; bottom: 44px; overflow-y: auto; background: rgba(14,15,22,0.97); padding: 8px 10px; }
   .mp-places[hidden] { display: none; }

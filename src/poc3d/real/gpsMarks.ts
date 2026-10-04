@@ -2,11 +2,15 @@ import * as THREE from 'three';
 
 /**
  * The GPS in the world (district/gps.ts routes): chevrons lying on the street along the next stretch of the
- * route, a pulse running along them toward the destination, and a column of light standing on the
+ * route, a pulse running along them toward the destination, and a thin line of light standing on the
  * destination, tall enough to see over the rooftops.
  */
 const MAX = 24;
 const COLOR = new THREE.Color(0.35, 1.5, 1.9);
+
+/** The beacon's radius up close (m), and its least radius as a share of the distance (about a pixel either side). */
+const BEAM_R = 0.05;
+const BEAM_PX = 0.0012;
 
 export class GpsMarks {
   readonly group = new THREE.Group();
@@ -36,7 +40,8 @@ export class GpsMarks {
     this.chevrons.count = 0;
     this.chevrons.frustumCulled = false;
     this.chevrons.renderOrder = 4;
-    // The beacon: an open cylinder, bright at the foot fading out upward.
+    // The beacon: a thin line of light, bright at the foot fading out upward. 10 cm across up close, widened with
+    // distance only enough to stay a couple of pixels wide (`BEAM_PX`), so it reads as a hairline from anywhere.
     const cv = document.createElement('canvas');
     cv.width = 4;
     cv.height = 256;
@@ -49,13 +54,19 @@ export class GpsMarks {
     g.fillRect(0, 0, 4, 256);
     const tex = new THREE.CanvasTexture(cv);
     this.beacon = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.1, 1.1, 220, 20, 1, true).translate(0, 110, 0),
+      new THREE.CylinderGeometry(BEAM_R, BEAM_R, 220, 6, 1, true).translate(0, 110, 0),
       new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(0.5, 1.2, 1.6), transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, blending: THREE.AdditiveBlending, fog: false }),
     );
     this.beacon.renderOrder = 4;
+    this.beacon.onBeforeRender = (_r, _s, camera) => {
+      const d = camera.position.distanceTo(this.beacon.position);
+      const k = Math.max(1, (d * BEAM_PX) / BEAM_R);
+      this.beacon.scale.set(k, 1, k);
+      this.beacon.updateMatrixWorld();
+    };
     this.ring = new THREE.Mesh(
-      new THREE.RingGeometry(2.2, 2.7, 40).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, blending: THREE.AdditiveBlending }),
+      new THREE.RingGeometry(0.9, 1.05, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.65, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, blending: THREE.AdditiveBlending }),
     );
     this.ring.renderOrder = 4;
     this.group.add(this.chevrons, this.beacon, this.ring);

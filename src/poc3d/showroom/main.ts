@@ -7,7 +7,6 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { cityMaterial, cityUniforms } from '../real/city';
 import { KIND, lin, MeshBuilder } from '../real/meshBuilder';
-import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Pose } from '../real/people';
 import { Character, CHARACTERS, setCharacterEnvironment } from '../models/characters';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { FpMode } from './fpMode';
@@ -15,6 +14,9 @@ import { buildShotgun, SHOTGUN_KINDS } from '../models/shotgun';
 import { buildBosozoku } from '../models/bosozoku';
 import type { Bike } from '../models/bikeKit';
 import { buildCruiser, CRUISER_LOOKS } from '../models/cruiser';
+import { buildSportBike, SPORT_LOOKS } from '../models/sportbike';
+import { buildHelmet, HELMET_LOOKS } from '../models/helmet';
+import { buildKatana } from '../models/katana';
 import { addVehicle, addVehicleLow, addWheel, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, WORK_TYPES, type VehicleSpec, type VehicleType } from '../models/vehicles';
 import { Lightmap, paintLights, type Light } from '../real/lightmap';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
@@ -31,15 +33,16 @@ import { CAR } from '../district/cabin';
 import { addProps, type Prop } from '../real/props';
 import { addTree, FOLIAGE_VARIANTS, setFoliageVariant, type TreeSpecies } from '../models/trees';
 import { TAXI_ADS } from '../models/ads';
+import { CensorPass } from '../models/censorPass';
 import { SignAtlas, SignBuilder, signBox, signMaterial } from '../real/signs';
 import { BILLBOARDS, DISTRICT_BLANK, districtAdUv, POSTERS } from '../real/districtAds';
 
 /**
- * Model showroom: every car type and every person body type x pose, laid out in a clean space with studio
+ * Model showroom: every car type, the cast and the props, laid out in a clean space with studio
  * lighting, for reviewing the designs before they go into the world. Shows the new generation under review
  * (models/) and, for comparison, the previous one the district still uses (real/); M switches. Uses the same builders and
- * materials as the district (city material for cars, ghost material for people, ACES + bloom), but no
- * city, lightmap or ASCII overlay.
+ * materials as the district (the city material, ACES + bloom), but no city, lightmap or ASCII overlay. The mob (the
+ * passers-by, real/people.ts) has a showroom of its own: mob.html (showroom/mob.ts).
  * Mouse: left-drag orbit, right-drag pan, wheel zoom. Keys: WASD / Q E fly the view (Shift faster),
  * M new/previous models, 1 studio / 2 night / 3 day lighting, L labels, X wireframe, B bloom, R turntable.
  */
@@ -93,7 +96,6 @@ scene.add(hemi, key, ...street);
 const cityU = cityUniforms();
 cityU.uLightGain.value = 0;
 const city = cityMaterial(cityU);
-const ghost = ghostMaterial();
 
 // Floor: asphalt pad for the cars, a paved area for the people, on a neutral studio floor.
 const floor = new MeshBuilder();
@@ -131,7 +133,30 @@ const genRoot: Record<Gen, THREE.Group> = { new: new THREE.Group(), previous: ne
 const genLabels: Record<Gen, CSS2DObject[]> = { new: [], previous: [] };
 const genItems: Record<Gen, Item[]> = { new: [], previous: [] };
 scene.add(genRoot.new, genRoot.previous);
+// The labels over the models (drawn over everything, so they can cover what's in front): shown orbiting, hidden in
+// first person (looking at Mack), each switched by L or the panel's Labels while in that mode; remembered.
 let labelsOn = true;
+let fpLabels = false;
+try {
+  labelsOn = localStorage.getItem('citypop.showroom.labels') !== '0';
+  fpLabels = localStorage.getItem('citypop.showroom.labels.fp') === '1';
+} catch {
+  /* no storage */
+}
+/** Whether the labels show now. */
+const labelsShown = (): boolean => (fp.active ? fpLabels : labelsOn);
+let labelsShownNow = true;
+const setLabels = (on: boolean): void => {
+  if (fp.active) fpLabels = on;
+  else labelsOn = on;
+  try {
+    localStorage.setItem(fp.active ? 'citypop.showroom.labels.fp' : 'citypop.showroom.labels', on ? '1' : '0');
+  } catch {
+    /* no storage */
+  }
+  applyGen(gen);
+  renderPanel();
+};
 const label = (g: Gen, text: string, x: number, y: number, z: number): void => {
   const div = document.createElement('div');
   div.className = 'label';
@@ -499,96 +524,6 @@ const VARIANT_ROW: [TreeSpecies, number][] = [['zelkova', 0], ['ginkgo', 11], ['
 }
 const tCars = performance.now() - t0;
 
-// The mob (real/people.ts): every body type in every pose, the hair and clothes, and groups as they stand
-// in the street. Fading is off here except in the last row, which shows the crowd coming and going.
-const mob = new GhostBuilder();
-const person = (s: Partial<FigureSpec> & Pick<FigureSpec, 'x' | 'z' | 'body' | 'pose'>): void => {
-  addFigure(mob, { yaw: 0, color: GHOST_COLORS[1], hair: s.body === 'woman' ? 'long' : s.body === 'elder' ? 'none' : 'short', long: false, phase: 0.25, side: 1, look: 0, fade: false, ...s });
-};
-const BODIES: Body[] = ['man', 'woman', 'child', 'elder'];
-const POSES: Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold'];
-const DX = 2.0;
-const DZ = 3.6;
-const x0 = -((POSES.length - 1) * DX) / 2;
-BODIES.forEach((body, r) => {
-  const z = 8 + r * DZ;
-  POSES.forEach((pose, c) => {
-    const x = x0 + c * DX;
-    person({ x, z, body, pose, color: GHOST_COLORS[(r * 3 + c) % GHOST_COLORS.length] });
-    label('new', `${body} · ${pose}`, x, body === 'child' ? 1.5 : 2.2, z);
-  });
-  genItems.new.push({ name: `${body} × all poses`, group: 'People', at: new THREE.Vector3(0, 1, z), size: 7, view: FRONT_VIEW });
-});
-const LOOKS: [string, Partial<FigureSpec> & Pick<FigureSpec, 'body' | 'pose'>][] = [
-  ['bob · skirt', { body: 'woman', pose: 'stand', hair: 'short', long: true }],
-  ['bun · skirt', { body: 'woman', pose: 'walk', hair: 'bun', long: true }],
-  ['sun hat', { body: 'woman', pose: 'pockets', hair: 'hat' }],
-  ['long coat · fedora', { body: 'man', pose: 'pockets', hair: 'hat', long: true }],
-  ['cap', { body: 'man', pose: 'stand', hair: 'cap' }],
-  ['bald', { body: 'man', pose: 'phone', hair: 'none' }],
-  ['elder · cap', { body: 'elder', pose: 'stand', hair: 'cap' }],
-];
-const zv = 8 + BODIES.length * DZ;
-LOOKS.forEach(([name, s], c) => {
-  const x = x0 + c * DX;
-  person({ x, z: zv, color: GHOST_COLORS[(c * 5 + 2) % GHOST_COLORS.length], ...s });
-  label('new', name, x, 2.3, zv);
-});
-genItems.new.push({ name: 'hair & clothes', group: 'People', at: new THREE.Vector3(0, 1, zv), size: 7.5, view: FRONT_VIEW });
-// Groups as they'll appear in the street, fading in and out on their own cycles.
-const zg = zv + DZ + 0.2;
-const GROUP: (Partial<FigureSpec> & Pick<FigureSpec, 'x' | 'z' | 'body' | 'pose'>)[] = [
-  { x: -5.2, z: zg - 0.45, body: 'woman', pose: 'talk', hair: 'bun', long: true },
-  { x: -5.2, z: zg + 0.45, body: 'man', pose: 'stand', yaw: Math.PI, color: GHOST_COLORS[3] },
-  { x: -1.9, z: zg, body: 'woman', pose: 'hold', side: 1, color: GHOST_COLORS[4] },
-  { x: -1.35, z: zg, body: 'child', pose: 'hold', side: -1, hair: 'cap', look: -0.4, color: GHOST_COLORS[6] },
-  { x: 1.5, z: zg, body: 'man', pose: 'walk', phase: 0.25, color: GHOST_COLORS[0] },
-  { x: 2.15, z: zg + 0.1, body: 'woman', pose: 'walk', phase: 0.75, look: -0.4, color: GHOST_COLORS[5] },
-  { x: 5.2, z: zg - 0.4, body: 'man', pose: 'pockets', hair: 'hat', long: true, color: GHOST_COLORS[2] },
-  { x: 5.6, z: zg + 0.4, body: 'woman', pose: 'phone', yaw: Math.PI, color: GHOST_COLORS[7] },
-];
-for (const g of GROUP) person({ ...g, fade: true });
-label('new', 'talking pair', -5.2, 2.4, zg);
-label('new', 'parent + child', -1.6, 2.4, zg);
-label('new', 'couple walking', 1.8, 2.4, zg);
-label('new', 'waiting', 5.4, 2.4, zg);
-genItems.new.push({ name: 'groups (fading)', group: 'People', at: new THREE.Vector3(0, 1, zg), size: 7, view: FRONT_VIEW });
-// Outfits (district/peopleMix.ts): what the mob wears where.
-const zo = zg + DZ;
-const DRESSED: [string, Partial<FigureSpec> & Pick<FigureSpec, 'body' | 'pose'>][] = [
-  ['salaryman · suit', { body: 'man', pose: 'walk', outfit: 'suit', phase: 0.3 }],
-  ['office · suit', { body: 'woman', pose: 'stand', outfit: 'suit', hair: 'bun' }],
-  ['maid', { body: 'woman', pose: 'wave', outfit: 'maid', hair: 'long' }],
-  ['maid', { body: 'woman', pose: 'stand', outfit: 'maid', hair: 'short' }],
-  ['schoolgirl', { body: 'woman', pose: 'phone', outfit: 'school', hair: 'long' }],
-  ['schoolboy', { body: 'man', pose: 'walk', outfit: 'school', phase: 0.7 }],
-  ['randoseru', { body: 'child', pose: 'walk', outfit: 'school', hair: 'cap', phase: 0.2 }],
-  ['kimono', { body: 'woman', pose: 'stand', outfit: 'kimono', hair: 'bun' }],
-  ['kimono (man)', { body: 'man', pose: 'pockets', outfit: 'kimono' }],
-  ['kimono (elder)', { body: 'elder', pose: 'stand', outfit: 'kimono', hair: 'none' }],
-  ['yukata', { body: 'woman', pose: 'walk', outfit: 'yukata', hair: 'bun', phase: 0.4 }],
-  ['yukata (child)', { body: 'child', pose: 'stand', outfit: 'yukata', hair: 'bun' }],
-  ['yukata (man)', { body: 'man', pose: 'pockets', outfit: 'yukata' }],
-  ['hard hat · hi-vis', { body: 'man', pose: 'stand', outfit: 'work' }],
-  ['police', { body: 'man', pose: 'stand', outfit: 'police', color: GHOST_COLORS[3] }],
-  ['police (woman)', { body: 'woman', pose: 'walk', outfit: 'police', color: GHOST_COLORS[3], phase: 0.6 }],
-  ['backpack', { body: 'man', pose: 'walk', outfit: 'backpack', phase: 0.1 }],
-  ['backpack (girl)', { body: 'woman', pose: 'phone', outfit: 'backpack', hair: 'long' }],
-  ['sitting', { body: 'man', pose: 'sit', outfit: 'suit', y: 0 }],
-  ['sitting', { body: 'woman', pose: 'sit', outfit: 'long', hair: 'long', y: 0 }],
-  ['strap', { body: 'man', pose: 'strap', outfit: 'plain' }],
-];
-DRESSED.forEach(([name, sp], c) => {
-  const x = x0 - 2 + c * DX;
-  person({ x, z: zo, color: GHOST_COLORS[(c * 3 + 1) % GHOST_COLORS.length], ...sp });
-  person({ x, z: zo + 1.4, yaw: Math.PI, color: GHOST_COLORS[(c * 3 + 1) % GHOST_COLORS.length], ...sp });
-  label('new', name, x, 2.3, zo);
-});
-genItems.new.push({ name: 'outfits', group: 'People', at: new THREE.Vector3(x0 - 2 + 8.5 * DX, 1, zo), size: 17, view: FRONT_VIEW });
-genItems.new.push({ name: 'outfits (backs)', group: 'People', at: new THREE.Vector3(x0 - 2 + 4.5 * DX, 1, zo + 1.4), size: 9, view: new THREE.Vector3(0, 0.55, -0.85).normalize() });
-const mobMesh = new THREE.Mesh(mob.build(0, 0)!, ghost);
-genRoot.new.add(mobMesh);
-(window as unknown as { __mob: unknown }).__mob = { scene, mobMesh, floorMesh, ghost };
 // The cast as modelled characters (models/characters.ts), on a pad of their own past the mob, idling.
 const CAST_Z = 38;
 const castPad = new MeshBuilder();
@@ -647,6 +582,59 @@ const rideable: Bike[] = [];
   label('new', 'bike: Seika Shiden 400F (bōsōzoku)', bx, 2.0, CAST_Z);
   genItems.new.push({ name: 'bike: bōsōzoku', group: 'Characters', at: new THREE.Vector3(bx, 0.8, CAST_Z), size: 1.6, view: new THREE.Vector3(-0.6, 0.25, 0.75).normalize() });
 }
+// The sports bike (models/sportbike.ts) at the end, in each of its colours.
+(Object.keys(SPORT_LOOKS) as (keyof typeof SPORT_LOOKS)[]).forEach((name, i) => {
+  const bx = Math.max(6, CHARACTERS.length * 2.2 + 2) / 2 + 12.0 + i * 2.6;
+  const bike = buildSportBike(charEnv, SPORT_LOOKS[name]);
+  bike.root.position.set(bx, 0.15, CAST_Z);
+  bike.root.rotation.y = -0.6;
+  bike.steer.quaternion.setFromAxisAngle(bike.steerAxis, 0.25);
+  genRoot.new.add(bike.root);
+  rideable.push(bike);
+  label('new', `bike: Ōmi Hayate 900RR (${name})`, bx, 1.6, CAST_Z);
+  genItems.new.push({ name: `bike: sports (${name})`, group: 'Characters', at: new THREE.Vector3(bx, 0.7, CAST_Z), size: 1.6, view: new THREE.Vector3(-0.6, 0.25, 0.75).normalize() });
+});
+// The helmets (models/helmet.ts), on the stand by the guns, one of each look.
+(Object.keys(HELMET_LOOKS) as (keyof typeof HELMET_LOOKS)[]).forEach((name, i) => {
+  const helmet = buildHelmet(charEnv, HELMET_LOOKS[name]);
+  helmet.position.set(Math.max(6, CHARACTERS.length * 2.2 + 2) / 2 + 1.4 - 0.2 + i * 0.4, 1.32, CAST_Z + 0.75);
+  helmet.rotation.y = -0.5;
+  genRoot.new.add(helmet);
+  label('new', `helmet: ${name}`, helmet.position.x, 1.62 + i * 0.08, helmet.position.z);
+  genItems.new.push({ name: `helmet: ${name}`, group: 'Characters', at: helmet.position.clone(), size: 0.5, view: new THREE.Vector3(0.4, 0.2, 1).normalize() });
+});
+// Mack's katana (models/katana.ts) on a black lacquered rack in front of the guns: the drawn sword above, its
+// saya below, edge up as swords are shown, the handles to the left.
+{
+  const kx = Math.max(6, CHARACTERS.length * 2.2 + 2) / 2 + 1.6;
+  const kz = CAST_Z + 1.7;
+  const rack = new THREE.Group();
+  rack.position.set(kx, 0.15, kz);
+  genRoot.new.add(rack);
+  const black = new THREE.MeshPhysicalMaterial({ color: 0x080708, roughness: 0.25, clearcoat: 1, envMap: charEnv, envMapIntensity: 0.6 });
+  const box = (w: number, h: number, d: number, x: number, y: number, z: number): void => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), black);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    rack.add(m);
+  };
+  box(1.1, 0.04, 0.26, 0, 0.02, 0);
+  for (const x of [-0.3, 0.3]) {
+    box(0.05, 0.62, 0.07, x, 0.33, 0);
+    for (const y of [0.42, 0.62]) box(0.05, 0.03, 0.14, x, y, 0.035);
+  }
+  const k = buildKatana(charEnv);
+  // The sword's frame: -z along the blade; turned so the blade runs to +x, edge up.
+  k.root.rotation.set(0, -Math.PI / 2, Math.PI);
+  k.root.position.set(-0.08, 0, 0.06);
+  rack.add(k.root);
+  // Sword on the top arms, saya on the lower (the frame's y is down here, edge up).
+  k.sword.position.y = -0.65;
+  k.saya.position.y = -0.45;
+  label('new', 'katana', kx, 1.0, kz);
+  genItems.new.push({ name: 'katana', group: 'Characters', at: new THREE.Vector3(kx, 0.72, kz), size: 1.1, view: new THREE.Vector3(0, 0.15, 1).normalize() });
+  genItems.new.push({ name: 'katana: tsuba and tsuka', group: 'Characters', at: new THREE.Vector3(kx - 0.35, 0.8, kz + 0.06), size: 0.35, view: new THREE.Vector3(0.2, 0.15, 1).normalize() });
+}
 // The cruiser (models/cruiser.ts) beside it, in each of its colours.
 (Object.keys(CRUISER_LOOKS) as (keyof typeof CRUISER_LOOKS)[]).forEach((name, i) => {
   const bx = Math.max(6, CHARACTERS.length * 2.2 + 2) / 2 + 6.8 + i * 2.6;
@@ -669,9 +657,9 @@ fp.bikes = rideable;
 const enterFp = (): void => void fp.enter(0.6, CAST_Z + 2.2, 0);
 (window as unknown as { __fp: unknown }).__fp = fp.script();
 // For scripted shots of a model on its own: three, the showroom's scene, the gun builder and the characters' light.
-(window as unknown as { __lab: unknown }).__lab = { THREE, scene, buildShotgun, buildBosozoku, buildCruiser, CRUISER_LOOKS, env: charEnv };
+(window as unknown as { __lab: unknown }).__lab = { THREE, scene, buildShotgun, buildBosozoku, buildCruiser, CRUISER_LOOKS, buildSportBike, SPORT_LOOKS, buildHelmet, HELMET_LOOKS, buildKatana, env: charEnv };
 if (new URLSearchParams(location.search).has('fp')) enterFp();
-const tPeople = performance.now() - t0 - tCars;
+const tCast = performance.now() - t0 - tCars;
 
 // ---- Previous generation (for comparison) ----
 // The district's one street tree (real/props.ts), where the new species stand.
@@ -697,7 +685,8 @@ const applyGen = (g: Gen): void => {
   gen = g;
   genRoot.new.visible = g === 'new';
   genRoot.previous.visible = g === 'previous';
-  for (const k of ['new', 'previous'] as const) for (const o of genLabels[k]) o.visible = labelsOn && k === g;
+  for (const k of ['new', 'previous'] as const) for (const o of genLabels[k]) o.visible = labelsShown() && k === g;
+  labelsShownNow = labelsShown();
   renderPanel();
 };
 
@@ -738,6 +727,9 @@ composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.22, 0.45, 1.6);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
+// Mack's face censored on the finished image when the style asks (models/censorPass.ts).
+const censor = new CensorPass();
+composer.addPass(censor);
 
 // Focus: glide the orbit target and camera to an item.
 let glide: { t0: number; from: THREE.Vector3; to: THREE.Vector3; camFrom: THREE.Vector3; camTo: THREE.Vector3 } | null = null;
@@ -789,6 +781,8 @@ function renderPanel(): void {
   section('Models');
   button('new (under review)', gen === 'new', () => applyGen('new'));
   button('previous (in the district)', gen === 'previous', () => applyGen('previous'));
+  section('Labels');
+  button(labelsShown() ? 'labels on (L)' : 'labels off (L)', labelsShown(), () => setLabels(!labelsShown()));
   section('Lighting');
   for (const m of ['studio', 'night', 'day'] as const) button(m, mode === m, () => applyMode(m));
   section('Foliage season');
@@ -796,10 +790,12 @@ function renderPanel(): void {
     cityU.uSeason.value = i;
     renderPanel();
   }));
-  for (const g of ['Characters', 'Foliage', 'Transit', 'Mega-sign', 'Cars', 'Billboards', 'Posters', 'People']) {
+  for (const g of ['Characters', 'Foliage', 'Transit', 'Mega-sign', 'Cars', 'Billboards', 'Posters']) {
     section(g);
     for (const it of genItems[gen].filter((i) => i.group === g)) button(it.name, false, () => focus(it));
   }
+  section('People');
+  button('→ the mob showroom (mob.html)', false, () => (location.href = 'mob.html'));
   section('First person');
   button(fp.active ? 'back to orbiting (V)' : 'Mack, first person (V)', fp.active, () => (fp.active ? fp.exit() : enterFp(), setTimeout(renderPanel, 50)));
   section('View');
@@ -813,6 +809,7 @@ const keys = new Set<string>();
 let turntable = false;
 let wire = false;
 window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyL') return setLabels(!labelsShown());
   if (fp.active) return;
   if (e.code === 'KeyV') {
     enterFp();
@@ -823,17 +820,12 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit1') applyMode('studio');
   if (e.code === 'Digit2') applyMode('night');
   if (e.code === 'Digit3') applyMode('day');
-  if (e.code === 'KeyL') {
-    labelsOn = !labelsOn;
-    applyGen(gen);
-  }
   if (e.code === 'KeyM') applyGen(gen === 'new' ? 'previous' : 'new');
   if (e.code === 'KeyB') bloom.enabled = !bloom.enabled;
   if (e.code === 'KeyR') turntable = !turntable;
   if (e.code === 'KeyX') {
     wire = !wire;
     city.wireframe = wire;
-    ghost.wireframe = wire;
   }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -878,13 +870,15 @@ renderer.setAnimationLoop(() => {
   controls.autoRotate = turntable;
   if (fp.active) fp.update(dt);
   else controls.update();
+  // Into or out of first person: its own label setting.
+  if (labelsShown() !== labelsShownNow) applyGen(gen);
   cityU.uTime.value = performance.now() / 1000;
-  ghost.uniforms.uTime.value = performance.now() / 1000;
   for (const c of cast) c.update(dt);
+  censor.track(fp.body, camera);
   composer.render(dt);
   labels.render(scene, camera);
   $('hud').textContent = fp.active ? fp.hud() : [
-    `MODEL SHOWROOM · ${gen === 'new' ? 'NEW models (under review)' : 'previous models (district)'} · ${mode} lighting · built cars ${tCars.toFixed(0)} ms, people ${tPeople.toFixed(0)} ms`,
+    `MODEL SHOWROOM · ${gen === 'new' ? 'NEW models (under review)' : 'previous models (district)'} · ${mode} lighting · built cars ${tCars.toFixed(0)} ms, the rest ${tCast.toFixed(0)} ms`,
     'click a model to focus it · left-drag orbit · right-drag pan · wheel zoom · WASD / Q E fly (Shift faster)',
     `M new/previous models · 1 studio · 2 night · 3 day · L labels · X wireframe${wire ? ' (on)' : ''} · B bloom${bloom.enabled ? '' : ' (off)'} · R turntable${turntable ? ' (on)' : ''}`,
   ].join('\n');

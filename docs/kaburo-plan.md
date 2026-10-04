@@ -25,11 +25,15 @@ These are hand-authored stamps with interiors or VN hooks, placed on L0 cells li
 - **Kirishima Investigations**: the detective agency's office up a narrow stairwell (taxi ad B, poster).
 - **Kaburo Crossing / mega-sign building**: the landmark, see below.
 - **Live house 地下室**: basement venue with a lit stairwell and gig posters; a natural event location. **Built (2026-09-26)**: walk down into B1 (Julie's MIDNIGHT PLASTIC release show on stage; a hotspot for the VN).
-- **Maid café ♡ぴゅあ♡**: upstairs café with a street tout.
+- **Maid café ♡ぴゅあ♡**: upstairs café with a street tout. **Built (2026-10-02) in Denkō-chō** instead (the story
+  guide places めいどかふぇ ♡ぴゅあ♡ there, in the maid café lanes): `maid_cafe`, real/maidCafe.ts.
 - **Hotel Rouge**: the flagship love hotel in the Love District, with a hidden side entrance. **Built (2026-09-26)** as a castle love hotel.
-- **Maruyoshi pawn shop**: the noir hub (items, information).
+- **Maruyoshi pawn shop**: the noir hub (items, information). **Built (2026-10-02)** in the back alleys, at street
+  level of a mixed-tenant building with a mahjong parlour on 2F and Cash One's office on 3F (`cash_one`,
+  real/cashOne.ts), all walk-in.
 - **Ryujin Kogyo office**: the yakuza front company, a story antagonist hook. **Built (2026-09-26)** on Host Street: granite block, gated forecourt, black sedans, CCTV, gold 竜 crest, guards; door to the VN.
-- **Koban (police box)**: wanted notices; story source.
+- **Koban (police box)**: wanted notices; story source. **Built (2026-10-02)**: 歌舞路交番 at the back of the
+  crossing's square (`koban`, real/kaburoKit.ts): clock tower, red lamp, wanted board, walk-in front room.
 - **Hoshikuzu Yokocho 星屑横丁**: **built (2026-09-26)**, a Golden Gai-style bar alley in the back alleys; BAR 黒猫 (door to VN) and its mama-san outside are a story hook.
 - **Konbini (Yoru Mart)**: several copies; a save/rest point or recurring hangout. **Built (2026-09-26):** one you can walk into, on the crossing's south-east corner.
 - **Kaburo Inari shrine**: **built (2026-09-26)** in the back alleys: torii tunnel, fox guardians, lanterns, hall, an offering box hotspot.

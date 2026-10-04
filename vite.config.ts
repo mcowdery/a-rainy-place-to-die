@@ -19,9 +19,9 @@ export default defineConfig(({ mode }) => {
       outDir: edition === 'standard' ? 'dist' : `dist-${edition}`,
       rollupOptions: {
         // index.html: 2D tile prototype (set aside). poc3d.html: 3D rendering test block. district.html: Kaburo district.
-        // models.html: showroom for reviewing car and people models in isolation.
+        // models.html: showroom for reviewing car, cast and prop models in isolation; mob.html: the mob's own showroom.
         // race.html: the racing venue (Kurokami Pass), the handling test.
-        input: { main: 'index.html', poc3d: 'poc3d.html', district: 'district.html', models: 'models.html', race: 'race.html', garage: 'garage.html' },
+        input: { main: 'index.html', poc3d: 'poc3d.html', district: 'district.html', models: 'models.html', mob: 'mob.html', race: 'race.html', garage: 'garage.html' },
       },
     },
     test: {

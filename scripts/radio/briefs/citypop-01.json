@@ -1,0 +1,81 @@
+{
+  "batch": "citypop-01",
+  "defaults": { "duration": 180, "takes": 2, "steps": 8 },
+  "items": [
+    {
+      "id": "toto_bay_drive",
+      "station": "bay",
+      "title": "東都ベイ・ドライブ",
+      "artist": "",
+      "caption": "1980s Japanese city pop, glossy and sophisticated. Clear, sweet female lead vocal in Japanese with soft backing harmonies. Funky slap bass, tight live drums with a gated reverb snare, bright Rhodes electric piano playing jazzy major seventh chords, clean chorus-effect rhythm guitar, punchy horn section stabs, shimmering analog synth pads, a smooth alto saxophone solo. Warm analog tape production. Breezy, romantic, a night drive along the bay.",
+      "lyrics": "[Intro]\n\n[Verse 1]\n真夜中の湾岸線\n窓を少し開けて\n潮風とラジオの音\nあなたの横顔\n\n[Pre-Chorus]\n言葉はいらない\nライトが流れてく\n\n[Chorus]\n東都ベイ・ドライブ\n夜を越えてゆく\nきらめく街の灯り\nふたりだけの海\n東都ベイ・ドライブ\n朝が来るまで\nこのままどこまでも\n走りつづけて\n\n[Verse 2]\n汐見の橋を渡る\n観覧車がまわる\n指先が触れるたび\n時が止まるの\n\n[Pre-Chorus]\n約束はいらない\n星が流れてく\n\n[Chorus]\n東都ベイ・ドライブ\n夜を越えてゆく\nきらめく街の灯り\nふたりだけの海\n東都ベイ・ドライブ\n朝が来るまで\nこのままどこまでも\n走りつづけて\n\n[Instrumental Break - Saxophone Solo]\n\n[Chorus]\n東都ベイ・ドライブ\n夜を越えてゆく\nきらめく街の灯り\nふたりだけの海\n\n[Outro]",
+      "language": "ja",
+      "bpm": 112,
+      "key": "A major",
+      "duration": 200,
+      "seed": 1101
+    },
+    {
+      "id": "neon_no_ame",
+      "station": "bay",
+      "title": "ネオンの雨",
+      "artist": "",
+      "caption": "1980s Japanese city pop ballad with a mid-tempo groove, moody and urban. Smoky, expressive female lead vocal in Japanese. Mellow Rhodes electric piano, round fretless bass, laid-back drums with soft gated snare, muted funk guitar, lush string synthesizer pads, a wistful electric piano solo. Melancholy but stylish, rain on neon streets late at night. Polished analog studio sound.",
+      "lyrics": "[Intro]\n\n[Verse 1]\n濡れた舗道に\nにじむネオンサイン\n傘もささずに\nひとり歩く夜\n\n[Verse 2]\n最終電車の\nベルが遠く鳴る\n帰る場所なら\nもう忘れたわ\n\n[Chorus]\nネオンの雨に打たれて\n思い出が溶けてゆく\nあなたのいないこの街で\n私は今も踊ってる\nネオンの雨が降る夜は\nグラスの氷が歌うの\nさよならさえも言えないまま\n夜明けを待っている\n\n[Verse 3]\n歌舞路の角の\n小さなバーで\n知らない誰かが\nあなたに似ていた\n\n[Chorus]\nネオンの雨に打たれて\n思い出が溶けてゆく\nあなたのいないこの街で\n私は今も踊ってる\nネオンの雨が降る夜は\nグラスの氷が歌うの\nさよならさえも言えないまま\n夜明けを待っている\n\n[Instrumental Break - Electric Piano Solo]\n\n[Chorus]\nネオンの雨が降る夜は\nグラスの氷が歌うの\nさよならさえも言えないまま\n夜明けを待っている\n\n[Outro]",
+      "language": "ja",
+      "bpm": 96,
+      "key": "D minor",
+      "duration": 210,
+      "seed": 1202
+    },
+    {
+      "id": "shuden_no_ato_de",
+      "station": "bay",
+      "title": "終電のあとで",
+      "artist": "",
+      "caption": "1980s Japanese city pop and AOR, smooth and mellow. Warm, relaxed male lead vocal in Japanese with layered falsetto harmonies in the chorus. Clean electric guitar with chorus effect, melodic bass, steady drums, glassy digital electric piano, soft synth strings, a tasteful melodic electric guitar solo. Nostalgic, gentle, walking home through the sleeping city. Polished analog studio production.",
+      "lyrics": "[Intro]\n\n[Verse 1]\n終電が行ったあとの\n静かなホームで\n缶コーヒーを飲みながら\n君を思い出す\n\n[Pre-Chorus]\n都会の夜は長くて\n風だけが優しい\n\n[Chorus]\n終電のあとで\nもう一度会いたい\n眠らない街の\nどこかにいる君に\n終電のあとで\n歩いて帰ろう\n星のない空に\n口笛を吹いて\n\n[Verse 2]\nタクシーの赤いランプ\n川面に揺れてる\nポケットの中の鍵が\n小さく鳴ってる\n\n[Pre-Chorus]\n都会の夜は長くて\n風だけが優しい\n\n[Chorus]\n終電のあとで\nもう一度会いたい\n眠らない街の\nどこかにいる君に\n終電のあとで\n歩いて帰ろう\n星のない空に\n口笛を吹いて\n\n[Instrumental Break - Guitar Solo]\n\n[Chorus]\n終電のあとで\n歩いて帰ろう\n星のない空に\n口笛を吹いて\n\n[Outro]",
+      "language": "ja",
+      "bpm": 104,
+      "key": "E major",
+      "duration": 205,
+      "seed": 1303
+    },
+    {
+      "id": "shiomi_breeze",
+      "station": "bay",
+      "title": "汐見ブリーズ",
+      "artist": "",
+      "caption": "1980s Japanese jazz fusion instrumental with a city pop feel. Bright lead electric guitar melody with chorus effect, funky slap bass, crisp tight drums, glassy digital electric piano, synth brass hits, a lyrical soprano saxophone trading the melody with the guitar. Breezy, sunny, optimistic, a seaside highway. Polished analog studio production. Instrumental, no vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 118,
+      "key": "G major",
+      "duration": 180,
+      "seed": 1404
+    },
+    {
+      "id": "kaburo_lights",
+      "station": "bay",
+      "title": "歌舞路ライツ",
+      "artist": "",
+      "caption": "Early 1980s Japanese funk and boogie instrumental, city pop style. Driving slap bass and four-on-the-floor drums with handclaps, scratchy rhythm guitar, bright synth brass riffs, sparkling electric piano, a gritty tenor saxophone lead melody, analog synthesizer solo. Energetic, glamorous, neon nightlife. Warm analog tape sound. Instrumental, no vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 116,
+      "key": "E minor",
+      "duration": 180,
+      "seed": 1505
+    },
+    {
+      "id": "summer_highway",
+      "station": "bay",
+      "title": "サマー・ハイウェイ",
+      "artist": "",
+      "caption": "1980s Japanese city pop instrumental, light and resort-like. Sweet melodic lead on a clean electric guitar, soft Rhodes electric piano chords, smooth bass, relaxed drums with rim clicks and shakers, warm synth pads, vibraphone accents, a gentle flute counter-melody. Carefree, sunlit, a summer afternoon drive by the sea. Polished analog studio sound. Instrumental, no vocals.",
+      "lyrics": "[Instrumental]",
+      "bpm": 100,
+      "key": "F major",
+      "duration": 180,
+      "seed": 1606
+    }
+  ]
+}

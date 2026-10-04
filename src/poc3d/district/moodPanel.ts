@@ -45,6 +45,14 @@ export interface MoodSettings {
   cycle: boolean;
   /** 0-1 master volume (0 mutes). */
   volume: number;
+  /** In your car only (real/audio.ts `cabin`): how much the cabin shuts the outside out (0 none, 1 nearly all of
+   * it), and how loud the rain drums on its roof (1 as built). */
+  carDamp: number;
+  carRoof: number;
+  /** Footsteps' level against the rest (1 as built). */
+  steps: number;
+  /** The car radio's level (real/radio.ts; 0 silences it). */
+  music: number;
   /** Render resolution: auto (lowered while frames are slow, raised again when there's room) or a fixed share. */
   resolution: Resolution;
   /** How far the detail reaches (QUALITY): high is the full city; medium and low pull it in for slower machines. */
@@ -93,7 +101,7 @@ export const SKY_COLOR_MODE: Record<SkyColors, { sky: number; light: number; tin
 export const RESOLUTIONS = ['auto', '100', '85', '70', '55'] as const;
 export type Resolution = (typeof RESOLUTIONS)[number];
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, resolution: 'auto', quality: 'high', mob: 'solid', sky: 'deep', skyColors: 'painted', moonShape: 'calendar' };
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, carDamp: 0.5, carRoof: 1, steps: 1, music: 0.5, resolution: 'auto', quality: 'high', mob: 'solid', sky: 'deep', skyColors: 'painted', moonShape: 'calendar' };
 const SHADOW_COUNTS = [0, 2, 4, 8];
 const SAVED_KEY = 'city-popper.district.mood';
 
@@ -124,6 +132,10 @@ function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettin
   const s = num('shadows', 0, 8);
   if (s !== undefined) m.shadows = SHADOW_COUNTS.reduce((a, b) => (Math.abs(b - s) < Math.abs(a - s) ? b : a));
   m.volume = num('volume', 0, 1) ?? m.volume;
+  m.carDamp = num('carDamp', 0, 1) ?? m.carDamp;
+  m.carRoof = num('carRoof', 0, 2) ?? m.carRoof;
+  m.steps = num('steps', 0, 2) ?? m.steps;
+  m.music = num('music', 0, 1) ?? m.music;
   const c = params.get('cycle');
   if (c === '1' || c === '0') m.cycle = c === '1';
   const g = params.get('grade') as GradeName | null;
@@ -161,6 +173,10 @@ function moodParams(m: MoodSettings, base: MoodSettings, into = new URLSearchPar
   set('shadows', String(m.shadows), String(base.shadows));
   set('grade', m.grade, base.grade);
   set('volume', f(m.volume), f(base.volume));
+  set('carDamp', f(m.carDamp), f(base.carDamp));
+  set('carRoof', f(m.carRoof), f(base.carRoof));
+  set('steps', f(m.steps), f(base.steps));
+  set('music', f(m.music), f(base.music));
   set('cycle', m.cycle ? '1' : '0', base.cycle ? '1' : '0');
   set('res', m.resolution, base.resolution);
   set('quality', m.quality, base.quality);
@@ -219,6 +235,10 @@ export class MoodPanel {
 
     const s = this.settings;
     this.slider('volume', 'Sound', 0, 1, 0.01, () => s.volume, (v) => (s.volume = v), (v) => (v < 0.01 ? 'muted' : `${Math.round(v * 100)}%`));
+    this.slider('music', 'Car radio', 0, 1, 0.01, () => s.music, (v) => (s.music = v), (v) => (v < 0.01 ? 'silent' : `${Math.round(v * 100)}%`));
+    this.slider('steps', 'Footsteps', 0, 2, 0.01, () => s.steps, (v) => (s.steps = v), (v) => (v < 0.01 ? 'off' : `${Math.round(v * 100)}%`));
+    this.slider('carDamp', 'In-car damping', 0, 1, 0.01, () => s.carDamp, (v) => (s.carDamp = v), (v) => (v < 0.01 ? 'none (as outside)' : `${Math.round(v * 100)}%`));
+    this.slider('carRoof', 'Rain on car roof', 0, 2, 0.01, () => s.carRoof, (v) => (s.carRoof = v), (v) => (v < 0.01 ? 'off' : `${Math.round(v * 100)}%`));
     this.choice('cycle', 'Weather cycle', ['off', 'on'], () => (s.cycle ? 'on' : 'off'), (v) => (s.cycle = v === 'on'));
     this.slider('rain', 'Rain', 0, 1, 0.01, () => s.rain ?? -1, (v) => (s.rain = v), (v) => (v < 0 ? 'from weather' : v < 0.2 ? `drizzle ${v.toFixed(2)}` : v < 0.6 ? `rain ${v.toFixed(2)}` : `downpour ${v.toFixed(2)}`), () => (s.rain = null));
     this.slider('wind', 'Wind', 0, 1, 0.01, () => s.wind, (v) => (s.wind = v), (v) => (v < 0.05 ? 'calm' : v < 0.35 ? `breeze ${v.toFixed(2)}` : v < 0.7 ? `gale ${v.toFixed(2)}` : `hurricane ${v.toFixed(2)}`));

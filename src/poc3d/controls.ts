@@ -11,6 +11,8 @@ const MAX_SHEAR = 1.6;
 /** Jump: take-off speed (m/s) and gravity (m/s^2): about 0.8 m high, 0.7 s in the air. */
 const JUMP_V = 4.4;
 const GRAVITY = 12;
+/** How far the view bobs with each step (metres either way). */
+const BOB = 0.04;
 /** Longest frame step: after a hitch the walker doesn't leap (or tunnel through a wall). */
 const MAX_DT = 0.05;
 /**
@@ -69,6 +71,11 @@ export class FirstPerson {
   /** Footsteps: called on each step (running or walking), and on landing (with the fall speed, m/s). */
   onStep: ((run: boolean) => void) | null = null;
   onLand: ((speed: number) => void) | null = null;
+  /**
+   * The walker's body, when it's drawn (models/firstPerson.ts): how it rides its stride, -1 as each foot lands and
+   * 1 between. The view bobs with it, and the steps are the body's own footfalls (onStep isn't called).
+   */
+  gaitBob: (() => number) | null = null;
   /** Ignore the first mouse event after locking (often a jump from where the cursor was). */
   private settle = true;
 
@@ -142,6 +149,11 @@ export class FirstPerson {
     this.level = y;
   }
 
+  /** The floor under the walker's feet (no bob, no jump). */
+  get feet(): number {
+    return this.level;
+  }
+
   get shearMode(): boolean {
     return this.shearOn;
   }
@@ -193,7 +205,8 @@ export class FirstPerson {
       }
     }
     if (f === 0 && r === 0) {
-      if (!this.fly) pos.y = (this.level = floor(pos.x, pos.z)) + EYE + this.air;
+      // (The body's stride eases out as it stops, and the bob with it.)
+      if (!this.fly) pos.y = (this.level = floor(pos.x, pos.z)) + EYE + this.air + (this.gaitBob && this.air === 0 ? this.gaitBob() * BOB : 0);
       return;
     }
     const fwd = new THREE.Vector3();
@@ -217,13 +230,18 @@ export class FirstPerson {
     if (this.fly || !this.blocked(pos.x + dx, pos.z, RADIUS, level)) pos.x += dx;
     if (this.fly || !this.blocked(pos.x, pos.z + dz, RADIUS, level)) pos.z += dz;
     if (!this.fly) {
-      // A step at each low point of the bob (two per cycle); none in the air.
+      // Without a body, a step at each low point of the bob (two per cycle); none in the air.
       const before = Math.floor(this.bob / Math.PI + 0.5);
       if (this.air === 0) this.bob += dt * speed * 1.8;
-      if (Math.floor(this.bob / Math.PI + 0.5) !== before) this.onStep?.(running);
+      if (!this.gaitBob && Math.floor(this.bob / Math.PI + 0.5) !== before) this.onStep?.(running);
       this.level = floor(pos.x, pos.z);
-      pos.y = this.level + EYE + this.air + (this.air === 0 ? Math.sin(this.bob) * 0.04 : 0);
+      pos.y = this.level + EYE + this.air + (this.air === 0 ? (this.gaitBob ? this.gaitBob() : Math.sin(this.bob)) * BOB : 0);
     }
+  }
+
+  /** Off the ground (a jump): no footfalls. */
+  get airborne(): boolean {
+    return this.air > 0 || this.vy !== 0;
   }
 
   /** The view's pitch (radians, up positive) when it's a shift of the image rather than the camera's own
