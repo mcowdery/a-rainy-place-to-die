@@ -1,0 +1,21 @@
+{
+  "file": "b_men_no_yoru_1.flac",
+  "id": "b_men_no_yoru",
+  "take": 1,
+  "station": "cypher",
+  "title": "B面の夜",
+  "artist": "DJ 終電",
+  "caption": "Mellow instrumental hip hop made from Japanese city pop. A slow, dusty boom-bap drum loop with a lazy swing, warm round bass, dreamy Rhodes electric piano playing lush major seventh chords, a looped clean guitar phrase with chorus effect, soft string pads, a wistful soprano saxophone melody, gentle vinyl crackle and occasional record scratches. Relaxed, nostalgic, cruising slowly through the sleeping city. Instrumental, no vocals.",
+  "lyrics": "[Instrumental]",
+  "language": "",
+  "bpm": 90,
+  "key": "F major",
+  "seconds": 175.0,
+  "seed": 3111,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:17",
+  "took": 45,
+  "batch": "citypop-rap-01",
+  "model": "acestep-v15-turbo"
+}

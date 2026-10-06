@@ -56,6 +56,7 @@ const CRUISER_SPEC: CarSpec = {
   reverse: 3,
   shift: [11, 19, 27, 35, 999],
   size: [1.15, 0.45],
+  twoWheels: true,
 };
 
 /** The Ōmi Hayate 900RR: light, short, a lot of power, quick to turn; grips harder, slides when you make it. */

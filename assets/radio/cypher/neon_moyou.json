@@ -1,0 +1,21 @@
+{
+  "file": "neon_moyou_1.flac",
+  "id": "neon_moyou",
+  "take": 1,
+  "station": "cypher",
+  "title": "ネオン模様",
+  "artist": "真夜中シアター feat. MC 夜風",
+  "caption": "1980s Japanese city pop with a guest rap verse. A glamorous, smoky female lead vocal sings the verses and chorus in Japanese; midway through, a smooth male MC raps a verse in Japanese over the groove. Four-on-the-floor disco-funk drums with handclaps, driving slap bass, scratchy rhythm guitar, sparkling electric piano, lush string synthesizer, bright horn section riffs. Glamorous, bittersweet, strangers dancing close in a neon-lit club. Warm analog tape sound.",
+  "lyrics": "[Intro]\n\n[Verse 1 - Sung]\n鏡の前で 口紅ひいて\n今夜は誰にも 縛られない\nフロアの隅で 目が合うたびに\n胸のどこかが 熱くなるの\n\n[Pre-Chorus - Sung]\n恋じゃないわ ただの遊び\nそう言い聞かせて\n\n[Chorus - Sung]\nネオン模様 揺れる夜に\nあなたの影が 重なってく\nネオン模様 夢のように\n朝になれば 消えてしまうの\n\n[Verse 2 - Rap]\nミラーボールが 回る真夜中\n君の瞳に 落ちる流れ星\n言葉はいらない リズムが通訳\nグラス合わせりゃ 始まる今夜\n名前も聞かない 明日も聞かない\nこの一曲が 終わるまでは\n都会の恋は ネオンと同じ\n朝日が昇れば 色を失くす\nそれでも今は 手を離さないで\nベースの鼓動に 身をまかせて\n君が笑えば 夜が輝く\n最後のダンスを 俺にください\n\n[Pre-Chorus - Sung]\n恋じゃないわ ただの遊び\nそう言い聞かせて\n\n[Chorus - Sung]\nネオン模様 揺れる夜に\nあなたの影が 重なってく\nネオン模様 夢のように\n朝になれば 消えてしまうの\n\n[Instrumental Break - Horn Section]\n\n[Chorus - Sung]\nネオン模様 揺れる夜に\nあなたの影が 重なってく\nネオン模様 夢のように\n朝になれば 消えてしまうの\n\n[Outro]",
+  "language": "ja",
+  "bpm": 110,
+  "key": "E minor",
+  "seconds": 190.0,
+  "seed": 2505,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:12",
+  "took": 282,
+  "batch": "citypop-rap-01",
+  "model": "acestep-v15-turbo"
+}

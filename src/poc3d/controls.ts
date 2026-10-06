@@ -76,6 +76,8 @@ export class FirstPerson {
    * 1 between. The view bobs with it, and the steps are the body's own footfalls (onStep isn't called).
    */
   gaitBob: (() => number) | null = null;
+  /** How far the eyes are below standing height (m): his body squatting. */
+  drop = 0;
   /** Ignore the first mouse event after locking (often a jump from where the cursor was). */
   private settle = true;
 
@@ -178,6 +180,14 @@ export class FirstPerson {
     this.applyProjection();
   }
 
+  /** In the air (a jump, a drop): how high the feet are above the floor (m) and how fast he's rising (m/s). */
+  get airHeight(): number {
+    return this.air;
+  }
+  get airSpeed(): number {
+    return this.vy;
+  }
+
   update(dt: number): void {
     this.applyProjection();
     dt = Math.min(dt, MAX_DT);
@@ -206,7 +216,7 @@ export class FirstPerson {
     }
     if (f === 0 && r === 0) {
       // (The body's stride eases out as it stops, and the bob with it.)
-      if (!this.fly) pos.y = (this.level = floor(pos.x, pos.z)) + EYE + this.air + (this.gaitBob && this.air === 0 ? this.gaitBob() * BOB : 0);
+      if (!this.fly) pos.y = (this.level = floor(pos.x, pos.z)) + EYE - this.drop + this.air + (this.gaitBob && this.air === 0 ? this.gaitBob() * BOB : 0);
       return;
     }
     const fwd = new THREE.Vector3();
@@ -235,7 +245,7 @@ export class FirstPerson {
       if (this.air === 0) this.bob += dt * speed * 1.8;
       if (!this.gaitBob && Math.floor(this.bob / Math.PI + 0.5) !== before) this.onStep?.(running);
       this.level = floor(pos.x, pos.z);
-      pos.y = this.level + EYE + this.air + (this.air === 0 ? (this.gaitBob ? this.gaitBob() : Math.sin(this.bob)) * BOB : 0);
+      pos.y = this.level + EYE - this.drop + this.air + (this.air === 0 ? (this.gaitBob ? this.gaitBob() : Math.sin(this.bob)) * BOB : 0);
     }
   }
 

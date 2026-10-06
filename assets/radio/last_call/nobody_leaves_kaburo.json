@@ -1,0 +1,21 @@
+{
+  "file": "nobody_leaves_kaburo_1.flac",
+  "id": "nobody_leaves_kaburo",
+  "take": 1,
+  "station": "last_call",
+  "title": "Nobody Leaves Kaburo",
+  "artist": "Johnny Vesper & The Night Shift",
+  "caption": "Slow, dark noir blues with a jazz band. A gravelly, weathered male baritone singing in English, half sung and half growled, like a man telling his story at the end of the bar. Prowling upright bass, a muted trumpet, twangy tremolo electric guitar, smoky tenor saxophone, slow swinging drums with brushes, a low piano. Shady, fatalistic, wry, a city of rain and neon that never lets anyone go. Warm, roomy, vintage club sound.",
+  "lyrics": "[Intro - Upright Bass and Muted Trumpet]\n\n[Verse 1]\nI came in on the night train with a suitcase and a name\nFigured I'd be gone by Friday, well, the joke's on me again\nThe dragon on the rooftop, he's been watching all along\nBrother, nobody leaves Kaburo once the neon sings its song\n\n[Verse 2]\nI owe a man some money and I owe a girl the truth\nI left them both in an alley with the better part of my youth\nThe rain comes down like judgment and the gutters run with gin\nNobody leaves Kaburo, they just learn to live in sin\n\n[Chorus]\nNobody leaves, nobody leaves\nYou can pack your bag, you can roll your sleeves\nThe last train's gone and the bridges are long\nNobody leaves Kaburo\n\n[Verse 3]\nThere's a card game in the back room where the losers never fold\nThere's a cop who looks the other way for a little bit of gold\nAnd a woman at the counter, she just pours and doesn't ask\nNobody leaves Kaburo, friend, we all just wear the mask\n\n[Chorus]\nNobody leaves, nobody leaves\nYou can pack your bag, you can roll your sleeves\nThe last train's gone and the bridges are long\nNobody leaves Kaburo\n\n[Instrumental Break - Muted Trumpet Solo]\n\n[Chorus]\nNobody leaves, nobody leaves\nYou can pack your bag, you can roll your sleeves\nThe last train's gone and the bridges are long\nNobody leaves Kaburo\n\n[Outro]\nNobody leaves\nNobody leaves",
+  "language": "en",
+  "bpm": 64,
+  "key": "E minor",
+  "seconds": 210.0,
+  "seed": 5404,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:32",
+  "took": 139,
+  "batch": "noir-02",
+  "model": "acestep-v15-turbo"
+}

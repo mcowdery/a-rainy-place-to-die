@@ -90,6 +90,11 @@ export interface ZoneLook {
   readonly open: number | null;
   /** Share of buildings that are homes: a front door and a window on the ground floor, no shop. */
   readonly homes: number;
+  /**
+   * How much of the city's vice goes on behind the zone's windows, 0 to 1 (real/windowScenes.ts): the share of its
+   * rooms where it shows at night, and of its buildings whose upper floors are bars and clubs.
+   */
+  readonly vice: number;
   /** Share of low homes (up to three storeys) with a pitched roof. */
   readonly roofs: number;
   /** Share of homes with bicycles parked out front. */
@@ -195,6 +200,8 @@ export interface DistrictStyle3 {
   readonly cars?: CarMix;
   /** What the zone's people wear (a zone's `people:`; otherwise the district's, district/peopleMix.ts). */
   readonly people?: PeopleMix;
+  /** How alive the zone's streets are at night, 0 asleep to 1 sleepless (a zone's `night:`; otherwise the district's, district/peopleHours.ts). */
+  readonly night?: number;
 }
 
 const BOUNDARY_ROAD = 16;

@@ -22,6 +22,8 @@ zones:
       colors: ['#ffffff', '#ffe45f']
     ads: { street: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.4
       windows: { blank: 50, small: 35, ribbon: 15 }
       walls: ['#9a9890', '#b8b4a8', '#7a7870', '#5a6a7a', '#a86a4a']
       tiled: false

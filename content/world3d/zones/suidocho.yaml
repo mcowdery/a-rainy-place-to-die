@@ -45,6 +45,7 @@ zones:
   D:
     id: dome_city
     name: Dome City
+    night: 0.5
     plan:
       floors: [[3, 5, 70], [6, 9, 30]]
       lotW: [20, 36]
@@ -60,6 +61,8 @@ zones:
       colors: ['#ffffff', '#4fe3ff', '#ffe45f', '#ff5fc8']
     ads: { fun: 3, mainstream: 3, food: 2 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.2
       windows: { curtain: 40, ribbon: 40, blank: 20 }
       walls: ['#d8dcdc', '#b8c4cc', '#e8e4dc', '#8a9aa8']
       tiled: false

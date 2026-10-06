@@ -13,6 +13,8 @@ const vnScenes = import.meta.glob('../../adult/content/vn/*/scene.json', { eager
 const vnAssets = import.meta.glob('../../adult/content/vn/*/assets/*', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const phoneFiles = import.meta.glob('../../adult/content/phone/*.yaml', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const phoneMedia = import.meta.glob('../../adult/content/phone/media/*', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+// (In file-name order, so the scenes keep their cells from build to build.)
+const windowScenes = import.meta.glob('../../adult/content/windows/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
 
 export const edition: Edition = {
   name: 'uncensored',
@@ -28,4 +30,5 @@ export const edition: Edition = {
   },
   kaburoArt,
   characters,
+  windowScenes: Object.keys(windowScenes).sort().map((k) => windowScenes[k]),
 };

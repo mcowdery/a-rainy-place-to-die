@@ -1,0 +1,21 @@
+{
+  "file": "sa_ngiti_mo_1.flac",
+  "id": "sa_ngiti_mo",
+  "take": 1,
+  "station": "harana",
+  "title": "Sa Ngiti Mo",
+  "artist": "Lino Amihan",
+  "caption": "Bright, easygoing Filipino R&B-pop love song sung in Tagalog. A smooth, smiling young male tenor with a light falsetto hook and playful ad-libs, stacked sunny harmonies. Bouncy Rhodes electric piano, a plucky clean guitar riff, warm melodic bass, a crisp mid-tempo drum groove with finger snaps and handclaps, soft synth bells. Lighthearted, sweet, helplessly charmed by a girl's smile. Modern, polished, warm production.",
+  "lyrics": "[Intro]\n\n[Verse 1]\nPagod ako galing sa mahabang araw\nMabigat ang balikat, masakit ang ulo\nPero pagbukas mo ng pinto\nNawala ang lahat ng problema ko\n\n[Pre-Chorus]\nAno bang mayroon ka\nNa wala sa iba?\n\n[Chorus]\nSa ngiti mo, lumiliwanag ang lahat\nSa ngiti mo, gumagaan ang bigat\nIsang sulyap lang, ayos na ako\nGanyan kalakas ang tama ko sa'yo\nSa ngiti mo, ako'y nahuhulog\nPaulit-ulit, 'di na umaahon\nSa ngiti mo\nDoon ako uuwi\n\n[Verse 2]\nKinukuwento mo ang araw mo sa akin\nKumikinang ang mata mo habang nagsasalita\nHindi ko na marinig ang sinasabi mo\nNakatitig lang ako, parang tanga\n\n[Pre-Chorus]\nAno bang mayroon ka\nNa wala sa iba?\n\n[Chorus]\nSa ngiti mo, lumiliwanag ang lahat\nSa ngiti mo, gumagaan ang bigat\nIsang sulyap lang, ayos na ako\nGanyan kalakas ang tama ko sa'yo\nSa ngiti mo, ako'y nahuhulog\nPaulit-ulit, 'di na umaahon\nSa ngiti mo\nDoon ako uuwi\n\n[Bridge]\nNgumiti ka lang palagi\nIyan lang ang hiling ko\nAt kung malungkot ka man\nAko naman ang ngingiti para sa'yo\n\n[Chorus]\nSa ngiti mo, ako'y nahuhulog\nPaulit-ulit, 'di na umaahon\nSa ngiti mo\nDoon ako uuwi\n\n[Outro]",
+  "language": "tl",
+  "bpm": 100,
+  "key": "F major",
+  "seconds": 195.0,
+  "seed": 4707,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:03",
+  "took": 72,
+  "batch": "opm-01",
+  "model": "acestep-v15-turbo"
+}

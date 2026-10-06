@@ -13,7 +13,8 @@ import type { OwnCar } from './ownCar';
  * cockpit (the car's cabin, `interior`, models/carInterior.ts), the bonnet, the bumper; remembered), Z looks back,
  * the mouse looks round (the view swings back to straight ahead). The page places the camera (`placeCamera`) once
  * the car's been posed for the frame. You get out by the driver's door, on the
- * right (Japan drives on the left).
+ * right (Japan drives on the left). Aiming a gun from your car's seat (`startAim`, district/carGun.ts: the right
+ * button) the view is the driver's eyes along the aim, which holds its place in the world while the car turns.
  * Collisions stop the car (with a knock back); the traffic system keeps drawing it and stops for it.
  * Your own car (ownCar.ts) drives on the racing model instead: grip, slides, its tuning; the same keys.
  */
@@ -63,6 +64,10 @@ export class Driving {
   private baseFov = 0;
   /** A knock this frame (speed of the impact, m/s), for a sound and a shake; 0 if none. */
   bump = 0;
+  /** Where the driver's eyes are from the seat's own (the car's frame): he leans to the window he shoots from (race/carDriver.ts). */
+  readonly eyeShift = new THREE.Vector3();
+  /** Aiming from the driver's seat: where (world yaw, 0 along +z, and pitch, rad); null when not. */
+  aim: { yaw: number; pitch: number } | null = null;
   /** Keys held (from the keyboard; tests press them directly). */
   readonly keys = new Set<string>();
   private yaw = 0;
@@ -98,8 +103,13 @@ export class Driving {
     document.addEventListener('mousemove', (e) => {
       if (!this.car || !document.pointerLockElement) return;
       if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
-      this.orbitYaw -= e.movementX * 0.003;
       const my = this.invertY ? -e.movementY : e.movementY;
+      if (this.aim) {
+        this.aim.yaw -= e.movementX * 0.0018;
+        this.aim.pitch = THREE.MathUtils.clamp(this.aim.pitch - my * 0.0018, -0.45, 0.4);
+        return;
+      }
+      this.orbitYaw -= e.movementX * 0.003;
       this.lookPitch = THREE.MathUtils.clamp(this.lookPitch - my * 0.003, -0.6, 0.5);
       this.mouseIdle = 0;
     });
@@ -151,7 +161,37 @@ export class Driving {
     return null;
   }
 
+  /** Raise the aim: from where the view looks now (a little up from the chase camera's downward look). */
+  startAim(): void {
+    if (this.aim || !this.car) return;
+    const d = this.camera.getWorldDirection(new THREE.Vector3());
+    this.aim = { yaw: Math.atan2(d.x, d.z), pitch: THREE.MathUtils.clamp(Math.asin(d.y) + (outside(this.view) ? 0.12 : 0), -0.1, 0.2) };
+  }
+
+  /** Lower it: the view carries on looking where you were aiming, then eases back ahead. */
+  stopAim(): void {
+    const a = this.aim;
+    this.aim = null;
+    if (!a || !this.car) return;
+    const rel = a.yaw - Math.atan2(this.car.dx, this.car.dz);
+    this.orbitYaw = Math.atan2(Math.sin(rel), Math.cos(rel));
+    this.lookPitch = outside(this.view) ? 0 : THREE.MathUtils.clamp(a.pitch, -0.6, 0.5);
+    this.mouseIdle = 0;
+  }
+
+  /** A jolt to the view (a hit on the car, a ram): 0-1. */
+  jolt(amount: number): void {
+    this.shake = Math.max(this.shake, Math.min(1, amount));
+  }
+
+  /** A shot's kick on the aim (rad up). */
+  kick(up: number): void {
+    if (this.aim) this.aim.pitch = Math.min(0.4, this.aim.pitch + up);
+    this.shake = Math.max(this.shake, 0.3);
+  }
+
   leave(): void {
+    this.aim = null;
     if (this.car) this.car.hideBody = false;
     if (this.interior) this.interior.group.visible = false;
     this.interior = null;
@@ -293,18 +333,21 @@ export class Driving {
     this.shake = Math.max(0, this.shake - dt * 3);
     const jolt = (): number => (Math.random() - 0.5) * this.shake * 0.25;
     const cam = this.camera;
-    // Z looks back (over the shoulder from inside; the chase cameras swing round in front).
-    this.lookBack += ((this.keys.has('KeyZ') ? 1 : 0) - this.lookBack) * Math.min(1, dt * 9);
+    // Z or C, held, looks back (from inside, turned in the seat to see out of the rear screen; the chase cameras
+    // swing round in front).
+    this.lookBack += ((this.keys.has('KeyZ') || this.keys.has('KeyC') ? 1 : 0) - this.lookBack) * Math.min(1, dt * 9);
     const back = this.lookBack * this.lookBack * (3 - 2 * this.lookBack) * Math.PI;
-    const view: DriveViewId = this.bike ? (outside(this.view) ? 'chase' : 'bumper') : this.view;
     const L = this.interior?.layout ?? null;
+    // Aiming from your car's seat: his eyes, whatever the camera was.
+    const aimed = this.aim && L && !this.bike ? this.aim : null;
+    const view: DriveViewId = this.bike ? (outside(this.view) ? 'chase' : 'bumper') : aimed ? 'cockpit' : this.view;
     const inside = view === 'cockpit' && (!!L || c.bus);
     c.hideBody = view === 'bumper' || (view === 'cockpit' && !inside);
     if (this.interior) this.interior.group.visible = inside;
     const speed = Math.abs(this.own ? this.own.sim.u : c.v);
     const base = this.baseFov || 68;
     // (The cockpit keeps the walker's field of view: any wider shows more city, and the city's cost is its geometry.)
-    if (!this.bike) this.setFov(base + (view === 'far' ? -6 : 0) + Math.min(6, speed * 0.14));
+    if (!this.bike) this.setFov(aimed ? base - 8 : base + (view === 'far' ? -6 : 0) + Math.min(6, speed * 0.14));
     if (inside || view === 'hood') {
       const frame = this.carFrame();
       const sim = this.own?.sim;
@@ -315,9 +358,25 @@ export class Driving {
         this.head.update(dt, ax, ay, speed, this.bump);
         this.bendYaw += (lookInto(sim ? sim.steer : this.steer, speed, sim ? sim.slide : 0) - this.bendYaw) * Math.min(1, dt * 3);
         // (A bus has no cabin of ours: its driver's seat, front right, over the new bus's own inside.)
-        const eye = L ? L.eye.clone() : new THREE.Vector3(-0.72, 2.3, c.half - 1.15);
-        const look = THREE.MathUtils.clamp(this.orbitYaw, -2.2, 2.2) + this.bendYaw + back;
-        placeInCar(cam, frame, turnedEye(eye, look).add(this.head.offset), look, this.lookPitch - 0.06, 0.5);
+        const eye = L ? L.eye.clone().add(this.eyeShift) : new THREE.Vector3(-0.72, 2.3, c.half - 1.15);
+        if (aimed) {
+          // Along the aim, level with the world (the aim stays put while the car turns and leans under it).
+          const rel = aimed.yaw - Math.atan2(c.dx, c.dz);
+          frame.updateMatrixWorld();
+          cam.position.copy(turnedEye(eye, Math.atan2(Math.sin(rel), Math.cos(rel))).add(this.head.offset).applyMatrix4(frame.matrixWorld));
+          cam.position.x += jolt() * 0.3;
+          cam.position.y += jolt() * 0.3;
+          const cp = Math.cos(aimed.pitch);
+          cam.up.set(0, 1, 0);
+          cam.lookAt(cam.position.x + Math.sin(aimed.yaw) * cp, cam.position.y + Math.sin(aimed.pitch), cam.position.z + Math.cos(aimed.yaw) * cp);
+        } else {
+          const look = THREE.MathUtils.clamp(this.orbitYaw, -2.2, 2.2) + this.bendYaw + back;
+          // Looking back he turns in his seat and leans to the middle of the car, so he sees between the seats and
+          // out of the rear screen (from where he sits his own seat's back fills the view).
+          const turn = this.lookBack * this.lookBack * (3 - 2 * this.lookBack);
+          const between = new THREE.Vector3(eye.x * 0.1, eye.y + 0.04, eye.z + 0.04);
+          placeInCar(cam, frame, turnedEye(eye, look).lerp(between, turn).add(this.head.offset), look, this.lookPitch - 0.06 + 0.02 * turn, 0.5);
+        }
         if (this.interior) {
           const gear = sim ? sim.gear : c.v < -0.1 ? 0 : 1;
           const rpm = sim ? 900 + sim.rev * (this.interior.redline - 900) : 800 + Math.min(1, Math.abs(c.v) / 20) * 2600;
@@ -368,6 +427,11 @@ export class Driving {
     cam.position.set(pivot.x + (this.camPos.x - pivot.x) * t + jolt(), pivot.y + (this.camPos.y - pivot.y) * t + jolt(), pivot.z + (this.camPos.z - pivot.z) * t);
     const la = Math.atan2(c.dx, c.dz) + back;
     cam.lookAt(c.x + Math.sin(la) * 3, (c.bus ? 2.2 : 1.1) + this.floor, c.z + Math.cos(la) * 3);
+  }
+
+  /** How far the look back has come round (0-1: Z or C held). */
+  get lookingBack(): number {
+    return this.lookBack;
   }
 
   /** Looking about from the vehicle (rad): yaw left positive, pitch up positive (a bike's views use them). */

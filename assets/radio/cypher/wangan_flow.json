@@ -1,0 +1,21 @@
+{
+  "file": "wangan_flow_1.flac",
+  "id": "wangan_flow",
+  "take": 1,
+  "station": "cypher",
+  "title": "湾岸フロウ",
+  "artist": "ワンガン・スムース",
+  "caption": "Japanese city pop and AOR blended with smooth early 1990s hip hop. Laid-back male rap verses in Japanese, low and conversational; a silky male falsetto sings the chorus with layered harmonies. Mid-tempo head-nodding drum machine groove, deep round synth bass, glassy digital electric piano, clean chorus-effect guitar licks, shimmering synth pads, a smooth alto saxophone answering the vocal. A night drive on the bayside expressway, cool sea air, city lights sliding past. Polished, glossy studio production.",
+  "lyrics": "[Intro]\n\n[Verse 1 - Rap]\nキーを回せば エンジンが歌う\n午前二時の湾岸 風が誘う\nガレージを出て 高架を上がる\nオレンジの灯りが 後ろへ下がる\n左の窓には 真っ黒な海\n右には眠らない ビルの群れ\nラジオのダイヤル 少し回して\nベースの低音が シートを揺らして\nアクセル踏むたび 悩みが消える\nミラーの中に 昨日が見える\n追い越し車線 誰もいない道\n今夜は俺だけの フリーウェイ\n\n[Chorus - Sung]\n湾岸フロウ 流れてゆく\n光の川を すべるように\n湾岸フロウ どこまででも\n夜が明けるまで 走らせて\n\n[Verse 2 - Rap]\n汐見の橋から 観覧車が見える\nピンクとブルーの 光が揺れる\n隣のシートは 今夜も空っぽ\nそれでもいいさ ビートが相棒\n恵比寿島のパーキング 仲間が待つ\n缶コーヒー片手に 車を語る\n誰が速いとか どうでもいい話\n走ることだけが 俺らのあかし\nトンネル抜けたら 潮の香り\nメーターの針と 月の明かり\n東の空が 白くなるまで\nこの道の上が 俺の居場所で\n\n[Chorus - Sung]\n湾岸フロウ 流れてゆく\n光の川を すべるように\n湾岸フロウ どこまででも\n夜が明けるまで 走らせて\n\n[Instrumental Break - Saxophone Solo]\n\n[Chorus - Sung]\n湾岸フロウ 流れてゆく\n光の川を すべるように\n湾岸フロウ どこまででも\n夜が明けるまで 走らせて\n\n[Outro]",
+  "language": "ja",
+  "bpm": 100,
+  "key": "F# minor",
+  "seconds": 190.0,
+  "seed": 2202,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:05",
+  "took": 91,
+  "batch": "citypop-rap-01",
+  "model": "acestep-v15-turbo"
+}

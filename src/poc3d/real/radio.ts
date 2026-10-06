@@ -14,6 +14,8 @@ import { Tape } from './tape';
 
 const files = import.meta.glob('../../../assets/radio/*/*.{ogg,opus,mp3}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const urlOf = (station: string, file: string): string | null => files[`../../../assets/radio/${station}/${file}`] ?? null;
+/** Where a station's track is served from (the phone's music app plays the same files: real/musicPlayer.ts). */
+export const trackUrl = urlOf;
 
 /** The stations whose music this build has (content/radio/stations.yaml; tests/radio.test.ts checks the file). */
 export function loadStations(): Station[] {

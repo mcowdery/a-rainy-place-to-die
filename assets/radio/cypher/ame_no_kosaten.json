@@ -1,0 +1,21 @@
+{
+  "file": "ame_no_kosaten_1.flac",
+  "id": "ame_no_kosaten",
+  "take": 1,
+  "station": "cypher",
+  "title": "雨の交差点",
+  "artist": "レディ・カスミ",
+  "caption": "Melancholy Japanese city pop ballad crossed with slow, soulful hip hop. A soft-spoken woman raps the verses in Japanese, gentle and wistful, then sings the aching chorus with airy harmonies. Slow, heavy boom-bap drums, warm fretless bass, mellow Rhodes electric piano, lush string synthesizer pads, a lonely saxophone. Bittersweet, rain on a neon crossing late at night, thinking of someone who is gone. Smooth analog studio sound.",
+  "lyrics": "[Intro]\n\n[Verse 1 - Rap]\n傘の花が咲く 交差点の真ん中\n信号が変わっても 動けないまま\nあなたと歩いた この横断歩道\n今はひとりきり 雨音がメロディー\n大きなスクリーン 知らない誰かが笑う\n濡れた舗道に 赤と青が混ざる\n電話ボックスの 灯りの中で\nかけられない番号 指でなぞって\n忘れたふりして 暮らしてきたけど\n雨が降るたび 胸がうずくの\n強がりばかりの 都会の女\n本当は今でも 待っているのかな\n\n[Chorus - Sung]\n雨の交差点 立ち止まれば\nあの日の声が 聞こえてくる\n雨の交差点 涙まじり\nネオンがにじんで 見えないの\n\n[Verse 2 - Rap]\n喫茶店の窓 曇ったガラス\n冷めたコーヒーと 吸い殻の灰皿\n二人で決めた 記念日の店\n今では違う 名前の看板\n時間は流れる 街も変わる\n私だけがまだ 同じ場所にいる\nだけど今夜は 少し違うの\n雨のリズムが 背中を押すの\n最終電車に 飛び乗ってみよう\n知らない駅まで 行ってみよう\nさよならあなた さよなら昨日\n雨があがれば 新しい私\n\n[Chorus - Sung]\n雨の交差点 立ち止まれば\nあの日の声が 聞こえてくる\n雨の交差点 涙まじり\nネオンがにじんで 見えないの\n\n[Instrumental Break - Saxophone Solo]\n\n[Chorus - Sung]\n雨の交差点 立ち止まれば\nあの日の声が 聞こえてくる\n雨の交差点 涙まじり\nネオンがにじんで 見えないの\n\n[Outro]",
+  "language": "ja",
+  "bpm": 84,
+  "key": "D minor",
+  "seconds": 200.0,
+  "seed": 2909,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:15",
+  "took": 47,
+  "batch": "citypop-rap-01",
+  "model": "acestep-v15-turbo"
+}

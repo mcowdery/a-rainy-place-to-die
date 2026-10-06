@@ -1,0 +1,110 @@
+{
+  "when": "evening",
+  "id": "v_hotel_bottle",
+  "label": "drinking alone on the edge of the bed",
+  "cat": [
+    "v_hotel",
+    "v_love"
+  ],
+  "back": [
+    [
+      "picture",
+      0,
+      1.65
+    ]
+  ],
+  "front": [
+    [
+      "bed",
+      -0.1,
+      1.7,
+      -1
+    ],
+    [
+      "nightstand",
+      0.95
+    ]
+  ],
+  "a": [
+    {
+      "who": "suit",
+      "x": 0.2,
+      "pose": {
+        "yaw": 90,
+        "lL": [
+          88,
+          0,
+          88
+        ],
+        "lR": [
+          88,
+          0,
+          88
+        ],
+        "lean": 30,
+        "nod": 24,
+        "aR": [
+          40,
+          0,
+          50
+        ],
+        "aL": [
+          40,
+          0,
+          50
+        ]
+      },
+      "seat": 0.5,
+      "hold": [
+        [
+          "R",
+          "bottle",
+          90
+        ]
+      ]
+    }
+  ],
+  "b": [
+    {
+      "who": "suit",
+      "x": 0.2,
+      "pose": {
+        "yaw": 90,
+        "lL": [
+          88,
+          0,
+          88
+        ],
+        "lR": [
+          88,
+          0,
+          88
+        ],
+        "lean": -8,
+        "nod": -28,
+        "aR": [
+          77.3,
+          -3,
+          104.5
+        ],
+        "aL": [
+          10,
+          0,
+          20
+        ]
+      },
+      "seat": 0.5,
+      "hold": [
+        [
+          "R",
+          "bottle",
+          130
+        ]
+      ]
+    }
+  ],
+  "anim": [
+    6,
+    0.72
+  ]
+}

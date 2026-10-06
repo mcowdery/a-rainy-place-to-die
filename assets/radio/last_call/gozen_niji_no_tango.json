@@ -1,0 +1,21 @@
+{
+  "file": "gozen_niji_no_tango_1.flac",
+  "id": "gozen_niji_no_tango",
+  "take": 1,
+  "station": "last_call",
+  "title": "午前二時のタンゴ",
+  "artist": "紅マリ子",
+  "caption": "1960s Japanese kayo tango, dramatic and dangerous, film noir mood. A passionate, dark-toned female vocalist singing in Japanese with theatrical intensity and a strong vibrato. Stabbing tango rhythm from a bandoneon and piano, a weeping solo violin, upright bass, castanets and snare rolls, a string section swelling in the chorus. Seductive, bitter, a femme fatale dancing with the man who betrayed her. Vintage studio sound with plate reverb.",
+  "lyrics": "[Intro - Bandoneon and Violin]\n\n[Verse 1]\n赤い靴を はいた夜は\n誰かを傷つけたくなるの\nグラスの縁に 口紅のあと\nあなたの嘘を 数えてる\n\n[Chorus]\n踊りましょう 午前二時のタンゴ\n愛と憎しみ 紙一重\n踊りましょう 最後のタンゴ\n夜が明けたら 他人同士\n\n[Verse 2]\n薔薇の棘より 痛いのは\nやさしい声の 裏切りね\n知っていたのよ はじめから\nそれでも抱かれた 私の負け\n\n[Chorus]\n踊りましょう 午前二時のタンゴ\n愛と憎しみ 紙一重\n踊りましょう 最後のタンゴ\n夜が明けたら 他人同士\n\n[Instrumental Break - Bandoneon and Violin]\n\n[Verse 3]\nハンドバッグの 奥底に\n冷たい秘密 しのばせて\n微笑みながら 腕の中\nステップ踏むの ナイフのように\n\n[Chorus]\n踊りましょう 午前二時のタンゴ\n愛と憎しみ 紙一重\n踊りましょう 最後のタンゴ\n夜が明けたら 他人同士\n\n[Outro]",
+  "language": "ja",
+  "bpm": 116,
+  "key": "G minor",
+  "seconds": 190.0,
+  "seed": 5505,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:33",
+  "took": 53,
+  "batch": "noir-02",
+  "model": "acestep-v15-turbo"
+}

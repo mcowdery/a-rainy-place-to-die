@@ -1,0 +1,21 @@
+{
+  "file": "kung_papayag_ka_1.flac",
+  "id": "kung_papayag_ka",
+  "take": 1,
+  "station": "harana",
+  "title": "Kung Papayag Ka",
+  "artist": "Lino Amihan",
+  "caption": "Heartfelt Filipino soul ballad sung in Tagalog, slow and swaying in six-eight time. A tender young male tenor, breathy and vulnerable in the verses, soaring into a pleading falsetto in the chorus, with gospel-tinged backing harmonies. Soft grand piano, warm electric piano, a swelling string section, round bass, gentle drums with brushes. Earnest, nervous, a young man finally confessing his love to a girl. Warm, polished, emotional production.",
+  "lyrics": "[Intro]\n\n[Verse 1]\nMatagal ko nang gustong sabihin sa'yo\nNgunit laging nauutal ang dila ko\nKaibigan mo lang ako sa'yong paningin\nPero iba ang laman ng aking damdamin\n\n[Pre-Chorus]\nNgayong gabi, lalakasan ko ang loob\nBahala na kung ano ang isasagot\n\n[Chorus]\nKung papayag ka, aalagaan kita\nKung papayag ka, hindi ka na mag-iisa\nIbibigay ko ang lahat ng kaya ko\nAng oras, ang puso, ang buong mundo\nKung papayag ka, ako'y maghihintay\nKahit gaano katagal, habang-buhay\nIsang oo mo lang\nAng hinihiling ko\n\n[Verse 2]\nHindi ako mayaman, wala akong kotse\nPero may gitara ako at mga tula\nIhahatid kita pauwi tuwing gabi\nAt sasalubungin sa bawat umaga\n\n[Pre-Chorus]\nNgayong gabi, lalakasan ko ang loob\nBahala na kung ano ang isasagot\n\n[Chorus]\nKung papayag ka, aalagaan kita\nKung papayag ka, hindi ka na mag-iisa\nIbibigay ko ang lahat ng kaya ko\nAng oras, ang puso, ang buong mundo\nKung papayag ka, ako'y maghihintay\nKahit gaano katagal, habang-buhay\nIsang oo mo lang\nAng hinihiling ko\n\n[Bridge]\nAt kung hindi man ang sagot mo\nTatanggapin ko nang buong puso\nPero sana, sana lang\nBigyan mo ako ng pagkakataon\n\n[Chorus]\nKung papayag ka, ako'y maghihintay\nKahit gaano katagal, habang-buhay\nIsang oo mo lang\nAng hinihiling ko\n\n[Outro]",
+  "language": "tl",
+  "bpm": 66,
+  "key": "C major",
+  "seconds": 225.0,
+  "seed": 4606,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:01",
+  "took": 102,
+  "batch": "opm-01",
+  "model": "acestep-v15-turbo"
+}

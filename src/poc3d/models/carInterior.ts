@@ -30,6 +30,7 @@ export const INDOOR = 10;
 export type CabinStyle = 'sport' | 'eighties' | 'rotary' | 'turbo' | 'roadster' | 'saloon' | 'luxury' | 'taxi' | 'kei' | 'van' | 'truck' | 'police';
 
 export const CABIN_STYLE: Record<CarType, CabinStyle> = {
+  hardtop: 'luxury',
   sports: 'sport',
   hatch: 'eighties',
   rotary: 'rotary',

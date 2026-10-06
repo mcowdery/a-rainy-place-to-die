@@ -1,13 +1,18 @@
 /**
  * The shotgun's crosshair, a screen overlay at the centre of the view (where a raised gun points:
  * models/firstPerson.ts aims it at AIM_RANGE along the view): a small dim dot with ticks while the gun is
- * out, a brighter ring with the spread's size when it's raised, a flash on firing.
+ * out, a brighter ring with the spread's size when it's raised, a flash on firing. With no line of fire (a car's
+ * driver aiming through his own windscreen) it's a red cross in a red ring instead, pulsing: nothing will fire.
  */
+const RED = '#ff2b3a';
 export class Crosshair {
   private readonly el: HTMLDivElement;
   private readonly ring: HTMLDivElement;
   private readonly dot: HTMLDivElement;
+  private readonly ticks: HTMLDivElement[] = [];
+  private readonly cross: HTMLDivElement;
   private flash = 0;
+  private pulse = 0;
 
   constructor(parent: HTMLElement = document.body) {
     this.el = document.createElement('div');
@@ -25,15 +30,38 @@ export class Crosshair {
       const t = document.createElement('div');
       Object.assign(t.style, { position: 'absolute', left: `${x - (w > h ? 0 : w / 2)}px`, top: `${y - (h > w ? 0 : h / 2)}px`, width: `${w}px`, height: `${h}px`, background: 'rgba(255,255,255,0.8)', boxShadow: '0 0 2px #000' });
       this.el.append(t);
+      this.ticks.push(t);
     }
+    // No line of fire: a cross of two bars.
+    this.cross = document.createElement('div');
+    Object.assign(this.cross.style, { position: 'absolute', left: '0', top: '0', display: 'none', filter: 'drop-shadow(0 0 3px #000)' });
+    for (const turn of [45, -45]) {
+      const bar = document.createElement('div');
+      Object.assign(bar.style, { position: 'absolute', left: '-17px', top: '-2px', width: '34px', height: '4px', borderRadius: '2px', background: RED, transform: `rotate(${turn}deg)` });
+      this.cross.append(bar);
+    }
+    this.el.append(this.cross);
     parent.append(this.el);
   }
 
-  /** Each frame: whether the gun is out, how far raised (0..1), and dt for the shot's flash. */
-  update(out: boolean, raised: number, dt: number): void {
+  /** Each frame: whether the gun is out, how far raised (0..1), and dt for the shot's flash. `blocked`: there's no line of fire. */
+  update(out: boolean, raised: number, dt: number, blocked = false): void {
     this.el.style.display = out ? 'block' : 'none';
     if (!out) return;
     this.flash = Math.max(0, this.flash - dt * 6);
+    this.cross.style.display = blocked ? 'block' : 'none';
+    this.dot.style.display = blocked ? 'none' : 'block';
+    for (const t of this.ticks) t.style.display = blocked ? 'none' : 'block';
+    if (blocked) {
+      this.pulse += dt * 9;
+      this.ring.style.width = this.ring.style.height = '46px';
+      this.ring.style.borderColor = RED;
+      this.ring.style.borderWidth = '3px';
+      this.ring.style.opacity = '1';
+      this.el.style.opacity = String(0.8 + 0.2 * Math.sin(this.pulse));
+      return;
+    }
+    this.ring.style.borderWidth = '1.5px';
     // Raised, the ring tightens to the spread's size; at the hip a little wider and fainter.
     const size = 26 + (1 - raised) * 12 + this.flash * 14;
     this.ring.style.width = this.ring.style.height = `${size}px`;

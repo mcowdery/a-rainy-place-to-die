@@ -21,6 +21,8 @@ export interface ScreenLight {
   readonly halfH: number;
   /** Its current average emitted colour (linear, HDR), written into out. */
   colour(time: number, neon: number, out: THREE.Color): THREE.Color;
+  /** A light that comes and goes (a muzzle flash, real/gunfire.ts): whether it's lit now. Without it, always. */
+  on?(): boolean;
 }
 
 export interface ScreenUniforms {
@@ -119,7 +121,7 @@ export class ScreenLights {
   update(camera: THREE.Vector3, time: number, neon: number): void {
     const near = this.all
       .map((s) => ({ s, d: s.centre.distanceToSquared(camera) }))
-      .filter((x) => x.d < 260 * 260)
+      .filter((x) => x.d < 260 * 260 && (x.s.on?.() ?? true))
       .sort((a, b) => a.d - b.d)
       .slice(0, SCREEN_LIGHTS);
     near.forEach(({ s }, i) => {

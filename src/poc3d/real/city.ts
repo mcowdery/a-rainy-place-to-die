@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { screenLightGlsl, screenUniforms, type ScreenUniforms } from './screenLight';
 import { shopGlsl } from './shopShader';
 import { TRADE } from './shops';
+import { WINDOW_ATLAS, windowsAt, type WindowWeather } from './windowScenes';
 import { WIPER_GLSL } from '../models/wipers';
-import { CAR_RAIN_GLSL } from './carRainGlsl';
+import { CAR_RAIN_GLSL, WALL_RAIN_GLSL } from './carRainGlsl';
 import { WATER_ALPHA, WATER_GLSL } from './waterGlsl';
 
 /** Cars whose headlights light the city (the nearest to the camera). */
@@ -87,6 +88,19 @@ export interface CityUniforms extends ScreenUniforms {
   uHorizon: { value: THREE.Color };
   /** Daylight reaching room interiors (unlit rooms read as dim by day, black by night). */
   uRoomAmbient: { value: THREE.Color };
+  /**
+   * The rooms behind the upper floors' glass (windowScenes.ts), by the hour, the season and the weather (windowHours
+   * sets these three; the defaults are an evening's). uLit: how many windows are lit, a factor on uWindowLit by what
+   * the building is (offices, homes, hotels, the night's buildings). uFolk: how many of the people of offices, homes
+   * and hotels are in while the lamps are on. uNight: how full the bars and clubs are, and how much of each of the
+   * night's vices is going on (the evening's, the late ones, lovers).
+   * uWindow: how many people (a multiplier), how much vice (a multiplier on the rooms that have it), a scene to
+   * stand in every furnished room (its cell; -1 for none: `?vignette=`), and the share of rooms that are furnished.
+   */
+  uLit: { value: THREE.Vector4 };
+  uFolk: { value: THREE.Vector3 };
+  uNight: { value: THREE.Vector4 };
+  uWindow: { value: THREE.Vector4 };
   tLight: { value: THREE.Texture | null };
   /** The storefront interiors' atlas (shopAtlas.ts): colour and mask; null leaves shops dark inside. */
   tShopCol: { value: THREE.Texture | null };
@@ -97,6 +111,27 @@ export interface CityUniforms extends ScreenUniforms {
   uLightFade: { value: THREE.Vector2 };
   uLightGain: { value: number };
 }
+
+/** Who's in behind the windows at an hour (0-24): offices, homes, hotels (windowScenes.ts windowsAt). */
+export function windowFolkAt(hour: number, out: THREE.Vector3): THREE.Vector3 {
+  return out.set(...windowsAt(hour).folk);
+}
+
+/** Sets the hour, the season and the weather for the rooms behind the windows: uLit, uFolk, uNight. */
+export function windowHours(hour: number, u: Pick<CityUniforms, 'uLit' | 'uFolk' | 'uNight'>, weather: WindowWeather = {}): void {
+  const w = windowsAt(hour, weather);
+  u.uLit.value.set(...w.lit);
+  u.uFolk.value.set(...w.folk);
+  u.uNight.value.set(...w.night);
+}
+
+/**
+ * The light of a nightlife building's rooms (a tenant building of bars and clubs, a love hotel): how bright against
+ * an ordinary lit room's 1, and how much of its tint the tinted minority gets (0 none: plain warm lamplight; 1 the
+ * full dull amber or muted rose; about a seventh of such rooms each).
+ */
+export const DEN_LIGHT = 0.62;
+export const DEN_TINT = 0.6;
 
 export function cityUniforms(): CityUniforms {
   return {
@@ -132,6 +167,10 @@ export function cityUniforms(): CityUniforms {
     uZenith: { value: new THREE.Color(0x0a0e18) },
     uHorizon: { value: new THREE.Color(0x2a2230) },
     uRoomAmbient: { value: new THREE.Color(0x000000) },
+    uLit: { value: new THREE.Vector4(...windowsAt(20.5).lit) },
+    uFolk: { value: windowFolkAt(20.5, new THREE.Vector3()) },
+    uNight: { value: new THREE.Vector4(...windowsAt(20.5).night) },
+    uWindow: { value: new THREE.Vector4(1, 1, -1, 0.8) },
     tLight: { value: null },
     tShopCol: { value: null },
     tShopMask: { value: null },
@@ -304,6 +343,10 @@ const common = /* glsl */ `
   uniform vec3 uZenith;
   uniform vec3 uHorizon;
   uniform vec3 uRoomAmbient;
+  uniform vec3 uFolk;
+  uniform vec4 uNight;
+  uniform vec4 uLit;
+  uniform vec4 uWindow;
   uniform sampler2D tLight;
   uniform vec4 uLightRect;
   uniform vec2 uLightFade;
@@ -489,7 +532,8 @@ const common = /* glsl */ `
   }
   vec3 roomLightColor(float h, bool office) {
     if (office) return h < 0.8 ? vec3(0.85, 0.95, 1.0) : vec3(1.0, 0.86, 0.66);
-    return h < 0.55 ? vec3(1.0, 0.62, 0.3) : h < 0.85 ? vec3(1.0, 0.86, 0.66) : h < 0.96 ? vec3(0.8, 0.9, 1.0) : vec3(0.45, 0.55, 1.0);
+    // (The last: a room lit by its television, a pale cool grey-blue.)
+    return h < 0.55 ? vec3(1.0, 0.62, 0.3) : h < 0.85 ? vec3(1.0, 0.86, 0.66) : h < 0.94 ? vec3(0.8, 0.9, 1.0) : vec3(0.64, 0.72, 0.9);
   }
   float flick(float id) {
     return uFlicker > 0.5 && h2(vec2(id, floor(uTime * 12.0))) > 0.99 ? 0.1 : 1.0;
@@ -660,10 +704,18 @@ const surface = /* glsl */ `
     float row = floor(v / 0.1);
     float grout = max(step(fract(v / 0.1), 0.12), step(fract(u / 0.3 + 0.5 * mod(row, 2.0)), 0.035));
     wallCol *= 1.0 - 0.12 * grout * tileFade;
-    // Wet walls go darker, the splash zone at the foot most.
-    float wW = uWet * (0.55 + 0.45 * smoothstep(0.7, 0.0, v));
-    wallCol *= 1.0 - 0.32 * wW;
+    // Wet walls go darker, and unevenly: the rain soaks in in tall runs down the face (broad ones, narrower ones
+    // within them), the gaps between filling in as it goes on; the splash zone at the foot is wet through.
+    float wetFoot = max(fwUV.x, fwUV.y);
+    float wetAt = h1(vBid + 3.0) * 37.0;
+    float soak = 0.7 * vnoise(vec2(u * 2.3 + wetAt, v * 0.09 + wetAt * 0.3))
+      + 0.3 * mix(0.5, vnoise(vec2(u * 11.0 + wetAt, v * 0.4)), 1.0 - smoothstep(0.03, 0.09, wetFoot));
+    soak = smoothstep(0.3, 0.75, soak + (uWet - 0.55) * 0.6);
+    float wW = uWet * mix(0.4, 1.0, max(soak, smoothstep(0.7, 0.0, v)));
+    wallCol *= 1.0 - 0.4 * wW;
     albedo = wallCol;
+    // What the water on the face has to catch besides the sky: the street's lamps and signs, less higher up.
+    vec3 wetStreet = uWet > 0.0 ? lightAt(vWPos.xz + Nw.xz * 0.6) * exp(-max(vWPos.y - 0.2, 0.0) / 6.0) : vec3(0.0);
 
     vec3 T = vec3(Nw.z, 0.0, -Nw.x);
     vec3 rd = vec3(dot(Vw, T), Vw.y, dot(Vw, Nw));
@@ -714,6 +766,15 @@ const surface = /* glsl */ `
       vec3 frameC = woodF ? woodC : darkFrame ? vec3(0.05) : vec3(0.42, 0.44, 0.47);
       float hb = h1(vBid + 57.0);
       vec3 L = shopLightOf(tr, hue, shopPal, h1(vBid + 21.0));
+      // A shady house (windowScenes.ts SHOP_KINDS, shopAtlas.ts): where the zone has the most vice, some shops of
+      // a few trades are a strip club, a hostess club, a back-room card game, a loan office... instead (which, and
+      // how many, are a texel of numbers by the trade: shadyTable). Such a place doesn't show itself to the
+      // street: its glass is blacked out (or frosted, as the trade's is) and only the door, under a short curtain,
+      // gives a glimpse in; by day it's all but dark.
+      vec4 sv = windowData(float(tr), 3);
+      bool shady = shopOpen && mod(floor(vFlags / 131072.0), 4.0) > 2.5 && h1(vBid + 77.0) * 255.0 < sv.a * uWindow.y;
+      float hsv = h1(vBid + 83.0);
+      int roomN = shady ? int((hsv < 0.34 ? sv.r : hsv < 0.67 ? sv.g : sv.b) + 0.5) : tr;
       if (sx < 0.0 || sx > sw) {
         albedo = tallFront ? wallCol * 0.7 : wallCol * 0.9;
         // A barber's pole turning on the pillar by the door.
@@ -783,10 +844,10 @@ const surface = /* glsl */ `
           float cw = mw - 2.0 * ft;
           float cx = mx - ft;
           bool covered = true;
-          if (door && v > 2.05 && (tr == ${TRADE.noodles} || tr == ${TRADE.izakaya} || (tr == ${TRADE.craft} && hb < 0.6))) {
+          if (door && v > 2.05 && (shady || tr == ${TRADE.noodles} || tr == ${TRADE.izakaya} || (tr == ${TRADE.craft} && hb < 0.6))) {
             // Noren over the door of a noodle shop, an izakaya or an old shop: cloth in the shop's colour (deep
-            // indigo in most), split in three, the shop's mark in white.
-            vec3 cloth = mix(hue, vec3(0.04, 0.06, 0.2), hb < 0.5 ? 0.75 : 0.25);
+            // indigo in most), split in three, the shop's mark in white. A shady house's is dark red.
+            vec3 cloth = shady ? vec3(0.2, 0.015, 0.04) : mix(hue, vec3(0.04, 0.06, 0.2), hb < 0.5 ? 0.75 : 0.25);
             float slit = fract(cx / (cw / 3.0));
             float ring = abs(length(vec2(cx - cw * 0.5, v - 2.48)) - 0.12);
             albedo = slit < 0.02 ? vec3(0.02) : ring < 0.022 && cw > 0.5 ? vec3(0.92) : cloth * (0.85 + 0.15 * sin(cx * 25.0));
@@ -819,19 +880,25 @@ const surface = /* glsl */ `
             // most of the glass (a snack bar, the mahjong parlour; a love hotel's, all but its door): milky,
             // glowing with the light behind it.
             bool fullFrost = tr == ${TRADE.snack} || tr == ${TRADE.mahjong} || tr == ${TRADE.lovehotel};
-            bool frost = gz.w > 0.5 && (fullFrost ? v < 2.15 && !(door && tr == ${TRADE.lovehotel}) : !door && v > 1.05 && v < 1.5);
+            bool frost = gz.w > 0.5 && (fullFrost ? v < 2.15 && !(door && (shady || tr == ${TRADE.lovehotel})) : !door && v > 1.05 && v < 1.5);
             if (frost) {
               float stripe = fullFrost ? step(abs(v - 1.9), 0.015) : step(abs(v - 1.27), 0.03);
               albedo = mix(fullFrost ? vec3(0.32, 0.33, 0.34) : vec3(0.55, 0.57, 0.58), hue, stripe);
               sRough = 0.35;
               sEmit = mix(L * (fullFrost ? 0.14 : 0.25) * max(uLamps, 0.45), hue * 0.5 * max(uLamps, 0.3), stripe) + refl * F * 0.5;
+            } else if (shady && !door) {
+              // Blacked-out glass: the street in it, and a thread of the house's colour along the bottom.
+              albedo = vec3(0.012);
+              sRough = 0.1;
+              sEmit = refl * F * 0.8 + hue * step(v, lowTop + 0.04) * 0.5 * uLamps;
             } else {
-              vec3 interior = shopInterior(vec2(sx, v), rd, sw, tr, vBid, hue, L, length(vWPos - cameraPosition), pxAng) * max(uLamps, 0.55);
+              vec3 interior = shopInterior(vec2(sx, v), rd, sw, roomN, vBid, hue, L, length(vWPos - cameraPosition), pxAng) * max(uLamps, shady ? 0.2 : 0.55);
               // At a tower's foot the glass is tinted like the curtain wall above it.
               if (towerFoot) interior *= vec3(0.75, 0.85, 0.88);
               albedo = vec3(0.02);
               sRough = 0.06;
               sEmit = interior * (1.0 - F) + refl * F;
+              if (uWet > 0.0) sEmit = wetPane(sEmit, interior, refl * 1.2 + wetStreet * 0.6 + 0.02, vec2(u + wetAt, v), wetFoot, uWet, uTime);
               // The door's pull handle, and the opening hours on it.
               if (door && !woodF && v > 0.85 && v < 1.35 && abs(mx - (mw - 0.14)) < 0.015) { albedo = vec3(0.7); sMetal = 0.9; sRough = 0.25; sEmit = vec3(0.0); }
               else if (door && v > 1.45 && v < 1.58 && abs(cx - cw * 0.5) < 0.09) { albedo = abs(v - 1.55) < 0.02 ? hue : vec3(0.92); sRough = 0.7; sEmit = L * 0.08; }
@@ -864,7 +931,18 @@ const surface = /* glsl */ `
       float reveal = smoothstep(0.06, 0.4, cosV);
       // Window rectangle within the bay (x) and floor (y), by type.
       float x0 = 0.0, x1 = b, y0 = 0.9, y1 = 0.9 + winH;
-      bool office = type > 0.5 && type < 2.5;
+      // Whose rooms these are. Ribbon and curtain-wall floors are offices, unless the building is a home
+      // (HOME_FLAG), a hotel (its sign's trade: a hotel or a love hotel) or a tenant building of bars and clubs
+      // (buildings.ts DEN_FLAG), whose rooms are a bay each and lit like any flat's; behind punched windows and
+      // balcony doors, flats. viceLv: how much of the city's vice its zone has (buildings.ts VICE_SHIFT: 0 to 3).
+      bool wide = type > 0.5 && type < 2.5;
+      float trade = mod(floor(vFlags / 512.0), 32.0);
+      bool hotel = !home && trade > ${TRADE.hotel - 0.5} && trade < ${TRADE.lovehotel + 0.5};
+      bool love = hotel && trade > ${TRADE.lovehotel - 0.5};
+      bool den = !home && !hotel && mod(floor(vFlags / 524288.0), 2.0) > 0.5;
+      float viceLv = mod(floor(vFlags / 131072.0), 4.0);
+      bool office = wide && !home && !hotel && !den;
+      vec3 glassTint = wide && !home ? vec3(0.62, 0.78, 0.82) : vec3(1.0);
       if (type < 0.5) { float ww = b * ratio; x0 = (b - ww) * 0.5; x1 = x0 + ww; y1 = min(y1, FH - 0.35); }
       else if (type < 1.5) { y0 = 0.95; y1 = min(0.95 + winH, FH - 0.3); }
       else if (type < 2.5) { y0 = 0.0; y1 = FH; }
@@ -872,14 +950,19 @@ const surface = /* glsl */ `
       else { x0 = b * 0.5 - 0.32; x1 = b * 0.5 + 0.32; y0 = 1.45; y1 = 2.05; inGrid = inGrid && h3(vec3(vBid, col, fl)) > 0.45; }
 
       bool inWin = inGrid && xb > x0 && xb < x1 && yf > y0 && yf < y1;
-      // Rooms span 2 bays on ribbon / curtain-wall floors (open-plan offices).
-      float pair = office ? 2.0 : 1.0;
+      // Rooms span 2 bays on ribbon / curtain-wall floors (open-plan offices; the bays are narrow, so a flat or a
+      // bar behind them takes two as well, a hotel room one).
+      float pair = wide && !hotel ? 2.0 : 1.0;
       float roomCol = floor(col / pair);
       float rw = b * pair;
       float rx = xb + (col - roomCol * pair) * b;
       float hr = h3(vec3(vBid, roomCol, fl));
-      float litFrac = clamp(uWindowLit * (0.35 + 1.3 * litBias), 0.0, 1.0);
-      bool lit = hr < litFrac;
+      // How many rooms are lit: the atmosphere's share, the building's own bias, and what the building is at this
+      // hour (uLit). A room's hash against it is its bedtime, so the lights go out one by one (each eased over a
+      // couple of seconds); an office's hash is mostly its floor's, so floors are lit or dark together.
+      float litFrac = clamp(uWindowLit * (0.35 + 1.3 * litBias) * (office ? uLit.x : den || love ? uLit.w : hotel ? uLit.z : uLit.y), 0.0, 1.0);
+      float glow = clamp((litFrac - (office ? 0.65 * h3(vec3(vBid, 7.0, fl)) + 0.35 * hr : hr)) / 0.012, 0.0, 1.0);
+      bool lit = glow > 0.0;
 
       vec3 detailAlbedo = albedo;
       vec3 detailEmit = vec3(0.0);
@@ -891,7 +974,7 @@ const surface = /* glsl */ `
         float fr = type > 1.5 && type < 2.5 ? 0.05 : 0.07;
         bool spandrel = type > 1.5 && type < 2.5 && yf < 0.5;
         bool sash = type < 0.5 && (x1 - x0) > 1.3 && abs(xb - (x0 + x1) * 0.5) < 0.03;
-        bool mullion = office && (xb < 0.04 || xb > b - 0.04);
+        bool mullion = wide && (xb < 0.04 || xb > b - 0.04);
         if (spandrel) {
           detailAlbedo = mix(wallCol * 0.3, vec3(0.03, 0.04, 0.05), 0.6);
           detailRough = 0.25;
@@ -904,21 +987,123 @@ const surface = /* glsl */ `
           float face;
           float depth = 3.5 + 3.0 * h1(hr * 91.0);
           vec3 hp = roomHit(vec3(rx, yf, 0.0), rd, rw, FH - 0.25, depth, face);
-          vec3 L = lit ? roomLightColor(h1(hr * 37.0), office) : vec3(0.0);
+          float hl = h1(hr * 37.0);
+          vec3 L = roomLightColor(hl, office) * glow;
+          // The rooms lit by a television: its light drifts, gently (between scenes, not frame to frame: eased from
+          // one level to the next about once a second, within a fifth of its brightness).
+          bool tvRoom = !office && !den && hl >= 0.94;
+          float tvT = uTime * 0.9 + hr * 57.0;
+          L *= tvRoom ? 0.86 + 0.2 * mix(h1(floor(tvT)), h1(floor(tvT) + 1.0), smoothstep(0.0, 1.0, fract(tvT))) : 1.0;
+          // A tenant building's bars and clubs and a love hotel's rooms are lit like any room, only lower and
+          // warmer: dim lamplight. A minority have a faint tint to it, a dull amber or a muted rose (DEN_TINT: how
+          // much of the tint; nothing saturated).
+          float hc = h1(hr * 41.0);
+          vec3 lampL = mix(vec3(1.0, 0.8, 0.58), hc < 0.14 ? vec3(1.0, 0.72, 0.46) : hc < 0.28 ? vec3(1.0, 0.72, 0.62) : vec3(1.0, 0.8, 0.58), ${DEN_TINT});
+          if (den || love) L = lampL * (${DEN_LIGHT} * glow);
+          // A room that's a place (most are): its furniture and whoever is in it come from the scenes' atlas, below.
+          float forced = step(0.0, uWindow.z);
+          bool furnished = type < 3.5 && (h1(hr * 101.0) < uWindow.w || forced > 0.5);
           vec3 wallA = mix(vec3(0.78, 0.74, 0.68), vec3(0.62, 0.66, 0.7), h1(hr * 13.0));
           vec3 c;
           float depthT = -hp.z / depth;
           if (face < 0.5) {
             c = wallA * 0.85;
-            // A dark furniture silhouette against the back wall.
+            // A dark furniture silhouette against the back wall (the rooms without a scene).
             float fxp = rw * (0.25 + 0.5 * h1(hr * 53.0));
-            if (hp.y < 0.55 + 1.4 * h1(hr * 71.0) && abs(hp.x - fxp) < 0.4 + 0.5 * h1(hr * 29.0)) c = vec3(0.09, 0.07, 0.06);
+            if (!furnished && hp.y < 0.55 + 1.4 * h1(hr * 71.0) && abs(hp.x - fxp) < 0.4 + 0.5 * h1(hr * 29.0)) c = vec3(0.09, 0.07, 0.06);
           } else if (face < 1.5) {
             c = wallA * 0.75;
           } else if (face < 2.5) {
             c = vec3(0.9) * (1.0 + 0.9 * exp(-depthT * 4.0) * (office ? 1.2 : 0.6));
           } else {
             c = office ? vec3(0.4, 0.42, 0.45) : mix(vec3(0.36, 0.24, 0.15), vec3(0.5, 0.45, 0.38), h1(hr * 17.0));
+          }
+          // What's in the room (windowScenes.ts: the scenes; windowAtlas.ts paints them, the mob's own figures posed,
+          // under the storefronts' masks): dark shapes against its light, in three layers that part as you move.
+          // Against the back wall its furniture (and in a still scene anyone back there); some way in from the
+          // glass the people, in one of two frames, or walking to and fro; just in front of them the furniture
+          // they're at. The furniture is there whoever is in; the people come by the hour.
+          // Which scene goes with the building: a home's, an office's, a hotel's, a bar's or club's; and in a
+          // share of rooms that grows with the zone's vice (most of a love hotel's), one where the city's vice
+          // shows, peopled at its own hours of the night (uNight). Glass to the floor (curtain walls, balcony
+          // doors) also gets the scenes that lie low. Stable by the room's hash; straight-line code: four reads
+          // of the cells and four texels of numbers, so a new scene is new data and never new shader.
+          if (furnished && (lit || uLamps < 0.97)) {
+            float hw = h1(hr * 113.0);
+            float hk = h1(hr * 127.0);
+            float hm = h1(hr * 139.0);
+            float vshare = love ? 0.8 : den ? 0.3 + 0.1 * viceLv : viceLv < 0.5 ? 0.012 : viceLv < 1.5 ? 0.06 : viceLv < 2.5 ? 0.15 : 0.3;
+            bool vice = h1(hr * 163.0) < vshare * uWindow.y;
+            // The kind of room (windowScenes.ts CATS, in that order), its pick list for this glass, the scene
+            // picked from it, and how that scene plays: all numbers in the atlas (windowTables), a texel each.
+            float kind = vice ? (love ? 8.0 : hotel ? 7.0 : den ? 9.0 : office ? 6.0 : 5.0) : (hotel ? 3.0 : den ? 4.0 : office ? 2.0 : tvRoom ? 1.0 : 0.0);
+            vec4 list = windowData(kind * 2.0 + step(1.5, type), 1);
+            float fn = mix(windowData(list.r + 256.0 * list.g + floor(hm * list.b), 2).r, uWindow.z, forced);
+            vec4 pd = windowData(fn, 0);
+            vec4 pe = windowData(fn, 4);
+            // Its play: cycles a second, the first pose's share of one, the walk's speed; its hours, whether its
+            // back furniture stands close, how many poses it has.
+            vec3 play = vec3(pd.r * ${4 / 255}, pd.g / 255.0, pd.b * ${2 / 255});
+            float bits = floor(pd.a + 0.5);
+            float when = mod(bits, 4.0);
+            float near = mod(floor(bits * 0.25), 2.0);
+            float nposes = floor(bits * 0.125) + 1.0;
+            // Who's in: by day the offices are at work and few are at home; with the lamps on, by the hour, and
+            // never in a dark room.
+            vec3 folk3 = mix(vec3(1.0, 0.3, 0.25), uFolk, uLamps);
+            float folk = vice ? (when < 0.5 ? uNight.y : when < 1.5 ? uNight.z : uNight.w) : hotel ? folk3.z : den ? uNight.x : office ? folk3.x : folk3.y;
+            float here = max(step(hw, (lit ? (vice ? 1.0 : 0.6) : 0.4 * (1.0 - uLamps)) * folk * uWindow.x), forced);
+            // Where the scene stands: across the room (mirrored in half of them), the people 0.7 to 1.8 m in, and
+            // as much further as the scene asks (its setBack, cm: a number it already has), short of the far wall.
+            float dm = min(0.7 + 1.1 * h1(hr * 151.0) + pe.a * 0.01, depth - 0.8);
+            // (What's behind them: against the back wall, or in some scenes close behind: the sofa they sit on.)
+            float db = mix(depth - 0.3, dm + 0.45, near);
+            float flipS = h1(hr * 173.0) < 0.5 ? -1.0 : 1.0;
+            float cx0 = rw * 0.5 + (h1(hr * 181.0) - 0.5) * max(rw - 3.4, 0.0);
+            // Walkers cross the room and come back, facing the way they go.
+            float sl = step(0.001, play.z);
+            float span = rw + 1.2;
+            float pp = fract(uTime * play.z / (2.0 * span) + hk) * 2.0;
+            float cxm = mix(cx0, rw * 0.5 + (0.5 - abs(pp - 1.0)) * span, sl);
+            float flipM = mix(flipS, pp < 1.0 ? 1.0 : -1.0, sl);
+            vec3 ro2 = vec3(rx, min(yf, FH - 0.26), 0.0);
+            float iz = 1.0 / max(-rd.z, 1e-3);
+            // Too small to make out, it all fades (and the atlas's neighbours would bleed in at coarser levels).
+            float flod = log2(max((length(vWPos - cameraPosition) + dm * iz) * pxAng * ${WINDOW_ATLAS.ppm}.0, 1.0));
+            float lodS = min(flod, 4.0);
+            vec3 qb = ro2 + rd * (db * iz);
+            vec3 qm = ro2 + rd * (dm * iz);
+            vec3 qf = ro2 + rd * ((dm - 0.3) * iz);
+            // (Each layer only in front of what the ray meets, and inside the room.)
+            vec4 sb = windowScene(fn, vec2((qb.x - cx0) * flipS, qb.y), lodS) * (step(db, -hp.z) * step(0.0, qb.x) * step(qb.x, rw));
+            vec4 sf = windowScene(fn, vec2((qf.x - cx0) * flipS, qf.y), lodS) * (step(dm - 0.3, -hp.z) * step(0.0, qf.x) * step(qf.x, rw));
+            // The people's poses play there and back, never cut: they rest in the first, move through the others
+            // to the last over the scene's go seconds (eased), rest there and come back; where they are between
+            // two poses the two outlines (distance fields) are blended, so the shape moves across. Each room on
+            // its own phase and at its own pace (a tenth either way), so no two windows move in step.
+            float still = step(nposes, 1.5);
+            float rate = play.x * (0.9 + 0.2 * hm);
+            float ph = fract(uTime * rate + hk * 7.0);
+            float go = max(min(pe.b * 0.01 * rate, min(play.y, 1.0 - play.y)), 1e-4);
+            float at = (nposes - 1.0) * (smoothstep(play.y - go, play.y, ph) - smoothstep(1.0 - go, 1.0, ph));
+            float p0 = min(floor(at), max(nposes - 2.0, 0.0));
+            float p1 = min(p0 + 1.0, nposes - 1.0);
+            // (Where a pose is: the first two in the scene's own cell, G and A; the rest in the frame slots.)
+            vec2 w0 = p0 < 1.5 ? vec2(fn, 1.0 + 2.0 * p0) : vec2(pe.r + floor((pe.g + p0 - 2.0) * 0.25), mod(pe.g + p0 - 2.0, 4.0));
+            vec2 w1 = p1 < 1.5 ? vec2(fn, 1.0 + 2.0 * p1) : vec2(pe.r + floor((pe.g + p1 - 2.0) * 0.25), mod(pe.g + p1 - 2.0, 4.0));
+            vec2 qp = vec2((qm.x - cxm) * flipM, qm.y);
+            float inM = step(dm, -hp.z) * step(0.0, qm.x) * step(qm.x, rw);
+            float v0 = dot(windowScene(w0.x, qp, lodS), step(abs(vec4(0.0, 1.0, 2.0, 3.0) - w0.y), vec4(0.5)));
+            float v1 = dot(windowScene(w1.x, qp, lodS), step(abs(vec4(0.0, 1.0, 2.0, 3.0) - w1.y), vec4(0.5)));
+            // (The outline's softness: half a texel up close, wider as the texels shrink on screen.)
+            float sw = min(0.035 * exp2(lodS), 0.3);
+            float people = smoothstep(0.5 - sw, 0.5 + sw, mix(v0, v1, at - p0)) * inM * here;
+            float vis = 1.0 - smoothstep(3.0, 4.0, flod);
+            // Further in, a little of the room's light on them.
+            vec3 ink = vec3(0.028, 0.027, 0.03);
+            c = mix(c, ink + wallA * 0.2, max(smoothstep(0.3, 0.6, sb.r), smoothstep(0.5 - sw, 0.5 + sw, sb.a) * still * here) * vis);
+            c = mix(c, ink + wallA * 0.05, people * vis);
+            c = mix(c, ink, smoothstep(0.3, 0.6, sf.b) * vis);
           }
           vec3 interior = c * mix(1.0, 0.45, depthT) * (L * 0.55 + uRoomAmbient);
           // Blinds (lowered from the top) or curtains (drawn in from the sides).
@@ -942,22 +1127,13 @@ const surface = /* glsl */ `
           // side-on doesn't turn into one flat sheet of lit interiors.
           interior *= reveal;
           float F = fresnel(cosV);
-          vec3 tint = office ? vec3(0.62, 0.78, 0.82) : vec3(1.0);
+          vec3 tint = glassTint;
           if (type > 1.5 && type < 2.5) F = mix(F, 1.0, 0.3);
           detailAlbedo = vec3(0.015);
           detailRough = 0.05;
           detailEmit = (interior * (1.0 - F) + refl * F) * tint;
-          // Drops on wet glass, up close: beads catching the sky and the room, a few sliding down.
-          if (uWet > 0.0) {
-            vec2 dq = vec2(xb, yf) * 8.0;
-            vec2 dc = floor(dq);
-            float dr = h2(dc + vBid);
-            float slide = step(0.85, dr) * fract(uTime * 0.05 + dr * 9.0);
-            vec2 dp = fract(dq) - vec2(0.25 + 0.5 * h2(dc * 1.7), 0.75 - 0.5 * h2(dc * 2.3) - slide * 0.6);
-            float drop = smoothstep(0.12, 0.05, length(dp * vec2(1.0, 0.8))) * step(0.4, dr);
-            float closeG = 1.0 - smoothstep(0.004, 0.02, max(fwUV.x, fwUV.y));
-            detailEmit += (refl * 0.7 + interior * 0.9 + vec3(0.02)) * drop * uWet * closeG;
-          }
+          // Rain on the glass (carRainGlsl.ts): water sheeting down it, and up close the drops.
+          if (uWet > 0.0) detailEmit = wetPane(detailEmit, interior * tint, refl * 1.2 + wetStreet * 0.6 + 0.02, vec2(u + wetAt, v), wetFoot, uWet, uTime);
         }
       } else if (inGrid) {
         // Floor-slab bands and window sills.
@@ -977,7 +1153,7 @@ const surface = /* glsl */ `
       // The lit share averages what the rooms look like up close: offices cool white behind tinted glass, homes
       // warm; each room about 0.3 of its light (wall colour, depth falloff). It was a flat warm gold at 0.4,
       // so distant towers glowed gold until you came close enough to see their windows.
-      vec3 roomAvg = office ? vec3(0.53, 0.74, 0.82) : vec3(1.0, 0.72, 0.45);
+      vec3 roomAvg = office ? vec3(0.53, 0.74, 0.82) : vec3(1.0, 0.72, 0.45) * (den || love ? ${DEN_LIGHT} : 1.0) * glassTint;
       vec3 glassAvg = (litFrac * roomAvg * 0.28 + uRoomAmbient * 0.3) * reveal * (1.0 - Fa) + refl * mix(0.2, 0.9, Fa);
       bool rowY = ux >= 0.0 && ux < span && fv >= 0.0 && fl < floors && yf > y0 && yf < y1;
       vec3 bandAlbedo = rowY ? mix(wallCol, vec3(0.02), xFrac) : detailAlbedo;
@@ -991,15 +1167,12 @@ const surface = /* glsl */ `
       sMetal = detailMetal * dd;
     }
     if (uWet > 0.0) {
-      // A wet sheen (sky at grazing angles) and rivulets running down some lanes of the facade, catching
-      // the street light and the sky.
-      sEmit += refl * fresnel(cosV) * 0.3 * wW;
-      float lane = floor(u * 4.0);
-      float closeW = 1.0 - smoothstep(0.03, 0.12, max(fwUV.x, fwUV.y));
-      float line = step(0.7, h1(lane * 3.7 + vBid)) * smoothstep(0.06, 0.0, abs(fract(u * 4.0) - 0.5 - 0.3 * (h1(lane + vBid) - 0.5)));
-      float flow = smoothstep(0.55, 1.0, fract(v * 0.4 + uTime * (0.5 + h1(lane * 1.3)) + h1(lane)));
-      sEmit += (refl * 0.6 + lightAt(vWPos.xz + Nw.xz * 0.6) * 0.25) * line * (0.35 + 0.65 * flow) * uWet * closeW * 0.5;
-      sRough = mix(sRough, sRough * 0.45, uWet);
+      // The film of water on the face: the sky in it, and the street's light, most at grazing angles and where the
+      // wall is wettest; and threads of water trickling down it (carRainGlsl.ts), catching the same.
+      float Fw = fresnel(cosV);
+      sEmit += (refl * Fw * 0.3 + wetStreet * (0.02 + 0.3 * Fw)) * wW;
+      sEmit += (refl * 0.35 + wetStreet * 0.3 + 0.004) * wallRuns(vec2(u, v), wetAt, wetFoot, uTime) * (0.4 + 0.6 * soak) * uWet * 0.6;
+      sRough = mix(sRough, sRough * 0.4, wW);
     }
   } else if (kindF < 2.5) {
     albedo *= 0.75 + 0.4 * vnoise(vWPos.xz * 0.6) * (0.8 + 0.4 * vnoise(vWPos.xz * 4.0));
@@ -1045,15 +1218,12 @@ const surface = /* glsl */ `
           drop.z *= 1.0 - wf.x * (1.0 - smoothstep(0.15, 1.7, wf.y));
         }
         if (drop.z > 0.0) {
-          float dl = min(length(drop.xy), 1.0);
           vec3 glint = refl * 1.2 + lightAt(vWPos.xz) * 0.6 + skyRefl(vec3(0.0, 1.0, 0.0)) * 0.5 + 0.02;
-          float pool = smoothstep(-0.2, 0.9, dot(drop.xy, vec2(0.55, -0.83))) * (1.0 - dl * dl);
-          float spark = 1.0 - smoothstep(0.0, 0.3, length(drop.xy - vec2(-0.3, 0.42)));
-          float rim = smoothstep(0.55, 1.0, dl) * drop.z;
-          albedo *= 1.0 - 0.45 * rim;
-          sEmit *= 1.0 - 0.5 * rim;
           // (On glass and dark paint there's little under a drop to darken: the light in it carries it.)
-          sEmit += glint * (0.45 * pool + 1.6 * spark + (isGlass ? 0.12 : 0.04)) * drop.z;
+          vec2 lens = rainLens(drop, isGlass ? 0.12 : 0.04);
+          albedo *= 1.0 - 0.45 * lens.x;
+          sEmit *= 1.0 - 0.5 * lens.x;
+          sEmit += glint * lens.y;
         }
       }
     }
@@ -1292,7 +1462,7 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
           vWNor = normalize(mat3(modelMatrix) * objectNormal);
         #endif`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${WIPER_GLSL}\n${common}\n${WATER_GLSL}\n${CAR_RAIN_GLSL}`)
+      .replace('#include <common>', `#include <common>\n${WIPER_GLSL}\n${common}\n${WATER_GLSL}\n${CAR_RAIN_GLSL}\n${WALL_RAIN_GLSL}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${surface}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         // normalFoliage: a tree crown's leaf clusters catch the light (city surface: leafBump, world space).

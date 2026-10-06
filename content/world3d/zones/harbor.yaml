@@ -27,6 +27,8 @@ zones:
       colors: ['#ffffff', '#ffe45f']
     ads: { street: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.3
       windows: { blank: 60, small: 30, ribbon: 10 }
       walls: ['#8a9098', '#a8aeb4', '#6a7078', '#c8ccd0', '#5a6a7a']
       tiled: false
@@ -43,6 +45,8 @@ zones:
       signChance: 0.25
     ads: { street: 2, mainstream: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.45
       windows: { blank: 45, small: 35, ribbon: 20 }
       walls: ['#9a9890', '#b8b4a8', '#7a7870', '#c0b8a8', '#8a6a4a', '#5a6a7a', '#a86a4a']
       tiled: false
@@ -52,6 +56,7 @@ zones:
   N:
     id: port_nightlife
     name: Warehouse nightlife
+    night: 1
     # Where the racing crowd parks.
     cars: { sports: 8, rotary: 8, awd: 8, hatch: 6, roadster: 4, sedan: 18, minivan: 10, taxi: 12, luxury: 6, keitruck: 6, boxtruck: 4, van: 3, police: 1 }
     plan:
@@ -64,6 +69,8 @@ zones:
       colors: ['#ff5fc8', '#4fe3ff', '#ffe45f', '#b48cff', '#ff4f4f']
     ads: { fun: 4, food: 2, mainstream: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.9
       windows: { blank: 40, small: 40, ribbon: 20 }
       walls: ['#3a3a44', '#2a2a30', '#5a4a5a', '#7a7870', '#4a3a3a']
       tiled: false
@@ -84,6 +91,8 @@ zones:
       colors: ['#ffffff', '#4fe3ff']
     ads: { mainstream: 3, food: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.2
       windows: { curtain: 50, balcony: 40, ribbon: 10 }
       walls: ['#c8ccd0', '#a8b0b8', '#e0e0dc', '#8a949c']
       tiled: false
@@ -93,6 +102,7 @@ zones:
   F:
     id: port_fish_market
     name: Fish market streets
+    night: 0.3
     people: { work: 4, plain: 4, long: 1 }
     plan:
       floors: [[2, 3, 70], [4, 5, 30]]
@@ -108,6 +118,8 @@ zones:
       colors: ['#ffe45f', '#ff4f4f', '#ffffff', '#4fe3ff']
     ads: { food: 5, street: 2 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.2
       windows: { punched: 40, small: 40, blank: 20 }
       walls: ['#b8a88c', '#9a9890', '#7c604c', '#c2b49a', '#6a7a8a']
       tiled: true

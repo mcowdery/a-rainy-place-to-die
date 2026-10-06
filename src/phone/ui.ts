@@ -1,5 +1,6 @@
 import type { Contact, MsgBody } from './format';
 import { type Msg, Phone, type PhoneEvent } from './engine';
+import { wallpaper } from './wallpapers';
 
 /**
  * The phone on screen: the KAIWA messenger (a LINE-style chat app). Tab opens it (the city keeps going; you can
@@ -143,10 +144,15 @@ export class PhoneUI {
     if (this.open && this.mode !== 'home' && this.mode !== 'kaiwa') this.app()?.tick?.(dt);
   }
 
-  /** The home screen: the time, then the apps with their badges. */
+  /** The home screen: the time, then the apps with their badges (at the bottom over a wallpaper, clear of the picture). */
   private renderHome(): void {
     this.screen.innerHTML = '';
     const home = el('div', 'ph-homescreen');
+    const wall = wallpaper();
+    if (wall) {
+      home.classList.add('ph-wall');
+      home.style.backgroundImage = `linear-gradient(rgba(8,8,14,0.5), transparent 24%, transparent 62%, rgba(8,8,14,0.72)), url("${wall.url}")`;
+    }
     const now = Phone.time(this.phone.clock);
     home.append(wrap('div', 'ph-bigclock', [span('ph-bigtime', now), span('ph-bigdate', '東都 · TOTO')]));
     const grid = el('div', 'ph-apps');
@@ -454,6 +460,9 @@ function injectStyle(): void {
   .ph-home { width: 36%; height: 5px; border-radius: 3px; background: #5a5862; margin: 7px auto 1px; cursor: pointer; }
   .ph-home:hover { background: #8a8892; }
   .ph-homescreen { flex: 1; display: flex; flex-direction: column; background: radial-gradient(ellipse at 30% 0%, #5a2a6a, transparent 60%), radial-gradient(ellipse at 80% 100%, #1a4a6a, transparent 60%), #14121e; padding: 28px 22px; gap: 34px; }
+  .ph-wall { background-size: cover; background-position: center; justify-content: space-between; }
+  .ph-wall .ph-bigclock, .ph-wall .ph-app-name { text-shadow: 0 1px 4px rgba(0,0,0,0.85); }
+  .ph-wall .ph-bigdate { color: #f0e8f4; }
   .ph-bigclock { display: flex; flex-direction: column; align-items: center; color: #fff; }
   .ph-bigtime { font-size: 58px; font-weight: 200; letter-spacing: 2px; line-height: 1; }
   .ph-bigdate { font-size: 12px; color: #d8c8e8; letter-spacing: 3px; margin-top: 6px; }

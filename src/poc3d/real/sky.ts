@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { EL_MIN, SKY_AZ, SKY_EL } from './skyModel';
 
 /**
- * The moon's looks (the K panel's Moon, ?moonShape=): its angular radius (radians; the real moon's is 0.0045, drawn
+ * The moon's looks (the debug menu's Moon, ?moonShape=): its angular radius (radians; the real moon's is 0.0045, drawn
  * larger as photographs and films do), its phase (degrees from full: 90 a half moon), the edge's softness (a share
  * of the radius), the glow round it and the faint 22-degree ring of thin high cloud, and how much moonlight it gives
  * the city (a crescent lights little). `calendar` follows the lunar calendar (the phase of the story's day); `classic` is

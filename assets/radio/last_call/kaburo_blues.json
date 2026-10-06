@@ -1,0 +1,21 @@
+{
+  "file": "kaburo_blues_1.flac",
+  "id": "kaburo_blues",
+  "take": 1,
+  "station": "last_call",
+  "title": "歌舞路ブルース",
+  "artist": "氷室朱実",
+  "caption": "Late 1960s Japanese kayo blues, slow and sultry, a nightclub torch song. A smoky, husky female alto singing in Japanese, bitter and proud, with a slow vibrato at the ends of phrases. Muted trumpet with a wah mute, sobbing tenor saxophone, tremolo electric guitar, upright bass, brushed drums with a slow triplet feel, soft strings. Weary, defiant, a hostess taking off her make-up as the neon goes out. Warm vintage studio sound with plate reverb.",
+  "lyrics": "[Intro - Muted Trumpet]\n\n[Verse 1]\nネオンが消える 午前四時\n化粧を落とす 鏡の前\n嘘をつくのも 仕事のうち\n笑ってみせた 今夜も\n\n[Chorus]\n歌舞路ブルース 女の街\n涙は見せない 意地がある\n歌舞路ブルース 夜の花\n咲いて散るのが さだめなら\n\n[Verse 2]\nあんたがくれた 安い指輪\n質屋の窓に 光ってる\n恨んでなんか いないけど\n雨の夜には 思い出す\n\n[Chorus]\n歌舞路ブルース 女の街\n涙は見せない 意地がある\n歌舞路ブルース 夜の花\n咲いて散るのが さだめなら\n\n[Instrumental Break - Muted Trumpet Solo]\n\n[Verse 3]\n生まれた町は 北の果て\n帰る切符は とうに捨てた\nグラスを重ね 夢を売り\n明日もここで 生きてゆく\n\n[Chorus]\n歌舞路ブルース 女の街\n涙は見せない 意地がある\n歌舞路ブルース 夜の花\n誰かのために もう一度\n\n[Outro]",
+  "language": "ja",
+  "bpm": 66,
+  "key": "A minor",
+  "seconds": 205.0,
+  "seed": 5202,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:28",
+  "took": 106,
+  "batch": "noir-02",
+  "model": "acestep-v15-turbo"
+}

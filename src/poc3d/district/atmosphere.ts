@@ -68,7 +68,7 @@ interface Rule3 {
 }
 
 /**
- * Looks for the sky (the K panel's Sky, ?sky=): `citypop` is the rules alone; any other is the file's `skies:` entry
+ * Looks for the sky (the debug menu's Sky, ?sky=): `citypop` is the rules alone; any other is the file's `skies:` entry
  * of that name, rules laid over them (each by the same matching), so a look changes only what it sets.
  */
 export const SKY_LOOKS = ['noir', 'deep', 'citypop'] as const;

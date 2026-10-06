@@ -4,8 +4,10 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { EMOTE_MARKS, EMOTE_RATE, Emotes } from '../real/emotes';
 import type { MobModelDoc } from '../real/mobModels';
-import { setShapedHeadScale } from '../real/mobShape';
+import { packFigures } from '../real/people';
+import { CrowdSmoke } from '../real/smoke';
 import { addFigure, figureMesh, holdHands, GHOST_COLORS, GhostBuilder, ghostMaterial, MOB_LOOK_NAMES, registerMobModel, setMobLook, setMobShape, type Body, type FigureSpec, type Hair, type MobLook, type MobShape, type Pose } from '../real/people';
 
 /**
@@ -63,7 +65,10 @@ const light = { tLight: { value: lamp as THREE.Texture | null }, uLightRect: { v
 const ghost = ghostMaterial(light);
 
 // ---- Who stands where ----
-type Spec = Partial<FigureSpec> & Pick<FigureSpec, 'x' | 'z' | 'body' | 'pose'>;
+type Spec = Partial<FigureSpec> & Pick<FigureSpec, 'x' | 'z' | 'body' | 'pose'> & {
+  /** Another way of building a woman's hips for this one (real/mobShape.ts setShapedTrial); else as the city has them. */
+  trial?: ShapedTrial;
+};
 interface Item {
   readonly name: string;
   readonly at: THREE.Vector3;
@@ -270,6 +275,39 @@ const DRESSED_NEW: Dressed[] = [
   ['down jacket', { body: 'woman', pose: 'stand', outfit: 'puffer', hair: 'long' }],
   ['down jacket', { body: 'child', pose: 'stand', outfit: 'puffer', hair: 'twin' }],
 ];
+// The shady ones (the sculpted generation's): the hair asked for picks each one's look (real/mobShape.ts VARIANT, cutOf).
+const DRESSED_SHADY: Dressed[] = [
+  ['yakuza', { body: 'man', pose: 'stand', outfit: 'yakuza' }],
+  ['yakuza', { body: 'man', pose: 'pockets', outfit: 'yakuza', hair: 'none' }],
+  ['yakuza', { body: 'man', pose: 'walk', outfit: 'yakuza', hair: 'cap', phase: 0.3 }],
+  ['old boss', { body: 'elder', pose: 'stand', outfit: 'yakuza', hair: 'hat' }],
+  ['chinpira', { body: 'man', pose: 'pockets', outfit: 'chinpira' }],
+  ['chinpira', { body: 'man', pose: 'stand', outfit: 'chinpira', hair: 'none' }],
+  ['chinpira', { body: 'man', pose: 'walk', outfit: 'chinpira', hair: 'cap', phase: 0.7 }],
+  ['chinpira', { body: 'man', pose: 'talk', outfit: 'chinpira', hair: 'hat' }],
+  ['irezumi', { body: 'man', pose: 'stand', outfit: 'irezumi' }],
+  ['irezumi', { body: 'man', pose: 'pockets', outfit: 'irezumi', hair: 'none' }],
+  ['bosozoku', { body: 'man', pose: 'stand', outfit: 'bosozoku' }],
+  ['bosozoku', { body: 'man', pose: 'pockets', outfit: 'bosozoku', hair: 'none' }],
+  ['bosozoku', { body: 'man', pose: 'walk', outfit: 'bosozoku', hair: 'cap', phase: 0.3 }],
+  ['bosozoku', { body: 'woman', pose: 'stand', outfit: 'bosozoku', hair: 'long' }],
+  ['bosozoku', { body: 'woman', pose: 'stand', outfit: 'bosozoku', hair: 'ponytail' }],
+  ['boss', { body: 'man', pose: 'stand', outfit: 'boss' }],
+  ['boss', { body: 'man', pose: 'walk', outfit: 'boss', hair: 'none', phase: 0.3 }],
+  ['boss', { body: 'elder', pose: 'stand', outfit: 'boss' }],
+  ['politician', { body: 'man', pose: 'wave', outfit: 'boss', hair: 'hat' }],
+  ['politician', { body: 'elder', pose: 'stand', outfit: 'boss', hair: 'cap' }],
+  ['hood', { body: 'man', pose: 'pockets', outfit: 'hood' }],
+  ['hood', { body: 'man', pose: 'stand', outfit: 'hood', hair: 'none' }],
+  ['hood', { body: 'man', pose: 'pockets', outfit: 'hood', hair: 'cap' }],
+  ['hood', { body: 'woman', pose: 'pockets', outfit: 'hood', hair: 'long' }],
+  ['sukeban', { body: 'woman', pose: 'stand', outfit: 'yankee', hair: 'long' }],
+  ['sukeban', { body: 'woman', pose: 'walk', outfit: 'yankee', hair: 'ponytail', phase: 0.6 }],
+  ['bancho', { body: 'man', pose: 'pockets', outfit: 'yankee' }],
+  ['bancho', { body: 'man', pose: 'stand', outfit: 'yankee', hair: 'none' }],
+  ['drunk', { body: 'man', pose: 'stand', outfit: 'drunk' }],
+  ['drunk', { body: 'man', pose: 'walk', outfit: 'drunk', hair: 'none', phase: 0.3 }],
+];
 function outfitStage(title: string, DRESSED: Dressed[]): void {
   const z = rowZ();
   wall(z);
@@ -300,6 +338,114 @@ function outfitStage(title: string, DRESSED: Dressed[]): void {
 }
 outfitStage('outfits', DRESSED_FIRST);
 outfitStage('new outfits', DRESSED_NEW);
+outfitStage('shady', DRESSED_SHADY);
+// A woman's hips and bottom (real/mobShape.ts), in trousers, each way of building them turned round: the plain seat,
+// round as the city has them, fuller ones (the two sides run together: no cleft, no line), and in full with the
+// cleft (what skin-tight clothes will show, to come); then where the legs part, as it was and raised; then what
+// else shows the hips, from behind, and walking and sitting.
+{
+  const trials = (title: string, list: [string, string, ShapedTrial][], YAWS: number[]): void => {
+    const z = rowZ();
+    wall(z);
+    const step = 0.85, gap = 1.2;
+    const w = YAWS.length * step;
+    const x0 = -(list.length * w + (list.length - 1) * gap) / 2 + step / 2;
+    list.forEach(([name, label, trial], g) => {
+      YAWS.forEach((yaw, i) => people.push({ x: x0 + g * (w + gap) + i * step, z, body: 'woman', pose: 'stand', yaw, hair: 'bob', color: tone(4), trial }));
+      const cx = x0 + g * (w + gap) + (w - step) / 2;
+      tags.push([label, cx, 2.25, z]);
+      items.push({ name: `${title}: ${name}`, at: new THREE.Vector3(cx, 0.95, z), size: w + 0.3, view: LEVEL, close: true });
+      items.push({ name: `${title}: ${name}, hips`, at: new THREE.Vector3(cx, 0.95, z), size: w - 0.4, view: LEVEL, close: true });
+    });
+    items.push({ name: title, at: new THREE.Vector3(0, 1, z), size: list.length * (w + gap), view: LEVEL });
+    endStage();
+  };
+  trials('the bottom', [
+    ['plain seat', 'plain seat (as teens keep)', { rear: 0 }],
+    ['round', "round: the city's", {}],
+    ['full', 'full, no cleft', { rear: 1 }],
+    ['fuller', 'fuller, no cleft', { rear: 1.5 }],
+    ['fullest', 'fullest, no cleft', { rear: 2 }],
+    ['with the cleft', 'full, with the cleft: skin-tight clothes, to come', { rear: 1, cleft: true }],
+  ], [Math.PI, 2.35, Math.PI / 2]);
+  trials('the crotch', [
+    ['as it was', 'as it was (lower)', { crotch: 0.8 }],
+    ['raised', "raised, the seat as low as it was: the city's", {}],
+    ['raised, the seat drawn in', 'raised, the seat drawn in higher too', { part: 0.9 }],
+  ], [Math.PI, 2.35, Math.PI / 2, 0.8, 0]);
+}
+// The woman's body with nothing on (a mannequin's: the rooms of adult scenes use it), beside the same body in
+// clothes, to judge its shape: the cleft against what skin-tight clothes show, the breasts against a top's. On
+// the dev server only, and never in the demo.
+if (import.meta.env.DEV && __EDITION__ !== 'demo') {
+  const z = rowZ();
+  wall(z);
+  const YAWS: [string, number][] = [['front', 0], ['3/4', 0.8], ['side', Math.PI / 2], ['3/4 back', 2.35], ['back', Math.PI]];
+  const WHO: [string, string, Partial<Spec>][] = [
+    ['bare', 'nothing on', { outfit: 'nude' }],
+    ['skin-tight, to come', 'in clothes, the bottom in full with the cleft (skin-tight, to come)', { trial: { rear: 1, cleft: true } }],
+  ];
+  const step = 0.85, gap = 1.2;
+  const w = YAWS.length * step;
+  const x0 = -(WHO.length * w + (WHO.length - 1) * gap) / 2 + step / 2;
+  WHO.forEach(([name, label, extra], g) => {
+    YAWS.forEach(([, yaw], i) => people.push({ x: x0 + g * (w + gap) + i * step, z, body: 'woman', pose: 'stand', yaw, hair: 'bob', color: tone(4), ...extra }));
+    const cx = x0 + g * (w + gap) + (w - step) / 2;
+    tags.push([label, cx, 2.25, z]);
+    items.push({ name: `the bare body: ${name}`, at: new THREE.Vector3(cx, 0.95, z), size: w + 0.3, view: LEVEL, close: true });
+    items.push({ name: `the bare body: ${name}, chest`, at: new THREE.Vector3(cx - step, 1.2, z), size: 2.4, view: LEVEL, close: true });
+    items.push({ name: `the bare body: ${name}, hips`, at: new THREE.Vector3(cx + step, 0.9, z), size: 2.4, view: LEVEL, close: true });
+  });
+  items.push({ name: 'the bare body', at: new THREE.Vector3(0, 1, z), size: WHO.length * (w + gap), view: LEVEL });
+  endStage();
+  const zn = rowZ();
+  wall(zn);
+  const pairGap = 0.5, stepN = 0.8;
+  const wn = 2 * stepN;
+    const cx = xn + g * (wn + pairGap) + stepN / 2;
+    tags.push([`${g + 1}: ${look.name}${g ? '' : " (the city's)"}`, cx, 2.25, zn]);
+  });
+  endStage();
+  const zh = rowZ();
+  wall(zh);
+  const stepH = 0.9;
+    people.push({ x: xh + g * stepH, z: zh, body: 'woman', pose: 'stand', yaw: 0, hair: 'bob', outfit: 'nude', color: tone(4), trial: g ? { hair: g } : undefined });
+    tags.push([`${g + 1}: ${look.name}${g ? '' : " (the city's)"}`, xh + g * stepH, 2.25, zh]);
+    items.push({ name: `the bare body: hair ${g + 1}, ${look.name}`, at: new THREE.Vector3(xh + g * stepH, 0.82, zh), size: 0.55, view: LEVEL, close: true });
+  });
+  endStage();
+}
+{
+  const zb = rowZ();
+  wall(zb);
+  const WEAR: [string, Omit<Spec, 'x' | 'z'>][] = [
+    ['walking', { body: 'woman', pose: 'walk', phase: 0.3, hair: 'bob' }],
+    ['walking', { body: 'woman', pose: 'walk', phase: 0.8, hair: 'bob' }],
+    ['sitting', { body: 'woman', pose: 'sit', hair: 'bob', yaw: Math.PI / 2 }],
+    ['sitting', { body: 'woman', pose: 'sit', hair: 'bob', yaw: 2.5 }],
+    ['shorts', { body: 'woman', pose: 'stand', outfit: 'shorts', hair: 'ponytail' }],
+    ['shorts', { body: 'woman', pose: 'stand', outfit: 'shorts', hair: 'ponytail', yaw: 2.2 }],
+    ['hoodie', { body: 'woman', pose: 'stand', outfit: 'hoodie', hair: 'bob' }],
+    ['shop apron', { body: 'woman', pose: 'stand', outfit: 'apron', hair: 'bun' }],
+    ['hard hat', { body: 'woman', pose: 'stand', outfit: 'work', hair: 'bob' }],
+    ['police', { body: 'woman', pose: 'stand', outfit: 'police', hair: 'short', color: GHOST_COLORS[3] }],
+    ['mini skirt', { body: 'woman', pose: 'stand', outfit: 'mini', hair: 'bob' }],
+    ['evening dress', { body: 'woman', pose: 'stand', outfit: 'gown', hair: 'bun' }],
+    ['suit', { body: 'woman', pose: 'stand', outfit: 'suit', hair: 'bun' }],
+    ['dress', { body: 'woman', pose: 'stand', outfit: 'dress', hair: 'bob' }],
+    ['track suit (teen)', { body: 'woman', pose: 'stand', outfit: 'track', hair: 'ponytail' }],
+    ['gym clothes (teen)', { body: 'woman', pose: 'stand', outfit: 'gym', hair: 'ponytail' }],
+  ];
+  const stepB = 1.0;
+  const xb = (-(WEAR.length - 1) * stepB) / 2;
+  WEAR.forEach(([name, sp], c) => {
+    people.push({ x: xb + c * stepB, z: zb, yaw: Math.PI, color: tone(c * 3 + 4), ...sp });
+    tags.push([name, xb + c * stepB, 2.25, zb]);
+  });
+  items.push({ name: 'the bottom: in other clothes, walking, sitting', at: new THREE.Vector3(0, 1, zb), size: WEAR.length * stepB + 1, view: LEVEL });
+  for (let c = 0; c < WEAR.length; c += 4) items.push({ name: `the bottom: clothes ${c / 4 + 1}: ${[...new Set(WEAR.slice(c, c + 4).map(([n]) => n))].join(', ')}`, at: new THREE.Vector3(xb + (c + 1.5) * stepB, 0.95, zb), size: 4 * stepB, view: LEVEL, close: true });
+  endStage();
+}
 // Holding hands: each pair is placed by holdHands as the generation being built has them, so the hands meet.
 const holding: [number, number][] = [];
 const pair = (a: Spec, b: Spec): void => {
@@ -353,6 +499,11 @@ const pair = (a: Spec, b: Spec): void => {
   });
   // (Those standing together come and go together too: the builder gives people within reach of one another one seed.)
   pair({ x: -3.4, z: z + 4.8, body: 'woman', pose: 'hold', side: 1, hair: 'ponytail', color: tone(7), fade: true }, { x: -2.85, z: z + 4.8, body: 'child', pose: 'hold', hair: 'twin', look: -0.4, color: tone(12), fade: true });
+  // The ones you'd rather not pass: loitering as the shady do (squatting, smoking, watching), and a drunk weaving home.
+  const LOITER: Omit<Spec, 'x' | 'z' | 'pose'>[] = [{ body: 'man', outfit: 'hood', hair: 'short' }, { body: 'man', outfit: 'chinpira', hair: 'cap' }, { body: 'man', outfit: 'yakuza', hair: 'short' }, { body: 'woman', outfit: 'yankee', hair: 'long' }, { body: 'man', outfit: 'bosozoku', hair: 'short' }];
+  LOITER.forEach((who, i) => people.push({ x: 9.6 + (i % 3) * 1.1, z: z + 4.3 + Math.floor(i / 3) * 1.1, pose: 'stand', yaw: -0.9 + i * 0.35, color: tone(i * 2 + 1), fade: true, seed: 0.42, manner: 'shady', ...who }));
+  people.push({ x: 15, z: z + 2.9, body: 'man', pose: 'walk', yaw: -Math.PI / 2, outfit: 'drunk', hair: 'short', color: tone(4), fade: true, seed: 0.77, manner: 'drunk', walk: { ex: -30, ez: 0, speed: 0.8, gap: 2 } });
+  people.push({ x: -15, z: z + 1.9, body: 'man', pose: 'walk', yaw: Math.PI / 2, outfit: 'office', hair: 'short', color: tone(2), fade: true, seed: 0.13, walk: { ex: 30, ez: 0, speed: 2.9, gap: 2 } });
   const standing: Spec[] = [
     { x: -7.2, z: z + 4.4, body: 'woman', pose: 'talk', hair: 'bob', long: true },
     { x: -7.2, z: z + 5.3, body: 'man', pose: 'stand', yaw: Math.PI },
@@ -365,9 +516,96 @@ const pair = (a: Spec, b: Spec): void => {
   tags.push(['walking past', 0, 2.5, z]);
   tags.push(['standing about', 0, 2.5, z + 4.8]);
   items.push({ name: 'street', at: new THREE.Vector3(0, 1, z + 2.4), size: 13, view: new THREE.Vector3(0, 0.3, 1).normalize() });
+  items.push({ name: 'street: the loiterers', at: new THREE.Vector3(10.6, 0.9, z + 4.8), size: 5.5, view: new THREE.Vector3(-0.2, 0.12, 1).normalize(), close: true });
   items.push({ name: 'street (as you walk it)', at: new THREE.Vector3(0, 1.45, z + 2.4), size: 9, view: new THREE.Vector3(0.9, 0.0, 0.45).normalize() });
   endStage();
 }
+// Emotes (real/emotes.ts): each of the marks the crowd shows now and then, held up by someone, the three looks of
+// the blush, the hearts and the stars side by side to compare (or, from the panel, coming and going as they do in the
+// city, only far more often); and, from the panel, everyone's breath in the cold.
+const emoteFrom = people.length;
+const emoteStage = stage;
+// (Where the row stands: the figures in it are the ones that emote, in the marks' order along it.)
+let emoteRow = { x0: 0, step: 1, z: 0, depth: 0.6 };
+{
+  const z = rowZ();
+  wall(z);
+  // (The rows run back past the floor's edge by now: it's made to reach under this one.)
+  floor.scale.setScalar(Math.max(1, (20 - z) / 60));
+  // Who holds each (EMOTE_MARKS, in order): faces to the front for the ones drawn on the face, the sigh half turned.
+  const WHO: Omit<Spec, 'x' | 'z'>[] = [
+    { body: 'man', pose: 'stand' },
+    { body: 'woman', pose: 'stand', hair: 'bob' },
+    { body: 'child', pose: 'stand', hair: 'cap' },
+    { body: 'elder', pose: 'stand' },
+    { body: 'woman', pose: 'phone', hair: 'long' },
+    { body: 'woman', pose: 'stand', outfit: 'school', hair: 'ponytail' },
+    { body: 'woman', pose: 'stand', hair: 'bob', outfit: 'dress' },
+    { body: 'man', pose: 'stand', outfit: 'office' },
+    { body: 'woman', pose: 'stand', hair: 'long', outfit: 'dress' },
+    { body: 'woman', pose: 'stand', hair: 'short', outfit: 'suit' },
+    { body: 'man', pose: 'stand', outfit: 'hoodie' },
+    { body: 'woman', pose: 'wave', outfit: 'school', hair: 'twin' },
+    { body: 'man', pose: 'stand', outfit: 'school' },
+    { body: 'child', pose: 'stand', hair: 'twin' },
+    { body: 'man', pose: 'walk', outfit: 'hoodie', phase: 0.3 },
+    { body: 'man', pose: 'pockets', hair: 'hat', long: true },
+    { body: 'man', pose: 'stand', outfit: 'suit', yaw: 1.1 },
+    { body: 'woman', pose: 'stand', outfit: 'suit', hair: 'bun' },
+    { body: 'man', pose: 'stand', outfit: 'office', hair: 'none' },
+    { body: 'woman', pose: 'stand', hair: 'ponytail' },
+  ];
+  const step = 1.15;
+  const x0 = (-(EMOTE_MARKS.length - 1) * step) / 2;
+  emoteRow = { x0, step, z, depth: 0.6 };
+  EMOTE_MARKS.forEach(({ label }, i) => {
+    people.push({ x: x0 + i * step, z, color: tone(i * 3 + 1), ...WHO[i % WHO.length] });
+    tags.push([label, x0 + i * step, 2.5, z]);
+  });
+  items.push({ name: 'emotes', at: new THREE.Vector3(0, 1.1, z), size: EMOTE_MARKS.length * step + 1, view: LEVEL });
+  // Close: the plain ones, then each set of looks side by side.
+  const CLOSE: [string, number, number][] = [['sweat, anger, !, ?, !?', 0, 5], ['blush: lines, flush, both', 5, 3], ['hearts: over head, eyes, rising', 8, 3], ['stars: over head, eyes, round head', 11, 3], ['note, zzz, sigh', 14, 3], ['..., gloom, fluster', 17, 3]];
+  for (const [name, from, n] of CLOSE) items.push({ name: `emotes: ${name}`, at: new THREE.Vector3(x0 + (from + (n - 1) / 2) * step, 1.45, z), size: n * step + 0.2, view: LEVEL, close: true });
+  endStage();
+}
+// Smokers (real/smoke.ts): the street's people with something lit, as the city has them: the cigarette or cigar in the
+// free hand, up to the mouth for a drag every so often, the ember, the thread of smoke off its tip and the breath of
+// smoke after each drag. (From the panel: a wind for it to lean with.)
+const smokeFrom = people.length;
+const smokeStage = stage;
+{
+  const z = rowZ();
+  wall(z);
+  const WHO: [string, Omit<Spec, 'x' | 'z'>][] = [
+    ['a man', { body: 'man', pose: 'stand', smokes: 'cigarette' }],
+    ['a salaryman (case in the left)', { body: 'man', pose: 'stand', outfit: 'suit', smokes: 'cigarette' }],
+    ['left-handed', { body: 'man', pose: 'pockets', outfit: 'office', hair: 'none', side: -1, smokes: 'cigarette' }],
+    ['a woman', { body: 'woman', pose: 'stand', hair: 'bob', outfit: 'dress', smokes: 'cigarette' }],
+    ['a hostess', { body: 'woman', pose: 'stand', hair: 'long', outfit: 'gown', side: -1, smokes: 'cigarette' }],
+    ['an old man', { body: 'elder', pose: 'stand', hair: 'cap', smokes: 'cigarette' }],
+    ['a labourer', { body: 'man', pose: 'stand', outfit: 'work', hair: 'short', smokes: 'cigarette' }],
+    ['a chinpira (squats)', { body: 'man', pose: 'stand', outfit: 'chinpira', hair: 'cap', manner: 'shady', smokes: 'cigarette' }],
+    ['yakuza', { body: 'man', pose: 'stand', outfit: 'yakuza', hair: 'short', manner: 'shady', smokes: 'cigarette' }],
+    ['a drunk', { body: 'man', pose: 'stand', outfit: 'drunk', hair: 'short', manner: 'drunk', smokes: 'cigarette' }],
+    ['a fat cat: a cigar', { body: 'man', pose: 'stand', outfit: 'boss', hair: 'none', smokes: 'cigar' }],
+    ['a politician: a cigar', { body: 'man', pose: 'stand', outfit: 'boss', hair: 'cap', side: -1, smokes: 'cigar' }],
+    ['the old boss: a cigar', { body: 'elder', pose: 'stand', outfit: 'yakuza', hair: 'hat', smokes: 'cigar' }],
+  ];
+  const step = 1.3;
+  const x0 = (-(WHO.length - 1) * step) / 2;
+  WHO.forEach(([label, who], i) => {
+    people.push({ x: x0 + i * step, z, color: tone(i * 3 + 2), ...who });
+    tags.push([label, x0 + i * step, 2.5, z]);
+  });
+  // Two walking past with one lit: the thread trails behind them.
+  people.push({ x: -9, z: z + 1.5, body: 'man', pose: 'walk', yaw: Math.PI / 2, outfit: 'suit', hair: 'short', color: tone(4), phase: 0.1, fade: true, seed: 0.31, smokes: 'cigarette', walk: { ex: 18, ez: 0, speed: 1.25, gap: 1 } });
+  people.push({ x: 9, z: z + 2.3, body: 'man', pose: 'walk', yaw: -Math.PI / 2, outfit: 'long', hair: 'hat', color: tone(9), phase: 0.6, fade: true, seed: 0.64, side: -1, smokes: 'cigarette', walk: { ex: -18, ez: 0, speed: 1.1, gap: 2 } });
+  items.push({ name: 'smoking', at: new THREE.Vector3(0, 1.15, z + 0.6), size: WHO.length * step + 1, view: LEVEL });
+  const CLOSE: [string, number, number][] = [['men', 0, 3], ['women, an old man', 3, 3], ['at work, and the shady', 6, 4], ['cigars', 10, 3]];
+  for (const [name, from, n] of CLOSE) items.push({ name: `smoking: ${name}`, at: new THREE.Vector3(x0 + (from + (n - 1) / 2) * step, 1.3, z), size: n * step + 0.3, view: new THREE.Vector3(0.25, 0.06, 1).normalize(), close: true });
+  endStage();
+}
+const smokeTo = people.length;
 
 // The sculpted figures' head size (a scale on what real/mobShape.ts gives each body), for trying sizes: ?head=.
 const HEADS = [1, 0.92, 0.85];
@@ -376,7 +614,7 @@ setShapedHeadScale(headSize);
 
 // ---- Both generations, standing in the same places ----
 type Gen = 'new' | 'current' | 'both';
-const meshes: Record<MobShape, THREE.Mesh[]> = { classic: [], shaped: [] };
+const meshes: Record<MobShape, THREE.Object3D[]> = { classic: [], shaped: [] };
 const stats = {} as Record<MobShape, { vertices: number; triangles: number; ms: number; man: number; woman: number }>;
 for (const shape of ['classic', 'shaped'] as MobShape[]) {
   const t0 = performance.now();
@@ -392,22 +630,51 @@ for (const shape of ['classic', 'shaped'] as MobShape[]) {
     held.set(b, B);
   }
   for (let st = 0; st < stage; st++) {
-    const gb = new GhostBuilder();
-    people.forEach((s, i) => {
-      if (stageOf.people[i] !== st) return;
-      const spec = held.get(i) ?? full(s);
-      addFigure(gb, spec);
-      triangles += figureMesh(spec).triangles;
-    });
-    vertices += gb.count;
-    const mesh = new THREE.Mesh(gb.build(0, 0)!, ghost);
-    mesh.frustumCulled = false;
-    scene.add(mesh);
-    meshes[shape].push(mesh);
+    // (A mesh for each way of building the hips on the stage: a builder's templates are whichever are set when it builds.)
+    const group = new THREE.Group();
+    const trials = new Set(people.filter((_, i) => stageOf.people[i] === st).map((s) => JSON.stringify(s.trial ?? {})));
+    for (const trial of trials) {
+      setShapedTrial(JSON.parse(trial) as ShapedTrial);
+      const gb = new GhostBuilder();
+      people.forEach((s, i) => {
+        if (stageOf.people[i] !== st || JSON.stringify(s.trial ?? {}) !== trial) return;
+        const spec = held.get(i) ?? full(s);
+        addFigure(gb, spec);
+        triangles += figureMesh(spec).triangles;
+      });
+      vertices += gb.count;
+      const mesh = new THREE.Mesh(gb.build(0, 0)!, ghost);
+      mesh.frustumCulled = false;
+      group.add(mesh);
+    }
+    setShapedTrial(null);
+    scene.add(group);
+    meshes[shape].push(group);
   }
   const plain = (body: Body): number => figureMesh({ body, hair: DEFAULT_HAIR[body], long: false }).triangles;
   stats[shape] = { vertices, triangles, ms: performance.now() - t0, man: plain('man'), woman: plain('woman') };
 }
+// The emotes' row (measured and packed for the sculpted figures, the generation still set here).
+const emotes = new Emotes(ghost);
+{
+  const specs = people.slice(emoteFrom, emoteFrom + EMOTE_MARKS.length).map((s): FigureSpec => ({ yaw: 0, color: GHOST_COLORS[1], hair: DEFAULT_HAIR[s.body], long: false, phase: 0.25, side: 1, look: 0, fade: false, ...s }));
+  emotes.fill([packFigures(specs)], specs.length);
+  emotes.row = emoteRow;
+  scene.add(emotes.mesh, emotes.breath);
+}
+// The smokers' cigarettes, embers and smoke (the sculpted figures', as the crowd's are in the city).
+const smoke = new CrowdSmoke(ghost);
+{
+  const specs = people.slice(smokeFrom, smokeTo).map((s): FigureSpec => ({ yaw: 0, color: GHOST_COLORS[1], hair: DEFAULT_HAIR[s.body], long: false, phase: 0.25, side: 1, look: 0, fade: false, ...s }));
+  smoke.fill([packFigures(specs, null, false)]);
+  scene.add(smoke.mesh);
+}
+// (A wind for the smoke: ?wind=x,z in m/s, or the panel's.)
+const WINDS: [string, number, number][] = [['still air', 0, 0], ['a breeze', 0.7, 0.2], ['windy', 2.4, 0.6]];
+let windy = 0;
+const smokeWind = new THREE.Vector2();
+if (query.has('wind')) smokeWind.fromArray((query.get('wind') ?? '0,0').split(',').map(Number));
+smoke.wind = smokeWind;
 setMobShape('classic');
 const tagObjects = tags.map(([text, x, y, z]) => {
   const div = document.createElement('div');
@@ -437,6 +704,10 @@ const SKINS = [1, 1.5, 2.2];
 let skin = Number(query.get('skin') ?? 1);
 let still = query.get('still') !== '0';
 let labelsOn = query.get('labels') !== '0';
+// The emotes' row: each held up to look at, or coming and going by the clock as in the city (far more often: ?emotes=clock).
+let emotesHeld = query.get('emotes') !== 'clock';
+// The same row's breath in the cold (?cold=1).
+let cold = query.get('cold') === '1';
 /** The stage looked at alone (null: everything). */
 let solo: number | null = null;
 let wire = false;
@@ -467,9 +738,16 @@ const apply = (): void => {
   ghost.uniforms.uSkin.value = skin;
   (ghost.uniforms.uFlat.value as THREE.Vector4).set(0.02, 0.02, 0.022, oneColor ? 1 : 0);
   ghost.uniforms.uBlack.value = allBlack ? 1 : 0;
+  // (Coloured, they aren't ghosts: nobody comes and goes. See-through or all black, they do.)
+  ghost.uniforms.uStay.value = allBlack || look === 'ghost' ? 0 : 1;
   ghost.uniforms.uEdge.value = edge;
   ghost.uniforms.uStill.value = still ? 1 : 0;
   ghost.wireframe = wire;
+  emotes.on = (solo === null || solo === emoteStage) && gen !== 'current';
+  emotes.cold = cold && emotes.on ? 1 : 0;
+  emotes.force = emotesHeld ? 'each' : null;
+  emotes.rate = emotesHeld ? EMOTE_RATE : 1;
+  smoke.mesh.visible = smoke.count > 0 && (solo === null || solo === smokeStage) && gen !== 'current';
   tagObjects.forEach((o, i) => (o.visible = labelsOn && (solo === null || solo === stageOf.tags[i])));
   renderPanel();
 };
@@ -507,7 +785,7 @@ const focus = (it: Item, now = false): void => {
   else if (name === 'everything') focus(EVERYTHING, true);
   return !!it;
 };
-(window as unknown as { __mob: unknown }).__mob = { scene, camera, ghost, meshes, stats, items: items.map((i) => i.name) };
+(window as unknown as { __mob: unknown }).__mob = { scene, camera, controls, ghost, emotes, smoke, meshes, stats, items: items.map((i) => i.name) };
 
 function renderPanel(): void {
   const panel = $('panel');
@@ -555,6 +833,13 @@ function renderPanel(): void {
   section('Motion');
   button(still ? 'standing still (T)' : 'going about their routine (T)', !still, set(() => (still = !still)));
   button(labelsOn ? 'labels on (L)' : 'labels off (L)', labelsOn, set(() => (labelsOn = !labelsOn)));
+  button(emotesHeld ? 'emotes held up' : 'emotes come and go', !emotesHeld, set(() => (emotesHeld = !emotesHeld)));
+  button(cold ? 'cold: breath shows (emotes row)' : 'warm: no breath', cold, set(() => (cold = !cold)));
+  button(`smoke: ${WINDS[windy][0]}`, windy > 0, set(() => {
+    windy = (windy + 1) % WINDS.length;
+    smokeWind.set(WINDS[windy][1], WINDS[windy][2]);
+    smoke.wind = smokeWind;
+  }));
   section('Views');
   button('everything', solo === null, () => focus(EVERYTHING));
   for (const it of items) if (!it.close) button(it.name, false, () => focus(it));
@@ -564,6 +849,12 @@ function renderPanel(): void {
   a.href = 'models.html';
   a.textContent = '→ model showroom (cars, cast, props)';
   panel.appendChild(a);
+  // The scene editor poses these same figures in the rooms behind the city's windows.
+  const scenes = document.createElement('a');
+  scenes.href = 'scenes.html';
+  scenes.textContent = '→ scene editor (the rooms behind the windows)';
+  scenes.style.display = 'block';
+  panel.appendChild(scenes);
 }
 
 /** The original look, on or off: everything black and see-through; off, back to solid and coloured. */
@@ -611,6 +902,8 @@ const fwd = new THREE.Vector3();
 const right = new THREE.Vector3();
 // (A fixed time for scripted shots: ?t=seconds.)
 const fixedTime = query.has('t') ? Number(query.get('t')) : null;
+// (And a script sets it shot by shot: __mob.fixedTime.)
+const hooks = (window as unknown as { __mob: { fixedTime?: number } }).__mob;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.1);
   const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 12 : 3.5) * dt;
@@ -638,7 +931,7 @@ renderer.setAnimationLoop(() => {
   }
   controls.autoRotate = turntable;
   controls.update();
-  ghost.uniforms.uTime.value = fixedTime ?? performance.now() / 1000;
+  ghost.uniforms.uTime.value = hooks.fixedTime ?? fixedTime ?? performance.now() / 1000;
   composer.render(dt);
   labels.render(scene, camera);
   const S = stats.shaped, C = stats.classic;

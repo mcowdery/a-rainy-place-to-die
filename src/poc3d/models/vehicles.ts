@@ -23,9 +23,9 @@ import { TAXI_ADS } from './ads';
 
 export type CarType =
   | 'sedan' | 'luxury' | 'sports' | 'taxi' | 'taxi2' | 'kei' | 'minivan' | 'keitruck' | 'hatch' | 'rotary' | 'awd' | 'roadster'
-  | 'van' | 'keivan' | 'boxtruck' | 'police';
+  | 'van' | 'keivan' | 'boxtruck' | 'police' | 'hardtop';
 export type VehicleType = CarType | BikeType;
-export const CAR_TYPES2: readonly CarType[] = ['sedan', 'luxury', 'sports', 'taxi', 'taxi2', 'kei', 'minivan', 'keitruck', 'hatch', 'rotary', 'awd', 'roadster', 'van', 'keivan', 'boxtruck', 'police'];
+export const CAR_TYPES2: readonly CarType[] = ['sedan', 'luxury', 'sports', 'taxi', 'taxi2', 'kei', 'minivan', 'keitruck', 'hatch', 'rotary', 'awd', 'roadster', 'van', 'keivan', 'boxtruck', 'police', 'hardtop'];
 /** The working vehicles and the patrol car (under review in the showroom, not yet in the district's mixes). */
 export const WORK_TYPES: readonly CarType[] = ['van', 'keivan', 'boxtruck', 'police'];
 /** The cars you can own and race (the garage). */
@@ -82,7 +82,28 @@ interface Design {
   readonly softTop?: boolean;
   /** Two-tone: ring segments below this take paint2 (the 80s "panda": a black lower body under the colour). */
   readonly twoTone?: number;
+  /** Mirrors out on the front wings instead of the doors (the classic taxi; a 70s saloon's are chrome). */
+  readonly fenderMirrors?: 'black' | 'chrome';
 }
+
+/**
+ * The noir saloon (under review in the showroom; yours through the debug menu's car picker as the Seika Kurofune,
+ * race/catalog.ts; in no traffic mix): a late-70s Japanese four-door pillared hardtop, the big square saloon of the
+ * detective dramas. Long, low and flat: a long level bonnet and boot, an upright squared-off roof on a thick rear
+ * pillar with a near-vertical back window, a straight waistline, chrome bumpers, a wide chrome grille between
+ * rectangular lamps, chrome wing mirrors far out on the front wings, steel wheels.
+ */
+const HARDTOP: Design = {
+  name: 'hardtop', L: 4.86, W: 0.85, corner: 0.09, clear: 0.16, x0: 0,
+  top: [[0, 0.62], [0.05, 0.92], [0.4, 0.95], [1.22, 0.965], [1.3, 1.0], [1.62, 1.36], [1.86, 1.395], [2.95, 1.4], [3.08, 1.37], [3.55, 1.0], [3.62, 0.965], [4.66, 0.93], [4.8, 0.88], [4.86, 0.64]],
+  belt: [[0, 0.92], [4.86, 0.9]],
+  roofInset: 0.13,
+  windscreen: [3.09, 3.55], rearGlass: [1.31, 1.6], sideGlass: [1.86, 3.44], pillars: [[2.6, 2.67]], blackPillars: false,
+  wheelX: [1.0, 3.72], wheelR: 0.325, tyreW: 0.2, rims: 'steel',
+  seams: [1.74, 2.64, 3.5],
+  head: [0.66, 0.8, 0.46, 0.82], grille: [0.6, 0.82, 0, 0.46], grilleChrome: true, tail: [0.68, 0.9, 0.34, 0.83],
+  plateY: [0.4, 0.52], plate: 'white', bumper: 'chrome', chromeBelt: true, fenderMirrors: 'chrome',
+};
 
 const SEDAN: Design = {
   name: 'sedan', L: 4.9, W: 0.915, corner: 0.3, clear: 0.15, x0: 0,
@@ -277,11 +298,12 @@ const BOXTRUCK: Design = {
 /** The patrol car (after the Crown patrol cars): the saloon, white over black, steel wheels, a red light bar. */
 const POLICE: Design = { ...SEDAN, name: 'police', rims: 'steel', twoTone: 4 };
 
-const DESIGNS: Record<CarType, Design> = { van: VAN, keivan: KEIVAN, boxtruck: BOXTRUCK, police: POLICE, sedan: SEDAN, luxury: LUXURY, sports: SPORTS, taxi: TAXI, taxi2: TAXI2, kei: KEI, minivan: MINIVAN, keitruck: KEITRUCK, hatch: HATCH, rotary: ROTARY, awd: AWD, roadster: ROADSTER };
+const DESIGNS: Record<CarType, Design> = { hardtop: HARDTOP, van: VAN, keivan: KEIVAN, boxtruck: BOXTRUCK, police: POLICE, sedan: SEDAN, luxury: LUXURY, sports: SPORTS, taxi: TAXI, taxi2: TAXI2, kei: KEI, minivan: MINIVAN, keitruck: KEITRUCK, hatch: HATCH, rotary: ROTARY, awd: AWD, roadster: ROADSTER };
 
 export const PAINTS: Record<VehicleType, readonly number[]> = {
   sedan: [0xe8e8e4, 0x121316, 0xb4b6ba, 0x1c2a44, 0x5a1a20],
   luxury: [0x07070a, 0x1a2032, 0x2a1418, 0xf0efe8],
+  hardtop: [0x0a0a0c, 0x16181e, 0x2a1418, 0x3a3428, 0xd6d2c6],
   sports: [0xc01818, 0xf0f0ec, 0x121316, 0xb4b6ba, 0x1c3a7a, 0xe8c020],
   taxi: [0x121316, 0xe0a818, 0x1f5a36, 0x1c2438],
   taxi2: [0x1c2240, 0x121316],
@@ -962,33 +984,75 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     }
   }
 
-  // Mirrors: door mirrors at the base of the A-pillar (the classic taxi has fender mirrors instead).
+  // Mirrors (`mirrorPlan`): door mirrors at the base of the A-pillar, or wing mirrors out on the front wings (the
+  // classic taxi's, and a 70s saloon's in chrome). Each is a shell that tapers forward from its rim to a blunt nose,
+  // swept in toward the car, on an arm or a stalk; in the rim a dark bezel, and the glass set back in it. (They were
+  // two boxes with a pane stuck on the back, which the user called bad once he could see them from the cab.)
   for (const sd of [-1, 1]) {
-    if (spec.type === 'taxi') {
-      // Fender mirrors, the classic Japanese taxi's signature.
-      const mx = d.L - 0.55;
-      const my = top(mx) + 0.02;
-      const mz = sd * (d.W - 0.12);
-      mb.kind = KIND.gloss;
-      mb.color = BLACK;
-      boxL(mx - 0.01, mx + 0.01, my, my + 0.12, mz - 0.01, mz + 0.01);
-      boxL(mx - 0.03, mx + 0.03, my + 0.1, my + 0.17, mz - 0.05, mz + 0.05);
-    } else {
-      const mx = d.windscreen[0] + 0.02;
-      const my = section(mx)[5][0] + 0.02;
-      const mz = sd * (halfW(mx) - 0.03);
-      // Arm out of the door, then the housing, with the glass facing back.
-      mb.kind = KIND.gloss;
-      mb.color = BLACK;
-      boxL(mx - 0.04, mx + 0.02, my - 0.01, my + 0.03, Math.min(mz, mz + sd * 0.08), Math.max(mz, mz + sd * 0.08));
-      mb.color = spec.type === 'keitruck' ? BLACK : paint;
-      boxL(mx - 0.07, mx + 0.03, my, my + 0.12, Math.min(mz + sd * 0.06, mz + sd * 0.2), Math.max(mz + sd * 0.06, mz + sd * 0.2));
-      mb.kind = KIND.glass;
-      const g0 = Math.min(mz + sd * 0.075, mz + sd * 0.185);
-      const g1 = Math.max(mz + sd * 0.075, mz + sd * 0.185);
-      const gn = N([-1, 0, 0]);
-      mb.quadN(P(mx - 0.072, my + 0.015, g0), P(mx - 0.072, my + 0.015, g1), P(mx - 0.072, my + 0.105, g1), P(mx - 0.072, my + 0.105, g0), gn, gn, gn, gn);
+    const M = mirrorPlan(d, spec.type as CarType, { top, halfW, section }, sd);
+    const fine = (spec.detail ?? 0.1) <= 0.13;
+    // A point of the head: `t` in from the rim (m), across (outboard) and up from its middle.
+    const at = (t: number, x: number, y: number): V3 => [M.c[0] - M.b[0] * t + M.a[0] * x + M.u[0] * y, M.c[1] - M.b[1] * t + M.a[1] * x + M.u[1] * y, M.c[2] - M.b[2] * t + M.a[2] * x + M.u[2] * y];
+    // A flat face through four points, turned to face `out`.
+    const face = (p0: V3, p1: V3, p2: V3, p3: V3, out: V3): void => {
+      const e1: V3 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+      const e2: V3 = [p3[0] - p0[0], p3[1] - p0[1], p3[2] - p0[2]];
+      let n: V3 = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      const len = Math.hypot(n[0], n[1], n[2]) || 1;
+      n = [n[0] / len, n[1] / len, n[2] / len];
+      const flip = n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0;
+      if (flip) n = [-n[0], -n[1], -n[2]];
+      const w = N(n);
+      if (flip) mb.quadN(P(...p0), P(...p3), P(...p2), P(...p1), w, w, w, w);
+      else mb.quadN(P(...p0), P(...p1), P(...p2), P(...p3), w, w, w, w);
+    };
+    const { hw, hh, depth } = M;
+    const c = 0.34 * Math.min(hw, hh);
+    const outline: [number, number][] = fine
+      ? [[hw, -(hh - c)], [hw, hh - c], [hw - c, hh], [-(hw - c), hh], [-hw, hh - c], [-hw, -(hh - c)], [-(hw - c), -hh], [hw - c, -hh]]
+      : [[hw, -hh], [hw, hh], [-hw, hh], [-hw, -hh]];
+    const n = outline.length;
+    // The shell's sections from the rim forward: how far in, how big, and how far swept in toward the car.
+    const rings: [number, number, number][] = fine ? [[0, 1, 0], [0.3 * depth, 1, 0], [0.72 * depth, 0.84, 0.14 * hw], [depth, 0.5, 0.34 * hw]] : [[0, 1, 0], [0.5 * depth, 0.95, 0.05 * hw], [depth, 0.55, 0.3 * hw]];
+    const ringAt = (k: number): V3[] => outline.map(([x, y]) => at(rings[k][0], x * rings[k][1] - rings[k][2], y * rings[k][1]));
+    const radial = (i: number): V3 => {
+      const x = (outline[i][0] + outline[(i + 1) % n][0]) / 2;
+      const y = (outline[i][1] + outline[(i + 1) % n][1]) / 2;
+      return [M.a[0] * x + M.u[0] * y, M.a[1] * x + M.u[1] * y, M.a[2] * x + M.u[2] * y];
+    };
+    const body: V3 = M.wing ? (d.fenderMirrors === 'chrome' ? CHROME : BLACK) : spec.type === 'keitruck' ? BLACK : paint;
+    mb.kind = M.wing && d.fenderMirrors === 'chrome' ? KIND.chrome : KIND.gloss;
+    mb.color = body;
+    for (let k = 0; k + 1 < rings.length; k++) {
+      const r0 = ringAt(k);
+      const r1 = ringAt(k + 1);
+      for (let i = 0; i < n; i++) face(r0[i], r0[(i + 1) % n], r1[(i + 1) % n], r1[i], radial(i));
     }
+    const nose = ringAt(rings.length - 1);
+    const fwd: V3 = [-M.b[0], -M.b[1], -M.b[2]];
+    if (fine) for (const q of [[0, 1, 2, 3], [0, 3, 4, 7], [4, 5, 6, 7]]) face(nose[q[0]], nose[q[1]], nose[q[2]], nose[q[3]], fwd);
+    else face(nose[0], nose[1], nose[2], nose[3], fwd);
+    // The rim's bezel, the well behind it, and the glass at its bottom (a hero car's own glass stands a little proud of it).
+    const well = fine ? 0.03 : 0.012;
+    const inner = (t: number): V3[] => outline.map(([x, y]) => at(t, x * 0.86, y * 0.86));
+    const rim = ringAt(0);
+    const i0 = inner(0);
+    const i1 = inner(well);
+    mb.kind = KIND.plain;
+    mb.color = TRIM;
+    for (let i = 0; i < n; i++) {
+      face(rim[i], rim[(i + 1) % n], i0[(i + 1) % n], i0[i], M.b);
+      const r = radial(i);
+      face(i0[i], i0[(i + 1) % n], i1[(i + 1) % n], i1[i], [-r[0], -r[1], -r[2]]);
+    }
+    mb.kind = KIND.chrome;
+    mb.color = [0.5, 0.56, 0.62];
+    if (fine) for (const q of [[0, 1, 2, 3], [0, 3, 4, 7], [4, 5, 6, 7]]) face(i1[q[0]], i1[q[1]], i1[q[2]], i1[q[3]], M.b);
+    else face(i1[0], i1[1], i1[2], i1[3], M.b);
+    // Its arm out of the door, or its stalk up from the wing.
+    mb.kind = M.wing && d.fenderMirrors === 'chrome' ? KIND.chrome : KIND.gloss;
+    mb.color = M.wing ? body : BLACK;
+    mb.beam(P(...M.foot), P(...(M.wing ? at(0.5 * depth, 0, -hh * 0.8) : at(0.55 * depth, -hw * 0.7, -hh * 0.3))), M.wing ? 0.018 : 0.04);
   }
 
   if (isTaxi(spec.type)) {
@@ -1257,7 +1321,7 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
       mb.quadN(P(x, y, -0.55), P(x + 0.05, top(x + 0.05) + 0.006, -0.55), P(x + 0.05, top(x + 0.05) + 0.006, 0.55), P(x, y, 0.55), n, n, n, n);
     }
   }
-  if (spec.type === 'luxury') {
+  if (spec.type === 'luxury' || spec.type === 'hardtop') {
     // Stand-up bonnet ornament and chrome sills.
     const ox = d.L - 0.3;
     mb.kind = KIND.chrome;
@@ -1621,6 +1685,57 @@ export function addVehicleMarks(mb: MeshBuilder, spec: VehicleSpec, signs: Vehic
 }
 
 /** Where a car's four wheels are, and their size and rims, for drawing them apart (to spin and steer). */
+/**
+ * A mirror's head, in the design's frame (x from the rear, y up, z across): the middle of its rim, the way the rim
+ * faces (back, toed in toward the car and tipped a little down), across (outboard) and up, its half size and its
+ * depth, and where its arm or stalk meets the body. `wing`: out on the front wing (the classic taxi, a 70s saloon)
+ * rather than on the door at the foot of the screen pillar.
+ */
+interface MirrorPlan {
+  wing: boolean;
+  c: V3;
+  b: V3;
+  a: V3;
+  u: V3;
+  hw: number;
+  hh: number;
+  depth: number;
+  foot: V3;
+}
+function mirrorPlan(d: Design, type: CarType, S: { top: (x: number) => number; halfW: (x: number) => number; section: (x: number) => [number, number][] }, sd: number): MirrorPlan {
+  const wing = type === 'taxi' || !!d.fenderMirrors;
+  const bl = Math.hypot(1, 0.05, 0.3);
+  const b: V3 = [-1 / bl, -0.05 / bl, (-sd * 0.3) / bl];
+  const al = Math.hypot(0.3, 1);
+  const a: V3 = [-0.3 / al, 0, sd / al];
+  // (Up: square to both, whichever way round that comes out.)
+  let u: V3 = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  if (u[1] < 0) u = [-u[0], -u[1], -u[2]];
+  if (wing) {
+    const mx = d.L - 0.55;
+    return { wing, b, a, u, c: [mx - 0.02, S.top(mx) + 0.15, sd * (d.W - 0.12)], hw: 0.054, hh: 0.037, depth: 0.075, foot: [mx + 0.01, S.top(mx) - 0.005, sd * (d.W - 0.12)] };
+  }
+  const mx = d.windscreen[0] + 0.02;
+  const my = S.section(mx)[5][0] + 0.02;
+  const skin = S.halfW(mx);
+  return { wing, b, a, u, c: [mx - 0.035, my + 0.07, sd * (skin + 0.115)], hw: 0.085, hh: 0.054, depth: 0.1, foot: [mx - 0.01, my + 0.03, sd * (skin - 0.03)] };
+}
+
+/**
+ * The door mirrors' glass (wing mirrors', on a car that has those), for a car that shows a picture in them
+ * (district/ownCar.ts): each one's middle, set back in its head's rim, and the way that rim faces, in the car's own
+ * frame (x to its left, z forward, as `wheelLayout`'s), and the glass's size. Left first.
+ */
+export function mirrorSpots(type: CarType): { x: number; y: number; z: number; nx: number; ny: number; nz: number; w: number; h: number }[] {
+  const d = DESIGNS[type];
+  const S = shapeOf(d);
+  return ([1, -1] as const).map((sd) => {
+    const M = mirrorPlan(d, type, S, sd);
+    const t = 0.017;
+    return { x: M.c[2] - M.b[2] * t, y: M.c[1] - M.b[1] * t, z: M.c[0] - M.b[0] * t - d.L / 2, nx: M.b[2], ny: M.b[1], nz: M.b[0], w: M.hw * 2 * 0.84, h: M.hh * 2 * 0.84 };
+  });
+}
+
 export function wheelLayout(type: CarType): { r: number; tw: number; rims: 'alloy' | 'steel'; spots: WheelSpot[] } {
   const d = DESIGNS[type];
   const spots: WheelSpot[] = [];

@@ -13,6 +13,8 @@
  *   adult/content/vn/<story>/assets/*      its stills; a file with a base still's name replaces it
  *   adult/content/phone/<contact>.yaml     overlay on a contact's beats (format in phoneOverlay.ts)
  *   adult/content/phone/media/*            its media; a file with a base file's name replaces it
+ *   adult/content/windows/*.json           more scenes for the rooms behind the windows (format in
+ *                                          poc3d/real/windowScenes.ts: each file a scene or a list of them)
  * An overlay only changes what's shown, never where the story goes or what it remembers, so both story editions
  * share one story, one set of flags and saves.
  */
@@ -56,4 +58,9 @@ export interface Edition {
   readonly kaburoArt: Readonly<Record<string, string>>;
   /** The cast's models (assets/characters/*.glb, models/characters.ts): URL by name ("mack_suit_black"). */
   readonly characters: Readonly<Record<string, string>>;
+  /**
+   * More scenes for the rooms behind the windows (poc3d/real/windowScenes.ts checks and merges them after the
+   * built-in ones): each entry one scene object or a list of them. Only the uncensored edition has any.
+   */
+  readonly windowScenes?: readonly unknown[];
 }

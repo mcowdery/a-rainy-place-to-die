@@ -5,10 +5,12 @@ import { CELL, junctionSpans, type CellPlan3, type Road3 } from '../district/pla
 import type { Signals } from '../district/traffic';
 import { propDist, type CellDetail } from './props';
 import { toGeometry, type RawGeometry } from './rawGeometry';
-import { CITY_PEOPLE, DISTRICT_PEOPLE, OUTFITS, pickOutfit, type Outfit, type PeopleMix } from '../district/peopleMix';
+import { CITY_PEOPLE, DISTRICT_PEOPLE, OUTFITS, pickOutfit, smokeOf, SMOKES, type Outfit, type PeopleMix, type Smoke } from '../district/peopleMix';
+import { HOURS, HOURS_GLSL, MANNERS, nightLife, seasonsOf, whenOf, type Hours, type Manner } from '../district/peopleHours';
 
 import { blend, BONES, FOOT_L, FOOT_LEVEL, FOOT_R, ARM_L, ARM_R, FORE_L, FORE_R, HEAD, one, PARENT, PELVIS, pivotsOf, PROPORTIONS, ROOT, scaleRows, SHIN_L, SHIN_R, SPINE, TemplateBuilder, THIGH_L, THIGH_R, type Body, type Hair, type Row, type Template, type V3, type Weight } from './mobRig';
-import { buildShaped, isTeen, TEEN_SCALE } from './mobShape';
+import { buildShaped, isTeen, shapedVariant, TEEN_SCALE } from './mobShape';
+import { EMOTE_GLSL, EMOTE_REACH, emoteUniforms, FACE_MARK, FACE_MARK_GLSL, FACE_VERTEX_GLSL, flushGlsl } from './emoteGlsl';
 import { modelTemplate, type MobModelDoc } from './mobModels';
 
 export type { Outfit } from '../district/peopleMix';
@@ -88,10 +90,22 @@ export interface FigureSpec {
   };
   /** The fade cycle's seed (people together share one, so they come and go together); else from where it stands. */
   readonly seed?: number;
+  /** When this one is out (district/peopleHours.ts: its hours through the day, less in rain); unset, always there. */
+  readonly hours?: Hours;
+  /** Its threshold for being out, in [0, 1): out while the share of such people out is above it. */
+  readonly out?: number;
+  /** How it stands about and walks (the material's routine: a shady one squats and smokes, a drunk sways). */
+  readonly manner?: Manner;
   /** Pose 'hold': how far out the holding arm is raised (rad). `holdHands` sets it so two people's hands meet. */
   readonly reach?: number;
   /** A modelled figure (real/mobModels.ts, registered with `registerMobModel`) drawn in place of the body's lofted one. */
   readonly model?: string;
+  /**
+   * Something lit in the free hand (district/peopleMix.ts smokeOf): the material carries it low and brings it to the
+   * mouth for a drag every so often; real/smoke.ts draws the cigarette or cigar, its ember and the smoke for the
+   * figures it's given (the street's crowd).
+   */
+  readonly smokes?: Smoke;
 }
 
 /** The mob's shades: blacks, charcoal, and dark navy, wine, olive and brown. */
@@ -324,6 +338,13 @@ const wears = (b: Body, o: Outfit): boolean => {
     case 'mini':
     case 'gown':
       return b === 'woman';
+    // (Nothing on: only ever in a room of an adult scene, real/windowScenes.ts; no mix has it and pickOutfit never
+    // gives it, so nobody in the street does.)
+    case 'nude':
+      return b === 'woman' || b === 'man';
+    // (The same in high heels: a woman's.)
+    case 'nude_heels':
+      return b === 'woman';
     case 'school':
     case 'otaku':
     case 'shorts':
@@ -337,7 +358,17 @@ const wears = (b: Body, o: Outfit): boolean => {
     case 'office':
     case 'nurse':
     case 'doctor':
+    case 'bosozoku':
+    case 'hood':
+    case 'yankee':
       return b === 'man' || b === 'woman';
+    case 'yakuza':
+    case 'boss':
+      return b === 'man' || b === 'elder';
+    case 'chinpira':
+    case 'irezumi':
+    case 'drunk':
+      return b === 'man';
     default:
       return b !== 'child';
   }
@@ -355,7 +386,9 @@ export function outfitOf(s: Pick<FigureSpec, 'body' | 'long' | 'outfit'>): Outfi
  * the same, so one material poses both. Set it before the figures are built (templates are cached per generation).
  */
 export type MobShape = 'classic' | 'shaped';
-let mobShape: MobShape = 'classic';
+// (The sculpted figures are the city's now, on the main thread and in the chunk workers alike; 'classic' is kept for
+// the mob showroom's comparison and its tests.)
+let mobShape: MobShape = 'shaped';
 export function setMobShape(shape: MobShape): void {
   mobShape = shape;
 }
@@ -365,14 +398,14 @@ export const getMobShape = (): MobShape => mobShape;
 const CLASSIC_HAIR: Partial<Record<Hair, Hair>> = { bob: 'short', ponytail: 'long', twin: 'long' };
 
 /** The outfits only the shaped generation has, as the classic one draws them. */
-const CLASSIC_OUTFIT: Partial<Record<Outfit, Outfit>> = { dress: 'long', mini: 'plain', gown: 'long', shorts: 'plain', hoodie: 'plain', office: 'suit', track: 'plain', nurse: 'plain', doctor: 'long', apron: 'plain', puffer: 'plain', gym: 'plain' };
+const CLASSIC_OUTFIT: Partial<Record<Outfit, Outfit>> = { dress: 'long', mini: 'plain', gown: 'long', shorts: 'plain', hoodie: 'plain', office: 'suit', track: 'plain', nurse: 'plain', doctor: 'long', apron: 'plain', puffer: 'plain', gym: 'plain', yakuza: 'suit', boss: 'suit', drunk: 'suit', bosozoku: 'long', yankee: 'school', chinpira: 'plain', hood: 'plain', irezumi: 'plain', nude: 'plain', nude_heels: 'plain' };
 
 const templates = new Map<string, Template>();
 
 /** The posable template for a body with its hair and outfit (built once per combination). */
 function template(body: Body, hair: Hair, outfit: Outfit): Template {
   const o = wears(body, outfit) ? outfit : 'plain';
-  const key = `${mobShape}|${body}|${hair}|${o}`;
+  const key = `${mobShape}${mobShape === 'shaped' ? shapedVariant() : ''}|${body}|${hair}|${o}`;
   let t = templates.get(key);
   if (!t) templates.set(key, (t = mobShape === 'shaped' ? buildShaped(body, hair, o) : buildTemplate(body, CLASSIC_HAIR[hair] ?? hair, CLASSIC_OUTFIT[o] ?? o)));
   return t;
@@ -642,6 +675,21 @@ const v3Glsl = (c: V3): string => `vec3(${c.map((v) => v.toFixed(4)).join(', ')}
 /** GLSL: one of `colors` by h in [0, 1). */
 const pickGlsl = (colors: readonly V3[], h: string): string => colors.map((c, i) => `${i < colors.length - 1 ? `${h} < ${((i + 1) / colors.length).toFixed(4)} ? ` : ''}${v3Glsl(c)}`).join(' : ');
 const TAG_GLSL = TAG_COLORS.map((c, i) => `${i < TAG_COLORS.length - 1 ? `tag < ${i + 2}.5 ? ` : ''}${v3Glsl(c)}`).join(' : ');
+
+/**
+ * A smoker's round (s): the hand up to the mouth, the drag, the hand down, a moment's hold, the breath out; a round
+ * every so many seconds (each their own, between the two) for a cigarette and for a cigar. (The material's mobPose
+ * moves the arm and the head by it; real/smoke.ts lights the ember and lets the smoke out by it.)
+ */
+export const SMOKE_ROUND = { rise: 0.7, drag: 1.3, fall: 0.7, hold: 0.3, out: 1.6, every: [8, 15], cigar: [15, 24] } as const;
+/** When in a round the breath starts out (s). */
+export const SMOKE_OUT = SMOKE_ROUND.rise + SMOKE_ROUND.drag + SMOKE_ROUND.fall + SMOKE_ROUND.hold;
+/** The mouth, from the head's joint in head heights (up, out of the face): where breath leaves and a cigarette goes. */
+export const MOUTH = [0.14, 0.36] as const;
+/** Where the fingers bring a cigarette's grip to, from the mouth (m, for a man: to the hand's side, up, out of the face). */
+const SMOKE_AT_MOUTH = [0.012, -0.008, 0.03] as const;
+/** A smoker's upper arm out from the body with the hand at the mouth (rad). */
+const SMOKE_RAISE = 0.15;
 
 const UMBRELLA_HOLD = { swing: -0.05, raise: 0.12, bend: 2.15, side: 0, twist: 0.45 } as const;
 /** The spine's lean the umbrella is built for (the body's own, plus a little: walkers lean more, standers less). */
@@ -928,9 +976,11 @@ const POSE_LIST: readonly Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets',
 export const TEMPLATE_COUNT = BODY_LIST.length * OUTFITS.length * HAIR_LIST.length;
 export const templateIndex = (s: Pick<FigureSpec, 'body' | 'hair' | 'long' | 'outfit' | 'model'>): number =>
   s.model !== undefined && modelSlot(s.model) >= 0
-    ? TEMPLATE_COUNT + BODY_LIST.length + modelSlot(s.model)
+    ? TEMPLATE_COUNT + BODY_LIST.length + TEEN_ROWS + modelSlot(s.model)
     : (BODY_LIST.indexOf(s.body) * OUTFITS.length + OUTFITS.indexOf(outfitOf(s))) * HAIR_LIST.length + HAIR_LIST.indexOf(s.hair);
 export const umbrellaIndex = (body: Body): number => TEMPLATE_COUNT + BODY_LIST.indexOf(body);
+/** A figure's umbrella: its body's, or a teen's own (a row an umbrella, as the joints: TEMPLATE_COUNT + the body's row). */
+const umbrellaOf = (s: Pick<FigureSpec, 'body' | 'long' | 'outfit'>): number => (teenRow(s) >= 0 ? TEMPLATE_COUNT + BODY_LIST.length + teenRow(s) : umbrellaIndex(s.body));
 
 /**
  * Modelled figures (real/mobModels.ts): each a template of its own after the umbrellas', and a body of its own in
@@ -952,7 +1002,13 @@ export function registerMobModel(doc: MobModelDoc): void {
  * four lofted ones, then the models as registered), a texel a bone (xyz its joint), and the arms' bind angle in
  * the texel after the bones. One texture for every mob material, rewritten when a model is registered.
  */
-const JOINT_COLS = 16;
+const JOINT_COLS = 20;
+/**
+ * The texels after the bones' in a body's row: the arms' bind angle (x); a hand's grip, where the fingers hold a
+ * cigarette (the right hand's, bind pose: x mirrored for the left); the mouth (bind pose) and the head's height (w);
+ * a smoker's arm with the hand at the mouth (swing, bend, twist, and the raise in w).
+ */
+export const JOINT_EXTRA = { armOut: BONES, grip: BONES + 1, mouth: BONES + 2, reach: BONES + 3 } as const;
 /** The shaped generation's teens (real/mobShape.ts `isTeen`): a row of joints each after the four bodies' (a girl's, a boy's), before the models'. */
 const TEEN_ROWS = 2;
 const teenRow = (s: Pick<FigureSpec, 'body' | 'long' | 'outfit'>): number => (mobShape === 'shaped' && isTeen(s.body, outfitOf(s)) ? (s.body === 'woman' ? 0 : 1) : -1);
@@ -960,22 +1016,127 @@ const JOINT_ROWS = BODY_LIST.length + TEEN_ROWS + MAX_MOB_MODELS;
 let jointTexture: THREE.DataTexture | null = null;
 function writeJoints(tex: THREE.DataTexture): void {
   const data = tex.image.data as Float32Array;
-  const row = (r: number, pivot: readonly V3[], armOut: number): void => {
+  // (A smoker's numbers are the body's own; a teen's and a model's, who don't smoke, the grown body's scaled or as they are.)
+  const row = (r: number, pivot: readonly V3[], armOut: number, sm: SmokerJoints, kx = 1, ky = 1): void => {
     pivot.forEach((p, b) => data.set([p[0], p[1], p[2], 0], (r * JOINT_COLS + b) * 4));
-    data[(r * JOINT_COLS + BONES) * 4] = armOut;
+    data[(r * JOINT_COLS + JOINT_EXTRA.armOut) * 4] = armOut;
+    data.set([sm.grip[0] * kx, sm.grip[1] * ky, sm.grip[2] * kx, 0], (r * JOINT_COLS + JOINT_EXTRA.grip) * 4);
+    data.set([sm.mouth[0] * kx, sm.mouth[1] * ky, sm.mouth[2] * kx, sm.head * ky], (r * JOINT_COLS + JOINT_EXTRA.mouth) * 4);
+    data.set([sm.reach.swing, sm.reach.bend, sm.reach.twist ?? 0, sm.reach.raise], (r * JOINT_COLS + JOINT_EXTRA.reach) * 4);
   };
   BODY_LIST.forEach((body, r) => {
     const p = pivotsOf(body);
-    row(r, p.pivot, p.armOut);
+    row(r, p.pivot, p.armOut, smokerJoints(body));
   });
   (['woman', 'man'] as const).forEach((body, t) => {
     const p = pivotsOf(body);
     const [kx, ky] = TEEN_SCALE[body];
-    row(BODY_LIST.length + t, p.pivot.map((v): V3 => [v[0] * kx, v[1] * ky, v[2] * kx]), p.armOut);
+    row(BODY_LIST.length + t, p.pivot.map((v): V3 => [v[0] * kx, v[1] * ky, v[2] * kx]), p.armOut, smokerJoints(body), kx, ky);
   });
-  mobModels.forEach((m, i) => row(BODY_LIST.length + TEEN_ROWS + i, m.template.pivot, m.template.armOut));
+  mobModels.forEach((m, i) => row(BODY_LIST.length + TEEN_ROWS + i, m.template.pivot, m.template.armOut, smokerJoints('man')));
   tex.needsUpdate = true;
 }
+
+/** What the material needs to know of a body to have it smoke (JOINT_EXTRA). */
+export interface SmokerJoints {
+  /** Where the fingers hold a cigarette: a point of the right hand in the bind pose (figure frame). */
+  readonly grip: V3;
+  /** The mouth in the bind pose, and the head's height (its joint to the top of the hair). */
+  readonly mouth: V3;
+  readonly head: number;
+  /** The arm with the hand at the mouth. */
+  readonly reach: Limb;
+}
+const smokers = new Map<Body, SmokerJoints>();
+const _fk = [new THREE.Matrix4(), new THREE.Matrix4(), new THREE.Matrix4(), new THREE.Matrix4()];
+const about = (m: THREE.Matrix4, at: V3): THREE.Matrix4 => _fk[1].makeTranslation(at[0], at[1], at[2]).multiply(m).multiply(_fk[2].makeTranslation(-at[0], -at[1], -at[2]));
+/** A point of the right forearm (bind pose) with the arm posed, the body standing with its spine leant by `lean` (figure frame). */
+function armPoint(pivot: readonly V3[], armOut: number, lean: number, l: Limb, p: V3, out: THREE.Vector3): THREE.Vector3 {
+  const M = _fk[0].copy(about(_r.makeRotationX(lean), pivot[SPINE]));
+  M.multiply(about(_r.makeRotationX(-l.swing).multiply(_t.makeRotationZ(l.raise - armOut)), pivot[ARM_R]));
+  M.multiply(about(_r.makeRotationY(-(l.twist ?? 0)).multiply(_t.makeRotationZ(l.side ?? 0)).multiply(_fk[3].makeRotationX(-l.bend)), pivot[FORE_R]));
+  return out.set(p[0], p[1], p[2]).applyMatrix4(M);
+}
+/** A point of the head (bind pose) with the body standing, its spine leant by `lean` (figure frame): as the material turns the head back upright. */
+function headPoint(pivot: readonly V3[], lean: number, p: V3, out: THREE.Vector3): THREE.Vector3 {
+  const M = _fk[0].copy(about(_r.makeRotationX(lean), pivot[SPINE]));
+  M.multiply(about(_r.makeRotationX(-lean * 0.7), pivot[HEAD]));
+  return out.set(p[0], p[1], p[2]).applyMatrix4(M);
+}
+/** A body's sculpted figure (the city's generation, whichever is set), plainly dressed. */
+function plainFigure(body: Body): Template {
+  const was = mobShape;
+  mobShape = 'shaped';
+  const T = template(body, 'short', 'plain');
+  mobShape = was;
+  return T;
+}
+/**
+ * A body's hand, mouth and reach for smoking, measured on its sculpted figure and solved once: the arm's swing, bend
+ * and twist that bring the fingers to the mouth.
+ */
+export function smokerJoints(body: Body): SmokerJoints {
+  const had = smokers.get(body);
+  if (had) return had;
+  const T = plainFigure(body);
+  const k = T.pivot[ARM_R][1] / 1.42;
+  // The hand: the fingers are its lowest part.
+  let lo = Infinity;
+  let top = 0;
+  for (let i = 0; i < T.b0.length; i++) {
+    top = Math.max(top, T.pos[i * 3 + 1]);
+    if (T.b0[i] === FORE_R && (T.b1[i] === FORE_R || T.w[i] > 0.99)) lo = Math.min(lo, T.pos[i * 3 + 1]);
+  }
+  const c = handBind(T, 1);
+  const grip: V3 = [c.x, lo + 0.02 * k, c.z + 0.012 * k];
+  const head = top - T.pivot[HEAD][1];
+  const mouth: V3 = [0, T.pivot[HEAD][1] + head * MOUTH[0], T.pivot[HEAD][2] + head * MOUTH[1]];
+  // Solved standing (an elder stoops): a coarse search, then closing in.
+  const lean = body === 'elder' ? 0.2 : 0.02;
+  const to = headPoint(T.pivot, lean, mouth, new THREE.Vector3()).add(new THREE.Vector3(SMOKE_AT_MOUTH[0] * k, SMOKE_AT_MOUTH[1] * k, SMOKE_AT_MOUTH[2] * k));
+  const at = new THREE.Vector3();
+  const miss = (swing: number, bend: number, twist: number): number => armPoint(T.pivot, T.armOut, lean, { swing, raise: SMOKE_RAISE, bend, twist }, grip, at).distanceTo(to);
+  let best: [number, number, number] = [0.5, 2.3, 0.45];
+  let err = miss(...best);
+  for (let swing = 0; swing <= 1.4; swing += 0.1) {
+    for (let bend = 1.5; bend <= 2.75; bend += 0.1) {
+      for (let twist = 0; twist <= 1.2; twist += 0.1) {
+        const e = miss(swing, bend, twist);
+        if (e < err) [best, err] = [[swing, bend, twist], e];
+      }
+    }
+  }
+  for (let step = 0.05; step > 0.0005; step /= 2) {
+    for (let again = 0; again < 4; again++) {
+      for (let j = 0; j < 3; j++) {
+        for (const d of [-step, step]) {
+          const q: [number, number, number] = [...best];
+          q[j] += d;
+          // (An elbow only folds so far, and the forearm turns in, not out.)
+          if (q[1] > 2.75 || q[2] < 0 || q[2] > 1.3) continue;
+          const e = miss(...q);
+          if (e < err) [best, err] = [q, e];
+        }
+      }
+    }
+  }
+  const got: SmokerJoints = { grip, mouth, head, reach: { swing: best[0], raise: SMOKE_RAISE, bend: best[1], twist: best[2] } };
+  smokers.set(body, got);
+  return got;
+}
+/**
+ * For tests: where a smoker's fingers are with the hand up at the mouth (`up` 1) or down (0), and where the mouth
+ * is, standing (figure frame, the right hand's).
+ */
+export function smokerReach(body: Body, up = 1): { hand: [number, number, number]; mouth: [number, number, number] } {
+  const J = smokerJoints(body);
+  const T = plainFigure(body);
+  const lean = body === 'elder' ? 0.2 : 0.02;
+  const mix = (a: number, b: number): number => a + (b - a) * up;
+  const l: Limb = { swing: mix(0.14, J.reach.swing), raise: mix(0.12, J.reach.raise), bend: mix(0.62, J.reach.bend), twist: mix(0.15, J.reach.twist ?? 0) };
+  return { hand: armPoint(T.pivot, T.armOut, lean, l, J.grip, new THREE.Vector3()).toArray(), mouth: headPoint(T.pivot, lean, J.mouth, new THREE.Vector3()).toArray() };
+}
+
 function mobJoints(): THREE.DataTexture {
   if (!jointTexture) {
     jointTexture = new THREE.DataTexture(new Float32Array(JOINT_COLS * JOINT_ROWS * 4), JOINT_COLS, JOINT_ROWS, THREE.RGBAFormat, THREE.FloatType);
@@ -993,11 +1154,21 @@ function templateOf(s: Pick<FigureSpec, 'body' | 'hair' | 'long' | 'outfit' | 'm
 }
 
 function templateAt(i: number): Template {
-  if (i >= TEMPLATE_COUNT + BODY_LIST.length) return mobModels[i - TEMPLATE_COUNT - BODY_LIST.length].template;
+  if (i >= TEMPLATE_COUNT + BODY_LIST.length + TEEN_ROWS) return mobModels[i - TEMPLATE_COUNT - BODY_LIST.length - TEEN_ROWS].template;
   if (i >= TEMPLATE_COUNT) {
-    const body = BODY_LIST[i - TEMPLATE_COUNT];
-    let t = templates.get(`umbrella|${body}`);
-    if (!t) templates.set(`umbrella|${body}`, (t = buildUmbrella(body)));
+    // An umbrella a body, then a teen girl's and a teen boy's (the adult's, scaled as the teen is).
+    const row = i - TEMPLATE_COUNT;
+    let t = templates.get(`umbrella|${row}`);
+    if (!t) {
+      if (row < BODY_LIST.length) t = buildUmbrella(BODY_LIST[row]);
+      else {
+        const body = row === BODY_LIST.length ? 'woman' : 'man';
+        const [kx, ky] = TEEN_SCALE[body];
+        const U = buildUmbrella(body);
+        t = { ...U, pos: Float32Array.from(U.pos, (v, j) => v * (j % 3 === 1 ? ky : kx)), pivot: U.pivot.map((v): V3 => [v[0] * kx, v[1] * ky, v[2] * kx]) };
+      }
+      templates.set(`umbrella|${row}`, t);
+    }
     return t;
   }
   const hair = HAIR_LIST[i % HAIR_LIST.length];
@@ -1039,11 +1210,97 @@ export function templateGeometry(i: number): THREE.BufferGeometry {
 
 /**
  * A figure as numbers (packFigures), FIGURE_STRIDE floats: template, x, z, yaw, seed, body, pose, side, look,
- * walk ex, ez, speed, phase, floor at the start and end, gap, tint r, g, b, and whether it carries an umbrella.
+ * walk ex, ez, speed, phase, floor at the start and end, gap, tint r, g, b, whether it carries an umbrella, and when
+ * it's out: its hours (-1: always), its manner, its threshold, the seasons its outfit is worn in (bits).
  */
-export const FIGURE_STRIDE = 20;
+export const FIGURE_STRIDE = 24;
 /** The pavements' and plazas' height (real/ground.ts): where a figure stands unless its floor says otherwise. */
 export const PAVEMENT = 0.15;
+/**
+ * GLSL: where a figure is and whether it's there, from its numbers (a walker along its walk, a crosser on the
+ * signal's clock, the fades; with uStay nobody comes and goes). The mob's vertex shader uses it, and so can anything
+ * drawn with the figures (their emotes): it needs the attributes aFig, aWalk, aGround and aWhen and the uniforms
+ * uStay, uHour, uRain and uSeason. Its fade is 0 for someone who isn't out at this hour, in this weather or season.
+ */
+export const MOB_PLACE_GLSL = /* glsl */ `${HOURS_GLSL}
+      // Where a figure is and whether it's there (MOB_PLACE_GLSL: shared with anything drawn with the figures, like
+      // their emotes). Needs aFig, aWalk, aGround and uStay declared.
+      struct MobPlace { vec2 org; float ground; float phase; float fade; float turn; bool moving; bool crosser; };
+      MobPlace mobPlace(float t, int body, float seed) {
+        // Where it is: a walker along its walk, fading in at the start and out at the end, then away for its
+        // gap; everyone else where they stand, on their own fade cycle. With uStay nobody fades: a walker stops at
+        // the end of its walk for its gap, turns round and walks back; someone at a crossing crosses on one green
+        // and back on the next.
+        vec2 org = aFig.xy;
+        float ground = aGround.x;
+        float phase = aWalk.w;
+        float fade = 1.0;
+        // (Turned round, for the way back.)
+        float turn = 0.0;
+        bool stay = uStay > 0.5;
+        bool moving = aWalk.z > 0.0;
+        bool crosser = moving && aGround.z < 0.0;
+        if (crosser) {
+          // On a signal's clock (cycle C): appear at the kerb at aWalk.w, wait W s for the walk light, cross,
+          // gone at the far side until the next cycle. Off the kerb (from 0.4 m in) a step down to the road.
+          float C = floor(-aGround.z / 100.0);
+          float W = mod(-aGround.z, 100.0);
+          float L = max(length(aWalk.xy), 0.1);
+          float tw = L / aWalk.z;
+          float s = mod(t - aWalk.w, C);
+          float k = clamp((s - W) / tw, 0.0, 1.0);
+          moving = s > W && s < W + tw;
+          fade = smoothstep(0.0, 1.5, s) * (1.0 - smoothstep(W + tw - 1.2, W + tw, s));
+          if (stay) {
+            // Every other cycle from the far side, turning round at the kerb as the cycle begins.
+            bool odd = mod(floor((t - aWalk.w) / C), 2.0) > 0.5;
+            if (odd) k = 1.0 - k;
+            turn = (odd ? 0.0 : 3.14159265) + 3.14159265 * smoothstep(0.0, 0.9, s);
+            fade = 1.0;
+          }
+          org += aWalk.xy * k;
+          float d = k * L;
+          ground = mix(aGround.x, aGround.y, k) - ${PAVEMENT.toFixed(2)} * smoothstep(0.3, 0.6, d) * (1.0 - smoothstep(L - 0.6, L - 0.3, d));
+          phase = fract(k * L / ((body == 2 ? 0.95 : 1.35) * (1.0 + 0.7 * clamp(aWalk.z - 1.9, 0.0, 1.0))));
+        } else if (moving) {
+          float L = max(length(aWalk.xy), 0.1);
+          float tw = L / aWalk.z;
+          float k;
+          if (stay) {
+            // There (tw), a stop for the gap, back (tw), a stop.
+            float leg = tw + max(aGround.z, 2.5);
+            float u = mod(t + fract(abs(seed) * 7.31) * 2.0 * leg, 2.0 * leg);
+            bool back = u >= leg;
+            float v = back ? u - leg : u;
+            float k1 = clamp(v / tw, 0.0, 1.0);
+            k = back ? 1.0 - k1 : k1;
+            moving = v < tw;
+            turn = (back ? 3.14159265 : 0.0) + 3.14159265 * smoothstep(leg - 1.2, leg, v);
+          } else {
+            float cycle = tw + aGround.z;
+            float u = mod(t + fract(abs(seed) * 7.31) * cycle, cycle);
+            k = clamp(u / tw, 0.0, 1.0);
+            if (seed >= 0.0) fade = smoothstep(0.0, 1.6, u) * (1.0 - smoothstep(tw - 1.6, tw, u));
+          }
+          org += aWalk.xy * k;
+          ground = mix(aGround.x, aGround.y, k);
+          phase = fract(aWalk.w + k * L / ((body == 2 ? 0.95 : 1.35) * (1.0 + 0.7 * clamp(aWalk.z - 1.9, 0.0, 1.0))));
+        } else if (seed >= 0.0 && !stay) {
+          float cycle = 50.0 + 70.0 * seed;
+          float ph = fract(t / cycle + seed * 13.37);
+          float e = 3.5 / cycle;
+          fade = smoothstep(0.0, e, ph) * (1.0 - smoothstep(0.8, 0.8 + e, ph));
+        }
+        // Out at this hour, in this weather and season? (aWhen: its hours, manner, threshold, seasons; hours -1: always.)
+        if (aWhen.x > -0.5) {
+          float there = smoothstep(aWhen.z - 0.02, aWhen.z + 0.02, mobOut(aWhen.x, uHour, uRain));
+          if (mod(floor(aWhen.w / exp2(floor(uSeason + 0.5))), 2.0) < 0.5) there = 0.0;
+          fade *= there;
+        }
+        return MobPlace(org, ground, phase, fade, turn, moving, crosser);
+      }
+`;
+
 /** The per-figure attributes the material reads, and where each comes from in a figure's numbers. */
 export const FIGURE_ATTRS: readonly { readonly name: string; readonly at: readonly number[] }[] = [
   { name: 'aFig', at: [1, 2, 3, 4] },
@@ -1051,6 +1308,7 @@ export const FIGURE_ATTRS: readonly { readonly name: string; readonly at: readon
   { name: 'aWalk', at: [9, 10, 11, 12] },
   { name: 'aGround', at: [13, 14, 15] },
   { name: 'aTint', at: [16, 17, 18] },
+  { name: 'aWhen', at: [20, 21, 22, 23] },
 ];
 
 /** A figure's fade seed in [0, 1): its own or from where it stands; -1 if it never fades (-2: nor up close). */
@@ -1084,10 +1342,11 @@ function writeFigure(o: Float32Array, k: number, s: FigureSpec, ground: ((x: num
   o[k + 6] = POSE_LIST.indexOf(s.pose);
   // (+1: a bag in the left hand, so the routine keeps that hand down; +2: an umbrella to hold up while it rains.)
   const o2 = outfitOf(s);
-  const bag = ((o2 === 'suit' || o2 === 'office') && s.body !== 'woman') || (o2 === 'school' && s.body !== 'child');
+  // (A drunk's box of sushi, a sukeban's wooden sword.)
+  const bag = ((o2 === 'suit' || o2 === 'office') && s.body !== 'woman') || (o2 === 'school' && s.body !== 'child') || o2 === 'drunk' || (o2 === 'yankee' && s.body === 'woman');
   const held = umbrella && carriesUmbrella(s);
-  // (+4: both hands on a rucksack's straps.)
-  o[k + 7] = (s.side >= 0 ? 1 : -1) * (1 + (bag ? 1 : 0) + (held ? 2 : 0) + (holdsStraps(s) ? 4 : 0));
+  // (+4: both hands on a rucksack's straps. +8: a cigarette to smoke; +16: a cigar.)
+  o[k + 7] = (s.side >= 0 ? 1 : -1) * (1 + (bag ? 1 : 0) + (held ? 2 : 0) + (holdsStraps(s) ? 4 : 0) + (s.smokes ? 8 * (1 + SMOKES.indexOf(s.smokes)) : 0));
   o[k + 8] = s.look;
   // (A figure moved by the game has no walk of its own: its pace goes in the walk's place.)
   // (And someone holding a hand: how far out that arm is raised.)
@@ -1103,6 +1362,12 @@ function writeFigure(o: Float32Array, k: number, s: FigureSpec, ground: ((x: num
   o[k + 17] = c[1];
   o[k + 18] = c[2];
   o[k + 19] = carriesUmbrella(s) ? 1 : 0;
+  // When it's out. (Someone who never fades, a story npc or a passenger, is always there.)
+  const always = s.hours === undefined || s.fade === false;
+  o[k + 20] = always ? -1 : HOURS.indexOf(s.hours!);
+  o[k + 21] = MANNERS.indexOf(s.manner ?? 'plain');
+  o[k + 22] = s.out ?? 0;
+  o[k + 23] = always ? 15 : seasonsOf(o2);
 }
 
 /**
@@ -1320,7 +1585,7 @@ export function addFigure(gb: GhostBuilder, s: FigureSpec, umbrella = false): vo
  */
 export function addUmbrella(gb: GhostBuilder, s: FigureSpec): boolean {
   if (!carriesUmbrella(s)) return false;
-  gb.add(umbrellaIndex(s.body), packFigures([s]));
+  gb.add(umbrellaOf(s), packFigures([s]));
   return true;
 }
 
@@ -1329,7 +1594,7 @@ export function addUmbrella(gb: GhostBuilder, s: FigureSpec): boolean {
  * holding it up (the arm only), or with 'canopy' its umbrella instead of the figure.
  */
 export function posedFigure(s: FigureSpec, umbrella: boolean | 'canopy' = false): Float32Array {
-  const T = umbrella === 'canopy' ? templateAt(umbrellaIndex(s.body)) : templateOf(s);
+  const T = umbrella === 'canopy' ? templateAt(umbrellaOf(s)) : templateOf(s);
   const M = poseBones(T, s, umbrella !== false);
   const n = T.pos.length / 3;
   const out = new Float32Array(n * 3);
@@ -1368,15 +1633,19 @@ export function figureSize(s: Pick<FigureSpec, 'body' | 'hair' | 'long' | 'outfi
 // ---- The material ----
 
 /**
- * How the mob looks (the K panel's People, `?mob=`): `ghost` faint and see-through; `rim` a little more solid,
+ * How the mob looks (the debug menu's People tab, `?mob=`): `ghost` faint and see-through; `rim` a little more solid,
  * with a soft cool light along the silhouette so dark figures part from dark streets; `solid` near-opaque dark
  * mannequins; `lit` lighter mid-tone figures with the rim.
  */
+// (`black`: everything the one black, clothes and all; `edge`: how much denser toward the silhouette; `scene`: lit by
+// the scene's own light, the sky's and the sun's or moon's with the sun's shadows, instead of evenly: `setMobSun`.)
 export const MOB_LOOKS = {
-  ghost: { opacity: 0.72, lift: 1, rim: 0 },
-  rim: { opacity: 0.8, lift: 1, rim: 0.32 },
-  solid: { opacity: 0.94, lift: 1, rim: 0.12 },
-  lit: { opacity: 0.85, lift: 3.2, rim: 0.32 },
+  ghost: { opacity: 0.72, lift: 1, rim: 0, black: 1, edge: 0 },
+  rim: { opacity: 0.8, lift: 1, rim: 0.32, black: 1, edge: 0.2 },
+  solid: { opacity: 0.94, lift: 1, rim: 0.12, black: 1, edge: 0.2 },
+  lit: { opacity: 0.85, lift: 3.2, rim: 0.32, black: 1, edge: 0.2 },
+  // The figures in their colours (skin, hair, clothes), near-opaque.
+  color: { opacity: 0.94, lift: 1, rim: 0.04, black: 0, edge: 0, scene: 1 },
 } as const;
 export type MobLook = keyof typeof MOB_LOOKS;
 export const MOB_LOOK_NAMES = Object.keys(MOB_LOOKS) as MobLook[];
@@ -1385,8 +1654,49 @@ export const MOB_LOOK_NAMES = Object.keys(MOB_LOOKS) as MobLook[];
 export function setMobLook(material: THREE.ShaderMaterial, look: MobLook): void {
   const L = MOB_LOOKS[look];
   material.uniforms.uOpacity.value = L.opacity;
+  material.uniforms.uBlack.value = L.black;
+  (material.uniforms.uFlat.value as THREE.Vector4).set(0.02, 0.02, 0.022, 0);
+  material.uniforms.uEdge.value = L.edge;
+  // (Compiled in only for the look that uses it, so the others pay nothing for it: a change of look to or from it
+  // recompiles the mob's shader, once.)
+  const lit = 'scene' in L;
+  // (In their colours they aren't ghosts: nobody comes and goes.)
+  material.uniforms.uStay.value = lit ? 1 : 0;
+  if (('MOB_LIT' in material.defines) !== lit) {
+    if (lit) material.defines.MOB_LIT = '';
+    else delete material.defines.MOB_LIT;
+    material.needsUpdate = true;
+  }
   material.uniforms.uLift.value = L.lift;
   (material.uniforms.uRim.value as THREE.Color).setRGB(0.42 * L.rim, 0.5 * L.rim, 0.62 * L.rim);
+}
+
+/** A depth texture in compare mode, to stand in while the sun has no shadow map (a shadow sampler can't be given any other kind). */
+const NO_SHADOW = new THREE.DepthTexture(1, 1);
+NO_SHADOW.compareFunction = THREE.LessEqualCompare;
+// (Marked for upload: a texture never uploaded binds as none, which a shadow sampler can't take either.)
+NO_SHADOW.needsUpdate = true;
+
+/**
+ * The scene's light for the mob's coloured look (each frame): the hemisphere light, the sun or moon, and the sun's
+ * shadow map, so people darken in a building's shadow and at night as the city round them does.
+ */
+export function setMobSun(material: THREE.ShaderMaterial, hemi: THREE.HemisphereLight, sun: THREE.DirectionalLight): void {
+  const u = material.uniforms;
+  (u.uHemiSky.value as THREE.Color).copy(hemi.color).multiplyScalar(hemi.intensity);
+  (u.uHemiGround.value as THREE.Color).copy(hemi.groundColor).multiplyScalar(hemi.intensity);
+  (u.uSunCol.value as THREE.Color).copy(sun.color).multiplyScalar(sun.intensity);
+  (u.uSunDir.value as THREE.Vector3).copy(sun.position).sub(sun.target.position).normalize();
+  const map = sun.castShadow ? sun.shadow.map : null;
+  u.tSunShadow.value = map?.depthTexture ?? NO_SHADOW;
+  u.uSunShadow.value = map?.depthTexture ? sun.shadow.intensity : 0;
+  (u.uSunShadowMatrix.value as THREE.Matrix4).copy(sun.shadow.matrix);
+  (u.uSunShadowBias.value as THREE.Vector3).set(sun.shadow.bias, sun.shadow.normalBias, 1 / sun.shadow.mapSize.x);
+}
+
+/** Where the viewer is, for the mob's shadow caster (each frame). */
+export function setMobEye(material: THREE.ShaderMaterial, eye: THREE.Vector3): void {
+  (material.uniforms.uEye.value as THREE.Vector3).copy(eye);
 }
 
 /** The street lightmap's uniforms (real/city.ts), shared so the mob is lit where the streets are. */
@@ -1398,60 +1708,21 @@ export interface GhostLight {
 }
 
 /**
- * The mob's material: poses and animates each figure from its numbers (the skeleton rebuilt in the vertex
- * shader: the same joints and rotations as `poseBones`, plus breathing, a sway, looking about, gestures and
- * the walk), dark and softly top-lit, lit by the street lightmap at night, a little denser at the
- * silhouette, see-through by alpha to coverage (opaque pass, depth written: one surface per figure, no
- * sorting). `uTime` drives the motion and the fades (main.ts sets it).
+ * GLSL (vertex): how the mob's figures are posed. The limbs and the standing routine (`pickAct`, `act`), `mobPose`,
+ * which sets a figure's skeleton for this moment (the globals armL, armR, legL, legR, lean, drop, spineRoll,
+ * headYaw, headPitch, and a smoker's hand), and `bone`, a bone's transform from the bind pose. The mob's material
+ * uses it, and so does anything that has to find a part of a figure as it is posed (real/smoke.ts: a smoker's hand
+ * and mouth). It needs `pv` (a body's joints: tJoints, jointRow), uStill, uSmoking and the attributes aPose and
+ * aWalk declared before it.
  */
-export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THREE.ShaderMaterial {
-  const material = new THREE.ShaderMaterial({
-    uniforms: {
-      ...THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uOpacity: { value: 0.72 }, uLift: { value: 1 }, uRim: { value: new THREE.Color(0, 0, 0) }, uUmbrella: { value: 0 }, uSkin: { value: 1 }, uStill: { value: 0 }, uFlat: { value: new THREE.Vector4(0, 0, 0, 0) }, uBlack: { value: 0 }, uEdge: { value: 0.2 } }]),
-      tJoints: { value: mobJoints() },
-      tLight: light?.tLight ?? { value: null },
-      uLightRect: light?.uLightRect ?? { value: new THREE.Vector4(0, 0, 1, 1) },
-      uLightFade: light?.uLightFade ?? { value: new THREE.Vector2(0, 0) },
-      uLightGain: light?.uLightGain ?? { value: 0 },
-    },
-    alphaToCoverage: true,
-    fog: true,
-    vertexShader: /* glsl */ `
-      #include <fog_pars_vertex>
-      uniform float uTime;
-      // 1 while it rains: those who carry an umbrella hold it up (real/crowd.ts sets it with its umbrellas).
-      uniform float uUmbrella;
-      // How much lighter skin is than the clothes (the shaped generation tags skin: aShade + 100; see vC below).
-      uniform float uSkin;
-      // 1: standing figures only stand easy, no routine (the mob showroom's turnarounds).
-      uniform float uStill;
-      // Every body's joints (mobJoints): a row a body, a texel a bone, the arms' bind angle after the bones.
-      uniform sampler2D tJoints;
-      // One colour for every figure and every part of it (rgb, and how much of it): the mob showroom's single-colour ghost.
-      uniform vec4 uFlat;
-      // 1: everything the one colour, clothes and all (the mob as it first was: all black).
-      uniform float uBlack;
-      float jointRow;
-      vec3 pv(int i) { return texture2D(tJoints, vec2((float(i) + 0.5) / ${JOINT_COLS}.0, (jointRow + 0.5) / ${JOINT_ROWS}.0)).xyz; }
-      attribute float aShade;
-      attribute vec3 aBone;
-      attribute float aMirror;
-      attribute vec4 aFig;
-      attribute vec4 aPose;
-      attribute vec4 aWalk;
-      attribute vec3 aGround;
-      attribute vec3 aTint;
-      varying vec3 vN;
-      varying vec3 vW;
-      varying vec3 vC;
-      varying float vFade;
-
+export const MOB_POSE_GLSL = /* glsl */ `
       // swing forward, raise out, bend (elbow forward / knee back), the forearm's side bend and inward twist.
       struct Limb { float swing; float raise; float bend; float side; float twist; };
       Limb L3(float s, float r, float b) { return Limb(s, r, b, 0.0, 0.0); }
       Limb mixL(Limb a, Limb b, float w) { return Limb(mix(a.swing, b.swing, w), mix(a.raise, b.raise, w), mix(a.bend, b.bend, w), mix(a.side, b.side, w), mix(a.twist, b.twist, w)); }
       // A standing activity: the limbs, and how the head and hips go.
-      struct Act { Limb aL; Limb aR; Limb lL; Limb lR; float yaw; float pitch; float roll; };
+      // (lean: the spine forward; drop: the hips lowered, as a share of their height.)
+      struct Act { Limb aL; Limb aR; Limb lL; Limb lR; float yaw; float pitch; float roll; float lean; float drop; };
       float hh1(float k, float r) { return fract(sin(k * 12.9898 + r * 78.233) * 43758.5453); }
       Limb armL, armR, legL, legR;
       float lean, drop, spineRoll, headYaw, headPitch, armOut;
@@ -1498,19 +1769,31 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
       }
 
       /** Which activity (STANDING) a standing figure does in its k-th stretch, by its pose's temperament. */
-      int pickAct(int P, float k, float r, bool bag, bool umb) {
+      int pickAct(int P, float k, float r, bool bag, bool umb, int manner, bool smoker) {
         float h = hh1(k, r);
         int a = 0;
         if (uStill > 0.5) return 0;
-        if (P == 3) a = h < 0.4 ? 2 : h < 0.6 ? 3 : h < 0.72 ? 6 : h < 0.85 ? 1 : 0;
-        else if (P == 2) a = h < 0.5 ? 8 : h < 0.62 ? 4 : h < 0.7 ? 5 : h < 0.8 ? 1 : h < 0.85 ? 6 : 0;
+        // Someone with a cigarette lit: the things that leave that hand to it (it has its own round: mobPose).
+        if (smoker) {
+          if (manner == 1) a = h < 0.28 ? 11 : h < 0.46 ? 14 : h < 0.8 ? 6 : 0;
+          else if (manner == 2) a = 19;
+          else a = h < 0.42 ? 0 : h < 0.72 ? 6 : h < 0.82 ? 16 : h < 0.9 ? 20 : 14;
+          if (bag && (a == 11 || a == 14)) a = 6;
+          return a;
+        }
+        // A shady one squats and watches; a drunk sways. (Nobody mimes a cigarette: those who smoke have one, above.)
+        if (manner == 1) a = h < 0.24 ? 11 : h < 0.46 ? 6 : h < 0.6 ? 1 : h < 0.74 ? 6 : h < 0.86 ? 4 : h < 0.95 ? 14 : 0;
+        else if (manner == 2) a = h < 0.72 ? 19 : h < 0.86 ? 16 : 13;
+        else if (P == 3) a = h < 0.4 ? 2 : h < 0.6 ? 3 : h < 0.72 ? 6 : h < 0.85 ? 1 : 0;
+        else if (P == 2) a = h < 0.38 ? 8 : h < 0.5 ? 15 : h < 0.6 ? 20 : h < 0.68 ? 4 : h < 0.74 ? 5 : h < 0.82 ? 1 : h < 0.87 ? 6 : (manner == 3 && h < 0.95) ? 12 : 0;
         else if (P == 5) a = h < 0.15 ? 9 : h < 0.45 ? 6 : h < 0.65 ? 1 : 0;
-        else a = h < 0.27 ? 0 : h < 0.41 ? 1 : h < 0.51 ? 2 : h < 0.6 ? 4 : h < 0.67 ? 5 : h < 0.84 ? 6 : h < 0.89 ? 7 : h < 0.94 ? 3 : 0;
+        else a = h < 0.2 ? 0 : h < 0.32 ? 1 : h < 0.41 ? 2 : h < 0.48 ? 4 : h < 0.54 ? 5 : h < 0.68 ? 6 : h < 0.73 ? 7 : h < 0.77 ? 3 : h < 0.82 ? 0 : h < 0.86 ? 16 : h < 0.89 ? 17 : h < 0.93 ? 18 : h < 0.96 ? 13 : 14;
         // Two-handed things aren't for someone holding a bag.
         if (bag && (a == 2 || a == 4 || a == 5)) a = a == 2 ? 3 : 0;
+        if (bag && (a == 13 || a == 18 || a == 11)) a = 6;
         // Holding an umbrella up: nothing for that hand (the free one may still glance at the watch or go in a pocket).
         if (umb) {
-          if (a == 2 || a == 3 || a == 8 || a == 9) a = 6;
+          if (a == 2 || a == 3 || a == 8 || a == 9 || a == 13 || a == 15 || a == 17 || a == 18) a = 6;
           else if (a == 4 || a == 5 || (bag && a == 7)) a = 0;
         }
         return a;
@@ -1518,8 +1801,10 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
 
       /**
        * The activities: 0 standing easy, 1 hands in pockets, 2 texting, 3 a call, 4 arms crossed, 5 hands clasped,
-       * 6 looking about, 7 a glance at the watch, 8 talking with a hand, 9 a wave. u: seconds into it; k: which
-       * stretch (the resting leg alternates).
+       * 6 looking about, 7 a glance at the watch, 8 talking with a hand, 9 a wave, (10 was a mimed cigarette), 11 squatting on the
+       * heels, 12 a bow, 13 a stretch, 14 leaning back with a knee up, 15 laughing, 16 looking up, 17 scratching the
+       * head, 18 hands on hips, 19 a drunk's sway, 20 nodding along. u: seconds into it; k: which stretch (the resting
+       * leg alternates).
        */
       Act act(int a, float u, float k, float t, float r, float side, int body) {
         Limb hang = L3(0.0, 0.1, 0.12);
@@ -1527,7 +1812,7 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         Limb leg = L3(0.0, 0.0, 0.0);
         bool leftRests = mod(k, 2.0) < 1.0;
         // (No ?: on structs in ESSL 1.0.)
-        Act A = Act(hang, hang, rest, leg, 0.0, 0.0, -0.035);
+        Act A = Act(hang, hang, rest, leg, 0.0, 0.0, -0.035, 0.0, 0.0);
         if (!leftRests) {
           A.lL = leg;
           A.lR = rest;
@@ -1567,6 +1852,66 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
           // A short wave, then easy again.
           float w = smoothstep(0.2, 0.8, u) * (1.0 - smoothstep(2.6, 3.4, u));
           main = mixL(hang, Limb(0.15, 1.3, 0.0, 1.35 + 0.3 * sin(t * 7.0 + r * 2.0), 0.0), w);
+        } else if (a == 11) {
+          // Squatting on the heels, the arms resting on the knees, looking up from under.
+          A.lL = L3(1.85, 0.28, 2.4);
+          A.lR = A.lL;
+          A.drop = 0.64;
+          A.lean = 0.42;
+          A.roll = 0.0;
+          A.pitch = -0.22;
+          A.yaw = 0.35 * sin(u * 0.5 + k * 1.7);
+          main = L3(1.0, 0.25, 0.5);
+          off = main;
+        } else if (a == 12) {
+          // A bow, held a moment.
+          float w = smoothstep(0.3, 1.0, u) * (1.0 - smoothstep(1.8, 2.6, u));
+          A.lean = 0.55 * w;
+          A.pitch = 0.15 * w;
+        } else if (a == 13) {
+          // A stretch: both arms up and out, the head back.
+          float w = smoothstep(0.3, 1.2, u) * (1.0 - smoothstep(2.6, 3.6, u));
+          main = mixL(hang, L3(0.2, 2.7, 0.25), w);
+          off = main;
+          A.pitch = -0.3 * w;
+          A.lean = -0.08 * w;
+        } else if (a == 14) {
+          // Leaning back, one knee up (a foot against the wall), hands in pockets.
+          A.lean = -0.1;
+          if (leftRests) A.lL = L3(0.55, 0.0, 1.05);
+          else A.lR = L3(0.55, 0.0, 1.05);
+          main = L3(-0.1, 0.22, 0.45);
+          off = main;
+        } else if (a == 15) {
+          // Laughing: the head back, the shoulders shaking, a hand to the mouth.
+          float shake = sin(t * 14.0 + r * 3.0);
+          A.pitch = -0.16 + 0.05 * shake;
+          A.lean = -0.04 + 0.02 * shake;
+          main = Limb(0.45, 0.1, 2.2, 0.0, 0.5);
+        } else if (a == 16) {
+          // Looking up (at the signs, the screens, the sky).
+          A.pitch = -0.5 * smoothstep(0.2, 1.0, u);
+          A.yaw = 0.3 * sin(u * 0.4 + r * 4.0);
+        } else if (a == 17) {
+          // Scratching the head.
+          float w = smoothstep(0.2, 0.8, u) * (1.0 - smoothstep(2.4, 3.2, u));
+          main = mixL(hang, Limb(0.3, 0.5, 2.5 + 0.12 * sin(t * 9.0), 0.0, 0.3), w);
+          A.pitch = 0.15 * w;
+        } else if (a == 18) {
+          // Hands on hips.
+          main = Limb(-0.25, 0.6, 1.35, 0.0, 0.9);
+          off = main;
+        } else if (a == 19) {
+          // A drunk on his feet: swaying, the head hanging.
+          A.roll = 0.16 * sin(t * 0.9 + r * 6.0);
+          A.lean = 0.1 + 0.12 * sin(t * 0.7 + r * 3.0);
+          A.pitch = 0.3 + 0.12 * sin(t * 0.5 + r);
+          main = L3(0.1 * sin(t * 0.9 + r), 0.15, 0.2);
+          off = main;
+        } else if (a == 20) {
+          // Nodding along.
+          A.pitch = 0.08 + 0.1 * sin(t * 3.0 + r * 5.0);
+          A.yaw = 0.15 * sin(t * 0.6 + r * 2.0);
         }
         if (side > 0.0) {
           A.aR = main;
@@ -1578,70 +1923,22 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         return A;
       }
 
-      void main() {
-        float t = uTime;
-        int body = int(aPose.x + 0.5);
-        base = body * ${BONES};
-        jointRow = float(body);
-        armOut = pv(${BONES}).x;
-        float side = sign(aPose.z);
-        // |aPose.z| is 1, +1 with a bag in the left hand (that hand stays down), +2 carrying an umbrella.
-        float carry = floor(abs(aPose.z) + 0.5);
-        // (+4: both hands on a rucksack's straps, standing or walking.)
-        bool straps = carry > 4.5;
-        if (straps) carry -= 4.0;
-        bool umb = carry > 2.5 && uUmbrella > 0.5;
-        bool bag = carry - (carry > 2.5 ? 2.0 : 0.0) > 1.5;
-        float seed = aFig.w;
-        // Each figure's own randomness for its idle motion (seeds can be shared by a group).
-        float r = fract(sin(dot(aFig.xy, vec2(12.9898, 78.233))) * 43758.5453);
-
-        // Where it is: a walker along its walk, fading in at the start and out at the end, then away for its
-        // gap; everyone else where they stand, on their own fade cycle.
-        vec2 org = aFig.xy;
-        float ground = aGround.x;
-        float phase = aWalk.w;
-        float fade = 1.0;
-        bool moving = aWalk.z > 0.0;
-        bool crosser = moving && aGround.z < 0.0;
-        if (crosser) {
-          // On a signal's clock (cycle C): appear at the kerb at aWalk.w, wait W s for the walk light, cross,
-          // gone at the far side until the next cycle. Off the kerb (from 0.4 m in) a step down to the road.
-          float C = floor(-aGround.z / 100.0);
-          float W = mod(-aGround.z, 100.0);
-          float L = max(length(aWalk.xy), 0.1);
-          float tw = L / aWalk.z;
-          float s = mod(t - aWalk.w, C);
-          float k = clamp((s - W) / tw, 0.0, 1.0);
-          moving = s > W && s < W + tw;
-          org += aWalk.xy * k;
-          float d = k * L;
-          ground = mix(aGround.x, aGround.y, k) - ${PAVEMENT.toFixed(2)} * smoothstep(0.3, 0.6, d) * (1.0 - smoothstep(L - 0.6, L - 0.3, d));
-          phase = fract(k * L / (body == 2 ? 0.95 : 1.35));
-          fade = smoothstep(0.0, 1.5, s) * (1.0 - smoothstep(W + tw - 1.2, W + tw, s));
-        } else if (moving) {
-          float L = max(length(aWalk.xy), 0.1);
-          float tw = L / aWalk.z;
-          float cycle = tw + aGround.z;
-          float u = mod(t + fract(abs(seed) * 7.31) * cycle, cycle);
-          float k = clamp(u / tw, 0.0, 1.0);
-          org += aWalk.xy * k;
-          ground = mix(aGround.x, aGround.y, k);
-          phase = fract(aWalk.w + k * L / (body == 2 ? 0.95 : 1.35));
-          if (seed >= 0.0) fade = smoothstep(0.0, 1.6, u) * (1.0 - smoothstep(tw - 1.6, tw, u));
-        } else if (seed >= 0.0) {
-          float cycle = 50.0 + 70.0 * seed;
-          float ph = fract(t / cycle + seed * 13.37);
-          float e = 3.5 / cycle;
-          fade = smoothstep(0.0, e, ph) * (1.0 - smoothstep(0.8, 0.8 + e, ph));
-        }
-
-        // The pose, and on top of it the motion.
-        int P = int(aPose.y + 0.5);
-        if (crosser && !moving) P = 0;
-        // Mid-stride with nowhere to go (set pieces' figures): they stand and go about the routine instead. (Fixed
-        // figures, seed < 0, keep their pose: the showroom, story NPCs.)
-        if (P == 1 && !moving && seed >= 0.0) P = 0;
+      // (A texel of the body's joints whole: the ones after the bones', JOINT_EXTRA.)
+      vec4 pw(int i) { return texture2D(tJoints, vec2((float(i) + 0.5) / ${JOINT_COLS}.0, (jointRow + 0.5) / ${JOINT_ROWS}.0)); }
+      // Someone smoking (mobPose sets these): which hand has it (1 right, -1 left; 0: nothing lit now), how far that hand
+      // is up at the mouth (0-1), the seconds into its round and the round's length, and that arm with the hand down
+      // and with it at the mouth.
+      float smokeHand, smokeUp, smokeAt, smokeEvery;
+      Limb smokeLow, smokeHigh;
+      // How far up the hand is, c seconds into a round: up to the mouth, a drag, down again.
+      float smokeLift(float c) { return smoothstep(0.0, ${SMOKE_ROUND.rise.toFixed(2)}, c) * (1.0 - smoothstep(${(SMOKE_ROUND.rise + SMOKE_ROUND.drag).toFixed(2)}, ${(SMOKE_ROUND.rise + SMOKE_ROUND.drag + SMOKE_ROUND.fall).toFixed(2)}, c)); }
+      // How hard the breath is going out, c seconds into a round (after the hand is down and a moment's hold).
+      float smokeOut(float c) { return smoothstep(${SMOKE_OUT.toFixed(2)} - 0.1, ${SMOKE_OUT.toFixed(2)} + 0.2, c) * (1.0 - smoothstep(${(SMOKE_OUT + SMOKE_ROUND.out).toFixed(2)} - 0.4, ${(SMOKE_OUT + SMOKE_ROUND.out).toFixed(2)}, c)); }
+      // The figure's skeleton now: the pose, and on top of it the motion. (sm: 0, or what it smokes: 1 a cigarette, 2 a cigar.)
+      void mobPose(float t, int body, float r, int P, bool moving, float phase, float side, bool bag, bool umb, bool straps, int manner, float sm) {
+        // Smoking now: someone who smokes (sm), a hand free for it (not up with an umbrella, on a strap or in someone's
+        // hand), not running; and as many of them as the setting says (uSmoking).
+        bool smoker = sm > 0.5 && !umb && !straps && P <= 5 && hh1(r, 9.1) < uSmoking && !(P == 1 && moving && aWalk.z > 1.9);
         // The umbrella's hand: the gesturing one, unless that hand holds someone else's (pose 'hold').
         float uside = P == 6 ? -side : side;
         Limb still = L3(0.0, 0.1, 0.12);
@@ -1656,19 +1953,29 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         headYaw = aPose.w;
         headPitch = 0.0;
         if (P == 1) {
-          float a = sin(phase * 6.2832) * 0.36;
+          // (Someone in a hurry runs: a longer stride, the knee folding as the leg comes through, the elbows bent.)
+          float rn = moving ? clamp(aWalk.z - 1.9, 0.0, 1.0) : 0.0;
+          float amp = mix(0.36, 0.58, rn);
+          float a = sin(phase * 6.2832) * amp;
+          float thru = cos(phase * 6.2832 + 0.4);
           // The knee bends as the leg goes back (smoothly, so the foot doesn't snap as the legs pass).
-          legL = L3(a, 0.0, 0.06 + 0.24 * clamp(-a / 0.36, 0.0, 1.0));
-          legR = L3(-a, 0.0, 0.06 + 0.24 * clamp(a / 0.36, 0.0, 1.0));
-          armL = L3(-a * 0.7, 0.1, 0.25);
-          armR = L3(a * 0.7, 0.1, 0.25);
-          lean += 0.04;
+          legL = L3(a, 0.0, 0.06 + (1.0 - rn) * 0.24 * clamp(-a / amp, 0.0, 1.0) + rn * (0.15 + 1.1 * max(0.0, thru)));
+          legR = L3(-a, 0.0, 0.06 + (1.0 - rn) * 0.24 * clamp(a / amp, 0.0, 1.0) + rn * (0.15 + 1.1 * max(0.0, -thru)));
+          armL = L3(-a * mix(0.7, 1.2, rn), 0.1, mix(0.25, 1.45, rn));
+          armR = L3(a * mix(0.7, 1.2, rn), 0.1, mix(0.25, 1.45, rn));
+          lean += mix(0.04, 0.18, rn);
           // The hips drop as far as the swinging legs rise, so the planted foot stays on the ground.
           drop = pv(3).y * (1.0 - cos(a));
           if (moving) {
             // The shoulders turning with the stride, a glance about.
             spineRoll = 0.03 * sin(phase * 6.2832);
             headYaw = aPose.w * 0.4 + 0.12 * sin(t * 0.4 + r * 9.0);
+            if (manner == 2) {
+              // A drunk: rolling, head down.
+              spineRoll += 0.15 * sin(t * 1.3 + r * 6.0);
+              lean += 0.1;
+              headPitch = 0.25 + 0.1 * sin(t * 0.6 + r);
+            }
           }
         } else {
           float breath = sin(t * 1.4 + r * 20.0);
@@ -1718,8 +2025,8 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
             float tt = t / dur + r * 37.0;
             float k = floor(tt);
             float u = fract(tt) * dur;
-            Act A = act(pickAct(P, k, r, bag, umb), u, k, t, r, side, body);
-            Act B = act(pickAct(P, k + 1.0, r, bag, umb), u - dur, k + 1.0, t, r, side, body);
+            Act A = act(pickAct(P, k, r, bag, umb, manner, smoker), u, k, t, r, side, body);
+            Act B = act(pickAct(P, k + 1.0, r, bag, umb, manner, smoker), u - dur, k + 1.0, t, r, side, body);
             float w = smoothstep(dur - 1.2, dur, u);
             armL = mixL(A.aL, B.aL, w);
             armR = mixL(A.aR, B.aR, w);
@@ -1728,6 +2035,8 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
             headYaw += mix(A.yaw, B.yaw, w);
             headPitch += mix(A.pitch, B.pitch, w);
             spineRoll += mix(A.roll, B.roll, w);
+            lean += mix(A.lean, B.lean, w);
+            drop = pv(3).y * mix(A.drop, B.drop, w);
             armL.swing += 0.015 * breath;
             armR.swing += 0.015 * breath;
           }
@@ -1764,6 +2073,33 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
           armL = h;
           armR = h;
         }
+        smokeHand = 0.0;
+        smokeUp = 0.0;
+        smokeAt = 0.0;
+        smokeEvery = 1.0;
+        smokeLow = still;
+        smokeHigh = still;
+        if (smoker) {
+          // A cigarette (or a cigar) in the free hand (a bag is in the left), held low; every so often up to the mouth
+          // for a drag and down again, then the breath out, the head going back a little with it. Each at their own
+          // pace: a cigar is slower.
+          smokeHand = bag ? 1.0 : side;
+          smokeEvery = (sm > 1.5 ? ${SMOKE_ROUND.cigar[0].toFixed(1)} : ${SMOKE_ROUND.every[0].toFixed(1)}) + (sm > 1.5 ? ${(SMOKE_ROUND.cigar[1] - SMOKE_ROUND.cigar[0]).toFixed(1)} : ${(SMOKE_ROUND.every[1] - SMOKE_ROUND.every[0]).toFixed(1)}) * hh1(r, 3.3);
+          smokeAt = mod(t + r * 97.0, smokeEvery);
+          smokeUp = smokeLift(smokeAt);
+          // (The arm with the hand at the mouth is solved for each body: smokerJoints.)
+          vec4 reach = pw(${JOINT_EXTRA.reach});
+          smokeHigh = Limb(reach.x, reach.w, reach.y, 0.0, reach.z);
+          // Walking, the arm still swings a little with the stride, the forearm carried.
+          float stride = P == 1 ? sin(phase * 6.2832) * 0.1 * smokeHand : 0.0;
+          // (No ?: on structs in ESSL 1.0.)
+          smokeLow = Limb(0.14, 0.12, 0.62, 0.0, 0.15);
+          if (P == 1) smokeLow = Limb(0.14 + stride, 0.1, 0.78, 0.0, 0.1);
+          Limb now = mixL(smokeLow, smokeHigh, smokeUp);
+          if (smokeHand > 0.0) armR = now;
+          else armL = now;
+          headPitch += 0.07 * smokeUp - 0.13 * smokeOut(smokeAt);
+        }
         if (umb) {
           // The umbrella held up (people.ts UMBRELLA_HOLD, which the umbrella is built on), bobbing a little with
           // the stride or the breath.
@@ -1772,6 +2108,162 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
           if (uside > 0.0) armR = h;
           else armL = h;
         }
+      }
+`;
+
+/**
+ * The mob's material: poses and animates each figure from its numbers (the skeleton rebuilt in the vertex
+ * shader: the same joints and rotations as `poseBones`, plus breathing, a sway, looking about, gestures and
+ * the walk), dark and softly top-lit, lit by the street lightmap at night, a little denser at the
+ * silhouette, see-through by alpha to coverage (opaque pass, depth written: one surface per figure, no
+ * sorting). `uTime` drives the motion and the fades (main.ts sets it).
+ */
+export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THREE.ShaderMaterial {
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      ...THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uOpacity: { value: 0.72 }, uLift: { value: 1 }, uRim: { value: new THREE.Color(0, 0, 0) }, uUmbrella: { value: 0 }, uSkin: { value: 1 }, uStill: { value: 0 }, uFlat: { value: new THREE.Vector4(0, 0, 0, 0) }, uBlack: { value: 0 }, uStay: { value: 0 }, uHour: { value: 12 }, uRain: { value: 0 }, uSeason: { value: 0 }, uEdge: { value: 0.2 }, uSmoking: { value: 1 } }]),
+      tJoints: { value: mobJoints() },
+      // Emotes (real/emoteGlsl.ts): who shows what, when; off until the crowd's billboards (real/emotes.ts) turn them on.
+      ...emoteUniforms(),
+      // The scene's light (setMobSun), used by the look compiled with MOB_LIT. (As it starts, it's the even light of the other looks.)
+      uHemiSky: { value: new THREE.Color(Math.PI, Math.PI, Math.PI) },
+      uHemiGround: { value: new THREE.Color(0.6 * Math.PI, 0.6 * Math.PI, 0.6 * Math.PI) },
+      uSunCol: { value: new THREE.Color(0, 0, 0) },
+      uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+      tSunShadow: { value: NO_SHADOW },
+      uSunShadow: { value: 0 },
+      uSunShadowMatrix: { value: new THREE.Matrix4() },
+      uSunShadowBias: { value: new THREE.Vector3(0, 0, 1 / 2048) },
+      // For the shadow caster (mobDepthMaterial): where the viewer is, and how far from them people cast shadows (m).
+      uEye: { value: new THREE.Vector3() },
+      uShadowReach: { value: 60 },
+      tLight: light?.tLight ?? { value: null },
+      uLightRect: light?.uLightRect ?? { value: new THREE.Vector4(0, 0, 1, 1) },
+      uLightFade: light?.uLightFade ?? { value: new THREE.Vector2(0, 0) },
+      uLightGain: light?.uLightGain ?? { value: 0 },
+    },
+    alphaToCoverage: true,
+    fog: true,
+    vertexShader: /* glsl */ `
+      #include <fog_pars_vertex>
+      // (The shadow caster is this shader with MOB_DEPTH: the camera there is the light's, so the viewer's place comes as uEye.)
+      #ifdef MOB_DEPTH
+      uniform vec3 uEye;
+      uniform float uShadowReach;
+      #define EYE uEye
+      #else
+      #define EYE cameraPosition
+      #endif
+      uniform float uTime;
+      // 1 while it rains: those who carry an umbrella hold it up (real/crowd.ts sets it with its umbrellas).
+      uniform float uUmbrella;
+      // How much lighter skin is than the clothes (the shaped generation tags skin: aShade + 100; see vC below).
+      uniform float uSkin;
+      // 1: standing figures only stand easy, no routine (the mob showroom's turnarounds).
+      uniform float uStill;
+      // How many of those who smoke have one lit (0 to 1: the setting).
+      uniform float uSmoking;
+      // Every body's joints (mobJoints): a row a body, a texel a bone, the arms' bind angle after the bones.
+      uniform sampler2D tJoints;
+      // One colour for every figure and every part of it (rgb, and how much of it): the mob showroom's single-colour ghost.
+      uniform vec4 uFlat;
+      // 1: everything the one colour, clothes and all (the mob as it first was: all black).
+      uniform float uBlack;
+      // 1: nobody comes and goes (the coloured look: they aren't ghosts). Walkers turn round and walk back, people
+      // at a crossing cross back on the next green, those standing stay.
+      uniform float uStay;
+      float jointRow;
+      vec3 pv(int i) { return texture2D(tJoints, vec2((float(i) + 0.5) / ${JOINT_COLS}.0, (jointRow + 0.5) / ${JOINT_ROWS}.0)).xyz; }
+      attribute float aShade;
+      attribute vec3 aBone;
+      attribute float aMirror;
+      attribute vec4 aFig;
+      attribute vec4 aPose;
+      attribute vec4 aWalk;
+      attribute vec3 aGround;
+      attribute vec3 aTint;
+      attribute vec4 aWhen;
+      // The hour (0-24), the rain (0-1) and the season (0 spring to 3 winter): who is out (MOB_PLACE_GLSL).
+      uniform float uHour;
+      uniform float uRain;
+      uniform float uSeason;
+      varying vec3 vN;
+      varying vec3 vW;
+      varying vec3 vC;
+      varying float vFade;
+      // An emote's mark on the face (real/emoteGlsl.ts; its quads are the template's, real/mobShape.ts): uv across the
+      // quad, which mark (0: none) and how much of it; its beat and its light.
+      varying vec4 vMark;
+      varying vec2 vMarkFx;
+      uniform vec3 uHemiSky;
+      ${EMOTE_GLSL}
+
+      ${MOB_POSE_GLSL}
+      ${MOB_PLACE_GLSL}
+      void main() {
+        float t = uTime;
+        int body = int(aPose.x + 0.5);
+        base = body * ${BONES};
+        jointRow = float(body);
+        armOut = pv(${BONES}).x;
+        float side = sign(aPose.z);
+        // |aPose.z| is 1, +1 with a bag in the left hand (that hand stays down), +2 carrying an umbrella.
+        float carry = floor(abs(aPose.z) + 0.5);
+        // (+8: a cigarette to smoke, +16: a cigar.)
+        float sm = floor((carry - 1.0) / 8.0 + 0.01);
+        carry -= sm * 8.0;
+        // (+4: both hands on a rucksack's straps, standing or walking.)
+        bool straps = carry > 4.5;
+        if (straps) carry -= 4.0;
+        bool umb = carry > 2.5 && uUmbrella > 0.5;
+        bool bag = carry - (carry > 2.5 ? 2.0 : 0.0) > 1.5;
+        float seed = aFig.w;
+        // Each figure's own randomness for its idle motion (seeds can be shared by a group).
+        float r = fract(sin(dot(aFig.xy, vec2(12.9898, 78.233))) * 43758.5453);
+
+        MobPlace place = mobPlace(t, body, seed);
+        vec2 org = place.org;
+        float ground = place.ground;
+        float phase = place.phase;
+        float fade = place.fade;
+        float turn = place.turn;
+        bool moving = place.moving;
+        bool crosser = place.crosser;
+        int manner = int(aWhen.y + 0.5);
+        #ifndef MOB_DEPTH
+        // Not there (faded out, or not out at this hour): dropped here, before the work of posing it.
+        if (fade <= 0.002) {
+          vFade = 0.0;
+          gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+          return;
+        }
+        #endif
+        // A drunk weaves along.
+        if (manner == 2 && moving) org += normalize(vec2(aWalk.y, -aWalk.x) + 1e-5) * 0.32 * sin(t * 0.8 + r * 9.0);
+
+        #ifdef MOB_DEPTH
+        {
+          // Only people near the viewer cast shadows, and only while they're there (not faded out): the rest are
+          // dropped here, before the work of posing them. (And a face mark's quad casts none.)
+          vec3 at = (modelMatrix * vec4(org.x, ground, org.y, 1.0)).xyz;
+          if (fade < 0.5 || aShade > ${FACE_MARK}.0 || distance(at.xz, uEye.xz) > uShadowReach) {
+            vFade = 0.0;
+            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+            return;
+          }
+        }
+        #endif
+        // The pose, and on top of it the motion.
+        int P = int(aPose.y + 0.5);
+        if (crosser && !moving) P = 0;
+        // Mid-stride with nowhere to go (set pieces' figures): they stand and go about the routine instead. (Fixed
+        // figures, seed < 0, keep their pose: the showroom, story NPCs.)
+        if (P == 1 && !moving && seed >= 0.0) P = 0;
+        // Emotes on the face: its marks' quads, and a flush of the head's skin.
+        ${FACE_VERTEX_GLSL}
+        // The umbrella's hand: the gesturing one, unless that hand holds someone else's (pose 'hold').
+        float uside = P == 6 ? -side : side;
+        mobPose(t, body, r, P, moving, phase, side, bag, umb, straps, manner, sm);
 
         // Skinned by two bones (an umbrella mirrored to the hand it's in, on that side's arm).
         float m = mix(1.0, uside, aMirror);
@@ -1791,7 +2283,7 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         vec3 lp = w * (M0 * p + T0) + (1.0 - w) * (M1 * p + T1);
         vec3 ln = normalize(w * (M0 * n) + (1.0 - w) * (M1 * n));
         // The figure frame (x right, z forward) turned by its facing, at where it is.
-        float fx = sin(aFig.z), fz = cos(aFig.z);
+        float fx = sin(aFig.z + turn), fz = cos(aFig.z + turn);
         vec3 local = vec3(org.x + fz * lp.x + fx * lp.z, ground + lp.y, org.y - fx * lp.x + fz * lp.z);
         vec3 nl = vec3(fz * ln.x + fx * ln.z, ln.y, -fx * ln.x + fz * ln.z);
         vec4 wp = modelMatrix * vec4(local, 1.0);
@@ -1814,14 +2306,19 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         } else if (tag > 1.5) vC = (${TAG_GLSL}) * sh;
         else if (tag > 0.5) vC = mix(${v3Glsl(SKIN_TONE)} * (0.84 + 0.3 * fract(hq * 2.17 + 0.71)) * sh * uSkin, uFlat.rgb, uFlat.a);
         else vC = mix(aTint * sh, uFlat.rgb, uFlat.a);
+        // (A flushed face: the head's skin toward red, by how far to the front of the head it is, below the brow.)
+        if (flushing > 0.0) vC = ${flushGlsl('vC', '(position - pv(2))', 'sh')};
         vC = mix(vC, uFlat.rgb, uBlack);
         // Fade with distance and as you walk into one, by where it stands so it fades whole.
         vec3 c = (modelMatrix * vec4(org.x, ground, org.y, 1.0)).xyz;
-        float d = distance(c.xz, cameraPosition.xz);
+        float d = distance(c.xz, EYE.xz);
         // (seed -2: someone who stays whole right beside you, a passenger in your car.)
         vFade = fade * (seed < -1.5 ? 1.0 : smoothstep(0.45, 1.2, d)) * (1.0 - smoothstep(125.0, 175.0, d));
         vec4 mvPosition = viewMatrix * wp;
         gl_Position = projectionMatrix * mvPosition;
+        // (A face mark's quad with nothing to show is folded away; one that shows, only near the viewer, as the emotes are.)
+        if (folded) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        vMark.w *= 1.0 - smoothstep(${(0.8 * EMOTE_REACH).toFixed(1)}, ${EMOTE_REACH.toFixed(1)}, d);
         #include <fog_vertex>
       }`,
     fragmentShader: /* glsl */ `
@@ -1839,16 +2336,60 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
       varying vec3 vW;
       varying vec3 vC;
       varying float vFade;
+      varying vec4 vMark;
+      varying vec2 vMarkFx;
+      ${FACE_MARK_GLSL}
       float bayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
       float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+      #ifdef MOB_LIT
+      uniform vec3 uHemiSky;
+      uniform vec3 uHemiGround;
+      uniform vec3 uSunCol;
+      uniform vec3 uSunDir;
+      uniform sampler2DShadow tSunShadow;
+      uniform float uSunShadow;
+      uniform mat4 uSunShadowMatrix;
+      uniform vec3 uSunShadowBias;
+      // How much of the sun reaches a point (the sun's shadow map, four taps of its filtered compare).
+      float sunShade(vec3 n) {
+        if (uSunShadow <= 0.0) return 1.0;
+        // (Asked a little off the body, toward the sun: the map is too coarse for a figure to shade itself cleanly, so
+        // it takes the shadows of what's round it, not its own.)
+        vec4 sc = uSunShadowMatrix * vec4(vW + n * (uSunShadowBias.y + 0.06) + uSunDir * 0.3, 1.0);
+        sc.xyz /= sc.w;
+        sc.z += uSunShadowBias.x;
+        if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
+        float e = uSunShadowBias.z * 1.5;
+        float s = texture(tSunShadow, vec3(sc.xy + vec2(e, e), sc.z)) + texture(tSunShadow, vec3(sc.xy + vec2(-e, e), sc.z)) + texture(tSunShadow, vec3(sc.xy + vec2(e, -e), sc.z)) + texture(tSunShadow, vec3(sc.xy + vec2(-e, -e), sc.z));
+        return mix(1.0, s * 0.25, uSunShadow);
+      }
+      #endif
       void main() {
         if (vFade < 0.01) discard;
+        if (vMark.z > 0.5) {
+          // An emote's mark on the face: inked, not lit (a little dimmer at night), as the marks over a head are.
+          vec4 mark = faceMark(vMark.xy, vMark.z, vMarkFx.x);
+          float ma = mark.a * vMark.w * vFade;
+          if (ma < 0.02) discard;
+          gl_FragColor = vec4(mark.rgb * vMarkFx.y, ma);
+          #include <fog_fragment>
+          return;
+        }
         vec3 n = normalize(vN);
         vec3 v = normalize(cameraPosition - vW);
         float rim = 1.0 - abs(dot(n, v));
         rim *= rim;
         float light = 0.6 + 0.4 * (n.y * 0.5 + 0.5);
         vec3 col = vC * uLift * light * (1.0 + 0.5 * rim);
+        #ifdef MOB_LIT
+        {
+          // In the scene's light, as the city's surfaces are: the sky's from above and the ground's from below, and the
+          // sun or the moon where it reaches. (A floor, so someone in the dark is a dark figure, not a hole.)
+          vec3 sky = mix(uHemiGround, uHemiSky, 0.5 + 0.5 * n.y);
+          vec3 lit = vC * 0.3183 * (sky + uSunCol * max(dot(n, uSunDir), 0.0) * sunShade(n));
+          col = max(lit, vC * 0.05) * uLift * (1.0 + 0.3 * rim);
+        }
+        #endif
         // A soft light along the silhouette (MOB_LOOKS), so dark figures part from a dark street.
         col += uRim * rim * (0.4 + 0.6 * rim);
         // Street light (the lightmap): the dark clothes catch the lamps and the neon.
@@ -1870,8 +2411,23 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
       }`,
   });
   setMobLook(material, look);
+  // The shadow caster: the same posing, depth only (three draws a mesh into a shadow map with its customDepthMaterial).
+  material.userData.depth = new THREE.ShaderMaterial({
+    uniforms: material.uniforms,
+    defines: { MOB_DEPTH: '' },
+    vertexShader: material.vertexShader,
+    fragmentShader: /* glsl */ `
+      varying float vFade;
+      void main() {
+        if (vFade < 0.5) discard;
+        gl_FragColor = vec4(1.0);
+      }`,
+  });
   return material;
 }
+
+/** The mob material's shadow caster (a mesh's `customDepthMaterial`): the figures posed as they're drawn, near the viewer only. */
+export const mobDepthMaterial = (material: THREE.Material): THREE.Material | undefined => material.userData.depth as THREE.Material | undefined;
 
 /** Where a point is, for people: on a pavement or open ground, a shared lane (walk along it), or the road. */
 export type Footing = 'foot' | 'lane' | 'road';
@@ -1904,18 +2460,30 @@ export function footingOf(roads: readonly Road3[]): (x: number, z: number) => Fo
 
 // ---- Crowds ----
 
-function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body: Body | undefined, mix: PeopleMix): FigureSpec {
+/** Who hangs about in an alley. */
+const ALLEY_PEOPLE: PeopleMix = { hood: 3, chinpira: 2, yakuza: 1.2, yankee: 1, drunk: 1, plain: 1, long: 0.5, irezumi: 0.3, bosozoku: 0.3 };
+
+function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body: Body | undefined, mix: PeopleMix, night = 0.15): FigureSpec {
   const b: Body = body ?? (rnd.chance(0.45) ? 'man' : rnd.chance(0.85) ? 'woman' : 'elder');
   const woman = b === 'woman';
   // What they wear, by the place's mix.
   const outfit = pickOutfit(mix, rnd.int(0, 1 << 30), (o) => wears(b, o));
-  let hair: Hair = woman ? rnd.pick(['long', 'long', 'bun', 'short', 'hat'] as const) : b === 'elder' ? rnd.pick(['none', 'hat', 'cap'] as const) : rnd.pick(['short', 'short', 'short', 'none', 'cap', 'hat'] as const);
-  if (outfit === 'maid' || (outfit === 'school' && woman)) hair = rnd.pick(['long', 'long', 'short', 'bun'] as const);
+  let hair: Hair = woman ? rnd.pick(['long', 'long', 'bob', 'ponytail', 'bun', 'short', 'hat'] as const) : b === 'elder' ? rnd.pick(['none', 'hat', 'cap'] as const) : rnd.pick(['short', 'short', 'short', 'none', 'cap', 'hat'] as const);
+  if (outfit === 'maid' || ((outfit === 'school' || outfit === 'track' || outfit === 'gym') && woman)) hair = rnd.pick(['long', 'ponytail', 'bob', 'twin', 'short', 'bun'] as const);
+  if (outfit === 'gown' || outfit === 'office') hair = woman ? rnd.pick(['long', 'bun', 'bob'] as const) : hair;
   if (outfit === 'kimono' || outfit === 'yukata') hair = woman ? 'bun' : rnd.pick(['short', 'none'] as const);
   if (outfit === 'work' || outfit === 'police') hair = woman ? 'short' : rnd.pick(['short', 'none'] as const);
   if (outfit === 'suit' && !woman) hair = rnd.pick(['short', 'short', 'none'] as const);
+  // The shady ones: their hair picks the look (real/mobShape.ts: a punch perm, a crop, slicked back; the old boss in
+  // white under a hat; a politician's sash now and then on a fat cat).
+  if (outfit === 'yakuza') hair = b === 'elder' ? rnd.pick(['hat', 'hat', 'short', 'none'] as const) : rnd.pick(['short', 'short', 'none', 'cap', 'cap'] as const);
+  if (outfit === 'chinpira' || (outfit === 'bosozoku' && !woman)) hair = rnd.pick(['short', 'none', 'cap', 'hat'] as const);
+  if (outfit === 'boss') hair = rnd.chance(0.06) ? 'cap' : rnd.pick(['short', 'none'] as const);
+  if (outfit === 'hood' && !woman) hair = rnd.pick(['short', 'short', 'none', 'cap'] as const);
+  if (outfit === 'yankee') hair = woman ? rnd.pick(['long', 'long', 'ponytail', 'bob'] as const) : rnd.pick(['short', 'none'] as const);
+  if (outfit === 'drunk' || outfit === 'irezumi') hair = rnd.pick(['short', 'short', 'none'] as const);
   // A bag in the left hand: they gesture with the right.
-  const carries = (outfit === 'suit' && !woman) || (outfit === 'school' && b !== 'child');
+  const carries = (outfit === 'suit' && !woman) || (outfit === 'school' && b !== 'child') || outfit === 'drunk' || (outfit === 'yankee' && woman);
   return {
     x,
     z,
@@ -1930,6 +2498,9 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
     phase: rnd.float(),
     side: carries || rnd.chance(0.5) ? 1 : -1,
     look: (rnd.float() - 0.5) * 0.6,
+    // When they're out and how they carry themselves (district/peopleHours.ts), and their own threshold for being out.
+    ...whenOf(outfit, b, night, rnd.float()),
+    out: rnd.float(),
   };
 }
 
@@ -1944,7 +2515,8 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
 export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly (Rect & { readonly focus?: readonly [number, number] })[] = [], signals: Signals | null = null, around: readonly Road3[] = plan.roads, stamps: readonly Rect[] = [], fixtures: readonly Rect[] = []): FigureSpec[] {
   const out: FigureSpec[] = [];
   const mix = plan.style.people ?? DISTRICT_PEOPLE[plan.kind] ?? CITY_PEOPLE;
-  const person = (rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body?: Body): FigureSpec => randomPerson(rnd, x, z, yaw, pose, body, mix);
+  const night = nightLife(plan.style, plan.kind);
+  const person = (rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body?: Body): FigureSpec => randomPerson(rnd, x, z, yaw, pose, body, mix, night);
   const cell = plan.rect;
   const mine = (x: number, z: number): boolean => x >= cell.x && z >= cell.y && x < cell.x + cell.w && z < cell.y + cell.h;
   const inRect = (q: Rect, x: number, z: number, m: number): boolean => x > q.x - m && x < q.x + q.w + m && z > q.y - m && z < q.y + q.h + m;
@@ -1973,7 +2545,8 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
     return L;
   };
   /** A walk along (dx, dz) for L metres at a stroll (an elder's slower), and the time away between walks. */
-  const walkOf = (rnd: Rng, L: number, dx: number, dz: number, slow = false): FigureSpec['walk'] => ({ ex: dx * L, ez: dz * L, speed: (slow ? 0.95 : 1.2) + rnd.float() * 0.35, gap: 3 + rnd.float() * 20 });
+  // (One in twenty-five is in a hurry: they run.)
+  const walkOf = (rnd: Rng, L: number, dx: number, dz: number, slow = false): FigureSpec['walk'] => ({ ex: dx * L, ez: dz * L, speed: !slow && rnd.chance(0.04) ? 2.7 + rnd.float() * 0.5 : (slow ? 0.95 : 1.2) + rnd.float() * 0.35, gap: 3 + rnd.float() * 20 });
   /** People walking from (x, z) along (dx, dz): one, a couple, a parent and child, or two friends side by side. */
   const walkers = (rnd: Rng, x: number, z: number, dx: number, dz: number, L: number, roomy: boolean): void => {
     const yaw = Math.atan2(dx, dz);
@@ -1998,7 +2571,7 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
       // (A parent out with a child: in their own clothes, not a uniform.)
       const own = parent.outfit === 'maid' || parent.outfit === 'school' ? 'plain' : parent.outfit;
       out.push({ ...parent, outfit: own, side: 1, seed, walk });
-      out.push({ ...person(rnd, x2, z2, yaw, 'walk', 'child'), side: -1, hair: rnd.pick(['short', 'cap', 'bun'] as const), look: -0.3, phase: parent.phase + 0.5, seed, walk });
+      out.push({ ...person(rnd, x2, z2, yaw, 'walk', 'child'), side: -1, hair: rnd.pick(['short', 'cap', 'bun', 'twin'] as const), look: -0.3, phase: parent.phase + 0.5, seed, walk });
     } else {
       const walk = walkOf(rnd, L, dx, dz);
       const [x1, z1] = at(-0.32);
@@ -2055,6 +2628,38 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
             const ang = (i / n) * Math.PI * 2 + rnd.float() * 0.4;
             const [xi, zi] = [cx + Math.sin(ang) * 0.6, cz + Math.cos(ang) * 0.6];
             if (standable(xi, zi)) out.push({ ...person(rnd, xi, zi, ang + Math.PI, rnd.pick(['stand', 'stand', 'pockets', 'talk', 'phone'] as const)), look: (rnd.float() - 0.5) * 0.8, seed });
+          }
+        }
+      }
+    }
+  }
+
+  // The alleys' own people: someone against the wall you'd rather not pass, two of them, a few squatting together.
+  // More of them where the night is alive; they keep late hours, so an alley by day is mostly empty.
+  for (const r of plan.roads) {
+    if (r.kind !== 'alley') continue;
+    const q = r.rect;
+    const rnd = rng(hash(Math.round(q.x * 3), Math.round(q.y * 3), 0x5ad1, r.vertical ? 1 : 2));
+    const [a, b] = r.vertical ? [q.y, q.y + q.h] : [q.x, q.x + q.w];
+    const shady = (x: number, z: number, yaw: number, pose: Pose): FigureSpec => {
+      const who = randomPerson(rnd, x, z, yaw, pose, rnd.chance(0.85) ? 'man' : 'woman', ALLEY_PEOPLE, night);
+      return { ...who, hours: who.hours === 'always' || who.hours === 'commute' ? 'late' : who.hours, manner: who.manner === 'drunk' ? 'drunk' : 'shady' };
+    };
+    for (const side of [-1, 1]) {
+      for (let t = a + 3 + rnd.float() * 8; t < b - 3; t += 9 + rnd.float() * 12) {
+        if (!rnd.chance(0.14 + 0.36 * night)) continue;
+        const [wx, wz, dx0, dz0] = onRoad(r, side, t, 0.4);
+        if (!standable(wx, wz)) continue;
+        const face = Math.atan2(r.vertical ? -side : 0, r.vertical ? 0 : -side);
+        const seed = rnd.float();
+        const roll = rnd.float();
+        if (roll < 0.55) out.push({ ...shady(wx, wz, face + (rnd.float() - 0.5) * 0.6, rnd.pick(['stand', 'pockets', 'pockets', 'phone'] as const)), seed });
+        else {
+          const n = roll < 0.85 ? 2 : 3;
+          for (let i = 0; i < n; i++) {
+            const o = (i - (n - 1) / 2) * 0.8;
+            const [xi, zi] = [wx + dx0 * o, wz + dz0 * o];
+            if (standable(xi, zi)) out.push({ ...shady(xi, zi, face + (rnd.float() - 0.5) * 0.9, rnd.pick(['stand', 'pockets', 'talk'] as const)), look: (rnd.float() - 0.5) * 0.9, seed });
           }
         }
       }
@@ -2209,7 +2814,27 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
     if (f.walk) continue;
     if (wallAt(f.x, f.z, Math.sin(f.yaw), Math.cos(f.yaw), 1.0)) out[i] = { ...f, yaw: f.yaw + Math.PI };
   }
-  return out;
+  // People together are out together: one threshold for the group, and a child's hours if there's a child among them.
+  const groups = new Map<number, number[]>();
+  out.forEach((f, i) => {
+    if (f.seed === undefined) return;
+    const g = groups.get(f.seed);
+    if (g) g.push(i);
+    else groups.set(f.seed, [i]);
+  });
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    const lead = out[g[0]];
+    const hours = g.some((i) => out[i].body === 'child') ? 'day' : lead.hours;
+    for (const i of g) out[i] = { ...out[i], hours, out: lead.out };
+  }
+  // Who has something lit (district/peopleMix.ts): by who they are and what they're doing, each from where they
+  // stand (no draw from the cell's random numbers, so everything else stays as it was). Not someone holding a hand.
+  return out.map((s): FigureSpec => {
+    if (s.pose === 'hold') return s;
+    const what = smokeOf({ body: s.body, outfit: outfitOf(s), hair: s.hair }, !s.walk ? 'stand' : s.walk.speed > 1.9 ? 'run' : 'walk', u01(hash(Math.round(s.x * 10), Math.round(s.z * 10), 0x5a0c)));
+    return what ? { ...s, smokes: what } : s;
+  });
 }
 
 // ---- Passengers ----

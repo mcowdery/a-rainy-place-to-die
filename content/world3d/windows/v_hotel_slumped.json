@@ -1,0 +1,81 @@
+{
+  "id": "v_hotel_slumped",
+  "label": "someone out cold on the bed, someone going through his bag",
+  "cat": "v_hotel",
+  "low": true,
+  "back": [
+    [
+      "picture",
+      0,
+      1.65
+    ]
+  ],
+  "front": [
+    [
+      "bed",
+      -0.2,
+      1.9,
+      -1
+    ],
+    [
+      "bag",
+      1.3
+    ]
+  ],
+  "a": [
+    {
+      "who": "drunk",
+      "x": -0.08,
+      "pose": {
+        "yaw": 90,
+        "pitch": -90,
+        "aL": [
+          80,
+          80,
+          10
+        ],
+        "aR": [
+          -10,
+          0,
+          10
+        ],
+        "hL": [
+          0,
+          0,
+          12
+        ],
+        "nod": 38
+      },
+      "floor": 0.43
+    },
+    {
+      "who": "dress",
+      "x": 0.85,
+      "pose": {
+        "yaw": 90,
+        "lean": 52.2,
+        "nod": 13.2,
+        "lL": [
+          27.5,
+          0,
+          125
+        ],
+        "lR": [
+          26.9,
+          0,
+          128
+        ],
+        "aL": [
+          59,
+          0,
+          20
+        ],
+        "aR": [
+          56,
+          0,
+          26
+        ]
+      }
+    }
+  ]
+}

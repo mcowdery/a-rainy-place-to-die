@@ -21,6 +21,15 @@ export const FH = 3.0;
 export const HOME_GF = 3.0;
 /** The flag bit marking a home (city.ts reads it). */
 export const HOME_FLAG = 256;
+/**
+ * The rooms behind the upper floors' glass (city.ts, windowScenes.ts; the literals there must match). VICE_SHIFT:
+ * two bits, how much of the city's vice the building's zone has (its look's `vice`, 0 to 3). DEN_FLAG: a tenant
+ * building whose upper floors are bars, clubs, parlours and back offices rather than flats or offices: more of them
+ * the more vice the zone has, and over a bar or a parlour's sign.
+ */
+export const VICE_SHIFT = 131072;
+export const DEN_FLAG = 524288;
+const NIGHT_TRADES: readonly number[] = [TRADE.bar, TRADE.snack, TRADE.izakaya, TRADE.mahjong, TRADE.karaoke, TRADE.lounge, TRADE.pachinko, TRADE.arcade];
 
 export interface RealStyle {
   readonly wall: C3;
@@ -121,7 +130,10 @@ export function styleFor(b: Building3): RealStyle {
   const { trade, hue } = stamp
     ? { trade: TRADE.bar, hue: hueOfColor(b.hue!) }
     : pickTrade({ id: b.id, sign: b.sign, words: b.zone?.style.signWords, colors: b.zone?.style.signColors, mood: shopPal, front: s1 - s0 - 0.7, tower: b.h >= 45 || type === WIN.curtain });
-  const flags = (shopOpen ? 1 : 0) + shopPal * 2 + (darkFrame ? 8 : 0) + litBias * 16 + (tiled ? 128 : 0) + (home ? HOME_FLAG : 0) + (home ? 0 : shopFlags(trade, hue));
+  // (From their own hash too.)
+  const vice = stamp ? 0 : (look?.vice ?? 0);
+  const den = !home && !stamp && b.h < 45 && rng(hash(b.id, 0xde17)).chance(vice * (NIGHT_TRADES.includes(trade) ? 0.95 : 0.5));
+  const flags = (shopOpen ? 1 : 0) + shopPal * 2 + (darkFrame ? 8 : 0) + litBias * 16 + (tiled ? 128 : 0) + (home ? HOME_FLAG : 0) + (home ? 0 : shopFlags(trade, hue)) + Math.min(3, Math.round(vice * 3)) * VICE_SHIFT + (den ? DEN_FLAG : 0);
   s = {
     wall: lin(wallHex),
     trim: lin(rnd.pick(TRIMS)),

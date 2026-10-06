@@ -1,4 +1,5 @@
 import { ATLAS_H, ATLAS_W, BLOCK, BLOCK_COLS, PPM, REGIONS, roomTables } from './shopAtlas';
+import { maskShare, windowGlsl } from './windowScenes';
 import { HUES, TRADES } from './shops';
 
 /**
@@ -47,13 +48,15 @@ export const shopGlsl = (): string => /* glsl */ `
   vec4 shopTex(int tr, vec4 rg, vec2 t, float lod, out vec3 mask) {
     vec2 px = vec2(float(tr % ${BLOCK_COLS}), float(tr / ${BLOCK_COLS})) * ${f(BLOCK)} + rg.xy + vec2(t.x, 1.0 - t.y) * rg.zw;
     vec2 uv = px / vec2(${f(ATLAS_W)}, ${f(ATLAS_H)});
-    mask = textureLod(tShopMask, uv, max(lod - 1.0, 0.0)).rgb;
+    // (The masks are the top of their texture: the rooms behind the upper floors' glass lie under them.)
+    mask = textureLod(tShopMask, vec2(uv.x, uv.y * ${r3(maskShare())}), max(lod - 1.0, 0.0)).rgb;
     return textureLod(tShopCol, uv, lod);
   }
 
   // What's seen through a shop's glass at (x along the front, y up) looking along rd (in the facade's frame, z out
-  // of the wall), lit by its light L, plus what glows. w: the shop's width; dist: from the camera to the glass;
-  // pxAng: a pixel's angle (how big a texel looks).
+  // of the wall), lit by its light L, plus what glows. tr: its room in the atlas (its trade's, or a shady room after
+  // the trades'); w: the shop's width; dist: from the camera to the glass; pxAng: a pixel's angle (how big a texel
+  // looks).
   vec3 shopInterior(vec2 at, vec3 rd, float w, int tr, float seed, vec3 hue, vec3 L, float dist, float pxAng) {
     vec2 rm = SHOP_ROOM[tr];
     float D = rm.x * (0.9 + 0.2 * h1(seed + 41.0));
@@ -101,4 +104,6 @@ export const shopGlsl = (): string => /* glsl */ `
     float dt = clamp(-zSeen / D, 0.0, 1.0);
     return col * L * mix(1.0, 0.55, dt) + glow;
   }
+
+  ${windowGlsl()}
 `;

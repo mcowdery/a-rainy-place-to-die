@@ -1,0 +1,21 @@
+{
+  "file": "denko_breaks_1.flac",
+  "id": "denko_breaks",
+  "take": 1,
+  "station": "cypher",
+  "title": "電光ブレイクス",
+  "artist": "DJ デンコー",
+  "caption": "Mid-1980s electro-funk and hip hop instrumental with a Japanese city pop flavour. A hard drum machine breakbeat with a booming kick, handclaps and cowbell, a squelchy analog synth bass line, bright city pop chord stabs on a digital electric piano, rhythmic vinyl record scratching as the lead, arcade game bleeps, a soaring analog synthesizer solo. Energetic, futuristic, an electric town of neon signs and game arcades. Instrumental, no vocals.",
+  "lyrics": "[Instrumental]",
+  "language": "",
+  "bpm": 112,
+  "key": "G minor",
+  "seconds": 175.0,
+  "seed": 2808,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:14",
+  "took": 44,
+  "batch": "citypop-rap-01",
+  "model": "acestep-v15-turbo"
+}

@@ -14,6 +14,7 @@ zones:
   E:
     id: shiomi_events
     name: Shiomi event quarter
+    night: 0.6
     people: { plain: 5, long: 2, yukata: 2, otaku: 1 }
     plan:
       floors: [[3, 5, 50], [6, 10, 35], [12, 18, 15]]
@@ -31,6 +32,8 @@ zones:
       colors: ['#ffffff', '#4fe3ff', '#ff5fc8', '#ffe45f']
     ads: { fun: 3, mainstream: 3, food: 2 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.25
       windows: { curtain: 40, ribbon: 40, blank: 20 }
       walls: ['#d8dcdc', '#b8c4cc', '#e8e4dc', '#8a9aa8', '#c8b8a8']
       tiled: false
@@ -52,6 +55,8 @@ zones:
       colors: ['#ffffff', '#4fe3ff']
     ads: { mainstream: 3, food: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.2
       windows: { curtain: 55, balcony: 35, ribbon: 10 }
       walls: ['#c8ccd0', '#a8b0b8', '#e0e0dc', '#8a949c']
       tiled: false

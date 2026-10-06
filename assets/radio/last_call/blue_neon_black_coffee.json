@@ -1,0 +1,21 @@
+{
+  "file": "blue_neon_black_coffee_1.flac",
+  "id": "blue_neon_black_coffee",
+  "take": 1,
+  "station": "last_call",
+  "title": "Blue Neon, Black Coffee",
+  "artist": "Dolores Vane",
+  "caption": "1950s cool jazz vocal with a noir mood, easy medium swing. A smoky, knowing female jazz singer in English, relaxed and behind the beat, dry wit in her voice. Walking upright bass, light swinging ride cymbal and brushes, shimmering vibraphone, hollow-body jazz guitar comping, a cool muted trumpet answering the vocal. Sleepless, wry, a woman alone in an all-night diner at three in the morning. Warm vintage club sound.",
+  "lyrics": "[Intro - Vibraphone]\n\n[Verse 1]\nBlue neon, black coffee, quarter past three\nA booth in the corner, my shadow and me\nThe jukebox is playing a tune I don't know\nAnd I've got no reason, no reason to go\n\n[Verse 2]\nThe waitress is yawning, the cook's half asleep\nA cop at the counter with secrets to keep\nThe rain on the window is tapping in time\nBlue neon, black coffee, and nothing is mine\n\n[Bridge]\nSomewhere there's a morning with sun on the sheets\nSomewhere there's a fella who means what he speaks\nBut I know this city, and I know this town\nThe sun only rises to let a girl down\n\n[Verse 3]\nSo pour me another, and leave me the cream\nI'll sit here till daylight and finish my dream\nBlue neon, black coffee, quarter to four\nI'll leave when the night doesn't love me no more\n\n[Instrumental Break - Vibraphone Solo]\n\n[Bridge]\nSomewhere there's a morning with sun on the sheets\nSomewhere there's a fella who means what he speaks\nBut I know this city, and I know this town\nThe sun only rises to let a girl down\n\n[Verse 3]\nSo pour me another, and leave me the cream\nI'll sit here till daylight and finish my dream\nBlue neon, black coffee, quarter to four\nI'll leave when the night doesn't love me no more\n\n[Outro]",
+  "language": "en",
+  "bpm": 108,
+  "key": "F minor",
+  "seconds": 190.0,
+  "seed": 5909,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:40",
+  "took": 56,
+  "batch": "noir-02",
+  "model": "acestep-v15-turbo"
+}

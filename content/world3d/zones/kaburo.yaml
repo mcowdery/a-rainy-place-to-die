@@ -17,6 +17,7 @@ zones:
   C:
     id: crossing
     name: Kaburo Crossing
+    night: 0.6
     plan:
       open: { parking: 0.03 }
       setback: [0.5, 2]
@@ -35,6 +36,8 @@ zones:
       colors: ['#ff5fc8', '#4fe3ff', '#ffe45f', '#ffffff', '#ff4f4f']
     ads: { mainstream: 5, gaming: 2, fun: 2, food: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.5
       windows: { ribbon: 30, curtain: 25, punched: 30, small: 15 }
       walls: ['#d8d5cc', '#8e8d88', '#3a3a3e', '#c2b49a', '#2c2e33']
       shops: { cool: 4, colourful: 4, warm: 2 }
@@ -43,7 +46,8 @@ zones:
   H:
     id: host_street
     name: Host Street
-    people: { suit: 6, long: 3, plain: 2 }
+    night: 1
+    people: { suit: 6, long: 3, plain: 2, gown: 1.5, mini: 0.8, yakuza: 0.8, boss: 0.4, chinpira: 0.4, drunk: 0.4 }
     # The hosts' cars: black saloons and the odd sports car, and taxis for the customers.
     cars: { luxury: 22, sedan: 16, taxi: 18, taxi2: 12, minivan: 10, kei: 6, van: 3, keivan: 2, police: 2, sports: 3, rotary: 2 }
     plan:
@@ -61,6 +65,8 @@ zones:
       colors: ['#ffd070', '#ff5fc8', '#ffffff', '#b48cff']
     ads: { host: 4, hostess: 4, adult: 1, mainstream: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.9
       windows: { blank: 25, small: 35, punched: 25, ribbon: 15 }
       walls: ['#1e1c20', '#2a2426', '#3a3036', '#241c18', '#4a4046']
       shops: { bar: 7, warm: 2, colourful: 1 }
@@ -69,7 +75,8 @@ zones:
   L:
     id: love_district
     name: Love District
-    people: { long: 5, plain: 4, suit: 2 }
+    night: 1
+    people: { long: 5, plain: 4, suit: 2, gown: 0.8, mini: 0.8, dress: 0.6, yakuza: 0.4, chinpira: 0.5, drunk: 0.5, hood: 0.3 }
     # Taxis dropping couples off, black cars waiting.
     cars: { taxi: 24, taxi2: 14, luxury: 14, sedan: 16, minivan: 12, kei: 8, van: 3, keivan: 3, police: 2 }
     plan:
@@ -88,6 +95,8 @@ zones:
       colors: ['#ff5fc8', '#b48cff', '#4fe3ff', '#ff8ad8']
     ads: { lovehotel: 6, adult: 2 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 1
       windows: { small: 60, blank: 25, punched: 15 }
       walls: ['#e8d8e0', '#d8c0d0', '#f0e8d8', '#c8d8e8', '#b8a0c8', '#e0c8a8']
       tiled: true
@@ -97,6 +106,8 @@ zones:
   A:
     id: back_alleys
     name: Back Alleys
+    night: 1
+    people: { plain: 4, long: 2, suit: 1, hood: 1.2, chinpira: 1, yakuza: 0.6, drunk: 0.8, mini: 0.4, irezumi: 0.2 }
     plan:
       open: { parking: 0.07, vacant: 0.04, playground: 0.02 }
       rear: [0.3, 1.5]
@@ -116,6 +127,8 @@ zones:
       colors: ['#ff4f4f', '#ffb040', '#6bff8a', '#ff5fc8']
     ads: { loan: 4, street: 3, adult: 1, gaming: 1, hostess: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.9
       windows: { punched: 50, small: 40, balcony: 10 }
       walls: ['#6c5242', '#7c604c', '#5a5550', '#8e8d88', '#4a4644', '#6f6e6b']
       tiled: true
@@ -125,7 +138,8 @@ zones:
   M:
     id: food_lane
     name: Music & Food Lane
-    people: { plain: 6, long: 3, suit: 1 }
+    night: 0.95
+    people: { plain: 6, long: 3, suit: 1, office: 1, apron: 0.6, drunk: 1, chinpira: 0.5, yakuza: 0.2, dress: 0.6 }
     plan:
       open: { parking: 0.05, vacant: 0.02 }
       streetTrees: 0.4
@@ -141,6 +155,8 @@ zones:
       colors: ['#ffe45f', '#ff4f4f', '#ffb040', '#4fe3ff', '#ffffff']
     ads: { food: 4, fun: 4, mainstream: 1, street: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.6
       windows: { punched: 45, small: 25, ribbon: 20, balcony: 10 }
       walls: ['#b8a88c', '#c2b49a', '#a89878', '#7c604c', '#d8d5cc']
       tiled: true
@@ -150,7 +166,8 @@ zones:
   S:
     id: station_edge
     name: Station Edge
-    people: { suit: 4, plain: 4, long: 2, school: 1, otaku: 1, police: 0.15 }
+    night: 0.6
+    people: { suit: 4, plain: 4, long: 2, school: 1, otaku: 1, police: 0.15, office: 1.5, drunk: 0.6, hood: 0.3, yankee: 0.3 }
     plan:
       open: { parking: 0.08 }
       streetTrees: 0.5
@@ -167,6 +184,8 @@ zones:
       colors: ['#ffffff', '#4fe3ff', '#ffe45f', '#6bff8a']
     ads: { lodging: 4, food: 2, mainstream: 2, street: 1, loan: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.4
       windows: { ribbon: 40, curtain: 25, punched: 25, balcony: 10 }
       walls: ['#8e8d88', '#7c7b77', '#d8d5cc', '#a3b3ba', '#2e3b45']
       shops: { cool: 6, warm: 3, colourful: 1 }
@@ -175,6 +194,7 @@ zones:
   P:
     id: kaburo_park
     name: Kaburo Park
+    night: 0.35
     plan:
       park: 0.5
       floors: [[3, 7, 70], [8, 12, 30]]
@@ -191,6 +211,8 @@ zones:
       colors: ['#ffe45f', '#ff4f4f', '#ffb040', '#4fe3ff', '#ffffff']
     ads: { food: 3, fun: 3, street: 2, mainstream: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.3
       windows: { punched: 45, small: 25, ribbon: 20, balcony: 10 }
       walls: ['#b8a88c', '#c2b49a', '#a89878', '#7c604c', '#d8d5cc']
       tiled: true

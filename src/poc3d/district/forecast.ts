@@ -19,7 +19,7 @@ import { seasonIndex, type Season } from './seasons';
  *   wind at its height (lightning with it), the wind swinging round as it goes, then the clear blue sky after it
  *   (台風一過) with a breeze.
  * - Autumn has its rain and its morning fogs; winter snows sometimes.
- * main.ts follows it unless the weather is held (world.weather_hold: ?weather=, R, the debug menu's picks, the story).
+ * main.ts follows it unless the weather is held (world.weather_hold: ?weather=, the debug menu's picks, the story).
  */
 export const BLOCK = 3 * 60;
 export const TSUYU_DAYS = 6;
@@ -151,6 +151,27 @@ export function outlookAt(total: number, season: Season, seasonStart = 0, force:
   // Morning fog (04:00 to 09:00), on some mornings.
   if (m >= 4 * 60 && m < 9 * 60 && hash(day, s, 0xf06) / 4294967296 < o.fog * 3) return { weather: 'fog', amount: 0, shower: false, tsuyu, heat, temp: air, ...calm };
   return { weather: 'clear', amount: 0, shower: false, tsuyu, heat, temp: air, ...calm };
+}
+
+/**
+ * The air (°C) with the weather there really is: the forecast's, but snow set by hand (the debug menu, the story)
+ * over a milder spell is freezing, as the forecast's own snow is.
+ */
+export function airWith(o: Outlook, weather: Weather): number {
+  return weather === 'snow' ? Math.min(o.temp, 0.5) : o.temp;
+}
+
+/**
+ * People's breath in the cold (real/emotes.ts draws it): it shows as the air cools from BREATH_AIR[1] °C to
+ * BREATH_AIR[0] and below. Breath only mists in properly cold air: nothing at 10 °C (it started at 11, and showed
+ * faintly on a mild spring night), so winter's mornings, evenings and nights, snow, and the coldest wet hours
+ * before a spring dawn.
+ */
+export const BREATH_AIR: readonly [number, number] = [2, 7];
+/** How much of people's breath shows (0 to 1) in air of `temp` °C. */
+export function coldBreath(temp: number): number {
+  const k = Math.min(1, Math.max(0, (BREATH_AIR[1] - temp) / (BREATH_AIR[1] - BREATH_AIR[0])));
+  return k * k * (3 - 2 * k);
 }
 
 export function forecastAt(total: number, season: Season, seasonStart = 0, force: ForecastForce = {}): Weather {

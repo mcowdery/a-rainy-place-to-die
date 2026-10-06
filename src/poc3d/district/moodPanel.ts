@@ -1,12 +1,15 @@
+import { BLUSH_LOOKS, EMOTE_LOOKS, HEART_LOOKS, STAR_LOOKS, type EmoteLooks } from '../real/emotes';
 import { MOB_LOOK_NAMES, type MobLook } from '../real/people';
 import { GRADE_NAMES, type GradeName } from '../real/grade';
 import { SKY_LOOKS, type SkyLook } from './atmosphere';
 import { MOON_SHAPES, type MoonShape } from '../real/sky';
+import { DEFAULT_GUN_VOICE, GUN_VOICES, type GunVoice } from '../../race/gunVoices';
 
 /**
- * Weather and lighting settings to play with, on top of the (district, time, weather) atmosphere: rain
- * strength, wind (up to a hurricane) and its direction, lightning, fog density, darkness, shadow-casting
- * lamps and the colour grade. K opens the panel. Every setting also reads from the URL
+ * Settings to play with, on top of the (district, time, weather) atmosphere: rain strength, wind (up to a
+ * hurricane) and its direction, lightning, fog density, darkness, shadow-casting lamps, the colour grade, how the
+ * crowd looks, the sound's levels, the detail. Their rows are in the debug menu's tabs (` backquote,
+ * district/debugMenu.ts: `MoodPanel.groups`). Every setting also reads from the URL
  * (?rain=0.8&wind=0.6&windDir=90&lightning=on&fog=1.5&dark=0.7&shadows=4&grade=noir&quality=medium; `auto` for the
  * settings that can follow the scene), and "copy link" puts the current ones in the address bar and on the
  * clipboard, to keep a look for a scene. Links list what differs from the built-in MOOD_DEFAULTS, so they
@@ -34,6 +37,11 @@ export interface MoodSettings {
   wetness: number | null;
   /** Glow round the big screens, 0 off to 1.5 (0.45 default). */
   screenGlow: number;
+  /** The rooms behind the windows (real/windowScenes.ts): how many people are in them, and how much of the city's vice shows (multipliers; 0 none). */
+  windowFolk: number;
+  windowVice: number;
+  /** Whether anyone is in those rooms at all (off: the rooms stay furnished, and empty). */
+  windowPeople: boolean;
   /** Depth of field: 0 off, 1 strong. */
   dof: number;
   /** Focus distance in metres; null focuses on the centre of the view. */
@@ -43,6 +51,16 @@ export interface MoodSettings {
   grade: GradeName;
   /** Weather cycle: rain builds to a storm, eases and clears on its own over ~6 minutes (rain and wind follow it). */
   cycle: boolean;
+  /** The people cast shadows (those near you). */
+  mobShadows: boolean;
+  /** People show emotes now and then (anime's symbols at the head: real/emotes.ts). */
+  mobEmotes: boolean;
+  /** How many of the street's smokers have one lit (0 none, 1 as the period was: real/smoke.ts). */
+  smoking: number;
+  /** How the emotes' blush, hearts and stars are drawn (real/emotes.ts EmoteLooks). */
+  mobBlush: EmoteLooks['blush'];
+  mobHearts: EmoteLooks['hearts'];
+  mobStars: EmoteLooks['stars'];
   /** 0-1 master volume (0 mutes). */
   volume: number;
   /** In your car only (real/audio.ts `cabin`): how much the cabin shuts the outside out (0 none, 1 nearly all of
@@ -51,10 +69,17 @@ export interface MoodSettings {
   carRoof: number;
   /** Footsteps' level against the rest (1 as built). */
   steps: number;
+  /** The pistol's shot (race/gunVoices.ts: a set of recordings, or the synthesised one), the guns' level against the rest (1 as built), and how much street echo a recorded shot gets. */
+  gun: GunVoice;
+  shotgun: 'a' | 'b' | 'synth';
+  guns: number;
+  gunEcho: number;
   /** The car radio's level (real/radio.ts; 0 silences it). */
   music: number;
   /** Render resolution: auto (lowered while frames are slow, raised again when there's room) or a fixed share. */
   resolution: Resolution;
+  /** The rear-view mirror's picture at the wheel of your car: none, in the cabin's own mirror only, or also as a mirror over the view from the other cameras. */
+  mirror: 'off' | 'cockpit' | 'all';
   /** How far the detail reaches (QUALITY): high is the full city; medium and low pull it in for slower machines. */
   quality: Quality;
   /** How the people in the streets look (real/people.ts MOB_LOOKS). */
@@ -101,7 +126,7 @@ export const SKY_COLOR_MODE: Record<SkyColors, { sky: number; light: number; tin
 export const RESOLUTIONS = ['auto', '100', '85', '70', '55'] as const;
 export type Resolution = (typeof RESOLUTIONS)[number];
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, carDamp: 0.5, carRoof: 1, steps: 1, music: 0.5, resolution: 'auto', quality: 'high', mob: 'solid', sky: 'deep', skyColors: 'painted', moonShape: 'calendar' };
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, windowFolk: 1, windowVice: 1, windowPeople: true, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, carDamp: 0.5, carRoof: 1, steps: 1, gun: DEFAULT_GUN_VOICE, shotgun: 'a', guns: 1, gunEcho: 0.3, music: 0.5, resolution: 'auto', mirror: 'all', quality: 'high', mob: 'ghost', mobShadows: true, mobEmotes: true, smoking: 1, mobBlush: EMOTE_LOOKS.blush, mobHearts: EMOTE_LOOKS.hearts, mobStars: EMOTE_LOOKS.stars, sky: 'deep', skyColors: 'painted', moonShape: 'calendar' };
 const SHADOW_COUNTS = [0, 2, 4, 8];
 const SAVED_KEY = 'city-popper.district.mood';
 
@@ -127,6 +152,8 @@ function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettin
   m.darkness = num('dark', 0, 1) ?? m.darkness;
   m.wetness = opt('wet', 0, 1, m.wetness);
   m.screenGlow = num('glow', 0, 1.5) ?? m.screenGlow;
+  m.windowFolk = num('windowFolk', 0, 3) ?? m.windowFolk;
+  m.windowVice = num('windowVice', 0, 4) ?? m.windowVice;
   m.dof = num('dof', 0, 1) ?? m.dof;
   m.focus = opt('focus', 1, 300, m.focus);
   const s = num('shadows', 0, 8);
@@ -135,11 +162,33 @@ function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettin
   m.carDamp = num('carDamp', 0, 1) ?? m.carDamp;
   m.carRoof = num('carRoof', 0, 2) ?? m.carRoof;
   m.steps = num('steps', 0, 2) ?? m.steps;
+  m.guns = num('guns', 0, 2) ?? m.guns;
+  m.gunEcho = num('gunEcho', 0, 1) ?? m.gunEcho;
+  const gv = params.get('gun') as GunVoice | null;
+  if (gv && GUN_VOICES.includes(gv)) m.gun = gv;
+  const sv = params.get('shotgun');
+  if (sv === 'a' || sv === 'b' || sv === 'synth') m.shotgun = sv;
   m.music = num('music', 0, 1) ?? m.music;
   const c = params.get('cycle');
   if (c === '1' || c === '0') m.cycle = c === '1';
+  const cast = params.get('mobShadows');
+  if (cast === '1' || cast === '0') m.mobShadows = cast === '1';
+  const wp = params.get('windowPeople');
+  if (wp === '1' || wp === '0') m.windowPeople = wp === '1';
+  m.smoking = num('smoking', 0, 1) ?? m.smoking;
+  const em = params.get('emotes');
+  if (em === '1' || em === '0') m.mobEmotes = em === '1';
+  const bl = params.get('blush') as EmoteLooks['blush'] | null;
+  if (bl && BLUSH_LOOKS.includes(bl)) m.mobBlush = bl;
+  const he = params.get('hearts') as EmoteLooks['hearts'] | null;
+  if (he && HEART_LOOKS.includes(he)) m.mobHearts = he;
+  const st = params.get('stars') as EmoteLooks['stars'] | null;
+  if (st && STAR_LOOKS.includes(st)) m.mobStars = st;
   const g = params.get('grade') as GradeName | null;
   if (g && GRADE_NAMES.includes(g)) m.grade = g;
+  const mi = params.get('mirror');
+  if (mi === 'off' || mi === 'cockpit' || mi === 'all') m.mirror = mi;
+  else if (mi === '0' || mi === '1') m.mirror = mi === '1' ? 'all' : 'off';
   const r = params.get('res') as Resolution | null;
   if (r && RESOLUTIONS.includes(r)) m.resolution = r;
   const q = params.get('quality') as Quality | null;
@@ -168,6 +217,9 @@ function moodParams(m: MoodSettings, base: MoodSettings, into = new URLSearchPar
   set('dark', f(m.darkness), f(base.darkness));
   set('wet', f(m.wetness), f(base.wetness));
   set('glow', f(m.screenGlow), f(base.screenGlow));
+  set('windowFolk', f(m.windowFolk), f(base.windowFolk));
+  set('windowVice', f(m.windowVice), f(base.windowVice));
+  set('windowPeople', m.windowPeople ? '1' : '0', base.windowPeople ? '1' : '0');
   set('dof', f(m.dof), f(base.dof));
   set('focus', f(m.focus, 1), f(base.focus, 1));
   set('shadows', String(m.shadows), String(base.shadows));
@@ -176,9 +228,20 @@ function moodParams(m: MoodSettings, base: MoodSettings, into = new URLSearchPar
   set('carDamp', f(m.carDamp), f(base.carDamp));
   set('carRoof', f(m.carRoof), f(base.carRoof));
   set('steps', f(m.steps), f(base.steps));
+  set('gun', m.gun, base.gun);
+  set('shotgun', m.shotgun, base.shotgun);
+  set('guns', f(m.guns), f(base.guns));
+  set('gunEcho', f(m.gunEcho), f(base.gunEcho));
   set('music', f(m.music), f(base.music));
   set('cycle', m.cycle ? '1' : '0', base.cycle ? '1' : '0');
+  set('mobShadows', m.mobShadows ? '1' : '0', base.mobShadows ? '1' : '0');
+  set('emotes', m.mobEmotes ? '1' : '0', base.mobEmotes ? '1' : '0');
+  set('smoking', f(m.smoking), f(base.smoking));
+  set('blush', m.mobBlush, base.mobBlush);
+  set('hearts', m.mobHearts, base.mobHearts);
+  set('stars', m.mobStars, base.mobStars);
   set('res', m.resolution, base.resolution);
+  set('mirror', m.mirror, base.mirror);
   set('quality', m.quality, base.quality);
   set('mob', m.mob, base.mob);
   set('sky', m.sky, base.sky);
@@ -212,68 +275,101 @@ function moodToUrl(m: MoodSettings): string {
   return `${location.pathname}${q ? `?${q}` : ''}`;
 }
 
+/** The settings' rows by subject: a tab of the debug menu shows one or more of them. */
+export type MoodGroup = 'weather' | 'light' | 'crowd' | 'windows' | 'sound' | 'graphics';
+const UI = { accent: '#7cffb0', value: '#ffd070', dim: '#8a9a92', label: '#b8c6c0', button: '#1a2020', line: '#2f3c38' };
+
 export class MoodPanel {
-  readonly root: HTMLDivElement;
+  /** The rows, by subject. */
+  readonly groups: Record<MoodGroup, HTMLDivElement>;
+  /** Reset, save as default and copy link, which act on every group's settings, and which defaults reset goes back to. */
+  readonly footer: HTMLDivElement;
   private readonly rows = new Map<string, () => void>();
   private readonly savedLine: HTMLDivElement;
+  /** The group the rows being built go into. */
+  private into: HTMLDivElement;
 
   constructor(
     readonly settings: MoodSettings,
     private readonly changed: () => void,
   ) {
-    this.root = document.createElement('div');
-    Object.assign(this.root.style, {
-      position: 'fixed', right: '12px', top: '12px', width: '300px', padding: '12px 14px', display: 'none', zIndex: '21',
-      background: 'rgba(10, 10, 16, 0.9)', border: '1px solid #3a3850', color: '#e8e6f0', font: "12px 'Consolas', monospace",
-    } satisfies Partial<CSSStyleDeclaration>);
-    this.root.addEventListener('click', (e) => e.stopPropagation());
-    this.root.addEventListener('mousedown', (e) => e.stopPropagation());
-    const title = document.createElement('div');
-    title.textContent = 'WEATHER & LIGHT  ·  K to close';
-    Object.assign(title.style, { color: '#ff8ad8', marginBottom: '10px', letterSpacing: '1px' });
-    this.root.append(title);
-
+    const group = (): HTMLDivElement => document.createElement('div');
+    this.groups = { weather: group(), light: group(), crowd: group(), windows: group(), sound: group(), graphics: group() };
     const s = this.settings;
-    this.slider('volume', 'Sound', 0, 1, 0.01, () => s.volume, (v) => (s.volume = v), (v) => (v < 0.01 ? 'muted' : `${Math.round(v * 100)}%`));
-    this.slider('music', 'Car radio', 0, 1, 0.01, () => s.music, (v) => (s.music = v), (v) => (v < 0.01 ? 'silent' : `${Math.round(v * 100)}%`));
-    this.slider('steps', 'Footsteps', 0, 2, 0.01, () => s.steps, (v) => (s.steps = v), (v) => (v < 0.01 ? 'off' : `${Math.round(v * 100)}%`));
-    this.slider('carDamp', 'In-car damping', 0, 1, 0.01, () => s.carDamp, (v) => (s.carDamp = v), (v) => (v < 0.01 ? 'none (as outside)' : `${Math.round(v * 100)}%`));
-    this.slider('carRoof', 'Rain on car roof', 0, 2, 0.01, () => s.carRoof, (v) => (s.carRoof = v), (v) => (v < 0.01 ? 'off' : `${Math.round(v * 100)}%`));
+    const pct = (v: number): string => `${Math.round(v * 100)}%`;
+
+    this.into = this.groups.weather;
     this.choice('cycle', 'Weather cycle', ['off', 'on'], () => (s.cycle ? 'on' : 'off'), (v) => (s.cycle = v === 'on'));
     this.slider('rain', 'Rain', 0, 1, 0.01, () => s.rain ?? -1, (v) => (s.rain = v), (v) => (v < 0 ? 'from weather' : v < 0.2 ? `drizzle ${v.toFixed(2)}` : v < 0.6 ? `rain ${v.toFixed(2)}` : `downpour ${v.toFixed(2)}`), () => (s.rain = null));
+    this.slider('wet', 'Wet streets', 0, 1, 0.01, () => s.wetness ?? -1, (v) => (s.wetness = v), (v) => (v < 0 ? 'follows the rain' : v < 0.35 ? `damp ${v.toFixed(2)}` : `puddles ${v.toFixed(2)}`), () => (s.wetness = null));
     this.slider('wind', 'Wind', 0, 1, 0.01, () => s.wind, (v) => (s.wind = v), (v) => (v < 0.05 ? 'calm' : v < 0.35 ? `breeze ${v.toFixed(2)}` : v < 0.7 ? `gale ${v.toFixed(2)}` : `hurricane ${v.toFixed(2)}`));
     this.slider('windDir', 'Wind toward', 0, 360, 5, () => s.windDir, (v) => (s.windDir = v), (v) => `${Math.round(v)}° ${['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(v / 45) % 8]}`);
     this.choice('lightning', 'Lightning', ['auto', 'off', 'occasional', 'storm'], () => s.lightning, (v) => (s.lightning = v as MoodSettings['lightning']));
     this.slider('fog', 'Fog', 0.25, 4, 0.05, () => s.fog, (v) => (s.fog = v), (v) => `x${v.toFixed(2)}`);
+
+    this.into = this.groups.light;
+    this.slider('dark', 'Darkness', 0, 1, 0.01, () => s.darkness, (v) => (s.darkness = v), (v) => (v < 0.05 ? 'normal' : pct(v)));
     this.slider('moon', 'Moonlight (night)', 0, 1, 0.01, () => s.moon ?? -1, (v) => (s.moon = v), (v) => (v < 0 ? 'from time of day' : v.toFixed(2)), () => (s.moon = null));
-    this.slider('dark', 'Darkness', 0, 1, 0.01, () => s.darkness, (v) => (s.darkness = v), (v) => (v < 0.05 ? 'normal' : `${Math.round(v * 100)}%`));
-    this.slider('wet', 'Wet streets', 0, 1, 0.01, () => s.wetness ?? -1, (v) => (s.wetness = v), (v) => (v < 0 ? 'follows the rain' : v < 0.35 ? `damp ${v.toFixed(2)}` : `puddles ${v.toFixed(2)}`), () => (s.wetness = null));
     this.slider('glow', 'Screen glow', 0, 1.5, 0.01, () => s.screenGlow, (v) => (s.screenGlow = v), (v) => (v < 0.01 ? 'off' : v.toFixed(2)));
+    this.choice('sky', 'Sky', SKY_LOOKS, () => s.sky, (v) => (s.sky = v as SkyLook));
+    this.choice('skyColors', 'Sky colours', SKY_COLORS, () => s.skyColors, (v) => (s.skyColors = v as SkyColors));
+    this.choice('moonShape', 'Moon', MOON_SHAPES, () => s.moonShape, (v) => (s.moonShape = v as MoonShape));
+    this.choice('grade', 'Grade', GRADE_NAMES, () => s.grade, (v) => (s.grade = v as GradeName));
+
+    // The crowd in the streets: the mob's look (ghost: all black and see-through; color: the figures in their
+    // colours, lit by the scene), whether people cast shadows, whether they show emotes and how those are drawn.
+    this.into = this.groups.crowd;
+    this.choice('mob', 'Look', MOB_LOOK_NAMES, () => s.mob, (v) => (s.mob = v as MobLook));
+    this.choice('mobShadows', 'Shadows they cast', ['off', 'on'], () => (s.mobShadows ? 'on' : 'off'), (v) => (s.mobShadows = v === 'on'));
+    this.slider('smoking', 'Smoking', 0, 1, 0.05, () => s.smoking, (v) => (s.smoking = v), (v) => (v < 0.03 ? 'nobody' : v > 0.97 ? 'as it was (late Showa)' : `${Math.round(v * 100)}% of them`));
+    this.choice('emotes', 'Emotes', ['off', 'on'], () => (s.mobEmotes ? 'on' : 'off'), (v) => (s.mobEmotes = v === 'on'));
+    this.choice('blush', 'Blush', BLUSH_LOOKS, () => s.mobBlush, (v) => (s.mobBlush = v as EmoteLooks['blush']));
+    this.choice('hearts', 'Hearts', HEART_LOOKS, () => s.mobHearts, (v) => (s.mobHearts = v as EmoteLooks['hearts']));
+    this.choice('stars', 'Stars', STAR_LOOKS, () => s.mobStars, (v) => (s.mobStars = v as EmoteLooks['stars']));
+
+    // The rooms behind the windows (real/windowScenes.ts).
+    this.into = this.groups.windows;
+    this.choice('windowPeople', 'People in windows', ['off', 'on'], () => (s.windowPeople ? 'on' : 'off'), (v) => (s.windowPeople = v === 'on'));
+    this.slider('windowFolk', 'How many', 0, 3, 0.05, () => s.windowFolk, (v) => (s.windowFolk = v), (v) => (v < 0.03 ? 'none' : `x${v.toFixed(2)}`));
+    this.slider('windowVice', 'Vice (and shady shops)', 0, 4, 0.05, () => s.windowVice, (v) => (s.windowVice = v), (v) => (v < 0.03 ? 'none' : `x${v.toFixed(2)}`));
+    this.note('Off: the rooms stay lit and furnished, with nobody in them. The shady shops at street level follow Vice alone.');
+    // (The crowd's notes come after the windows' rows, the People tab's last, so they don't push those down.)
+    this.note('ghost: all black and see-through. color: in their colours, lit by the sky, the sun or moon and the street, dark in shadow. solid, rim, lit: black, near-opaque. Only people near you cast shadows, and only while the sun or moon casts any. Emotes: now and then someone near you shows what they feel, a mark at the head (a sweat drop, the anger mark, a blush, a heart, zzz). Blush: lines on the cheeks, the face flushed, or both. Hearts and stars: over the head, for eyes (over the head from behind), or small ones rising off or round the head. In the cold, breath shows.');
+
+    this.into = this.groups.sound;
+    this.slider('volume', 'Sound', 0, 1, 0.01, () => s.volume, (v) => (s.volume = v), (v) => (v < 0.01 ? 'muted' : pct(v)));
+    this.slider('music', 'Music (radio, phone)', 0, 1, 0.01, () => s.music, (v) => (s.music = v), (v) => (v < 0.01 ? 'silent' : pct(v)));
+    this.slider('steps', 'Footsteps', 0, 2, 0.01, () => s.steps, (v) => (s.steps = v), (v) => (v < 0.01 ? 'off' : pct(v)));
+    this.choice('gun', 'Pistol shot', GUN_VOICES, () => s.gun, (v) => (s.gun = v as GunVoice));
+    this.choice('shotgun', 'Shotgun shot', ['a', 'b', 'synth'], () => s.shotgun, (v) => (s.shotgun = v as MoodSettings['shotgun']));
+    this.slider('guns', 'Gunshots', 0, 2, 0.01, () => s.guns, (v) => (s.guns = v), (v) => (v < 0.01 ? 'off' : pct(v)));
+    this.slider('gunEcho', 'Gunshot echo', 0, 1, 0.01, () => s.gunEcho, (v) => (s.gunEcho = v), (v) => (v < 0.01 ? 'dry' : pct(v)));
+    this.slider('carDamp', 'In-car damping', 0, 1, 0.01, () => s.carDamp, (v) => (s.carDamp = v), (v) => (v < 0.01 ? 'none (as outside)' : pct(v)));
+    this.slider('carRoof', 'Rain on car roof', 0, 2, 0.01, () => s.carRoof, (v) => (s.carRoof = v), (v) => (v < 0.01 ? 'off' : pct(v)));
+
+    this.into = this.groups.graphics;
+    this.choice('res', 'Resolution %', RESOLUTIONS, () => s.resolution, (v) => (s.resolution = v as Resolution));
+    this.choice('mirror', 'Rear-view mirror', ['off', 'cockpit', 'all'], () => s.mirror, (v) => (s.mirror = v as MoodSettings['mirror']));
+    this.choice('quality', 'Detail', QUALITIES, () => s.quality, (v) => (s.quality = v as Quality));
+    this.choice('shadows', 'Lamp shadows', SHADOW_COUNTS.map(String), () => String(s.shadows), (v) => (s.shadows = Number(v)));
     this.slider('dof', 'Depth of field', 0, 1, 0.01, () => s.dof, (v) => (s.dof = v), (v) => (v < 0.01 ? 'off' : v.toFixed(2)));
     // Focus on a log scale (1 m to 300 m), or auto (the centre of the view).
     const toM = (v: number): number => Math.exp(Math.log(1) + v * (Math.log(300) - Math.log(1)));
     const fromM = (m: number): number => Math.log(m) / Math.log(300);
     this.slider('focus', 'Focus', 0, 1, 0.005, () => (s.focus === null ? -1 : fromM(s.focus)), (v) => (s.focus = toM(v)), (v) => (v < 0 ? 'auto (centre of view)' : `${toM(v) < 10 ? toM(v).toFixed(1) : Math.round(toM(v))} m`), () => (s.focus = null));
-    this.choice('shadows', 'Lamp shadows', SHADOW_COUNTS.map(String), () => String(s.shadows), (v) => (s.shadows = Number(v)));
-    this.choice('sky', 'Sky', SKY_LOOKS, () => s.sky, (v) => (s.sky = v as SkyLook));
-    this.choice('skyColors', 'Sky colours', SKY_COLORS, () => s.skyColors, (v) => (s.skyColors = v as SkyColors));
-    this.choice('moonShape', 'Moon', MOON_SHAPES, () => s.moonShape, (v) => (s.moonShape = v as MoonShape));
-    this.choice('grade', 'Grade', GRADE_NAMES, () => s.grade, (v) => (s.grade = v as GradeName));
-    this.choice('res', 'Resolution %', RESOLUTIONS, () => s.resolution, (v) => (s.resolution = v as Resolution));
-    this.choice('quality', 'Detail', QUALITIES, () => s.quality, (v) => (s.quality = v as Quality));
-    this.choice('mob', 'People', MOB_LOOK_NAMES, () => s.mob, (v) => (s.mob = v as MobLook));
+    this.note('Lamp shadows: each lamp costs ~1.5 ms a frame at night (its shadow map redraws in turn, not every frame; none by day). Changing the count recompiles shaders (a short pause). Resolution auto lowers the render resolution while frames run slow. Detail: how far full detail, traffic and people reach (high is the full city; medium and low for slower machines).');
 
+    this.footer = document.createElement('div');
     const buttons = document.createElement('div');
-    Object.assign(buttons.style, { display: 'flex', gap: '8px', marginTop: '12px' });
+    Object.assign(buttons.style, { display: 'flex', gap: '6px' });
     const button = (label: string, act: () => void): HTMLButtonElement => {
-      const b = document.createElement('button');
-      b.textContent = label;
-      Object.assign(b.style, { flex: '1', padding: '5px', background: '#1a1a28', color: '#e8e6f0', border: '1px solid #2e2c44', cursor: 'pointer', font: 'inherit' });
+      const b = this.button(label);
+      Object.assign(b.style, { padding: '5px' });
       b.addEventListener('click', act);
       buttons.append(b);
       return b;
     };
-    button('reset', () => {
+    button('reset settings', () => {
       Object.assign(this.settings, moodDefaults());
       this.refresh();
       this.changed();
@@ -295,14 +391,12 @@ export class MoodPanel {
       copy.textContent = 'copied ✓';
       setTimeout(() => (copy.textContent = 'copy link'), 1200);
     });
-    this.root.append(buttons);
     // Which defaults "reset" goes back to, and a way to forget the saved ones.
     this.savedLine = document.createElement('div');
-    Object.assign(this.savedLine.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#8a88a0', marginTop: '8px' });
+    Object.assign(this.savedLine.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: UI.dim, marginTop: '6px' });
     const savedText = document.createElement('span');
-    const forget = document.createElement('button');
-    forget.textContent = 'use built-in';
-    Object.assign(forget.style, { padding: '1px 6px', background: '#1a1a28', color: '#b8b6c8', border: '1px solid #2e2c44', cursor: 'pointer', font: 'inherit' });
+    const forget = this.button('use built-in');
+    Object.assign(forget.style, { flex: '', padding: '1px 6px' });
     forget.addEventListener('click', () => {
       try {
         localStorage.removeItem(SAVED_KEY);
@@ -315,22 +409,9 @@ export class MoodPanel {
       this.showSaved();
     });
     this.savedLine.append(savedText, forget);
-    this.root.append(this.savedLine);
+    this.footer.append(buttons, this.savedLine);
     this.showSaved();
-    const note = document.createElement('div');
-    note.textContent = 'Lamp shadows: each lamp costs ~1.5 ms a frame at night (its shadow map redraws in turn, not every frame; none by day). Changing the count recompiles shaders (a short pause). Resolution auto lowers the render resolution while frames run slow. Detail: how far full detail, traffic and people reach (high is the full city; medium and low for slower machines).';
-    Object.assign(note.style, { color: '#8a88a0', marginTop: '10px', lineHeight: '1.4' });
-    this.root.append(note);
-    document.body.append(this.root);
-  }
-
-  get open(): boolean {
-    return this.root.style.display !== 'none';
-  }
-
-  toggle(): void {
-    this.root.style.display = this.open ? 'none' : 'block';
-    if (this.open) this.refresh();
+    this.refresh();
   }
 
   /** Shows whether "reset" goes to defaults saved in this browser or the built-in ones. */
@@ -340,33 +421,48 @@ export class MoodPanel {
     (this.savedLine.lastElementChild as HTMLElement).style.display = saved ? '' : 'none';
   }
 
+  /** Shows the settings as they are (after something else changed them). */
   refresh(): void {
     for (const r of this.rows.values()) r();
+  }
+
+  private button(label: string): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.textContent = label;
+    Object.assign(b.style, { flex: '1', padding: '3px 0', background: UI.button, color: 'inherit', border: `1px solid ${UI.line}`, borderRadius: '5px', cursor: 'pointer', font: 'inherit' });
+    return b;
+  }
+
+  private note(text: string): void {
+    const note = document.createElement('div');
+    note.textContent = text;
+    Object.assign(note.style, { color: UI.dim, marginTop: '10px', lineHeight: '1.4' });
+    this.into.append(note);
   }
 
   private row(label: string): HTMLDivElement {
     const row = document.createElement('div');
     Object.assign(row.style, { margin: '7px 0' });
     const head = document.createElement('div');
-    Object.assign(head.style, { display: 'flex', justifyContent: 'space-between', color: '#b8b6c8', marginBottom: '3px' });
+    Object.assign(head.style, { display: 'flex', justifyContent: 'space-between', color: UI.label, marginBottom: '3px' });
     const name = document.createElement('span');
     name.textContent = label;
     head.append(name);
     row.append(head);
-    this.root.append(row);
+    this.into.append(row);
     return row;
   }
 
   private slider(key: string, label: string, min: number, max: number, step: number, get: () => number, set: (v: number) => void, show: (v: number) => string, auto?: () => void): void {
     const row = this.row(label);
     const value = document.createElement('span');
-    Object.assign(value.style, { color: '#ffd070' });
+    Object.assign(value.style, { color: UI.value });
     row.firstElementChild!.append(value);
     const line = document.createElement('div');
     Object.assign(line.style, { display: 'flex', gap: '6px', alignItems: 'center' });
     const input = document.createElement('input');
     Object.assign(input, { type: 'range', min: String(min), max: String(max), step: String(step) });
-    Object.assign(input.style, { flex: '1', accentColor: '#ff8ad8' });
+    Object.assign(input.style, { flex: '1', accentColor: UI.accent });
     input.addEventListener('input', () => {
       set(Number(input.value));
       value.textContent = show(Number(input.value));
@@ -374,9 +470,8 @@ export class MoodPanel {
     });
     line.append(input);
     if (auto) {
-      const b = document.createElement('button');
-      b.textContent = 'auto';
-      Object.assign(b.style, { padding: '1px 6px', background: '#1a1a28', color: '#b8b6c8', border: '1px solid #2e2c44', cursor: 'pointer', font: 'inherit' });
+      const b = this.button('auto');
+      Object.assign(b.style, { flex: '', padding: '1px 6px' });
       b.addEventListener('click', () => {
         auto();
         this.refresh();
@@ -395,11 +490,9 @@ export class MoodPanel {
   private choice(key: string, label: string, options: readonly string[], get: () => string, set: (v: string) => void): void {
     const row = this.row(label);
     const line = document.createElement('div');
-    Object.assign(line.style, { display: 'flex', gap: '4px' });
+    Object.assign(line.style, { display: 'flex', flexWrap: 'wrap', gap: '4px' });
     const buttons = options.map((o) => {
-      const b = document.createElement('button');
-      b.textContent = o;
-      Object.assign(b.style, { flex: '1', padding: '3px 0', background: '#1a1a28', color: '#e8e6f0', border: '1px solid #2e2c44', cursor: 'pointer', font: 'inherit' });
+      const b = this.button(o);
       b.addEventListener('click', () => {
         set(o);
         this.refresh();
@@ -411,7 +504,7 @@ export class MoodPanel {
     row.append(line);
     this.rows.set(key, () => {
       const v = get();
-      options.forEach((o, i) => (buttons[i].style.borderColor = o === v ? '#ff8ad8' : '#2e2c44'));
+      options.forEach((o, i) => Object.assign(buttons[i].style, { borderColor: o === v ? UI.accent : UI.line, background: o === v ? '#1f5a3c' : UI.button }));
     });
   }
 }

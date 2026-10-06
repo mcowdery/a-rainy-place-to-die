@@ -1,0 +1,21 @@
+{
+  "file": "kape_at_ulan_1.flac",
+  "id": "kape_at_ulan",
+  "take": 1,
+  "station": "harana",
+  "title": "Kape at Ulan",
+  "artist": "Lino Amihan",
+  "caption": "Mellow acoustic Filipino R&B love song sung in Tagalog. A warm, breathy young male tenor singing softly, slipping into a tender falsetto at the ends of lines, with close two-part harmonies. Fingerpicked nylon-string acoustic guitar, soft Rhodes electric piano, warm upright-style bass, a gentle lo-fi drum loop with brushes and a soft shaker. Cozy, unhurried, a rainy morning at home with the girl he loves. Intimate, warm, close-miked production.",
+  "lyrics": "[Intro]\n\n[Verse 1]\nUmuulan na naman sa labas ng bintana\nNakabalot ka sa kumot, bagong gising pa\nMagulo ang buhok mo, antok pa ang mata\nPero sa paningin ko, wala nang mas gaganda\n\n[Pre-Chorus]\nIpagtitimpla kita ng kape\nTulad ng gusto mo, matamis\n\n[Chorus]\nKape at ulan, ikaw at ako\nWala nang hahanapin pa sa mundo\nKape at ulan, tahimik na umaga\nSapat na sa akin na kasama ka\nHayaan mong bumuhos ang ulan\nDito lang tayo, walang pupuntahan\nKape at ulan\nAt ikaw sa aking tabi\n\n[Verse 2]\nTumatawa ka sa mga biro kong luma\nKahit ilang ulit mo nang narinig\nGanito pala ang pakiramdam ng payapa\nGanito pala ang tunay na pag-ibig\n\n[Pre-Chorus]\nIpagtitimpla kita ng kape\nTulad ng gusto mo, matamis\n\n[Chorus]\nKape at ulan, ikaw at ako\nWala nang hahanapin pa sa mundo\nKape at ulan, tahimik na umaga\nSapat na sa akin na kasama ka\nHayaan mong bumuhos ang ulan\nDito lang tayo, walang pupuntahan\nKape at ulan\nAt ikaw sa aking tabi\n\n[Bridge]\nLumipas man ang mga taon\nTumanda man tayong dalawa\nIpagtitimpla pa rin kita\nTuwing umuulan sa umaga\n\n[Chorus]\nHayaan mong bumuhos ang ulan\nDito lang tayo, walang pupuntahan\nKape at ulan\nAt ikaw sa aking tabi\n\n[Outro]",
+  "language": "tl",
+  "bpm": 80,
+  "key": "G major",
+  "seconds": 215.0,
+  "seed": 4404,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:57",
+  "took": 396,
+  "batch": "opm-01",
+  "model": "acestep-v15-turbo"
+}

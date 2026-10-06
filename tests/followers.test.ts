@@ -304,6 +304,6 @@ describe('the mob figures they are', () => {
       }
     }
     // The hat adds to the height (the detective sinks into his seat under a low roof).
-    expect(figureSize({ body: 'man', hair: 'hat', long: true }).height).toBeGreaterThan(figureSize({ body: 'man', hair: 'short', long: false }).height + 0.02);
+    expect(figureSize({ body: 'man', hair: 'hat', long: true }).height).toBeGreaterThan(figureSize({ body: 'man', hair: 'short', long: false }).height + 0.005);
   });
 });

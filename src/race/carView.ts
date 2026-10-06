@@ -151,11 +151,11 @@ const WINDOW_DROP = 0.42;
 export function rollWindows(v: CarView, left: number, right: number): void {
   if (v.windows.left) {
     v.windows.left.position.y = -WINDOW_DROP * left;
-    v.windows.left.visible = left < 0.98;
+    v.windows.left.visible = left < 0.98 && !v.windows.left.userData.broken;
   }
   if (v.windows.right) {
     v.windows.right.position.y = -WINDOW_DROP * right;
-    v.windows.right.visible = right < 0.98;
+    v.windows.right.visible = right < 0.98 && !v.windows.right.userData.broken;
   }
 }
 

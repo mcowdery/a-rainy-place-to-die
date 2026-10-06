@@ -1,0 +1,107 @@
+{
+  "batch": "opm-01",
+  "defaults": { "duration": 215, "takes": 1, "steps": 8 },
+  "items": [
+    {
+      "id": "sayo_lang_titibok",
+      "station": "harana",
+      "title": "Sa'yo Lang Titibok",
+      "artist": "Lino Amihan",
+      "caption": "Contemporary Filipino R&B and soul-pop love song sung in Tagalog. A smooth, breathy young male tenor, intimate and close to the microphone, gliding into a silky falsetto in the chorus, with stacked airy vocal harmonies and soft ad-libs. Mellow Rhodes electric piano chords, warm sub bass, a gentle clean electric guitar, slow laid-back R&B drums with finger snaps and crisp hi-hats, dreamy reverb. Tender, romantic, late at night, devoted to one girl. Modern, polished, warm production.",
+      "lyrics": "[Intro]\n\n[Verse 1]\nHindi ko alam kung paano nagsimula\nIsang tingin mo lang, ako'y natulala\nAng ngiti mong kay tamis, 'di ko malimutan\nSa bawat gabi, ikaw ang laman ng isipan\n\n[Pre-Chorus]\nDahan-dahan, lumalapit ang puso ko\n'Di na kayang itago pa ito\n\n[Chorus]\nSa'yo lang, sa'yo lang ako\nWala nang iba, ikaw lang ang gusto\nSa'yo lang, sa'yo lang, mahal\nHawakan mo ang kamay ko nang matagal\nSa'yo lang, sa'yo lang ako\nKahit saan, kahit kailan, pangako\nSa'yo lang titibok\nAng puso kong ito\n\n[Verse 2]\nAng boses mo'y himig na paulit-ulit\nSa aking isip, kay sarap pakinggan\nKapag kasama ka, humihinto ang mundo\nAyoko nang matapos ang sandaling ito\n\n[Pre-Chorus]\nDahan-dahan, lumalapit ang puso ko\n'Di na kayang itago pa ito\n\n[Chorus]\nSa'yo lang, sa'yo lang ako\nWala nang iba, ikaw lang ang gusto\nSa'yo lang, sa'yo lang, mahal\nHawakan mo ang kamay ko nang matagal\nSa'yo lang, sa'yo lang ako\nKahit saan, kahit kailan, pangako\nSa'yo lang titibok\nAng puso kong ito\n\n[Bridge]\nKung panaginip man ito\nAyoko nang magising\nDito lang sa piling mo\nAng gusto kong marating\n\n[Chorus]\nSa'yo lang, sa'yo lang ako\nKahit saan, kahit kailan, pangako\nSa'yo lang titibok\nAng puso kong ito\n\n[Outro]\nSa'yo lang, sa'yo lang",
+      "language": "tl",
+      "bpm": 78,
+      "key": "D major",
+      "seed": 4101
+    },
+    {
+      "id": "dahan_dahan_lang",
+      "station": "harana",
+      "title": "Dahan-Dahan Lang",
+      "artist": "Lino Amihan",
+      "caption": "Slow, sensual Filipino R&B slow jam sung in Tagalog. A soft, breathy young male tenor almost whispering the verses, rising into a delicate, aching falsetto in the chorus, with layered airy harmonies. Warm electric piano, deep sub bass, a muted clean guitar, very slow sparse drums with rim clicks and finger snaps, lush pads, long reverb tails. Intimate, hushed, two people awake together in the small hours. Modern, polished, warm production.",
+      "lyrics": "[Intro]\n\n[Verse 1]\nAlas-dos na ng umaga, gising pa rin tayo\nNag-uusap tungkol sa kahit ano\nAng liwanag ng buwan sa iyong mukha\nAng ganda mo, 'di ko masabi sa salita\n\n[Pre-Chorus]\nHuwag kang magmadali\nNarito lang ako sa tabi\n\n[Chorus]\nDahan-dahan, mahal\nWalang kailangang habulin\nDahan-dahan, mahal\nAng gabi ay atin\nIpikit mo ang iyong mga mata\nSumandal ka sa akin, sinta\nDahan-dahan lang\nHanggang mag-umaga\n\n[Verse 2]\nAng init ng yakap mo'y aking tahanan\nSa gulo ng mundo, ikaw ang kapayapaan\nBawat hininga mo'y aking naririnig\nParang musika ang tibok ng dibdib\n\n[Pre-Chorus]\nHuwag kang magmadali\nNarito lang ako sa tabi\n\n[Chorus]\nDahan-dahan, mahal\nWalang kailangang habulin\nDahan-dahan, mahal\nAng gabi ay atin\nIpikit mo ang iyong mga mata\nSumandal ka sa akin, sinta\nDahan-dahan lang\nHanggang mag-umaga\n\n[Bridge]\nHindi kailangan ng pangako ngayon\nSapat na ang ikaw at ako\nDito sa dilim, sa tahimik na kuwarto\nDahan-dahan nating buuin ang mundo\n\n[Chorus]\nDahan-dahan, mahal\nAng gabi ay atin\nDahan-dahan lang\nHanggang mag-umaga\n\n[Outro]",
+      "language": "tl",
+      "bpm": 68,
+      "key": "A major",
+      "duration": 225,
+      "seed": 4202
+    },
+    {
+      "id": "bituin_sa_mata_mo",
+      "station": "harana",
+      "title": "Bituin sa Mata Mo",
+      "artist": "Lino Amihan",
+      "caption": "Dreamy Filipino soul-pop ballad sung in Tagalog. A smooth young male tenor with a light, floating falsetto carrying most of the chorus, wide stacked harmonies and gentle vocal runs. Shimmering electric piano, soft synth pads, a clean chorus-effect guitar picking arpeggios, round bass, relaxed R&B drums with brushed hi-hats, spacious reverb. Starry, wide-eyed, in love with a girl under the night sky. Modern, polished, warm production.",
+      "lyrics": "[Intro]\n\n[Verse 1]\nTumingala ako sa langit kagabi\nNaghahanap ng liwanag sa dilim\nNgunit nang lumingon ka sa akin\nNakita ko ang hinahanap kong bituin\n\n[Pre-Chorus]\nHindi na kailangan ng kalawakan\nNasa harap ko na ang kagandahan\n\n[Chorus]\nMay bituin sa mata mo\nKumikislap tuwing ngumingiti ka\nMay bituin sa mata mo\nAt doon ako naliligaw, sinta\nKahit milyon pa ang tala sa langit\nSa'yo lang ako tumitingin\nMay bituin sa mata mo\nLiwanag ng aking dilim\n\n[Verse 2]\nSabihin mo sa akin ang iyong mga pangarap\nPakikinggan ko hanggang sumikat ang araw\nBawat salita mo ay aking iingatan\nParang hiling sa bulalakaw\n\n[Pre-Chorus]\nHindi na kailangan ng kalawakan\nNasa harap ko na ang kagandahan\n\n[Chorus]\nMay bituin sa mata mo\nKumikislap tuwing ngumingiti ka\nMay bituin sa mata mo\nAt doon ako naliligaw, sinta\nKahit milyon pa ang tala sa langit\nSa'yo lang ako tumitingin\nMay bituin sa mata mo\nLiwanag ng aking dilim\n\n[Bridge]\nKung mawala man ang lahat ng ilaw\nHindi ako matatakot\nHangga't nandito ka\nHangga't hawak kita\n\n[Chorus]\nKahit milyon pa ang tala sa langit\nSa'yo lang ako tumitingin\nMay bituin sa mata mo\nLiwanag ng aking dilim\n\n[Outro]",
+      "language": "tl",
+      "bpm": 84,
+      "key": "E major",
+      "seed": 4303
+    },
+    {
+      "id": "kape_at_ulan",
+      "station": "harana",
+      "title": "Kape at Ulan",
+      "artist": "Lino Amihan",
+      "caption": "Mellow acoustic Filipino R&B love song sung in Tagalog. A warm, breathy young male tenor singing softly, slipping into a tender falsetto at the ends of lines, with close two-part harmonies. Fingerpicked nylon-string acoustic guitar, soft Rhodes electric piano, warm upright-style bass, a gentle lo-fi drum loop with brushes and a soft shaker. Cozy, unhurried, a rainy morning at home with the girl he loves. Intimate, warm, close-miked production.",
+      "lyrics": "[Intro]\n\n[Verse 1]\nUmuulan na naman sa labas ng bintana\nNakabalot ka sa kumot, bagong gising pa\nMagulo ang buhok mo, antok pa ang mata\nPero sa paningin ko, wala nang mas gaganda\n\n[Pre-Chorus]\nIpagtitimpla kita ng kape\nTulad ng gusto mo, matamis\n\n[Chorus]\nKape at ulan, ikaw at ako\nWala nang hahanapin pa sa mundo\nKape at ulan, tahimik na umaga\nSapat na sa akin na kasama ka\nHayaan mong bumuhos ang ulan\nDito lang tayo, walang pupuntahan\nKape at ulan\nAt ikaw sa aking tabi\n\n[Verse 2]\nTumatawa ka sa mga biro kong luma\nKahit ilang ulit mo nang narinig\nGanito pala ang pakiramdam ng payapa\nGanito pala ang tunay na pag-ibig\n\n[Pre-Chorus]\nIpagtitimpla kita ng kape\nTulad ng gusto mo, matamis\n\n[Chorus]\nKape at ulan, ikaw at ako\nWala nang hahanapin pa sa mundo\nKape at ulan, tahimik na umaga\nSapat na sa akin na kasama ka\nHayaan mong bumuhos ang ulan\nDito lang tayo, walang pupuntahan\nKape at ulan\nAt ikaw sa aking tabi\n\n[Bridge]\nLumipas man ang mga taon\nTumanda man tayong dalawa\nIpagtitimpla pa rin kita\nTuwing umuulan sa umaga\n\n[Chorus]\nHayaan mong bumuhos ang ulan\nDito lang tayo, walang pupuntahan\nKape at ulan\nAt ikaw sa aking tabi\n\n[Outro]",
+      "language": "tl",
+      "bpm": 80,
+      "key": "G major",
+      "seed": 4404
+    },
+    {
+      "id": "sayaw_sa_sala",
+      "station": "harana",
+      "title": "Sayaw sa Sala",
+      "artist": "Lino Amihan",
+      "caption": "Groovy Filipino neo-soul and R&B love song sung in Tagalog. A smooth, playful young male tenor with an easy falsetto in the chorus, stacked harmonies answering the lead. A melodic, bouncing electric bass line up front, warm Rhodes electric piano with jazzy chords, clean funk guitar plucks, a relaxed head-nodding drum groove with a tight snare and handclaps, soft horn pads. Sweet, flirtatious, slow dancing with a girl in the living room. Modern, polished, warm production.",
+      "lyrics": "[Intro]\n\n[Verse 1]\nPatayin mo na ang ilaw, buksan ang radyo\nMay kantang mabagal, tamang-tama sa'tin 'to\nHubarin ang sapatos, halika sa gitna\nWalang ibang tao, tayo lang dalawa\n\n[Pre-Chorus]\nHindi ako marunong sumayaw\nPero para sa'yo, susubukan ko\n\n[Chorus]\nSayaw sa sala, hawak ang baywang mo\nPaikot-ikot, mabagal ang mundo\nSayaw sa sala, hanggang hatinggabi\nAng ulo mo'y nakasandal sa aking dibdib\nHindi kailangan ng entablado\nSapat na ang sahig at ang puso ko\nSayaw sa sala\nIkaw ang musika ko\n\n[Verse 2]\nNatatapakan ko ang iyong mga paa\nTumatawa ka lang, sabi mo, okay lang\nSa bawat hakbang, lalo kong nadarama\nNa sa'yo ko gustong tumanda\n\n[Pre-Chorus]\nHindi ako marunong sumayaw\nPero para sa'yo, susubukan ko\n\n[Chorus]\nSayaw sa sala, hawak ang baywang mo\nPaikot-ikot, mabagal ang mundo\nSayaw sa sala, hanggang hatinggabi\nAng ulo mo'y nakasandal sa aking dibdib\nHindi kailangan ng entablado\nSapat na ang sahig at ang puso ko\nSayaw sa sala\nIkaw ang musika ko\n\n[Bridge]\nIsa pa, isa pang kanta\nHuwag muna tayong huminto\nIsa pa, isa pang ikot\nBago matapos ang gabing ito\n\n[Chorus]\nHindi kailangan ng entablado\nSapat na ang sahig at ang puso ko\nSayaw sa sala\nIkaw ang musika ko\n\n[Outro]",
+      "language": "tl",
+      "bpm": 94,
+      "key": "B minor",
+      "duration": 200,
+      "seed": 4505
+    },
+    {
+      "id": "kung_papayag_ka",
+      "station": "harana",
+      "title": "Kung Papayag Ka",
+      "artist": "Lino Amihan",
+      "caption": "Heartfelt Filipino soul ballad sung in Tagalog, slow and swaying in six-eight time. A tender young male tenor, breathy and vulnerable in the verses, soaring into a pleading falsetto in the chorus, with gospel-tinged backing harmonies. Soft grand piano, warm electric piano, a swelling string section, round bass, gentle drums with brushes. Earnest, nervous, a young man finally confessing his love to a girl. Warm, polished, emotional production.",
+      "lyrics": "[Intro]\n\n[Verse 1]\nMatagal ko nang gustong sabihin sa'yo\nNgunit laging nauutal ang dila ko\nKaibigan mo lang ako sa'yong paningin\nPero iba ang laman ng aking damdamin\n\n[Pre-Chorus]\nNgayong gabi, lalakasan ko ang loob\nBahala na kung ano ang isasagot\n\n[Chorus]\nKung papayag ka, aalagaan kita\nKung papayag ka, hindi ka na mag-iisa\nIbibigay ko ang lahat ng kaya ko\nAng oras, ang puso, ang buong mundo\nKung papayag ka, ako'y maghihintay\nKahit gaano katagal, habang-buhay\nIsang oo mo lang\nAng hinihiling ko\n\n[Verse 2]\nHindi ako mayaman, wala akong kotse\nPero may gitara ako at mga tula\nIhahatid kita pauwi tuwing gabi\nAt sasalubungin sa bawat umaga\n\n[Pre-Chorus]\nNgayong gabi, lalakasan ko ang loob\nBahala na kung ano ang isasagot\n\n[Chorus]\nKung papayag ka, aalagaan kita\nKung papayag ka, hindi ka na mag-iisa\nIbibigay ko ang lahat ng kaya ko\nAng oras, ang puso, ang buong mundo\nKung papayag ka, ako'y maghihintay\nKahit gaano katagal, habang-buhay\nIsang oo mo lang\nAng hinihiling ko\n\n[Bridge]\nAt kung hindi man ang sagot mo\nTatanggapin ko nang buong puso\nPero sana, sana lang\nBigyan mo ako ng pagkakataon\n\n[Chorus]\nKung papayag ka, ako'y maghihintay\nKahit gaano katagal, habang-buhay\nIsang oo mo lang\nAng hinihiling ko\n\n[Outro]",
+      "language": "tl",
+      "bpm": 66,
+      "key": "C major",
+      "timesignature": 6,
+      "duration": 225,
+      "seed": 4606
+    },
+    {
+      "id": "sa_ngiti_mo",
+      "station": "harana",
+      "title": "Sa Ngiti Mo",
+      "artist": "Lino Amihan",
+      "caption": "Bright, easygoing Filipino R&B-pop love song sung in Tagalog. A smooth, smiling young male tenor with a light falsetto hook and playful ad-libs, stacked sunny harmonies. Bouncy Rhodes electric piano, a plucky clean guitar riff, warm melodic bass, a crisp mid-tempo drum groove with finger snaps and handclaps, soft synth bells. Lighthearted, sweet, helplessly charmed by a girl's smile. Modern, polished, warm production.",
+      "lyrics": "[Intro]\n\n[Verse 1]\nPagod ako galing sa mahabang araw\nMabigat ang balikat, masakit ang ulo\nPero pagbukas mo ng pinto\nNawala ang lahat ng problema ko\n\n[Pre-Chorus]\nAno bang mayroon ka\nNa wala sa iba?\n\n[Chorus]\nSa ngiti mo, lumiliwanag ang lahat\nSa ngiti mo, gumagaan ang bigat\nIsang sulyap lang, ayos na ako\nGanyan kalakas ang tama ko sa'yo\nSa ngiti mo, ako'y nahuhulog\nPaulit-ulit, 'di na umaahon\nSa ngiti mo\nDoon ako uuwi\n\n[Verse 2]\nKinukuwento mo ang araw mo sa akin\nKumikinang ang mata mo habang nagsasalita\nHindi ko na marinig ang sinasabi mo\nNakatitig lang ako, parang tanga\n\n[Pre-Chorus]\nAno bang mayroon ka\nNa wala sa iba?\n\n[Chorus]\nSa ngiti mo, lumiliwanag ang lahat\nSa ngiti mo, gumagaan ang bigat\nIsang sulyap lang, ayos na ako\nGanyan kalakas ang tama ko sa'yo\nSa ngiti mo, ako'y nahuhulog\nPaulit-ulit, 'di na umaahon\nSa ngiti mo\nDoon ako uuwi\n\n[Bridge]\nNgumiti ka lang palagi\nIyan lang ang hiling ko\nAt kung malungkot ka man\nAko naman ang ngingiti para sa'yo\n\n[Chorus]\nSa ngiti mo, ako'y nahuhulog\nPaulit-ulit, 'di na umaahon\nSa ngiti mo\nDoon ako uuwi\n\n[Outro]",
+      "language": "tl",
+      "bpm": 100,
+      "key": "F major",
+      "duration": 195,
+      "seed": 4707
+    },
+    {
+      "id": "uuwi_ako_sayo",
+      "station": "harana",
+      "title": "Uuwi Ako Sa'yo",
+      "artist": "Lino Amihan",
+      "caption": "Moody late-night Filipino R&B love song sung in Tagalog. A low, breathy young male tenor in the verses, opening into a yearning falsetto in the chorus, with hazy layered harmonies and soft ad-libs. Deep sub bass, dark warm electric piano chords, a distant reverb-soaked guitar, slow sparse drums with fast ticking hi-hats and a soft snare, atmospheric pads. Longing, devoted, far from the girl he loves and coming home to her. Modern, polished, spacious production.",
+      "lyrics": "[Intro]\n\n[Verse 1]\nMalayo man ang aking narating\nMaraming lungsod, maraming mukha\nSa dulo ng bawat mahabang biyahe\nIkaw pa rin ang hinahanap ng mata\n\n[Pre-Chorus]\nBuksan mo ang ilaw sa may pinto\nParating na ako\n\n[Chorus]\nUuwi ako sa'yo, mahal\nKahit gaano kalayo, kahit gaano katagal\nUuwi ako sa'yo, sinta\nSa yakap mo lang ako nagpapahinga\nIkaw ang daan, ikaw ang tahanan\nIkaw ang simula at hangganan\nUuwi ako sa'yo\nPalagi, sa'yo\n\n[Verse 2]\nNami-miss ko ang amoy ng buhok mo\nAng lamig ng paa mo sa ilalim ng kumot\nAng tawag mo sa akin tuwing hatinggabi\nKumain ka na ba, ang lagi mong tanong\n\n[Pre-Chorus]\nBuksan mo ang ilaw sa may pinto\nParating na ako\n\n[Chorus]\nUuwi ako sa'yo, mahal\nKahit gaano kalayo, kahit gaano katagal\nUuwi ako sa'yo, sinta\nSa yakap mo lang ako nagpapahinga\nIkaw ang daan, ikaw ang tahanan\nIkaw ang simula at hangganan\nUuwi ako sa'yo\nPalagi, sa'yo\n\n[Bridge]\nBilangin mo ang mga araw\nMalapit na, malapit na\nPagdating ko, hindi na ako aalis\nDito na lang ako sa piling mo\n\n[Chorus]\nIkaw ang daan, ikaw ang tahanan\nIkaw ang simula at hangganan\nUuwi ako sa'yo\nPalagi, sa'yo\n\n[Outro]",
+      "language": "tl",
+      "bpm": 74,
+      "key": "F# minor",
+      "seed": 4808
+    }
+  ]
+}

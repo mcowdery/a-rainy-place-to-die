@@ -5,13 +5,14 @@ import { Crosshair } from '../models/crosshair';
 import type { GlassesKind } from '../models/sunglasses';
 import { FACE_SHADOW } from '../models/faceShadow';
 import { FirstPersonRig } from '../models/firstPerson';
-import { footOffset, THIRD, ThirdPersonCamera } from '../models/thirdPerson';
+import { BodyFacing, footOffset, THIRD, ThirdPersonCamera } from '../models/thirdPerson';
 import { GLASSES_LABELS, HELMET_LABELS, helmetLook, loadWardrobe, nextFace, nextGlasses, nextHelmet, nextOutfit, outfitById, saveWardrobe } from '../models/wardrobe';
 import { FACE_STYLE_LABELS, type FaceStyle } from '../models/faceShadow';
 import { MACK_GUNS, SHOTGUN_KINDS } from '../models/shotgun';
 import { GORE_LEVELS, saveGore, type Dir, type Melee, type MeleeWeapon } from '../models/melee';
 import { Brawl } from '../models/brawl';
 import { DuelHud } from '../models/duelHud';
+import { MackSmoke } from '../real/smoke';
 
 /**
  * The showroom's first-person mode, for reviewing Mack's body and guns as the player will see them:
@@ -64,6 +65,17 @@ export class FpMode {
     return this.active ? this.rig : null;
   }
   private rig: FirstPersonRig | null = null;
+  /** His smoke (J lights a cigarette or, with Shift, a cigar; J again flicks it away). */
+  private readonly smoke = new MackSmoke();
+  private readonly air = new THREE.Vector2();
+  /** Which way he faces in third person, apart from the camera (models/thirdPerson.ts). */
+  private readonly facing = new BodyFacing();
+  /** A script's own mirror (for shots: __fp.watch): the camera this far round from in front of his face, this far off. */
+  private watch: { angle: number; dist: number } | null = null;
+  /** For shots: a pace to show his stride at without his going anywhere (m/s), a point of the stride to hold (rad), and a jump's height and rise to hold. */
+  private pace: number | null = null;
+  private heldPhase: number | null = null;
+  private heldAir: [number, number] | null = null;
   private yaw = 0;
   private pitch = 0;
   private speed = 0;
@@ -104,6 +116,7 @@ export class FpMode {
     private readonly env: THREE.Texture | null,
     private readonly floorAt: (x: number, z: number) => number,
   ) {
+    this.scene.add(this.smoke.mesh);
     let inv = false;
     try {
       inv = localStorage.getItem('citypop.invertY') === '1';
@@ -147,6 +160,11 @@ export class FpMode {
       if (e.code === 'KeyN') this.setFace(nextFace(this.wardrobe.face));
       if (e.code === 'KeyK') this.setHelmet(nextHelmet(this.wardrobe.helmet));
       if (e.code === 'KeyC') this.mirror = (this.mirror + 1) % MIRRORS.length;
+      if (e.code === 'KeyP' && this.rig) this.rig.squatting = !this.rig.squatting;
+      if (e.code === 'KeyJ' && this.rig) {
+        if (this.rig.smoking.what) this.rig.smoking.flick();
+        else this.rig.smoking.light(e.shiftKey ? 'cigar' : 'cigarette');
+      }
       if (e.code === 'KeyE') this.toggleRide();
       if (e.code === 'KeyX' && this.rig) {
         if (this.hand !== 'gun' && !this.riding) {
@@ -448,7 +466,7 @@ export class FpMode {
     if (!this.active || !rig || this.frozen) return;
     // Last frame's cinematic or third-person camera: back to the eyes.
     this.restoreEyes();
-    rig.setHeadless(!this.third && !MIRRORS[this.mirror]);
+    rig.setHeadless(!this.third && !(this.watch ?? MIRRORS[this.mirror]));
     this.crosshair.update(rig.armed && (this.hand === 'gun' || !!this.riding), rig.aim, dt);
     this.dirT -= dt;
     this.dirEl.style.opacity = String(Math.max(0, Math.min(1, this.dirT * 4)));
@@ -468,6 +486,7 @@ export class FpMode {
         .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ')));
       this.camera.updateMatrixWorld();
       rig.update(dt, this.camera, 0, 0);
+      this.smoke.update(dt, rig.smoking.out, this.air);
       if (this.third) this.thirdCam.place(this.camera, THIRD.ride, dt, this.clear);
       return;
     }
@@ -484,7 +503,9 @@ export class FpMode {
     this.speed += (want - this.speed) * Math.min(1, dt * 8);
     if (move.lengthSq() > 0) this.camera.position.addScaledVector(move.normalize(), this.speed * dt);
     const floor = this.floorAt(this.camera.position.x, this.camera.position.z);
-    this.camera.position.y += (floor + rig.eyeHeight - this.camera.position.y) * Math.min(1, dt * 12);
+    // (Any step and he's up off his heels.)
+    if (want > 0) rig.squatting = false;
+    this.camera.position.y += (floor + rig.eyeHeight - rig.eyeDrop - this.camera.position.y) * Math.min(1, dt * 12);
     // The fight: it may move you (a lunge, a kill move carrying you) and turn your head (a kill move's look).
     let dtW = dt;
     let shake = 0;
@@ -504,7 +525,14 @@ export class FpMode {
     const sh = shake * shake * 0.03;
     this.camera.rotation.set(this.pitch + (Math.random() - 0.5) * sh, this.yaw + (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh * 0.5, 'YXZ');
     this.camera.updateMatrixWorld();
-    rig.update(dtW, this.camera, locked ? 0 : this.speed, floor);
+    // In third person he faces the way he goes, not where the camera looks, unless he has a weapon up.
+    const going = move.lengthSq() > 0 && !locked ? this.speed : 0;
+    const eyes = this.facing.update(dtW, this.camera, this.facing.modeFor(this.third && !cine, rig, dtW), move.x * going, move.z * going);
+    if (this.heldPhase !== null) (rig as unknown as { walk: number }).walk = this.heldPhase;
+    if (this.heldAir) [rig.air, rig.airV] = this.heldAir;
+    // (A jump held for a shot: his feet are that far off the floor.)
+    rig.update(dtW, eyes, this.pace ?? (locked ? 0 : this.speed), floor + (this.heldAir?.[0] ?? 0));
+    this.smoke.update(dtW, rig.smoking.out, this.air);
     // A kill move's cinematic angle: rendered from there this frame (his head shown), the eyes put back next.
     if (cine) {
       this.cineSaved = { p: this.camera.position.clone(), q: this.camera.quaternion.clone() };
@@ -512,8 +540,8 @@ export class FpMode {
       this.camera.position.copy(cine.pos);
       this.camera.lookAt(cine.look);
       this.camera.updateMatrixWorld();
-    } else if (MIRRORS[this.mirror]) {
-      this.mirrorView(MIRRORS[this.mirror]!);
+    } else if ((this.watch ?? MIRRORS[this.mirror])) {
+      this.mirrorView((this.watch ?? MIRRORS[this.mirror])!);
     } else if (this.third) {
       this.thirdCam.place(this.camera, footOffset(rig.aim), dt, this.clear);
     }
@@ -582,6 +610,15 @@ export class FpMode {
       riding: () => this.riding,
       key: (code: string, on: boolean) => (on ? this.keys.add(code) : this.keys.delete(code)),
       armed: (on: boolean) => this.rig && (this.rig.armed = on),
+      smoke: (kind: 'cigarette' | 'cigar' = 'cigarette') => this.rig?.smoking.light(kind),
+      flick: () => this.rig?.smoking.flick(),
+      squat: (on: boolean) => this.rig && (this.rig.squatting = on),
+      pace: (v: number | null) => (this.pace = v),
+      stridePhase: (p: number | null) => (this.heldPhase = p),
+      air: (height: number, v: number) => (this.heldAir = height > 0 ? [height, v] : ((this.rig!.air = 0), (this.rig!.airV = 0), null)),
+      autoSmoke: (kind: 'cigarette' | 'cigar' | null) => this.rig && (this.rig.smoking.auto = kind),
+      wind: (x: number, z: number) => this.air.set(x, z),
+      watch: (angle: number | null, dist = 1.2) => (this.watch = angle === null ? null : { angle, dist }),
       headless: (on: boolean) => this.rig?.setHeadless(on),
       third: (on: boolean) => (this.third = on),
       wear: (outfit: string, glasses: GlassesKind | null = this.wardrobe.glasses) => this.wear(outfit, glasses),

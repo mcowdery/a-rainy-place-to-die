@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { MuzzleFlashes } from '../poc3d/models/muzzleFlash';
 import type { Course } from './course';
 import { splat, type TargetHit, type Targets } from './targets';
 
@@ -106,7 +107,7 @@ const PAINTS = [0xff3fa4, 0x3ff0ff, 0xffe03f, 0x7dff4a, 0xff8a2a].map((h) => new
 
 /** Something for the sound to play: shots, clicks, hits (with where, for distance). */
 export interface ShotEvent {
-  readonly kind: 'pistol' | 'paint' | 'dry' | 'reload' | 'ding' | 'paper' | 'splat' | 'ground' | 'clang';
+  readonly kind: 'pistol' | 'shotgun' | 'lever' | 'paint' | 'dry' | 'reload' | 'magazine' | 'ding' | 'paper' | 'splat' | 'ground' | 'clang';
   readonly at: THREE.Vector3;
 }
 
@@ -188,6 +189,8 @@ export class Shooting {
   private tracerT = 0;
   private readonly flash: THREE.PointLight;
   private readonly flashSprite: THREE.Sprite;
+  /** The page's muzzle flashes (it adds their group to its scene and updates them); without them, a plain sprite. */
+  flashes: MuzzleFlashes | null = null;
   private flashT = 0;
   private readonly guns: Record<Weapon['id'], THREE.Group>;
   private readonly muzzleZ: Record<Weapon['id'], number> = { pistol: 0.2, paint: 0.52, shotgun: 0.6 };
@@ -370,23 +373,7 @@ export class Shooting {
 
   /** The nearest car hit volume along a ray, within far. */
   castBodies(origin: THREE.Vector3, dir: THREE.Vector3, far: number): BodyHit | null {
-    if (!this.bodies.length) return null;
-    this.ray.set(origin, dir);
-    this.ray.far = far;
-    const hits = this.ray.intersectObjects(this.bodies, false);
-    if (!hits.length) return null;
-    // Through a window (not the roof: steel) to a head behind it; into the side of the body at a wheel, the tyre.
-    let h = hits[0];
-    const part = (x: THREE.Intersection): string => x.object.userData.part as string;
-    const window = !!h.face && h.face.normal.clone().transformDirection(h.object.matrixWorld).y < 0.5;
-    for (const k of hits.slice(1)) {
-      if ((part(h) === 'glass' && window && part(k) === 'head' && k.distance - h.distance < 2.2) || (part(h) === 'body' && part(k) === 'tyre' && k.distance - h.distance < 0.35)) {
-        h = k;
-        break;
-      }
-    }
-    const normal = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : dir.clone().negate();
-    return { id: h.object.userData.id as string, object: h.object, point: h.point.clone(), normal, distance: h.distance };
+    return castVolumes(this.ray, this.bodies, origin, dir, far);
   }
 
   /** Distance along a ray to the ground (marching, then bisecting), or null within far. */
@@ -457,7 +444,7 @@ export class Shooting {
     if (W.id === 'pistol') {
       const p = this.pick(muzzle, dir, 400);
       this.showTracer(muzzle, p.point);
-      this.flashAt(muzzle);
+      this.flashAt(muzzle, p.point);
       if (p.target) this.land(p.target, 'bullet', ctx.mult, ctx.why);
       else if (p.body) this.strike(p.body, 'bullet');
       else {
@@ -524,8 +511,8 @@ export class Shooting {
    */
   blast(muzzle: THREE.Vector3, dir: THREE.Vector3, pellets: number, spread: number, mult: number, why: string): void {
     this.shots++;
-    this.events.push({ kind: 'pistol', at: muzzle.clone() });
-    this.flashAt(muzzle);
+    this.events.push({ kind: pellets > 1 ? 'shotgun' : 'pistol', at: muzzle.clone() });
+    this.flashAt(muzzle, muzzle.clone().add(dir));
     let struck = false;
     let points = 0;
     let base = 0;
@@ -641,7 +628,7 @@ export class Shooting {
     (this.tracer.material as THREE.LineBasicMaterial).opacity = this.tracerT / 0.07;
     this.flashT = Math.max(0, this.flashT - dt);
     this.flash.intensity = this.flashT > 0 ? 40 * (this.flashT / 0.05) : 0;
-    this.flashSprite.visible = this.flashT > 0.02;
+    this.flashSprite.visible = this.flashT > 0.02 && !this.flashes;
   }
 
   set pointScale(v: number) {
@@ -656,11 +643,16 @@ export class Shooting {
     this.tracerT = 0.07;
   }
 
-  private flashAt(p: THREE.Vector3): void {
+  private flashAt(p: THREE.Vector3, toward: THREE.Vector3): void {
     this.flash.position.copy(p);
+    this.flashT = 0.05;
+    // (The page's own flashes, from footage, where it has them: models/muzzleFlash.ts.)
+    if (this.flashes) {
+      this.flashes.fire(p, toward.clone().sub(p), this.weapon.id === 'shotgun' ? 1.7 : 1);
+      return;
+    }
     this.flashSprite.position.copy(p);
     this.flashSprite.material.rotation = Math.random() * Math.PI;
-    this.flashT = 0.05;
   }
 
   /** A decal on the ground: a paint splat or a bullet's mark. */
@@ -701,6 +693,30 @@ export class Shooting {
       this.pLife[k] = 0.6 + Math.random() * 0.4;
     }
   }
+}
+
+/**
+ * The nearest car hit volume (race/carView.ts `hitVolumes`) along a ray, within far: through a window (not the
+ * roof: steel) to a head behind it; into the side of the body at a wheel, the tyre. (The city's shots use it too:
+ * real/gunfire.ts.)
+ */
+export function castVolumes(ray: THREE.Raycaster, bodies: readonly THREE.Object3D[], origin: THREE.Vector3, dir: THREE.Vector3, far: number): BodyHit | null {
+  if (!bodies.length) return null;
+  ray.set(origin, dir);
+  ray.far = far;
+  const hits = ray.intersectObjects(bodies as THREE.Object3D[], false);
+  if (!hits.length) return null;
+  let h = hits[0];
+  const part = (x: THREE.Intersection): string => x.object.userData.part as string;
+  const window = !!h.face && h.face.normal.clone().transformDirection(h.object.matrixWorld).y < 0.5;
+  for (const k of hits.slice(1)) {
+    if ((part(h) === 'glass' && window && part(k) === 'head' && k.distance - h.distance < 2.2) || (part(h) === 'body' && part(k) === 'tyre' && k.distance - h.distance < 0.35)) {
+      h = k;
+      break;
+    }
+  }
+  const normal = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld) : dir.clone().negate();
+  return { id: h.object.userData.id as string, object: h.object, point: h.point.clone(), normal, distance: h.distance };
 }
 
 /** A shot's spread (rad, the cone's half-angle): it opens with the slide and the speed, across the car and from the hip. */

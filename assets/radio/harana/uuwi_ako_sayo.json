@@ -1,0 +1,21 @@
+{
+  "file": "uuwi_ako_sayo_1.flac",
+  "id": "uuwi_ako_sayo",
+  "take": 1,
+  "station": "harana",
+  "title": "Uuwi Ako Sa'yo",
+  "artist": "Lino Amihan",
+  "caption": "Moody late-night Filipino R&B love song sung in Tagalog. A low, breathy young male tenor in the verses, opening into a yearning falsetto in the chorus, with hazy layered harmonies and soft ad-libs. Deep sub bass, dark warm electric piano chords, a distant reverb-soaked guitar, slow sparse drums with fast ticking hi-hats and a soft snare, atmospheric pads. Longing, devoted, far from the girl he loves and coming home to her. Modern, polished, spacious production.",
+  "lyrics": "[Intro]\n\n[Verse 1]\nMalayo man ang aking narating\nMaraming lungsod, maraming mukha\nSa dulo ng bawat mahabang biyahe\nIkaw pa rin ang hinahanap ng mata\n\n[Pre-Chorus]\nBuksan mo ang ilaw sa may pinto\nParating na ako\n\n[Chorus]\nUuwi ako sa'yo, mahal\nKahit gaano kalayo, kahit gaano katagal\nUuwi ako sa'yo, sinta\nSa yakap mo lang ako nagpapahinga\nIkaw ang daan, ikaw ang tahanan\nIkaw ang simula at hangganan\nUuwi ako sa'yo\nPalagi, sa'yo\n\n[Verse 2]\nNami-miss ko ang amoy ng buhok mo\nAng lamig ng paa mo sa ilalim ng kumot\nAng tawag mo sa akin tuwing hatinggabi\nKumain ka na ba, ang lagi mong tanong\n\n[Pre-Chorus]\nBuksan mo ang ilaw sa may pinto\nParating na ako\n\n[Chorus]\nUuwi ako sa'yo, mahal\nKahit gaano kalayo, kahit gaano katagal\nUuwi ako sa'yo, sinta\nSa yakap mo lang ako nagpapahinga\nIkaw ang daan, ikaw ang tahanan\nIkaw ang simula at hangganan\nUuwi ako sa'yo\nPalagi, sa'yo\n\n[Bridge]\nBilangin mo ang mga araw\nMalapit na, malapit na\nPagdating ko, hindi na ako aalis\nDito na lang ako sa piling mo\n\n[Chorus]\nIkaw ang daan, ikaw ang tahanan\nIkaw ang simula at hangganan\nUuwi ako sa'yo\nPalagi, sa'yo\n\n[Outro]",
+  "language": "tl",
+  "bpm": 74,
+  "key": "F# minor",
+  "seconds": 215.0,
+  "seed": 4808,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:05",
+  "took": 160,
+  "batch": "opm-01",
+  "model": "acestep-v15-turbo"
+}

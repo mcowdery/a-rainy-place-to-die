@@ -2,11 +2,14 @@ import { TuningPanel } from '../../race/tuning';
 import { RacePath, RaceState, type RaceDef } from './cityRace';
 import { RaceHud } from './raceHud';
 import { RaceRival } from './raceRival';
+import { CarGun } from './carGun';
+import { CHASES, pursue } from './chase';
+import { CityChase } from './cityChase';
 import { separateCars } from '../../race/battle';
 import { FLAG_SEASON, isSeason, SEASON_NAMES, seasonFlag, seasonIndex, type Season } from './seasons';
-import { DebugMenu, type DebugHit } from './debugMenu';
+import { DebugMenu, type DebugHit, type DebugSection, type DebugTab } from './debugMenu';
 import { WaitPanel } from './waitPanel';
-import { outlookAt } from './forecast';
+import { airWith, coldBreath, outlookAt } from './forecast';
 import { WeatherApp } from './weatherApp';
 import { puddleAt, weatherGrip, wheelsOf as carWheels, type RoadWeather } from './roadGrip';
 import { blendAtmosphere } from './atmosphere';
@@ -28,9 +31,11 @@ import { loadPhoneContent } from '../../phone/content';
 import { edition } from '@edition';
 import { Phone } from '../../phone/engine';
 import { PhoneUI } from '../../phone/ui';
+import { WallpaperApp } from '../../phone/wallpaperApp';
 import { FirstPerson } from '../controls';
 import { frontFrame } from '../real/buildings';
-import { cityDepthMaterial, cityMaterial, cityUniforms } from '../real/city';
+import { cityDepthMaterial, cityMaterial, cityUniforms, windowHours } from '../real/city';
+import { windowSceneIndex } from '../real/windowScenes';
 import { Lightmap } from '../real/lightmap';
 import { buildMegaSign } from '../real/megaSign';
 import { buildKonbini } from '../real/konbini';
@@ -61,7 +66,8 @@ import { readSave, SAVE_VERSION, SLOTS, writeSave, type SaveGame, type Slot } fr
 import { installSnap } from '../../debug/snap';
 import { fare, rideMetres, TaxiPicker } from './taxi';
 import { Approach, sideOf, trimToUnseen } from './taxiDispatch';
-import { earn, loadProfile, saveProfile, spend } from '../../race/profile';
+import { MODELS, SALOONS } from '../../race/catalog';
+import { earn, loadProfile, newCar, saveProfile, spend } from '../../race/profile';
 import { Expressway, parseExpressway } from './expressway';
 import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
 import { buildSea } from '../real/sea';
@@ -75,16 +81,18 @@ import { Guide, type GuideDest, type GuideFrom } from './guide';
 import { PhoneMaps } from './phoneMaps';
 import { GpsMarks } from '../real/gpsMarks';
 import { ScreenGlows, ScreenLights } from '../real/screenLight';
-import { GRADE_NAMES, GradePass } from '../real/grade';
+import { GradePass } from '../real/grade';
 import { DofPass } from '../real/dof';
 import { SsrPass } from '../real/ssr';
 import { CityAudio } from '../real/audio';
 import { Radio, loadStations } from '../real/radio';
+import { MusicPlayer } from '../real/musicPlayer';
+import { MusicApp } from './musicApp';
 import { LampCones, LampShadows, Lightning, RainLayers, RainSystem, StreetWater, Drift, Splashes } from '../real/weather';
 import { TrackMap, type Wheel } from '../real/tracks';
 import { setTreeSink, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { LITTER, WIPERS } from '../real/city';
-import { moodFromUrl, MoodPanel, QUALITY, SKY_COLOR_MODE } from './moodPanel';
+import { MOOD_DEFAULTS, moodFromUrl, MoodPanel, QUALITY, SKY_COLOR_MODE } from './moodPanel';
 import { carLoops, routeFor, scrambleKeys, Signals } from './traffic';
 import { carMixFor, CITY_CARS } from './carMix';
 import { CAR } from './cabin';
@@ -97,11 +105,11 @@ import { RoutePicker } from './routePicker';
 import { subwayRoute } from './subway';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
-import { addFigure, GhostBuilder, ghostMaterial, setMobLook, setPassengerMaterial, type FigureSpec, type MobLook } from '../real/people';
+import { addFigure, GhostBuilder, ghostMaterial, setMobEye, setMobLook, setMobSun, setPassengerMaterial, type FigureSpec, type MobLook } from '../real/people';
 import { SignAtlas, signMaterial } from '../real/signs';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { TAXI_ADS } from '../models/ads';
-import { MOON_SHAPE, MOON_SHAPES, Sky } from '../real/sky';
+import { MOON_SHAPE, Sky } from '../real/sky';
 import { SKY_AZ, SKY_EL, SkyModel, type SkyStats } from '../real/skyModel';
 import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
@@ -110,9 +118,11 @@ import { CELL, DISTRICTS3, STYLES3 } from './plan';
 import type { Node3 } from './stamps';
 import { District, LIGHTMAP_WINDOW } from './world';
 import { FirstPersonRig } from '../models/firstPerson';
-import { footOffset, ThirdPersonCamera } from '../models/thirdPerson';
+import { BodyFacing, footOffset, ThirdPersonCamera } from '../models/thirdPerson';
 import { CensorPass } from '../models/censorPass';
 import { underfoot } from './footing';
+import { MackSmoke } from '../real/smoke';
+import type { StickKind } from '../models/cigarette';
 import { availableOutfits, GLASSES_LABELS, HELMET_LABELS, HELMET_NAMES, helmetLook, loadDressed, loadWardrobe, outfitById, saveWardrobe } from '../models/wardrobe';
 import { FACE_STYLE_LABELS, FACE_STYLES } from '../models/faceShadow';
 import { GLASSES_KINDS, type GlassesKind } from '../models/sunglasses';
@@ -130,8 +140,8 @@ import { CityGunfire } from '../real/gunfire';
  * realistically with an ASCII overlay for mood (see real/overlay.ts).
  * URL: ?time=night|day|dusk|dawn &weather=clear|rain|fog &cam=x,y,z,yaw,pitch &spawn=<node id> &late=1 (after the last train)
  * &debug=1 (M opens the map, a fast-travel tool; &ride=<from>,<to> starts on a subway ride) &ascii=vibe|heavy|ascii|off &grade=neutral|nocturne|noir|citypop &bench=1
- * Keys: WASD/mouse, Shift run, Space jump (up in fly, Ctrl down), E interact, M map / fast travel (debug), T time, R weather, F fly, Q third person, V overlay (1-4 direct), G dither,
- * B bloom, P look mode. At the wheel: , and . the radio's dial, / the tape deck (Shift+/ another folder).
+ * Keys: WASD/mouse, Shift run, Space jump (up in fly, Ctrl down), E interact, M map / fast travel (debug), T time, F fly, Q third person,
+ * ` the debug menu (district/debugMenu.ts: everything for testing and tuning, in tabs; no other key is spent on it). At the wheel: , and . the radio's dial, / the tape deck (Shift+/ another folder).
  */
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const params = new URLSearchParams(location.search);
@@ -354,9 +364,9 @@ async function run(): Promise<void> {
   composer.addPass(new OutputPass());
   // The colour grade, last, on the display image: C cycles the looks, ?grade= picks one.
   const grade = new GradePass();
-  // Weather and light settings on top of the atmosphere (K opens the panel; also from the URL).
+  // Weather and light settings on top of the atmosphere (the debug menu's rows; also from the URL).
   const mood = moodFromUrl(params);
-  // Render resolution (K panel, ?res=): fixed, or auto: stepped down a tenth while frames run slow (over ~24 ms for
+  // Render resolution (the debug menu, ?res=): fixed, or auto: stepped down a tenth while frames run slow (over ~24 ms for
   // 1.5 s) and back up after 3 s of room (under ~17.5 ms), never back up for 20 s after a step down, between 60%
   // and 100% of the display's. The benchmark keeps it at 100%.
   let resScale = 1;
@@ -709,8 +719,61 @@ async function run(): Promise<void> {
   let mack: FirstPersonRig | null = null;
   const crosshair = new Crosshair();
   // Shots land on the district (walls to each building's height, the ground, parked cars, poles) and the traffic.
-  const gunfire = new CityGunfire((ax, az, bx, bz, pad) => district.shotProbe(ax, az, bx, bz, pad), (x, y, z) => y - district.terrain.height(x, z) < 1.7 && traffic.blocked(x, z, 0));
+  // (A shot from your own car, or at it, doesn't count its place in the traffic: it has hit volumes of its own.)
+  const gunfire = new CityGunfire((ax, az, bx, bz, pad) => district.shotProbe(ax, az, bx, bz, pad), (x, y, z, skipOwn) => y - district.terrain.height(x, z) < 1.7 && traffic.blocked(x, z, 0, skipOwn ? ownCar.vehicle : null));
   scene.add(gunfire.group);
+  // His smoking (models/smoking.ts: J lights one up with his hands free, J again flicks it away; Shift+J changes
+  // between cigarettes and cigars): the smoke, the ember's glow and the lighter's flame (real/smoke.ts), lit as the
+  // crowd's smoke is.
+  const mackSmoke = new MackSmoke(ghost);
+  scene.add(mackSmoke.mesh);
+  let smokes: StickKind = 'cigarette';
+  // Left to himself: he lights one before long when he's standing about (models/smoking.ts `auto`), and after a
+  // while standing still goes down on his heels (C squats or stands at will; any step and he's up). Both can be
+  // turned off (the debug menu's Player tab; localStorage `citypop.mack.idle`: 'smoke', 'squat', both or neither).
+  let idleSmokes = true;
+  let idleSquats = true;
+  try {
+    const idle = localStorage.getItem('citypop.mack.idle');
+    if (idle !== null) {
+      idleSmokes = idle.includes('smoke');
+      idleSquats = idle.includes('squat');
+    }
+  } catch {
+    /* no storage */
+  }
+  const saveIdle = (): void => {
+    try {
+      localStorage.setItem('citypop.mack.idle', `${idleSmokes ? 'smoke ' : ''}${idleSquats ? 'squat' : ''}`);
+    } catch {
+      /* no storage */
+    }
+  };
+  /** How long he's stood still with his hands free (s), and after how long he squats. */
+  let mackIdle = 0;
+  const SQUAT_AFTER = 22;
+  // In third person the camera turns freely round him: he faces the way he goes (models/thirdPerson.ts BodyFacing).
+  const facing = new BodyFacing();
+  try {
+    if (localStorage.getItem('citypop.smoke') === 'cigar') smokes = 'cigar';
+  } catch {
+    /* no storage */
+  }
+  const setSmokes = (k: StickKind): void => {
+    smokes = k;
+    try {
+      localStorage.setItem('citypop.smoke', k);
+    } catch {
+      /* no storage */
+    }
+  };
+  // Bullets mark the cars they strike (real/carHits.ts): the traffic's and yours, whose bodywork and glass they cost a little.
+  gunfire.carAt = (x, _y, z, skipOwn) => traffic.objectAt(x, z, skipOwn ? ownCar.vehicle : null);
+  gunfire.onCarHit = (car, h) => {
+    if (car === ownCar.view.obj) ownCar.struck(h.local.z, h.local.x, h.pane ? 0.5 : 1.4);
+  };
+  // (A muzzle flash lights the street as a screen does, for as long as it lasts.)
+  screens.add(gunfire.light);
   // ?debug=1: fire without the mouse captured (scripts).
   if (debug) Object.assign(window, { __fire: () => !!mack?.armed && mack.fire() && (crosshair.fired(), gunfire.resume(), true) });
   // Q on foot: third person (models/thirdPerson.ts), over his right shoulder and always behind him (his face is
@@ -794,15 +857,15 @@ async function run(): Promise<void> {
   };
   // The right button raises the shotgun while it's out.
   document.addEventListener('mousedown', (e) => {
-    if (e.button === 2 && mack?.armed && controls.look.isLocked) mack.aiming = true;
-    // The left fires it (on foot or on a bike; not from a car's seat).
-    if (e.button === 0 && mack?.armed && mack.object.visible && controls.look.isLocked && !inVn) {
+    if (e.button === 2 && mack?.armed && controls.look.isLocked && !seated) mack.aiming = true;
+    // The left fires it (on foot or on a bike; from your car's seat it's district/carGun.ts').
+    if (e.button === 0 && mack?.armed && mack.object.visible && controls.look.isLocked && !inVn && !seated) {
       gunfire.resume();
       if (mack.fire()) crosshair.fired();
     }
   });
   document.addEventListener('mouseup', (e) => {
-    if (e.button === 2 && mack) mack.aiming = false;
+    if (e.button === 2 && mack && !seated) mack.aiming = false;
   });
   document.addEventListener('contextmenu', (e) => {
     if (controls.look.isLocked) e.preventDefault();
@@ -1178,7 +1241,7 @@ async function run(): Promise<void> {
     // (A new sky look resolves the atmosphere again, which comes back here.)
     if (mood.sky !== atmSky || mood.moonShape !== atmMoon) return applyAtmosphere();
     const fog = scene.fog as THREE.Fog;
-    // How hard it rains: the forecast's (a drizzle to a downpour), eased in and out each frame; the K panel's
+    // How hard it rains: the forecast's (a drizzle to a downpour), eased in and out each frame; the debug menu's
     // setting at once.
     rainTarget = mood.rain ?? (atm.rain > 0 ? Math.max(0.12, Math.min(1, Number(flags.get(FLAG_RAIN_AMOUNT) ?? 0.45))) : 0);
     if (mood.rain !== null || rainAmount < 0) rainAmount = rainTarget;
@@ -1274,7 +1337,7 @@ async function run(): Promise<void> {
     cityU.uDark.value = d;
     dof.strength = mood.dof;
     dof.focus = mood.focus;
-    // Detail (K panel): how far full detail, traffic and people reach.
+    // Detail (the debug menu): how far full detail, traffic and people reach.
     const q = QUALITY[mood.quality];
     district.detailDistance = q.detail;
     district.midDistance = q.mid;
@@ -1282,6 +1345,10 @@ async function run(): Promise<void> {
     traffic.drawDistance = q.traffic;
     traffic.carLod = q.carLod;
     setMobLook(ghost, mood.mob);
+    if (district.crowd) district.crowd.shadows = mood.mobShadows;
+    if (district.crowd) district.crowd.emotes = mood.mobEmotes;
+    if (district.crowd) district.crowd.smoking = mood.smoking;
+    if (district.crowd) district.crowd.emoteLooks = { blush: mood.mobBlush, hearts: mood.mobHearts, stars: mood.mobStars };
     renderer.toneMappingExposure = atm.exposure * (1 - 0.3 * d) * (1 + 0.1 * heatHaze);
     heatNow = heatHaze;
     grade.grade = mood.grade;
@@ -1403,10 +1470,58 @@ async function run(): Promise<void> {
   driving.onView = (v) => toast(driving.bike ? (outside(v) ? 'Third person' : 'First person') : `Camera: ${VIEW_NAMES[v]}`, 1.2);
   // Mack at the wheel of your car (race/carDriver.ts): seated, his hands on the wheel, seen in the cockpit view.
   let seated: CarDriver | null = null;
-  // The cockpit's rear-view mirror's picture (race/driveCam.ts), with ?mirror=1: small, every third frame, the nearer
-  // city only, and still ~1.5 ms of GPU and ~2 of CPU a frame. Without it the glass reflects the sky's colours.
-  const rearMirror = params.get('mirror') === '1' ? new RearMirror(256, 68, 160, 3) : null;
+  // The rear-view mirror's picture at the wheel of your car (race/driveCam.ts; the debug menu's Rear-view mirror,
+  // `?mirror=off|cockpit|all`): small, every third frame, the nearer city only, and still ~1.5 ms of GPU and ~2 of
+  // CPU a frame while it shows. In the cabin it's the mirror's own glass (off: the glass reflects the sky's colours);
+  // from the other cameras (`all`) a mirror drawn at the top of the view, the road behind the car.
+  // (Measured, 2026-10-05: the picture's size costs next to nothing, the city's cost being its geometry; a picture
+  // costs ~2.4 ms however big. So the pictures are sharp, and what's rationed is how many are drawn: at most one a
+  // frame, the cab's mirror or the one over the view every other frame, a door mirror only while it's on the screen.)
+  const rearMirror = new RearMirror(640, 170, 160, 1, 0, 4);
+  const doorMirrors = [new RearMirror(288, 224, 160, 1, 0, 4), new RearMirror(288, 224, 160, 1, 0, 4)];
+  /** Frames since each mirror's picture was drawn (the cab's or the one over the view, the left door's, the right's), and how many frames each is good for. */
+  const mirrorAge = [99, 99, 99];
+  const MIRROR_EVERY = [2, 3, 3];
+  const mirrorFrustum = new THREE.Frustum();
+  /** Whether a pane of glass is on the screen, facing the eye. */
+  const glassSeen = (g: THREE.Object3D): boolean => {
+    const at = g.getWorldPosition(new THREE.Vector3());
+    const n = new THREE.Vector3(0, 0, 1).applyQuaternion(g.getWorldQuaternion(new THREE.Quaternion()));
+    return n.dot(camera.position.clone().sub(at)) > 0.02 && mirrorFrustum.intersectsSphere(new THREE.Sphere(at, 0.14));
+  };
+  const hudMirror = new THREE.Group();
+  {
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(1, 68 / 256), new THREE.MeshBasicMaterial({ map: rearMirror.target.texture }));
+    const frame = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 68 / 256 + 0.05), new THREE.MeshBasicMaterial({ color: 0x050506 }));
+    frame.position.z = -0.001;
+    for (const m of [frame, glass]) {
+      m.material.depthTest = false;
+      m.renderOrder = 900 + (m === glass ? 1 : 0);
+      m.frustumCulled = false;
+      hudMirror.add(m);
+    }
+    hudMirror.visible = false;
+    scene.add(hudMirror);
+  }
+  /** The gun he had on foot (at the wheel it's the Type 54: district/carGun.ts). */
+  let footGun: FirstPersonRig['kind'] = 'lever';
+  /** Mack into your car's driver's seat, his pistol to hand. */
+  const seat = (): void => {
+    if (seated || !mack) return;
+    footGun = mack.kind;
+    seated = CarDriver.seatIn(ownCar.view, mack);
+    // (His hands on the cabin's own wheel as it shows.)
+    seated.cabin = driving.interior;
+    mack.setKind('pistol');
+    gunfire.sync(mack);
+  };
   const unseat = (): void => {
+    if (seated && mack) {
+      mack.setKind(footGun);
+      mack.armed = false;
+      mack.aiming = false;
+      gunfire.sync(mack);
+    }
     seated?.release();
     seated = null;
   };
@@ -1941,6 +2056,7 @@ async function run(): Promise<void> {
   const raceHud = new RaceHud();
   let race: { st: RaceState; path: RacePath; rival: RaceRival; you: number; paid: boolean } | null = null;
   const startRace = async (def: RaceDef): Promise<void> => {
+    if (chase.active) chase.end();
     inVn = true;
     await fadeTo(1);
     const path = new RacePath(def, expressway);
@@ -1960,6 +2076,105 @@ async function run(): Promise<void> {
     inVn = false;
   };
   if (debug) (window as unknown as { __race: unknown }).__race = { start: (id: string) => startRace(content.races.find((r) => r.id === id)!), state: () => race && { phase: race.st.phase, t: race.st.t, you: race.you, rival: race.rival.s, result: race.st.result } };
+  // Car chases (district/chase.ts, cityChase.ts): for trying the pistol from the car. A runner to stop, or cars of
+  // gunmen after you; the debug menu's World tab offers them (`__chase.start(id)`).
+  const carGun = new CarGun({ camera, gunfire, driving, own: ownCar, crosshair, seated: () => seated, rig: () => mack, live: () => controls.look.isLocked && !inVn && !debugMenu.open && !travel.open });
+  const chase = new CityChase({
+    scene,
+    material: city,
+    camera,
+    own: ownCar,
+    gunfire,
+    roads: (x, z, vertical) => roadsFor(x, z, vertical),
+    probe: (x, z, r) => (npcBlocked(x, z, r) ? 'person' : traffic.blocked(x, z, r, ownCar.vehicle) ? 'car' : district.obstacle(x, z, r)),
+    solid: (x, z, r) => (npcBlocked(x, z, r) ? 'person' : district.obstacle(x, z, r)),
+    height: groundAt,
+    grip: () => weatherGrip(ownCar.weather),
+    route: (ax, az, bx, bz, heading) => navGrid('drive').route(ax, az, bx, bz, heading),
+    vehicles: (x, z, r, self) => [...traffic.around(x, z, r, null), ...chase.cars.filter((c) => c !== self && Math.abs(c.sim.x - x) < r && Math.abs(c.sim.z - z) < r).map((c) => c.vehicle)],
+    driving: () => driving.own === ownCar,
+    hold: (on) => (driving.hold = on),
+    seen: (x, z) => {
+      const dx = x - camera.position.x;
+      const dz = z - camera.position.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 45) return true;
+      if (d > 280) return false;
+      camera.getWorldDirection(forward);
+      return (dx * forward.x + dz * forward.z) / d > 0.25;
+    },
+    node: (id) => {
+      const n = nodeById.get(id);
+      return n ? { x: n.x, z: n.z, label: n.name ?? id } : null;
+    },
+    gps: (id) => {
+      const n = id ? nodeById.get(id) : null;
+      guide.set(n ? { x: n.x, z: n.z, label: n.name ?? id! } : null, gpsFrom());
+    },
+    lamps: () => cityU.uHeadlights.value,
+    toast: (t, s) => toast(t, s),
+    pay: (yen) => {
+      const profile = loadProfile();
+      earn(profile, yen);
+      saveProfile(profile);
+    },
+    shake: (k) => driving.jolt(k),
+  });
+  gunfire.onBody = (h, by) => chase.struck(h, by);
+  gunfire.carHits.skin(ownCar.view.obj, ownCar.view.body, ownCar.view.windows);
+  const startChase = (id: string): boolean => {
+    const def = CHASES.find((c) => c.id === id);
+    if (!def) return false;
+    if (race) return toast('A race is on.'), false;
+    if (!driving.car) driveHere();
+    return chase.start(def);
+  };
+  if (debug) {
+    // ?debug=1: __chase.start(id) / end() / state(); tail(true) drives your car after the first chase car by itself
+    // (for checks); aim(i) points the gun at chase car i, fire() pulls the trigger.
+    let tailing: typeof driving.pilot = null;
+    (window as unknown as { __chase: unknown }).__chase = {
+      start: startChase,
+      end: () => chase.end(),
+      chase,
+      gun: carGun,
+      state: () => chase.state && { phase: chase.state.phase, t: +chase.state.t.toFixed(1), you: chase.state.health, result: chase.state.result, cars: chase.cars.map((c, i) => ({ mode: c.status, kmh: Math.round(c.sim.u * 3.6), d: Math.round(Math.hypot(c.sim.x - ownCar.sim.x, c.sim.z - ownCar.sim.z)), at: [Math.round(c.sim.x), Math.round(c.sim.z)], ...chase.state!.cars[i] })) },
+      tail: (on: boolean) => {
+        if (on && !tailing) {
+          tailing = driving.pilot;
+          driving.pilot = () => (chase.cars[0] && !ownCar.totaled ? pursue(ownCar.sim, chase.cars[0].sim, { along: -9, across: 0 }, 38) : null);
+        } else if (!on && tailing) {
+          driving.pilot = tailing;
+          tailing = null;
+        }
+      },
+      aim: (i: number) => {
+        const c = chase.cars[i];
+        if (!c) return false;
+        carGun.raise(true);
+        if (!driving.aim) return false;
+        const p = camera.position;
+        driving.aim.yaw = Math.atan2(c.sim.x - p.x, c.sim.z - p.z);
+        driving.aim.pitch = Math.atan2(c.sim.y + 0.7 - p.y, Math.hypot(c.sim.x - p.x, c.sim.z - p.z));
+        return carGun.side;
+      },
+      lower: () => carGun.lower(),
+      muzzle: () => mack && ownCar.view.obj.worldToLocal(mack.muzzle()).toArray().map((v) => +v.toFixed(2)),
+      // (For checks: his gun arm's shoulder in the car's frame and its reach, the cabin's half width; the draw held part way.)
+      arm: () => {
+        if (!mack) return null;
+        const a = (mack as unknown as { arms: { r: { upper: THREE.Object3D; lower: THREE.Object3D; hand: THREE.Object3D } } }).arms.r;
+        const p = (o: THREE.Object3D): THREE.Vector3 => o.getWorldPosition(new THREE.Vector3());
+        return { shoulder: ownCar.view.obj.worldToLocal(p(a.upper)).toArray().map((v) => +v.toFixed(2)), hand: ownCar.view.obj.worldToLocal(p(a.hand)).toArray().map((v) => +v.toFixed(2)), reach: +(p(a.upper).distanceTo(p(a.lower)) + p(a.lower).distanceTo(p(a.hand))).toFixed(2), halfW: ownCar.interior?.layout.halfW, eye: ownCar.interior?.layout.eye.toArray() };
+      },
+      drawAt: (k: number | null) => mack && (mack.drawHold = k),
+      seated: () => seated,
+      vis: () => mack && { visible: mack.object.visible, view: driving.view, aim: !!driving.aim, shown: carGun.shown, seated: !!seated },
+      reloadAt: (k: number | null) => mack && (mack.reloadHold = k),
+      rig: () => mack && { shells: mack.shells, fired: mack.shotsFired, armed: mack.armed, aim: +mack.aim.toFixed(2), kind: mack.kind },
+      fire: () => carGun.fire(),
+    };
+  }
   const endRace = (): void => {
     if (!race) return;
     race.rival.stop();
@@ -2006,19 +2221,16 @@ async function run(): Promise<void> {
     driving.enter(car, car === ownCar.vehicle ? ownCar : bk?.own ?? null, !!bk);
     // Your car's cabin for the cockpit view, and Mack in its driver's seat.
     driving.interior = car === ownCar.vehicle ? ownCar.interior : null;
-    if (driving.interior && rearMirror) driving.interior.showMirror(rearMirror.material);
-    if (car === ownCar.vehicle && mack) {
-      seated = CarDriver.seatIn(ownCar.view, mack);
-      // (His hands on the cabin's own wheel as it shows.)
-      seated.cabin = driving.interior;
-    }
+    if (driving.interior) driving.interior.showMirror(mood.mirror === 'off' ? null : rearMirror.material);
+    if (car === ownCar.vehicle) seat();
     controls.held = true;
     controls.mouseLook = false;
     if (bk) {
       // On a bike: his eyes (Q: behind it), hands on the bars, its gun to hand, its helmet on.
       if (mack) bk.ride.mount(mack);
       toast(`${car.label} · W/S throttle · brake · A/D steer · Space rear brake · Q first / third person · F lights · N auto drive · X ${bk.ride.def.gun === 'pistol' ? 'pistol' : 'shotgun'} · E get off`, 5);
-    } else toast(`${car.label} · W/S drive · A/D steer · Space handbrake · Q camera · Z look back · F lights · N auto drive · , . radio · E get out`, 5);
+    } else if (car === ownCar.vehicle) toast(`${car.label} · W/S drive · A/D steer · Space handbrake (held with the wheel over: let go for a 90, keep holding for a 180) · W+S burnout · Q camera · Z or C look back · V mirror · right button aims the pistol, left fires · F lights · N auto drive · , . radio · E get out`, 7);
+    else toast(`${car.label} · W/S drive · A/D steer · Space handbrake · Q camera · Z or C look back · V mirror · F lights · N auto drive · , . radio · E get out`, 5);
   };
   const exitCar = (): void => {
     stopAuto();
@@ -2076,6 +2288,7 @@ async function run(): Promise<void> {
   if (exitRoad) enterCar(ownCar.vehicle);
   if (me?.driving && !exitRoad) enterCar(ownCar.vehicle);
   if (debug) (window as unknown as { __own: OwnCar; __ex: Expressway }).__own = ownCar;
+  if (debug) (window as unknown as { __mirrors: unknown }).__mirrors = { rear: rearMirror, doors: doorMirrors, mode: (v: 'off' | 'cockpit' | 'all') => (mood.mirror = v) };
   if (debug) (window as unknown as { __taxi: unknown }).__taxi = { hail: () => hailTaxi(), state: () => ({ hail: traffic.hail && { stopped: traffic.hail.stopped, d: Math.hypot(traffic.hail.taxi.x - camera.position.x, traffic.hail.taxi.z - camera.position.z) }, here: taxiHere(), ride: taxiRide && { t: taxiRide.t, T: taxiRide.T, fare: taxiRide.fare } }), getIn: () => getInTaxi(), path: () => taxiRide && { path: taxiRide.path.map((p) => p.map(Math.round)), blocked: taxiRide.path.map((p) => district.blocked(p[0], p[1], 0.5)) }, taxis: () => (traffic as unknown as { vehicles: { label: string; x: number; z: number; mode: string }[] }).vehicles.filter((v) => v.label === 'Taxi').map((v) => [Math.round(v.x), Math.round(v.z), v.mode, Math.round(Math.hypot(v.x - camera.position.x, v.z - camera.position.z))]) };
   if (debug) (window as unknown as { __ex: Expressway }).__ex = expressway;
   // ?debug=1: window.__onExpressway(i, road) puts your car on the loop (or the named ramp or spur) at sample i
@@ -2334,6 +2547,7 @@ async function run(): Promise<void> {
     if (document.visibilityState === 'hidden') autosave();
   });
   phoneUi.register(new SaveApp(saveTo, loadFrom));
+  phoneUi.register(new WallpaperApp());
   // 天気, the weather app: the forecast ahead (district/weatherApp.ts).
   phoneUi.register(new WeatherApp({
     now: () => clockTotal,
@@ -2352,7 +2566,10 @@ async function run(): Promise<void> {
   };
   if (debug) (window as unknown as { __guide: Guide }).__guide = guide;
 
-  // The debug menu (` backquote, district/debugMenu.ts): on the dev server, or with ?debug=1.
+  // The debug menu (` backquote, district/debugMenu.ts): everything for testing and tuning under one key, in tabs
+  // by subject. The settings' rows (moodPanel.ts: weather, light, the crowd, sound, graphics) are in every build; the
+  // testing tools (teleport, the clock, the season, your car, the wardrobe...) on the dev server or with ?debug=1.
+  const debugTools = import.meta.env.DEV || debug;
   const setClockTo = (minute: number): void => {
     clockTotal = Math.floor(clockTotal / DAY) * DAY + minute;
     syncClockFlags();
@@ -2366,177 +2583,275 @@ async function run(): Promise<void> {
   const minuteNow = (): number => Math.floor(clockTotal) % DAY;
   // Driving tuning (race/tuning.ts): the debug menu's Car: tune driving; your car re-specced as you slide.
   const tuningPanel = new TuningPanel('road', (t) => ownCar.retune(t));
-  const debugMenu = import.meta.env.DEV || debug
-    ? new DebugMenu([
-        {
-          // Every season, and summer's stages: the rainy season (a new summer), high summer (past it), a heat wave
-          // and a typhoon (each starting now, on the forecast).
-          title: 'Season',
-          items: () => {
-            const now = Math.floor(clockTotal);
-            const o = outlookNow();
-            const go = (x: Season, start: number): void => {
-              flags.set(FLAG_HEAT_UNTIL, false);
-              flags.set(FLAG_TYPHOON_AT, false);
-              flags.set(FLAG_SETTLED_UNTIL, false);
-              flags.set(FLAG_SEASON, x);
-              flags.set(FLAG_SEASON_START, start);
-            };
-            const auto = (): void => {
-              flags.set(FLAG_WEATHER_HOLD, false);
-              syncClockFlags();
-              const w = outlookNow();
-              lastForecast = w.weather;
-              if (w.amount > 0) flags.set(FLAG_RAIN_AMOUNT, w.amount);
-              flags.set(FLAG_WEATHER, w.weather);
-            };
-            return [
-              { label: SEASON_NAMES.spring, on: () => season() === 'spring', run: () => go('spring', now) },
-              { label: '夏 梅雨 rainy season', on: () => o.tsuyu, run: () => { go('summer', now); auto(); } },
-              { label: '夏 summer', on: () => season() === 'summer' && !o.tsuyu && !o.heat && o.typhoon === 0, run: () => { go('summer', now - 7 * DAY); flags.set(FLAG_SETTLED_UNTIL, now + 3 * DAY); auto(); } },
-              { label: '夏 猛暑 heat wave', on: () => o.heat, run: () => { go('summer', now - 7 * DAY); flags.set(FLAG_HEAT_UNTIL, now + 2 * DAY); auto(); } },
-              { label: '台風 typhoon', on: () => o.typhoon > 0, run: () => { if (season() !== 'summer' && season() !== 'autumn') go('summer', now - 7 * DAY); flags.set(FLAG_TYPHOON_AT, now - 8 * 60); auto(); } },
-              { label: SEASON_NAMES.autumn, on: () => season() === 'autumn' && o.typhoon === 0, run: () => { go('autumn', now - 20 * DAY); flags.set(FLAG_SETTLED_UNTIL, now + 3 * DAY); auto(); } },
-              { label: SEASON_NAMES.winter, on: () => season() === 'winter', run: () => go('winter', now) },
-            ];
-          },
+  const seasonSec: DebugSection = {
+    // Every season, and summer's stages: the rainy season (a new summer), high summer (past it), a heat wave
+    // and a typhoon (each starting now, on the forecast).
+    title: 'Season',
+    items: () => {
+      const now = Math.floor(clockTotal);
+      const o = outlookNow();
+      const go = (x: Season, start: number): void => {
+        flags.set(FLAG_HEAT_UNTIL, false);
+        flags.set(FLAG_TYPHOON_AT, false);
+        flags.set(FLAG_SETTLED_UNTIL, false);
+        flags.set(FLAG_SEASON, x);
+        flags.set(FLAG_SEASON_START, start);
+      };
+      const auto = (): void => {
+        flags.set(FLAG_WEATHER_HOLD, false);
+        syncClockFlags();
+        const w = outlookNow();
+        lastForecast = w.weather;
+        if (w.amount > 0) flags.set(FLAG_RAIN_AMOUNT, w.amount);
+        flags.set(FLAG_WEATHER, w.weather);
+      };
+      return [
+        { label: SEASON_NAMES.spring, on: () => season() === 'spring', run: () => go('spring', now) },
+        { label: '夏 梅雨 rainy season', on: () => o.tsuyu, run: () => { go('summer', now); auto(); } },
+        { label: '夏 summer', on: () => season() === 'summer' && !o.tsuyu && !o.heat && o.typhoon === 0, run: () => { go('summer', now - 7 * DAY); flags.set(FLAG_SETTLED_UNTIL, now + 3 * DAY); auto(); } },
+        { label: '夏 猛暑 heat wave', on: () => o.heat, run: () => { go('summer', now - 7 * DAY); flags.set(FLAG_HEAT_UNTIL, now + 2 * DAY); auto(); } },
+        { label: '台風 typhoon', on: () => o.typhoon > 0, run: () => { if (season() !== 'summer' && season() !== 'autumn') go('summer', now - 7 * DAY); flags.set(FLAG_TYPHOON_AT, now - 8 * 60); auto(); } },
+        { label: SEASON_NAMES.autumn, on: () => season() === 'autumn' && o.typhoon === 0, run: () => { go('autumn', now - 20 * DAY); flags.set(FLAG_SETTLED_UNTIL, now + 3 * DAY); auto(); } },
+        { label: SEASON_NAMES.winter, on: () => season() === 'winter', run: () => go('winter', now) },
+      ];
+    },
+  };
+  const timeSec: DebugSection = {
+    title: () => `Time · ${clockNow()}${clockStopped ? ' · stopped' : ''}`,
+    items: () => [
+      ...(Object.entries(TIMES_OF_DAY) as [NamedTime, number][]).map(([k, m]) => ({ label: `${k} ${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`, on: () => minuteNow() === m, run: () => setClockTo(m) })),
+      { label: 'dawn 05:45', on: () => minuteNow() === 345, run: () => setClockTo(345) },
+      { label: '−1 h', run: () => shiftClock(-60) },
+      { label: '+1 h', run: () => shiftClock(60) },
+      { label: '+1 day', run: () => shiftClock(DAY) },
+      { label: clockStopped ? 'start clock' : 'stop clock', on: () => clockStopped, run: () => (clockStopped = !clockStopped) },
+    ],
+  };
+  const weatherSec: DebugSection = {
+    title: 'Weather',
+    items: () => [
+      { label: 'auto (forecast)', on: () => flags.get(FLAG_WEATHER_HOLD) !== true, run: () => {
+        flags.set(FLAG_WEATHER_HOLD, false);
+        const o = outlookNow();
+        lastForecast = o.weather;
+        if (o.amount > 0) flags.set(FLAG_RAIN_AMOUNT, o.amount);
+        flags.set(FLAG_WEATHER, lastForecast);
+      } },
+      ...WEATHERS.map((w) => ({ label: w, on: () => weather() === w, run: () => {
+        flags.set(FLAG_WEATHER_HOLD, true);
+        flags.set(FLAG_WEATHER, w);
+      } })),
+      { label: 'snow cover 0', on: () => snowCover < 0.01, run: () => (snowCover = 0) },
+      { label: 'snow cover full', on: () => snowCover > 0.99, run: () => (snowCover = 1) },
+    ],
+  };
+  const carSec: DebugSection = {
+    title: 'Car',
+    items: () => [
+      { label: driving.car ? 'driving' : 'drive my car here', on: () => !!driving.car, run: () => void (driving.car || driveHere()) },
+      { label: 'repair', run: () => (ownCar.repair(), gunfire.carHits.mend(ownCar.view.obj)) },
+      // The car picker: any car you can own becomes yours and the one you drive, there and then (`OwnCar.change`):
+      // at the wheel, you're put back at it in the new one.
+      ...[...MODELS, ...SALOONS].map((m) => ({
+        label: `${m.maker} ${m.name}`,
+        on: () => ownCar.view.type === m.type,
+        run: () => {
+          if (ownCar.view.type === m.type) return;
+          const driven = driving.car === ownCar.vehicle;
+          if (driven) exitCar();
+          if (driving.car === ownCar.vehicle) return;
+          chase.end();
+          gunfire.carHits.mend(ownCar.view.obj);
+          const p = loadProfile();
+          let c = p.cars.find((k) => k.type === m.type);
+          if (!c) {
+            let n = p.cars.length + 1;
+            while (p.cars.some((k) => k.id === `car${n}`)) n++;
+            p.cars.push((c = newCar(m.type, `car${n}`)));
+          }
+          p.current = c.id;
+          saveProfile(p);
+          ownCar.change(city);
+          gunfire.carHits.skin(ownCar.view.obj, ownCar.view.body, ownCar.view.windows);
+          if (driven) enterCar(ownCar.vehicle);
+          toast(`${ownCar.name}${driven ? '' : ': it stands where your car did'}`, 3);
         },
-        {
-          title: () => `Time · ${clockNow()}${clockStopped ? ' · stopped' : ''}`,
-          items: () => [
-            ...(Object.entries(TIMES_OF_DAY) as [NamedTime, number][]).map(([k, m]) => ({ label: `${k} ${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`, on: () => minuteNow() === m, run: () => setClockTo(m) })),
-            { label: 'dawn 05:45', on: () => minuteNow() === 345, run: () => setClockTo(345) },
-            { label: '−1 h', run: () => shiftClock(-60) },
-            { label: '+1 h', run: () => shiftClock(60) },
-            { label: '+1 day', run: () => shiftClock(DAY) },
-            { label: clockStopped ? 'start clock' : 'stop clock', on: () => clockStopped, run: () => (clockStopped = !clockStopped) },
-          ],
+      })),
+      { label: 'tune driving…', on: () => tuningPanel.open, run: () => (tuningPanel.open ? tuningPanel.hide() : tuningPanel.show(ownCar.sim, ownCar.baseSpec, CITY_ASSISTS)) },
+    ],
+  };
+  const wardrobeSec: DebugSection = {
+    title: 'Wardrobe',
+    items: () => [
+      ...availableOutfits().map((o) => ({ label: o.label, on: () => wardrobe.outfit === o.id, run: () => void wear(o.id, wardrobe.glasses) })),
+      { label: 'no sunglasses', on: () => !wardrobe.glasses, run: () => void wear(wardrobe.outfit, null) },
+      ...GLASSES_KINDS.map((g) => ({ label: GLASSES_LABELS[g], on: () => wardrobe.glasses === g, run: () => void wear(wardrobe.outfit, g) })),
+      ...[null, ...HELMET_NAMES].map((h) => ({
+        label: h ? HELMET_LABELS[h] : 'no helmet',
+        on: () => wardrobe.helmet === h,
+        run: () => {
+          wardrobe = { ...wardrobe, helmet: h };
+          saveWardrobe(wardrobe);
+          mack?.wearHelmet(helmetLook(h));
         },
-        {
-          title: 'Weather',
-          items: () => [
-            { label: 'auto (forecast)', on: () => flags.get(FLAG_WEATHER_HOLD) !== true, run: () => {
-              flags.set(FLAG_WEATHER_HOLD, false);
-              const o = outlookNow();
-              lastForecast = o.weather;
-              if (o.amount > 0) flags.set(FLAG_RAIN_AMOUNT, o.amount);
-              flags.set(FLAG_WEATHER, lastForecast);
-            } },
-            ...WEATHERS.map((w) => ({ label: w, on: () => weather() === w, run: () => {
-              flags.set(FLAG_WEATHER_HOLD, true);
-              flags.set(FLAG_WEATHER, w);
-            } })),
-            { label: 'snow cover 0', on: () => snowCover < 0.01, run: () => (snowCover = 0) },
-            { label: 'snow cover full', on: () => snowCover > 0.99, run: () => (snowCover = 1) },
-          ],
+      })),
+    ],
+  };
+  const smokingSec: DebugSection = {
+    // His smoking (models/smoking.ts): what he lights with J, and lighting or flicking it from here.
+    title: () => `Smoking (J) · ${mack?.smoking.what ? `a ${mack.smoking.what} lit` : 'nothing lit'}`,
+    items: () => [
+      { label: 'cigarettes', on: () => smokes === 'cigarette', run: () => setSmokes('cigarette') },
+      { label: 'cigars', on: () => smokes === 'cigar', run: () => setSmokes('cigar') },
+      {
+        label: 'lights up by himself',
+        on: () => idleSmokes,
+        run: () => {
+          idleSmokes = !idleSmokes;
+          saveIdle();
         },
-        {
-          title: 'Car',
-          items: () => [
-            { label: driving.car ? 'driving' : 'drive my car here', on: () => !!driving.car, run: () => void (driving.car || driveHere()) },
-            { label: 'repair', run: () => ownCar.repair() },
-            { label: 'tune driving…', on: () => tuningPanel.open, run: () => (tuningPanel.open ? tuningPanel.hide() : tuningPanel.show(ownCar.sim, ownCar.baseSpec, CITY_ASSISTS)) },
-          ],
+      },
+      {
+        label: 'squats when left standing (C)',
+        on: () => idleSquats,
+        run: () => {
+          idleSquats = !idleSquats;
+          saveIdle();
+          if (!idleSquats && mack) mack.squatting = false;
         },
-        {
-          title: 'Wardrobe',
-          items: () => [
-            ...availableOutfits().map((o) => ({ label: o.label, on: () => wardrobe.outfit === o.id, run: () => void wear(o.id, wardrobe.glasses) })),
-            { label: 'no sunglasses', on: () => !wardrobe.glasses, run: () => void wear(wardrobe.outfit, null) },
-            ...GLASSES_KINDS.map((g) => ({ label: GLASSES_LABELS[g], on: () => wardrobe.glasses === g, run: () => void wear(wardrobe.outfit, g) })),
-            ...[null, ...HELMET_NAMES].map((h) => ({
-              label: h ? HELMET_LABELS[h] : 'no helmet',
-              on: () => wardrobe.helmet === h,
-              run: () => {
-                wardrobe = { ...wardrobe, helmet: h };
-                saveWardrobe(wardrobe);
-                mack?.wearHelmet(helmetLook(h));
-              },
-            })),
-          ],
+      },
+      {
+        label: 'light one / flick it away',
+        run: () => {
+          if (!mack) return;
+          if (mack.smoking.what) mack.smoking.flick();
+          else if (!mack.smoking.light(smokes)) toast('Hands full: on foot, with the gun put away');
         },
-        {
-          // How his face is hidden (models/faceShadow.ts), under review.
-          title: 'Face',
-          items: () =>
-            FACE_STYLES.map((f) => ({
-              label: FACE_STYLE_LABELS[f],
-              on: () => wardrobe.face === f,
-              run: () => {
-                wardrobe = { ...wardrobe, face: f };
-                saveWardrobe(wardrobe);
-                mack?.setFaceStyle(f);
-              },
-            })),
+      },
+    ],
+  };
+  const faceSec: DebugSection = {
+    // How his face is hidden (models/faceShadow.ts), under review.
+    title: 'Face',
+    items: () =>
+      FACE_STYLES.map((f) => ({
+        label: FACE_STYLE_LABELS[f],
+        on: () => wardrobe.face === f,
+        run: () => {
+          wardrobe = { ...wardrobe, face: f };
+          saveWardrobe(wardrobe);
+          mack?.setFaceStyle(f);
         },
-        {
-          title: 'Races',
-          items: () => [
-            ...content.races.map((r) => ({ label: r.name, on: () => race?.path.def.id === r.id, run: () => void (race ? toast('A race is on.') : startRace(r)) })),
-            ...(race ? [{ label: 'end race', run: () => endRace() }] : []),
-          ],
-        },
-        {
-          // Who's with you (district/followers.ts): on foot behind you, in your car's seats when you drive.
-          title: 'Followers',
-          items: () => FOLLOWERS.map((f) => ({ label: f.name, on: () => flags.get(followFlag(f.id)) === true, run: () => flags.set(followFlag(f.id), flags.get(followFlag(f.id)) !== true) })),
-        },
-        { title: 'Moving', items: () => [{ label: 'fly (F)', on: () => controls.fly, run: () => (controls.fly = !controls.fly) }] },
-        {
-          // The moon's shape (also the K panel's Moon), its size and the glow round it; look at it; copy the look as
-          // URL settings.
-          title: () => {
-            const m = moonAt(clockTotal);
-            return `Moon · age ${m.age.toFixed(1)} d · ${Math.round(m.lit * 100)}% lit${m.up < 0.01 ? ' · set' : ''}`;
-          },
-          items: () => [
-            ...MOON_SHAPES.map((m) => ({ label: m, on: () => mood.moonShape === m, run: () => {
-              mood.moonShape = m;
-              applyMood();
-              panel.refresh();
-            } })),
-            { label: 'look at it', run: () => {
-              const d = sky.uniforms.uMoonDir.value;
-              controls.setView((Math.atan2(-d.x, -d.z) * 180) / Math.PI, (Math.asin(Math.min(1, d.y)) * 180) / Math.PI);
-            } },
-            { label: 'copy settings', run: () => {
-              const q = `moonShape=${mood.moonShape}&moonSize=${sky.moonSize.toFixed(2)}&moonGlow=${sky.moonGlow.toFixed(2)}`;
-              void navigator.clipboard?.writeText(q);
-              toast(`Copied: ${q}`);
-            } },
-          ],
-          sliders: () => [
-            { label: 'Size', min: 0.25, max: 4, step: 0.05, get: () => sky.moonSize, set: (v) => {
-              sky.moonSize = v;
-              sky.setMoonShape(mood.moonShape, moonNow.phase);
-            }, format: (v) => `x${v.toFixed(2)} (${(2 * (MOON_SHAPE[mood.moonShape].r || 0.0095) * v * 180 / Math.PI).toFixed(2)}° across; real 0.52°)` },
-            { label: 'Glow', min: 0, max: 5, step: 0.05, get: () => sky.moonGlow, set: (v) => {
-              sky.moonGlow = v;
-              sky.setMoonShape(mood.moonShape, moonNow.phase);
-            }, format: (v) => (v < 0.01 ? 'off' : `x${v.toFixed(2)}`) },
-          ],
-        },
-      ], {
-        find: (q): DebugHit[] => {
-          const t = q.toLowerCase();
-          const score = (s: string): number => (s.toLowerCase().startsWith(t) ? 0 : s.toLowerCase().includes(t) ? 1 : -1);
-          const places = allPlaces()
-            .map((d) => ({ d, k: Math.min(...[score(d.name), score(d.id)].map((v) => (v < 0 ? 9 : v))) }))
-            .filter((x) => x.k < 9)
-            .map((x) => ({ k: x.k, hit: { label: x.d.name, detail: x.d.group, go: () => goPlace(x.d) } }));
-          const byNode = nodes
-            .map((n) => ({ n, k: score(n.id) }))
-            .filter((x) => x.k >= 0)
-            .map((x) => ({ k: x.k, hit: { label: x.n.id, detail: x.n.kind, go: () => (x.n.kind === 'spawn' ? teleport(x.n.id) : standBy(x.n)) } }));
-          return [...places, ...byNode].sort((a, b) => a.k - b.k).map((x) => x.hit);
-        },
-        flag: { get: (k) => flags.get(k), set: (k, v) => flags.set(k, v) },
-        onOpen: () => document.exitPointerLock(),
-        onClose: () => {
-          if (!inVn) controls.lock();
-        },
-      })
-    : null;
+      })),
+  };
+  const chaseSec: DebugSection = {
+    // Car chases (district/chase.ts): the pistol from your car, against cars that run from you or come after you.
+    title: 'Car chases (your car, the pistol)',
+    items: () => [
+      ...CHASES.map((c) => ({ label: `${c.name} · ${c.kind === 'hunt' ? 'run him down' : c.reach ? 'get away' : 'hunted'}`, on: () => chase.state?.def.id === c.id, run: () => void startChase(c.id) })),
+      ...(chase.active ? [{ label: 'end chase', run: () => chase.end() }] : []),
+    ],
+  };
+  const racesSec: DebugSection = {
+    title: 'Races',
+    items: () => [
+      ...content.races.map((r) => ({ label: r.name, on: () => race?.path.def.id === r.id, run: () => void (race ? toast('A race is on.') : startRace(r)) })),
+      ...(race ? [{ label: 'end race', run: () => endRace() }] : []),
+    ],
+  };
+  const followersSec: DebugSection = {
+    // Who's with you (district/followers.ts): on foot behind you, in your car's seats when you drive.
+    title: 'Followers',
+    items: () => FOLLOWERS.map((f) => ({ label: f.name, on: () => flags.get(followFlag(f.id)) === true, run: () => flags.set(followFlag(f.id), flags.get(followFlag(f.id)) !== true) })),
+  };
+  const movingSec: DebugSection = { title: 'Moving', items: () => [{ label: 'fly (F)', on: () => controls.fly, run: () => (controls.fly = !controls.fly) }] };
+  const moonSec: DebugSection = {
+    // The moon's size and the glow round it (its shape is the settings' Moon row, above it in the tab); look at
+    // it; copy the look as URL settings.
+    title: () => {
+      const m = moonAt(clockTotal);
+      return `Moon · age ${m.age.toFixed(1)} d · ${Math.round(m.lit * 100)}% lit${m.up < 0.01 ? ' · set' : ''}`;
+    },
+    items: () => [
+      { label: 'look at it', run: () => {
+        const d = sky.uniforms.uMoonDir.value;
+        controls.setView((Math.atan2(-d.x, -d.z) * 180) / Math.PI, (Math.asin(Math.min(1, d.y)) * 180) / Math.PI);
+      } },
+      { label: 'copy settings', run: () => {
+        const q = `moonShape=${mood.moonShape}&moonSize=${sky.moonSize.toFixed(2)}&moonGlow=${sky.moonGlow.toFixed(2)}`;
+        void navigator.clipboard?.writeText(q);
+        toast(`Copied: ${q}`);
+      } },
+    ],
+    sliders: () => [
+      { label: 'Size', min: 0.25, max: 4, step: 0.05, get: () => sky.moonSize, set: (v) => {
+        sky.moonSize = v;
+        sky.setMoonShape(mood.moonShape, moonNow.phase);
+      }, format: (v) => `x${v.toFixed(2)} (${(2 * (MOON_SHAPE[mood.moonShape].r || 0.0095) * v * 180 / Math.PI).toFixed(2)}° across; real 0.52°)` },
+      { label: 'Glow', min: 0, max: 5, step: 0.05, get: () => sky.moonGlow, set: (v) => {
+        sky.moonGlow = v;
+        sky.setMoonShape(mood.moonShape, moonNow.phase);
+      }, format: (v) => (v < 0.01 ? 'off' : `x${v.toFixed(2)}`) },
+    ],
+  };
+  const overlaySec: DebugSection = {
+    title: 'ASCII overlay',
+    items: () => [
+      ...OVERLAY_PRESETS.map((o) => ({ label: o, on: () => overlay.preset === o, run: () => void (overlay.preset = o) })),
+      { label: 'dither', on: () => overlay.dither, run: () => void (overlay.dither = !overlay.dither) },
+    ],
+  };
+  const bloomSec: DebugSection = {
+    title: 'Bloom',
+    items: () => [{ label: 'bloom', on: () => bloom.enabled, run: () => void (bloom.enabled = !bloom.enabled) }],
+    sliders: () => [
+      { label: 'Strength', min: 0, max: 2, step: 0.05, get: () => bloom.strength, set: (v) => (bloom.strength = v) },
+      { label: 'Threshold', min: 0, max: 5, step: 0.1, get: () => bloom.threshold, set: (v) => (bloom.threshold = v) },
+    ],
+  };
+  const lookSec: DebugSection = {
+    title: 'Looking up',
+    items: () => [
+      { label: 'image shift (verticals stay vertical)', on: () => controls.shearMode, run: () => controls.setShearMode(true) },
+      { label: 'true pitch', on: () => !controls.shearMode, run: () => controls.setShearMode(false) },
+    ],
+  };
+  const tools = <T,>(...blocks: T[]): T[] => (debugTools ? blocks : []);
+  const debugTabs: DebugTab[] = [
+    ...tools<DebugTab>({ label: 'World', blocks: ['teleport', racesSec, chaseSec, 'flag'] }),
+    { label: 'Time & weather', blocks: [...tools(timeSec, seasonSec, weatherSec), { title: 'Rain, wind and fog', element: panel.groups.weather }] },
+    { label: 'Light & sky', blocks: [{ element: panel.groups.light }, ...tools(moonSec)] },
+    { label: 'People', blocks: [{ title: 'In the streets', element: panel.groups.crowd }, { title: 'In the windows', element: panel.groups.windows }] },
+    ...tools<DebugTab>({ label: 'Player', blocks: [movingSec, followersSec, carSec, wardrobeSec, faceSec, smokingSec] }),
+    { label: 'Sound', blocks: [{ element: panel.groups.sound }] },
+    { label: 'Graphics', blocks: [{ element: panel.groups.graphics }, overlaySec, bloomSec, lookSec] },
+  ];
+  const debugMenu = new DebugMenu(debugTabs, {
+    title: debugTools ? 'DEBUG' : 'SETTINGS',
+    footer: panel.footer,
+    find: (q): DebugHit[] => {
+      const t = q.toLowerCase();
+      const score = (s: string): number => (s.toLowerCase().startsWith(t) ? 0 : s.toLowerCase().includes(t) ? 1 : -1);
+      const places = allPlaces()
+        .map((d) => ({ d, k: Math.min(...[score(d.name), score(d.id)].map((v) => (v < 0 ? 9 : v))) }))
+        .filter((x) => x.k < 9)
+        .map((x) => ({ k: x.k, hit: { label: x.d.name, detail: x.d.group, go: () => goPlace(x.d) } }));
+      const byNode = nodes
+        .map((n) => ({ n, k: score(n.id) }))
+        .filter((x) => x.k >= 0)
+        .map((x) => ({ k: x.k, hit: { label: x.n.id, detail: x.n.kind, go: () => (x.n.kind === 'spawn' ? teleport(x.n.id) : standBy(x.n)) } }));
+      return [...places, ...byNode].sort((a, b) => a.k - b.k).map((x) => x.hit);
+    },
+    flag: { get: (k) => flags.get(k), set: (k, v) => flags.set(k, v) },
+    onOpen: () => {
+      document.exitPointerLock();
+      panel.refresh();
+    },
+    onClose: () => {
+      if (!inVn) controls.lock();
+    },
+  });
+  if (debug) (window as unknown as { __menu: DebugMenu }).__menu = debugMenu;
   // The dashboard: speed and gear, while driving.
   const dash = document.createElement('div');
   Object.assign(dash.style, { position: 'fixed', left: '24px', bottom: '22px', zIndex: '16', padding: '8px 14px', background: 'rgba(8,8,14,0.72)', border: '1px solid #3a3850', color: '#e8e6f0', font: "bold 26px 'Consolas', monospace", display: 'none', pointerEvents: 'none' });
@@ -2549,6 +2864,14 @@ async function run(): Promise<void> {
   const radioHud = new RadioHud();
   radio.onReadout = (r) => radioHud.show(r);
   if (debug) (window as unknown as { __radio: Radio }).__radio = radio;
+  // NAMI, the phone's music app (district/musicApp.ts): the same music on demand, anywhere, through his
+  // noise-cancelling headphones (real/musicPlayer.ts) or the phone's speaker.
+  const music = new MusicPlayer(radio.stations);
+  music.onReadout = (r) => radioHud.show(r);
+  phoneUi.register(new MusicApp(music));
+  /** How much of your own engine comes through what's on his ears. */
+  const EAR_DUCK = { none: 1, worn: 0.7, nc: 0.25 } as const;
+  if (debug) (window as unknown as { __music: MusicPlayer }).__music = music;
   // F9: a snapshot and a note for reporting an issue (debug/snap.ts, saved to debug-shots/).
   const shot = installSnap(renderer.domElement, 'district', () => ({
     camera: [camera.position.x, camera.position.y, camera.position.z].map((v) => Math.round(v * 10) / 10),
@@ -2818,7 +3141,6 @@ async function run(): Promise<void> {
     inVn = false;
   }
 
-  const direct: Record<string, OverlayPreset> = { Digit1: 'off', Digit2: 'vibe', Digit3: 'heavy', Digit4: 'ascii' };
   window.addEventListener('keydown', (e) => {
     if (bench || inVn) return;
     if (rider.active && cabin) {
@@ -2882,11 +3204,6 @@ async function run(): Promise<void> {
         waitPanel.show();
       }
     }
-    if (e.code === 'KeyR') {
-      // (By hand: held until the debug menu's 'auto weather'.)
-      flags.set(FLAG_WEATHER_HOLD, true);
-      flags.set(FLAG_WEATHER, WEATHERS[(WEATHERS.indexOf(weather()) + 1) % WEATHERS.length]);
-    }
     if (e.code === 'KeyF' && !driving.car) controls.fly = !controls.fly;
     if (e.code === 'KeyN' && driving.car && !inVn) setAuto(autoMode ? (AUTO_MODES[AUTO_MODES.indexOf(autoMode) + 1] ?? null) : AUTO_MODES[0]);
     if (e.code === 'KeyF' && driving.own && !inVn) {
@@ -2912,34 +3229,36 @@ async function run(): Promise<void> {
       setInvertY(!controls.invertY, true);
       toast(controls.invertY ? 'Mouse Y inverted (mouse up looks down) · I to switch back' : 'Mouse Y normal (mouse up looks up) · I to invert');
     }
+    // V at the wheel of your car: the mirror over the view from the cameras outside the cab, on or off.
+    if (e.code === 'KeyV' && driving.car === ownCar.vehicle && !inVn) {
+      mood.mirror = mood.mirror === 'all' ? 'cockpit' : 'all';
+      toast(mood.mirror === 'all' ? 'Rear-view mirror on' : 'Rear-view mirror off (the cab keeps its own)');
+    }
+    if (e.code === 'KeyC' && mack && !driving.car && !inVn && mack.object.visible && !controls.fly) {
+      mack.squatting = !mack.squatting;
+      // (Stood up by hand, he isn't back down by himself the moment after.)
+      mackIdle = mack.squatting ? 0 : -60;
+      if (mack.squatting && mack.armed) toast('Put the gun away to squat');
+    }
+    if (e.code === 'KeyJ' && mack && !driving.car && !inVn && mack.object.visible) {
+      if (e.shiftKey) {
+        setSmokes(smokes === 'cigar' ? 'cigarette' : 'cigar');
+        toast(smokes === 'cigar' ? 'Cigars · J lights one' : 'Cigarettes · J lights one');
+      } else if (mack.smoking.what) {
+        if (mack.smoking.flick()) toast('Flicked away');
+      } else if (mack.smoking.light(smokes)) toast(`Lighting a ${smokes} · J flicks it away`);
+      else toast('Hands full: put the gun away to light up');
+    }
     if (e.code === 'KeyX' && mack && (!driving.car || ridingNow()) && !inVn) {
       mack.armed = !mack.armed;
       if (!mack.armed) mack.aiming = false;
       const what = mack.gun.kind === 'pistol' ? 'Pistol' : 'Shotgun';
       toast(mack.armed ? `${what} out · right button raises it · left button fires · X puts it away` : `${what} put away`);
     }
-    if (e.code === 'KeyC') {
-      mood.grade = GRADE_NAMES[(GRADE_NAMES.indexOf(mood.grade) + 1) % GRADE_NAMES.length];
-      grade.grade = mood.grade;
-      panel.refresh();
-    }
-    if (e.code === 'KeyK') {
-      panel.toggle();
-      if (panel.open) document.exitPointerLock();
-    }
-    if (e.code === 'KeyV') overlay.preset = OVERLAY_PRESETS[(OVERLAY_PRESETS.indexOf(overlay.preset) + 1) % OVERLAY_PRESETS.length];
-    if (direct[e.code]) overlay.preset = direct[e.code];
-    if (e.code === 'KeyG') overlay.dither = !overlay.dither;
-    if (e.code === 'KeyB') bloom.enabled = !bloom.enabled;
-    if (e.code === 'BracketLeft') bloom.strength = Math.max(0, +(bloom.strength - 0.05).toFixed(2));
-    if (e.code === 'BracketRight') bloom.strength = Math.min(2, +(bloom.strength + 0.05).toFixed(2));
-    if (e.code === 'Semicolon') bloom.threshold = Math.max(0, +(bloom.threshold - 0.1).toFixed(2));
-    if (e.code === 'Quote') bloom.threshold = Math.min(5, +(bloom.threshold + 0.1).toFixed(2));
-    if (e.code === 'KeyP') controls.setShearMode(!controls.shearMode);
   });
   document.body.addEventListener('click', () => {
     audio.start();
-    if (!bench && !inVn && !travel.open && !panel.open && !picker.open && !taxiPicker.open && !debugMenu?.open) controls.lock();
+    if (!bench && !inVn && !travel.open && !picker.open && !taxiPicker.open && !debugMenu.open) controls.lock();
   });
   controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
   controls.look.addEventListener('unlock', () => ($('overlay').hidden = bench));
@@ -3018,7 +3337,9 @@ async function run(): Promise<void> {
   $('overlay').hidden = bench;
 
   renderer.setAnimationLoop(() => {
-    const dt = Math.min(clock.getDelta(), 0.1);
+    // (Aiming from the car slows the world while the focus lasts: district/carGun.ts. `realDt` is the wall clock's.)
+    const realDt = Math.min(clock.getDelta(), 0.1);
+    const dt = realDt * carGun.timeScale;
     const now = performance.now();
     let phase: string | null = null;
     if (bench) {
@@ -3092,6 +3413,7 @@ async function run(): Promise<void> {
     exTraffic.update(inVn ? 0 : dt, onLoop && onLoop.road === expressway.loop ? { i: onLoop.i, lateral: onLoop.lateral, v: ownCar.sim.u } : null, rivalOn && rivalOn.road === expressway.loop ? [{ i: rivalOn.i, lateral: rivalOn.lateral, v: race!.rival.car.u }] : []);
     updateRace(dt);
     raceHud.update(dt, race?.st ?? null, race?.path.def.name ?? '');
+    chase.update(inVn ? 0 : dt, realDt);
     airport.update(inVn ? 0 : dt, time() === 'night' || time() === 'dusk');
     (sodium.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
     sodium.visible = cityU.uLamps.value > 0.05;
@@ -3131,26 +3453,60 @@ async function run(): Promise<void> {
     }
     if (mack) {
       const shown = !driving.car && !controls.fly && !inVn && !rider.active && !taxiRide;
-      // At the wheel: seen in the cockpit view (his head folded away), his hands turning the wheel.
-      const atWheel = !!seated && driving.view === 'cockpit' && !inVn;
-      if (atWheel) seated!.update(ownCar.sim, { raised: false, window: null, aimPoint: null, pov: 1, throttle: driving.pedals.throttle, brake: driving.pedals.brake, calm: true }, dt, dt);
+      // (Loaded after you took the wheel: into the seat now.)
+      if (driving.own === ownCar && !seated) seat();
+      // At the wheel: seen in the cockpit view (his head folded away), his hands turning the wheel; and from any
+      // view while his pistol's out of a window (district/carGun.ts: the right button aims from his eyes, the left fires).
+      const cockpit = driving.view === 'cockpit' || !!driving.aim;
+      const inCar = !!seated && !inVn;
+      const atWheel = inCar && (cockpit || carGun.shown);
+      carGun.update(inVn ? 0 : dt, realDt, cockpit, outside(driving.view) && !driving.aim, driving.pedals);
       mack.object.visible = shown || riding || atWheel;
       thirdNow = shown && thirdPerson;
       controls.gaitBob = shown ? bodyBob : null;
       if (shown) mack.setHeadless(!thirdNow);
-      crosshair.update((shown || riding) && mack.armed, mack.aim, dt);
+      if (!seated) crosshair.update((shown || riding) && mack.armed, mack.aim, dt);
+      gunfire.dark = cityU.uHeadlights.value;
+      gunfire.setSound(mood.gun, (mood.volume / MOOD_DEFAULTS.volume) * mood.guns, mood.gunEcho, mood.shotgun);
       gunfire.update(mack, camera, inVn ? 0 : dt);
       if (shown) {
-        // His gait from how fast you're going: the game's walk (4.5 m/s) is his walk, its run (9) his run.
+        // His gait from how fast you're going: the game's walk (4.5 m/s) is his walk, its run (9) his run. (He covers
+        // more ground than his strides would: he isn't quite human.) And a jump: how high he is, how fast he's rising.
         const v = dt > 0 ? Math.hypot(cp0.x - mackLast.x, cp0.z - mackLast.z) / dt : 0;
         mackSpeed += ((v > 12 ? 0 : v) - mackSpeed) * Math.min(1, dt * 10);
         const gait = mackSpeed <= 4.5 ? mackSpeed / 3 : 1.5 + ((mackSpeed - 4.5) / 4.5) * 2.7;
+        mack.air = controls.airHeight;
+        mack.airV = controls.airSpeed;
         // His feet on the paving at street level (raised pavements, plazas, medians: District.pavingAt), the eye
         // set from the ground under it.
-        const feet = camera.position.y - 1.7;
+        // (The eyes are lowered while he squats: controls.drop, from his body last frame.)
+        const feet = camera.position.y - 1.7 + controls.drop;
         const paved = Math.abs(district.aboveGround(camera.position.x, camera.position.z, feet)) < 0.3 ? district.pavingAt(camera.position.x, camera.position.z) : 0;
-        mack.update(dt, camera, gait, feet + paved, controls.viewPitch);
+        // Standing about with his hands free: he lights one before long, and in time squats; up again at a step.
+        if (mackSpeed > 0.4 || mack.armed) {
+          mack.squatting = false;
+          mackIdle = Math.min(mackIdle, 0);
+        } else mackIdle += dt;
+        if (idleSquats && mackIdle > SQUAT_AFTER) mack.squatting = true;
+        mack.smoking.auto = idleSmokes ? smokes : null;
+        // In third person he faces the way he's going, not where the camera looks (unless a gun's up or just fired).
+        const mode = facing.modeFor(thirdNow, mack, dt);
+        if (mode === 'eyes') {
+          facing.update(dt, camera, mode, 0, 0, controls.viewPitch);
+          mack.update(dt, camera, gait, feet + paved, controls.viewPitch);
+        } else {
+          const k = dt > 0 && v < 12 ? 1 / dt : 0;
+          mack.update(dt, facing.update(dt, camera, mode, (cp0.x - mackLast.x) * k, (cp0.z - mackLast.z) * k, controls.viewPitch), gait, feet + paved);
+        }
+        controls.drop = mack.eyeDrop;
+      } else {
+        facing.reset();
+        controls.drop = 0;
+        mackIdle = 0;
       }
+      // His smoke: from where the cigarette's end and his mouth are now (none of it in a car's cabin; what's in the
+      // air already drifts on wherever he's gone).
+      mackSmoke.update(inVn ? 0 : dt, mack.object.visible && (!driving.car || ridingNow()) ? mack.smoking.out : null, windVec);
     }
     mackLast.copy(camera.position);
     lastWalker.set(cp0.x, cp0.y, cp0.z);
@@ -3171,6 +3527,8 @@ async function run(): Promise<void> {
       for (const w of party.walkers) if (Math.abs(district.aboveGround(w.x, w.z, w.floor)) < 1.2) walkers.push({ x: w.x, z: w.z, vx: w.vx, vz: w.vz });
     }
     moveCalled(inVn ? 0 : dt);
+    // (The traffic brakes for the cars in a chase as it does for anyone in the road.)
+    if (chase.active) walkers.push(...chase.walkers());
     traffic.update(dt, camera.position, walkers);
     if (cabin?.bus) {
       traffic.busScreens(cabin.bus);
@@ -3243,7 +3601,15 @@ async function run(): Promise<void> {
       const m = audio.musicOut();
       if (m) radio.attach(m.ctx, m.out);
     }
-    radio.update({ dt, on: ((!!driving.car && !driving.bike) || !!taxiRide) && !inVn, level: mood.music * (taxiRide ? TAXI_RADIO : 1), station: taxiRide ? TAXI_STATION : undefined });
+    if (!music.attached) {
+      const m = audio.musicOut();
+      if (m) music.attach(m.ctx, m.out);
+    }
+    // His own music (the phone's NAMI): held through a story scene (not through a fade: a wait, a lift); while
+    // it plays the car's radio gives way.
+    music.update({ on: !document.body.classList.contains('vn-on'), level: mood.music });
+    driving.own?.sound.setDuck(EAR_DUCK[music.ears]);
+    radio.update({ dt, on: ((!!driving.car && !driving.bike) || !!taxiRide) && !inVn && !music.audible, level: mood.music * (taxiRide ? TAXI_RADIO : 1), station: taxiRide ? TAXI_STATION : undefined });
     // Weather cycle: a storm that builds, peaks, eases and clears over six minutes, then again.
     if (mood.cycle && (cycleTick += dt) > 1) {
       cycleTick = 0;
@@ -3252,7 +3618,7 @@ async function run(): Promise<void> {
       mood.rain = env <= 0 ? 0 : 0.08 + 0.9 * env;
       mood.wind = Math.max(0, env - 0.3) * 0.9;
       applyMood();
-      if (panel.open) panel.refresh();
+      panel.refresh();
     }
     // Wind: a direction and strength with gusts; the rain slants by up to ~3 m sideways per metre of fall.
     const tt = now / 1000;
@@ -3370,6 +3736,7 @@ async function run(): Promise<void> {
       cabin: taxiRide || driving.interior?.group.visible ? 1 : driving.car && !driving.bike ? CABIN_OUTSIDE : 0,
       cabinDamp: mood.carDamp,
       cabinRoof: mood.carRoof,
+      ears: music.ears,
       train: aboard(),
       volume: mood.volume,
       x: cp.x,
@@ -3400,6 +3767,20 @@ async function run(): Promise<void> {
     cityU.uTime.value = now / 1000;
     // The mob runs on the traffic's clock, so people cross on the green.
     ghost.uniforms.uTime.value = mobClock ?? traffic.clock;
+    setMobSun(ghost, hemi, sun);
+    setMobEye(ghost, camera.position);
+    // Who is out: by the hour, the rain (snow keeps some in too) and the season.
+    ghost.uniforms.uHour.value = (((clockTotal % DAY) + DAY) % DAY) / 60;
+    ghost.uniforms.uRain.value = Math.max(Math.max(0, rainAmount), weather() === 'snow' ? 0.45 : 0, flags.get(FLAG_TYPHOON) === true ? 1 : 0);
+    ghost.uniforms.uSeason.value = seasonIndex(season());
+    // In the cold their breath shows (real/emotes.ts draws it): by the air the weather app gives, from 7 °C down.
+    if (district.crowd) district.crowd.cold = coldBreath(airWith(outlookNow(), weather()));
+    // (And the smokers' smoke leans with the wind: real/smoke.ts.)
+    if (district.crowd) district.crowd.wind = windVec;
+    // (And the rooms behind the windows, real/city.ts: which are lit and who's in, by the hour, the season and the
+    // weather; how many people and how much vice, from the debug menu; `?vignette=<scene>` stands one scene in every room.)
+    windowHours((((clockTotal % DAY) + DAY) % DAY) / 60, cityU, { season: seasonIndex(season()), tsuyu: flags.get(FLAG_TSUYU) === true, wet: ghost.uniforms.uRain.value as number });
+    cityU.uWindow.value.set(mood.windowPeople ? mood.windowFolk : 0, mood.windowVice, windowSceneIndex(params.get('vignette')), cityU.uWindow.value.w);
     overlay.setRain(rainAmount * 0.11 * (inside ? 0 : 1), now / 1000);
     renderer.info.reset();
     // Hidden groups (the subway above ground, interiors you're not in, the surface below ground) skip the matrix
@@ -3413,10 +3794,50 @@ async function run(): Promise<void> {
     if (thirdNow && mack) thirdCam.place(camera, footOffset(mack.aim), dt, thirdClear);
     censor.track(mack?.object.visible ? mack : null, camera);
     // The rear-view mirror's picture, in the cockpit (without Mack; the sun's shadows as they are).
-    if (rearMirror && driving.interior?.group.visible && driving.interior === ownCar.interior) {
+    const atWheel = driving.own === ownCar && !ownCar.bike && driving.interior === ownCar.interior;
+    const inCabin = atWheel && !!driving.interior?.group.visible;
+    hudMirror.visible = atWheel && !inCabin && !driving.aim && mood.mirror === 'all' && !inVn && driving.lookingBack < 0.3;
+    // (The door mirrors show the road behind from the cab; from outside, or with the mirrors off, they're dull glass.)
+    ownCar.sideMirrors.forEach((g, i) => (g.material = inCabin && mood.mirror !== 'off' ? doorMirrors[i].material : OwnCar.dullMirror));
+    if (atWheel) driving.interior!.showMirror(mood.mirror === 'off' ? null : rearMirror.material);
+    if (atWheel && mood.mirror !== 'off' && (inCabin || hudMirror.visible)) {
       const autoSun = sun.shadow.autoUpdate;
       sun.shadow.autoUpdate = false;
-      rearMirror.render(renderer, scene, driving.interior.mirror, camera.position, mack ? [mack.object] : []);
+      for (let i = 0; i < 3; i++) mirrorAge[i]++;
+      // (The mirrors leave the passers-by out: at a busy crossing they're most of a picture's triangles, and it's the cars you look for.)
+      const mirrorLeaves = district.crowd ? [district.crowd.group] : [];
+      if (inCabin) {
+        // One picture a frame at most: of the mirrors on the screen, the one most overdue.
+        camera.updateMatrixWorld();
+        mirrorFrustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorld.clone().invert()));
+        const panes = [driving.interior!.mirror, ...ownCar.sideMirrors];
+        let due = -1;
+        for (let i = 0; i < panes.length; i++) {
+          if (mirrorAge[i] < MIRROR_EVERY[i] || !glassSeen(panes[i])) continue;
+          if (due < 0 || mirrorAge[i] / MIRROR_EVERY[i] > mirrorAge[due] / MIRROR_EVERY[due]) due = i;
+        }
+        const hide = [...(mack ? [mack.object] : []), ...mirrorLeaves];
+        if (due === 0) rearMirror.render(renderer, scene, panes[0], camera.position, hide);
+        else if (due > 0) doorMirrors[due - 1].render(renderer, scene, panes[due], camera.position, hide, ownCar.mirrorHalf);
+        if (due >= 0) mirrorAge[due] = 0;
+      } else {
+        // Over the view: at the top, a quarter of its width; the picture from the car's roof straight back.
+        const s = ownCar.sim;
+        const back = new THREE.Vector3(-Math.sin(s.h), -0.03, -Math.cos(s.h));
+        if (mirrorAge[0] >= MIRROR_EVERY[0]) {
+          mirrorAge[0] = 0;
+          rearMirror.renderBack(renderer, scene, new THREE.Vector3(s.x, ownCar.view.obj.position.y + 1.25, s.z), back, 15, [ownCar.view.obj, hudMirror, ...mirrorLeaves]);
+        }
+        const d = 0.6;
+        const half = d * Math.tan((camera.fov * Math.PI) / 360);
+        const fwd = camera.getWorldDirection(new THREE.Vector3());
+        const upv = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+        hudMirror.position.copy(camera.position).addScaledVector(fwd, d).addScaledVector(upv, half * 0.56);
+        hudMirror.quaternion.copy(camera.quaternion);
+        hudMirror.scale.setScalar(half * 2 * camera.aspect * 0.26);
+        // (Hidden top-level groups skip their matrix update: this one is placed after that's decided.)
+        hudMirror.updateMatrixWorld(true);
+      }
       sun.shadow.autoUpdate = autoSun;
     }
     composer.render(dt);
@@ -3466,12 +3887,12 @@ async function run(): Promise<void> {
         `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${SEASON_NAMES[season()]}${flags.get(FLAG_TSUYU) === true ? ' 梅雨' : ''}${flags.get(FLAG_HEAT) === true ? ' 猛暑' : ''}${flags.get(FLAG_TYPHOON) === true ? ' 台風' : ''} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
         `${fps} fps · ${work.toFixed(2)} ms/frame · res ${Math.round(resScale * 100)}%${resFixed() === null ? ' (auto)' : ''} · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
-        `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}  ([ ] strength · ; ' threshold · B toggle)`,
+        `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}`,
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
-        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? (t.sleep ? 'Sleep until morning' : 'Look') : 'Talk'}: ${t.name ?? t.id}` : driving.car ? '[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera' : taxiHere() ? '[E] Get in the taxi' : busesNew && !rider.active && traffic.busToBoard(camera.position) ? `[E] Board the bus · ¥${BUS_FARE}` : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
-        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · R weather · K weather & light panel · C grade · Q third person · F fly · I invert mouse Y · V ascii (1 off 2 vibe 3 heavy 4 full) · G dither · B bloom · P look${debugMenu ? ' · ` debug menu' : ''}`,
+        t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? (t.sleep ? 'Sleep until morning' : 'Look') : 'Talk'}: ${t.name ?? t.id}` : driving.car ? `[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera${seated ? ' · right button aims the pistol, left fires · R reload' : ''}` : taxiHere() ? '[E] Get in the taxi' : busesNew && !rider.active && traffic.busToBoard(camera.position) ? `[E] Board the bus · ¥${BUS_FARE}` : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
+        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · Q third person · J smoke · C squat · F fly · I invert mouse Y${debugTools ? ' · ` debug menu' : ' · ` settings'}`,
       ].join('\n');
       builtThisWindow = 0;
     }
