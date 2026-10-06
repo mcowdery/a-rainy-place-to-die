@@ -17,7 +17,9 @@ export default defineConfig(({ mode }) => {
     define: { __EDITION__: JSON.stringify(edition) },
     // Other agents' checkouts (.claude/worktrees, scripts/worktree.mjs) and the shots are inside this folder but are
     // none of this server's business: a save or a git operation in one mustn't reload the page being played here.
-    server: { watch: { ignored: ['**/.claude/**', '**/debug-shots/**'] } },
+    // No hot reload: the game can't swap a module in place, so every save of a source file (an agent's, mid-play)
+    // reloaded the whole page. A change is picked up when you refresh (F5); the files are still watched for that.
+    server: { hmr: false, watch: { ignored: ['**/.claude/**', '**/debug-shots/**'] } },
     build: {
       outDir: edition === 'standard' ? 'dist' : `dist-${edition}`,
       rollupOptions: {
