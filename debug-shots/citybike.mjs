@@ -1,0 +1,52 @@
+// Your bike in the city: parked at the garage, on it (first and third person), riding off, the shotgun out.
+//   node debug-shots/citybike.mjs <out dir> [query]
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const out = process.argv[2];
+const extra = process.argv[3] ? `&${process.argv[3]}` : '';
+const bikeId = process.argv[4] ?? 'cruiser';
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1100, height: 640 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
+page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); });
+await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=city_garage.front&bike=home&car=home${extra}`);
+await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
+await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
+await page.waitForTimeout(3500);
+const shot = (n) => page.screenshot({ path: `${out}/${n}.png` });
+const key = async (code, down) => page.evaluate(([c, d]) => window.dispatchEvent(new KeyboardEvent(d ? 'keydown' : 'keyup', { code: c })), [code, down]);
+// The bay from in front.
+await page.evaluate((ID) => {
+  const b = window.__bike.bikes.find((b) => b.id === ID).own.sim;
+  const cam = window.__camera;
+  cam.position.set(b.x + Math.sin(b.h) * 5.5 + Math.cos(b.h) * 1.5, 1.8, b.z + Math.cos(b.h) * 5.5 - Math.sin(b.h) * 1.5);
+  cam.lookAt(b.x - Math.cos(b.h) * 1.0, 0.8, b.z + Math.sin(b.h) * 1.0);
+}, bikeId);
+await page.waitForTimeout(600);
+await shot('k1_bay');
+console.log(await page.evaluate((ID) => window.__ride(ID), bikeId));
+await page.waitForTimeout(1500);
+await shot('k2_first');
+await key('KeyQ', true); await key('KeyQ', false);
+await page.waitForTimeout(800);
+await shot('k3_third');
+await key('KeyW', true);
+await page.waitForTimeout(2500);
+await shot('k4_third_riding');
+await key('KeyQ', true); await key('KeyQ', false);
+await page.waitForTimeout(600);
+await shot('k5_first_riding');
+await key('KeyW', false);
+await key('KeyX', true); await key('KeyX', false);
+await page.waitForTimeout(900);
+await shot('k6_gun');
+await page.evaluate((ID) => { window.__bike.bikes.find((b) => b.id === ID).ride.rig.aiming = true; }, bikeId);
+await page.waitForTimeout(800);
+await shot('k7_aim');
+await key('KeyQ', true); await key('KeyQ', false);
+await page.waitForTimeout(800);
+await shot('k8_aim_third');
+console.log(await page.evaluate((ID) => { const s = window.__bike.bikes.find((b) => b.id === ID).own.sim; return `speed ${(Math.hypot(s.u, s.w) * 3.6).toFixed(0)} km/h at ${s.x.toFixed(1)},${s.z.toFixed(1)}`; }, bikeId));
+await browser.close(); await server.close();

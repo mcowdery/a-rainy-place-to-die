@@ -1,0 +1,21 @@
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11'] });
+const page = await browser.newPage({ viewport: { width: 320, height: 200 } });
+await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
+await page.evaluate(() => { __fp.kind('lever'); __fp.oneHand(true); __fp.aim(false); __fp.look(0, 0); });
+await page.waitForTimeout(1200);
+console.log(await page.evaluate(() => {
+  const rig = __fp.rig();
+  const gun = rig.guns.lever;
+  const V = gun.root.position.constructor;
+  const muzzle = gun.muzzles[0].clone().applyMatrix4(gun.root.matrixWorld);
+  const hand = rig.arms.r.hand.getWorldPosition(new V());
+  const feet = rig.body.position.y;
+  const eye = feet + rig.eyeHeight;
+  return `eye ${(eye - feet).toFixed(2)} m, head top ~${(eye - feet + 0.12).toFixed(2)}, muzzle ${(muzzle.y - feet).toFixed(2)} (${((muzzle.y - eye) * 100).toFixed(0)} cm above the eyes), wrist ${(hand.y - feet).toFixed(2)}`;
+}));
+await browser.close(); await server.close();

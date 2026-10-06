@@ -1,0 +1,27 @@
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu'] });
+const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
+await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=city_garage.front&bike=home&car=home&clock=12:00`);
+await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
+await page.waitForTimeout(2500);
+await page.evaluate(() => window.__ride());
+await page.waitForTimeout(800);
+await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyX' })));
+await page.waitForTimeout(1200);
+console.log(await page.evaluate(() => {
+  const B = window.__bike;
+  const rig = B.ride.rig;
+  const cam = window.__camera;
+  if (!rig) return 'no rig on the ride';
+  const V = cam.position.constructor;
+  const g = rig.guns[rig.kind].root;
+  const gp = g.getWorldPosition(new V());
+  const f = (v) => v.toArray().map((x) => x.toFixed(2)).join(',');
+  let vis = true;
+  for (let o = g; o; o = o.parent) if (!o.visible) vis = false;
+  return `armed ${rig.armed} aim ${rig.aim.toFixed(2)} mounted ${!!rig.mounted} cam ${f(cam.position)} gun ${f(gp)} dist ${gp.distanceTo(cam.position).toFixed(2)} chainVisible ${vis} inScene ${!!g.parent?.parent} objVisible ${rig.object.visible} bodyScale ${rig.body.scale.x.toFixed(3)}`;
+}));
+await browser.close(); await server.close();

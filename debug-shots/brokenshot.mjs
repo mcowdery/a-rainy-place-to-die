@@ -1,0 +1,24 @@
+// The swordsman with his guard broken (on one knee), from outside and from your eyes.
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const out = process.argv[2];
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 900, height: 560 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
+await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
+await page.waitForTimeout(1500);
+await page.evaluate(() => { document.getElementById('panel').style.display = 'none'; document.querySelectorAll('.label').forEach((l) => (l.style.display = 'none')); });
+await page.evaluate(async () => { await __fp.enter(14, 30, 0); __fp.look(0, -0.15); __fp.hand('katana'); __fp.duel(); });
+await page.waitForFunction(() => __fp.thugs().some((t) => t.tier === 'elite' && t.root.visible), null, { timeout: 60000, polling: 200 });
+await page.evaluate(() => __fp.draw());
+await page.waitForTimeout(1500);
+await page.evaluate(() => { const e = __fp.thugs().find((t) => t.tier === 'elite'); e.addPosture(200); });
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${out}/b1_first.png` });
+await page.evaluate(() => { __fp.freeze(true); __fp.headless(false); const c = __fp.camera(); const e = __fp.thugs().find((t) => t.tier === 'elite').root.position; __view(e.x + 1.8, 1.4, e.z + 1.2, e.x, 0.8, e.z); });
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${out}/b2_outside.png` });
+await browser.close(); await server.close();

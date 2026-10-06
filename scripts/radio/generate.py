@@ -126,6 +126,10 @@ def main():
         if args.dry_run or not jobs:
             return
         names = [f"{item['id']}_{t + 1}" for item, t, _ in jobs]
+        # The model fills the GPU: wait for the shots and benchmarks now running, and hold new ones back (scripts/gpu_lock.py).
+        sys.path.insert(0, os.path.join(REPO, "scripts"))
+        import gpu_lock
+        gpu_lock.exclusive(f"radio generate {batch}")
         for i in range(0, len(names), PER_PROCESS):
             subprocess.run([sys.executable, os.path.abspath(__file__), *sys.argv[1:], "--force", "--jobs", ",".join(names[i : i + PER_PROCESS])], check=False)
         print(f"Listen: {os.path.join(out, 'index.html')}")

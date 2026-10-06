@@ -1,0 +1,25 @@
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const out = process.argv[2];
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1000, height: 650 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
+await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
+await page.waitForTimeout(1500);
+await page.evaluate(() => { document.getElementById('panel').style.display = 'none'; document.querySelectorAll('.label').forEach((l) => (l.style.display = 'none')); });
+// Out on open ground, away from the cast, facing the camera's way; one-handed, upright.
+await page.evaluate(async () => { await __fp.enter(14, 24, 0); __fp.kind('lever'); __fp.oneHand(true); __fp.look(0.4, -0.1); });
+await page.waitForTimeout(1200);
+await page.screenshot({ path: `${out}/s1_fp.png` });
+await page.evaluate(() => { __fp.look(2.4, -1.0); });
+await page.waitForTimeout(700);
+await page.screenshot({ path: `${out}/s2_fp_shadow.png` });
+await page.evaluate(() => { __fp.look(0.4, -0.1); });
+await page.waitForTimeout(700);
+await page.evaluate(() => { __fp.freeze(true); const c = __fp.rig().object.children[0].position; __view(c.x - 2.6, 3.4, c.z - 3.4, c.x - 0.7, 0.2, c.z - 0.9); });
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${out}/s3_above.png` });
+await browser.close(); await server.close();

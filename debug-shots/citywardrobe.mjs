@@ -1,0 +1,31 @@
+// Mack's wardrobe in the district, third person: node debug-shots/citywardrobe.mjs <outdir> [outfit] [glasses]
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+import { mkdirSync } from 'fs';
+import { writeGallery } from './gallery.mjs';
+const out = process.argv[2] ?? 'debug-shots/citywardrobe';
+const outfit = process.argv[3] ?? 'suit_black';
+const glasses = process.argv[4] ?? 'wrap';
+mkdirSync(out, { recursive: true });
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
+await page.addInitScript(([o, g]) => { try { localStorage.setItem('citypop.thirdPerson', '1'); localStorage.setItem('citypop.wardrobe', JSON.stringify({ outfit: o, glasses: g === 'none' ? null : g })); } catch {} }, [outfit, glasses]);
+await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1`);
+await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
+await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
+await page.waitForTimeout(5000);
+const look = (pitchDeg, yawDeg) => page.evaluate(([p, y]) => {
+  const cam = window.__camera;
+  const e = new cam.rotation.constructor().setFromQuaternion(cam.quaternion, 'YXZ');
+  e.x = (p * Math.PI) / 180;
+  if (y !== undefined) e.y = (y * Math.PI) / 180;
+  e.z = 0;
+  cam.quaternion.setFromEuler(e);
+}, [pitchDeg, yawDeg]);
+await look(-6); await page.waitForTimeout(1200); await page.screenshot({ path: `${out}/${outfit}_${glasses}_a.png` });
+await look(-6, 60); await page.waitForTimeout(1200); await page.screenshot({ path: `${out}/${outfit}_${glasses}_b.png` });
+await browser.close(); await server.close();
+writeGallery(out);

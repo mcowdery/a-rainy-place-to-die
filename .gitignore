@@ -13,7 +13,14 @@ adult/
 assets/ads/pending/
 # Generated music awaiting review (scripts/radio/generate.py; approved tracks move to assets/radio/<station>/)
 assets/radio_pending/
-debug-shots/
+# Shots, logs and their folders; the scripts that take them are kept
+debug-shots/*
+!debug-shots/*.mjs
+!debug-shots/*.py
+# Other agents' checkouts (scripts/worktree.mjs), and this machine's Claude Code settings
+.claude/worktrees/
+.claude/settings.local.json
+.claude/*.lock
 
 # Python bytecode (scripts/blender)
 __pycache__/

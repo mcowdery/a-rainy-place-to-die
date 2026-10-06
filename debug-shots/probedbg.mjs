@@ -1,0 +1,24 @@
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 800, height: 500 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
+await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
+await page.waitForTimeout(1000);
+console.log(await page.evaluate(async () => {
+  await __fp.enter(14, 30, 0);
+  const { THREE, scene } = window.__lab;
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 0.3), new THREE.MeshStandardMaterial({ color: 0x8a8580 }));
+  wall.position.set(14, 1.5, 27.7);
+  scene.add(wall);
+  wall.updateMatrixWorld(true);
+  const r = __fp.probe(new THREE.Vector3(14, 1.1, 28.9), new THREE.Vector3(0, 0, -1), 1.7);
+  const ray = new THREE.Raycaster(new THREE.Vector3(14, 1.1, 28.9), new THREE.Vector3(0, 0, -1), 0, 1.7);
+  ray.camera = __fp.camera();
+  const hits = ray.intersectObjects(scene.children, true).slice(0, 6).map((h) => `${h.object.type}:${h.object.name}:${h.distance.toFixed(2)}`);
+  return JSON.stringify({ r, hits });
+}));
+await browser.close(); await server.close();

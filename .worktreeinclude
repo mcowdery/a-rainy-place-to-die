@@ -1,0 +1,4 @@
+# Git-ignored local files a new worktree gets a copy of (Claude Code's own worktrees, and scripts/worktree.mjs).
+# One path a line. Not adult/ (see scripts/worktree.mjs) and not node_modules (installed per worktree).
+.env.krea
+.krea/

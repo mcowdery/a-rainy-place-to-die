@@ -4,12 +4,12 @@
 //   node scripts/benchDistrict.mjs --headed   visible window
 //   node scripts/benchDistrict.mjs --query "dark=1&shadows=4"   extra settings for both runs
 import { chromium } from 'playwright-core';
-import { createServer } from 'vite';
+import { shotServer } from './shotServer.mjs';
 
 const headed = process.argv.includes('--headed');
 const qi = process.argv.indexOf('--query');
 const extra = qi > 0 ? `&${process.argv[qi + 1]}` : '';
-const server = await createServer({ server: { port: 0 }, logLevel: 'silent' });
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' }, { gpu: 'exclusive' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
 const browser = await chromium.launch({
