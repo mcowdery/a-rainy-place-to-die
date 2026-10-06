@@ -15,6 +15,9 @@ export default defineConfig(({ mode }) => {
     resolve: { alias: { '@edition': `/src/edition/${edition}.ts` } },
     // For code that only needs the edition's name (the chunk workers' ad list), without importing its files.
     define: { __EDITION__: JSON.stringify(edition) },
+    // Other agents' checkouts (.claude/worktrees, scripts/worktree.mjs) and the shots are inside this folder but are
+    // none of this server's business: a save or a git operation in one mustn't reload the page being played here.
+    server: { watch: { ignored: ['**/.claude/**', '**/debug-shots/**'] } },
     build: {
       outDir: edition === 'standard' ? 'dist' : `dist-${edition}`,
       rollupOptions: {
