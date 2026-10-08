@@ -246,10 +246,10 @@ const startTrial = (): void => {
 interface GpRival { readonly name: string; readonly car: Car; readonly drv: RivalDriver; readonly view: ReturnType<typeof buildCar> }
 let gp: { race: CircuitRace; slots: ReturnType<typeof gridSlots>; rivals: GpRival[]; paid: boolean; result: { place: number; pay: number; bestLap: number | null; best: GpBest | null; newBest: boolean } | null } | null = null;
 interface GpBest { readonly place: number; readonly lap: number | null }
-const gpKey = `citypop.race.v1.${venueId}.gp`;
+const gpKey = `rainyplace.race.v1.${venueId}.gp`;
 const loadGpBest = (id = venueId): GpBest | null => {
   try {
-    return JSON.parse(localStorage.getItem(`citypop.race.v1.${id}.gp`) ?? 'null') as GpBest | null;
+    return JSON.parse(localStorage.getItem(`rainyplace.race.v1.${id}.gp`) ?? 'null') as GpBest | null;
   } catch {
     return null;
   }
@@ -736,8 +736,8 @@ document.addEventListener('pointerlockchange', () => {
 });
 // Mouse look: a click captures the mouse (Esc lets it go); moving it swings the camera round the car and up
 // or down, and it eases back behind the car a moment after you stop. Mouse Y follows the district's choice
-// (the same 'citypop.invertY' in localStorage; I toggles it here too; ?invertY=1 / 0).
-const INVERT_KEY = 'citypop.invertY';
+// (the same 'rainyplace.invertY' in localStorage; I toggles it here too; ?invertY=1 / 0).
+const INVERT_KEY = 'rainyplace.invertY';
 let invertY = false;
 {
   let saved: string | null = null;

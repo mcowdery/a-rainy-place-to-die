@@ -6,12 +6,12 @@ await server.listen();
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 800, height: 500 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
-await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.goto(`${server.resolvedUrls.local[0]}fight.html`);
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
 await page.waitForTimeout(1000);
-await page.evaluate(async () => { await __fp.enter(14, 30, 0); __fp.hand('fists'); __fp.spawn(1); __fp.draw(); });
+await page.evaluate(async () => { await __fp.enter(0, 3, 0); __fp.hand('fists'); __fp.spawn(1); __fp.draw(); });
 await page.waitForFunction(() => __fp.thugs().length > 0, null, { timeout: 60000, polling: 200 });
-await page.evaluate(() => { const t = __fp.thugs()[0]; const c = __fp.camera().position; t.place(c.x, 0.15, c.z - 1.1, Math.PI); __fp.thugs().slice(1).forEach((x) => (x.root.visible = false)); t.knockDown(t.root.position.clone().set(0, 0, -1)); });
+await page.evaluate(() => { const t = __fp.thugs()[0]; const c = __fp.camera().position; t.place(c.x, 0, c.z - 1.1, Math.PI); __fp.thugs().slice(1).forEach((x) => (x.root.visible = false)); t.knockDown(t.root.position.clone().set(0, 0, -1)); });
 await page.waitForTimeout(800);
 console.log('floored', await page.evaluate(() => __fp.thugs()[0].state), 'start', await page.evaluate(() => __fp.forceKill('stomp')));
 for (let i = 0; i < 8; i++) {

@@ -8,8 +8,11 @@ import { type FaceStyle, setFaceMode } from './faceShadow';
 import { buildRoboHelmet } from './roboHelmet';
 import { buildShotgun, SHOTGUN_KINDS, type HandHold, type Shotgun, type ShotgunKind } from './shotgun';
 import { buildKatana, type Katana } from './katana';
-import { Footfalls, gaitBob, legPose, STRIDE_HZ, type Foot } from './gait';
-import { swordQuat, type Hitter, type Melee, type MeleePose, type SwordKey } from './melee';
+import { buildBat, type Bat } from './bat';
+import type { AnimLibrary } from './characterAnims';
+import type { CityMoves } from './cityMoves';
+import { Footfalls, gaitBob, legPose, strikePhase, STRIDE_HZ, type Foot } from './gait';
+import { swordQuat, type Hitter, type Melee, type MeleePose, type MeleeWeapon, type SwordKey } from './melee';
 import { Smoking, type Hands, type SmokeCtx } from './smoking';
 
 /**
@@ -144,6 +147,27 @@ const FIST = [[1.35, 1.65, 1.0], [1.4, 1.7, 1.0], [1.45, 1.7, 1.0], [1.5, 1.6, 0
 /** The saya at the left hip (the body's frame, metres at Mack's size, +x his left, +z ahead): its mouth ahead
  * of the hip, the scabbard running back and down, the edge up, as a katana is worn through the belt. */
 const SAYA_MOUTH = new THREE.Vector3(0.17, 0.98, 0.16);
+/** A weapon raised in first person: from this far below the eyes' level (the keys' y, metres), over this much more,
+ * its hands go this much further up and back, out of the view; only while they're this near the face (the keys'
+ * z: not at all at `far`, wholly `near` it), so a swing coming through at arm's length is as keyed. */
+const FP_RAISE = { from: 0, over: 0.12, up: 0.14, back: 0.2, far: -0.36, near: -0.2 } as const;
+/** The bat carried (the body's frame, as the saya): the top of its handle by his right thigh, in the right hand,
+ * the barrel down and ahead; how far it swings with his stride (m). */
+const BAT_CARRY = new THREE.Vector3(-0.27, 0.86, 0.06);
+const BAT_CARRY_DIR = new THREE.Vector3(0.04, -0.72, 0.7).normalize();
+const BAT_CARRY_EDGE = new THREE.Vector3(0, -0.7, -0.72).normalize();
+const BAT_CARRY_SWING = 0.07;
+/** A swing's lower body (models/melee.ts' `LegsKey`): how much of the hips' sinking the eyes go down by (the page
+ * lowers the camera by `eyeDrop`); how far a foot follows the hips round on its ball as its own hip comes forward,
+ * and how far its heel comes up with that; the ball ahead of the ankle (m, at Mack's size). */
+const EYE_SINK = 0.4;
+const FOOT_PIVOT = 0.9;
+const HEEL_UP = 0.55;
+const BALL_AHEAD = 0.14;
+/** Frames a second the library's fitted clips are sampled at (characterAnims.ts' RATE); how far his fingers close
+ * on a handle his hand is given by a clip (of a fist). */
+const CLIP_RATE = 30;
+const CLIP_GRIP = 0.85;
 const SAYA_DIR = new THREE.Vector3(0.1, -0.36, -1).normalize();
 const SAYA_EDGE = new THREE.Vector3(0, 1, -0.36).normalize();
 const FIGURE_BONES = ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'head', 'clavicle_l', 'clavicle_r', 'thigh_l', 'thigh_r', 'calf_l', 'calf_r', 'foot_l', 'foot_r'];
@@ -348,6 +372,18 @@ export class FirstPersonRig {
   readonly flashLight = new THREE.PointLight(0xffc070, 0, 9, 2);
   /** His katana (models/katana.ts): the sword and its saya placed apart each frame. */
   readonly katana: Katana;
+  /** The bat (models/bat.ts), placed by the same keys. */
+  readonly bat: Bat;
+  /** The animation library (models/characterAnims.ts), if the page has given it: a fighting move may be one of its
+   * clips, played over his whole body (`overlayClip`). */
+  anims: AnimLibrary | null = null;
+  /** What of the library is his own on foot (models/cityMoves.ts: his walk, and his body's stance with the pistol
+   * out), if the page has given it (with `anims`): laid over the keyed pose each frame (`layMoves`). */
+  moves: CityMoves | null = null;
+  private readonly clipTracks = new Map<THREE.AnimationClip, { bone: THREE.Bone; q: Float32Array | null; p: Float32Array | null }[]>();
+  private bonesByName: Map<string, THREE.Bone> | null = null;
+  private pelvisBone: THREE.Bone | null = null;
+  private readonly pelvisLocal = new THREE.Vector3();
   /** Fighting hand to hand or with the katana (models/melee.ts): set, it poses him for it instead of the guns. */
   melee: Melee | null = null;
   /** A kill move's pose for him (models/killMoves.ts), in place of the melee's own, and its gun placement. */
@@ -472,6 +508,9 @@ export class FirstPersonRig {
     this.ballR = bones.get('ball_r') ?? null;
     this.ballL = bones.get('ball_l') ?? null;
     this.katana = buildKatana(env);
+    this.bat = buildBat(env);
+    this.bat.root.visible = false;
+    this.object.add(this.bat.root);
     this.object.add(this.katana.sword, this.katana.saya);
     this.object.add(this.smoking.group);
     this.katana.sword.visible = this.katana.saya.visible = false;
@@ -521,6 +560,8 @@ export class FirstPersonRig {
     this.setFaceStyle(old.faceStyle);
     this.setHeadless(old.headless);
     this.onFootfall = old.onFootfall;
+    this.anims = old.anims;
+    this.moves = old.moves;
     if (old.fitHeight !== null) this.fitEye(old.fitHeight);
     if (!old.object.children.includes(old.flashLight)) this.object.remove(this.flashLight);
     this.object.visible = old.object.visible;
@@ -910,6 +951,8 @@ export class FirstPersonRig {
     if (this.sq < 0.001 && !down) this.sq = 0;
     const sq = this.sq * this.sq * (3 - 2 * this.sq);
     this.dropped = 0;
+    // (The pelvis back where it rests: a library clip may have moved it last frame.)
+    if (this.pelvisBone) this.pelvisBone.position.copy(this.pelvisLocal);
 
     // The body: under the camera, facing where it looks, the eyes BACK behind the camera.
     const fwd = camera.getWorldDirection(_a);
@@ -1016,7 +1059,7 @@ export class FirstPersonRig {
       this.poseShadow(pitch, bend);
       return;
     }
-    this.katana.sword.visible = this.katana.saya.visible = false;
+    this.katana.sword.visible = this.katana.saya.visible = this.bat.root.visible = false;
     const away = !this.armed && this.draw <= 0;
     if (away && bike) {
       for (const g of Object.values(this.guns)) g.root.visible = false;
@@ -1034,10 +1077,12 @@ export class FirstPersonRig {
       this.flash.visible = false;
       this.flashLight.intensity = 0;
       this.freeArms(fx, fz, Math.sin(this.walk) * k, s * k, run * k, sq, this.airK);
+      this.layMoves(dt, speed, false, 0, { at: (this.walk - strikePhase(run, k)) / (2 * Math.PI), k: k * (1 - sq) * (1 - this.airK), run });
       // (His head stays up over the squat's lean.)
       this.poseShadow(pitch, bend + SQUAT.lean * sq);
       return;
     }
+    if (!bike) this.layMoves(dt, speed, true, bend, { at: (this.walk - strikePhase(run, k)) / (2 * Math.PI), k: k * (1 - sq) * (1 - this.airK), run });
     // The gun, in the camera's frame (unseen until the hand has it: it's drawn from his belt).
     for (const g of Object.values(this.guns)) g.root.visible = g.kind === this.kind && this.draw > GRAB;
     const gun = this.guns[this.kind];
@@ -1282,13 +1327,135 @@ export class FirstPersonRig {
 
   /**
    * Fighting (models/melee.ts): the saya at the hip with the katana; the chest turned and leaned by the move;
-   * the kicking foot by IK; the fists placed in the view's frame and closed, or the sword placed there with both
-   * hands on its tsuka (the left on the saya's mouth while drawing and sheathing). Nothing drawn, the arms swing
-   * free.
+   * the kicking foot by IK; the fists placed in the view's frame and closed, or the sword or the bat placed there
+   * with both hands on its handle (the left on the saya's mouth while drawing and sheathing; free while the bat
+   * comes up or goes down). Nothing drawn, the arms swing free; the bat hangs in the right hand.
    */
   private fight(m: Melee, camera: THREE.Camera, viewQ: THREE.Quaternion, fx: number, fz: number, swing: number, k: number, run: number): void {
+    this.fightKeyed(m, camera, viewQ, fx, fz, swing, k, run);
+    const clip = this.poseOverride ? null : this.lastPose?.clip;
+    if (clip && clip.weight > 0) this.overlayClip(clip, m.weapon);
+  }
+
+  /**
+   * A clip from the animation library over the whole body (a swing that's one of its: `MeleePose.clip`), blended
+   * in over the keyed pose by its weight: every bone the clip has, and the pelvis's place; the weapon then goes
+   * with his right hand, held as its hold has it, his fingers closed on it (bare hands are closed as fists). In first person the body moves under
+   * the eyes (his neck stays where it was, the eyes going down with it: `eyeDrop`); in third it moves as the clip
+   * has it, over his feet. The clips are fitted to his skeleton when first asked for; until the library is in,
+   * the keyed pose stands.
+   */
+  private overlayClip(c: { name: string; time: number; weight: number }, weapon: MeleeWeapon): void {
+    if (!this.layClip(c)) return;
+    // The weapon in his right hand (the hold's frame turned as the hand has turned from its rest), his fingers
+    // closed on it; the left hand as the clip has it, loose.
+    const arm = this.arms.r;
+    // (Bare hands are as the clip has them, fists and all, and there's nothing to carry.)
+    if (weapon === 'fists') return;
+    // The hand on the weapon is closed from its rest, not on top of the clip's own fingers (curled already, they'd
+    // come round straight again).
+    for (const f of [...arm.fingers.flat(), ...arm.thumb]) f.quaternion.copy(this.rest.get(f)!);
+    this.relaxHand(arm, CLIP_GRIP, FIST, [0, 0]);
+    this.thumbOver(arm);
+    const h = weapon === 'bat' ? this.bat.single : this.katana.grip;
+    const held = weapon === 'bat' ? this.bat.root : this.katana.sword;
+    arm.hand.updateWorldMatrix(true, false);
+    const turned = arm.hand.getWorldQuaternion(new THREE.Quaternion()).multiply(arm.q0.clone().invert());
+    const holdFrame = handFrame(h.fwd, h.palm, new THREE.Matrix4());
+    const q = turned.multiply(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().copy(arm.frame0).multiply(holdFrame.transpose())));
+    const wrist = h.at.clone().addScaledVector(h.palm, -(h.seat?.[1] ?? PALM_OFF)).addScaledVector(h.fwd, -(h.seat?.[0] ?? PALM_BACK));
+    held.quaternion.copy(q);
+    held.position.copy(arm.hand.getWorldPosition(new THREE.Vector3())).sub(wrist.applyQuaternion(q));
+    held.visible = true;
+    held.updateMatrixWorld(true);
+  }
+
+  /**
+   * What of the library is his own on foot (models/cityMoves.ts: his walk; with the pistol out, his body's stance)
+   * over the pose he's in, each clip in turn. `armed`: a gun is out, and his arms go to it after this.
+   */
+  private layMoves(dt: number, gait: number, armed: boolean, bend: number, stride: { at: number; k: number; run: number }): void {
+    if (!this.moves || !this.anims) return;
+    // (The pistol out, or on its way: standing, his body is the library's, and his hands go to the gun after it.)
+    const gun = armed && this.kind === 'pistol' && !this.mounted ? { out: this.draw, aim: this.aim, shots: this.shotsFired, reload: this.reloadT > 0 ? 1 - this.reloadT / this.reloadFull : -1 } : null;
+    const layers = this.moves.update({ dt, gait, air: this.air, gun, stride });
+    let laid = false;
+    for (const l of layers) if (l.weight > 0) laid = this.layClip(l, false, l.steady) || laid;
+    // (A hand that goes to a gun next is closed on it from its rest, not from the clip's own fingers.)
+    if (laid && armed) for (const arm of [this.arms.l, this.arms.r]) for (const f of [...arm.fingers.flat(), ...arm.thumb]) f.quaternion.copy(this.rest.get(f)!);
+    // His back still goes with the view up and down, over the stance, so the arms keep the gun in reach.
+    const k = gun ? this.moves.gunWeight * this.draw : 0;
+    if (k > 0 && bend !== 0) {
+      this.turn('spine_01', 0, bend * 0.2 * k);
+      this.turn('spine_02', 0, bend * 0.35 * k);
+      this.turn('spine_03', 0, bend * 0.45 * k);
+      this.object.updateMatrixWorld(true);
+    }
+  }
+
+  /**
+   * A clip from the animation library laid over the pose he's in, by its weight: every bone the clip has, and the
+   * pelvis's place (`open`: with the hands at ease, not as the clip has them). In first person the body moves under
+   * the eyes (his neck stays where it was, the eyes going down with it: `eyeDrop`; `steady`: the eyes stay too, the
+   * body taking up what the clip does to his neck); in third it moves as the clip has it, over his feet. False if
+   * the library hasn't the clip, or isn't in yet.
+   */
+  private layClip(c: { name: string; time: number; weight: number }, open = false, steady = false): boolean {
+    const fitted = this.anims?.clipFor(this.model, this.body, c.name, open);
+    if (!fitted || fitted.tracks.length === 0) return false;
+    let tracks = this.clipTracks.get(fitted);
+    if (!tracks) {
+      if (!this.bonesByName) {
+        const byName = new Map<string, THREE.Bone>();
+        this.body.traverse((o) => {
+          if ((o as THREE.Bone).isBone) byName.set(o.name, o as THREE.Bone);
+        });
+        this.bonesByName = byName;
+        this.pelvisBone = byName.get('pelvis') ?? null;
+        if (this.pelvisBone) this.pelvisLocal.copy(this.pelvisBone.position);
+      }
+      tracks = [];
+      for (const tr of fitted.tracks) {
+        const dot = tr.name.lastIndexOf('.');
+        const bone = this.bonesByName.get(tr.name.slice(0, dot));
+        const prop = tr.name.slice(dot + 1);
+        if (!bone) continue;
+        if (prop === 'quaternion') tracks.push({ bone, q: tr.values as Float32Array, p: null });
+        else if (prop === 'position' && bone === this.pelvisBone) tracks.push({ bone, q: null, p: tr.values as Float32Array });
+      }
+      this.clipTracks.set(fitted, tracks);
+    }
+    const frames = fitted.tracks[0].times.length;
+    const at = THREE.MathUtils.clamp(c.time * CLIP_RATE, 0, frames - 1);
+    const i = Math.min(frames - 2, Math.floor(at));
+    const u = at - i;
+    const w = c.weight;
+    const neckWas = this.neck.getWorldPosition(new THREE.Vector3());
+    for (const tr of tracks) {
+      if (tr.q) tr.bone.quaternion.slerp(_q.fromArray(tr.q, i * 4).slerp(_q2.fromArray(tr.q, (i + 1) * 4), u), w);
+      else if (tr.p) tr.bone.position.lerp(_a.fromArray(tr.p, i * 3).lerp(_b.fromArray(tr.p, (i + 1) * 3), u), w);
+    }
+    this.object.updateMatrixWorld(true);
+    if (this.headless) {
+      const n = this.neck.getWorldPosition(new THREE.Vector3());
+      this.body.position.x -= n.x - neckWas.x;
+      this.body.position.z -= n.z - neckWas.z;
+      // (His stride doesn't move the eyes: the view has its own bob for it. Anything else that lowers his neck lowers them.)
+      if (steady) this.body.position.y -= n.y - neckWas.y;
+      else this.dropped = Math.max(this.dropped, neckWas.y - n.y);
+      this.object.updateMatrixWorld(true);
+    } else if (!steady) {
+      // (With his head shown the body stays over his feet; the page still wants to know how far his eyes have come
+      // down, as it does for the squat, so the third-person camera goes down with him.)
+      this.dropped = Math.max(this.dropped, neckWas.y - this.neck.getWorldPosition(new THREE.Vector3()).y);
+    }
+    return true;
+  }
+
+  private fightKeyed(m: Melee, camera: THREE.Camera, viewQ: THREE.Quaternion, fx: number, fz: number, swing: number, k: number, run: number): void {
     const kt = this.katana;
     const katana = m.weapon === 'katana';
+    const bat = m.weapon === 'bat';
     const right = new THREE.Vector3(-fz, 0, fx);
     const up = new THREE.Vector3(0, 1, 0);
     const fwdH = new THREE.Vector3(fx, 0, fz);
@@ -1297,22 +1464,66 @@ export class FirstPersonRig {
     const sc = this.body.scale.x;
     const mouth = SAYA_MOUTH.clone().multiplyScalar(sc).applyQuaternion(bodyQ).add(this.body.position);
     const sayaQ = bodyQ.clone().multiply(swordQuat({ p: SAYA_MOUTH, dir: SAYA_DIR, edge: SAYA_EDGE }));
+    const viewInv = viewQ.clone().invert();
+    // Where the weapon is put away: the sword in the saya; the bat hanging by his right thigh, swinging a little
+    // with his stride (forward as that arm would).
+    const awayAt = bat ? BAT_CARRY.clone().add(new THREE.Vector3(0, 0, BAT_CARRY_SWING * swing)).multiplyScalar(sc).applyQuaternion(bodyQ).add(this.body.position) : mouth;
+    const awayQ = bat ? bodyQ.clone().multiply(swordQuat({ p: BAT_CARRY, dir: BAT_CARRY_DIR, edge: BAT_CARRY_EDGE })) : sayaQ;
+    const sheath: SwordKey = {
+      p: awayAt.clone().sub(camera.position).applyQuaternion(viewInv),
+      dir: new THREE.Vector3(0, 0, -1).applyQuaternion(awayQ).applyQuaternion(viewInv),
+      edge: new THREE.Vector3(0, -1, 0).applyQuaternion(awayQ).applyQuaternion(viewInv),
+    };
+    let P = this.poseOverride ?? m.pose(sheath);
+    this.lastPose = P;
+    // In first person a weapon raised over his head goes further up and back than it's keyed (third person has it
+    // as keyed): held in front of his forehead, his hands and forearms would fill the view.
+    if (this.headless && P.sword && P.sword.p.y > FP_RAISE.from) {
+      const k = Math.min(1, (P.sword.p.y - FP_RAISE.from) / FP_RAISE.over) * THREE.MathUtils.clamp((P.sword.p.z - FP_RAISE.far) / (FP_RAISE.near - FP_RAISE.far), 0, 1);
+      P = { ...P, sword: { ...P.sword, p: P.sword.p.clone().add(new THREE.Vector3(0, FP_RAISE.up * k, FP_RAISE.back * k)) } };
+    }
+    // The lower body: where his feet stand now (as his stance or his stride has them), before the hips move;
+    // then the hips turned, let down and moved over them (the saya goes with them); the feet are put back below.
+    const L = P.legs && this.airK < 0.2 ? P.legs : null;
+    const feet = (['l', 'r'] as const).map((side) => ({ side, at: this.legs[side].hand.getWorldPosition(new THREE.Vector3()), q: this.legs[side].hand.getWorldQuaternion(new THREE.Quaternion()) }));
+    if (L) {
+      this.turn('pelvis', 1, L.hips);
+      this.body.position.addScaledVector(right, L.shift[0] * sc).addScaledVector(fwdH, L.shift[1] * sc);
+      this.body.position.y -= L.sink * sc;
+      this.dropped = Math.max(this.dropped, L.sink * sc * EYE_SINK);
+      const hipQ = bodyQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(up, L.hips));
+      mouth.copy(SAYA_MOUTH).multiplyScalar(sc).applyQuaternion(hipQ).add(this.body.position);
+      sayaQ.copy(hipQ).multiply(swordQuat({ p: SAYA_MOUTH, dir: SAYA_DIR, edge: SAYA_EDGE }));
+    }
     kt.saya.visible = katana;
     kt.saya.position.copy(mouth);
     kt.saya.quaternion.copy(sayaQ);
-    const viewInv = viewQ.clone().invert();
-    const sheath: SwordKey = {
-      p: mouth.clone().sub(camera.position).applyQuaternion(viewInv),
-      dir: new THREE.Vector3(0, 0, -1).applyQuaternion(sayaQ).applyQuaternion(viewInv),
-      edge: new THREE.Vector3(0, -1, 0).applyQuaternion(sayaQ).applyQuaternion(viewInv),
-    };
-    const P = this.poseOverride ?? m.pose(sheath);
-    this.lastPose = P;
     this.turn('spine_02', 1, P.twist * 0.45);
     this.turn('spine_03', 1, P.twist * 0.55);
     this.turn('spine_01', 0, P.lean * 0.4);
     this.turn('spine_02', 0, P.lean * 0.6);
+    // (His head stays on what's ahead of him while the hips and the chest turn under it.)
+    const turned = (L?.hips ?? 0) + P.twist;
+    this.turn('neck_01', 1, -turned * 0.4);
+    this.turn('head', 1, -turned * 0.4);
     this.object.updateMatrixWorld(true);
+    if (L) {
+      for (const f of feet) {
+        const leg = this.legs[f.side];
+        const step = L[f.side];
+        // A foot follows the hips round on its ball as its own hip comes forward (the right as they turn left, the
+        // left as they turn right), the heel coming up: the back foot of a swing.
+        const yaw = (f.side === 'r' ? Math.max(0, L.hips) : Math.min(0, L.hips)) * FOOT_PIVOT;
+        const round = new THREE.Quaternion().setFromAxisAngle(up, yaw);
+        const pivot = new THREE.Quaternion().setFromAxisAngle(right.clone().applyQuaternion(round), -Math.abs(yaw) * HEEL_UP).multiply(round);
+        const ball = f.at.clone().addScaledVector(fwdH, BALL_AHEAD * sc);
+        ball.y = this.body.position.y + L.sink * sc;
+        const ankle = ball.clone().add(f.at.clone().sub(ball).applyQuaternion(pivot)).addScaledVector(right, step.x * sc).addScaledVector(up, step.y * sc).addScaledVector(fwdH, step.z * sc);
+        this.reach(leg, ankle, fwdH.clone().applyQuaternion(round).addScaledVector(right, f.side === 'r' ? 0.2 : -0.2).normalize());
+        leg.hand.quaternion.copy(leg.hand.parent!.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(pivot.multiply(f.q)));
+        leg.hand.updateWorldMatrix(false, true);
+      }
+    }
     // The kick: the right ankle from where the stride has it to the move's place, the knee up and forward.
     if (P.foot || P.footWorld) {
       const leg = this.legs.r;
@@ -1323,31 +1534,41 @@ export class FirstPersonRig {
     }
     const toWorld = (p: THREE.Vector3): THREE.Vector3 => p.clone().applyQuaternion(viewQ).add(camera.position);
     const behind = fwdH.clone().negate();
-    const pole = (side: 1 | -1): THREE.Vector3 => new THREE.Vector3().addScaledVector(up, -1).addScaledVector(right, 0.8 * side).addScaledVector(behind, 0.25).normalize();
-    // The sword, in or out of the saya.
+    // The elbows down and out; with the weapon raised over his head, out to the sides (not up in front of his face).
+    const raised = P.sword ? THREE.MathUtils.clamp((P.sword.p.y + 0.12) / 0.3, 0, 1) : 0;
+    const pole = (side: 1 | -1): THREE.Vector3 => new THREE.Vector3().addScaledVector(up, -1 + 0.8 * raised).addScaledVector(right, (0.8 + 0.9 * raised) * side).addScaledVector(behind, 0.25).normalize();
+    // The weapon: the sword (in or out of the saya) or the bat, in his hands or put away.
     kt.sword.visible = katana;
-    if (katana && !P.sword) {
-      kt.sword.position.copy(mouth);
-      kt.sword.quaternion.copy(sayaQ);
+    this.bat.root.visible = bat;
+    const held = bat ? this.bat.root : kt.sword;
+    const holds = bat ? this.bat : kt;
+    if ((katana || bat) && !P.sword) {
+      held.position.copy(awayAt);
+      held.quaternion.copy(awayQ);
+      held.updateMatrixWorld(true);
     }
     if (P.sword) {
-      kt.sword.position.copy(toWorld(P.sword.p));
-      kt.sword.quaternion.copy(viewQ).multiply(swordQuat(P.sword));
-      kt.sword.updateMatrixWorld(true);
-      this.hold('r', kt.grip, kt.sword, pole(1));
-      if (P.leftOnSaya) {
+      held.position.copy(toWorld(P.sword.p));
+      held.quaternion.copy(viewQ).multiply(swordQuat(P.sword));
+      held.updateMatrixWorld(true);
+      this.hold('r', bat && P.single ? this.bat.single : holds.grip, held, pole(1));
+      if (P.leftOnSaya && katana) {
         // The left hand holds the saya by its mouth as the sword comes out or goes home.
         const along = new THREE.Vector3(0, 0, -1).applyQuaternion(sayaQ);
         const at = mouth.clone().addScaledVector(along, 0.06).addScaledVector(up, -0.03);
         this.reach(this.arms.l, at, new THREE.Vector3().addScaledVector(behind, 1).addScaledVector(right, -0.6).normalize());
         this.orientHand(this.arms.l, along.clone().lerp(fwdH, 0.3).normalize(), right.clone());
         this.relaxHand(this.arms.l, 2.2);
-      } else this.hold('l', kt.fore, kt.sword, pole(-1));
+      } else if (P.leftOnSaya) this.freeArms(fx, fz, Math.sin(this.walk) * k, swing, run * k, 0, 0, [-1]);
+      else this.hold('l', holds.fore, held, pole(-1));
       return;
     }
+    // The bat hanging in his right hand, whatever the left is doing (swinging free, or up as a fist).
+    const carried = bat && !P.sword;
+    if (carried) this.hold('r', this.bat.grip, this.bat.root, new THREE.Vector3().addScaledVector(behind, 1).addScaledVector(right, 0.3).normalize());
     if (P.r || P.l) {
       const bob = 0.012 * Math.sin(this.walk * 2) * k;
-      const hands: ['r' | 'l', typeof P.r][] = [['r', P.r], ['l', P.l]];
+      const hands: ['r' | 'l', typeof P.r][] = [['r', carried ? null : P.r], ['l', P.l]];
       for (const [side, key] of hands) {
         if (!key) continue;
         const arm = this.arms[side];
@@ -1359,7 +1580,7 @@ export class FirstPersonRig {
       }
       return;
     }
-    this.freeArms(fx, fz, Math.sin(this.walk) * k, swing, run * k);
+    this.freeArms(fx, fz, Math.sin(this.walk) * k, swing, run * k, 0, 0, carried ? [-1] : [1, -1]);
   }
 
   /** A hand's wrist now (world). */
@@ -1368,8 +1589,13 @@ export class FirstPersonRig {
   }
 
   /** Where a striking part is now (world): a fist from the wrist to past the knuckles, the right foot from the
-   * ankle to the ball and past, the blade from the habaki to the point; with its thickness. */
+   * ankle to the ball and past, the blade from the habaki to the point, the bat's barrel; with its thickness. */
   strike(h: Hitter): { a: THREE.Vector3; b: THREE.Vector3; r: number } {
+    if (h === 'bat') {
+      const s = this.bat.root;
+      s.updateMatrixWorld(true);
+      return { a: s.localToWorld(this.bat.base.clone()), b: s.localToWorld(this.bat.tip.clone()), r: 0.03 };
+    }
     if (h === 'blade') {
       const s = this.katana.sword;
       s.updateMatrixWorld(true);
@@ -1533,12 +1759,12 @@ export class FirstPersonRig {
   }
 
   /** Both arms free: hanging and swinging walking, pumping running (`run`, 0..1 with the stride). */
-  private freeArms(fx: number, fz: number, pump: number, swingS: number, run: number, sq = 0, air = 0): void {
+  private freeArms(fx: number, fz: number, pump: number, swingS: number, run: number, sq = 0, air = 0, sides: readonly (1 | -1)[] = [1, -1]): void {
     const up = new THREE.Vector3(0, 1, 0);
     const right = new THREE.Vector3(-fz, 0, fx);
     const behind = new THREE.Vector3(-fx, 0, -fz);
     const fwdH = new THREE.Vector3(fx, 0, fz);
-    for (const side of [1, -1] as const) {
+    for (const side of sides) {
       const arm = side > 0 ? this.arms.r : this.arms.l;
       const S = arm.upper.getWorldPosition(new THREE.Vector3());
       // Each arm forward as the other side's leg is (the right as the left leg comes forward).
@@ -1575,16 +1801,21 @@ export class FirstPersonRig {
     // His smoking has the arms last (so the shadow's copy has them too), and its cigarette goes in once the head is posed.
     const sm = this.smokeFrame;
     const ctx = (face: SmokeCtx['face']): SmokeCtx => ({ ...sm!, sc: this.body.scale.x, free: this.handsFree, face });
-    if (sm) this.smoking.pose(ctx(null));
     const nod = -pitch - bend;
-    // With the head shown (third person) it nods itself, and casts its own shadow: the copy is hidden.
+    // With the head shown (third person) it nods itself, and casts its own shadow: the copy is hidden. (The head
+    // first, then the arms: his hand goes to his mouth as the head has it, not as the view would.)
     if (!this.headless) {
       this.turn('neck_01', 0, nod * 0.4);
       this.turn('head', 0, nod * 0.6);
       this.body.updateMatrixWorld(true);
-      if (sm) this.smoking.place(ctx(this.faceNow()));
+      if (sm) {
+        this.smoking.pose(ctx(this.faceNow()));
+        this.body.updateMatrixWorld(true);
+        this.smoking.place(ctx(this.faceNow()));
+      }
       return;
     }
+    if (sm) this.smoking.pose(ctx(null));
     this.shadowBody.position.copy(this.body.position);
     this.shadowBody.quaternion.copy(this.body.quaternion);
     for (const [b, twin] of this.shadowPairs) {

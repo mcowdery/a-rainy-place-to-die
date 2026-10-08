@@ -1,7 +1,7 @@
 /**
  * The phone's wallpapers: the pictures in assets/phone/wallpapers/ (made from approved art by
  * scripts/crop_wallpapers.py; a file's name is its id), and which one is on the home screen, kept in the browser
- * (localStorage `citypop.phone.wallpaper`; 'none' is the plain home screen).
+ * (localStorage `rainyplace.phone.wallpaper`; 'none' is the plain home screen).
  */
 const files = import.meta.glob('../../assets/phone/wallpapers/*.jpg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 
@@ -16,7 +16,7 @@ export const WALLPAPERS: readonly Wallpaper[] = Object.entries(files)
 
 /** The one a phone starts with. */
 export const DEFAULT_WALLPAPER = 'julie_ferry_1';
-const KEY = 'citypop.phone.wallpaper';
+const KEY = 'rainyplace.phone.wallpaper';
 
 /** The wallpaper chosen, or null for the plain home screen. */
 export function wallpaper(): Wallpaper | null {

@@ -8,7 +8,7 @@ import { toGeometry, type RawGeometry } from './rawGeometry';
 import { CITY_PEOPLE, DISTRICT_PEOPLE, OUTFITS, pickOutfit, smokeOf, SMOKES, type Outfit, type PeopleMix, type Smoke } from '../district/peopleMix';
 import { HOURS, HOURS_GLSL, MANNERS, nightLife, seasonsOf, whenOf, type Hours, type Manner } from '../district/peopleHours';
 
-import { blend, BONES, FOOT_L, FOOT_LEVEL, FOOT_R, ARM_L, ARM_R, FORE_L, FORE_R, HEAD, one, PARENT, PELVIS, pivotsOf, PROPORTIONS, ROOT, scaleRows, SHIN_L, SHIN_R, SPINE, TemplateBuilder, THIGH_L, THIGH_R, type Body, type Hair, type Row, type Template, type V3, type Weight } from './mobRig';
+import { ALL_BONES, blend, BONES, DIGIT_BONES, SPINE_BONES, TOE_BONES, digitParent, FOOT_L, FOOT_LEVEL, FOOT_R, ARM_L, ARM_R, FORE_L, FORE_R, HEAD, one, PARENT, PELVIS, pivotsOf, PROPORTIONS, ROOT, scaleRows, SHIN_L, SHIN_R, SPINE, TemplateBuilder, THIGH_L, THIGH_R, type Body, type Hair, type Row, type Template, type V3, type Weight } from './mobRig';
 import { buildShaped, isTeen, shapedVariant, TEEN_SCALE } from './mobShape';
 import { EMOTE_GLSL, EMOTE_REACH, emoteUniforms, FACE_MARK, FACE_MARK_GLSL, FACE_VERTEX_GLSL, flushGlsl } from './emoteGlsl';
 import { modelTemplate, type MobModelDoc } from './mobModels';
@@ -988,7 +988,7 @@ const umbrellaOf = (s: Pick<FigureSpec, 'body' | 'long' | 'outfit'>): number => 
  * (`ghostMaterial` takes their joints then), at most MAX_MOB_MODELS.
  */
 export const MAX_MOB_MODELS = 252;
-const mobModels: { name: string; doc: MobModelDoc; template: Template }[] = [];
+const mobModels: { name: string; doc: MobModelDoc | null; template: Template }[] = [];
 const modelSlot = (name: string): number => mobModels.findIndex((m) => m.name === name);
 export function registerMobModel(doc: MobModelDoc): void {
   if (modelSlot(doc.name) >= 0) return;
@@ -1002,7 +1002,9 @@ export function registerMobModel(doc: MobModelDoc): void {
  * four lofted ones, then the models as registered), a texel a bone (xyz its joint), and the arms' bind angle in
  * the texel after the bones. One texture for every mob material, rewritten when a model is registered.
  */
-const JOINT_COLS = 20;
+const JOINT_COLS = 44;
+/** (A named character's finger and toe joints, real/mobRig.ts: the texels after these.) */
+const DIGIT_COL = 20;
 /**
  * The texels after the bones' in a body's row: the arms' bind angle (x); a hand's grip, where the fingers hold a
  * cigarette (the right hand's, bind pose: x mirrored for the left); the mouth (bind pose) and the head's height (w);
@@ -1018,7 +1020,7 @@ function writeJoints(tex: THREE.DataTexture): void {
   const data = tex.image.data as Float32Array;
   // (A smoker's numbers are the body's own; a teen's and a model's, who don't smoke, the grown body's scaled or as they are.)
   const row = (r: number, pivot: readonly V3[], armOut: number, sm: SmokerJoints, kx = 1, ky = 1): void => {
-    pivot.forEach((p, b) => data.set([p[0], p[1], p[2], 0], (r * JOINT_COLS + b) * 4));
+    pivot.forEach((p, b) => b < BONES + DIGIT_BONES && data.set([p[0], p[1], p[2], 0], (r * JOINT_COLS + (b < BONES ? b : DIGIT_COL + b - BONES)) * 4));
     data[(r * JOINT_COLS + JOINT_EXTRA.armOut) * 4] = armOut;
     data.set([sm.grip[0] * kx, sm.grip[1] * ky, sm.grip[2] * kx, 0], (r * JOINT_COLS + JOINT_EXTRA.grip) * 4);
     data.set([sm.mouth[0] * kx, sm.mouth[1] * ky, sm.mouth[2] * kx, sm.head * ky], (r * JOINT_COLS + JOINT_EXTRA.mouth) * 4);
@@ -1145,6 +1147,16 @@ function mobJoints(): THREE.DataTexture {
     writeJoints(jointTexture);
   }
   return jointTexture;
+}
+/**
+ * A figure built elsewhere (a named character: real/mobCharacters.ts), registered as the models are: a template of
+ * its own and a body of its own in the material, so it can have its own height and joints. `FigureSpec.model` draws it.
+ */
+export function registerMobTemplate(name: string, template: Template): void {
+  if (modelSlot(name) >= 0) return;
+  if (mobModels.length >= MAX_MOB_MODELS) throw new Error(`too many mob models (${MAX_MOB_MODELS})`);
+  mobModels.push({ name, doc: null, template });
+  if (jointTexture) writeJoints(jointTexture);
 }
 export const mobModelNames = (): string[] => mobModels.map((m) => m.name);
 /** The template a figure is drawn with: its model's, else its body's with its hair and outfit. */
@@ -1604,7 +1616,7 @@ export function posedFigure(s: FigureSpec, umbrella: boolean | 'canopy' = false)
   for (let i = 0; i < n; i++) {
     const x = left ? -T.pos[i * 3] : T.pos[i * 3], y = T.pos[i * 3 + 1], z = T.pos[i * 3 + 2];
     const fore = (b: number): number => (left && (b === ARM_R || b === FORE_R) ? b - 2 : b);
-    const e0 = M[fore(T.b0[i])].elements, e1 = M[fore(T.b1[i])].elements;
+    const e0 = M[fore(digitParent(T.b0[i]))].elements, e1 = M[fore(digitParent(T.b1[i]))].elements;
     const w = T.w[i], u = 1 - w;
     const px = w * (e0[0] * x + e0[4] * y + e0[8] * z + e0[12]) + u * (e1[0] * x + e1[4] * y + e1[8] * z + e1[12]);
     const py = w * (e0[1] * x + e0[5] * y + e0[9] * z + e0[13]) + u * (e1[1] * x + e1[5] * y + e1[9] * z + e1[13]);
@@ -1651,6 +1663,36 @@ export type MobLook = keyof typeof MOB_LOOKS;
 export const MOB_LOOK_NAMES = Object.keys(MOB_LOOKS) as MobLook[];
 
 /** Sets the mob material's look. */
+/**
+ * The mob's material for named characters (real/mobCharacters.ts): the same shader with the fingers' and toes'
+ * bones posed as well (MOB_DIGITS; the crowd's material leaves them out and pays nothing for them). `uCurl` closes
+ * the hands (0 relaxed, 1 a fist), `uToes` bends the toes up (radians). A character drawn with the crowd's material
+ * would have its fingers left where they were bound.
+ */
+export function characterMaterial(light?: GhostLight, look: MobLook = 'solid'): THREE.ShaderMaterial {
+  const material = ghostMaterial(light, look);
+  material.defines = { ...material.defines, MOB_DIGITS: '' };
+  material.uniforms.uCurl = { value: 0 };
+  material.uniforms.uToes = { value: 0 };
+  material.needsUpdate = true;
+  return material;
+}
+/**
+ * The characters' material for one posed freely (real/characterPose.ts): the pose's bones are worked out on the CPU
+ * and handed in (`uBones`: a matrix a bone, the fourteen and the hands', fingers' and toes'), in place of the mob's
+ * own posing. One material a figure: the bones are a uniform.
+ */
+export function posedMaterial(light?: GhostLight, look: MobLook = 'solid'): THREE.ShaderMaterial {
+  const material = characterMaterial(light, look);
+  material.defines = { ...material.defines, MOB_POSED: '' };
+  const bones = new Float32Array(ALL_BONES * 16);
+  for (let b = 0; b < ALL_BONES; b++) bones.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], b * 16);
+  material.uniforms.uBones = { value: bones };
+  material.needsUpdate = true;
+  return material;
+}
+/** A figure's template as it's drawn (its bind pose, bones and joints): for whoever poses it themselves. */
+export const figureTemplate = (s: Pick<FigureSpec, 'body' | 'hair' | 'long' | 'outfit' | 'model'>): Template => templateOf(s);
 export function setMobLook(material: THREE.ShaderMaterial, look: MobLook): void {
   const L = MOB_LOOKS[look];
   material.uniforms.uOpacity.value = L.opacity;
@@ -2200,6 +2242,90 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
 
       ${MOB_POSE_GLSL}
       ${MOB_PLACE_GLSL}
+      #ifdef MOB_POSED
+      uniform mat4 uBones[${ALL_BONES}];
+      #endif
+      #ifdef MOB_DIGITS
+      // A named character's fingers and toes (real/mobRig.ts digitBone, toeBone): each finger's two bones curl it
+      // toward the palm about its own joints (the bind pose is the hand hanging relaxed), on top of the forearm;
+      // the toes bend up at the ball of the foot, on top of the foot. uCurl: 0 relaxed to 1 a fist; uToes: radians.
+      uniform float uCurl;
+      uniform float uToes;
+      mat3 digitZ(float a) { float c = cos(a), s = sin(a); return mat3(c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0); }
+      void digit(int b, out mat3 M, out vec3 T) {
+        int k = b - 14;
+        mat3 Mp;
+        vec3 Tp;
+        // (A hip's or a shoulder's half-way bone, real/mobRig.ts hipHalf, shoulderHalf: turned half as far as its
+        // thigh or arm about that joint, from the pelvis or the chest.)
+        if (k >= ${DIGIT_BONES + SPINE_BONES + TOE_BONES}) {
+          int hh = k - ${DIGIT_BONES + SPINE_BONES + TOE_BONES};
+          // (A finger's last joint, real/mobRig.ts fingerTip: its middle joint's bone, where the hands aren't posed.)
+          if (hh >= 8) {
+            int q = hh - 8;
+            int hq = q / 5;
+            k = hq * 10 + (q - hq * 5) * 2 + 1;
+          } else {
+          // (A collar bone goes with the spine, an arm's untwisted bone with the arm, where they aren't posed.)
+          if (hh >= 4) {
+            bone(hh < 6 ? 1 : hh == 6 ? 7 : 9, M, T);
+            return;
+          }
+          int th = hh == 0 ? 3 : hh == 1 ? 5 : hh == 2 ? 7 : 9;
+          mat3 Mt;
+          vec3 Tt;
+          bone(hh < 2 ? 0 : 1, Mp, Tp);
+          bone(th, Mt, Tt);
+          vec3 c0 = normalize(Mp[0] + Mt[0]);
+          vec3 c1 = normalize(Mp[1] + Mt[1]);
+          c1 = normalize(c1 - c0 * dot(c0, c1));
+          M = mat3(c0, c1, cross(c0, c1));
+          vec3 pj = pv(th);
+          T = Mt * pj + Tt - M * pj;
+          return;
+          }
+        }
+        // (A toe's own bone, real/mobRig.ts toeDigit: its foot's toes' bone, where each toe isn't posed.)
+        if (k >= ${DIGIT_BONES + SPINE_BONES}) k = 20 + (k - ${DIGIT_BONES + SPINE_BONES}) / 5;
+        // (The spine's further joints, real/mobRig.ts spineBone: the chest's two go with the spine, the head's with the head.)
+        if (k >= ${DIGIT_BONES}) {
+          bone(k == ${DIGIT_BONES + 2} ? 2 : 1, M, T);
+          return;
+        }
+        // (A hand's own bone: its forearm's, where the hands aren't posed.)
+        if (k >= 22) {
+          bone(k == 22 ? 8 : 10, M, T);
+          return;
+        }
+        if (k >= 20) {
+          bone(12 + (k - 20), Mp, Tp);
+          vec3 p = pv(${DIGIT_COL} + k);
+          float c = cos(-uToes), s = sin(-uToes);
+          mat3 R = mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c);
+          M = Mp * R;
+          T = Mp * (p - R * p) + Tp;
+          return;
+        }
+        int h = k / 10;
+        int d = (k - h * 10) / 2;
+        int j = k - h * 10 - d * 2;
+        // (The left hand, x < 0, curls toward +x: a positive turn about z; the right the other way.)
+        float sg = h == 0 ? 1.0 : -1.0;
+        float curl = uCurl * (d == 0 ? 0.5 : 1.1) + 0.03 * sin(uTime * 0.9 + float(d) * 0.8 + float(h) * 1.7);
+        vec3 p0 = pv(${DIGIT_COL} + h * 10 + d * 2);
+        mat3 A = digitZ(sg * curl);
+        vec3 a = p0 - A * p0;
+        if (j == 1) {
+          vec3 p1 = pv(${DIGIT_COL} + h * 10 + d * 2 + 1);
+          mat3 R1 = digitZ(sg * curl * 1.2);
+          a = A * (p1 - R1 * p1) + a;
+          A = A * R1;
+        }
+        bone(h == 0 ? 8 : 10, Mp, Tp);
+        M = Mp * A;
+        T = Mp * a + Tp;
+      }
+      #endif
       void main() {
         float t = uTime;
         int body = int(aPose.x + 0.5);
@@ -2263,7 +2389,9 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         ${FACE_VERTEX_GLSL}
         // The umbrella's hand: the gesturing one, unless that hand holds someone else's (pose 'hold').
         float uside = P == 6 ? -side : side;
+        #ifndef MOB_POSED
         mobPose(t, body, r, P, moving, phase, side, bag, umb, straps, manner, sm);
+        #endif
 
         // Skinned by two bones (an umbrella mirrored to the hand it's in, on that side's arm).
         float m = mix(1.0, uside, aMirror);
@@ -2273,12 +2401,25 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         vec3 T0, T1;
         int b0 = int(aBone.x + 0.5);
         int b1 = int(aBone.y + 0.5);
+        #ifdef MOB_POSED
+        // A character posed freely (real/characterPose.ts): every bone's matrix worked out on the CPU and handed in.
+        M0 = mat3(uBones[b0]);
+        T0 = uBones[b0][3].xyz;
+        M1 = mat3(uBones[b1]);
+        T1 = uBones[b1][3].xyz;
+        #else
         if (aMirror > 0.5 && uside < 0.0) {
           if (b0 == 9 || b0 == 10) b0 -= 2;
           if (b1 == 9 || b1 == 10) b1 -= 2;
         }
-        bone(b0, M0, T0);
-        bone(b1, M1, T1);
+        #ifdef MOB_DIGITS
+          if (b0 > 13) digit(b0, M0, T0); else bone(b0, M0, T0);
+          if (b1 > 13) digit(b1, M1, T1); else bone(b1, M1, T1);
+        #else
+          bone(b0, M0, T0);
+          bone(b1, M1, T1);
+        #endif
+        #endif
         float w = aBone.z;
         vec3 lp = w * (M0 * p + T0) + (1.0 - w) * (M1 * p + T1);
         vec3 ln = normalize(w * (M0 * n) + (1.0 - w) * (M1 * n));
@@ -2314,6 +2455,10 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         float d = distance(c.xz, EYE.xz);
         // (seed -2: someone who stays whole right beside you, a passenger in your car.)
         vFade = fade * (seed < -1.5 ? 1.0 : smoothstep(0.45, 1.2, d)) * (1.0 - smoothstep(125.0, 175.0, d));
+        #ifdef MOB_POSED
+        // (A character being posed is looked at from as near as a fingertip: whole at any distance.)
+        vFade = fade;
+        #endif
         vec4 mvPosition = viewMatrix * wp;
         gl_Position = projectionMatrix * mvPosition;
         // (A face mark's quad with nothing to show is folded away; one that shows, only near the viewer, as the emotes are.)

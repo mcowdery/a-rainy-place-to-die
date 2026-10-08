@@ -1,4 +1,4 @@
-const KEY = 'citypop.ageConfirmed';
+const KEY = 'rainyplace.ageConfirmed';
 
 /**
  * The uncensored edition's age check, before the district loads: an adults-only notice with Enter and Leave.

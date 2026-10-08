@@ -5,10 +5,10 @@ const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 700, height: 500 } });
-await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.goto(`${server.resolvedUrls.local[0]}fight.html`);
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
 await page.waitForTimeout(1000);
-await page.evaluate(async () => { await __fp.enter(14, 30, 0); __fp.look(0, 0); __fp.hand('fists'); __fp.draw(); });
+await page.evaluate(async () => { await __fp.enter(0, 3, 0); __fp.look(0, 0); __fp.hand('fists'); __fp.draw(); });
 await page.waitForTimeout(1200);
 console.log(await page.evaluate(() => {
   __fp.freeze(true);

@@ -119,6 +119,7 @@ import type { Node3 } from './stamps';
 import { District, LIGHTMAP_WINDOW } from './world';
 import { FirstPersonRig } from '../models/firstPerson';
 import { BodyFacing, footOffset, ThirdPersonCamera } from '../models/thirdPerson';
+import { withCityMoves } from '../models/cityMoves';
 import { CensorPass } from '../models/censorPass';
 import { underfoot } from './footing';
 import { MackSmoke } from '../real/smoke';
@@ -730,11 +731,11 @@ async function run(): Promise<void> {
   let smokes: StickKind = 'cigarette';
   // Left to himself: he lights one before long when he's standing about (models/smoking.ts `auto`), and after a
   // while standing still goes down on his heels (C squats or stands at will; any step and he's up). Both can be
-  // turned off (the debug menu's Player tab; localStorage `citypop.mack.idle`: 'smoke', 'squat', both or neither).
+  // turned off (the debug menu's Player tab; localStorage `rainyplace.mack.idle`: 'smoke', 'squat', both or neither).
   let idleSmokes = true;
   let idleSquats = true;
   try {
-    const idle = localStorage.getItem('citypop.mack.idle');
+    const idle = localStorage.getItem('rainyplace.mack.idle');
     if (idle !== null) {
       idleSmokes = idle.includes('smoke');
       idleSquats = idle.includes('squat');
@@ -744,7 +745,7 @@ async function run(): Promise<void> {
   }
   const saveIdle = (): void => {
     try {
-      localStorage.setItem('citypop.mack.idle', `${idleSmokes ? 'smoke ' : ''}${idleSquats ? 'squat' : ''}`);
+      localStorage.setItem('rainyplace.mack.idle', `${idleSmokes ? 'smoke ' : ''}${idleSquats ? 'squat' : ''}`);
     } catch {
       /* no storage */
     }
@@ -755,14 +756,14 @@ async function run(): Promise<void> {
   // In third person the camera turns freely round him: he faces the way he goes (models/thirdPerson.ts BodyFacing).
   const facing = new BodyFacing();
   try {
-    if (localStorage.getItem('citypop.smoke') === 'cigar') smokes = 'cigar';
+    if (localStorage.getItem('rainyplace.smoke') === 'cigar') smokes = 'cigar';
   } catch {
     /* no storage */
   }
   const setSmokes = (k: StickKind): void => {
     smokes = k;
     try {
-      localStorage.setItem('citypop.smoke', k);
+      localStorage.setItem('rainyplace.smoke', k);
     } catch {
       /* no storage */
     }
@@ -775,18 +776,37 @@ async function run(): Promise<void> {
   // (A muzzle flash lights the street as a screen does, for as long as it lasts.)
   screens.add(gunfire.light);
   // ?debug=1: fire without the mouse captured (scripts).
-  if (debug) Object.assign(window, { __fire: () => !!mack?.armed && mack.fire() && (crosshair.fired(), gunfire.resume(), true) });
+  if (debug) Object.assign(window, { __fire: () => !!mack?.armed && mack.fire() && (crosshair.fired(), gunfire.resume(), true), __mack: () => mack });
   // Q on foot: third person (models/thirdPerson.ts), over his right shoulder and always behind him (his face is
   // never shown). The camera stays at his eyes for everything else and is moved behind him only for the render.
   let thirdPerson = false;
   try {
-    thirdPerson = localStorage.getItem('citypop.thirdPerson') === '1';
+    thirdPerson = localStorage.getItem('rainyplace.thirdPerson') === '1';
   } catch {
     /* no storage */
   }
   const thirdCam = new ThirdPersonCamera();
+  try {
+    thirdCam.setZoom(Number(localStorage.getItem('rainyplace.thirdZoom')) || 1);
+  } catch {
+    /* no storage */
+  }
   /** This frame is rendered from behind him (on foot, in third person). */
   let thirdNow = false;
+  // The mouse wheel in third person: the camera nearer or further (remembered).
+  document.addEventListener(
+    'wheel',
+    (e) => {
+      if (!thirdNow || !controls.look.isLocked || inVn) return;
+      const zoom = thirdCam.wheel(e);
+      try {
+        localStorage.setItem('rainyplace.thirdZoom', zoom.toFixed(2));
+      } catch {
+        /* no storage */
+      }
+    },
+    { passive: true },
+  );
   /** How far the way is clear for the third-person camera: the walker's collision at his level, every 0.2 m. */
   const thirdClear = (from: THREE.Vector3, dir: THREE.Vector3, max: number): number => {
     const floor = camera.position.y - 1.7;
@@ -819,6 +839,8 @@ async function run(): Promise<void> {
       r.armed = false;
       r.onFootfall = footfall;
       r.fitEye(1.7);
+      // What of the animation library is his own (models/cityMoves.ts: his walk, the pistol's stance), once it's fetched.
+      withCityMoves(r).catch((e: unknown) => console.warn("Mack's moves from the animation library aren't in: he moves as he's keyed.", e));
       r.object.remove(r.flashLight);
       r.object.visible = false;
       scene.add(r.object);
@@ -1475,13 +1497,13 @@ async function run(): Promise<void> {
   // CPU a frame while it shows. In the cabin it's the mirror's own glass (off: the glass reflects the sky's colours);
   // from the other cameras (`all`) a mirror drawn at the top of the view, the road behind the car.
   // (Measured, 2026-10-05: the picture's size costs next to nothing, the city's cost being its geometry; a picture
-  // costs ~2.4 ms however big. So the pictures are sharp, and what's rationed is how many are drawn: at most one a
-  // frame, the cab's mirror or the one over the view every other frame, a door mirror only while it's on the screen.)
+  // costs ~2.4 ms however big. So the picture is sharp, and what's rationed is how often it's drawn: the cab's mirror
+  // (only while it's on the screen) or the one over the view, every other frame. The door mirrors show no picture:
+  // they're the body's own chrome glass, as every car's.)
   const rearMirror = new RearMirror(640, 170, 160, 1, 0, 4);
-  const doorMirrors = [new RearMirror(288, 224, 160, 1, 0, 4), new RearMirror(288, 224, 160, 1, 0, 4)];
-  /** Frames since each mirror's picture was drawn (the cab's or the one over the view, the left door's, the right's), and how many frames each is good for. */
-  const mirrorAge = [99, 99, 99];
-  const MIRROR_EVERY = [2, 3, 3];
+  /** Frames since the mirror's picture was drawn (the cab's or the one over the view), and how many frames it's good for. */
+  let mirrorAge = 99;
+  const MIRROR_EVERY = 2;
   const mirrorFrustum = new THREE.Frustum();
   /** Whether a pane of glass is on the screen, facing the eye. */
   const glassSeen = (g: THREE.Object3D): boolean => {
@@ -1771,7 +1793,7 @@ async function run(): Promise<void> {
   if (me?.profile) saveProfile(me.profile);
   if (me?.car) {
     try {
-      localStorage.setItem('citypop.city.car', JSON.stringify(me.car));
+      localStorage.setItem('rainyplace.city.car', JSON.stringify(me.car));
     } catch {
       /* this session only */
     }
@@ -1823,7 +1845,7 @@ async function run(): Promise<void> {
   const CAR_LIGHTS = ['auto', 'high', 'off'] as const;
   let carLights: (typeof CAR_LIGHTS)[number] = 'auto';
   try {
-    const kept = CAR_LIGHTS.find((m) => m === localStorage.getItem('citypop.carLights'));
+    const kept = CAR_LIGHTS.find((m) => m === localStorage.getItem('rainyplace.carLights'));
     if (kept) carLights = kept;
   } catch {
     /* no storage */
@@ -2288,7 +2310,9 @@ async function run(): Promise<void> {
   if (exitRoad) enterCar(ownCar.vehicle);
   if (me?.driving && !exitRoad) enterCar(ownCar.vehicle);
   if (debug) (window as unknown as { __own: OwnCar; __ex: Expressway }).__own = ownCar;
-  if (debug) (window as unknown as { __mirrors: unknown }).__mirrors = { rear: rearMirror, doors: doorMirrors, mode: (v: 'off' | 'cockpit' | 'all') => (mood.mirror = v) };
+  // ?debug=1: window.__turn(deg) turns the view on foot by so much (third person: the camera comes round him).
+  if (debug) (window as unknown as { __turn: (deg: number) => void }).__turn = (deg) => controls.setView(lookYaw() + deg, 0);
+  if (debug) (window as unknown as { __mirrors: unknown }).__mirrors = { rear: rearMirror, mode: (v: 'off' | 'cockpit' | 'all') => (mood.mirror = v) };
   if (debug) (window as unknown as { __taxi: unknown }).__taxi = { hail: () => hailTaxi(), state: () => ({ hail: traffic.hail && { stopped: traffic.hail.stopped, d: Math.hypot(traffic.hail.taxi.x - camera.position.x, traffic.hail.taxi.z - camera.position.z) }, here: taxiHere(), ride: taxiRide && { t: taxiRide.t, T: taxiRide.T, fare: taxiRide.fare } }), getIn: () => getInTaxi(), path: () => taxiRide && { path: taxiRide.path.map((p) => p.map(Math.round)), blocked: taxiRide.path.map((p) => district.blocked(p[0], p[1], 0.5)) }, taxis: () => (traffic as unknown as { vehicles: { label: string; x: number; z: number; mode: string }[] }).vehicles.filter((v) => v.label === 'Taxi').map((v) => [Math.round(v.x), Math.round(v.z), v.mode, Math.round(Math.hypot(v.x - camera.position.x, v.z - camera.position.z))]) };
   if (debug) (window as unknown as { __ex: Expressway }).__ex = expressway;
   // ?debug=1: window.__onExpressway(i, road) puts your car on the loop (or the named ramp or spur) at sample i
@@ -2300,7 +2324,7 @@ async function run(): Promise<void> {
   };
   // Mouse Y: normal (mouse up looks up) or inverted, for walking and driving alike. I toggles it; the choice is
   // remembered in this browser; ?invertY=1 / 0 sets it.
-  const INVERT_KEY = 'citypop.invertY';
+  const INVERT_KEY = 'rainyplace.invertY';
   const setInvertY = (on: boolean, save: boolean): void => {
     controls.invertY = on;
     driving.invertY = on;
@@ -2570,6 +2594,9 @@ async function run(): Promise<void> {
   // by subject. The settings' rows (moodPanel.ts: weather, light, the crowd, sound, graphics) are in every build; the
   // testing tools (teleport, the clock, the season, your car, the wardrobe...) on the dev server or with ?debug=1.
   const debugTools = import.meta.env.DEV || debug;
+  // A figure under trial, walking where you are (the dev server only: `?figure=<a .glb's path>`, district/trialFigure.ts).
+  let trial: { update(dt: number, camera: THREE.Camera): void } | null = null;
+  if (import.meta.env.DEV && params.get('figure')) void import('./trialFigure').then(async (m) => (trial = await m.trialFigure(scene, params.get('figure')!, groundAt)));
   const setClockTo = (minute: number): void => {
     clockTotal = Math.floor(clockTotal / DAY) * DAY + minute;
     syncClockFlags();
@@ -3209,7 +3236,7 @@ async function run(): Promise<void> {
     if (e.code === 'KeyF' && driving.own && !inVn) {
       carLights = CAR_LIGHTS[(CAR_LIGHTS.indexOf(carLights) + 1) % CAR_LIGHTS.length];
       try {
-        localStorage.setItem('citypop.carLights', carLights);
+        localStorage.setItem('rainyplace.carLights', carLights);
       } catch {
         /* no storage */
       }
@@ -3219,11 +3246,11 @@ async function run(): Promise<void> {
       thirdPerson = !thirdPerson;
       thirdCam.reset();
       try {
-        localStorage.setItem('citypop.thirdPerson', thirdPerson ? '1' : '0');
+        localStorage.setItem('rainyplace.thirdPerson', thirdPerson ? '1' : '0');
       } catch {
         /* no storage */
       }
-      toast(thirdPerson ? 'Third person · Q back to first person' : 'First person · Q for third person');
+      toast(thirdPerson ? 'Third person · mouse wheel nearer or further · Q back to first person' : 'First person · Q for third person');
     }
     if (e.code === 'KeyI') {
       setInvertY(!controls.invertY, true);
@@ -3244,10 +3271,10 @@ async function run(): Promise<void> {
       if (e.shiftKey) {
         setSmokes(smokes === 'cigar' ? 'cigarette' : 'cigar');
         toast(smokes === 'cigar' ? 'Cigars · J lights one' : 'Cigarettes · J lights one');
-      } else if (mack.smoking.what) {
-        if (mack.smoking.flick()) toast('Flicked away');
-      } else if (mack.smoking.light(smokes)) toast(`Lighting a ${smokes} · J flicks it away`);
-      else toast('Hands full: put the gun away to light up');
+      } else if (mack.smoking.flick()) toast('Flicked away');
+      else if (mack.smoking.lighting) toast(`Lighting a ${mack.smoking.what} · J flicks it away once it's lit`);
+      else if (mack.smoking.light(smokes)) toast(`Lighting a ${smokes} · J flicks it away`);
+      else toast('Can’t light up now: put the gun away, and not at a run');
     }
     if (e.code === 'KeyX' && mack && (!driving.car || ridingNow()) && !inVn) {
       mack.armed = !mack.armed;
@@ -3530,6 +3557,7 @@ async function run(): Promise<void> {
     // (The traffic brakes for the cars in a chase as it does for anyone in the road.)
     if (chase.active) walkers.push(...chase.walkers());
     traffic.update(dt, camera.position, walkers);
+    trial?.update(inVn ? 0 : dt, camera);
     if (cabin?.bus) {
       traffic.busScreens(cabin.bus);
       rider.compose();
@@ -3791,41 +3819,34 @@ async function run(): Promise<void> {
       query = gl2.createQuery();
       gl2.beginQuery(timer.TIME_ELAPSED_EXT, query);
     }
-    if (thirdNow && mack) thirdCam.place(camera, footOffset(mack.aim), dt, thirdClear);
+    if (thirdNow && mack) thirdCam.place(camera, footOffset(mack.aim, thirdCam.zoom), dt, thirdClear);
     censor.track(mack?.object.visible ? mack : null, camera);
     // The rear-view mirror's picture, in the cockpit (without Mack; the sun's shadows as they are).
     const atWheel = driving.own === ownCar && !ownCar.bike && driving.interior === ownCar.interior;
     const inCabin = atWheel && !!driving.interior?.group.visible;
     hudMirror.visible = atWheel && !inCabin && !driving.aim && mood.mirror === 'all' && !inVn && driving.lookingBack < 0.3;
-    // (The door mirrors show the road behind from the cab; from outside, or with the mirrors off, they're dull glass.)
-    ownCar.sideMirrors.forEach((g, i) => (g.material = inCabin && mood.mirror !== 'off' ? doorMirrors[i].material : OwnCar.dullMirror));
     if (atWheel) driving.interior!.showMirror(mood.mirror === 'off' ? null : rearMirror.material);
     if (atWheel && mood.mirror !== 'off' && (inCabin || hudMirror.visible)) {
       const autoSun = sun.shadow.autoUpdate;
       sun.shadow.autoUpdate = false;
-      for (let i = 0; i < 3; i++) mirrorAge[i]++;
-      // (The mirrors leave the passers-by out: at a busy crossing they're most of a picture's triangles, and it's the cars you look for.)
+      mirrorAge++;
+      // (The mirror leaves the passers-by out: at a busy crossing they're most of a picture's triangles, and it's the cars you look for.)
       const mirrorLeaves = district.crowd ? [district.crowd.group] : [];
       if (inCabin) {
-        // One picture a frame at most: of the mirrors on the screen, the one most overdue.
+        // The cab's mirror, while its glass is on the screen.
         camera.updateMatrixWorld();
         mirrorFrustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorld.clone().invert()));
-        const panes = [driving.interior!.mirror, ...ownCar.sideMirrors];
-        let due = -1;
-        for (let i = 0; i < panes.length; i++) {
-          if (mirrorAge[i] < MIRROR_EVERY[i] || !glassSeen(panes[i])) continue;
-          if (due < 0 || mirrorAge[i] / MIRROR_EVERY[i] > mirrorAge[due] / MIRROR_EVERY[due]) due = i;
+        const pane = driving.interior!.mirror;
+        if (mirrorAge >= MIRROR_EVERY && glassSeen(pane)) {
+          mirrorAge = 0;
+          rearMirror.render(renderer, scene, pane, camera.position, [...(mack ? [mack.object] : []), ...mirrorLeaves]);
         }
-        const hide = [...(mack ? [mack.object] : []), ...mirrorLeaves];
-        if (due === 0) rearMirror.render(renderer, scene, panes[0], camera.position, hide);
-        else if (due > 0) doorMirrors[due - 1].render(renderer, scene, panes[due], camera.position, hide, ownCar.mirrorHalf);
-        if (due >= 0) mirrorAge[due] = 0;
       } else {
         // Over the view: at the top, a quarter of its width; the picture from the car's roof straight back.
         const s = ownCar.sim;
         const back = new THREE.Vector3(-Math.sin(s.h), -0.03, -Math.cos(s.h));
-        if (mirrorAge[0] >= MIRROR_EVERY[0]) {
-          mirrorAge[0] = 0;
+        if (mirrorAge >= MIRROR_EVERY) {
+          mirrorAge = 0;
           rearMirror.renderBack(renderer, scene, new THREE.Vector3(s.x, ownCar.view.obj.position.y + 1.25, s.z), back, 15, [ownCar.view.obj, hudMirror, ...mirrorLeaves]);
         }
         const d = 0.6;
@@ -3892,7 +3913,7 @@ async function run(): Promise<void> {
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? (t.sleep ? 'Sleep until morning' : 'Look') : 'Talk'}: ${t.name ?? t.id}` : driving.car ? `[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera${seated ? ' · right button aims the pistol, left fires · R reload' : ''}` : taxiHere() ? '[E] Get in the taxi' : busesNew && !rider.active && traffic.busToBoard(camera.position) ? `[E] Board the bus · ¥${BUS_FARE}` : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
-        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · Q third person · J smoke · C squat · F fly · I invert mouse Y${debugTools ? ' · ` debug menu' : ' · ` settings'}`,
+        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · Q third person (wheel zooms) · J smoke · C squat · F fly · I invert mouse Y${debugTools ? ' · ` debug menu' : ' · ` settings'}`,
       ].join('\n');
       builtThisWindow = 0;
     }

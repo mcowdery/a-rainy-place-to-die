@@ -9,6 +9,9 @@ adult/
 # Krea Studio client: cached session cookie and optional local credentials (never commit)
 .krea/
 .env.krea
+.env.sketchfab
+# Jev (Typesafe) API key for scripts/model/pickModel.mjs
+.env.jev
 # Generated ad candidates awaiting review (approved ones move to assets/ads/source/)
 assets/ads/pending/
 # Generated music awaiting review (scripts/radio/generate.py; approved tracks move to assets/radio/<station>/)
@@ -22,5 +25,15 @@ debug-shots/*
 .claude/settings.local.json
 .claude/*.lock
 
+# Packs fetched from elsewhere, as downloaded (what's cut from them is in assets/, credited in CREDITS.md)
+.cache/
+
+# Reference photos to look at (refs/README.md): never committed, never shipped
+refs/*
+!refs/README.md
+
 # Python bytecode (scripts/blender)
 __pycache__/
+
+# claude-model-guard decision log (contains prompt text)
+.claude/model-guard.log.jsonl

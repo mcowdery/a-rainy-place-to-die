@@ -125,6 +125,13 @@ export class Smoking {
   private toLips = 0;
   private round = -1;
   private wait = 0;
+  /** What's to be lit once the one just flicked has left his hand, and whether he's running (from the last pose). */
+  private next: StickKind | null = null;
+  private running = false;
+  /** Still lighting up (the page says so when it's asked for another). */
+  get lighting(): boolean {
+    return this.stage === 'light';
+  }
   private burnt = 0;
   private heat = 0;
   private breath = 0;
@@ -152,9 +159,18 @@ export class Smoking {
     return this.stage === 'none' ? null : this.inHand ? 'hand' : 'lips';
   }
 
-  /** Lights one up, if he has nothing lit and both hands are free. */
+  /**
+   * Lights one up, if he has nothing lit and both hands are free (and he isn't running: he'd throw it away). With
+   * the last one only just flicked away (it lies glowing for some seconds, and until it was out a press did
+   * nothing: the user had to keep hitting the key), the next is lit as soon as that one has left his hand.
+   */
   light(kind: StickKind): boolean {
-    if (this.stage !== 'none' || !this.free) return false;
+    if (this.stage === 'flick') {
+      this.next = kind;
+      return true;
+    }
+    if (this.stage !== 'none' || !this.free || this.running) return false;
+    this.next = null;
     this.kind = kind;
     this.stage = 'light';
     this.t = 0;
@@ -211,6 +227,7 @@ export class Smoking {
   /** The act moves on, and the arms it needs are posed (before the rig's shadow copies them). */
   pose(c: SmokeCtx): void {
     this.free = c.free;
+    this.running = c.running;
     if (this.stage === 'none') {
       // Left to himself he lights one before long: sooner standing about than on the move.
       if (this.auto && c.free && !c.running) {
@@ -319,6 +336,15 @@ export class Smoking {
       } else {
         wantL = t < T + 0.5 ? 1 : 0;
         this.butt.life -= dt;
+        // (Another asked for meanwhile: once the hand's back, the stub's forgotten and the next is lit.)
+        if (this.next && this.oursL < 0.25 && c.free && !c.running) {
+          const kind = this.next;
+          this.stage = 'none';
+          this.butt = null;
+          this.heat = 0;
+          this.light(kind);
+          return;
+        }
         this.heat = 0.3 * THREE.MathUtils.clamp(this.butt.life / 2.5, 0, 1);
         if (this.butt.life <= 0 && this.oursL < 0.02) {
           this.seed = (this.seed * 7.13 + 0.31) % 1;
@@ -347,8 +373,11 @@ export class Smoking {
     const fwdH = new THREE.Vector3(c.fx, 0, c.fz);
     const right = new THREE.Vector3(-c.fz, 0, c.fx);
     const behind = fwdH.clone().negate();
-    const mouth = this.mouthOf({ ...c, face: null }, new THREE.Vector3());
-    const viewF = new THREE.Vector3(0, 0, -1).applyQuaternion(c.viewQ);
+    // His mouth as the head has it when the head's shown (third person, where the camera's eyes and his own part
+    // company: squatting, his back leant over his knees; the head nodding): the hand went to where the view put his
+    // mouth while the cigarette went to his lips, and at each drag the two were apart (the user's report).
+    const mouth = this.mouthOf(c, new THREE.Vector3());
+    const viewF = c.face ? c.face.fwd.clone() : new THREE.Vector3(0, 0, -1).applyQuaternion(c.viewQ);
     H.reset('l');
     const S = arm.upper.getWorldPosition(new THREE.Vector3());
     // Held low: the arm hanging at his side as it does anyway (going with its swing as he walks), only a little
@@ -405,8 +434,8 @@ export class Smoking {
     const fwdH = new THREE.Vector3(c.fx, 0, c.fz);
     const right = new THREE.Vector3(-c.fz, 0, c.fx);
     const behind = fwdH.clone().negate();
-    const mouth = this.mouthOf({ ...c, face: null }, new THREE.Vector3());
-    const viewF = new THREE.Vector3(0, 0, -1).applyQuaternion(c.viewQ);
+    const mouth = this.mouthOf(c, new THREE.Vector3());
+    const viewF = c.face ? c.face.fwd.clone() : new THREE.Vector3(0, 0, -1).applyQuaternion(c.viewQ);
     H.reset('r');
     const S = arm.upper.getWorldPosition(new THREE.Vector3());
     // In his pocket, by the hip; and with the flame at the cigarette's end: the fist under it, the thumb on the wheel.

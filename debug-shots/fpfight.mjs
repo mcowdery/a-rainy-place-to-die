@@ -1,4 +1,4 @@
-// Fighting in the showroom's first person: fists (guard, jab, cross, hook, uppercut, kick) and the katana (draw,
+// Fighting on the fight page (fight.html): fists (guard, jab, cross, hook, uppercut, kick) and the katana (draw,
 // guard, cuts, thrust), against the test thug, in first person and from outside.
 //   node debug-shots/fpfight.mjs <out dir> [fists|katana|both]
 import { chromium } from 'playwright-core';
@@ -11,14 +11,14 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true, args:
 const page = await browser.newPage({ viewport: { width: 1000, height: 600 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); });
-await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.goto(`${server.resolvedUrls.local[0]}fight.html`);
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
 await page.waitForTimeout(1500);
 await page.evaluate(() => { for (const id of ['panel']) document.getElementById(id).style.display = 'none'; document.querySelectorAll('.label').forEach((l) => (l.style.display = 'none')); });
 const shot = (n) => page.screenshot({ path: `${out}/${n}.png` });
 const wait = (ms) => page.waitForTimeout(ms);
-// Somewhere open: the far side of the pad, looking along it.
-await page.evaluate(async () => { await __fp.enter(14, 24, 0); __fp.look(0, -0.05); });
+// In the yard, facing its north wall.
+await page.evaluate(async () => { await __fp.enter(0, 3, 0); __fp.look(0, -0.05); });
 await wait(600);
 // A frozen outside view of you both, from your right front.
 // (The camera is your eyes: kept and put back, so the outside view doesn't move you.)

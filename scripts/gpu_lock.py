@@ -4,7 +4,7 @@
     gpu_lock.exclusive("radio generate")
 
 waits until the shot scripts and benchmarks now running have finished, and holds new ones back until this process
-ends. A holder is a file <pid>-<mode>.json in the temp folder's citypop-gpu/; see shotServer.mjs for the rules.
+ends. A holder is a file <pid>-<mode>.json in the temp folder's rainyplace-gpu/; see shotServer.mjs for the rules.
 CITYPOP_GPU=off skips it.
 """
 import atexit
@@ -16,7 +16,7 @@ import sys
 import tempfile
 import time
 
-DIR = os.path.join(tempfile.gettempdir(), "citypop-gpu")
+DIR = os.path.join(tempfile.gettempdir(), "rainyplace-gpu")
 WAIT = 15 * 60
 
 

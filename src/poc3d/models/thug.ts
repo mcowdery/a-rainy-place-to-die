@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { loadCharacterModel } from './characters';
 import { collapse, cutPart } from './dismember';
 import { buildKatana, type Katana } from './katana';
-import { FIST_BLOCK, FIST_GUARD, lerpHand, lerpSword, Melee, partFactor, swordQuat, type Capsule, type HandKey, type Hitter, type HitInfo, type MeleeTarget, type MeleeWeapon, type MoveId, type SwordKey } from './melee';
+import { FIST_BLOCK, FIST_GUARD, lerpHand, lerpSword, Melee, MOVES, partFactor, swordQuat, type Capsule, type HandKey, type Hitter, type HitInfo, type MeleeTarget, type MeleeWeapon, type MoveId, type SwordKey } from './melee';
 
 /**
  * An ordinary fighter (models/melee.ts): a cast model (the salaryman's for now) posed procedurally, fighting
@@ -66,9 +66,12 @@ export type GuardSide = 'left' | 'right' | 'high';
 /** Where a blow comes at the one it's aimed at: his left, his right, high, or straight in. */
 export type Side = GuardSide | 'center';
 
+/** What a fighter fights with (nobody but you has a bat yet). */
+export type ThugWeapon = Exclude<MeleeWeapon, 'bat'>;
+
 export interface ThugOpts {
   readonly tier?: Tier;
-  readonly weapon?: MeleeWeapon;
+  readonly weapon?: ThugWeapon;
   /** For the boss bar. */
   readonly name?: string;
 }
@@ -93,11 +96,17 @@ export const ELITE = {
 
 /** Which side of the one it's aimed at each move reaches (his right-to-left cut comes at your left). */
 export function sideOf(m: MoveId): Side {
-  if (m === 'slashR' || m === 'hookR') return 'left';
-  if (m === 'slashL' || m === 'hook') return 'right';
-  if (m === 'overhead') return 'high';
+  // (A stance's swing at a zone, from one side: the high stance's come down on him.)
+  const z = /^[kb]z_(high|mid|low)_\w+_([rl])$/.exec(m);
+  if (z) return z[1] === 'high' ? 'high' : z[2] === 'r' ? 'left' : 'right';
+  if (FROM_RIGHT.has(m)) return 'left';
+  if (FROM_LEFT.has(m)) return 'right';
+  if (m === 'overhead' || m === 'batDown') return 'high';
   return 'center';
 }
+/** The swings that travel right to left (they reach the other's left), and their mirrors. */
+const FROM_RIGHT: ReadonlySet<MoveId> = new Set<MoveId>(['slashR', 'hookR', 'sideR', 'rising', 'legCut', 'batChopR', 'batR', 'batRiseR', 'batLegs']);
+const FROM_LEFT: ReadonlySet<MoveId> = new Set<MoveId>(['slashL', 'hook', 'sideL', 'risingL', 'batChopL', 'batL', 'batRiseL']);
 
 const vk = (x: number, y: number, z: number): V3 => new THREE.Vector3(x, y, z);
 const nk = (x: number, y: number, z: number): V3 => new THREE.Vector3(x, y, z).normalize();
@@ -116,7 +125,7 @@ const FIST_GUARDS: Record<GuardSide, { r: HandKey; l: HandKey }> = {
   high: FIST_BLOCK,
 };
 /** An elite's blows. */
-const ELITE_BLOWS: Record<MeleeWeapon, [MoveId, number][]> = {
+const ELITE_BLOWS: Record<ThugWeapon, [MoveId, number][]> = {
   katana: [
     ['slashR', 3],
     ['slashL', 3],
@@ -222,7 +231,7 @@ export class Thug implements MeleeTarget {
   private readonly cuts: THREE.Object3D[] = [];
   private readonly scaled: THREE.Bone[] = [];
   readonly tier: Tier;
-  readonly weapon: MeleeWeapon;
+  readonly weapon: ThugWeapon;
   readonly name: string;
   readonly maxHealth: number;
   /** An elite's posture (0 to `ELITE.posture`), its guard, when it next shifts, a shift on its way. */
@@ -452,7 +461,11 @@ export class Thug implements MeleeTarget {
       return;
     }
     if (this.state === 'floored' || this.state === 'getup') return;
-    if (h.move === 'kick' && this.rand() < 0.65) {
+    // A kick floors him more often than not; so does a cut or a bat across the legs, and now and then a full
+    // swing of the bat anywhere.
+    const legs = /thigh|calf|leg|foot/.test(h.part);
+    const floors = h.move === 'kick' ? 0.65 : h.move === 'legCut' || h.move === 'batLegs' || MOVES[h.move].low ? (legs ? 0.8 : 0.3) : h.hitter === 'bat' && h.move !== 'batJab' ? 0.3 : 0;
+    if (floors > 0 && this.rand() < floors) {
       this.knockDown(flat);
       return;
     }
@@ -568,10 +581,11 @@ export class Thug implements MeleeTarget {
     this.scaled.push(bone);
   }
 
-  /** Crushes his head (a stomp): flattened. */
-  crushHead(): void {
+  /** Crushes his head: flattened (a stomp, a blow down on it), or caved in from the side (a bat swung through it). */
+  crushHead(fromSide = false): void {
     const bone = this.bone('head');
-    bone.scale.set(1.35, 0.4, 1.3);
+    if (fromSide) bone.scale.set(0.62, 1.08, 1.22);
+    else bone.scale.set(1.35, 0.4, 1.3);
     this.scaled.push(bone);
   }
 
@@ -587,10 +601,10 @@ export class Thug implements MeleeTarget {
     if (this.state === 'scripted') return ev;
     this.push.multiplyScalar(Math.exp(-6 * dt));
     if (this.state !== 'dead' || (this.fall && this.fall.a < 0.3)) this.root.position.addScaledVector(this.push, dt);
-    // Keep apart from the others.
+    // Keep apart from the others (the ones there: a fighter put away is nowhere).
     if (this.alive)
       for (const o of f.others) {
-        if (o === this || !o.alive) continue;
+        if (o === this || !o.alive || !o.root.visible) continue;
         const dx = this.root.position.x - o.root.position.x;
         const dz = this.root.position.z - o.root.position.z;
         const d = Math.hypot(dx, dz);

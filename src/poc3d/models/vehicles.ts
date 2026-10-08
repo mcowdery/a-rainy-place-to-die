@@ -1032,7 +1032,7 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     const fwd: V3 = [-M.b[0], -M.b[1], -M.b[2]];
     if (fine) for (const q of [[0, 1, 2, 3], [0, 3, 4, 7], [4, 5, 6, 7]]) face(nose[q[0]], nose[q[1]], nose[q[2]], nose[q[3]], fwd);
     else face(nose[0], nose[1], nose[2], nose[3], fwd);
-    // The rim's bezel, the well behind it, and the glass at its bottom (a hero car's own glass stands a little proud of it).
+    // The rim's bezel, the well behind it, and the glass at its bottom.
     const well = fine ? 0.03 : 0.012;
     const inner = (t: number): V3[] => outline.map(([x, y]) => at(t, x * 0.86, y * 0.86));
     const rim = ringAt(0);
@@ -1719,21 +1719,6 @@ function mirrorPlan(d: Design, type: CarType, S: { top: (x: number) => number; h
   const my = S.section(mx)[5][0] + 0.02;
   const skin = S.halfW(mx);
   return { wing, b, a, u, c: [mx - 0.035, my + 0.07, sd * (skin + 0.115)], hw: 0.085, hh: 0.054, depth: 0.1, foot: [mx - 0.01, my + 0.03, sd * (skin - 0.03)] };
-}
-
-/**
- * The door mirrors' glass (wing mirrors', on a car that has those), for a car that shows a picture in them
- * (district/ownCar.ts): each one's middle, set back in its head's rim, and the way that rim faces, in the car's own
- * frame (x to its left, z forward, as `wheelLayout`'s), and the glass's size. Left first.
- */
-export function mirrorSpots(type: CarType): { x: number; y: number; z: number; nx: number; ny: number; nz: number; w: number; h: number }[] {
-  const d = DESIGNS[type];
-  const S = shapeOf(d);
-  return ([1, -1] as const).map((sd) => {
-    const M = mirrorPlan(d, type, S, sd);
-    const t = 0.017;
-    return { x: M.c[2] - M.b[2] * t, y: M.c[1] - M.b[1] * t, z: M.c[0] - M.b[0] * t - d.L / 2, nx: M.b[2], ny: M.b[1], nz: M.b[0], w: M.hw * 2 * 0.84, h: M.hh * 2 * 0.84 };
-  });
 }
 
 export function wheelLayout(type: CarType): { r: number; tw: number; rims: 'alloy' | 'steel'; spots: WheelSpot[] } {

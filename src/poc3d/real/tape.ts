@@ -9,7 +9,7 @@
 const AUDIO = /\.(mp3|ogg|opus|oga|m4a|aac|flac|wav)$/i;
 const MAX_TRACKS = 2000;
 const MAX_DEPTH = 4;
-const DB = 'citypop.tape';
+const DB = 'rainyplace.tape';
 
 interface DirHandle {
   readonly name: string;
@@ -109,7 +109,7 @@ export class Tape {
     if (pick) {
       let h: DirHandle;
       try {
-        h = await pick.call(window, { id: 'citypop-tape', mode: 'read', startIn: 'music' });
+        h = await pick.call(window, { id: 'rainyplace-tape', mode: 'read', startIn: 'music' });
       } catch {
         return false;
       }

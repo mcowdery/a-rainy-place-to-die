@@ -1,6 +1,6 @@
 import type { Outfit } from '../district/peopleMix';
 import { FACE_CHEEK, FACE_EYE, FACE_MARK } from './emoteGlsl';
-import { ARM_L, ARM_R, blend, FOOT_L, FOOT_R, FORE_L, FORE_R, HEAD, one, PELVIS, pivotsOf, PROPORTIONS, SHIN_L, SHIN_R, SPINE, TemplateBuilder, THIGH_L, THIGH_R, type Body, type Hair, type Row, type Template, type V3, type Weight } from './mobRig';
+import { ALL_BONES, ARM_L, ARM_R, armSwing, blend, BONES, clavicle, digitBone, fingerTip, handBone, hipHalf, shoulderHalf, spineBone, toeBone, toeDigit, FOOT_L, FOOT_R, FORE_L, FORE_R, HEAD, one, PELVIS, pivotsOf, PROPORTIONS, SHIN_L, SHIN_R, SPINE, TemplateBuilder, THIGH_L, THIGH_R, type Body, type Hair, type Row, type Template, type V3, type Weight } from './mobRig';
 
 /**
  * The mob's shaped generation (under review in mob.html; the district still draws real/people.ts's classic
@@ -97,26 +97,29 @@ export function setShapedHeadScale(k: number): void {
 }
 
 /**
- * For the mob showroom, to compare ways of building a woman's hips (null: as the city has them). Set before a
- * template is built (real/people.ts keeps one per variant).
+ * A figure's own proportions, where it isn't the body's usual ones: a named character's (real/mobCharacters.ts).
+ * Set before a template is built (real/people.ts keeps one per variant); null, as the crowd is built.
  */
-export interface ShapedTrial {
-  /** How full her bottom is in trousers (1: as FORM_FITTING clothes have it; 0: the plain seat), where the city's is ROUND_SEAT. */
-  readonly rear?: number;
-  /** Whether the two sides then meet in the cleft, its line drawn (the city's trousers: no, run together). */
-  readonly cleft?: boolean;
-  /** Where her legs part (CROTCH), and where above it her hips start to draw in to the thighs (HIPS_PART). */
-  readonly crotch?: number;
-  readonly part?: number;
-  readonly nipple?: number;
-  readonly hair?: number;
+export interface FigureShape {
+  /** Its height against the body's own (the whole figure scaled, joints and all). */
+  readonly height?: number;
+  /** A woman's bust against the usual. */
+  readonly bust?: number;
+  /** A woman's hips against the usual: their width, and the tops of the thighs with them. */
+  readonly hips?: number;
+  /**
+   * The detailed body a named character has, where the crowd's is simple: arms with an arm's own form that run
+   * into the shoulders without a crease, hands with fingers and a thumb in one piece with the arm, bare feet with
+   * toes, a curved back, and (with nothing on) the furrow down the spine.
+   */
+  readonly detail?: boolean;
 }
-let trial: ShapedTrial | null = null;
-export function setShapedTrial(t: ShapedTrial | null): void {
-  trial = t && Object.keys(t).length ? t : null;
+let figure: FigureShape | null = null;
+export function setFigureShape(f: FigureShape | null): void {
+  figure = f && Object.keys(f).length ? f : null;
 }
-/** What the templates built now differ by from the city's (part of their cache's key). */
-export const shapedVariant = (): string => (trial ? JSON.stringify(trial) : '');
+/** What the templates built now differ by from the crowd's (part of their cache's key). */
+export const shapedVariant = (): string => (figure ? JSON.stringify(figure) : '');
 
 /** A push on the surface: vertices within the ellipsoid (centre c, radii r) move by `push`, fading to its edge. */
 interface Bulge {
@@ -170,7 +173,8 @@ function pushAt(x: number, y: number, z: number, field: readonly Bulge[]): V3 {
         const across = b.side === undefined || d2 < 1e-9 ? 0 : (ex * ex) / d2;
         const round = (b.round ?? 2) + ((b.under ?? 0) - (b.round ?? 2)) * lower;
         const dome = Math.pow(1 - d2, round + ((b.side ?? round) - round) * across);
-        return b.point ? dome + (1 - Math.sqrt(d2) - dome) * b.point * (1 - lower) * (1 - across) : dome;
+        // (The cone eased to nothing at its edge, so the form runs into the surface round it without a crease.)
+        return b.point ? dome + (Math.pow(1 - Math.sqrt(d2), 1.4) - dome) * b.point * (1 - lower) * (1 - across) : dome;
       };
       let k: number, drop = 0;
       if (b.lower && ey < 0) {
@@ -235,6 +239,267 @@ function displace(tb: TemplateBuilder, from: number, field: readonly Bulge[]): v
 }
 
 /**
+ * Two shapes pushed into one another made one surface (a character's arm and chest): `a` and `b` are each a run of
+ * the builder's points (first, one past the last) with the faces among them. Every point of either that lies inside
+ * the other (a ray's crossings of the other's faces; only points `near` allows) goes, with the faces on it, which
+ * leaves each shape open along a ragged line beside where the two met; the two open edges are then joined by faces,
+ * going round both together and advancing along whichever makes the shorter new edge. Each new face is wound against
+ * the edge it stands on, so the surface faces out without being told which way that is. Nothing is changed, and
+ * false comes back, where the two don't meet in one closed line each (an edge that forks, more than one opening).
+ */
+function weld(tb: TemplateBuilder, a: readonly [number, number], b: readonly [number, number], near: (x: number, y: number, z: number) => boolean, axis: V3 = [1, 0, 0]): number[][] | null {
+  const P = tb.pos, I = tb.idx;
+  const of = (v: number): number => (v >= a[0] && v < a[1] ? 0 : v >= b[0] && v < b[1] ? 1 : -1);
+  const tris: number[][] = [[], []];
+  for (let t = 0; t < I.length; t += 3) {
+    const k = of(I[t]);
+    if (k >= 0 && of(I[t + 1]) === k && of(I[t + 2]) === k) tris[k].push(t);
+  }
+  // (A ray a little off level and off every axis, so it doesn't run along the shapes' own lines.)
+  const D = [0.297, 0.031, 0.954];
+  const inside = (v: number, other: readonly number[]): boolean => {
+    const ox = P[v * 3], oy = P[v * 3 + 1], oz = P[v * 3 + 2];
+    let hits = 0;
+    for (const t of other) {
+      const p0 = I[t] * 3, p1 = I[t + 1] * 3, p2 = I[t + 2] * 3;
+      const e1x = P[p1] - P[p0], e1y = P[p1 + 1] - P[p0 + 1], e1z = P[p1 + 2] - P[p0 + 2];
+      const e2x = P[p2] - P[p0], e2y = P[p2 + 1] - P[p0 + 1], e2z = P[p2 + 2] - P[p0 + 2];
+      const hx = D[1] * e2z - D[2] * e2y, hy = D[2] * e2x - D[0] * e2z, hz = D[0] * e2y - D[1] * e2x;
+      const det = e1x * hx + e1y * hy + e1z * hz;
+      if (Math.abs(det) < 1e-14) continue;
+      const sx = ox - P[p0], sy = oy - P[p0 + 1], sz = oz - P[p0 + 2];
+      const u = (sx * hx + sy * hy + sz * hz) / det;
+      if (u < 0 || u > 1) continue;
+      const qx = sy * e1z - sz * e1y, qy = sz * e1x - sx * e1z, qz = sx * e1y - sy * e1x;
+      const w = (D[0] * qx + D[1] * qy + D[2] * qz) / det;
+      if (w < 0 || u + w > 1) continue;
+      if ((e2x * qx + e2y * qy + e2z * qz) / det > 1e-9) hits++;
+    }
+    return hits % 2 === 1;
+  };
+  const gone = new Set<number>();
+  for (const k of [0, 1]) {
+    const [from, to] = k === 0 ? a : b;
+    for (let v = from; v < to; v++) if (near(P[v * 3], P[v * 3 + 1], P[v * 3 + 2]) && inside(v, tris[1 - k])) gone.add(v);
+  }
+  if (!gone.size) return null;
+  // Each shape's open edge: the edges of the faces that stay which a face that goes shared, the way the staying face
+  // has them. It must be one closed line: a point where it forks (the opening pinched there) goes too, and so does
+  // any piece left cut off from the rest (the top of the arm standing out above the shoulder), until it is.
+  const loops: number[][] = [];
+  const drop = new Set<number>();
+  for (const k of [0, 1]) {
+    let loop: number[] | null = null;
+    for (let pass = 0; pass < 12 && !loop; pass++) {
+      const cut = new Set<string>();
+      const stay: number[] = [];
+      for (const t of tris[k]) {
+        if (gone.has(I[t]) || gone.has(I[t + 1]) || gone.has(I[t + 2])) for (let e = 0; e < 3; e++) cut.add(`${I[t + e]},${I[t + ((e + 1) % 3)]}`);
+        else stay.push(t);
+      }
+      if (stay.length === tris[k].length || !stay.length) return null;
+      // (The pieces the staying faces are in, by the points they share; all but the biggest go.)
+      const piece = new Map<number, number>();
+      const top = (v: number): number => {
+        let r = v;
+        while (piece.get(r) !== r) r = piece.get(r)!;
+        piece.set(v, r);
+        return r;
+      };
+      for (const t of stay) {
+        for (let e = 0; e < 3; e++) if (!piece.has(I[t + e])) piece.set(I[t + e], I[t + e]);
+        piece.set(top(I[t + 1]), top(I[t]));
+        piece.set(top(I[t + 2]), top(I[t]));
+      }
+      const size = new Map<number, number>();
+      for (const t of stay) size.set(top(I[t]), (size.get(top(I[t])) ?? 0) + 1);
+      const main = [...size.entries()].sort((p, q) => q[1] - p[1])[0][0];
+      let again = false;
+      for (const v of piece.keys()) {
+        if (top(v) === main) continue;
+        gone.add(v);
+        again = true;
+      }
+      if (again) continue;
+      // (The staying faces' free edges: the opening, and with it any of the shape's own open end it runs into, the
+      // top of the arm; the shape's other open ends are lines of their own and are left.)
+      const has = new Set<string>();
+      for (const t of stay) for (let e = 0; e < 3; e++) has.add(`${I[t + e]},${I[t + ((e + 1) % 3)]}`);
+      const next = new Map<number, number>();
+      for (const t of stay) {
+        for (let e = 0; e < 3; e++) {
+          const p = I[t + e], q = I[t + ((e + 1) % 3)];
+          if (has.has(`${q},${p}`)) continue;
+          if (next.has(p)) {
+            gone.add(p);
+            again = true;
+          } else next.set(p, q);
+        }
+      }
+      if (again) continue;
+      // The closed lines among them, and which have an edge of the cut.
+      const seen = new Set<number>();
+      const cuts: number[][] = [];
+      let open = false;
+      for (const first of next.keys()) {
+        if (seen.has(first)) continue;
+        const round = [first];
+        seen.add(first);
+        let v = next.get(first);
+        while (v !== undefined && v !== first && !seen.has(v)) {
+          round.push(v);
+          seen.add(v);
+          v = next.get(v);
+        }
+        if (v !== first) open = true;
+        else if (round.some((q) => cut.has(`${next.get(q)},${q}`))) cuts.push(round);
+      }
+      if (open || !cuts.length) return null;
+      cuts.sort((p, q) => q.length - p.length);
+      // (More than one opening: the smaller ones' points go, and it's looked at again.)
+      if (cuts.length > 1) {
+        for (const round of cuts.slice(1)) for (const q of round) gone.add(q);
+        continue;
+      }
+      loop = cuts[0];
+    }
+    if (!loop) return null;
+    loops.push(loop);
+  }
+  for (const k of [0, 1]) for (const t of tris[k]) if (gone.has(I[t]) || gone.has(I[t + 1]) || gone.has(I[t + 2])) drop.add(t);
+  // Joined: the second runs the other way round the opening, so it is taken backward. The two are gone round together
+  // by the angle each has come about the middle of the opening, seen along the body's width (the way an arm or a leg
+  // leaves it): whichever is behind goes on. (By the shorter new edge alone the faces slanted all one way round, and
+  // an arm raised wrung them like a cloth.)
+  const A = loops[0], B = loops[1].slice().reverse();
+  // (Seen along `axis`: the way the one shape leaves the other. Across the body by default, an arm's way.)
+  const c: V3 = [0, 0, 0];
+  for (const v of [...A, ...B]) for (let k = 0; k < 3; k++) c[k] += P[v * 3 + k] / (A.length + B.length);
+  const up: V3 = Math.abs(axis[1]) > 0.9 ? [0, 0, 1] : [0, 1, 0];
+  let e1: V3 = [axis[1] * up[2] - axis[2] * up[1], axis[2] * up[0] - axis[0] * up[2], axis[0] * up[1] - axis[1] * up[0]];
+  const l1 = Math.hypot(e1[0], e1[1], e1[2]) || 1;
+  e1 = [e1[0] / l1, e1[1] / l1, e1[2] / l1];
+  const e2: V3 = [axis[1] * e1[2] - axis[2] * e1[1], axis[2] * e1[0] - axis[0] * e1[2], axis[0] * e1[1] - axis[1] * e1[0]];
+  const angle = (v: number): number => {
+    const d = [P[v * 3] - c[0], P[v * 3 + 1] - c[1], P[v * 3 + 2] - c[2]];
+    return Math.atan2(d[0] * e2[0] + d[1] * e2[1] + d[2] * e2[2], d[0] * e1[0] + d[1] * e1[1] + d[2] * e1[2]);
+  };
+  const turn = (p: number, q: number): number => {
+    const d = angle(q) - angle(p);
+    return d > Math.PI ? d - 2 * Math.PI : d < -Math.PI ? d + 2 * Math.PI : d;
+  };
+  let start = 0;
+  for (let j = 1; j < B.length; j++) if (Math.abs(turn(A[0], B[j])) < Math.abs(turn(A[0], B[start]))) start = j;
+  const kept: number[] = [];
+  for (let t = 0; t < I.length; t += 3) if (!drop.has(t)) kept.push(I[t], I[t + 1], I[t + 2]);
+  const n = A.length, m = B.length;
+  // (How far round each has come: its own turns added up, the second's from where it stands to the first's start.)
+  const way = Math.sign(A.reduce((sum, v, q) => sum + turn(v, A[(q + 1) % n]), 0)) || 1;
+  let i = 0, j = 0, ta = 0, tb2 = turn(A[0], B[start]) * way;
+  while (i < n || j < m) {
+    const ai = A[i % n], an = A[(i + 1) % n], bj = B[(start + j) % m], bn = B[(start + j + 1) % m];
+    const da = turn(ai, an) * way, db = turn(bj, bn) * way;
+    if (j >= m || (i < n && ta + da <= tb2 + db)) {
+      kept.push(an, ai, bj);
+      ta += da;
+      i++;
+    } else {
+      kept.push(bj, bn, ai);
+      tb2 += db;
+      j++;
+    }
+  }
+  tb.idx = kept;
+  return loops;
+}
+
+/**
+ * The edge of the opening left in a shape (a run of the builder's points) when some of its points go, as one closed
+ * line of points, the way the faces that stay have it; null where it can't be made one (it is asked for where it
+ * should be: a hole cut in the chest). A point where the edge forks, and any smaller opening's points, go too
+ * (`gone` grows), until it is one.
+ */
+function openingOf(tb: TemplateBuilder, run: readonly [number, number], gone: Set<number>): number[] | null {
+  const I = tb.idx;
+  const tris: number[] = [];
+  for (let t = 0; t < I.length; t += 3) if ([0, 1, 2].every((e) => I[t + e] >= run[0] && I[t + e] < run[1])) tris.push(t);
+  for (let pass = 0; pass < 12; pass++) {
+    const cut = new Set<string>(), has = new Set<string>();
+    const stay: number[] = [];
+    for (const t of tris) {
+      const off = gone.has(I[t]) || gone.has(I[t + 1]) || gone.has(I[t + 2]);
+      if (!off) stay.push(t);
+      for (let e = 0; e < 3; e++) (off ? cut : has).add(`${I[t + e]},${I[t + ((e + 1) % 3)]}`);
+    }
+    const next = new Map<number, number>();
+    let again = false;
+    for (const t of stay) {
+      for (let e = 0; e < 3; e++) {
+        const a = I[t + e], b = I[t + ((e + 1) % 3)];
+        if (!cut.has(`${b},${a}`) || has.has(`${b},${a}`)) continue;
+        if (next.has(a)) {
+          gone.add(a);
+          again = true;
+        } else next.set(a, b);
+      }
+    }
+    if (again) continue;
+    if (!next.size) return null;
+    const seen = new Set<number>();
+    const rounds: number[][] = [];
+    for (const first of next.keys()) {
+      if (seen.has(first)) continue;
+      const round = [first];
+      seen.add(first);
+      let v = next.get(first);
+      while (v !== undefined && v !== first && !seen.has(v)) {
+        round.push(v);
+        seen.add(v);
+        v = next.get(v);
+      }
+      if (v !== first) return null;
+      rounds.push(round);
+    }
+    rounds.sort((a, b) => b.length - a.length);
+    if (rounds.length === 1) return rounds[0];
+    for (const round of rounds.slice(1)) for (const v of round) gone.add(v);
+  }
+  return null;
+}
+
+/**
+ * Faces joining two closed lines of points that go the same way round an opening (`a` the way its own faces have it,
+ * so each new face is wound against the edge it stands on): both are gone round together by the angle each has come
+ * (`angle`: a point's angle about the opening's middle), whichever is behind going on.
+ */
+function stitchRings(a: readonly number[], b: readonly number[], angle: (v: number) => number): number[] {
+  const turn = (p: number, q: number): number => {
+    const d = angle(q) - angle(p);
+    return d > Math.PI ? d - 2 * Math.PI : d < -Math.PI ? d + 2 * Math.PI : d;
+  };
+  const n = a.length, m = b.length;
+  let start = 0;
+  for (let j = 1; j < m; j++) if (Math.abs(turn(a[0], b[j])) < Math.abs(turn(a[0], b[start]))) start = j;
+  const way = Math.sign(a.reduce((sum, v, q) => sum + turn(v, a[(q + 1) % n]), 0)) || 1;
+  const out: number[] = [];
+  let i = 0, j = 0, ta = 0, tb = turn(a[0], b[start]) * way;
+  while (i < n || j < m) {
+    const ai = a[i % n], an = a[(i + 1) % n], bj = b[(start + j) % m], bn = b[(start + j + 1) % m];
+    const da = turn(ai, an) * way, db = turn(bj, bn) * way;
+    if (j >= m || (i < n && ta + da <= tb + db)) {
+      out.push(an, ai, bj);
+      ta += da;
+      i++;
+    } else {
+      out.push(bj, bn, ai);
+      tb += db;
+      j++;
+    }
+  }
+  return out;
+}
+
+/**
  * Faces between two rows of points of different counts (vertex indices, both listed the same way round, `lo` the
  * lower): a zipper, advancing along whichever row is behind by its share of the way. The vertices are shared with
  * the lofts either side, so the surface shades as one. `closed`: rings (the upper is turned to start where the
@@ -266,6 +531,100 @@ function zip(tb: TemplateBuilder, lo: readonly number[], hi: readonly number[], 
     if (stepLo) i++;
     else k++;
   }
+}
+
+/**
+ * A tube along a path: a ring of `seg` points square to it at each point, its radius there (`flat`: how much
+ * thinner it is across its second axis), closed to a point just past its end. A finger, a toe.
+ */
+function tube(tb: TemplateBuilder, path: readonly V3[], radii: readonly number[], seg: number, weights: Weight | readonly Weight[], shade: number, flat = 1): void {
+  const start = tb.pos.length / 3;
+  const n = path.length;
+  // (One weight for all of it, or one a ring: a finger's joints.)
+  const each = typeof weights[0] !== 'number';
+  let weight = (each ? (weights as readonly Weight[])[0] : weights) as Weight;
+  const put = (x: number, y: number, z: number): void => {
+    tb.pos.push(x, y, z);
+    tb.b0.push(weight[0]);
+    tb.b1.push(weight[1]);
+    tb.w.push(weight[2]);
+    tb.shade.push(shade);
+  };
+  let last: V3 = [0, -1, 0];
+  let before: V3 | null = null;
+  for (let i = 0; i < n; i++) {
+    const a = path[Math.max(0, i - 1)], b = path[Math.min(n - 1, i + 1)], c = path[i];
+    if (each) weight = (weights as readonly Weight[])[Math.min(i, weights.length - 1)];
+    let d: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const dl = Math.hypot(d[0], d[1], d[2]) || 1;
+    d = [d[0] / dl, d[1] / dl, d[2] / dl];
+    last = d;
+    // (Across it: square to its length and to x where it runs up and down, else to y; and from then on the ring
+    // before's own across, carried along. Chosen afresh at each ring it turned a quarter round wherever the path
+    // passed from mostly upright to mostly level, a curled finger's last joint, which wrung the tube to a thread
+    // there and left the fingertip looking like a bead come off.)
+    const ref: V3 = Math.abs(d[1]) > 0.6 ? [1, 0, 0] : [0, 1, 0];
+    const k: number = before ? before[0] * d[0] + before[1] * d[1] + before[2] * d[2] : 0;
+    let u: V3 = before ? [before[0] - d[0] * k, before[1] - d[1] * k, before[2] - d[2] * k] : [d[1] * ref[2] - d[2] * ref[1], d[2] * ref[0] - d[0] * ref[2], d[0] * ref[1] - d[1] * ref[0]];
+    const ul = Math.hypot(u[0], u[1], u[2]) || 1;
+    u = [u[0] / ul, u[1] / ul, u[2] / ul];
+    before = u;
+    const v: V3 = [d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]];
+    for (let j = 0; j < seg; j++) {
+      const t = (j / seg) * Math.PI * 2, cu = Math.cos(t) * radii[i], cv = Math.sin(t) * radii[i] * flat;
+      put(c[0] + u[0] * cu + v[0] * cv, c[1] + u[1] * cu + v[1] * cv, c[2] + u[2] * cu + v[2] * cv);
+    }
+  }
+  const e = path[n - 1], r = radii[n - 1] * 0.7;
+  put(e[0] + last[0] * r, e[1] + last[1] * r, e[2] + last[2] * r);
+  const tip = tb.pos.length / 3 - 1;
+  // Faces out: away from the path.
+  const P = tb.pos;
+  const out = (a: number, b: number, c: number, about: V3): void => {
+    const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2];
+    const vx = P[c * 3] - P[a * 3], vy = P[c * 3 + 1] - P[a * 3 + 1], vz = P[c * 3 + 2] - P[a * 3 + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const mx = (P[a * 3] + P[b * 3] + P[c * 3]) / 3 - about[0], my = (P[a * 3 + 1] + P[b * 3 + 1] + P[c * 3 + 1]) / 3 - about[1], mz = (P[a * 3 + 2] + P[b * 3 + 2] + P[c * 3 + 2]) / 3 - about[2];
+    if (nx * mx + ny * my + nz * mz >= 0) tb.idx.push(a, b, c);
+    else tb.idx.push(a, c, b);
+  };
+  for (let i = 0; i + 1 < n; i++) {
+    const mid: V3 = [(path[i][0] + path[i + 1][0]) / 2, (path[i][1] + path[i + 1][1]) / 2, (path[i][2] + path[i + 1][2]) / 2];
+    for (let j = 0; j < seg; j++) {
+      const a = start + i * seg + j, b = start + i * seg + ((j + 1) % seg), c = start + (i + 1) * seg + ((j + 1) % seg), d = start + (i + 1) * seg + j;
+      out(a, c, b, mid);
+      out(a, d, c, mid);
+    }
+  }
+  for (let j = 0; j < seg; j++) out(start + (n - 1) * seg + j, start + (n - 1) * seg + ((j + 1) % seg), tip, e);
+}
+
+/**
+ * Normals softened where two parts of a figure meet (a shoulder, an ankle: each built as a shape of its own, pushed
+ * into the other, so the light broke along the join): within each zone (centre, radius) a point's normal becomes
+ * the mean of those near it that face about the same way, whichever part they belong to. The join then shades as
+ * one surface. (Opposite faces close together, an arm against the ribs, are left alone.)
+ */
+function softenNormals(t: Template, zones: readonly (readonly [V3, number])[]): void {
+  const P = t.pos, N = t.nor;
+  const idx: number[] = [];
+  for (let i = 0; i < P.length / 3; i++) if (zones.some(([c, r]) => Math.hypot(P[i * 3] - c[0], P[i * 3 + 1] - c[1], P[i * 3 + 2] - c[2]) < r)) idx.push(i);
+  const S2 = 0.016 * 0.016, R2 = 0.045 * 0.045;
+  const next = new Float32Array(idx.length * 3);
+  idx.forEach((i, n) => {
+    let sx = 0, sy = 0, sz = 0;
+    for (const j of idx) {
+      const d2 = (P[i * 3] - P[j * 3]) ** 2 + (P[i * 3 + 1] - P[j * 3 + 1]) ** 2 + (P[i * 3 + 2] - P[j * 3 + 2]) ** 2;
+      if (d2 > R2 || N[i * 3] * N[j * 3] + N[i * 3 + 1] * N[j * 3 + 1] + N[i * 3 + 2] * N[j * 3 + 2] < 0.2) continue;
+      const w = Math.exp(-d2 / S2);
+      sx += N[j * 3] * w;
+      sy += N[j * 3 + 1] * w;
+      sz += N[j * 3 + 2] * w;
+    }
+    const l = Math.hypot(sx, sy, sz) || 1;
+    next.set([sx / l, sy / l, sz / l], n * 3);
+  });
+  idx.forEach((i, n) => N.set(next.subarray(n * 3, n * 3 + 3), i * 3));
 }
 
 /** How far along a ray (from o, direction u, in a horizontal section) an ellipse's far side is; 0 if it misses. */
@@ -315,13 +674,16 @@ const CHEST_ANGLES: readonly number[] = [...Array.from({ length: 16 }, (_, i) =>
  * Round a woman's hips, below the waist: a point on the middle in front and behind (where the legs part), close
  * together either side of the middle behind (the buttocks and the cleft between them), fewer round the sides.
  */
-const HIP_ANGLES: readonly number[] = [0, 25, 50, 70, 81, 90, 99, 110, 130, 155, 180, 198, 218, 236, 250, 260, 266, 270, 274, 280, 290, 304, 322, 342].map((d) => (d * Math.PI) / 180);
-const HIP_FRONT = 5, HIP_BACK = 17;
+// (60 and 120: where the front of each thigh is. Without a point there the lowest rings cut straight across from
+// 50 to 70, 8 mm inside the thigh's front, a dent across it seen from the side.)
+const HIP_DEGREES = [0, 25, 50, 60, 70, 81, 90, 99, 110, 120, 130, 155, 180, 198, 218, 236, 250, 260, 266, 270, 274, 280, 290, 304, 322, 342];
+const HIP_ANGLES: readonly number[] = HIP_DEGREES.map((d) => (d * Math.PI) / 180);
+const HIP_FRONT = HIP_DEGREES.indexOf(90), HIP_BACK = HIP_DEGREES.indexOf(270);
 /**
  * The same with nothing on: more points close either side of the middle in front (and BARE_HIP_ROWS: more rings
  * low down, by how far above where the legs part), so the front of the hips can have form there.
  */
-const BARE_HIP_DEGREES = [0, 25, 50, 70, 81, 84, 87, 88.5, 89.3, 90, 90.7, 91.5, 93, 96, 99, 110, 130, 155, 180, 198, 218, 236, 250, 260, 266, 270, 274, 280, 290, 304, 322, 342];
+const BARE_HIP_DEGREES = [0, 12, 25, 38, 50, 60, 70, 81, 84, 86, 87, 88, 88.5, 89, 89.3, 89.65, 90, 90.35, 90.7, 91, 91.5, 92, 93, 94, 96, 99, 110, 120, 130, 142, 155, 168, 180, 189, 198, 208, 218, 227, 236, 243, 250, 260, 266, 270, 274, 280, 290, 297, 304, 313, 322, 332, 342, 351];
 const BARE_HIP_ANGLES: readonly number[] = BARE_HIP_DEGREES.map((d) => (d * Math.PI) / 180);
 const BARE_HIP_ROWS: readonly number[] = [0.01, 0.0275, 0.044];
 /** The heights (the man's) of the rings between her waist and where her legs part, and that height. */
@@ -342,6 +704,17 @@ const WAISTLINE = 1.024;
 const PART_FRONT = 0.08, PART_BACK = 0.05, PART_HALF_FRONT = 0.075, PART_HALF_BACK = 0.032;
 /** Where the line under her, between the legs, starts in front (m ahead of the legs' middle). */
 const PART_TUCK = 0.05;
+/**
+ * With nothing on: there is no such line (the skin between the legs is built of its own points: BARE_UNDER); the
+ * space between the thighs is wider (so the form there has room); the leg has closer sections at its top, and the buttock a longer lower slope, so the
+ * buttock rolls into the thigh rather than ending in a step.
+ */
+const BARE_THIGH_GAP = 0.036, BARE_CHEEK_LOW = 0.17;
+/** (And it ends further back, nearer the buttocks' own backs: the cleft comes down into a shallow hollow, not a pit.) */
+const BARE_PART_BACK = 0.06;
+/** (And what joins the thighs in front is narrower: the creases where each thigh meets the belly run in to where the legs part, a Y, where trousers have a smooth front.) */
+const BARE_HALF_FRONT = 0.042;
+const BARE_LEG_ROWS: readonly number[] = [-0.0125, -0.0375];
 /**
  * Where a woman's hips hand over to her thighs (thighShare; the man's metres): the height of the half-way line at
  * the side, behind and in front (at the middle it's the crotch's), and how tall the band is against THIGH_BAND
@@ -507,8 +880,9 @@ const BODY: Record<Body, BodyShape> = {
     field: [
       // The bust, shaped in the torso itself: each breast a long slope from above into a round underside, the cloth
       // between them; soft round buttocks; the hollow of the back.
-      { c: [0.066, 1.238, 0.112], r: [0.07, 0.062, 0.1], up: 0.125, push: [0.007, -0.006, 0.058], round: 1.15 },
-      { c: [0, 1.27, 0.115], r: [0.055, 0.07, 0.08], up: 0.09, push: [0, 0, 0.012] },
+      // (2 cm higher on her than it first was: the user's pick, tried on the bare body first: BUST_LOOKS.)
+      { c: [0.066, 1.2595, 0.112], r: [0.07, 0.062, 0.1], up: 0.125, push: [0.007, -0.006, 0.058], round: 1.15 },
+      { c: [0, 1.2915, 0.115], r: [0.055, 0.07, 0.08], up: 0.09, push: [0, 0, 0.012] },
       { c: [0.07, 0.905, -0.105], r: [0.105, 0.14, 0.11], push: [0, 0, -0.012] },
       { c: [0, 1.09, -0.07], r: [0.1, 0.11, 0.06], push: [0, 0, 0.01] },
     ],
@@ -557,31 +931,40 @@ const ROUND_SEAT = 0.6;
  * Nothing lies across between the two. Shape only.
  */
 /**
- * The front of her hips between the legs, as form (the user, 2026-10-06, after the cleft drawn as a line alone: 'this
- * is what I want', of giving the hips finer points there): a soft fullness either side of the middle and the middle
- * drawn in between them, from a little above where the legs part down to it. Nothing more than that.
+ * The form between her legs, in front, as the body's own shape (the user, 2026-10-06: 'this is what I want', of
+ * giving the hips finer points there; then, of two tries: the first, on the hips' front alone, was 'too far up and
+ * a little too subtle', not in the silhouette; the second, two forms of their own hung under the body, 'too far
+ * back', 'too long/pronounced' and 'separated'; 'in between the old and new is where it should be', and shaped
+ * from the body as the first was). So: low on the hips' front, a soft fullness either side of the middle with the
+ * middle drawn in (BARE_FRONT, on the lowest rings), carried on down and under by the skin between the legs
+ * (BARE_UNDER), which hangs a little either side of the middle just behind the front and is level again by the
+ * legs' middle: from the front, two low rounded shapes with a notch between at the top of the space between the
+ * thighs. Nothing more than that.
  */
 const BARE_FRONT: readonly Bulge[] = [
-  { c: [0.0095, 0.85, 0.075], r: [0.013, 0.034, 0.07], push: [0, 0, 0.0075], round: 1.1 },
-  { c: [0, 0.848, 0.075], r: [0.006, 0.032, 0.07], push: [0, 0, -0.009], round: 1 },
+  { c: [0.008, 0.832, 0.075], r: [0.0125, 0.017, 0.07], push: [0, 0, 0.008], round: 1 },
+  { c: [0, 0.83, 0.075], r: [0.004, 0.017, 0.07], push: [0, 0, -0.008], round: 1 },
 ];
 /**
- * And under her, between the legs, so it shows in her outline from the front (the user: 'more pronounced', and to
- * 'show in her silhouette when viewed from the front'): the two sides carried down and back under the body as a
- * rounded form each, side by side with the middle between them, hanging a little below where the legs part into
- * the space between the thighs. Each as sections front to back: [how far in front of the legs' middle, half width,
- * half height, how far above where the legs part (m)]; and how far from the middle its centre is.
+ * The skin under her, between the legs: rows from the hips' lowest ring in front (its own points close to the
+ * middle, shared) back to the legs' shared point on the middle behind, each `rows` of the way, sagging `sag` at
+ * its middle. Either side of the middle it hangs as a round form (the user, of a longer and thinner try: 'two round
+ * plumps', with a line drawn under them: two U's side by side across the space between the thighs): a round arc
+ * across, `wide` from the middle out (m; a little short of the thigh, so it turns up again before it), `depth` deep, the middle between the two up at `notch` of that; from the front back over the first `to` of
+ * the way, deepest midway (short front to back: about as long as it is wide and deep, not a ridge).
  */
-const BARE_UNDER = {
-  x: 0.006,
-  rows: [[0.066, 0.0005, 0.0005, 0.03], [0.061, 0.005, 0.007, 0.019], [0.052, 0.0065, 0.012, 0.004], [0.038, 0.007, 0.014, -0.009], [0.02, 0.007, 0.0145, -0.014], [0.002, 0.0066, 0.0135, -0.013], [-0.016, 0.005, 0.01, -0.007], [-0.03, 0.0005, 0.0005, 0.003]],
-} as const;
-const BARE_CLEFT: Bulge = { c: [0, 0.895, -0.11], r: [0.03, 0.095, 0.06], push: [0, 0, 0.014], round: 1.5 };
+const BARE_UNDER = { rows: [0.04, 0.08, 0.12, 0.16, 0.2, 0.25, 0.3, 0.4, 0.55, 0.75], sag: 0.0035, depth: 0.016, notch: 0.45, to: 0.34, wide: 0.0165 } as const;
+// (Deeper, and running on down to where the legs part, at the user's word: 'a deeper butt crack in general', and
+// more of one low down. Narrow ones, the cheeks touching, were tried and turned down.)
+const BARE_CLEFT: Bulge = { c: [0, 0.88, -0.11], r: [0.027, 0.115, 0.075], push: [0, 0, 0.025], round: 1.25 };
+/** How far up into the body the point is where the cleft meets the legs' parting behind (m): a notch there, seen from behind. */
+const BARE_CLEFT_UP = 0.011;
 const BARE_BREAST: Bulge = {
   // (Each a mound of its own, round across with steep sides (`side`), its inner edge just short of the middle: seen
   // from above the chest goes back in between the two, an upturned V, as the user drew it twice. Joined across the
   // middle in a crease they made one shelf from above.)
-  c: [0.07, 1.236, 0.112],
+  // (At the clothed bust's height: 2 cm higher on her than both first were, the user's pick of BUST_LOOKS.)
+  c: [0.07, 1.2575, 0.112],
   r: [0.064, 0.062, 0.1],
   side: 0.7,
   up: 0.125,
@@ -592,7 +975,8 @@ const BARE_BREAST: Bulge = {
   // fold at the chest, a little under the nipple's height: the user's second drawing. The skin is the clothed bust's
   // lower half, down to its lower edge: toward that edge it's drawn up, behind the rest, to where the fold is, less
   // round toward the sides, so the fold is a shallow arc and the chest behind the breast stands straight.)
-  lower: [[0, 1, 0], [0.15, 0.98, 0], [0.3, 0.9, 0.0012], [0.45, 0.77, 0.0009], [0.6, 0.6, -0.002], [0.72, 0.42, -0.009], [0.83, 0.25, -0.0195], [0.92, 0.115, -0.032], [1, 0, -0.046]],
+  // (Its lower half's profile is the first of UNDER_LOOKS, given where the figure is built; this is the same one.)
+  lower: [[0, 1, 0], [0.15, 0.99, 0.002], [0.3, 0.94, 0.005], [0.45, 0.85, 0.007], [0.6, 0.7, 0.006], [0.72, 0.55, 0.003], [0.83, 0.38, 0], [0.92, 0.2, -0.007], [0.97, 0.08, -0.014], [1, 0, -0.022]],
 };
 /**
  * Round her chest with nothing on: a point every five degrees across the front (the middle one on the middle), so
@@ -600,6 +984,29 @@ const BARE_BREAST: Bulge = {
  */
 const BARE_ANGLES: readonly number[] = [...Array.from({ length: 31 }, (_, i) => ((15 + i * 5) * Math.PI) / 180), ...CHEST_ANGLES.slice(16)];
 /** Sections through her chest for it, by how far below the breast's centre toward its lower edge (and a little past both). */
+/**
+ * How full the underside of a bare woman's breast is where it comes back to the chest, to choose between (the
+ * user, with a line drawn from its lowest point round and up the chest: 'more fatness underneath so that it
+ * touches', the bottom resting against her body 'instead of floating in the air', and the breast itself not moved).
+ * As it was, the underside ran straight from its lowest point up to a fold 2 cm higher on the chest, a wedge of air
+ * under it; fuller, it stays low as it comes back, lying along the chest, and turns up into the fold only at the
+ * chest itself, the fold lower. Each is BARE_BREAST's `lower` profile. The first is the city's (the user's pick of
+ * them: 'perfect'); the mob showroom shows them side by side (ShapedTrial.under).
+ */
+type Lower = NonNullable<Bulge['lower']>;
+const UNDER_HEAD: Lower = [[0, 1, 0], [0.15, 0.99, 0.002], [0.3, 0.94, 0.005], [0.45, 0.85, 0.007], [0.6, 0.7, 0.006]];
+export const UNDER_LOOKS: readonly { readonly name: string; readonly lower: Lower }[] = [
+  { name: 'full: rests on the chest, the fold low', lower: [...UNDER_HEAD, [0.72, 0.55, 0.003], [0.83, 0.38, 0], [0.92, 0.2, -0.007], [0.97, 0.08, -0.014], [1, 0, -0.022]] },
+];
+/**
+ * How high a bare woman's breasts sit, to choose between (the user: could they be 'slightly higher'; several to
+ * compare, the bare body first, the clothed bust to follow once a height is picked): how far above where they are
+ * (m, on her). The first is the city's (the user picked 2 cm above where it was: BARE_BREAST has it, and the clothed
+ * bust was then moved up the same); the mob showroom shows them side by side (ShapedTrial.bust).
+ */
+export const BUST_LOOKS: readonly { readonly name: string; readonly rise: number }[] = [
+  { name: "as it is (the clothed bust's height)", rise: 0 },
+];
 const BREAST_ROWS: readonly number[] = [...Array.from({ length: 21 }, (_, i) => i * 0.05), 1.04, 1.1, 1.18, 1.28, 1.4, 1.52, 1.62];
 /**
  * Her navel (the user: 'color in some more detail on the rest of her body such as a navel'; a round mark 'looks
@@ -608,8 +1015,39 @@ const BREAST_ROWS: readonly number[] = [...Array.from({ length: 21 }, (_, i) => 
  * that, how far round the belly from the middle (radians), its half width (m)]; how far off the skin; its shade.
  */
 const NAVEL = { y: 1.03, stroke: [[0.011, 0.006, 0.0003], [0.005, -0.006, 0.0013], [-0.002, -0.009, 0.0012], [-0.009, 0.002, 0.0003]], off: 0.0012, shade: SKIN - 0.45 } as const;
-/** How much darker the cleft's line is drawn down the seat. */
-const CLEFT_SHADE = 0.2;
+/**
+ * The cleft in front, between her legs (the user asked for it, 2026-10-06): drawn as the navel is, one fine stroke
+ * in her skin darkened down the middle of the hips' front, from a little above where the legs part down and under
+ * to it, lying in the form BARE_FRONT gives the hips there. The stroke as [how far up the hips' lowest
+ * rings (under 0: down toward where the legs part), its half width (of the way to the next hip point)]; how far
+ * off the skin (m; under the hair); its shade.
+ */
+/**
+ * How far the form between her legs hangs down, to choose between (the user: round enough now, but 'still too
+ * long', about twice what it should be, meaning 'from top to bottom how long it hangs down'; several to pick from):
+ * `depth`, how deep the two round forms hang (m; BARE_UNDER's); `tall`, how far up the hips' front the form runs
+ * against BARE_FRONT's own height (0: nothing on the front); `to`, how far back under her the forms run. The
+ * first is the city's (the user's pick, 2026-10-06: 'perfect'; the height on the front had been one of the main
+ * things wrong); the mob showroom shows them side by side (ShapedTrial.front).
+ */
+export const FRONT_LOOKS: readonly { readonly name: string; readonly tall: number; readonly to: number; readonly depth: number }[] = [
+  { name: 'hangs 0.8 cm, half as tall on the front', tall: 0.5, to: 0.34, depth: 0.008 },
+];
+/**
+ * How the cleft behind is drawn, to choose between. The user's words: the first, one column of points darkened,
+ * was liked but looked 'low quality' (a blurred line as wide as the points happened to be apart); soft shading in
+ * its place was fine from angles but 'looks bad' straight on, a smudge with nothing in it. So: a fine line drawn
+ * down the middle (`stroke`, its half width in m; a strip lying in the cleft, widest low down and tapering to
+ * nothing at the top, `dark` darker than the skin) with shading either side of it (`shade` darker on the middle,
+ * fading over `spread` degrees round from it; `column`: the first way's darkening of the middle column of points,
+ * which the user asked to see mixed with the soft shading, and of the mixes picked the one that is mostly shading).
+ * The first is the city's; the mob showroom shows them side by side (ShapedTrial.cleftLook).
+ */
+export const CLEFT_LOOKS: readonly { readonly name: string; readonly shade: number; readonly spread: number; readonly column?: number; readonly stroke: number; readonly dark: number }[] = [
+  { name: 'the first line in soft shading, mostly shading', shade: 0.24, spread: 9, column: 0.08, stroke: 0, dark: 0 },
+];
+/** (How far off the skin the line lies, m; and up to what height, the man's, it runs.) */
+const CLEFT_LINE = { off: 0.0006, top: 0.99 } as const;
 
 /** Legs, bottom to top: trousers (a straight leg to a hem over the shoe), slim ones, and a bare leg with a calf. */
 const TROUSERS: readonly Row[] = [
@@ -751,12 +1189,180 @@ const HAND: readonly Row[] = [
   [0.832, 0.014, 0.027, 0.003],
   [0.868, 0.016, 0.021, 0],
 ];
+/**
+ * A character's detailed arm (FigureShape.detail), wrist to shoulder, in the crowd's ARM's units: a slim wrist,
+ * flatter than it is deep (the hand hangs palm to the thigh), the forearm's belly below the elbow, the elbow a
+ * little drawn in with its point behind, the upper arm, and the shoulder's cap, which leans in over the top of the
+ * chest (ARM_LEAN) so the arm runs into the shoulder's slope, not up beside it.
+ */
+const ARM_FINE: readonly Row[] = [
+  [0.868, 0.024, 0.033, 0.001],
+  [0.9, 0.029, 0.037, -0.001],
+  [0.95, 0.034, 0.042, -0.004],
+  [1.0, 0.039, 0.046, -0.008],
+  [1.06, 0.042, 0.048, -0.014],
+  [1.1, 0.04, 0.046, -0.019],
+  [1.13, 0.037, 0.044, -0.023],
+  [1.17, 0.039, 0.045, -0.02],
+  [1.24, 0.044, 0.05, -0.016],
+  [1.3, 0.05, 0.054, -0.013],
+  [1.35, 0.054, 0.058, -0.011],
+  [1.39, 0.058, 0.062, -0.01],
+  [1.42, 0.055, 0.058, -0.01],
+  [1.44, 0.044, 0.05, -0.01],
+  [1.452, 0.022, 0.03, -0.01],
+  [1.457, 0.004, 0.004, -0.01],
+];
+const ARM_LEAN = 0.034;
+/** Its palm, knuckles to the heel of the hand, in one piece with the arm: [y, half thickness, half width, z]. */
+const PALM: readonly Row[] = [
+  [0.754, 0.002, 0.002, 0.004],
+  [0.757, 0.008, 0.037, 0.004],
+  [0.767, 0.012, 0.041, 0.004],
+  [0.792, 0.014, 0.041, 0.006],
+  [0.822, 0.0155, 0.038, 0.008],
+  [0.85, 0.015, 0.03, 0.004],
+];
+/** Its fingers, index to little: [where across the palm (-1 back to 1 front), length, radius, how much more it curls (degrees)]. */
+const FINGERS: readonly (readonly [number, number, number, number])[] = [[0.72, 0.07, 0.0088, 0], [0.26, 0.078, 0.0092, 3], [-0.22, 0.072, 0.0088, 7], [-0.68, 0.057, 0.0078, 12]];
+/** A bare foot, heel to the root of the toes: [z, half width, half height, y] (standing on the floor), and its toes, big to little: [how far across from the middle toward the outside, how far forward its tip is (z), its half width]. */
+const FOOT_FINE: readonly Row[] = [
+  [-0.052, 0.002, 0.002, 0.03],
+  [-0.046, 0.022, 0.024, 0.03],
+  [-0.03, 0.028, 0.034, 0.037],
+  [-0.005, 0.03, 0.04, 0.043],
+  [0.03, 0.033, 0.03, 0.033],
+  [0.06, 0.04, 0.022, 0.024],
+  [0.082, 0.044, 0.016, 0.017],
+  [0.096, 0.0435, 0.0125, 0.0135],
+  [0.103, 0.037, 0.009, 0.011],
+  [0.106, 0.002, 0.002, 0.01],
+];
+const TOES: readonly (readonly [number, number, number])[] = [[-0.0317, 0.128, 0.0115], [-0.0117, 0.127, 0.0085], [0.005, 0.123, 0.0082], [0.021, 0.118, 0.0078], [0.036, 0.112, 0.0072]];
+/** Where the toes are rooted, inside the forefoot (z), and how flat they are (their height against their width). */
+const TOE_ROOT = 0.086, TOE_FLAT = 0.8;
+/** The knob of the ankle on the outside of each leg: where (x out from the foot's middle, y, z, by the foot's scale), and how far it stands out (m). */
+const ANKLE_KNOB = { at: [0.025, 0.072, -0.014], r: [0.017, 0.017, 0.019], out: 0.0048 } as const;
+/**
+ * A character's back: the small of the back drawn in and the upper back a little out (a curve, where the crowd's
+ * is nearly straight), and, with nothing on, the furrow down the spine.
+ */
+const BACK_CURVE: readonly Bulge[] = [
+  // (A stronger arch, after the user's references, was tried and taken back: 'bring it back to what it was'.)
+  { c: [0, 1.08, -0.08], r: [0.12, 0.13, 0.08], push: [0, 0, 0.012] },
+  { c: [0, 1.33, -0.09], r: [0.13, 0.11, 0.08], push: [0, 0, -0.008] },
+  // The shoulder blades, either side of the spine, built out (the user asked): each a flat plate lying on the ribs,
+  // its inner edge a ridge down beside the spine, its lower corner a point, and its own spine a ridge up and out
+  // toward the shoulder; the back hollow between the two.
+  { c: [0.078, 1.335, -0.1], r: [0.055, 0.08, 0.07], push: [0.001, 0, -0.017], round: 1.2 },
+  { c: [0.05, 1.33, -0.1], r: [0.02, 0.066, 0.07], push: [0, 0, -0.008], round: 1.2 },
+  { c: [0.063, 1.272, -0.1], r: [0.03, 0.04, 0.07], push: [0, 0, -0.005], round: 1.5 },
+  { c: [0.078, 1.386, -0.1], r: [0.032, 0.013, 0.07], push: [0, 0, -0.005], round: 1 },
+  { c: [0.112, 1.402, -0.1], r: [0.03, 0.013, 0.07], push: [0, 0, -0.005], round: 1 },
+  { c: [0, 1.34, -0.1], r: [0.032, 0.09, 0.07], push: [0, 0, 0.008], round: 1.2 },
+];
+/**
+ * A character's chest, from under the bust to the shoulders (the user boxed it: 'thinner and rounded at the top
+ * more', and nothing outside the box changed, the hips and lower torso being right): its width against the
+ * crowd's by height, a little narrower up through the ribs and more at the shoulders, so the shoulders slope round
+ * into the arms instead of standing square (the arms come in with it: ARM_IN_FINE).
+ */
+const CHEST_FINE: readonly (readonly [number, number])[] = [[1.13, 1], [1.2, 0.965], [1.29, 0.94], [1.36, 0.93], [1.41, 0.905], [1.44, 0.87], [1.468, 0.95], [1.492, 1]];
+const ARM_IN_FINE = 0.013;
+/**
+ * The rib cage under her skin (the user asked for its definition): the edge of the ribs, a ridge each side from
+ * under the breastbone down and out, with the hollow under the breastbone between, and the ribs' round at the side
+ * of the chest. All above the waist's narrowest.
+ */
+const RIB_CAGE: readonly Bulge[] = [
+  { c: [0, 1.135, 0.085], r: [0.026, 0.03, 0.05], push: [0, 0, -0.0045], round: 1.2 },
+  { c: [0.04, 1.145, 0.085], r: [0.026, 0.016, 0.05], push: [0, 0, 0.0035], round: 1 },
+  { c: [0.075, 1.128, 0.07], r: [0.028, 0.017, 0.06], push: [0.001, 0, 0.0035], round: 1 },
+  { c: [0.112, 1.2, 0.01], r: [0.03, 0.07, 0.07], push: [0.0035, 0, 0], round: 1.4 },
+];
+/** Her collar bones (a ridge each side from the hollow at the base of the throat out to the shoulder) and that hollow. */
+const COLLAR_BONES: readonly Bulge[] = [
+  { c: [0.09, 1.436, 0.055], r: [0.09, 0.021, 0.058], push: [0, 0.0015, 0.013], round: 1 },
+  { c: [0, 1.445, 0.07], r: [0.02, 0.024, 0.05], push: [0, 0, -0.011], round: 1.2 },
+  // The trapezius, rounding from beside the neck down and out over the top of the shoulder to the arm (TRAPEZIUS
+  // was tried as a line of its own and merged in here: one slope reads better than two bulges meeting).
+  { c: [0.125, 1.415, 0.01], r: [0.055, 0.045, 0.065], push: [0.004, 0.006, 0.003], round: 1.4 },
+  { c: [0.155, 1.395, -0.01], r: [0.04, 0.035, 0.06], push: [0.005, 0.003, 0.002], round: 1.3 },
+];
+/** How much longer a character's neck is than the crowd's, whose chin sits on the shoulders (the man's metres). */
+const NECK_LONGER = 0.032;
+/** The cords of her neck: from behind each ear down and in to the hollow of the throat. */
+const NECK_CORDS: readonly Bulge[] = [
+  { c: [0.021, 1.488, 0.04], r: [0.015, 0.036, 0.03], push: [0.0015, 0, 0.0055], round: 1 },
+  { c: [0.04, 1.54, 0.014], r: [0.017, 0.04, 0.03], push: [0.004, 0, 0.003], round: 1 },
+];
+const SPINE_FURROW: Bulge = { c: [0, 1.2, -0.1], r: [0.02, 0.25, 0.09], push: [0, 0, 0.011], round: 1 };
+/** Round her chest for it: as BARE_ANGLES in front, and points close together either side of the spine behind. */
+const DETAIL_ANGLES: readonly number[] = [...Array.from({ length: 31 }, (_, i) => ((15 + i * 5) * Math.PI) / 180), ...[188, 197, 206, 214, 222, 229, 236, 242, 248, 253, 258, 262, 266, 270, 274, 278, 282, 287, 292, 298, 304, 311, 318, 326, 334, 343, 352].map((d) => (d * Math.PI) / 180)];
 const NECK: readonly Row[] = [
   [1.455, 0.06, 0.056, -0.012],
   [1.5, 0.05, 0.05, -0.008],
   [1.545, 0.047, 0.048, -0.002],
   [1.585, 0.046, 0.046, 0.002],
 ];
+/**
+ * Where a character's thigh folds at the hip (the man's heights): the line's height in front (a little over the hip's
+ * joint) and behind (the joint's, half-way up the buttock), from the middle of the thigh out; and how tall the band
+ * is that the skin goes over in, in front (short: a crease) and behind (tall: the buttock is drawn with the thigh).
+ */
+const HIP_CREASE = [0.925, 0.9, 0.06, 0.17] as const;
+/** A character's leg has sections close together down to the ankle (m), so it bends there as the foot's own skin over it does. */
+const ANKLE_ROWS = [0.072, 0.086, 0.098, 0.125, 0.15, 0.185] as const;
+/** A character's hand toward the rigged reference's: the palm's length from the wrist against how it was first built, and each finger's. */
+const HAND_FIT = [0.82, 1.3] as const;
+/** A character's bare arm between shoulder and wrist against how it was first built, toward the rigged reference's length. */
+const ARM_FIT = 0.88;
+/** A character's collar bone: how far out from the middle its inner end is, and how far over the shoulder's joint (the body's units). */
+const COLLAR = [0.035, 0.012] as const;
+/**
+ * Whether a character's bare arms are welded to the chest (`weld`). Tried 2026-10-06 and left off: at rest it is one
+ * clean surface, but the opening it cuts is ragged (it follows the two meshes' own faces), its points are at every
+ * height from the armpit to the top of the shoulder, and the shoulder's skin goes over to the arm by height, so a
+ * raised arm crumples the join behind and draws a web out of the armpit; spreading the pull over the chest's skin
+ * tore it. What it wants before it is turned on: the opening cut along a smooth ring (the arm's own ring at the
+ * armpit, the chest opened to match it), and the shoulder's weights laid as one smooth field over arm and chest.
+ * Without it the arm still moves as one with the shoulder (SHOULDER_BEND).
+ */
+const WELD_ARMS: boolean = false;
+/** Whether a character's four fingers are made one surface with the palm (buildShaped; the thumb is not: it is on the palm's side). */
+const WELD_FINGERS: boolean = true;
+/** How many rings a character's finger is built of, and how many points round each ring (buildShaped's `finger`; FINGER_SEG was 8: an octagon, which showed as flats down a finger's length and round a bent knuckle). One more point at the tip. */
+const FINGER_RINGS = 12, FINGER_SEG = 10;
+/** How far round the thumb's root its join to the palm is looked for (the body's units). */
+const THUMB_WELD = 0.05;
+/**
+ * A character's bare arms welded to the chest along a smooth seam (buildShaped, `seams`): the seam's plane, upright
+ * and running front to back, goes through the arm's innermost point this far under the shoulder's joint (the armpit)
+ * and through the top of the arm. WELD_SEAM: that depth; how far behind the plane the chest is still opened; how much
+ * bigger than the arm's edge the chest's opening is; and the weights down the arm from the seam (which itself stays
+ * with the chest, so the faces that join the two never move): all the arm's this far down under the armpit, and this
+ * far down over the top of the shoulder; how near the opening the chest's own skin goes with the seam (the body's
+ * units); and how much of the arm's turning the seam takes under the armpit (none at the top of the shoulder).
+ */
+const WELD_RING: boolean = true;
+const WELD_SEAM = [0.085, 0.045, 1.0, 0.04, 0.125, 0.06, 0] as const;
+/** How far under the shoulder's joint a character's arm is made one surface with the chest (the body's units): to about the armpit. */
+const WELD_SHOULDER = 0.1;
+/** A character's shoulder: how far over the joint the arm's skin is all the chest's, and how far under it all the arm's (the body's units); and how far from the join the chest's own skin goes with it. */
+const SHOULDER_BEND = [0.03, 0.085, 0.07] as const;
+/** How far down the leg a character's hips run on over it, from where the legs part (the body's units): SEAT_SKIRT. */
+const SEAT_SKIRT = 0.04;
+/**
+ * A character's ankle: how far under the joint the skin is all the foot's and how far over it all the shin's (the
+ * body's units), and how far forward of the joint that holds, and the way it eases back to the foot's own (m).
+ */
+const ANKLE_BEND = [0.045, 0.065, 0.035, 0.04] as const;
+/**
+ * A character's further spine joints (mobRig.ts spineBone): the lower chest's height (the bottom of the ribs) and the
+ * upper chest's (over the bust, under the shoulders), in the body's units; the head's above the neck's joint, in the
+ * head's; and half the height each is eased across.
+ */
+const SPINE_JOINTS = [1.19, 1.335, 0.06, 0.035] as const;
 /** The head from the neck joint: a wide round skull, the cheeks running straight down to a small pointed chin. */
 const SKULL: readonly Row[] = [
   [-0.034, 0.003, 0.003, 0.06],
@@ -1004,26 +1610,40 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const xs = S.xs;
   const tb = new TemplateBuilder();
   const { pivot, armOut } = pivotsOf(body);
+  /** (A character's chest and arms as runs of points, to be made one surface: `weld`.) */
+  let chestRun: [number, number] | null = null;
+  const armRuns: [number, number, number][] = [];
+  /** (Each finger's run of points: its side, its bone at the knuckle, where its points begin.) */
+  const fingerRuns: [number, number, number][] = [];
   const mark = (): number => tb.pos.length / 3;
 
   // ---- Torso ----
   const waist = 1.06 * ys;
   const hipY = 0.9 * ys;
-  const T = smooth(S.torso).map(([y, a, b, z]): Row => [y * ys, a * xs, b * xs, z * xs]);
+  // (A figure's own hips: wider or narrower below the waist, and the tops of the thighs with them.)
+  const hipK = woman ? (figure?.hips ?? 1) : 1;
+  const hipAt = (y: number): number => {
+    const k = clamp01((1.07 - y) / 0.14);
+    return 1 + (hipK - 1) * k * k * (3 - 2 * k);
+  };
+  // (A character's chest: CHEST_FINE, from under the bust up; nothing below it changes.)
+  const fine = figure?.detail === true && woman;
+  const chestAt = (y: number): number => (fine ? table(CHEST_FINE, y) : 1);
+  const T = smooth(S.torso).map(([y, a, b, z]): Row => [y * ys, a * xs * hipAt(y) * chestAt(y), b * xs * (1 + (hipAt(y) - 1) * 0.5), z * xs]);
   // (A schoolgirl's bust is less: the bulges on the front of the chest.)
-  const bust = (b: Bulge): number => (isTeen(body, outfit) && body === 'woman' && b.c[1] > 1.15 && b.c[2] > 0 ? TEEN_BUST : 1);
+  const bust = (b: Bulge): number => (body === 'woman' && b.c[1] > 1.15 && b.c[2] > 0 ? (figure?.bust ?? 1) * (isTeen(body, outfit) ? TEEN_BUST : 1) : 1);
   // (A woman's bottom: in full, with its cleft, only in what's skin-tight or with nothing on; round, the two sides
   // run together, in everything else; a teen's always the plain seat.)
   const skirted = woman && SKIRTED.includes(outfit);
   const unclothed = outfit === 'nude' || outfit === 'nude_heels';
   const fitted = FORM_FITTING.includes(outfit);
-  const cheeks = !woman || isTeen(body, outfit) ? 0 : fitted ? 1 : skirted ? ROUND_SEAT : (trial?.rear ?? ROUND_SEAT);
-  const cheek: Bulge[] = cheeks > 0 ? [{ ...CHEEK, push: [CHEEK.push[0] * cheeks, CHEEK.push[1] * cheeks, CHEEK.push[2] * cheeks] }] : [];
+  const cheeks = !woman || isTeen(body, outfit) ? 0 : fitted ? 1 : skirted ? ROUND_SEAT : (ROUND_SEAT);
+  const cheek: Bulge[] = cheeks > 0 ? [{ ...CHEEK, r: woman && unclothed ? [CHEEK.r[0], BARE_CHEEK_LOW, CHEEK.r[2]] : CHEEK.r, push: [CHEEK.push[0] * cheeks, CHEEK.push[1] * cheeks, CHEEK.push[2] * cheeks] }] : [];
   // What's worn over the body takes `field`; the body itself `bodyField`, the same but for the cleft (never more).
-  const cleft = fitted || (cheeks > 0 && !skirted && trial?.cleft === true);
+  const cleft = fitted;
   // (Where her legs part, and where above it the hips start to draw in to them.)
-  const crotch = trial?.crotch ?? CROTCH;
-  const hipsPart = trial?.part ?? HIPS_PART;
+  const crotch = CROTCH;
+  const hipsPart = HIPS_PART;
   // (The rings of her hips, and the points round them: finer in front with nothing on. `baseRing`: where each of
   // the usual rings is among them; `hipSide`: how many points the usual next one is from the middle in front.)
   const fineHips = woman && unclothed;
@@ -1034,13 +1654,21 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const hipFront = fineHips ? BARE_HIP_DEGREES.indexOf(90) : HIP_FRONT, hipBack = fineHips ? BARE_HIP_DEGREES.indexOf(270) : HIP_BACK;
   const hipSide = fineHips ? hipFront - BARE_HIP_DEGREES.indexOf(81) : 1;
   const scaled = (b: Bulge): Bulge => ({ round: b.round, under: b.under, point: b.point, side: b.side, cleft: b.cleft, lower: b.lower?.map(([t, k, d]) => [t, k, d * ys] as const), up: b.up === undefined ? undefined : b.up * ys, c: [b.c[0] * xs, b.c[1] * ys, b.c[2] * xs], r: [b.r[0] * xs, b.r[1] * ys, b.r[2] * xs], push: [b.push[0] * xs * bust(b), b.push[1] * ys * bust(b), b.push[2] * xs * bust(b)] });
-  // A woman with nothing on: her breasts as they are without clothes (BARE_BREAST, in place of the clothed bust and
+  // A woman with nothing on: her breasts as they are without clothes (bareBreast, in place of the clothed bust and
   // the cloth across it), and the cleft behind runs deeper (BARE_CLEFT).
   const bareWoman = woman && unclothed;
+  const frontLook = FRONT_LOOKS[0];
+  const cleftLook = CLEFT_LOOKS[0];
+  // (Her bare breast, at the height asked for: BUST_LOOKS.)
+  const bustRise = BUST_LOOKS[0].rise / ys;
+  const bareBreast: Bulge = { ...BARE_BREAST, c: [BARE_BREAST.c[0], BARE_BREAST.c[1] + bustRise, BARE_BREAST.c[2]], lower: UNDER_LOOKS[0].lower };
   const onChest = (b: Bulge): boolean => b.c[1] > 1.15 && b.c[2] > 0;
-  const form: readonly Bulge[] = bareWoman ? [...S.field.filter((b) => !onChest(b)), BARE_BREAST] : S.field;
+  const detail = figure?.detail === true;
+  const shaped: readonly Bulge[] = detail && woman ? [...S.field, ...BACK_CURVE] : S.field;
+  const bones: readonly Bulge[] = detail && woman ? [...COLLAR_BONES, ...RIB_CAGE] : [];
+  const form: readonly Bulge[] = bareWoman ? [...shaped.filter((b) => !onChest(b)), bareBreast, ...bones] : [...shaped, ...bones];
   const field: Bulge[] = [...form, ...cheek].map(scaled);
-  const bodyField: Bulge[] = cleft ? [...field.map((b, i): Bulge => (i >= form.length ? { ...b, cleft: true } : b)), ...(bareWoman ? [scaled(BARE_CLEFT), ...BARE_FRONT.map(scaled)] : [])] : field;
+  const bodyField: Bulge[] = cleft ? [...field.map((b, i): Bulge => (i >= form.length ? { ...b, cleft: true } : b)), ...(bareWoman ? [...(detail ? [scaled(SPINE_FURROW)] : []), scaled(BARE_CLEFT), ...(frontLook.tall > 0 ? BARE_FRONT.map((b): Bulge => scaled({ ...b, c: [b.c[0], b.c[1] - b.r[1] * (1 - frontLook.tall), b.c[2]], r: [b.r[0], b.r[1] * frontLook.tall, b.r[2]] })) : [])] : [])] : field;
   const torsoAt = (y: number): [number, number, number] => rowAt(T, y);
   const hips = (r: Row): Weight => blend(SPINE, PELVIS, clamp01((r[0] - (waist - 0.05 * ys)) / (0.1 * ys)));
   /** A skirt's or coat's skinning: below the hip joints each side follows its thigh (more of it lower down). */
@@ -1053,6 +1681,15 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const over = (rows: readonly Row[], weight: (r: Row, i: number, x: number) => Weight, shade: number, seg: number, n = 2.4, arc?: readonly [number, number]): void => {
     const from = mark();
     tb.loft(rows, () => 0, weight, shade, seg, n, 'y', arc);
+    displace(tb, from, field);
+  };
+  /**
+   * The same on a woman's chest, all the way round, with its points where her chest's are (CHEST_ANGLES): evenly
+   * spaced ones cut across between her breasts and over them differently from the body's, and it showed through.
+   */
+  const overChest = (rows: readonly Row[], weight: (r: Row) => Weight, shade: number): void => {
+    const from = mark();
+    loftAt(tb, rows, CHEST_ANGLES, weight, shade, 2.4);
     displace(tb, from, field);
   };
   /** The torso's section at a height (the man's), grown by g. */
@@ -1126,14 +1763,17 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const apart = (y: number): number => {
     if (!woman) return 0;
     const k = clamp01((y / ys - 0.5) / 0.15);
-    return (THIGH_GAP / 2) * k * k * (3 - 2 * k);
+    return ((fineHips ? BARE_THIGH_GAP : THIGH_GAP) / 2) * k * k * (3 - 2 * k);
   };
-  const legRows = L.rows.map(([y, a, b, z]): Row => [y * ys, a * P.leg * limb - apart(y * ys) / 2, b * P.leg * limb, z * P.leg]);
+  const thighK = (y: number): number => 1 + (hipK - 1) * clamp01((y / ys - 0.45) / 0.4);
+  const legRows0 = L.rows.map(([y, a, b, z]): Row => [y * ys, a * P.leg * limb - apart(y * ys) / 2, b * P.leg * limb, z * P.leg]);
+  const legRows = hipK === 1 ? legRows0 : legRows0.map(([y, a, b, z]): Row => [y, a * thighK(y), b * (1 + (thighK(y) - 1) * 0.5), z]);
   const legX = (s: number, y: number): number => {
     if (!woman) return s * P.hipX * (0.86 + 0.14 * Math.min(1, y / (0.92 * ys)));
     // A woman's legs run in from the hips to knees and ankles close together.
     const k = clamp01((y / ys - 0.45) / 0.45);
-    return s * (0.052 + 0.036 * k * k * (3 - 2 * k) + apart(y) / 2);
+    // (Wider thighs grow outward: the space between them stays.)
+    return s * (0.052 + 0.036 * k * k * (3 - 2 * k) + apart(y) / 2 + (hipK === 1 ? 0 : rowAt(legRows0, y)[0] * (thighK(y) - 1)));
   };
   /** (Where the lowest ring of a woman's hips starts: her legs join it.) */
   let hipRing = 0;
@@ -1175,11 +1815,12 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
       let chestRows = T.filter((r) => r[0] > 1.055 * ys);
       if (bareWoman) {
         // (Close sections where a bare breast's lower half is let down from, so it has the skin to round with.)
-        const more = BREAST_ROWS.map((t) => (BARE_BREAST.c[1] - t * BARE_BREAST.r[1]) * ys).filter((y) => chestRows.every((r) => Math.abs(r[0] - y) > 0.0006));
+        const more = BREAST_ROWS.map((t) => (bareBreast.c[1] - t * bareBreast.r[1]) * ys).filter((y) => chestRows.every((r) => Math.abs(r[0] - y) > 0.0006));
         chestRows = [...chestRows, ...more.map((y): Row => [y, ...rowAt(T, y)])].sort((p, q) => p[0] - q[0]);
       }
-      const chestAngles = bareWoman ? BARE_ANGLES : CHEST_ANGLES;
+      const chestAngles = bareWoman ? (detail ? DETAIL_ANGLES : BARE_ANGLES) : CHEST_ANGLES;
       loftAt(tb, chestRows, chestAngles, hips, topShade, 2.4);
+      chestRun = [t0, mark()];
       const chest = chestAngles.map((_, j) => t0 + j);
       const e24 = 2 / 2.4;
       const se24 = (v: number): number => Math.sign(v) * Math.pow(Math.abs(v), e24);
@@ -1205,7 +1846,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
             const len = Math.hypot(px, pz);
             const ux = px / len, uz = pz / len;
             const legs = Math.max(rayEllipse(0, z, ux, uz, lx, lz, la, lb), rayEllipse(0, z, ux, uz, -lx, lz, la, lb));
-            const between = 1 / (uz > 0 ? Math.hypot(ux / PART_HALF_FRONT, uz / PART_FRONT) : Math.hypot(ux / PART_HALF_BACK, uz / PART_BACK));
+            const between = 1 / (uz > 0 ? Math.hypot(ux / (fineHips ? BARE_HALF_FRONT : PART_HALF_FRONT), uz / PART_FRONT) : Math.hypot(ux / PART_HALF_BACK, uz / (fineHips ? BARE_PART_BACK : PART_BACK)));
             const r = len + (smoothMax(legs, between, 0.01) - len) * m;
             px = ux * r;
             pz = uz * r;
@@ -1231,7 +1872,16 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
       if (bareWoman) {
       }
       // The cleft's line, a little darker down the middle of the seat.
-      if (cleft) HIP_ROWS.forEach((hy, k) => (tb.shade[hipRing + k * M + hipBack] -= CLEFT_SHADE * clamp01((0.985 - hy) / 0.04)));
+      if (cleft) {
+        const shadow = hipAngles.map((a) => (cleftLook.spread > 0 ? Math.exp(-(((a - hipAngles[hipBack]) / ((cleftLook.spread * Math.PI) / 180)) ** 2)) : 0));
+        HIP_ROWS.forEach((hy, k) => {
+          const deep = clamp01((1.0 - hy) / 0.1);
+          hipAngles.forEach((_, j) => {
+            const dark = cleftLook.shade * shadow[j] + (j === hipBack ? (cleftLook.column ?? 0) : 0);
+            if (dark > 0.004) tb.shade[hipRing + k * M + j] -= dark * deep * deep * (3 - 2 * deep);
+          });
+        });
+      }
     } else {
       over(T, hips, topShade, S.seg, 2.4);
       if (trousers && !unclothed) for (let i = t0; i < mark(); i++) if (tb.pos[i * 3 + 1] / ys < hem + 0.01) tb.shade[i] = bottomShade;
@@ -1239,21 +1889,27 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     // The waistband of a woman's trousers, where her top goes into them.
     if (woman && trousers && !unclothed && !skirted && outfit !== 'police' && outfit !== 'bosozoku') over([wrap(0.997, 0.001), wrap(1.0, 0.005), wrap(1.03, 0.005), wrap(1.033, 0.001)], hips, bottomShade - 0.12, 18, 2.4);
     // An evening dress is off the shoulders: skin above the bust.
-    if (outfit === 'gown') for (let i = t0; i < mark(); i++) if (tb.pos[i * 3 + 1] / ys > 1.34) tb.shade[i] = SKIN;
+    if (outfit === 'gown') for (let i = t0; i < mark(); i++) if (tb.pos[i * 3 + 1] / ys > 1.365) tb.shade[i] = SKIN;
     // A tattooed man's chest and shoulders are bare above his undershirt (its straps are lofted over them): inked,
     // as his arms are.
     if (outfit === 'irezumi') for (let i = t0; i < mark(); i++) if (tb.pos[i * 3 + 1] / ys > 1.24) tb.shade[i] = INK;
     // A biker's chest is bare over the cloth bound round the belly (a woman's bound over the bust).
-    if (outfit === 'bosozoku') for (let i = t0; i < mark(); i++) if (tb.pos[i * 3 + 1] / ys > (woman ? 1.335 : 1.14)) tb.shade[i] = SKIN;
+    if (outfit === 'bosozoku') for (let i = t0; i < mark(); i++) if (tb.pos[i * 3 + 1] / ys > (woman ? 1.365 : 1.14)) tb.shade[i] = SKIN;
   }
 
   // ---- Neck and head ----
-  const neckY = 1.5 * ys;
+  // (A character's neck is longer, so it shows under the chin: the head, and its joint, that much higher.)
+  if (detail) for (let b = BONES; b < ALL_BONES; b++) pivot[b] = [0, 0, 0];
+  const neckUp = detail ? NECK_LONGER * ys : 0;
+  const neckY = 1.5 * ys + neckUp;
+  if (neckUp) pivot[HEAD] = [pivot[HEAD][0], pivot[HEAD][1] + neckUp, pivot[HEAD][2]];
   const teen = isTeen(body, outfit);
   const hk = P.head * HEAD_K[body] * headScale * (teen ? TEEN_HEAD : 1);
   const nk = P.arm * 0.9 * (heavy ? 1.2 : 1);
-  const neck = NECK.map(([y, a, b, z]): Row => [y * ys, a * nk, b * nk, z * nk]);
-  tb.loft(neck, () => 0, (_, i) => (i === 0 ? one(SPINE) : i === 1 ? blend(HEAD, SPINE, 0.4) : i === 2 ? blend(HEAD, SPINE, 0.8) : one(HEAD)), SKIN, 8);
+  const neck = NECK.map(([y, a, b, z]): Row => [y * ys + (y > 1.47 ? neckUp : 0), a * nk, b * nk, z * nk]);
+  const n0 = mark();
+  tb.loft(neck, () => 0, (_, i) => (i === 0 ? one(SPINE) : i === 1 ? blend(HEAD, SPINE, 0.4) : i === 2 ? blend(HEAD, SPINE, 0.8) : one(HEAD)), SKIN, detail ? 16 : 8);
+  if (detail && woman) displace(tb, n0, NECK_CORDS.map(scaled));
   const headRows = (rows: readonly Row[]): Row[] => rows.map(([y, a, b, z]) => [neckY + y * hk, a * hk, b * hk, z * hk]);
   const headField = (f: readonly Bulge[]): Bulge[] => f.map((b) => ({ c: [b.c[0] * hk, neckY + b.c[1] * hk, b.c[2] * hk], r: [b.r[0] * hk, b.r[1] * hk, b.r[2] * hk], push: [b.push[0] * hk, b.push[1] * hk, b.push[2] * hk] }));
   const skull = headRows(SKULL);
@@ -1511,15 +2167,20 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
       const [a, b, z] = rowAt(legRows, y);
       return [y, a, b, z];
     };
-    const extra = [...(legCut === null ? [] : [legCut - 0.005 * ys, legCut]), y0].filter((y, i, all) => all.indexOf(y) === i && fine.every((r) => Math.abs(r[0] - y) > 0.002 * ys)).map(at);
+    const extra = [...(legCut === null ? [] : [legCut - 0.005 * ys, legCut]), ...(fineHips ? BARE_LEG_ROWS.map((d) => y0 + d * ys) : []), ...(detail ? ANKLE_ROWS : []), y0].filter((y, i, all) => all.indexOf(y) === i && fine.every((r) => Math.abs(r[0] - y) > 0.002 * ys)).map(at);
     rows = [...fine, ...extra].sort((p, q) => p[0] - q[0]);
   }
   /** (The points where a woman's legs part, on the middle: the first leg's, which the second shares.) */
   let parting: number[] | null = null;
+  /** (With fine hips: each leg's top ring, left then right.) */
+  const legTops: number[] = [];
+  let underBack = -1;
   for (const [s, thigh, shin, foot] of [[-1, THIGH_L, SHIN_L, FOOT_L], [1, THIGH_R, SHIN_R, FOOT_R]] as const) {
     const x = (r: Row): number => legX(s, r[0]);
     const l0 = mark();
     const i0 = tb.idx.length;
+    /** (The leg's top ring and the hips' lowest it is joined to, as they were zipped.) */
+    let joined: [number[], number[]] | null = null;
     const bound = (r: Row): Weight => (r[0] > 0.88 * ys ? blend(thigh, PELVIS, 0.6) : blend(thigh, shin, clamp01((r[0] - (knee - 0.06 * ys)) / (0.1 * ys))));
     tb.loft(rows, x, bound, L.shade, legSeg);
     if (woman) {
@@ -1535,31 +2196,123 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
       // The top ring's inner points go to the middle, front to back under the body (the two legs' are the same
       // points, and the hips'); its outer ones are joined to the lowest ring of the hips' half on this side.
       const top = l0 + (rows.length - 1) * LEG_SEG;
-      const inner = s < 0 ? [2, 1, 0, 11, 10] : [4, 5, 6, 7, 8];
-      const outer = s < 0 ? [3, 4, 5, 6, 7, 8, 9] : [3, 2, 1, 0, 11, 10, 9];
-      const y0 = crotch * ys, zc = rows[rows.length - 1][3];
-      // (Its front end well behind the hips' smooth front, tucked in between the thighs: further forward it stood out
-      // as a flap when a thigh was raised or the legs parted.)
-      const line: V3[] = [[0, y0, zc + PART_TUCK], [0, y0 - 0.005, zc + 0.026], [0, y0 - 0.007, zc + 0.002], [0, y0 - 0.005, zc - 0.026], [0, y0, zc - PART_BACK]];
-      if (!parting) {
-        parting = inner.map((j) => top + j);
-        parting.forEach((i, n) => {
-          tb.pos.splice(i * 3, 3, ...line[n]);
-          tb.b0[i] = tb.b1[i] = PELVIS;
-          tb.w[i] = 1;
-        });
-        if (cleft) tb.shade[parting[4]] -= CLEFT_SHADE;
+      // (Only the three innermost: with five, the inner quarters of the thigh's top, front and back, were one flat
+      // face each from the thigh to the middle, which crumpled where the buttocks' cleft comes down into it.)
+      const inner = s < 0 ? [1, 0, 11] : [5, 6, 7];
+      const outer = s < 0 ? [2, 3, 4, 5, 6, 7, 8, 9, 10] : [4, 3, 2, 1, 0, 11, 10, 9, 8];
+      const ring = hipAngles.length;
+      if (fineHips) {
+        // (With nothing on: the leg keeps its inner points, the crease where the thigh meets the skin between the
+        // legs, which is built once both legs are: BARE_UNDER. Its outer ones join the hips' ring from the outermost
+        // of the fine points in front round to the middle behind.)
+        legTops.push(top);
+        const from = hipSide;
+        const half = s < 0 ? Array.from({ length: hipBack - hipFront - from + 1 }, (_, n) => hipFront + from + n) : Array.from({ length: ring - (hipBack - hipFront) - from + 1 }, (_, n) => (hipFront - from - n + ring) % ring);
+        // (Its inner point in front goes under the ring's point it joins, the outermost of the fine ones, not 3 cm
+        // behind it under a ledge; its inner point behind is on the middle, one point for both legs, as the others' is.)
+        const r0 = (hipRing + half[0]) * 3, f = (top + inner[0]) * 3;
+        tb.pos[f] = tb.pos[r0] * 0.95;
+        tb.pos[f + 2] = tb.pos[r0 + 2] - 0.006;
+        const b = top + inner[2];
+        if (underBack < 0) {
+          underBack = b;
+          tb.pos.splice(b * 3, 3, 0, crotch * ys + BARE_CLEFT_UP, rows[rows.length - 1][3] - BARE_PART_BACK);
+          tb.b0[b] = tb.b1[b] = PELVIS;
+          tb.w[b] = 1;
+          if (cleft) tb.shade[b] -= cleftLook.shade + (cleftLook.column ?? 0);
+        } else {
+          for (let q = i0; q < tb.idx.length; q++) if (tb.idx[q] === b) tb.idx[q] = underBack;
+          tb.pos.splice(b * 3, 3, 0, crotch * ys + 0.05, 0);
+        }
+        zip(tb, [top + inner[0], ...outer.map((j) => top + j), underBack], half.map((j) => hipRing + j), false, s > 0);
+        joined = [[top + inner[0], ...outer.map((j) => top + j), underBack], half.map((j) => hipRing + j)];
       } else {
-        const same = new Map(inner.map((j, n) => [top + j, parting![n]]));
-        for (let q = i0; q < tb.idx.length; q++) tb.idx[q] = same.get(tb.idx[q]) ?? tb.idx[q];
-        // (Left behind, used by nothing: out of the way, inside the body.)
-        for (const i of same.keys()) tb.pos.splice(i * 3, 3, 0, y0 + 0.05, 0);
+        const y0 = crotch * ys, zc = rows[rows.length - 1][3];
+        // (Its front end well behind the hips' smooth front, tucked in between the thighs: further forward it stood out
+        // as a flap when a thigh was raised or the legs parted.)
+        const line: V3[] = [[0, y0, zc + PART_TUCK], [0, y0 - 0.007, zc + 0.002], [0, y0, zc - PART_BACK]];
+        if (!parting) {
+          parting = inner.map((j) => top + j);
+          parting.forEach((i, n) => {
+            tb.pos.splice(i * 3, 3, ...line[n]);
+            tb.b0[i] = tb.b1[i] = PELVIS;
+            tb.w[i] = 1;
+          });
+          if (cleft) tb.shade[parting[2]] -= cleftLook.shade + (cleftLook.column ?? 0);
+        } else {
+          const same = new Map(inner.map((j, n) => [top + j, parting![n]]));
+          for (let q = i0; q < tb.idx.length; q++) tb.idx[q] = same.get(tb.idx[q]) ?? tb.idx[q];
+          // (Left behind, used by nothing: out of the way, inside the body.)
+          for (const i of same.keys()) tb.pos.splice(i * 3, 3, 0, y0 + 0.05, 0);
+        }
+        const half = s < 0 ? Array.from({ length: hipBack - hipFront + 1 }, (_, n) => hipFront + n) : Array.from({ length: ring - (hipBack - hipFront) + 1 }, (_, n) => (hipFront - n + ring) % ring);
+        zip(tb, [parting[0], ...outer.map((j) => top + j), parting[2]], half.map((j) => hipRing + j), false, s > 0);
+        joined = [[parting[0], ...outer.map((j) => top + j), parting[2]], half.map((j) => hipRing + j)];
       }
-      const half = s < 0 ? Array.from({ length: hipBack - hipFront + 1 }, (_, n) => hipFront + n) : Array.from({ length: hipAngles.length - (hipBack - hipFront) + 1 }, (_, n) => (hipFront - n + hipAngles.length) % hipAngles.length);
-      zip(tb, [parting[0], ...outer.map((j) => top + j), parting[4]], half.map((j) => hipRing + j), false, s > 0);
     }
     // (The buttocks run on into the thighs.)
     displace(tb, l0, bodyField);
+    if (detail && joined) {
+      // A character's hips run on down over the top of the leg (SEAT_SKIRT). The hips' lowest ring has several points
+      // to each of the leg's top ring's twelve, on the same outline: between the leg's points it stands a few
+      // millimetres proud of the leg's flat sides, and a little above its top, so the two met in a ledge all round the
+      // top of the thigh (the edge under the buttock, the dent across the front of the thigh, at rest). From each of
+      // the ring's points a strip now goes down to the leg's own surface a few centimetres lower, where it lies flush:
+      // the ledge is spread out over that height and can't be seen, and the old join is inside it.
+      const Q = tb.pos;
+      const ring = joined[1];
+      const rowY = (k: number): number => Q[(l0 + k * LEG_SEG) * 3 + 1];
+      // (The leg's section at a height: between its rings; the top ring's inner points have been moved, so from the next down.)
+      const last = rows.length - 2;
+      const section = (y: number): [number, number][] => {
+        let k = last;
+        while (k > 0 && rowY(k) > y) k--;
+        const up = Math.min(k + 1, last);
+        const f = up === k ? 0 : clamp01((y - rowY(k)) / (rowY(up) - rowY(k)));
+        return Array.from({ length: LEG_SEG }, (_, j): [number, number] => {
+          const a = (l0 + k * LEG_SEG + j) * 3, b = (l0 + up * LEG_SEG + j) * 3;
+          return [Q[a] + (Q[b] - Q[a]) * f, Q[a + 2] + (Q[b + 2] - Q[a + 2]) * f];
+        });
+      };
+      // (Not the ring's points nearest the body's middle: the forms between the legs are as they were built.)
+      const part = ring.filter((v) => Math.abs(Q[v * 3]) > 0.05);
+      const base = mark();
+      let lx = 0, lz = 0;
+      part.forEach((v, q) => {
+        const u = part.length > 1 ? q / (part.length - 1) : 0.5;
+        const y = Math.min(Q[v * 3 + 1] - SEAT_SKIRT * ys * (0.4 + 0.6 * clamp01(Math.min(u, 1 - u) / 0.2)), rowY(last));
+        const pg = section(y);
+        const cx = pg.reduce((sum, c) => sum + c[0], 0) / LEG_SEG, cz = pg.reduce((sum, c) => sum + c[1], 0) / LEG_SEG;
+        [lx, lz] = [cx, cz];
+        // Out from the leg's middle toward the ring's point, to the leg's side.
+        const dx = Q[v * 3] - cx, dz = Q[v * 3 + 2] - cz;
+        let hit: [number, number] = [Q[v * 3], Q[v * 3 + 2]];
+        for (let j = 0; j < LEG_SEG; j++) {
+          const [ax, az] = pg[j], [bx, bz] = pg[(j + 1) % LEG_SEG];
+          const ex = bx - ax, ez = bz - az;
+          const den = dx * ez - dz * ex;
+          if (Math.abs(den) < 1e-12) continue;
+          const t = ((ax - cx) * ez - (az - cz) * ex) / den, at = ((ax - cx) * dz - (az - cz) * dx) / den;
+          if (t <= 0 || at < -1e-6 || at > 1 + 1e-6) continue;
+          hit = [cx + dx * t, cz + dz * t];
+          break;
+        }
+        tb.pos.push(hit[0], y, hit[1]);
+        tb.b0.push(thigh);
+        tb.b1.push(PELVIS);
+        tb.w.push(1);
+        tb.shade.push(tb.shade[v]);
+      });
+      for (let q = 0; q + 1 < part.length; q++) {
+        const a = part[q], b = part[q + 1], c = base + q + 1, d = base + q;
+        // (Facing out of the leg, whichever way round the ring is listed.)
+        const ux = Q[b * 3] - Q[a * 3], uy = Q[b * 3 + 1] - Q[a * 3 + 1], uz = Q[b * 3 + 2] - Q[a * 3 + 2];
+        const vx = Q[d * 3] - Q[a * 3], vy = Q[d * 3 + 1] - Q[a * 3 + 1], vz = Q[d * 3 + 2] - Q[a * 3 + 2];
+        const out = (uy * vz - uz * vy) * (Q[a * 3] - lx) + (ux * vy - uy * vx) * (Q[a * 3 + 2] - lz);
+        if (out > 0) tb.idx.push(a, b, c, a, c, d);
+        else tb.idx.push(a, c, b, a, d, c);
+      }
+    }
     const fx = woman ? s * 0.052 : s * P.hipX * 0.88;
     const s0 = mark();
     const grown = (g: number, lo: number, hi: number): Row[] => rows.filter((r) => r[0] >= lo * ys && r[0] <= hi * ys).map(([y, a, b, z]): Row => [y, a + g, b + g, z]);
@@ -1598,22 +2351,179 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
       shoe(BARE_ROWS, k, k, outfit === 'kimono' ? WHITE : SKIN);
     } else if (footwear === 'bare') {
       const k = woman ? 1 : 1.22;
-      shoe(BARE_ROWS.map(([z, a, h, y]): Row => [z, a, h, y - BARE_DROP]), k, k, SKIN);
+      if (detail) {
+        // A character's foot: its own form, and toes (the big toe on the inside).
+        const fk = P.leg * k;
+        tb.loft(FOOT_FINE.map(([z, a, h, y]): Row => [z * fk, a * fk, h * fk, y * fk]), () => fx, () => one(foot), SKIN, 12, 2.6, 'z');
+        // The ankle: a collar from the top of the foot up onto the leg's own section, so the leg rises out of the foot
+        // (it stood on it, a ring round the join).
+        const collar = [0.03, 0.05, 0.068, 0.084, 0.1].map((y, n): Row => {
+          const [la, lb, lz] = rowAt(rows, Math.max(y * fk, rows[1][0]));
+          const k = [1, 0.62, 0.3, 0.08, 0][n];
+          // (Its top is just inside the leg, so it comes out through the leg's skin at a shallow angle: no step.)
+          const off = 0.001 * k - 0.0014 * (1 - k);
+          return [y * fk, la + off + (0.031 * fk - la) * k, lb + off + (0.05 * fk - lb) * k, lz + (0.01 * fk - lz) * k];
+        });
+        tb.loft(collar, () => fx, (r) => blend(shin, foot, clamp01((r[0] / fk - 0.05) / 0.04)), SKIN, 12, 2);
+        TOES.forEach(([across, len, r], toe) => {
+          // (Side by side across the forefoot, each rooted inside it where the foot is taller than the toe, lying on
+          // the floor with its top under the line of the foot's, and reaching a centimetre or two past the foot's
+          // front: so the toes are the foot's own front, parted, not things stuck out of it. Two earlier builds had
+          // them as thin stubs in a blunt forefoot, and then as rolls hung under it, taller than its front.)
+          const x = fx + s * across * fk, yc = (r * TOE_FLAT + 0.0012) * fk, tip = len * fk;
+          const path: V3[] = [[x, yc + 0.003 * fk, TOE_ROOT * fk], [x, yc, (TOE_ROOT + (len - TOE_ROOT) * 0.5) * fk], [x, yc, tip - r * 1.1 * fk], [x, yc - 0.0005, tip - r * 0.45 * fk]];
+          // (Each toe on a bone of its own, at its root, on top of the one that turns them all at the ball of the foot.)
+          const own = toeDigit(s < 0 ? 0 : 1, toe);
+          pivot[own] = [x, yc, (TOE_ROOT + 0.006) * fk];
+          tube(tb, path, [r * fk, r * fk, r * 0.97 * fk, r * 0.8 * fk], 8, [one(foot), one(own)], SKIN, TOE_FLAT);
+        });
+        // (The toes' joint: the ball of the foot.)
+        pivot[toeBone(s < 0 ? 0 : 1)] = [fx, 0.012 * fk, 0.094 * fk];
+        // (The ankle's knob, on the outside.)
+        displace(tb, l0, [{ c: [Math.abs(fx) + ANKLE_KNOB.at[0] * fk, ANKLE_KNOB.at[1] * fk, ANKLE_KNOB.at[2] * fk], r: [ANKLE_KNOB.r[0], ANKLE_KNOB.r[1], ANKLE_KNOB.r[2]], push: [ANKLE_KNOB.out, 0, 0], round: 1.3 }]);
+      } else shoe(BARE_ROWS.map(([z, a, h, y]): Row => [z, a, h, y - BARE_DROP]), k, k, SKIN);
     }
     else shoe(SHOE_ROWS, 1, 1, shoeShade);
     shoes.push([s0, mark()]);
   }
-  if (bareWoman && parting) {
-    // The form under her, between the legs (BARE_UNDER): with the pelvis.
+  const cleftFoot = fineHips ? underBack : (parting?.[2] ?? -1);
+  if (cleft && cleftFoot >= 0) {
+    // where the legs part behind.
+    const P = tb.pos;
+    const M = hipAngles.length;
+    const idx = [cleftFoot, ...HIP_ROWS.map((hy, k) => (hy < CLEFT_LINE.top ? hipRing + k * M + hipBack : -1)).filter((i) => i >= 0)];
+    const pts = idx.map((i): V3 => [0, P[i * 3 + 1], P[i * 3 + 2]]);
+    // (The skin's own shade beside the cleft at each: a few points round from the middle, past its shading.)
+    const base = idx.map((i, n) => tb.shade[n === 0 ? hipRing + hipBack + 5 : i + 5]);
+    const dist = pts.map((q, n) => (n ? Math.hypot(q[1] - pts[n - 1][1], q[2] - pts[n - 1][2]) : 0));
+    for (let n = 1; n < dist.length; n++) dist[n] += dist[n - 1];
+    const total = dist[dist.length - 1];
+    /** Out of the skin at a point of the path: square to it in the middle plane, backward and down. */
+    const outAt = (n: number): [number, number] => {
+      const a = pts[Math.max(0, n - 1)], b = pts[Math.min(pts.length - 1, n + 1)];
+      let ty = b[1] - a[1], tz = b[2] - a[2];
+      const l = Math.hypot(ty, tz) || 1;
+      ty /= l;
+      tz /= l;
+      let ny = tz, nz = -ty;
+      if (-0.5 * ny - nz < 0) {
+        ny = -ny;
+        nz = -nz;
+      }
+      return [ny, nz];
+    };
+    const put = (x: number, y: number, z: number, shade: number): number => {
+      tb.pos.push(x, y, z);
+      tb.b0.push(PELVIS);
+      tb.b1.push(PELVIS);
+      tb.w.push(1);
+      tb.shade.push(shade);
+      return mark() - 1;
+    };
+    /** A face turned to face out of the skin (n). */
+    const face = (a: number, b: number, c: number, n: [number, number]): void => {
+      const fy = (P[b * 3 + 2] - P[a * 3 + 2]) * (P[c * 3] - P[a * 3]) - (P[b * 3] - P[a * 3]) * (P[c * 3 + 2] - P[a * 3 + 2]);
+      const fz = (P[b * 3] - P[a * 3]) * (P[c * 3 + 1] - P[a * 3 + 1]) - (P[b * 3 + 1] - P[a * 3 + 1]) * (P[c * 3] - P[a * 3]);
+      if (fy * n[0] + fz * n[1] >= 0) tb.idx.push(a, b, c);
+      else tb.idx.push(a, c, b);
+    };
+    if (cleftLook.stroke > 0) {
+      const strip = pts.map((q, n) => {
+        const u = dist[n] / total;
+        const half = Math.max(0.00012, cleftLook.stroke * Math.pow(1 - u, 0.55) * (0.55 + 0.45 * clamp01(u / 0.12)));
+        const [ny, nz] = outAt(n);
+        const shade = base[n] - cleftLook.dark * clamp01((1 - u) / 0.25);
+        return [put(-half, q[1] + ny * CLEFT_LINE.off, q[2] + nz * CLEFT_LINE.off, shade), put(half, q[1] + ny * CLEFT_LINE.off, q[2] + nz * CLEFT_LINE.off, shade)];
+      });
+      for (let n = 0; n + 1 < strip.length; n++) {
+        face(strip[n][0], strip[n][1], strip[n + 1][1], outAt(n));
+        face(strip[n][0], strip[n + 1][1], strip[n + 1][0], outAt(n));
+      }
+    }
+  }
+  if (bareWoman && legTops.length === 2) {
+    // The skin under her, between the legs (BARE_UNDER): columns from the hips' lowest ring in front back to its
+    // middle point behind, the outermost each side the crease along that leg's inner points; with the pelvis.
+    let underMid = 0;
+    let underCol: number[] = [];
     {
-      const y0 = crotch * ys, zc = rows[rows.length - 1][3];
-      for (const sd of [-1, 1]) tb.loft(BARE_UNDER.rows.map(([z, w, h, y]): Row => [zc + z, w, h, y0 + y]), () => sd * BARE_UNDER.x, () => one(PELVIS), SKIN, 12, 2.6, 'z');
+      const P = tb.pos;
+      const at = (i: number): V3 => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
+      const backV = underBack, back = at(backV);
+      const U = { ...BARE_UNDER, to: frontLook.to, depth: frontLook.depth };
+      // (The crease each side, front to back: the ring's outermost fine point, the leg's inner points, the middle behind.)
+      const [topL, topR] = legTops;
+      const creaseL = [hipRing + hipFront + hipSide, topL + 1, topL, backV], creaseR = [hipRing + hipFront - hipSide, topR + 5, topR + 6, backV];
+      /** How far from the middle the crease is at a depth z (the two sides' mean). */
+      const creaseX = (z: number): number => {
+        const pts = creaseR.map((i, n) => [(Math.abs(P[i * 3]) + Math.abs(P[creaseL[n] * 3])) / 2, P[i * 3 + 2]]);
+        for (let n = 0; n + 1 < pts.length; n++) if (z >= pts[n + 1][1]) return pts[n][0] + (pts[n + 1][0] - pts[n][0]) * clamp01((pts[n][1] - z) / Math.max(1e-6, pts[n][1] - pts[n + 1][1]));
+        return 0;
+      };
+      const x0 = creaseX(1);
+      const column = (j: number): number[] => {
+        const r = at(hipRing + j);
+        const col = [hipRing + j];
+        for (const v of U.rows) {
+          const z = r[2] + (back[2] - r[2]) * v;
+          // (Between the creases as it is between the ring's outermost fine points; it hangs by how far out it is:
+          // a round arc from the middle to `wide`, short of the thigh so it turns up again there, the middle held up
+          // at the notch.)
+          const x = (r[0] / x0) * creaseX(z);
+          const t = Math.abs(x) / U.wide;
+          const arc = t >= 1 ? 0 : Math.pow(Math.sin(Math.PI * t), 0.75);
+          // (Its inner side comes down quickly from the notch, so the notch is narrow and each form round.)
+          const hang = (t < 0.5 ? U.notch + (1 - U.notch) * Math.pow(Math.sin(Math.PI * t), 0.45) : arc) * Math.pow(Math.sin(Math.PI * clamp01(v / U.to)), 0.7);
+          tb.pos.push(x, r[1] + (back[1] - r[1]) * v - U.sag * Math.sin(Math.PI * v) - U.depth * hang, z);
+          tb.b0.push(PELVIS);
+          tb.b1.push(PELVIS);
+          tb.w.push(1);
+          tb.shade.push(SKIN);
+          col.push(mark() - 1);
+        }
+        col.push(backV);
+        return col;
+      };
+      // (From her right, x < 0, to her left.)
+      const cols: number[][] = [creaseL];
+      for (let j = hipFront + hipSide - 1; j >= hipFront - hipSide + 1; j--) {
+        cols.push(column(j));
+        if (j === hipFront) {
+          underCol = cols[cols.length - 1];
+          underMid = underCol[1];
+        }
+      }
+      cols.push(creaseR);
+      // Faces between neighbouring columns (a zipper, as zip). The columns run from her right to her left and each
+      // from the front back, so a face listed (this column, this column's next, the next column) faces out: down
+      // under her, forward where the skin comes down off the hips' front. (Turning each to face away from a point
+      // inside the body got the steep sides of a round form wrong, and they weren't drawn.)
+      const tri = (a: number, b: number, c: number): void => {
+        if (a !== b && b !== c && a !== c) tb.idx.push(a, b, c);
+      };
+      const along = (col: readonly number[]): number[] => {
+        const f = [0];
+        for (let i = 1; i < col.length; i++) f.push(f[i - 1] + Math.hypot(P[col[i] * 3] - P[col[i - 1] * 3], P[col[i] * 3 + 1] - P[col[i - 1] * 3 + 1], P[col[i] * 3 + 2] - P[col[i - 1] * 3 + 2]));
+        return f.map((d) => d / (f[f.length - 1] || 1));
+      };
+      for (let c = 0; c + 1 < cols.length; c++) {
+        const A = cols[c], B = cols[c + 1];
+        const fa = along(A), fb = along(B);
+        let i = 0, k = 0;
+        while (i < A.length - 1 || k < B.length - 1) {
+          const stepA = k === B.length - 1 || (i < A.length - 1 && fa[i + 1] <= fb[k + 1]);
+          if (stepA) tri(A[i], A[i + 1], B[k]);
+          else tri(A[i], B[k + 1], B[k]);
+          if (stepA) i++;
+          else k++;
+        }
+      }
     }
   }
 
   // ---- Arms and hands ----
   // (A woman's arms hang a little inside the joints: narrower shoulders.)
-  const armIn = woman ? 0.014 : 0;
+  const armIn = (woman ? 0.014 : 0) + (detail && woman ? ARM_IN_FINE : 0);
   const ax = (y: number): number =>
     (y >= 1.42 ? P.shoulderX * 0.97 : y >= 1.13 ? P.elbowX + ((y - 1.13) / 0.29) * (P.shoulderX - P.elbowX) : P.wristX + ((y - 0.865) / 0.265) * (P.elbowX - P.wristX)) - armIn;
   // (A tattooed man's are inked to the wrist; a jacket's or a coat's sleeves; a politician's white gloves.)
@@ -1621,6 +2531,70 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const handShade = politician ? WHITES : SKIN;
   for (const [s, arm, fore] of [[-1, ARM_L, FORE_L], [1, ARM_R, FORE_R]] as const) {
     const ak = P.arm * (woman ? 0.88 : 1) * limb;
+    if (detail) {
+      // A character's arm and hand, one surface from the knuckles to the shoulder; fingers and a thumb on the palm.
+      const hl = woman || body === 'child' ? 1 : 1.14;
+      const hk = P.arm * limb;
+      const handY = (y: number): number => (0.868 - (0.868 - y) * hl) * ys;
+      const curl = (y: number): number => 0.012 * Math.pow(clamp01((0.868 - y / ys) / (0.14 * hl)), 2);
+      const handX = (y: number): number => P.wristX + 0.003 * clamp01((0.868 * ys - y) / (0.03 * ys)) - armIn - curl(y);
+      const lean = (y: number): number => {
+        const k = clamp01((y / ys - 1.37) / 0.087);
+        return ARM_LEAN * k * k;
+      };
+      const upper = ARM_FINE.map(([y, a, b, z]): Row => [y * ys, a * ak, b * ak, z * ak]);
+      // (The palm shorter from the wrist and the fingers longer, toward the rigged reference's hand: HAND_FIT.)
+      const inPalm = (y: number): number => 0.868 - (0.868 - y) * HAND_FIT[0];
+      const palm = PALM.map(([y, a, b, z]): Row => [handY(inPalm(y)), a * hk, b * hk, z * hk]);
+      // (A ring just under the wrist, the wrist's own section: where a sleeve ends, the hand's skin starts on a line.)
+      const cuff: Row = [upper[0][0] - 0.003 * ys, upper[0][1], upper[0][2], upper[0][3]];
+      // (The hand's own bone, at the wrist: the palm's, and the fingers' parent.)
+      const wrist = handBone(s < 0 ? 0 : 1);
+      pivot[wrist] = [s * (ax(upper[0][0] / ys) - lean(upper[0][0])), upper[0][0], upper[0][3]];
+      const a0 = mark();
+      tb.loft([...palm, cuff, ...upper], (r) => s * (r[0] >= upper[0][0] - 1e-6 ? ax(r[0] / ys) - lean(r[0]) : handX(r[0])), (r) => (r[0] < cuff[0] - 1e-6 ? one(wrist) : r[0] < upper[0][0] - 1e-6 ? blend(wrist, fore, 0.6) : r[0] < upper[0][0] + 1e-6 ? one(fore) : r[0] > 1.4 * ys ? blend(arm, SPINE, 0.6) : blend(arm, fore, clamp01((r[0] - 1.08 * ys) / (0.1 * ys)))), armShade, 10, 2.2);
+      for (let i = a0; i < mark(); i++) if (tb.pos[i * 3 + 1] < upper[0][0] - 1e-6) tb.shade[i] = handShade;
+      armRuns.push([a0, mark(), s]);
+      /**
+       * A finger (or the thumb) along its four points (root, middle joint, last joint, tip), bound to its three bones
+       * (the root's, the middle joint's and the last joint's, which follows the middle one: mobRig.ts fingerTip):
+       * rings close either side of each joint and between, the joint's own ring half each bone's, so it bends round
+       * a corner instead of folding flat at one ring (which left the tip looking like a piece come off).
+       */
+      const finger = (path: readonly V3[], radii: readonly number[], j0: number, j1: number, j2: number): void => {
+        const at = (seg: number, t: number): V3 => [0, 1, 2].map((k) => path[seg][k] + (path[seg + 1][k] - path[seg][k]) * t) as V3;
+        const rad = (seg: number, t: number): number => radii[seg] + (radii[seg + 1] - radii[seg]) * t;
+        const rings: [number, number, Weight][] = [
+          [0, 0, blend(j0, wrist, 0.5)], [0, 0.22, one(j0)], [0, 0.6, one(j0)], [0, 0.85, blend(j0, j1, 0.8)],
+          [1, 0, blend(j1, j0, 0.5)], [1, 0.18, blend(j1, j0, 0.8)], [1, 0.55, one(j1)], [1, 0.85, blend(j1, j2, 0.8)],
+          [2, 0, blend(j2, j1, 0.5)], [2, 0.2, blend(j2, j1, 0.8)], [2, 0.6, one(j2)], [2, 1, one(j2)],
+        ];
+        if (rings.length !== FINGER_RINGS) throw new Error('a finger is FINGER_RINGS rings');
+        pivot[j0] = path[0];
+        pivot[j1] = path[1];
+        pivot[j2] = path[2];
+        fingerRuns.push([s, j0, mark()]);
+        // (FINGER_SEG, not 8: at a finger's width, an 8-sided tube showed as faceted lines down its length and
+        // round each bent knuckle, which read as creases (the user, 2026-10-07, against the reference models).)
+        tube(tb, rings.map(([g, t]) => at(g, t)), rings.map(([g, t]) => rad(g, t)), FINGER_SEG, rings.map((q) => q[2]), handShade);
+      };
+      // Fingers from the knuckles, hanging and curling in toward the thigh, each a little more than the last.
+      const yk = handY(inPalm(0.767)), X = handX(yk), zc = 0.004 * hk, half = 0.041 * hk;
+      for (const [across, len, r, more] of FINGERS) {
+        const path: V3[] = [[s * X, yk + 0.008 * ys, zc + half * across]];
+        [[0.42, 10], [0.32, 28], [0.26, 50]].forEach(([share, angle]) => {
+          const t = ((angle + more) * Math.PI) / 180, q = path[path.length - 1];
+          path.push([q[0] - s * Math.sin(t) * len * HAND_FIT[1] * share * hk, q[1] - Math.cos(t) * len * HAND_FIT[1] * share * hk * hl, q[2]]);
+        });
+        const digit = 1 + FINGERS.findIndex((f) => f[0] === across);
+        finger(path, [r * hk, r * 0.96 * hk, r * 0.88 * hk, r * 0.74 * hk], digitBone(s < 0 ? 0 : 1, digit, 0), digitBone(s < 0 ? 0 : 1, digit, 1), fingerTip(s < 0 ? 0 : 1, digit));
+      }
+      // The thumb, from the heel of the hand forward and down.
+      const yt = handY(inPalm(0.835)), Xt = handX(yt);
+      const thumb: V3[] = [[s * Xt, yt, 0.03 * hk], [s * (Xt - 0.004), yt - 0.03 * hk * hl, 0.053 * hk], [s * (Xt - 0.008), yt - 0.058 * hk * hl, 0.062 * hk], [s * (Xt - 0.011), yt - 0.078 * hk * hl, 0.064 * hk]];
+      finger(thumb, [0.0125 * hk, 0.0115 * hk, 0.0095 * hk, 0.0075 * hk], digitBone(s < 0 ? 0 : 1, 0, 0), digitBone(s < 0 ? 0 : 1, 0, 1), fingerTip(s < 0 ? 0 : 1, 0));
+      continue;
+    }
     const rows = ARM.map(([y, a, b, z]): Row => [y * ys, a * ak, b * ak, z * ak]);
     tb.loft(rows, (r) => s * ax(r[0] / ys), (r) => (r[0] > 1.4 * ys ? blend(arm, SPINE, 0.6) : blend(arm, fore, clamp01((r[0] - 1.08 * ys) / (0.1 * ys)))), armShade, 6);
     // The hand: curling in a little toward the thigh, the thumb's base standing out at the front. A man's is longer.
@@ -1791,7 +2765,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const openCoat = (below: readonly Row[], shade: number, gap: number, g = 0.02): Row[] => {
     const hip = wrap(0.9, g);
     // (Its sections close together over a woman's bust, so it lies over it.)
-    const chest = woman ? [1.1, 1.15, 1.19, 1.23, 1.27, 1.31, 1.36] : [1.12, 1.2, 1.28, 1.35];
+    const chest = woman ? [1.12, 1.17, 1.21, 1.25, 1.29, 1.33, 1.375] : [1.12, 1.2, 1.28, 1.35];
     const rows: Row[] = [
       ...(below.length ? below.map(([y, a, b, z]): Row => [y * ys, a * gs, b * gs, z * gs]) : ([[0.8 * ys, hip[1] - 0.006, hip[2] - 0.006, hip[3]], [0.806 * ys, hip[1], hip[2], hip[3]]] as Row[])),
       hip,
@@ -1857,10 +2831,12 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     const flare = skirtAt(0.7 * ys, 0.03);
     over([[0.672 * ys, flare[1], flare[2], flare[3]], skirtAt(0.7 * ys, 0.014)], drape, WHITES - 0.1, 10, 2, [F - 1.05, F + 1.05]);
     over([wrap(1.04, 0.012), wrap(1.085, 0.012)], hips, WHITES, 16, 2.4);
-    // The bib up the chest, a frill along its top, and straps over the shoulders to the back.
-    over([1.08, 1.14, 1.2, 1.26, 1.32].map((y) => wrap(y, 0.008)), () => one(SPINE), WHITES, 10, 2.4, [F - 0.7, F + 0.7]);
-    over([wrap(1.32, 0.008), wrap(1.345, 0.022)], () => one(SPINE), WHITES - 0.1, 10, 2.4, [F - 0.74, F + 0.74]);
-    for (const c of [F - 0.55, F + 0.55, -F + 0.5, -F - 0.5]) over([1.31, 1.36, 1.42, 1.455].map((y) => wrap(y, 0.009)), () => one(SPINE), WHITES, 2, 2.4, [c - 0.07, c + 0.07]);
+    // The bib up the chest, a frill along its top, and straps over the shoulders to the back. (The bib's points are
+    // the chest's own, every ten degrees from 55 to 125: others cut across between the breasts under the dress.)
+    const BIB = (35 * Math.PI) / 180;
+    over([1.08, 1.12, 1.16, 1.2, 1.23, 1.26, 1.29, 1.32, 1.34].map((y) => wrap(y, 0.012)), () => one(SPINE), WHITES, 7, 2.4, [F - BIB, F + BIB]);
+    over([wrap(1.34, 0.012), wrap(1.365, 0.026)], () => one(SPINE), WHITES - 0.1, 7, 2.4, [F - BIB, F + BIB]);
+    for (const c of [F - 0.55, F + 0.55, -F + 0.5, -F - 0.5]) over([1.33, 1.37, 1.42, 1.455].map((y) => wrap(y, 0.011)), () => one(SPINE), WHITES, 2, 2.4, [c - 0.07, c + 0.07]);
     // The bow at the back of the waist, its two loops and tails.
     const [, bd, bz] = torsoAt(1.06 * ys);
     const back = bz - bd - 0.02;
@@ -1917,8 +2893,12 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   } else if (outfit === 'work') {
     // A hard hat with its brim (orange, whatever the figure's colour), and a hi-vis vest with two reflective bands.
     tb.loft(headRows([[0.13, 0.126, 0.136, -0.005], [0.14, 0.126, 0.136, -0.005], [0.145, 0.094, 0.112, -0.008], [0.2, 0.09, 0.106, -0.01], [0.244, 0.054, 0.064, -0.012], [0.26, 0.003, 0.003, -0.012]]), () => 0, () => one(HEAD), HARD_HAT, 12, 2.1);
-    over([1.0, 1.1, 1.2, 1.3, 1.38].map((y) => wrap(y, 0.012)), hips, HIVIS, S.seg, 2.4);
-    for (const y of [1.1, 1.24]) over([wrap(y, 0.016), wrap(y + 0.035, 0.016)], () => one(SPINE), LENS, S.seg, 2.4);
+    if (woman) overChest([1.0, 1.06, 1.12, 1.16, 1.2, 1.23, 1.26, 1.29, 1.32, 1.35, 1.38].map((y) => wrap(y, 0.012)), hips, HIVIS);
+    else over([1.0, 1.1, 1.2, 1.3, 1.38].map((y) => wrap(y, 0.012)), hips, HIVIS, S.seg, 2.4);
+    for (const y of [1.1, 1.24]) {
+      if (woman) overChest([wrap(y, 0.017), wrap(y + 0.0175, 0.017), wrap(y + 0.035, 0.017)], () => one(SPINE), LENS);
+      else over([wrap(y, 0.016), wrap(y + 0.035, 0.016)], () => one(SPINE), LENS, S.seg, 2.4);
+    }
   } else if (outfit === 'police') {
     // A peaked cap with a lighter band, and the duty belt.
     tb.loft(headRows([[0.155, 0.088, 0.11, -0.006], [0.18, 0.096, 0.118, -0.01], [0.212, 0.108, 0.128, -0.014], [0.226, 0.104, 0.123, -0.015], [0.232, 0.003, 0.003, -0.015]]), () => 0, () => one(HEAD), 0.7, 12, 2.1);
@@ -1969,7 +2949,8 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   } else if (outfit === 'hoodie' || outfit === 'hood') {
     // A loose body over the hips, the hood down behind the neck, the pocket on the front.
     // (More sections over a woman's hips, so it lies over her bottom.)
-    over([wrap(0.868, 0.004), ...[0.875, ...(woman ? [0.91, 0.95] : []), 1.0, 1.1, 1.2, 1.3, 1.38, 1.43].map((y) => wrap(y, 0.016))], hips, topShade, S.seg, 2.4);
+    if (woman) overChest([wrap(0.868, 0.004), ...[0.875, 0.91, 0.95, 1.0, 1.06, 1.12, 1.16, 1.2, 1.23, 1.26, 1.29, 1.32, 1.35, 1.38, 1.43].map((y) => wrap(y, 0.016))], hips, topShade);
+    else over([wrap(0.868, 0.004), ...[0.875, 1.0, 1.1, 1.2, 1.3, 1.38, 1.43].map((y) => wrap(y, 0.016))], hips, topShade, S.seg, 2.4);
     if (hooded) hoodUp(topShade);
     else {
       const [, hd, hz] = torsoAt(1.42 * ys);
@@ -2015,7 +2996,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     const cross = (x: number, y: number, z: number, k: number, bone: number): void => {
       for (const [a, h] of [[0.0055, 0.018], [0.018, 0.0055]]) tb.loft([[z, a * k, h * k, y], [z + 0.012 * k, a * k, h * k, y], [z + 0.0125 * k, 0, 0, y]], () => x, () => one(bone), CROSS, 8, 10, 'z');
     };
-    const by = 1.34 * ys;
+    const by = (woman ? 1.36 : 1.34) * ys;
     const [bw, bd, bz] = torsoAt(by);
     const bx = 0.068 * xs;
     const b0 = mark();
@@ -2029,7 +3010,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     // A white coat to the knee (white whatever the figure's colour), worn open: what's under it shows down the front.
     const w0 = woman ? 0.198 : 0.212;
     // (Up over the shoulders to the neck; its sections close together over a woman's bust, so it lies over it.)
-    const chest = woman ? [1.1, 1.14, 1.18, 1.21, 1.24, 1.27, 1.3, 1.33, 1.36] : [1.2, 1.34];
+    const chest = woman ? [1.12, 1.16, 1.2, 1.23, 1.26, 1.29, 1.32, 1.35, 1.38] : [1.2, 1.34];
     over(
       [[0.5 * ys, w0 * gs, 0.162 * gs, 0], [0.52 * ys, (w0 + 0.002) * gs, 0.164 * gs, 0], [0.7 * ys, (woman ? 0.192 : 0.2) * gs, 0.15 * gs, 0], wrap(0.9, 0.02), wrap(1.04, 0.02), ...chest.map((y) => wrap(y, 0.022)), wrap(1.42, 0.016), wrap(1.455, 0.012), wrap(1.482, 0.01)],
       drape,
@@ -2225,6 +3206,378 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     for (const [i, n] of marks) t.nor.set(n, i * 3);
     return t;
   };
+  if (detail) {
+    // A character's arms brought toward the rigged reference's length (ARM_FIT; refs/models,
+    // scripts/refs/measure_upper.py): shorter between the shoulder and the wrist, the hand moved up whole with the
+    // wrist, as it was built. (Shortening or stretching the hand's own parts was tried: a palm 0.8 as long and fingers
+    // half as long again, stretched along each finger's line, pinched the fingers at their joints and made them sticks.)
+    const Q = tb.pos;
+    for (const [from, to, side] of armRuns) {
+      const h = side < 0 ? 0 : 1;
+      const arm = h ? ARM_R : ARM_L, fore = h ? FORE_R : FORE_L, wrist = handBone(h);
+      const digits = [0, 1, 2, 3, 4].flatMap((d) => [digitBone(h, d, 0), digitBone(h, d, 1), fingerTip(h, d)]);
+      const sy = pivot[arm][1], wy = pivot[wrist][1], lift = (ARM_FIT - 1) * (wy - sy);
+      // (Whatever goes with the arm, its hand or its fingers: the arm itself and a sleeve over it alike.)
+      const limb = [arm, fore, wrist];
+      for (let v = 0; v < tb.b0.length; v++) {
+        const finger = digits.includes(tb.b0[v]) || digits.includes(tb.b1[v]);
+        if (!finger && !limb.includes(tb.b0[v]) && !limb.includes(tb.b1[v]) && (v < from || v >= to)) continue;
+        if (finger || Q[v * 3 + 1] < wy) Q[v * 3 + 1] += lift;
+        else if (Q[v * 3 + 1] < sy) Q[v * 3 + 1] = sy + (Q[v * 3 + 1] - sy) * ARM_FIT;
+      }
+      pivot[fore] = [pivot[fore][0], sy + (pivot[fore][1] - sy) * ARM_FIT, pivot[fore][2]];
+      for (const b of [wrist, ...digits]) pivot[b] = [pivot[b][0], pivot[b][1] + lift, pivot[b][2]];
+    }
+  }
+  if (WELD_FINGERS && detail) {
+    // A character's four fingers and palm made one surface. The palm's loft ends open at the knuckles in one ring, and
+    // each finger was a tube pushed up into it. Each finger's own first ring (inside the palm) goes; its second is its
+    // base. The four bases are gone round as one line (across the back of the hand from the index to the little
+    // finger, and back across the palm's side), which is joined to the palm's ring going round both together by
+    // length; and the gap between each two fingers is closed with a web. Every new face is turned to face out.
+    const Q = tb.pos, RING = FINGER_SEG, PALM_SEG = 10;
+    const at = (v: number): V3 => [Q[v * 3], Q[v * 3 + 1], Q[v * 3 + 2]];
+    for (const [from, , side] of armRuns) {
+      const mine = fingerRuns.filter((f) => f[0] === side && (f[1] - BONES) % 10 >= 2).map((f) => f[2]);
+      if (mine.length !== 4) continue;
+      // (From the palm's second ring: its lowest goes too, so the join is a slope down from the knuckles into the
+      // fingers and not the square end the palm's loft had.)
+      const palm = Array.from({ length: PALM_SEG }, (_, j) => from + PALM_SEG + j);
+      const dead = new Set([...mine.flatMap((st) => Array.from({ length: RING }, (_, j) => st + j)), ...Array.from({ length: PALM_SEG }, (_, j) => from + j)]);
+      // Each finger's base ring: its middle, and its two halves (back of the hand, palm's side), each across the hand.
+      const bases = mine.map((st) => {
+        const ring = Array.from({ length: RING }, (_, j) => st + RING + j);
+        const mid = ring.reduce((m, v) => [m[0] + Q[v * 3] / RING, m[1] + Q[v * 3 + 1] / RING, m[2] + Q[v * 3 + 2] / RING], [0, 0, 0]);
+        const back = ring.filter((v) => (Q[v * 3] - mid[0]) * side >= 0).sort((p, q) => Q[p * 3 + 2] - Q[q * 3 + 2]);
+        const front = ring.filter((v) => (Q[v * 3] - mid[0]) * side < 0).sort((p, q) => Q[q * 3 + 2] - Q[p * 3 + 2]);
+        return { mid, back, front };
+      }).sort((p, q) => p.mid[2] - q.mid[2]);
+      if (bases.some((b) => !b.back.length || !b.front.length)) continue;
+      let line = [...bases.flatMap((b) => b.back), ...bases.slice().reverse().flatMap((b) => b.front)];
+      const all = [...palm, ...line];
+      const mid: V3 = [0, 0, 0];
+      for (const v of all) for (let c = 0; c < 3; c++) mid[c] += Q[v * 3 + c] / all.length;
+      const faces: number[] = [];
+      /** A face, turned to face away from a point (or, `down`, toward the fingertips). */
+      const face = (a: number, b: number, c: number, down = false): void => {
+        const A = at(a), B = at(b), C = at(c);
+        const n: V3 = [(B[1] - A[1]) * (C[2] - A[2]) - (B[2] - A[2]) * (C[1] - A[1]), (B[2] - A[2]) * (C[0] - A[0]) - (B[0] - A[0]) * (C[2] - A[2]), (B[0] - A[0]) * (C[1] - A[1]) - (B[1] - A[1]) * (C[0] - A[0])];
+        const out = down ? -n[1] : n[0] * ((A[0] + B[0] + C[0]) / 3 - mid[0]) + n[2] * ((A[2] + B[2] + C[2]) / 3 - mid[2]);
+        if (out >= 0) faces.push(a, b, c);
+        else faces.push(a, c, b);
+      };
+      // (Both the same way round, seen from above, and the fingers' line starting beside the palm's first point.)
+      const turn = (loop: readonly number[]): number => loop.reduce((sum, v, n) => {
+        const w = loop[(n + 1) % loop.length];
+        return sum + (Q[v * 3] - mid[0]) * (Q[w * 3 + 2] - mid[2]) - (Q[w * 3] - mid[0]) * (Q[v * 3 + 2] - mid[2]);
+      }, 0);
+      if (Math.sign(turn(line)) !== Math.sign(turn(palm))) line = line.reverse();
+      const far = (p: number, q: number): number => Math.hypot(Q[p * 3] - Q[q * 3], Q[p * 3 + 1] - Q[q * 3 + 1], Q[p * 3 + 2] - Q[q * 3 + 2]);
+      let start = 0;
+      for (let j = 1; j < line.length; j++) if (far(palm[0], line[j]) < far(palm[0], line[start])) start = j;
+      line = [...line.slice(start), ...line.slice(0, start)];
+      const along = (loop: readonly number[]): number[] => {
+        const d = [0];
+        for (let n = 0; n < loop.length; n++) d.push(d[n] + far(loop[n], loop[(n + 1) % loop.length]));
+        return d.map((x) => x / d[loop.length]);
+      };
+      const da = along(palm), db = along(line);
+      let i = 0, j = 0;
+      while (i < palm.length || j < line.length) {
+        const ai = palm[i % palm.length], bj = line[j % line.length];
+        if (j >= line.length || (i < palm.length && da[i + 1] <= db[j + 1])) {
+          face(ai, palm[(i + 1) % palm.length], bj);
+          i++;
+        } else {
+          face(bj, line[(j + 1) % line.length], ai);
+          j++;
+        }
+      }
+      // The webs: between each two fingers, their facing sides' four points.
+      for (let n = 0; n + 1 < bases.length; n++) {
+        const p = bases[n], q = bases[n + 1];
+        const a = p.back[p.back.length - 1], b = q.back[0], c = q.front[q.front.length - 1], d = p.front[0];
+        face(a, b, c, true);
+        face(a, c, d, true);
+      }
+      tb.idx = [...tb.idx.filter((_, n) => !dead.has(tb.idx[n - (n % 3)]) && !dead.has(tb.idx[n - (n % 3) + 1]) && !dead.has(tb.idx[n - (n % 3) + 2])), ...faces];
+    }
+  }
+  if (WELD_FINGERS && detail) {
+    // The thumb too (`weld`): it leaves the side of the palm, so what of each lies inside the other is cut away and the
+    // two openings are joined, gone round as seen along the thumb. Where they don't meet in one clean line each it is
+    // left as it was built (nothing is changed).
+    for (const [from, to, side] of armRuns) {
+      const thumb = fingerRuns.find((f) => f[0] === side && (f[1] - BONES) % 10 < 2);
+      if (!thumb) continue;
+      const r = pivot[thumb[1]], q = pivot[thumb[1] + 1];
+      const len = Math.hypot(q[0] - r[0], q[1] - r[1], q[2] - r[2]) || 1;
+      weld(tb, [thumb[2], thumb[2] + FINGER_RINGS * FINGER_SEG + 1], [from, to], (x, y, z) => Math.hypot(x - r[0], y - r[1], z - r[2]) < THUMB_WELD * ys, [(q[0] - r[0]) / len, (q[1] - r[1]) / len, (q[2] - r[2]) / len]);
+    }
+  }
+  const welded = new Map<number, number>();
+  /** (Each welded shoulder's seam, by side: its arm's run, a point of the seam, the way out of the body square to it.) */
+  const seams = new Map<number, { from: number; to: number; near: Map<number, number>; down: Map<number, readonly [number, number, number]>; ay: number; high: number }>();
+  if (WELD_RING && detail && chestRun && Math.floor(tb.shade[chestRun[0]] / 100) === 1) {
+    // A character's bare arm and chest made one surface, along a smooth seam: an upright plane (running front to back)
+    // through the armpit and the top of the arm, as a sleeve's seam lies. The arm is cut off at it: up each of its
+    // lines of points the first point past the plane is put on the plane and the rest above goes, so its edge is one
+    // point a line, all on the plane. The chest is opened where that edge stands against it, and the two are joined.
+    const SEG = 10, Q = tb.pos;
+    for (const [from, to, side] of armRuns) {
+      const rowsN = (to - from) / SEG;
+      const arm = side < 0 ? ARM_L : ARM_R;
+      const at = (k: number, j: number): number => from + k * SEG + j;
+      let kp = 0, top = from;
+      for (let k = 0; k < rowsN; k++) if (Math.abs(Q[at(k, 0) * 3 + 1] - (pivot[arm][1] - WELD_SEAM[0] * ys)) < Math.abs(Q[at(kp, 0) * 3 + 1] - (pivot[arm][1] - WELD_SEAM[0] * ys))) kp = k;
+      for (let v = from; v < to; v++) if (Q[v * 3 + 1] > Q[top * 3 + 1]) top = v;
+      let ax = Infinity;
+      for (let j = 0; j < SEG; j++) ax = Math.min(ax, Q[at(kp, j) * 3] * side);
+      const ay = Q[at(kp, 0) * 3 + 1];
+      let dx = Q[top * 3] * side - ax, dy = Q[top * 3 + 1] - ay;
+      const len = Math.hypot(dx, dy);
+      if (len < 0.03 || dy <= 0) continue;
+      dx /= len;
+      dy /= len;
+      const nx = dy, ny = -dx;
+      const out = (v: number): number => (Q[v * 3] * side - ax) * nx + (Q[v * 3 + 1] - ay) * ny;
+      // The arm's edge: a point a line.
+      const rim: number[] = [];
+      for (let j = 0; j < SEG; j++) {
+        let r = rowsN - 1;
+        // (From the armpit's ring up: under it the arm is never cut, though its inner side may stand a hair inside the plane.)
+        for (let k = kp; k + 1 < rowsN; k++) {
+          const t0 = out(at(k, j)), t1 = out(at(k + 1, j));
+          if (t1 >= 0) continue;
+          const f = t0 <= 0 ? 0 : t0 / (t0 - t1), a = at(k, j) * 3, b = at(k + 1, j) * 3;
+          for (let c = 0; c < 3; c++) Q[b + c] = Q[a + c] + (Q[b + c] - Q[a + c]) * f;
+          r = k + 1;
+          break;
+        }
+        rim.push(r);
+      }
+      const edge = rim.map((r, j) => at(r, j));
+      // The chest's opening: what of it stands inside that edge, seen square to the plane, and isn't far behind it.
+      const flat = (v: number): [number, number] => [Q[v * 3 + 2], (Q[v * 3] * side - ax) * dx + (Q[v * 3 + 1] - ay) * dy];
+      const ring = edge.map(flat);
+      const mu = ring.reduce((sum, q) => sum + q[0], 0) / SEG, mv = ring.reduce((sum, q) => sum + q[1], 0) / SEG;
+      const within = ([u, v]: [number, number]): boolean => {
+        let odd = false;
+        for (let i = 0, j = SEG - 1; i < SEG; j = i++) {
+          const [ui, vi] = ring[i], [uj, vj] = ring[j];
+          if (vi > v !== vj > v && u < ((uj - ui) * (v - vi)) / (vj - vi) + ui) odd = !odd;
+        }
+        return odd;
+      };
+      const gone = new Set<number>();
+      for (let v = chestRun[0]; v < chestRun[1]; v++) {
+        if (Q[v * 3] * side < 0.02 || out(v) < -WELD_SEAM[1] * ys) continue;
+        const [u, w] = flat(v);
+        if (within([mu + (u - mu) / WELD_SEAM[2], mv + (w - mv) / WELD_SEAM[2]])) gone.add(v);
+      }
+      if (!gone.size) continue;
+      const hole = openingOf(tb, chestRun, gone);
+      if (!hole) continue;
+      // The faces: the arm's above its edge go, the gaps between its lines' ends are filled; the chest's on the opening go.
+      const I = tb.idx, kept: number[] = [];
+      for (let t = 0; t < I.length; t += 3) {
+        const f = [I[t], I[t + 1], I[t + 2]];
+        if (f.every((v) => v >= from && v < to) && f.some((v) => Math.floor((v - from) / SEG) > rim[(v - from) % SEG])) continue;
+        if (f.every((v) => v >= chestRun![0] && v < chestRun![1]) && f.some((v) => gone.has(v))) continue;
+        kept.push(...f);
+      }
+      for (let j = 0; j < SEG; j++) {
+        const j1 = (j + 1) % SEG;
+        if (rim[j1] > rim[j]) for (let q = rim[j]; q < rim[j1]; q++) kept.push(at(rim[j], j), at(q + 1, j1), at(q, j1));
+        else for (let q = rim[j1]; q < rim[j]; q++) kept.push(at(q, j), at(q + 1, j), at(rim[j1], j1));
+      }
+      const angle = (v: number): number => {
+        const [u, w] = flat(v);
+        return Math.atan2(w - mv, u - mu);
+      };
+      kept.push(...stitchRings(edge, hole.slice().reverse(), angle));
+      tb.idx = kept;
+      // (The chest's points close by the opening, and how close: only they take any of the arm's turning.)
+      const near = new Map<number, number>();
+      for (let v = chestRun[0]; v < chestRun[1]; v++) {
+        if (Q[v * 3] * side < 0.02 || gone.has(v)) continue;
+        let off = Infinity;
+        for (const q of hole) off = Math.min(off, Math.hypot(Q[v * 3] - Q[q * 3], Q[v * 3 + 1] - Q[q * 3 + 1], Q[v * 3 + 2] - Q[q * 3 + 2]));
+        if (off < WELD_SEAM[5] * ys) near.set(v, 1 - off / (WELD_SEAM[5] * ys));
+      }
+      // (And each of the arm's points, how far down its own line from the edge it is, as a share of the way to where
+      // the skin is all the arm's: a short way under the armpit, where the edge is low, so the arm lifts clear of
+      // the ribs there and no web is drawn out under it; a long way over the top of the shoulder.)
+      const down = new Map<number, readonly [number, number, number]>();
+      const high = Q[top * 3 + 1] - ay;
+      for (let j = 0; j < SEG; j++) {
+        let d = 0;
+        const reach = (WELD_SEAM[3] + (WELD_SEAM[4] - WELD_SEAM[3]) * clamp01((Q[at(rim[j], j) * 3 + 1] - ay) / high)) * ys;
+        // (What the seam itself takes of the arm's turning where this line meets it: WELD_SEAM's last under the
+        // armpit, which rises with a raised arm, to none at the top of the shoulder.)
+        const base = WELD_SEAM[6] * (1 - clamp01((Q[at(rim[j], j) * 3 + 1] - ay) / high));
+        down.set(at(rim[j], j), [0, base, reach]);
+        for (let k = rim[j] - 1; k >= 0 && d < 0.3; k--) {
+          const a = at(k, j) * 3, b = at(k + 1, j) * 3;
+          d += Math.hypot(Q[a] - Q[b], Q[a + 1] - Q[b + 1], Q[a + 2] - Q[b + 2]);
+          down.set(at(k, j), [d / reach, base, reach]);
+        }
+      }
+      seams.set(side, { from, to, near, down, ay, high });
+    }
+  }
+  if (WELD_ARMS && detail && chestRun && Math.floor(tb.shade[chestRun[0]] / 100) === 1) {
+    // A character's bare arms and chest made one surface (`weld`): the arm is a shape of its own pushed into the
+    // shoulder, its join only shaded over. About the shoulder and no lower than the armpit: down the ribs the arm
+    // hangs against the body and is no part of it. OFF (WELD_ARMS): see there.
+    for (const [from, to, side] of armRuns) {
+      const arm = side < 0 ? ARM_L : ARM_R;
+      const low = pivot[arm][1] - WELD_SHOULDER * ys;
+      const joined = weld(tb, [from, to], chestRun, (x, y) => y > low && x * side > 0.03);
+      if (!joined) continue;
+      // (The chest's skin about the join goes with the arm as the arm's own does there, less with distance from
+      // the join, to nothing SHOULDER_BEND's third away: the pull of a raised arm is spread over the chest and the
+      // back beside it, not taken up in the join's own faces.)
+      const edge = [...joined[0], ...joined[1]];
+      for (let v = chestRun[0]; v < chestRun[1]; v++) {
+        if (tb.pos[v * 3] * side < 0.03 || tb.pos[v * 3 + 1] < low - 0.08 * ys) continue;
+        let off = Infinity;
+        for (const q of edge) off = Math.min(off, Math.hypot(tb.pos[v * 3] - tb.pos[q * 3], tb.pos[v * 3 + 1] - tb.pos[q * 3 + 1], tb.pos[v * 3 + 2] - tb.pos[q * 3 + 2]));
+        if (off < SHOULDER_BEND[2] * ys) welded.set(v, 1 - off / (SHOULDER_BEND[2] * ys));
+      }
+    }
+  }
+  if (detail) {
+    // More joints up a character's spine (mobRig.ts spineBone): what went with the one bone from the waist up goes,
+    // by its height, with the waist's, the lower chest's or the upper chest's (eased across each joint), and what
+    // was built as the head (and everything on it) with the head's own bone on top of the neck's.
+    const ribs = spineBone(0), upper = spineBone(1), skull = spineBone(2);
+    const y1 = SPINE_JOINTS[0] * ys, y2 = SPINE_JOINTS[1] * ys, y3 = neckY + SPINE_JOINTS[2] * hk, band = SPINE_JOINTS[3] * ys;
+    pivot[ribs] = [0, y1, -0.012];
+    pivot[upper] = [0, y2, -0.018];
+    pivot[skull] = [0, y3, -0.006];
+    const ease = (t: number): number => {
+      const k = Math.max(0, Math.min(1, t));
+      return k * k * (3 - 2 * k);
+    };
+    for (let i = 0; i < tb.b0.length; i++) {
+      const y = tb.pos[i * 3 + 1];
+      const a = tb.w[i] < 0.001 ? tb.b1[i] : tb.b0[i], b = tb.w[i] > 0.999 ? tb.b0[i] : tb.b1[i];
+      if (a !== SPINE && a !== HEAD && b !== SPINE && b !== HEAD) continue;
+      let b0 = a, b1 = b, w = tb.w[i];
+      if (i >= h0) {
+        if (a === HEAD) b0 = skull;
+        if (b === HEAD) b1 = skull;
+      } else if (a === HEAD && b === HEAD) {
+        // (The neck's own top: onto the head.)
+        [b0, b1, w] = [skull, HEAD, ease((y - (y3 - band)) / (2 * band))];
+      }
+      if (a === SPINE && b === SPINE) {
+        if (y >= y2 - band) [b0, b1, w] = [upper, ribs, ease((y - (y2 - band)) / (2 * band))];
+        else if (y >= y1 - band) [b0, b1, w] = [ribs, SPINE, ease((y - (y1 - band)) / (2 * band))];
+      } else {
+        const at = y >= y2 ? upper : y >= y1 ? ribs : SPINE;
+        if (a === SPINE) b0 = at;
+        if (b === SPINE) b1 = at;
+      }
+      tb.b0[i] = b0;
+      tb.b1[i] = b1;
+      tb.w[i] = w;
+    }
+    // Where a character's hips and ankles bend (HIP_CREASE, ANKLE_BEND; the crowd's are as they were: its legs only
+    // walk). The hips' skin went over to the thigh well under the hip's joint, in front and behind alike, so a thigh
+    // raised carried a shelf out in front and left the buttock standing over it behind; and a foot was one stiff
+    // piece on a shin that ended inside it, so a foot turned showed a step behind the ankle.
+    const skinOnly = SKIRTED.includes(outfit);
+    pivot[hipHalf(0)] = pivot[THIGH_L];
+    pivot[hipHalf(1)] = pivot[THIGH_R];
+    pivot[shoulderHalf(0)] = pivot[ARM_L];
+    pivot[shoulderHalf(1)] = pivot[ARM_R];
+    for (const sd of [0, 1] as const) {
+      const arm = sd === 0 ? ARM_L : ARM_R;
+      pivot[armSwing(sd)] = pivot[arm];
+      // (A collar bone turns about its inner end, by the breastbone, a little over the shoulder's height.)
+      pivot[clavicle(sd)] = [Math.sign(pivot[arm][0]) * COLLAR[0] * ys, pivot[arm][1] + COLLAR[1] * ys, pivot[arm][2] + 0.02];
+    }
+    const [creaseF, creaseB, bandF, bandB] = HIP_CREASE;
+    for (let i = 0; i < tb.b0.length; i++) {
+      const x = tb.pos[i * 3], y = tb.pos[i * 3 + 1], z = tb.pos[i * 3 + 2];
+      const right = x > 0;
+      const thigh = right ? THIGH_R : THIGH_L, shin = right ? SHIN_R : SHIN_L, foot = right ? FOOT_R : FOOT_L;
+      const a = tb.w[i] < 0.001 ? tb.b1[i] : tb.b0[i], b = tb.w[i] > 0.999 ? tb.b0[i] : tb.b1[i];
+      const wa = a === b ? 1 : tb.w[i];
+      const arm = right ? ARM_R : ARM_L;
+      const seam = seams.get(right ? 1 : -1);
+      if (seam) {
+        // A welded shoulder: the skin goes over to the arm by how far down the arm from the seam it is (along the
+        // arm's own lines of points, so it is the same all round the seam and the faces that join arm and chest
+        // aren't pulled askew), through the shoulder's half-way bone; the chest's own skin right by the seam takes
+        // what the seam has, less with distance.
+        const inArm = i >= seam.from && i < seam.to && seam.down.has(i) && (a === arm || b === arm) && (a === arm || a === upper) && (b === arm || b === upper);
+        const inChest = seam.near.has(i);
+        if (inArm || inChest) {
+          // (The arm's: from what the seam has where its line meets it, to all the arm's. The chest's by the seam:
+          // what the seam has at its height, less with distance, so the faces across the seam move as one and a
+          // raised arm draws the armpit up with it instead of a web out of it.)
+          const sd = right ? 1 : 0, collar = clavicle(sd), plain = armSwing(sd), half = shoulderHalf(sd);
+          if (!inArm) {
+            // (The chest's skin by the seam: with the collar bone, less with distance, so the shoulder rises with a raised arm.)
+            [tb.b0[i], tb.b1[i], tb.w[i]] = [collar, upper, ease(seam.near.get(i)!)];
+            continue;
+          }
+          // (The arm's: at the seam the collar bone's; down from it, over to the arm without its twist, through the
+          // half-way bone; and from there the arm's twist comes on evenly down to the elbow.)
+          const [way, , reach] = seam.down.get(i)!;
+          const share = ease(way);
+          if (share < 0.999 || a !== arm || b !== arm) [tb.b0[i], tb.b1[i], tb.w[i]] = share < 0.5 ? [half, collar, share * 2] : [plain, half, share * 2 - 1];
+          else [tb.b0[i], tb.b1[i], tb.w[i]] = [arm, plain, clamp01(((way - 1) * reach) / Math.max(0.02, pivot[arm][1] - pivot[right ? FORE_R : FORE_L][1] - 1.4 * reach))];
+          continue;
+        }
+      }
+      if (welded.has(i)) {
+        const k = welded.get(i)!;
+        const share = k * k * (3 - 2 * k) * ease((pivot[arm][1] - y + SHOULDER_BEND[0] * ys) / ((SHOULDER_BEND[0] + SHOULDER_BEND[1]) * ys)), half = shoulderHalf(right ? 1 : 0);
+        if (share > 0.005) {
+          [tb.b0[i], tb.b1[i], tb.w[i]] = share < 0.5 ? [half, upper, share * 2] : [arm, half, share * 2 - 1];
+          continue;
+        }
+      }
+      if ((a === arm || b === arm) && (a === arm || a === upper) && (b === arm || b === upper)) {
+        // The shoulder (SHOULDER_BEND): the arm is a shape of its own whose top leans in over the chest, and all of
+        // it turned with the arm (its top six parts in ten), so a raised arm lifted its top out of the shoulder and
+        // stood beside the body. Now what is over the joint stays on the chest, and down from there the skin goes
+        // over to the arm through the shoulder's half-way bone: the top stays in the shoulder and the arm bends out
+        // of it. (A sleeve over it the same, by its place.)
+        const down = pivot[arm][1] - y;
+        const share = ease((down + SHOULDER_BEND[0] * ys) / ((SHOULDER_BEND[0] + SHOULDER_BEND[1]) * ys)), half = shoulderHalf(right ? 1 : 0);
+        [tb.b0[i], tb.b1[i], tb.w[i]] = share < 0.5 ? [half, upper, share * 2] : [arm, half, share * 2 - 1];
+        continue;
+      }
+      if ((a === shin || a === foot) && (b === shin || b === foot)) {
+        // The ankle: by height through a band about the joint, the shin's skin, the foot's and what joins them
+        // alike (so none comes through another); forward of the instep the foot is as it was.
+        const was = (a === shin ? wa : 0) + (b === shin && a !== b ? 1 - wa : 0);
+        const low = pivot[foot][1] - ANKLE_BEND[0] * ys, top = pivot[foot][1] + ANKLE_BEND[1] * ys;
+        const up = ease((y - low) / (top - low));
+        const near = 1 - ease((z - pivot[foot][2] - ANKLE_BEND[2]) / ANKLE_BEND[3]);
+        [tb.b0[i], tb.b1[i], tb.w[i]] = [shin, foot, was + (up - was) * near];
+      } else if ((a === PELVIS || a === thigh) && (b === PELVIS || b === thigh) && (!skinOnly || Math.floor(tb.shade[i] / 100) === 1)) {
+        // The hip: in front the line the thigh folds at runs from where the legs part up to the joint's height by
+        // the middle of the thigh, and the skin goes over in a short way (a crease); behind, half-way up the
+        // buttock, over a tall band (a raised thigh draws the buttock down round it). Near the middle as it was.
+        const was = (a === thigh ? wa : 0) + (b === thigh && a !== b ? 1 - wa : 0);
+        const out = clamp01(Math.abs(x) / 0.16), front = clamp01((z + 0.03) / 0.06);
+        const rise = ease((out - 0.1) / 0.35);
+        const lineF = crotch + (creaseF - crotch) * rise, lineB = crotch + (creaseB - crotch) * ease(out / 0.45);
+        const line = (lineB + (lineF - lineB) * front) * ys;
+        const band = (bandB + (0.09 + (bandF - 0.09) * rise - bandB) * front) * ys;
+        const now = ease((line + band / 2 - y) / band);
+        // (Through the hip's half-way bone: the pelvis to it over the first half of the way, it to the thigh over the rest.)
+        const share = was + (now - was) * clamp01((Math.abs(x) - 0.02) / 0.03), half = hipHalf(right ? 1 : 0);
+        [tb.b0[i], tb.b1[i], tb.w[i]] = share < 0.5 ? [half, PELVIS, share * 2] : [thigh, half, share * 2 - 1];
+      }
+    }
+  }
   if (isTeen(body, outfit)) {
     // Scaled down whole, the joints with it.
     const [kx, ky] = TEEN_SCALE[body];
@@ -2235,5 +3588,14 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     }
     return built(tb.build(pivot.map((v): V3 => [v[0] * kx, v[1] * ky, v[2] * kx]), armOut));
   }
-  return built(tb.build(pivot, armOut));
+  const tall = figure?.height ?? 1;
+  if (tall !== 1) for (let i = 0; i < tb.pos.length; i++) tb.pos[i] *= tall;
+  const done = built(tb.build(tall === 1 ? pivot : pivot.map((v): V3 => [v[0] * tall, v[1] * tall, v[2] * tall]), armOut));
+  if (detail) {
+    // (Where the arms meet the shoulders and the legs the feet: one surface to the light.)
+    const sx = (P.shoulderX * 0.97 - armIn - 0.02) * tall, fx = (woman ? 0.052 : P.hipX * 0.88) * tall;
+    const hx = (P.wristX - armIn) * tall;
+    softenNormals(done, [-1, 1].flatMap((sd): [V3, number][] => [[[sd * sx, 1.43 * ys * tall, -0.01], 0.075 * tall], [[sd * fx, 0.06 * tall, -0.01], 0.05 * tall], [[sd * hx, 0.775 * ys * tall, 0.005], 0.06 * tall]]));
+  }
+  return done;
 }

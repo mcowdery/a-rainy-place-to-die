@@ -46,7 +46,7 @@ export interface DebugHit {
   readonly go: () => void;
 }
 
-const TAB_KEY = 'citypop.debugTab';
+const TAB_KEY = 'rainyplace.debugTab';
 /** Keys the game keeps while the menu is open, so you can walk or drive on while you change things. */
 const WALK_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight']);
 

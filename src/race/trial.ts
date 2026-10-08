@@ -125,7 +125,7 @@ export interface BestRun {
   readonly ghost: readonly number[];
 }
 
-const key = (venue: string, dir: Dir): string => `citypop.race.v1.${venue}.${dir}`;
+const key = (venue: string, dir: Dir): string => `rainyplace.race.v1.${venue}.${dir}`;
 
 export function loadBest(venue: string, dir: Dir): BestRun | null {
   try {

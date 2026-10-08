@@ -41,6 +41,57 @@ if (parts.includes('cig')) {
   await page.keyboard.press('KeyJ');
   await page.waitForTimeout(9000);
 }
+if (parts.includes('drag')) {
+  // On foot, third person: at each drag, how far the cigarette's mouth end is from the fingers that hold it and from
+  // his mouth (standing, then squatting, then looking down at him). Then J straight after a flick.
+  const rig = () => 'window.__chase.gun.host.rig()';
+  await page.evaluate(() => localStorage.setItem('citypop.thirdPerson', '1'));
+  await page.keyboard.press('KeyQ');
+  await page.waitForTimeout(600);
+  await page.keyboard.press('KeyJ');
+  await page.waitForTimeout(7000);
+  const drag = async (name) => {
+    await page.evaluate(() => { const S = window.__chase.gun.host.rig().smoking; S.round = -1; S.wait = 0.05; });
+    let worst = 0, n2 = 0, mouthOff = 0;
+    for (let i = 0; i < 40; i++) {
+      await page.waitForTimeout(60);
+      const r = await page.evaluate(() => {
+        const R = window.__chase.gun.host.rig();
+        const S = R.smoking;
+        const V = window.__camera.position.constructor;
+        const f = R.arms.l.fingers;
+        const p = (a, b) => f[a][b].getWorldPosition(new V());
+        const g = p(0, 1).add(p(0, 2)).add(p(1, 1)).add(p(1, 2)).multiplyScalar(0.25);
+        const stick = S.sticks[S.kind].root.position;
+        const face = R.faceNow();
+        const mouth = face.eye.clone().addScaledVector(face.up, -0.07).addScaledVector(face.fwd, 0.085);
+        return { lift: S.lift, inHand: S.inHand, d: g.distanceTo(stick), m: mouth.distanceTo(stick), headless: R.headless };
+      });
+      if (r.lift > 0.97 && r.inHand) { worst = Math.max(worst, r.d); mouthOff = Math.max(mouthOff, r.m); n2++; }
+      if (i === 22) await shot(`drag_${name}`);
+    }
+    console.log('drag', name, JSON.stringify({ samples: n2, fingersToCigarette_cm: +(worst * 100).toFixed(1), cigaretteToMouth_cm: +(mouthOff * 100).toFixed(1) }));
+  };
+  await page.evaluate(() => window.__turn(150));
+  await page.waitForTimeout(900);
+  await drag('standing');
+  await page.keyboard.press('KeyC');
+  await page.waitForTimeout(1500);
+  await drag('squatting');
+  await page.keyboard.press('KeyC');
+  await page.waitForTimeout(1200);
+  // J: flick, and at once J again (it used to do nothing for some seconds).
+  await page.keyboard.press('KeyJ');
+  await page.waitForTimeout(700);
+  await page.keyboard.press('KeyJ');
+  for (const t of [0.5, 1.5, 3]) {
+    await page.waitForTimeout(t === 0.5 ? 500 : t === 1.5 ? 1000 : 1500);
+    console.log('again', t, JSON.stringify(await page.evaluate(() => { const S = window.__chase.gun.host.rig().smoking; return { stage: S.stage, what: S.what }; })));
+  }
+  await browser.close();
+  await server.close();
+  process.exit(0);
+}
 console.log(await page.evaluate(() => window.__drive()));
 await page.waitForTimeout(1500);
 if (parts.includes('cig')) {
@@ -356,15 +407,15 @@ if (parts.includes('mirrorperf')) {
     });
     console.log('perf', name.padEnd(34), JSON.stringify(r));
   };
-  const cfg = (mode, rw, rh, re, dw, dh, de) => `(() => { const M = window.__mirrors; M.mode('${mode}'); M.rear.target.setSize(${rw}, ${rh}); M.rear.every = ${re}; M.doors.forEach((d) => { d.target.setSize(${dw}, ${dh}); d.every = ${de}; }); })()`;
-  await measure('off', cfg('off', 256, 68, 3, 128, 100, 6));
-  await measure('now 256x68/3 128x100/6', cfg('cockpit', 256, 68, 3, 128, 100, 6));
-  await measure('res 512x136/3 256x200/6', cfg('cockpit', 512, 136, 3, 256, 200, 6));
-  await measure('res 768x204/3 384x300/6', cfg('cockpit', 768, 204, 3, 384, 300, 6));
-  await measure('rear only /1 (doors /999)', cfg('cockpit', 512, 136, 1, 256, 200, 999));
-  await measure('rear /2, doors /4', cfg('cockpit', 512, 136, 2, 256, 200, 4));
-  await measure('all /1', cfg('cockpit', 512, 136, 1, 256, 200, 1));
-  await measure('off again', cfg('off', 256, 68, 3, 128, 100, 6));
+  // (The door mirrors show no picture any more: only the cab's is measured.)
+  const cfg = (mode, rw, rh, re) => `(() => { const M = window.__mirrors; M.mode('${mode}'); M.rear.target.setSize(${rw}, ${rh}); M.rear.every = ${re}; })()`;
+  await measure('off', cfg('off', 256, 68, 3));
+  await measure('256x68/3', cfg('cockpit', 256, 68, 3));
+  await measure('512x136/3', cfg('cockpit', 512, 136, 3));
+  await measure('768x204/3', cfg('cockpit', 768, 204, 3));
+  await measure('512x136/2', cfg('cockpit', 512, 136, 2));
+  await measure('512x136/1', cfg('cockpit', 512, 136, 1));
+  await measure('off again', cfg('off', 256, 68, 3));
   console.log('groups', JSON.stringify(await page.evaluate(() => window.__scene.children.filter((o) => o.visible).map((o) => o.name || o.type).slice(0, 60))));
 }
 if (parts.includes('mirrorprof')) {
@@ -469,6 +520,29 @@ if (parts.includes('mirror2')) {
       return { vis: t.visible, mask: t.layers.mask, cam: M.camera.layers.mask, scale: +t.scale.x.toFixed(2), world: w.toArray().map((v) => Math.round(v)), ndc: ndc.toArray().map((v) => +v.toFixed(2)), parentVis: c.view.obj.visible, inScene: !!c.view.obj.parent, map: !!t.material.map?.image };
     });
   })));
+}
+if (parts.includes('window')) {
+  // The door glass from outside, each side: with the gun away, just after a shot from the hip, and four seconds on.
+  const hide = () => page.evaluate(() => document.querySelectorAll('body > div, body > pre').forEach((d) => (d.style.visibility = 'hidden')));
+  const win = () => page.evaluate(() => { const w = window.__own.view.windows; return { left: w.left && { vis: w.left.visible, y: +w.left.position.y.toFixed(2), broken: !!w.left.userData.broken }, right: w.right && { vis: w.right.visible, y: +w.right.position.y.toFixed(2), broken: !!w.right.userData.broken }, shown: window.__chase.gun.shown, mack: window.__chase.vis() }; });
+  const side = async (name, deg) => {
+    for (let i = 0; i < 5; i++) {
+      await page.evaluate((y) => window.__bike.driving.setLook((y * Math.PI) / 180, 0.02), deg);
+      await page.waitForTimeout(220);
+    }
+    await hide();
+    console.log('window', name, JSON.stringify(await win()));
+    await page.screenshot({ path: `${out}/${String(n++).padStart(2, '0')}_${name}.png`, clip: { x: 250, y: 200, width: 600, height: 300 } });
+  };
+  await side('left_before', 90);
+  await side('right_before', -90);
+  await page.evaluate(() => window.__bike.driving.setLook(-1.2, 0));
+  await page.evaluate(() => window.__chase.fire());
+  await page.waitForTimeout(500);
+  await side('left_just_fired', 90);
+  await page.waitForTimeout(4500);
+  await side('left_after', 90);
+  await side('right_after', -90);
 }
 if (parts.includes('smoke')) {
   // A smashed front, from the driver's seat: standing, then driving through its own smoke.

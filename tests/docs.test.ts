@@ -7,7 +7,7 @@ const texts = import.meta.glob('../.claude/rules/*.md', { query: '?raw', import:
 const docs = Object.fromEntries(Object.entries(texts).map(([path, text]) => [path.split('/').pop() as string, text]));
 // Every file a doc could name (the keys only: nothing is loaded).
 const files = new Set(
-  Object.keys(import.meta.glob(['../src/**', '../content/**', '../scripts/**', '../story/**', '../assets/ads/briefs/**', '../*.html'])).map((p) => p.replace(/^\.\.\//, '')),
+  Object.keys(import.meta.glob(['../src/**', '../content/**', '../scripts/**', '../story/**', '../assets/ads/briefs/**', '../assets/**/CREDITS.md', '../CREDITS.md', '../*.html'])).map((p) => p.replace(/^\.\.\//, '')),
 );
 const pathsOf = (text: string) => {
   const head = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);

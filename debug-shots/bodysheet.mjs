@@ -107,6 +107,17 @@ for (const who of ['nude_man', 'nude']) {
   sheets.bust = { cols: 4, cells, want: 'bust' };
 }
 
+// Under a bare woman's hips, close: where the buttocks meet the thighs and where the legs part, from behind, the side
+// and the front, level and leaning (seen from below).
+{
+  const cells = [];
+  for (const [what, pose, view] of [
+    ['behind', { yaw: 180 }, [0, 0.8, 0.16]], ['behind, three quarter', { yaw: 140 }, [0, 0.8, 0.16]], ['side', { yaw: 90 }, [0, 0.8, 0.16]], ['front', { yaw: 0 }, [0, 0.8, 0.16]],
+    ['front, three quarter', { yaw: 40 }, [0, 0.8, 0.16]], ['behind, from below', { yaw: 180, pitch: 30 }, [0, 0.68, 0.3]], ['front, from below', { yaw: 0, pitch: -30 }, [0, 0.68, 0.3]], ['side, a stride', { yaw: 90, lL: [26, 0, 6], lR: [-18, 0, 30] }, [0, 0.8, 0.16]],
+  ]) cells.push([what, { who: 'nude', x: 0, pose }, view]);
+  sheets.under = { cols: 4, cells, want: 'under' };
+}
+
 const server = await shotServer({ mode, server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });

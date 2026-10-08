@@ -13,7 +13,7 @@
 // measures frame times or fills the GPU ('exclusive': the benchmarks, the *perf scripts, the music generator) waits
 // for the others to finish and holds the rest back while it runs. `shotServer(config, { gpu: 'exclusive' })`, or for
 // one run of any script `CITYPOP_GPU=exclusive node debug-shots/<script>.mjs ...` ('shared', 'off' likewise).
-// A holder is a file `<pid>-<mode>.json` in the temp folder's citypop-gpu/, gone when its process is; nobody waits
+// A holder is a file `<pid>-<mode>.json` in the temp folder's rainyplace-gpu/, gone when its process is; nobody waits
 // more than WAIT, after which the run goes ahead and says so. scripts/gpu_lock.py is the same queue for Python.
 import { createServer } from 'vite';
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -22,7 +22,7 @@ import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const DIR = join(tmpdir(), 'citypop-gpu');
+const DIR = join(tmpdir(), 'rainyplace-gpu');
 const WAIT = 15 * 60e3;
 let held = false;
 

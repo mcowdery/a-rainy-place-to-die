@@ -5,7 +5,7 @@
 
 Opens Blender (with its window, not in the background) on the character as its definition builds it: the body, the
 skin, eyes, brows and lashes, no clothes or hair (they're fitted in the full build). Select the body, open the
-sidebar (N), and use MPFB's Model panel: face, nose, eyes, mouth, chin, ears, head, body. The City Popper tab has:
+sidebar (N), and use MPFB's Model panel: face, nose, eyes, mouth, chin, ears, head, body. The A Rainy Place to Die tab has:
 
   Save to <file>       writes the body's shape targets into the definition's "body.targets", replacing what was
                        there (left and right values that match become one "lr-" entry; the macros, age, weight,
@@ -137,7 +137,7 @@ def rebuild(path):
 
 
 class CITYPOP_OT_save_face(bpy.types.Operator):
-    bl_idname = 'citypop.save_face'
+    bl_idname = 'rainyplace.save_face'
     bl_label = 'Save'
     bl_description = "Write the body's shape targets into the definition"
     rebuild: bpy.props.BoolProperty(default=False)
@@ -156,15 +156,15 @@ class CITYPOP_PT_face_lab(bpy.types.Panel):
     bl_label = 'Face lab'
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'City Popper'
+    bl_category = 'A Rainy Place to Die'
 
     def draw(self, context):
         col = self.layout.column()
         col.label(text='Shape him with MPFB > Model,')
         col.label(text='with the body selected.')
         name = os.path.basename(STATE['path'] or '')
-        col.operator('citypop.save_face', text=f'Save to {name}').rebuild = False
-        col.operator('citypop.save_face', text='Save and rebuild models').rebuild = True
+        col.operator('rainyplace.save_face', text=f'Save to {name}').rebuild = False
+        col.operator('rainyplace.save_face', text='Save and rebuild models').rebuild = True
 
 
 def main():

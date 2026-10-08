@@ -35,7 +35,7 @@ export function loadStations(): Station[] {
 export const OFF = 'off';
 export const TAPE = 'tape';
 
-const KEY = 'citypop.radio';
+const KEY = 'rainyplace.radio';
 /** The crackle on changing station (seconds), and how long after going quiet the stream is stopped. */
 const BURST = 0.28;
 const STOP_AFTER = 0.4;

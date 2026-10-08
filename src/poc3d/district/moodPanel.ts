@@ -128,7 +128,7 @@ export type Resolution = (typeof RESOLUTIONS)[number];
 
 export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, windowFolk: 1, windowVice: 1, windowPeople: true, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, carDamp: 0.5, carRoof: 1, steps: 1, gun: DEFAULT_GUN_VOICE, shotgun: 'a', guns: 1, gunEcho: 0.3, music: 0.5, resolution: 'auto', mirror: 'all', quality: 'high', mob: 'ghost', mobShadows: true, mobEmotes: true, smoking: 1, mobBlush: EMOTE_LOOKS.blush, mobHearts: EMOTE_LOOKS.hearts, mobStars: EMOTE_LOOKS.stars, sky: 'deep', skyColors: 'painted', moonShape: 'calendar' };
 const SHADOW_COUNTS = [0, 2, 4, 8];
-const SAVED_KEY = 'city-popper.district.mood';
+const SAVED_KEY = 'rainyplace.district.mood';
 
 /** Settings from a parameter list over a base: each present key replaces the base's value. */
 function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettings {

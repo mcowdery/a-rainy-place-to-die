@@ -14,7 +14,7 @@ import sys
 
 from PIL import Image
 
-SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), '..', '..', 'krea-2-turbo', 'krea2-studio', 'outputs', 'taxi-ads')
+SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), '..', '..', 'Trame', 'trame-studio', 'outputs', 'taxi-ads')
 OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'ads')
 
 # name: (roof square box, door 3:4 box) as (left, top, right, bottom) in 1024x1024 source pixels.

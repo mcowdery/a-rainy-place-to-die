@@ -123,8 +123,106 @@ function scene(server, req, res) {
   });
 }
 
+// The animation review page (anims.html, src/poc3d/anims/main.ts): the user's verdicts on the clips proposed for
+// the city, one entry a candidate, in scripts/anims/verdicts.json (in git: they're decisions, to be worked from).
+//   GET  /__anims                        the file as it stands ({} if there's none yet)
+//   POST /__anims { id, verdict, note }  keeps one candidate's verdict (use, keep, no, later, or null) and note
+function anims(server, req, res) {
+  const json = (code, body) => {
+    res.statusCode = code;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
+  const file = resolve(server.config.root, 'scripts', 'anims', 'verdicts.json');
+  const read = () => (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {});
+  if (req.method === 'GET') {
+    try {
+      json(200, read());
+    } catch (err) {
+      json(500, { error: String(err) });
+    }
+    return;
+  }
+  if (req.method !== 'POST') return json(405, { error: 'GET or POST' });
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    try {
+      const { id, verdict, note } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      if (typeof id !== 'string' || !/^[a-z0-9_]+$/.test(id)) return json(400, { error: 'id must look like run_sprint' });
+      if (verdict !== null && !['use', 'keep', 'no', 'later'].includes(verdict)) return json(400, { error: 'verdict is use, keep, no, later or null' });
+      const all = read();
+      const text = typeof note === 'string' ? note.slice(0, 2000) : '';
+      // (Neither a verdict nor a note: nothing to keep.)
+      if (verdict === null && !text) delete all[id];
+      else all[id] = { verdict, note: text, at: new Date().toISOString().slice(0, 10) };
+      const sorted = Object.fromEntries(Object.keys(all).sort().map((k) => [k, all[k]]));
+      writeFileSync(file, `${JSON.stringify(sorted, null, 2)}\n`);
+      json(200, sorted);
+    } catch (err) {
+      json(400, { error: String(err) });
+    }
+  });
+}
+
+// The animation batch page (animbatch.html, src/poc3d/anims/batch.ts): who each clip isn't for, and each clip's note
+// on how to use it, in scripts/anims/exclusions.json (in git: it's what says which clips are fair game for whom).
+//   GET  /__animcast                      { exclude: { <who>: [clips] }, notes: { <clip>: text }, liked: ... } (liked:
+//                                         what was ticked in the page's first form, scripts/anims/picks.json, read only)
+//   POST /__animcast { who, clip, on }    says a clip isn't for <who> (mack, mob, a character's name), or takes it back
+//   POST /__animcast { clip, note }       keeps a clip's note ('' takes it away)
+function animCast(server, req, res) {
+  const json = (code, body) => {
+    res.statusCode = code;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
+  const dir = resolve(server.config.root, 'scripts', 'anims');
+  const file = resolve(dir, 'exclusions.json');
+  const from = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : {});
+  const read = () => {
+    const all = from(file);
+    return { exclude: all.exclude ?? {}, notes: all.notes ?? {} };
+  };
+  if (req.method === 'GET') {
+    try {
+      json(200, { ...read(), liked: from(resolve(dir, 'picks.json')) });
+    } catch (err) {
+      json(500, { error: String(err) });
+    }
+    return;
+  }
+  if (req.method !== 'POST') return json(405, { error: 'GET or POST' });
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    try {
+      const { who, clip, on, note } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      if (typeof clip !== 'string' || !/^[A-Za-z0-9_]{1,80}$/.test(clip)) return json(400, { error: "clip must be a clip's name" });
+      const all = read();
+      if (typeof note === 'string') {
+        if (note.trim()) all.notes[clip] = note.trim().slice(0, 2000);
+        else delete all.notes[clip];
+      } else {
+        if (typeof who !== 'string' || !/^[a-z0-9_]{1,40}$/.test(who)) return json(400, { error: 'who must be a name like mack' });
+        const list = new Set(Array.isArray(all.exclude[who]) ? all.exclude[who] : []);
+        if (on) list.add(clip);
+        else list.delete(clip);
+        if (list.size) all.exclude[who] = [...list].sort();
+        else delete all.exclude[who];
+      }
+      const sorted = (o) => Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]]));
+      const next = { exclude: sorted(all.exclude), notes: sorted(all.notes) };
+      writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`);
+      json(200, next);
+    } catch (err) {
+      json(400, { error: String(err) });
+    }
+  });
+}
+
 /** The endpoints by path. A new one goes here. */
-export const ENDPOINTS = { '/__shot': shot, '/__window': windowLab, '/__scene': scene };
+export const ENDPOINTS = { '/__shot': shot, '/__window': windowLab, '/__scene': scene, '/__anims': anims, '/__animcast': animCast };
 
 /** Answers the request if its path is an endpoint's; false if it's nobody's (Vite's own /__ paths). */
 export function handle(server, req, res) {

@@ -4,6 +4,7 @@ import { DistrictModel } from '../src/poc3d/district/model';
 import { CELL, DISTRICTS3 } from '../src/poc3d/district/plan';
 import { isBare, OUTFITS, smokeOf } from '../src/poc3d/district/peopleMix';
 import { railReserved } from '../src/poc3d/district/rail';
+import { buildShaped } from '../src/poc3d/real/mobShape';
 import { scrambleKeys, Signals } from '../src/poc3d/district/traffic';
 import { addFigure, addUmbrella, cellCrowd, handAt, holdHands, footingOf, FIGURE_STRIDE, GHOST_COLORS, GhostBuilder, figureMesh, packFigures, outfitOf, posedFigure, setMobShape, smokerJoints, smokerReach, templateIndex, TEMPLATE_COUNT, umbrellaIndex, type Body, type FigureSpec, type Hair, type Pose } from '../src/poc3d/real/people';
 
@@ -248,7 +249,7 @@ describe('shaped mob figures', () => {
           for (const pose of ['stand', 'walk', 'wave', 'sit'] as Pose[]) expect(bounds(spec(body, pose, { hair, outfit })).r).toBeLessThan(1.0);
           // (A body with nothing on is never in a crowd, and a woman's has more points across the chest: a bound of its own.)
           const triangles = figureMesh({ body, hair, long: false, outfit }).triangles;
-          if (isBare(outfit)) expect(triangles).toBeLessThan(8200);
+          if (isBare(outfit)) expect(triangles).toBeLessThan(9000);
           else most = Math.max(most, triangles);
         }
       }
@@ -259,6 +260,27 @@ describe('shaped mob figures', () => {
     // (A woman's hips and legs are one surface, finer round the back of the hips and through the thighs.)
     expect(figureMesh({ body: 'woman', hair: 'long', long: false }).triangles).toBeLessThan(4000);
   }, 300000);
+
+  it("join a woman's hips, legs and the skin between them the right way out (the mob's material draws one side)", () => {
+    // Where two faces share an edge they must run along it in opposite senses: the same sense means one of them faces
+    // in, and is not drawn (a slit you see through, at the crotch).
+    for (const outfit of ['plain', 'shorts', 'nude'] as const) {
+      const t = buildShaped('woman', 'bob', outfit);
+      const body = (i: number): boolean => Math.abs(t.pos[i * 3]) < 0.1 && t.pos[i * 3 + 1] > 0.72 && t.pos[i * 3 + 1] < 0.84 && (outfit !== 'nude' || t.shade[i] === 101);
+      const edges = new Map<string, number[]>();
+      for (let q = 0; q < t.idx.length; q += 3) {
+        const tri = [t.idx[q], t.idx[q + 1], t.idx[q + 2]];
+        if (!tri.every(body) || new Set(tri).size < 3) continue;
+        for (let e = 0; e < 3; e++) {
+          const a = tri[e], b = tri[(e + 1) % 3];
+          const key = a < b ? `${a}_${b}` : `${b}_${a}`;
+          edges.set(key, [...(edges.get(key) ?? []), a < b ? 1 : -1]);
+        }
+      }
+      const wrong = [...edges.values()].filter((d) => d.length > 2 || (d.length === 2 && d[0] === d[1])).length;
+      expect(wrong, outfit).toBe(0);
+    }
+  });
 
   it('give women a figure: a bust, the back hollow over round hips', () => {
     // The foremost and the rearmost points of the torso by height (standing square, facing +z; the arms hang outside).

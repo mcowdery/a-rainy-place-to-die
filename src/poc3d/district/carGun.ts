@@ -241,8 +241,13 @@ export class CarGun {
       // back in (race/carDriver.ts `blocked`).
       const n = line.wait;
       const nd = new THREE.Vector3(Math.sin(n.rel) * Math.cos(n.pitch), Math.sin(n.pitch), Math.cos(n.rel) * Math.cos(n.pitch)).applyQuaternion(car.quaternion);
-      this.aimAt = this.side ? aimPoint : head.clone().addScaledVector(nd, 20);
-      this.window = this.side ?? n.side;
+      // From the hip the gun stays where the shot went for its moment: swinging the view round the car with it still
+      // up doesn't swing his arm about the cabin, nor wind the other window down (both were gone from the car as
+      // soon as you looked round it: the user's 'window not showing').
+      if (aiming || this.pulled || !this.window) {
+        this.aimAt = this.side ? aimPoint : head.clone().addScaledVector(nd, 20);
+        this.window = this.side ?? n.side;
+      }
       if (this.pulled) {
         if (!aiming) this.hipT = HIP_HOLD;
         if (this.side && !H.own.totaled) seated.fire();

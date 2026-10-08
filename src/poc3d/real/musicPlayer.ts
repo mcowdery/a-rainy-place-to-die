@@ -8,7 +8,7 @@ import { type Readout, trackUrl } from './radio';
  * streams the track (as the radio does: a track decoded whole is ~90 MB) into the page's music bus two ways at
  * once, clean for the headphones and thin for the speaker, and wearing the headphones crossfades between them.
  * The headphones are a pair of noise-cancelling ones: `ears` says what the city's sound should do about them
- * (CityAudio's `AudioFrame.ears`). What's kept in the browser (localStorage `citypop.music`): the headphones, the
+ * (CityAudio's `AudioFrame.ears`). What's kept in the browser (localStorage `rainyplace.music`): the headphones, the
  * liked songs, shuffle and repeat, and the song that was on (it comes back paused).
  */
 
@@ -17,7 +17,7 @@ export type Ears = 'none' | 'worn' | 'nc';
 /** The headphones (an invented make). */
 export const HEADPHONES = 'OTOWA NC-7';
 
-const KEY = 'citypop.music';
+const KEY = 'rainyplace.music';
 /** The phone's speaker against the headphones, and how long putting them on or off takes to cross over (s). */
 const SPEAKER_LEVEL = 0.9;
 const EARS_FADE = 0.12;

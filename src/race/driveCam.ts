@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 /**
  * Driving cameras shared by the race page and the city (district/driving.ts): the views Q cycles through,
- * remembered in the browser (`citypop.driveView`); the driver's head in the cockpit, thrown about by the car's
+ * remembered in the browser (`rainyplace.driveView`); the driver's head in the cockpit, thrown about by the car's
  * accelerations on a spring and jolted by knocks; where the driver looks (into a bend, along a slide); placing the
  * cockpit and bonnet cameras in a car's frame; and the rear-view mirror's picture.
  *
@@ -19,7 +19,7 @@ export const VIEW_NAMES: Record<DriveViewId, string> = {
   bumper: 'Bumper',
 };
 
-const KEY = 'citypop.driveView';
+const KEY = 'rainyplace.driveView';
 
 /** The next view. On a bike only two: behind it, and his eyes (`cockpit`). */
 export function nextView(v: DriveViewId, bike = false): DriveViewId {
@@ -173,7 +173,7 @@ export class RearMirror {
     this.material = new THREE.MeshBasicMaterial({ map: tex });
   }
 
-  /** Renders the picture for the driver at `eye` (world); `hide` are left out of it (the glass, his head). `half`: half the glass's height (m: the cabin's mirror; a door mirror's is taller). */
+  /** Renders the picture for the driver at `eye` (world); `hide` are left out of it (the glass, his head). `half`: half the glass's height (m: the cabin's mirror). */
   render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, glass: THREE.Mesh, eye: THREE.Vector3, hide: readonly THREE.Object3D[] = [], half = 0.031): void {
     if (this.frame++ % this.every) return;
     glass.updateMatrixWorld();

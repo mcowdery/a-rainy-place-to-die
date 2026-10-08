@@ -1,9 +1,9 @@
 import { Terrain } from './terrain';
 import * as THREE from 'three';
-import { mirrorSpots, wheelLayout, type CarType } from '../models/vehicles';
+import { wheelLayout } from '../models/vehicles';
 import { model, tunedSpec } from '../../race/catalog';
 import { buildCar, poseCar, setLamps, turnWheels, type CarView } from '../../race/carView';
-import { CarInterior, cockpitLayout } from '../models/carInterior';
+import { CarInterior } from '../models/carInterior';
 import { Dents } from '../../race/dents';
 import { currentCar, loadProfile, saveProfile } from '../../race/profile';
 import { CarSound } from '../../race/sound';
@@ -47,7 +47,7 @@ export interface DeckObstacle {
  * Your own car in the city: the one you're driving in the garage (race/profile.ts), with its paint, livery,
  * neon and tuning, on the racing handling model (race/vehicle.ts) with calmer road assists. It joins the
  * traffic as a parked vehicle (traffic stops behind it and honks; E by it takes the wheel), and it stays where
- * you leave it (localStorage `citypop.city.car`; at first, and after ?car=home, in its bay at the garage).
+ * you leave it (localStorage `rainyplace.city.car`; at first, and after ?car=home, in its bay at the garage).
  *
  * The racing model wants a Ground. On the street: height 0, and what's in the way from `probe` (crash.ts:
  * a wall, a car, a pole, something soft or a person). Crashing is forgiving (crash.ts): walls and people stop
@@ -65,14 +65,14 @@ export interface DeckObstacle {
  * lamps from how it's driven; `beam`: where they shine from, for the city shader); parked, they're off.
  *
  * Or your motorcycle (`bike`: race/bikeRide.ts' BIKES): the same model, ground and crashing, its own spec and
- * saved spot (`citypop.city.bike`); no dents or damage yet; the page draws it and its rider (`onPose`).
+ * saved spot (`rainyplace.city.bike`); no dents or damage yet; the page draws it and its rider (`onPose`).
  */
 
 /** The city: road assists, but with room to slide (the expressway's long bends). */
 export const CITY_ASSISTS: Assists = { ...ROAD_ASSISTS, maxSlide: (38 * Math.PI) / 180 };
 
-const SAVE_KEY = 'citypop.city.car';
-const BIKE_SAVE_KEY = 'citypop.city.bike';
+const SAVE_KEY = 'rainyplace.city.car';
+const BIKE_SAVE_KEY = 'rainyplace.city.bike';
 /** The car's centre line is probed with small circles (what can stop it), its sides with more (drive through). */
 const CL = 0.35;
 const SIDE = 0.55;
@@ -81,9 +81,6 @@ const HW = 0.85;
 /** Sliding along a wall keeps nearly all your speed. */
 const WALL_FRICTION = 0.998;
 const DIRS = Array.from({ length: 16 }, (_, i) => [Math.cos((i / 16) * Math.PI * 2), Math.sin((i / 16) * Math.PI * 2)] as const);
-
-/** How far a door mirror's glass can be turned inside its head (rad). */
-const MIRROR_TILT = 0.2;
 
 export class OwnCar {
   /** The car's spec with its parts (before the driving tuning). */
@@ -103,13 +100,6 @@ export class OwnCar {
   private cabinFor: (() => CarInterior) | null;
   /** What the body builder put in the car's group (the rest there is other people's: a driver's seat, hit volumes, marks). */
   private built: THREE.Object3D[] = [];
-  /**
-   * The door mirrors' glass, left and right (`fitMirrors`): each turned so the driver sees the road behind along
-   * the car's flank in it. Dull until the page gives each a picture (main.ts, from the cab: race/driveCam.ts'
-   * RearMirror renders it); `mirrorHalf` is half a glass's height, for that.
-   */
-  sideMirrors: THREE.Mesh[] = [];
-  mirrorHalf = 0.05;
   private cabin: CarInterior | null = null;
   readonly vehicle: DrivenVehicle;
   readonly ground: Ground;
@@ -194,7 +184,6 @@ export class OwnCar {
       this.baseSpec = tunedSpec(mine.type, mine.parts);
       this.sim = new Car(tunedBy(this.baseSpec, tuning), assistsBy(CITY_ASSISTS, 'road', tuning));
       this.view = buildCar({ type: mine.type, paint: mine.paint, paint2: mine.paint2, livery: mine.livery, neon: mine.neonFitted ? mine.neon : null }, material);
-      this.fitMirrors(mine.type);
       this.built = [...this.view.obj.children];
       this.sound.configure(m.sound);
       const zs = wheelLayout(mine.type).spots.map((s) => s.z);
@@ -291,8 +280,6 @@ export class OwnCar {
     const next = buildCar({ type: mine.type, paint: mine.paint, paint2: mine.paint2, livery: mine.livery, neon: mine.neonFitted ? mine.neon : null }, material);
     this.built = [...next.obj.children];
     for (const c of this.built) obj.add(c);
-    this.fitMirrors(mine.type);
-    this.built.push(...this.sideMirrors);
     Object.assign(this.view as { -readonly [K in keyof CarView]: CarView[K] }, { type: next.type, body: next.body, windows: next.windows, wheels: next.wheels, r: next.r, wipers: next.wipers, lamps: next.lamps });
     this.carId = mine.id;
     Object.assign(this.parts, partsOf(mine));
@@ -309,31 +296,6 @@ export class OwnCar {
     this.pose(0);
     this.roof = THREE.MathUtils.clamp(new THREE.Box3().setFromObject(next.body).max.y - obj.position.y, 1.1, 2.2);
   }
-
-  /**
-   * Glass in the door mirrors' heads (models/vehicles.ts `mirrorSpots`: set back inside each rim), turned within
-   * the head, as a mirror's is adjusted, to face halfway between the driver's eyes and straight back; no further
-   * than the well it sits in allows.
-   */
-  private fitMirrors(type: CarType): void {
-    const eye = cockpitLayout(type).eye;
-    this.sideMirrors = mirrorSpots(type).map((s) => {
-      const at = new THREE.Vector3(s.x, s.y, s.z);
-      const head = new THREE.Vector3(s.nx, s.ny, s.nz);
-      const back = new THREE.Vector3(Math.sign(s.x) * 0.1, -0.03, -1).normalize();
-      const want = eye.clone().sub(at).normalize().add(back).normalize();
-      const off = head.angleTo(want);
-      const n = off > MIRROR_TILT ? head.clone().lerp(want, MIRROR_TILT / off).normalize() : want;
-      const x = new THREE.Vector3(0, 1, 0).cross(n).normalize();
-      const glass = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.h), OwnCar.dullMirror);
-      glass.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, n.clone().cross(x), n));
-      glass.position.copy(at);
-      this.view.obj.add(glass);
-      this.mirrorHalf = s.h / 2;
-      return glass;
-    });
-  }
-  static readonly dullMirror = new THREE.MeshBasicMaterial({ color: 0x55616c });
 
   /** Its cabin (models/carInterior.ts), for the cockpit view: fitted the first time it's asked for; a bike has none. */
   get interior(): CarInterior | null {

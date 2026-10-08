@@ -1,5 +1,5 @@
 {
-  "name": "city-popper",
+  "name": "a-rainy-place-to-die",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -27,17 +27,27 @@
     "vn:try": "node scripts/vn/try.mjs",
     "face:lab": "\"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe\" --python scripts/blender/face_lab.py --",
     "phone:clip": "node scripts/phone/record_clip.mjs",
-    "radio:index": "node scripts/radio/index.mjs"
+    "radio:index": "node scripts/radio/index.mjs",
+    "model:pick": "node C:/Users/mcowd/Documents/proj/claude-model-guard/scripts/pickModel.mjs",
+    "glb:check": "node scripts/glbCheck.mjs"
   },
   "dependencies": {
     "three": "^0.186.1",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "@gltf-transform/cli": "^4.5.1",
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
     "@types/three": "^0.186.0",
+    "ffmpeg-static": "^5.3.0",
     "playwright-core": "^1.63.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.1",
     "vitest": "^5.0.1"
+  },
+  "allowScripts": {
+    "ffmpeg-static@5.3.0": true
   }
 }

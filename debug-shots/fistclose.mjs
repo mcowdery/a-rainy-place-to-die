@@ -8,12 +8,12 @@ await server.listen();
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 700, height: 500 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
-await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.goto(`${server.resolvedUrls.local[0]}fight.html`);
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
 await page.waitForTimeout(1500);
 await page.keyboard.press('Digit3');
 await page.evaluate(() => { for (const id of ['panel', 'hud']) document.getElementById(id).style.display = 'none'; document.querySelectorAll('.label').forEach((l) => (l.style.display = 'none')); });
-await page.evaluate(async () => { await __fp.enter(14, 30, 0); __fp.look(0, 0); __fp.hand('fists'); __fp.draw(); });
+await page.evaluate(async () => { await __fp.enter(0, 3, 0); __fp.look(0, 0); __fp.hand('fists'); __fp.draw(); });
 await page.waitForTimeout(1200);
 const views = { front: [0, 0.02, -0.35], side: [0.3, 0.0, -0.05], above: [0.05, 0.3, -0.12], palm: [-0.25, -0.05, -0.1] };
 for (const [side, label] of [['r', 'R'], ['l', 'L']]) {

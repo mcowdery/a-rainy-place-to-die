@@ -8,6 +8,7 @@ import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRe
 import { cityMaterial, cityUniforms } from '../real/city';
 import { KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { Character, CHARACTERS, setCharacterEnvironment } from '../models/characters';
+import { loadStatue } from '../models/statues';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { FpMode } from './fpMode';
 import { buildShotgun, SHOTGUN_KINDS } from '../models/shotgun';
@@ -17,6 +18,7 @@ import { buildCruiser, CRUISER_LOOKS } from '../models/cruiser';
 import { buildSportBike, SPORT_LOOKS } from '../models/sportbike';
 import { buildHelmet, HELMET_LOOKS } from '../models/helmet';
 import { buildKatana } from '../models/katana';
+import { buildBat } from '../models/bat';
 import { addVehicle, addVehicleLow, addWheel, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, WORK_TYPES, type VehicleSpec, type VehicleType } from '../models/vehicles';
 import { Lightmap, paintLights, type Light } from '../real/lightmap';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
@@ -138,8 +140,8 @@ scene.add(genRoot.new, genRoot.previous);
 let labelsOn = true;
 let fpLabels = false;
 try {
-  labelsOn = localStorage.getItem('citypop.showroom.labels') !== '0';
-  fpLabels = localStorage.getItem('citypop.showroom.labels.fp') === '1';
+  labelsOn = localStorage.getItem('rainyplace.showroom.labels') !== '0';
+  fpLabels = localStorage.getItem('rainyplace.showroom.labels.fp') === '1';
 } catch {
   /* no storage */
 }
@@ -150,7 +152,7 @@ const setLabels = (on: boolean): void => {
   if (fp.active) fpLabels = on;
   else labelsOn = on;
   try {
-    localStorage.setItem(fp.active ? 'citypop.showroom.labels.fp' : 'citypop.showroom.labels', on ? '1' : '0');
+    localStorage.setItem(fp.active ? 'rainyplace.showroom.labels.fp' : 'rainyplace.showroom.labels', on ? '1' : '0');
   } catch {
     /* no storage */
   }
@@ -537,6 +539,9 @@ setCharacterEnvironment(charEnv);
 const cast: Character[] = [];
 CHARACTERS.forEach((name, i) => {
   const x = (i - (CHARACTERS.length - 1) / 2) * 2.2;
+  // Mack and his outfits stand here, each where it always did. The others made with MakeHuman (the salaryman, the
+  // maid, Julie) have moved to the MakeHuman test page (humans.html, src/poc3d/humans/).
+  if (!name.startsWith('mack')) return;
   label('new', name, x, 2.15, CAST_Z);
   genItems.new.push({ name, group: 'Characters', at: new THREE.Vector3(x, 1.1, CAST_Z), size: 2.2, view: new THREE.Vector3(0.25, 0.2, 1).normalize() });
   genItems.new.push({ name: `${name}: face`, group: 'Characters', at: new THREE.Vector3(x, 1.55, CAST_Z), size: 0.45, view: new THREE.Vector3(0.2, 0.05, 1).normalize() });
@@ -549,6 +554,25 @@ CHARACTERS.forEach((name, i) => {
     .catch((e: unknown) => console.warn(`character ${name}:`, e));
 });
 if (CHARACTERS.length > 0) genItems.new.push({ name: 'the cast', group: 'Characters', at: new THREE.Vector3(0, 1, CAST_Z), size: 3 + CHARACTERS.length, view: FRONT_VIEW });
+// A candidate for the mega-sign's roof (the user wants a giant tanuki there in time, and the dragon moved): a
+// statue made from a generated picture (models/statues.ts), stood off the other end of the cast's pad at a shop
+// front's size, a metre and a half, to be looked over before it's used anywhere.
+{
+  const sx = -Math.max(6, CHARACTERS.length * 2.2 + 2) / 2 - 2.4;
+  const tall = 1.5;
+  void loadStatue('tanuki', charEnv)
+    .then((statue) => {
+      statue.scale.setScalar(tall);
+      statue.position.set(sx, 0, CAST_Z);
+      genRoot.new.add(statue);
+    })
+    .catch((e: unknown) => console.warn('statue:', e));
+  label('new', 'tanuki (candidate)', sx, tall + 0.25, CAST_Z);
+  genItems.new.push({ name: 'tanuki (candidate)', group: 'Mega-sign', at: new THREE.Vector3(sx, tall * 0.5, CAST_Z), size: 2.4, view: new THREE.Vector3(0.3, 0.15, 1).normalize() });
+  genItems.new.push({ name: 'tanuki: face', group: 'Mega-sign', at: new THREE.Vector3(sx, tall * 0.72, CAST_Z), size: 0.8, view: new THREE.Vector3(0.15, 0.05, 1).normalize() });
+  genItems.new.push({ name: 'tanuki: back', group: 'Mega-sign', at: new THREE.Vector3(sx, tall * 0.5, CAST_Z), size: 2.4, view: new THREE.Vector3(-0.4, 0.2, -1).normalize() });
+}
+
 // Mack's shotguns (models/shotgun.ts), side by side on a stand at the end of the cast's pad.
 {
   const gx = Math.max(6, CHARACTERS.length * 2.2 + 2) / 2 + 1.4;
@@ -635,6 +659,29 @@ const rideable: Bike[] = [];
   genItems.new.push({ name: 'katana', group: 'Characters', at: new THREE.Vector3(kx, 0.72, kz), size: 1.1, view: new THREE.Vector3(0, 0.15, 1).normalize() });
   genItems.new.push({ name: 'katana: tsuba and tsuka', group: 'Characters', at: new THREE.Vector3(kx - 0.35, 0.8, kz + 0.06), size: 0.35, view: new THREE.Vector3(0.2, 0.15, 1).normalize() });
 }
+// The baseball bat (models/bat.ts), under review: on two pegs beside the katana's rack, the barrel to the right.
+{
+  const bx = Math.max(6, CHARACTERS.length * 2.2 + 2) / 2 + 3.0;
+  const bz = CAST_Z + 1.7;
+  const pegs = new THREE.Group();
+  pegs.position.set(bx, 0.15, bz);
+  genRoot.new.add(pegs);
+  const black = new THREE.MeshPhysicalMaterial({ color: 0x080708, roughness: 0.25, clearcoat: 1, envMap: charEnv, envMapIntensity: 0.6 });
+  for (const [w, h, d, x, y] of [[1.0, 0.04, 0.22, 0, 0.02], [0.05, 0.5, 0.07, -0.28, 0.27], [0.05, 0.5, 0.07, 0.24, 0.27]]) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), black);
+    m.position.set(x, y, 0);
+    m.castShadow = true;
+    pegs.add(m);
+  }
+  const bat = buildBat(charEnv);
+  // The bat's frame: -z along the barrel; turned so it runs to +x, its maker's mark up and to the front.
+  bat.root.rotation.set(0, -Math.PI / 2, 0.6, 'YXZ');
+  bat.root.position.set(-0.2, 0.555, 0);
+  pegs.add(bat.root);
+  label('new', 'baseball bat', bx, 1.0, bz);
+  genItems.new.push({ name: 'baseball bat', group: 'Characters', at: new THREE.Vector3(bx + 0.1, 0.72, bz), size: 1.1, view: new THREE.Vector3(0, 0.2, 1).normalize() });
+  genItems.new.push({ name: 'baseball bat: the mark', group: 'Characters', at: new THREE.Vector3(bx + 0.14, 0.72, bz), size: 0.3, view: new THREE.Vector3(0, 0.5, 1).normalize() });
+}
 // The cruiser (models/cruiser.ts) beside it, in each of its colours.
 (Object.keys(CRUISER_LOOKS) as (keyof typeof CRUISER_LOOKS)[]).forEach((name, i) => {
   const bx = Math.max(6, CHARACTERS.length * 2.2 + 2) / 2 + 6.8 + i * 2.6;
@@ -657,7 +704,7 @@ fp.bikes = rideable;
 const enterFp = (): void => void fp.enter(0.6, CAST_Z + 2.2, 0);
 (window as unknown as { __fp: unknown }).__fp = fp.script();
 // For scripted shots of a model on its own: three, the showroom's scene, the gun builder and the characters' light.
-(window as unknown as { __lab: unknown }).__lab = { THREE, scene, buildShotgun, buildBosozoku, buildCruiser, CRUISER_LOOKS, buildSportBike, SPORT_LOOKS, buildHelmet, HELMET_LOOKS, buildKatana, env: charEnv };
+(window as unknown as { __lab: unknown }).__lab = { THREE, scene, buildShotgun, buildBosozoku, buildCruiser, CRUISER_LOOKS, buildSportBike, SPORT_LOOKS, buildHelmet, HELMET_LOOKS, buildKatana, buildBat, env: charEnv };
 if (new URLSearchParams(location.search).has('fp')) enterFp();
 const tCast = performance.now() - t0 - tCars;
 
@@ -796,6 +843,9 @@ function renderPanel(): void {
   }
   section('People');
   button('→ the mob showroom (mob.html)', false, () => (location.href = 'mob.html'));
+  button('→ the MakeHuman test: salaryman, maid, the crowd (humans.html)', false, () => (location.href = 'humans.html'));
+  section('Fighting');
+  button('→ the fight test (fight.html)', false, () => (location.href = 'fight.html'));
   section('First person');
   button(fp.active ? 'back to orbiting (V)' : 'Mack, first person (V)', fp.active, () => (fp.active ? fp.exit() : enterFp(), setTimeout(renderPanel, 50)));
   section('View');

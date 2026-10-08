@@ -345,6 +345,15 @@ describe('Open ground and greenery', () => {
     }
   });
 
+  it('plants no street tree too big for its pavement: no crown hangs further than 1.5 m out over the road', () => {
+    const trees = model.cells.flatMap(([mx, my]) => model.detail(mx, my)!.props.filter((q) => q.kind === 'tree' && q.lean !== undefined));
+    expect(trees.length).toBeGreaterThan(1000);
+    for (const t of trees) {
+      expect(t.lean!, `${t.species} at ${t.x.toFixed(0)}, ${t.z.toFixed(0)}`).toBeLessThan(1.5);
+      expect(t.size ?? 1).toBeGreaterThanOrEqual(0.5);
+    }
+  });
+
   it('cuts some corners and steps some mid-rises back, keeping blade signs on the facade', () => {
     const bs = model.cells.flatMap(([mx, my]) => model.plan(mx, my)!.buildings);
     const cut = bs.filter((b) => b.cut);

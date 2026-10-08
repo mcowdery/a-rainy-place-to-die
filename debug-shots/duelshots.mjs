@@ -1,4 +1,4 @@
-// A duel in the showroom's first person: the swordsman's guard, his blow and the indicator, a deflect timed
+// A duel on the fight page (fight.html): the swordsman's guard, his blow and the indicator, a deflect timed
 // to his blow, swings into and round his guard, his posture broken and the deathblow.
 //   node debug-shots/duelshots.mjs <out dir>
 import { chromium } from 'playwright-core';
@@ -10,7 +10,7 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true, args:
 const page = await browser.newPage({ viewport: { width: 1000, height: 600 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); });
-await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.goto(`${server.resolvedUrls.local[0]}fight.html`);
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
 await page.waitForTimeout(1500);
 await page.evaluate(() => { document.getElementById('panel').style.display = 'none'; document.querySelectorAll('.label').forEach((l) => (l.style.display = 'none')); });
@@ -18,7 +18,7 @@ const wait = (ms) => page.waitForTimeout(ms);
 const shot = (n) => page.screenshot({ path: `${out}/${n}.png` });
 const el = () => page.evaluate(() => { const e = __fp.thugs().find((t) => t.tier === 'elite'); return e && { state: e.state, guard: e.guard, posture: Math.round(e.posture), health: Math.round(e.health), incoming: e.incoming, move: e.melee.move?.id ?? null, phase: +e.melee.phase.toFixed(2) }; });
 const st = async (tag) => console.log(tag, JSON.stringify(await el()), JSON.stringify(await page.evaluate(() => { const b = __fp.brawl(); return { you: Math.round(b.health), posture: Math.round(b.posture), stun: +b.stun.toFixed(2), last: b.lastHit, run: b.run?.def.id ?? null }; })));
-await page.evaluate(async () => { await __fp.enter(14, 30, 0); __fp.look(0, -0.05); __fp.hand('katana'); __fp.gore('full'); __fp.duel(); });
+await page.evaluate(async () => { await __fp.enter(0, 3, 0); __fp.look(0, -0.05); __fp.hand('katana'); __fp.gore('full'); __fp.duel(); });
 await page.waitForFunction(() => __fp.thugs().some((t) => t.tier === 'elite' && t.root.visible), null, { timeout: 60000, polling: 200 });
 await page.evaluate(() => __fp.draw());
 await wait(1500);

@@ -136,7 +136,7 @@ const redo: string[] = [];
 let lastEdit = '';
 let lastEditAt = 0;
 
-const DRAFT = 'citypop.scenes.draft';
+const DRAFT = 'rainyplace.scenes.draft';
 const dirty = (): boolean => sceneText(doc) !== savedText;
 const keys = (): KeyPose[] => sceneKeys(doc);
 const figs = (): Fig[] => keys()[Math.min(frame, keys().length - 1)].a;
