@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Animations</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #202226; color: #d8d8e0; }
+      body { font: 13px/1.4 Consolas, 'Cascadia Mono', 'Yu Gothic', monospace; }
+      canvas { display: block; }
+      #hud {
+        position: fixed; top: 8px; left: 8px; z-index: 2; padding: 6px 10px; white-space: pre;
+        background: rgba(10, 10, 14, 0.8); border: 1px solid #34343f; pointer-events: none;
+      }
+      #panel {
+        position: fixed; top: 8px; right: 8px; z-index: 2; width: 250px; max-height: calc(100% - 16px); overflow: auto;
+        padding: 8px 10px; background: rgba(10, 10, 14, 0.85); border: 1px solid #34343f;
+      }
+      #panel h3 { margin: 8px 0 4px; font-size: 12px; color: #9aa0b0; font-weight: normal; text-transform: uppercase; letter-spacing: 1px; }
+      #panel button {
+        display: block; box-sizing: border-box; width: 100%; margin: 2px 0; padding: 3px 6px; text-align: left; cursor: pointer;
+        font: inherit; color: #d8d8e0; background: #22242c; border: 1px solid #3a3c48;
+      }
+      #panel button:hover { background: #2e3140; }
+      #panel button.on { border-color: #ff5fc8; color: #ffb0e0; }
+      #panel .row { display: flex; gap: 2px; }
+      #panel button small { float: right; color: #7c8294; }
+      #panel h4 { margin: 6px 0 2px; font-size: 11px; color: #6f7586; font-weight: normal; }
+      /* A candidate for the city: what it's for, and the verdict. */
+      #card {
+        position: fixed; left: 8px; bottom: 8px; z-index: 2; width: 440px; max-width: calc(100% - 290px); padding: 10px 12px;
+        background: rgba(10, 10, 14, 0.88); border: 1px solid #34343f;
+      }
+      #card h2 { margin: 2px 0 4px; font-size: 16px; font-weight: normal; color: #fff; }
+      #card small { color: #7c8294; }
+      #card code { display: block; margin-bottom: 6px; color: #9fd0ff; font: inherit; }
+      #card p { margin: 4px 0; }
+      #card b { color: #9aa0b0; font-weight: normal; }
+      #card .row { display: flex; gap: 4px; margin: 8px 0 6px; }
+      #card button { flex: 1; padding: 5px 6px; cursor: pointer; font: inherit; color: #d8d8e0; background: #22242c; border: 1px solid #3a3c48; }
+      #card button:hover { background: #2e3140; }
+      #card button.on { border-color: #ff5fc8; color: #ffb0e0; }
+      #card input { box-sizing: border-box; width: 100%; padding: 4px 6px; font: inherit; color: #d8d8e0; background: #16171c; border: 1px solid #3a3c48; }
+      #card .error { color: #ff8080; }
+      .label {
+        position: fixed; z-index: 1; transform: translate(-50%, -100%); padding: 1px 7px; pointer-events: none;
+        background: rgba(10, 10, 14, 0.8); border: 1px solid #34343f; color: #9aa0b0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hud"></div>
+    <div id="panel"></div>
+    <div id="card" hidden></div>
+    <div id="label-now" class="label" hidden>now</div>
+    <div id="label-clip" class="label" hidden>the library's</div>
+    <script type="module" src="/src/poc3d/anims/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,132 @@
+{
+  "climb_up": {
+    "verdict": "no",
+    "note": "Approved, then never built: the user took the pack's clips off Mack first (they don't fit him; fine for enemies).",
+    "at": "2026-10-06"
+  },
+  "crouch": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "directions": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "doze": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "drink": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "fold_arms": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "ground_sit": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "interact": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "jump": {
+    "verdict": "keep",
+    "note": "Built into the city and taken out again at the user's asking after playing it: his own keyed jump stays.",
+    "at": "2026-10-06"
+  },
+  "look_around": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "phone_call": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "pickup": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "pistol": {
+    "verdict": "use",
+    "note": "In the city: the pack's stance for his body standing with the pistol out; his own hands on the gun, crosshair and magazine change kept, as the user asked. Kept when the rest of the pack came off him (\"pistol animations are fine\").",
+    "at": "2026-10-06"
+  },
+  "rail": {
+    "verdict": "no",
+    "note": "Approved, then never built: the user took the pack's clips off Mack first (they don't fit him; fine for enemies).",
+    "at": "2026-10-06"
+  },
+  "roll": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "run_cmu_09": {
+    "verdict": "keep",
+    "note": "Built into the city and taken out again at the user's asking after playing it: his own keyed run stays.",
+    "at": "2026-10-06"
+  },
+  "run_jog": {
+    "verdict": "keep",
+    "note": "",
+    "at": "2026-10-06"
+  },
+  "run_sprint": {
+    "verdict": "keep",
+    "note": "",
+    "at": "2026-10-06"
+  },
+  "run_style_neutral": {
+    "verdict": "later",
+    "note": "",
+    "at": "2026-10-06"
+  },
+  "seated": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "slide": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "sprint_edges": {
+    "verdict": "keep",
+    "note": "Built into the city and taken out again at the user's asking after playing it, the stop first and then the start: his own keyed start and stop of a run stay.",
+    "at": "2026-10-06"
+  },
+  "stand": {
+    "verdict": "keep",
+    "note": "",
+    "at": "2026-10-06"
+  },
+  "turn": {
+    "verdict": "no",
+    "note": "Built into the city, played, and taken off again at the user's asking: the pack's clips don't fit Mack (\"more of a 'hulk' type character while Mack is more chill\"). Fine for enemies.",
+    "at": "2026-10-06"
+  },
+  "walk": {
+    "verdict": "keep",
+    "note": "",
+    "at": "2026-10-06"
+  },
+  "walk_cmu_35": {
+    "verdict": "use",
+    "note": "In the city as his walk; kept when the pack's clips came off him (it's a real man's walk, not the pack's).",
+    "at": "2026-10-06"
+  }
+}

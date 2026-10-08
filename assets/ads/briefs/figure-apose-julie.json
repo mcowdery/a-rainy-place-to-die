@@ -1,0 +1,25 @@
+{
+  "batch": "figure-apose-julie",
+  "purpose": "Reference pictures of one person in an A-pose, from in front and from behind, to make a figure from (scripts/props/mesh_endpoint.mjs, then scripts/blender/prop_from_mesh.py): the pose a mesh needs if its limbs are to come out apart and its colour is to be laid on from both sides. Candidates for the user to choose from. Not ads, and not for the world as pictures.",
+  "use": "poster",
+  "defaults": { "lora": "ohwx julie", "variants": 4 },
+  "items": [
+    {
+      "id": "sheet_front_back",
+      "width": 1536,
+      "height": 1152,
+      "style": "full-length character reference sheet, studio photograph, soft even lighting, sharp focus",
+      "subject": "the same young Japanese woman shown twice side by side in the identical pose and outfit: on the left seen from directly in front, facing the camera; on the right seen from directly behind, facing away, only the back of her head visible; standing straight in an A-pose, feet shoulder-width apart, legs straight, arms held straight and a little away from her sides, hands open, neutral expression; long black hair with a fringe; wearing a pink and mint satin bomber jacket over a white t-shirt, blue jeans and white sneakers; both whole figures in frame from the top of the head to the soles of the shoes, camera level at chest height",
+      "composition": "two full-length figures side by side with a gap between them, isolated on a plain light grey seamless background, no other objects, no ground shadow",
+      "notes": "Front and back in one picture, so the two stay the same person, pose and outfit."
+    },
+    {
+      "id": "front_only",
+      "variants": 2,
+      "style": "full-length reference photograph for a costume catalogue, soft even studio lighting, sharp focus",
+      "subject": "a young Japanese woman standing straight in an A-pose facing the camera, feet shoulder-width apart, legs straight, arms held straight and a little away from her sides, hands open, neutral expression; long black hair with a fringe; wearing a pink and mint satin bomber jacket over a white t-shirt, blue jeans and white sneakers; the whole figure in frame from the top of her head to the soles of her shoes, seen straight on from the front at chest height",
+      "composition": "centred, isolated on a plain light grey seamless background, no other objects, no ground shadow",
+      "notes": "A front view alone, in case the sheets don't keep the two figures alike."
+    }
+  ]
+}

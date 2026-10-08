@@ -1,0 +1,15 @@
+{
+  "batch": "prop-person-test",
+  "purpose": "A picture of a person to try the image-to-3D tool on (scripts/props/image_to_3d.py): one whole figure, front on, level, arms a little out from the body, on a plain ground. An invented person, not a likeness. Not an ad, and not for the world as a picture.",
+  "use": "poster",
+  "defaults": { "lora": null, "variants": 2 },
+  "items": [
+    {
+      "id": "person_standing",
+      "style": "full-length reference photograph for a costume catalogue, soft even studio lighting, sharp focus",
+      "subject": "a Japanese man in his thirties in a plain charcoal suit, white shirt and dark tie, black leather shoes, short black hair, standing upright and relaxed facing the camera, arms held a little away from his sides, feet slightly apart, neutral expression, the whole figure in frame from the top of his head to the soles of his shoes, seen straight on from the front at chest height",
+      "composition": "centred, isolated on a plain light grey seamless background, no other objects, no ground shadow",
+      "notes": "Input for image-to-3D. The back will be invented by the model."
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "haiku": "A purely mechanical task with one unambiguous correct edit: a single-line numeric or config tweak, a well-specified one-line fix, a lookup/grep/summary whose answer is trivial to verify. No design judgment, no multi-file reasoning.",
+  "sonnet": "Normal day-to-day software work: a new feature of ordinary scope, a bug fix, dev tooling, refactoring, doc writing or reorganization, wiring a system together. The default for anything that isn't clearly at the Haiku or Opus extreme.",
+  "opus": "High-stakes or deep-reasoning work: debugging subtle rendering/shader/concurrency math, a single change that touches many files or systems at once, or an irreversible aesthetic, anatomical or design judgment call (e.g. approving a character model).",
+  "fable": "Long-form creative or narrative writing with little logic: lore, story-bible prose, dialogue, ad copy or briefs, world-building text where voice and judgment-free prose quality matter more than code correctness."
+}

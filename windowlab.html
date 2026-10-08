@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Window pose lab</title>
+  <style>
+    body { margin: 0; background: #121318; color: #e8e4da; font: 14px/1.4 system-ui, sans-serif; display: flex; height: 100vh; }
+    #view { flex: 1; overflow: auto; padding: 16px; }
+    #view canvas { max-width: 100%; height: auto; cursor: crosshair; }
+    #side { width: 400px; overflow: auto; padding: 12px 14px 28px; background: #1c1d22; border-left: 1px solid #2c2d33; box-sizing: border-box; }
+    label.row { display: grid; grid-template-columns: 64px 1fr 58px; gap: 6px; align-items: center; margin: 2px 0; }
+    input[type="range"] { width: 100%; }
+    input[type="number"] { width: 58px; background: #111; color: inherit; border: 1px solid #3a3b42; box-sizing: border-box; }
+    button, select { background: #2a2b32; color: inherit; border: 1px solid #3a3b42; padding: 4px 8px; }
+    select { max-width: 250px; }
+    h2 { font-size: 12px; margin: 14px 0 4px; color: #a8a49a; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+    #figs button { margin: 0 4px 4px 0; }
+    #figs button.on { outline: 2px solid #f3e7a2; }
+    #status { min-height: 2.4em; color: #c8c4ba; }
+    .hint, details { color: #8e8a80; font-size: 12px; }
+    .bar { display: flex; gap: 8px; align-items: center; }
+  </style>
+</head>
+<body>
+  <div id="view"></div>
+  <div id="side">
+    <div class="bar">
+      <select id="scene"></select>
+      <button id="save" type="button">Save</button>
+    </div>
+    <p class="hint">Click a body in the picture, or a name below. The pale tick is the one the sliders move. Drag a slider and the picture updates. Save writes that scene's JSON file. A refresh drops anything not saved.</p>
+    <p id="status"></p>
+    <div id="figs"></div>
+    <div id="controls"></div>
+    <details>
+      <summary>What the numbers mean</summary>
+      <p>Yaw 90 faces right, −90 faces left, 0 faces you. Pitch −90 lies on the back, 90 face-down. Lean bends the spine (50 is a bow); don't use pitch to bend someone who is standing. Arm raise 90 is level in front, 180 overhead; elbow 0 is straight, 140 brings the hand to the face. Leg raise 88 and knee 88, with a seat height, is sitting. L and R are the viewer's left and right when the figure faces you. The inner guide lines are a hotel window; the outer ones are as wide as a narrow room still shows. The horizontal line is the sill at 0.9 m.</p>
+    </details>
+  </div>
+  <script type="module" src="/src/poc3d/real/windowlab.ts"></script>
+</body>
+</html>
