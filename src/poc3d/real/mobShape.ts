@@ -1,7 +1,9 @@
 import type { Outfit } from '../district/peopleMix';
 import { FACE_CHEEK, FACE_EYE, FACE_MARK } from './emoteGlsl';
 import { ALL_BONES, ARM_L, ARM_R, armSwing, blend, BONES, clavicle, digitBone, fingerTip, handBone, hipHalf, shoulderHalf, spineBone, toeBone, toeDigit, FOOT_L, FOOT_R, FORE_L, FORE_R, HEAD, one, PELVIS, pivotsOf, PROPORTIONS, SHIN_L, SHIN_R, SPINE, TemplateBuilder, THIGH_L, THIGH_R, type Body, type Hair, type Row, type Template, type V3, type Weight } from './mobRig';
-import { type Bulge, clamp01, displace, loftAt, openingOf, pushAt, rayEllipse, rowAt, smooth, smoothMax, softenNormals, stitchRings, table, tube, weld, zip } from './mobMesh';
+import { bareDetail } from './mobBare';
+import '@bare';
+import { type Bulge, clamp01, displace, loftAt, openingOf, rayEllipse, rowAt, smooth, smoothMax, softenNormals, stitchRings, table, tube, weld, zip } from './mobMesh';
 
 /**
  * The mob's shaped generation (under review in mob.html; the district still draws real/people.ts's classic
@@ -24,12 +26,12 @@ import { type Bulge, clamp01, displace, loftAt, openingOf, pushAt, rayEllipse, r
  */
 
 /** Shades: multipliers on the figure's dark colour. Skin is tagged +100 for the material's `uSkin`. */
-const SKIN = 101;
+export const SKIN = 101;
 const TOP = 1;
 const BOTTOM = 0.78;
 // (Hair and shoes are tagged too, 19 and 20: the material colours them, black hair, an elder's grey, dark shoes.)
 const SHOE = 2001;
-const HAIR = 1901;
+export const HAIR = 1901;
 const HAT = 0.5;
 const WHITE = 3.6;
 /**
@@ -378,7 +380,7 @@ const BARE_FRONT: readonly Bulge[] = [
 const BARE_UNDER = { rows: [0.04, 0.08, 0.12, 0.16, 0.2, 0.25, 0.3, 0.4, 0.55, 0.75], sag: 0.0035, depth: 0.016, notch: 0.45, to: 0.34, wide: 0.0165 } as const;
 // (Deeper, and running on down to where the legs part, at the user's word: 'a deeper butt crack in general', and
 // more of one low down. Narrow ones, the cheeks touching, were tried and turned down.)
-const BARE_CLEFT: Bulge = { c: [0, 0.88, -0.11], r: [0.027, 0.115, 0.075], push: [0, 0, 0.025], round: 1.25 };
+export const BARE_CLEFT: Bulge = { c: [0, 0.88, -0.11], r: [0.027, 0.115, 0.075], push: [0, 0, 0.025], round: 1.25 };
 /** How far up into the body the point is where the cleft meets the legs' parting behind (m): a notch there, seen from behind. */
 const BARE_CLEFT_UP = 0.011;
 const BARE_BREAST: Bulge = {
@@ -437,13 +439,6 @@ const BREAST_ROWS: readonly number[] = [...Array.from({ length: 21 }, (_, i) => 
  * that, how far round the belly from the middle (radians), its half width (m)]; how far off the skin; its shade.
  */
 const NAVEL = { y: 1.03, stroke: [[0.011, 0.006, 0.0003], [0.005, -0.006, 0.0013], [-0.002, -0.009, 0.0012], [-0.009, 0.002, 0.0003]], off: 0.0012, shade: SKIN - 0.45 } as const;
-/**
- * The cleft in front, between her legs (the user asked for it, 2026-10-06): drawn as the navel is, one fine stroke
- * in her skin darkened down the middle of the hips' front, from a little above where the legs part down and under
- * to it, lying in the form BARE_FRONT gives the hips there. The stroke as [how far up the hips' lowest
- * rings (under 0: down toward where the legs part), its half width (of the way to the next hip point)]; how far
- * off the skin (m; under the hair); its shade.
- */
 /**
  * How far the form between her legs hangs down, to choose between (the user: round enough now, but 'still too
  * long', about twice what it should be, meaning 'from top to bottom how long it hangs down'; several to pick from):
@@ -1022,6 +1017,8 @@ function legsOf(body: Body, outfit: Outfit, bottom: number): { rows: readonly Ro
 const UNDER_HAT = 0.158;
 
 export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
+  // (The uncensored edition's detail on a bare woman: src/poc3d/real/mobBare.ts.)
+  const bareHooks = bareDetail();
   const P = PROPORTIONS[body];
   const woman = body === 'woman';
   // (The boss is a heavy man: his own flesh on the body's joints.)
@@ -1158,7 +1155,8 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     : outfit === 'maid' ? NAVY - 0.45
     : outfit === 'police' ? TOP
     // (Nothing on: the body as it is, nothing lofted over it and nothing added to it, barefoot; or, a cabaret's
-    // dancer, in her heels. A mannequin's body, smooth; a woman's has her breasts' own shape, a nipple on each with
+    // dancer, in her heels. A mannequin's body, smooth; a woman's has her breasts' own shape (bareBreast) and her navel (NAVEL);
+    // the uncensored edition adds more: mobBare.ts.)
     : outfit === 'nude' || outfit === 'nude_heels' ? SKIN
     // Everything else (plain clothes, a hoodie, a down jacket, a T-shirt, what's under an apron or a coat): a top in a colour of the figure's own.
     : CLOTH_TOP;
@@ -1292,6 +1290,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
       zip(tb, hipAngles.map((_, j) => hipRing + (HIP_ROWS.length - 1) * M + j), chest, true);
       displace(tb, t0, bodyField);
       if (bareWoman) {
+        bareHooks?.nipples({ tb, xs, ys, T, bodyField, bareBreast });
       }
       // The cleft's line, a little darker down the middle of the seat.
       if (cleft) {
@@ -1810,7 +1809,8 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   }
   const cleftFoot = fineHips ? underBack : (parting?.[2] ?? -1);
   if (cleft && cleftFoot >= 0) {
-    // where the legs part behind.
+    // The cleft's line (CLEFT_LOOKS) and, with nothing on, what the uncensored edition adds (mobBare.ts): up the
+    // middle of the seat from where the legs part behind.
     const P = tb.pos;
     const M = hipAngles.length;
     const idx = [cleftFoot, ...HIP_ROWS.map((hy, k) => (hy < CLEFT_LINE.top ? hipRing + k * M + hipBack : -1)).filter((i) => i >= 0)];
@@ -1862,6 +1862,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
         face(strip[n][0], strip[n + 1][1], strip[n + 1][0], outAt(n));
       }
     }
+    bareHooks?.anus({ tb, bareWoman, pts, idx, dist, outAt, put, face, scaled });
   }
   if (bareWoman && legTops.length === 2) {
     // The skin under her, between the legs (BARE_UNDER): columns from the hips' lowest ring in front back to its
@@ -1941,6 +1942,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
         }
       }
     }
+    bareHooks?.pubic({ tb, mark, frontLook, hipAngles, hipRing, hipFront, hipSide, baseRing, underMid });
   }
 
   // ---- Arms and hands ----
@@ -2580,6 +2582,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     }
   }
   if (bareWoman) {
+    bareHooks?.areola({ tb, mark, xs, ys, T, bareBreast, disc });
     // Her navel (NAVEL): on the middle of the belly.
     ribbon(NAVEL.stroke.map(([dy, da]): [number, number] => [NAVEL.y + dy, F + da]), NAVEL.stroke.map((p) => p[2]), () => NAVEL.off, NAVEL.shade);
   }

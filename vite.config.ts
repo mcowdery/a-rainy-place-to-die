@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [debugShots()],
     // Root-relative, which Vite resolves from the project root (the config has no Node types to build a path with).
-    resolve: { alias: { '@edition': `/src/edition/${edition}.ts` } },
+    resolve: { alias: { '@edition': `/src/edition/${edition}.ts`, '@bare': `/src/edition/bare/${edition === 'uncensored' ? 'uncensored' : 'none'}.ts` } },
     // For code that only needs the edition's name (the chunk workers' ad list), without importing its files.
     define: { __EDITION__: JSON.stringify(edition) },
     // Other agents' checkouts (.claude/worktrees, scripts/worktree.mjs) and the shots are inside this folder but are
