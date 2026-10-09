@@ -120,7 +120,7 @@ if (parts.includes('city') || parts.includes('perf')) {
   for (const time of parts.includes('city') ? ['day', 'night'] : ['day']) {
     const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
     watch(page);
-    await page.goto(`${server.resolvedUrls.local[0]}district.html?diag=1${extra}&time=${time}${time === 'night' ? '&season=winter' : ''}&weather=clear&res=100&spawn=${spawn}`, { timeout: 240000 });
+    await page.goto(`${server.resolvedUrls.local[0]}?diag=1${extra}&time=${time}${time === 'night' ? '&season=winter' : ''}&weather=clear&res=100&spawn=${spawn}`, { timeout: 240000 });
     await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
     await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
     // (The frames start a while after the overlay says so: wait for the crowd.)

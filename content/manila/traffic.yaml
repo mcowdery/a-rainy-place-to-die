@@ -1,0 +1,6 @@
+# Manilaya's traffic (format: content/world3d/traffic.yaml): generated car loops over the whole city (cars keep left, like
+# Toto's: the alternate-reality Manilaya drives on the left). Loops of its own and the jeepney routes come with the city's
+# bus lines.
+auto: { size: 2, spacing: 72 }
+cars: []
+buses: []

@@ -1,0 +1,28 @@
+# Balintagak Station on the Tafto Line (rail.yaml): a landmark built by real/station.ts, its street face 10 m from the line.
+id: station_m_balintawak
+name: Balintagak Station
+footprint: [24, 60]
+height: 16.6
+front: east
+landmark: station
+station: { jp: BALINTAGAK, en: BALINTAGAK, line: tafto }
+nodes:
+  exit:
+    kind: spawn
+    name: Balintagak Station
+    at: [30, 8]
+    facing: west
+    view: [70, 16]
+  platform:
+    kind: spawn
+    name: Balintagak Station (platform)
+    at: [44, 3.2]
+    floor: 9.1
+    facing: east
+    view: [-90, 2]
+  board:
+    kind: station
+    name: Tafto Line south to MONUMENO
+    at: [44, 5.4]
+    floor: 9.1
+    returnSpawn: monumento_station.platform

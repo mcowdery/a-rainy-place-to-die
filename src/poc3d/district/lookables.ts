@@ -40,6 +40,12 @@ const SPECIES: Record<string, readonly Line[]> = {
   dogwood: ['Dogwood. The flowers look like paper.'],
   azalea: ['Azaleas, clipped to a pillow.'],
   box: ['Boxwood, trimmed to within an inch of its life.'],
+  coconut: ['A coconut palm. Everything on it is useful, and somebody always has a use for the nuts.', 'The fronds clatter in any wind at all.'],
+  royalPalm: ['Royal palms, planted in rows like soldiers on parade.', 'A royal palm, straight as a surveyor’s line.'],
+  banana: ['Banana plants, torn leaves and all. They grow back faster than you can cut them.'],
+  raintree: ['A rain tree, shade enough for a whole market to stand under.', 'The rain tree folds its leaves when the sky turns.'],
+  mango: ['A mango tree, dark and dense. Somebody’s grandmother planted it.'],
+  bougainvillea: ['Bougainvillea, magenta over every wall that will hold it.'],
 };
 
 const PROPS: Record<string, PropWords> = {

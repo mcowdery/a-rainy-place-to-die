@@ -28,6 +28,8 @@ export interface Road3 {
   readonly vertical: boolean;
   /** A raised central strip (m; 0 for none): an avenue's median, broken at junctions (`CellPlan3.medians`). */
   readonly median: number;
+  /** Metres of its width that are a slip lane along each kerb (half each side): the lanes keep to the rest (`EdgeSpec.slip`). */
+  readonly slip?: number;
   /** A waterfront walk (a 'coast' strip along a river or the bay: plan.ts RIVER_WALK). */
   readonly water?: 'river' | 'bay';
   /** The city's edge: a planted verge (a 'coast' strip) between the outer street and the land beyond. */
@@ -99,6 +101,15 @@ export interface ZoneLook {
   readonly roofs: number;
   /** Share of homes with bicycles parked out front. */
   readonly bikes: number;
+  /** Filipino looks (real/manilaStreet.ts; Manila's zones only): the share of low buildings that are hollow-block houses with the top floor left unfinished, of buildings with arched windows, the chance of a vending machine against a wall (0.14 when absent), and how much of the street's clutter (kiosks, carts, banners, shrines, parols, garbage) a zone has, 0 to 1. */
+  readonly block?: number;
+  readonly arch?: number;
+  /** Share of buildings that are informal-settlement shacks: homes with patchwork walls of mismatched panels and a low scrap roof (real/buildings.ts `INFORMAL_FLAG`, Manila's `*_shanties` zones). */
+  readonly informal?: number;
+  /** Share of wide lots that are a Spanish-colonial church (a bell-tower, a pediment, buttresses). */
+  readonly church?: number;
+  readonly vending?: number | null;
+  readonly street?: number;
 }
 
 /**
@@ -122,9 +133,9 @@ export interface Zone3 {
  * Open ground: lots a row leaves open between buildings (coin parking, a pocket playground, a vacant
  * lot), the public plaza round towers, and parks.
  */
-export type OpenKind = 'parking' | 'playground' | 'vacant' | 'plaza' | 'park' | 'yard';
+export type OpenKind = 'parking' | 'playground' | 'vacant' | 'plaza' | 'park' | 'yard' | 'court';
 /** The kinds a row of lots can leave open (plazas come from towerCover, parks from park). */
-export const LOT_OPEN = ['parking', 'playground', 'vacant'] as const;
+export const LOT_OPEN = ['parking', 'playground', 'vacant', 'court'] as const;
 export type LotOpenKind = (typeof LOT_OPEN)[number];
 
 export interface OpenLot3 {
@@ -557,19 +568,20 @@ export function planCell3(
   const R: Rect = { x: mx * CELL, y: my * CELL, w: CELL, h: CELL };
   const roads: Road3[] = [];
 
-  const edge = (neighbour: CellKind, keyX: number, keyY: number, vertical: boolean): { w: number; median: number } => {
+  const edge = (neighbour: CellKind, keyX: number, keyY: number, vertical: boolean): { w: number; median: number; slip: number } => {
     const spec = edges?.get(edgeKey(keyX, keyY, vertical));
-    if (spec) return { w: spec.width, median: spec.median };
-    if (neighbour !== kind) return { w: BOUNDARY_ROAD, median: 0 };
+    if (spec) return { w: spec.width, median: spec.median, slip: spec.slip ?? 0 };
+    if (neighbour !== kind) return { w: BOUNDARY_ROAD, median: 0, slip: 0 };
     const opts = style.edgeRoads;
-    return { w: opts[hash(seed, keyX, keyY, vertical ? 1 : 2) % opts.length], median: 0 };
+    return { w: opts[hash(seed, keyX, keyY, vertical ? 1 : 2) % opts.length], median: 0, slip: 0 };
   };
-  const road = (rect: Rect, width: number, vertical: boolean, coast = false, median = 0): Road3 => ({
+  const road = (rect: Rect, width: number, vertical: boolean, coast = false, median = 0, slip = 0): Road3 => ({
     rect,
     vertical,
     kind: coast ? 'coast' : width >= 14 ? 'boulevard' : width >= 8 ? 'street' : width >= 3 ? 'street' : 'alley',
     sidewalk: coast ? 0 : width >= 8 ? Math.min(3, width * 0.2) : 0,
     median,
+    ...(slip ? { slip } : {}),
   });
 
   // Cell edges: roads centred on the boundary (each side owns half), width hashed from the shared edge
@@ -619,11 +631,11 @@ export function planCell3(
     }
     const keyX = side === 'w' ? mx - 1 : mx;
     const keyY = side === 'n' ? my - 1 : my;
-    const { w, median } = edge(n, keyX, keyY, vertical);
+    const { w, median, slip } = edge(n, keyX, keyY, vertical);
     const r = side === 'w' ? { x: R.x - w / 2, y: R.y, w, h: CELL } : side === 'e' ? { x: R.x + CELL - w / 2, y: R.y, w, h: CELL }
       : side === 'n' ? { x: R.x, y: R.y - w / 2, w: CELL, h: w } : { x: R.x, y: R.y + CELL - w / 2, w: CELL, h: w };
     edgeRoads[side] = { i: roads.length, bridge: !!edges?.get(edgeKey(keyX, keyY, vertical))?.bridge };
-    roads.push(road(r, w, vertical, false, median));
+    roads.push(road(r, w, vertical, false, median, slip));
     insets[side] = w / 2;
   }
   // River banks: the walk along the water and the riverside street behind it; the cross streets end at the
@@ -918,6 +930,8 @@ const OPEN_LOT: Record<LotOpenKind, { w: Range; min: readonly [number, number] }
   parking: { w: [7.5, 16], min: [5.5, 5.5] },
   playground: { w: [12, 20], min: [10, 10] },
   vacant: { w: [6, 14], min: [4, 4] },
+  // A basketball court (the barangay's, painted on the street's concrete): a full court is 15 x 28 m, a lot's is smaller.
+  court: { w: [14, 26], min: [13, 12] },
 };
 
 /** Whether the next lot is left open, and as what (one roll against the style's shares). */

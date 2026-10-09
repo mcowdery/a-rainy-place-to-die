@@ -3,6 +3,7 @@ import { hash, rng, type Rng } from '../../core/hash';
 import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Hair, type Outfit, type Pose } from './people';
 import { TRADE as T, TRADE_COUNT } from './shops';
 import { paintWindowAtlas, sceneLayerImage } from './windowAtlas';
+import { TOTO_TEXT, type ShopText } from './shopText';
 import { SHOP_KINDS, shopScenes, WINDOW_ATLAS, type Scene, type ShopKind } from './windowScenes';
 
 /**
@@ -485,8 +486,9 @@ function menuStrips(p: Painter, r: Rng, x0: number, x1: number, y0: number, y1: 
   }
 }
 
-const IZAKAYA_DISHES = ['焼鳥', '枝豆', '冷奴', '刺身', '唐揚', '生ビール', '日本酒', '焼酎', 'おでん', '漬物', '串カツ', '冷酒', 'ホッピー', '煮込み', '塩辛', 'もつ焼'];
-const NOODLE_DISHES = ['醤油', '味噌', '塩', 'つけ麺', '餃子', 'チャーシュー', '大盛', 'ライス'];
+/** The words painted into the rooms (shopText.ts): the city's, set when the atlas is made. */
+let TXT: ShopText = TOTO_TEXT;
+
 
 // ---- the rooms ----
 
@@ -513,7 +515,7 @@ export const ROOMS: Record<number, RoomDef> = {
     depth: 6, ceiling: 3, layers: [L('d', 1.6), L('c', 3.3)],
     paint: (p, r, tr) => {
       room(p, tr, 3, {
-        back: ['#e8e6e0', () => { shelves(p, r, 0, 4, 0.1, 2.1, 0.42, 0.2, { hue: 0.15 }); p.fill('#ffffff', { hue: 1 }).rect(0, 2.3, 4, 0.22); p.fill('#ffffff').text('SALE  お買い得  SALE', 2, 2.41, 0.13); }],
+        back: ['#e8e6e0', () => { shelves(p, r, 0, 4, 0.1, 2.1, 0.42, 0.2, { hue: 0.15 }); p.fill('#ffffff', { hue: 1 }).rect(0, 2.3, 4, 0.22); p.fill('#ffffff').text(TXT.sale, 2, 2.41, 0.13); }],
         side: ['#e0ded8', () => shelves(p, r, 0.8, 3, 0.1, 2.1, 0.42, 0.22)],
         floor: ['#a8a8a2', () => tiles(p, 0.3, '#b0b0aa', '#9a9a94', '#808080')],
         ceil: ['#d8d8d4', () => tubes(p, '#d8d8d4')],
@@ -565,13 +567,13 @@ export const ROOMS: Record<number, RoomDef> = {
           for (let x = 0.08; x < 3.9; x += 0.16) {
             p.fill(r.pick(['#1a3a1a', '#2a1a08', '#203018']), { glow: 0.15 }).rrect(x - 0.045, 1.36, 0.09, 0.32 + r.float() * 0.1, 0.02);
             p.fill('#f4f0e8').rect(x - 0.04, 1.47, 0.08, 0.06);
-            p.fill('#202020').text(r.pick(['ひろし', 'ケン', '田中', '社長', 'まさ', '佐藤', 'ゆう']), x, 1.5, 0.025, { maxW: 0.075 });
+            p.fill('#202020').text(r.pick(TXT.keepNames), x, 1.5, 0.025, { maxW: 0.075 });
           }
         }],
         side: ['#40101c', () => {
           p.fill('#0a0a14').rect(0.8, 1.35, 1.2, 0.72);
           p.fill('#6080ff', { glow: 0.9, anim: 1 }).rect(0.84, 1.39, 1.12, 0.64);
-          p.fill('#ffffff', { glow: 1 }).text('♪ 恋の 東都ブルース', 1.4, 1.5, 0.07, { maxW: 1.0 });
+          p.fill('#ffffff', { glow: 1 }).text(TXT.song, 1.4, 1.5, 0.07, { maxW: 1.0 });
         }],
         floor: ['#3a0a14', () => { for (let i = 0; i < 6; i++) p.fill('#4a1420', { hue: 0.3 }).ell(r.float(), r.float() * 1.5, 0.08, 0.08); }],
         ceil: ['#0a0808', () => { for (let i = 0; i < 14; i++) p.fill('#fff0e0', { glow: 1, anim: 0.5 }).ell(r.float(), r.float() * 1.5, 0.012, 0.012); }],
@@ -598,15 +600,15 @@ export const ROOMS: Record<number, RoomDef> = {
           for (let x = 0.15; x < 3.9; x += 0.24) {
             p.fill(r.pick(['#1a3018', '#3a2410', '#1e2a14', '#5a3a14'])).rrect(x - 0.08, 1.06, 0.16, 0.34, 0.04).rect(x - 0.025, 1.38, 0.05, 0.1);
             p.fill('#f2ecdc').rect(x - 0.06, 1.15, 0.12, 0.14);
-            p.fill('#101010').text(r.pick(['獺', '久保', '八海', '菊', '鶴', '月']), x, 1.22, 0.07);
+            p.fill('#101010').text(r.pick(TXT.bottleLabels), x, 1.22, 0.07);
           }
-          menuStrips(p, r, 0.02, 4, 1.6, 2.42, IZAKAYA_DISHES);
+          menuStrips(p, r, 0.02, 4, 1.6, 2.42, TXT.izakayaDishes);
           p.fill('#20120a').rect(0, 2.45, 4, 0.6);
         }],
         side: ['#5a3818', () => {
           for (let x = 0; x < 3; x += 0.25) p.fill('#4a2c12').rect(x, 0, 0.012, 3);
-          poster(p, r, 0.6, 1.35, 0.5, 0.7, ['生ビール', 'サワー', '冷酒']);
-          poster(p, r, 2.0, 1.35, 0.5, 0.7, ['ハイボール', '焼酎']);
+          poster(p, r, 0.6, 1.35, 0.5, 0.7, TXT.izakayaPoster1);
+          poster(p, r, 2.0, 1.35, 0.5, 0.7, TXT.izakayaPoster2);
         }],
         floor: ['#2e2c2a', () => { for (let i = 0; i < 20; i++) p.fill(r.chance(0.5) ? '#363432' : '#282624').ell(r.float(), r.float() * 1.5, 0.1, 0.07); }],
         ceil: ['#3a2410', () => p.fill('#20140a').rect(0, 0.6, 1, 0.14)],
@@ -624,7 +626,7 @@ export const ROOMS: Record<number, RoomDef> = {
         p.fill('#ff5a20', { glow: 1 }).ell(x, 2.32, 0.15, 0.23);
         for (let y = 2.12; y < 2.54; y += 0.06) p.fill('#c03010', { glow: 0.8 }).rect(x - 0.14, y, 0.28, 0.008);
         p.fill('#111').rect(x - 0.1, 2.53, 0.2, 0.04).rect(x - 0.1, 2.08, 0.2, 0.04);
-        p.fill('#1a0a04').text(r.pick(['酒', '焼鳥', '居酒屋']), x, 2.43, 0.11, { vertical: true });
+        p.fill('#1a0a04').text(r.pick(TXT.lantern), x, 2.43, 0.11, { vertical: true });
       }
     },
   },
@@ -641,10 +643,10 @@ export const ROOMS: Record<number, RoomDef> = {
             p.fill('#ffffff', { hue: 0.6, glow: 0.15 }).rect(x, y, 0.44, 0.26);
             p.fill('#f8f4ec', { glow: 0.2 }).ell(x + 0.22, y + 0.15, 0.15, 0.08);
             p.fill(r.pick(['#c88a3a', '#a85a20', '#d8b060', '#8a4a1a']), { glow: 0.2 }).ell(x + 0.22, y + 0.16, 0.11, 0.05);
-            p.fill('#202020').text(`${r.pick(NOODLE_DISHES)} ${r.int(6, 12)}50`, x + 0.22, y + 0.04, 0.045, { maxW: 0.4 });
+            p.fill('#202020').text(`${r.pick(TXT.noodleDishes)} ${r.int(6, 12)}50`, x + 0.22, y + 0.04, 0.045, { maxW: 0.4 });
           }
         }],
-        side: ['#e8e2d0', () => { p.fill('#c0b8a0').rect(0, 0, 3, 1.0); poster(p, r, 1.2, 1.3, 0.55, 0.75, ['大盛無料', '替玉 100', '本日のおすすめ']); }],
+        side: ['#e8e2d0', () => { p.fill('#c0b8a0').rect(0, 0, 3, 1.0); poster(p, r, 1.2, 1.3, 0.55, 0.75, TXT.noodlePoster); }],
         floor: ['#6a2a1a', () => tiles(p, 0.25, '#6a2a1a', '#5a2416', '#3a1a10')],
         ceil: ['#e8e8e4', () => tubes(p, '#e8e8e4')],
       });
@@ -658,7 +660,7 @@ export const ROOMS: Record<number, RoomDef> = {
       p.begin(tr, 'c', 3);
       p.fill('#c8c8c4').rrect(3.2, 0, 0.62, 1.75, 0.03);
       p.fill('#1a1a1a').rect(3.26, 1.5, 0.5, 0.18);
-      p.fill('#40ff80', { glow: 1 }).text('食券', 3.51, 1.59, 0.1);
+      p.fill('#40ff80', { glow: 1 }).text(TXT.ticket, 3.51, 1.59, 0.1);
       for (let y = 1.0; y < 1.45; y += 0.08) for (let x = 3.25; x < 3.75; x += 0.1) p.fill(r.chance(0.5) ? '#fff2a0' : '#a0e0ff', { glow: 0.7 }).rect(x, y, 0.08, 0.06);
     },
   },
@@ -676,7 +678,7 @@ export const ROOMS: Record<number, RoomDef> = {
           p.fill('#202020').rect(0.55, 1.3, 0.5, 0.08);
           p.fill('#14181a').rect(1.25, 1.5, 1.5, 0.9);
           p.fill('#a07040').rect(1.22, 1.47, 1.56, 0.03).rect(1.22, 2.4, 1.56, 0.03);
-          const menu = ['COFFEE', 'ブレンド 450', 'カフェラテ 520', 'ケーキセット 800', 'ホットサンド 680'];
+          const menu = TXT.cafeMenu;
           menu.forEach((m, i) => p.fill(i ? '#e8e4dc' : '#f0d070').text(m, 2, 2.27 - i * 0.16, i ? 0.08 : 0.11, { maxW: 1.35 }));
           for (const y of [1.65, 2.05]) {
             p.fill('#6a4424').rect(2.95, y, 0.95, 0.03);
@@ -722,7 +724,7 @@ export const ROOMS: Record<number, RoomDef> = {
         p.fill('#ffffff', { hue: 0.7 }).rect(0, 2.25, w, 0.2);
       };
       room(p, tr, 3, {
-        back: ['#e8e0d0', () => { racks(4); p.fill('#ffffff').text('BOULANGERIE  焼きたて', 2, 2.35, 0.12); }],
+        back: ['#e8e0d0', () => { racks(4); p.fill('#ffffff').text(TXT.bakery, 2, 2.35, 0.12); }],
         side: ['#e8e0d0', () => racks(3)],
         floor: ['#9a5a3a', () => tiles(p, 0.3, '#9a5a3a', '#8a5034', '#6a3a24')],
         ceil: ['#e8e2d8', () => downlight(p, '#e8e2d8')],
@@ -748,7 +750,7 @@ export const ROOMS: Record<number, RoomDef> = {
         back: ['#5a4430', () => {
           for (let y = 0; y < 2.0; y += 0.45) for (let x = 0; x < 4; x += 0.55) { p.fill(r.pick(['#a8845a', '#9a7a50', '#b89468'])).rect(x + 0.02, y + 0.02, 0.51, 0.41); p.fill(packColor(r)).rect(x + 0.12, y + 0.15, 0.3, 0.12); }
           p.fill('#ffffff', { hue: 0.9 }).rect(0, 2.15, 4, 0.35);
-          p.fill('#ffffff').text('新鮮  産地直送  毎日安い', 2, 2.32, 0.18);
+          p.fill('#ffffff').text(TXT.grocer, 2, 2.32, 0.18);
         }],
         side: ['#5a4430', () => { for (let y = 0; y < 2.0; y += 0.45) for (let x = 0.8; x < 3; x += 0.55) p.fill(r.pick(['#a8845a', '#9a7a50'])).rect(x + 0.02, y + 0.02, 0.51, 0.41); }],
         floor: ['#4a4a46', () => { for (let i = 0; i < 12; i++) p.fill('#3a3a36').ell(r.float(), r.float() * 1.5, 0.15, 0.1); }],
@@ -791,7 +793,7 @@ export const ROOMS: Record<number, RoomDef> = {
             p.fill('#909498').rect(x + 0.66, 0.12, 0.04, 1.92);
           }
           p.fill('#ffffff', { hue: 1 }).rect(0, 2.25, 4, 0.2);
-          p.fill('#ffffff').text('COLD DRINKS  つめたい', 2, 2.35, 0.12);
+          p.fill('#ffffff').text(TXT.coldDrinks, 2, 2.35, 0.12);
         }],
         side: ['#f0f0ee', () => shelves(p, r, 0, 3, 0.1, 2.0, 0.36, 0.14)],
         floor: ['#d8d8d4', () => tiles(p, 0.5, '#dcdcd8', '#d0d0cc', '#b8b8b4')],
@@ -834,7 +836,7 @@ export const ROOMS: Record<number, RoomDef> = {
         for (let y = 0.05; y < 2.0; y += 0.3) for (let x = x0 + 0.1; x < x1 - 0.2; x += 0.5 + r.float() * 0.3) if (r.chance(0.6)) pop(x, y);
       };
       room(p, tr, 3, {
-        back: ['#f4f4f2', () => { wall(0, 4); p.fill('#ffffff', { hue: 1 }).rect(0, 2.2, 4, 0.3); p.fill('#ffffff').text('くすり  化粧品  日用品', 2, 2.35, 0.14); }],
+        back: ['#f4f4f2', () => { wall(0, 4); p.fill('#ffffff', { hue: 1 }).rect(0, 2.2, 4, 0.3); p.fill('#ffffff').text(TXT.drugstore, 2, 2.35, 0.14); }],
         side: ['#f4f4f2', () => wall(0, 3)],
         floor: ['#e0e0dc', () => tiles(p, 0.5, '#e4e4e0', '#d8d8d4', '#c0c0bc')],
         ceil: ['#f4f4f2', () => { p.fill('#ffffff', { glow: 1 }).rect(0, 0.6, 1, 0.25); }],
@@ -851,7 +853,7 @@ export const ROOMS: Record<number, RoomDef> = {
         p.fill('#909090').rect(x + 0.1, 0, 0.03, 0.5).rect(x + 0.87, 0, 0.03, 0.5);
         for (let i = 0; i < 18; i++) p.fill(packColor(r)).rect(x + 0.05 + r.float() * 0.85, 0.55 + r.float() * 0.2, 0.08, 0.1);
         p.fill('#ffe020').rect(x + 0.3, 0.85, 0.4, 0.22);
-        p.fill('#d01818').text('激安!', x + 0.5, 0.96, 0.12);
+        p.fill('#d01818').text(TXT.bargain, x + 0.5, 0.96, 0.12);
       }
     },
   },
@@ -906,7 +908,7 @@ export const ROOMS: Record<number, RoomDef> = {
             p.fill('#606060', { glow: 1, anim: 1 }).rect(x + 0.06, y + 0.07, 0.83, 0.1);
           }
           p.fill('#ffffff', { hue: 1 }).rect(0, 2.6, 4, 0.3);
-          p.fill('#ffe020').text('大特価 SALE ポイント10%', 2, 2.75, 0.16);
+          p.fill('#ffe020').text(TXT.discountBand, 2, 2.75, 0.16);
         }],
         side: ['#f0f0f0', () => {
           shelves(p, r, 0, 3, 0.1, 2.1, 0.35, 0.25);
@@ -922,7 +924,7 @@ export const ROOMS: Record<number, RoomDef> = {
       for (let x = 0.45; x < 3.6; x += 0.3) {
         p.fill('#0a0a0a').rect(x, 0.9, 0.14, 0.09);
         p.fill('#80b0ff', { glow: 0.8 }).rect(x + 0.01, 0.91, 0.12, 0.07);
-        if (r.chance(0.5)) { p.fill('#ffe020').rect(x + 0.16, 0.9, 0.12, 0.2); p.fill('#d01818').text('特価', x + 0.22, 1.02, 0.05); }
+        if (r.chance(0.5)) { p.fill('#ffe020').rect(x + 0.16, 0.9, 0.12, 0.2); p.fill('#d01818').text(TXT.discountTag, x + 0.22, 1.02, 0.05); }
       }
     },
   },
@@ -931,7 +933,7 @@ export const ROOMS: Record<number, RoomDef> = {
     depth: 9, ceiling: 3, layers: [L('d', 0.9, false, true), L('b', 4.0), L('a', 6.5)],
     paint: (p, r, tr) => {
       room(p, tr, 3, {
-        back: ['#0a0a10', () => { p.fill('#ffffff', { hue: 1, glow: 1 }).rect(0, 2.48, 4, 0.04); poster(p, r, 0.5, 1.6, 0.6, 0.8, ['NEW', '新台']); poster(p, r, 2.8, 1.6, 0.6, 0.8, ['PRIZE', '景品']); }],
+        back: ['#0a0a10', () => { p.fill('#ffffff', { hue: 1, glow: 1 }).rect(0, 2.48, 4, 0.04); poster(p, r, 0.5, 1.6, 0.6, 0.8, TXT.pachinkoPoster1); poster(p, r, 2.8, 1.6, 0.6, 0.8, TXT.pachinkoPoster2); }],
         side: ['#0a0a10', () => p.fill('#ffffff', { hue: 1, glow: 1 }).rect(0, 2.48, 3, 0.04)],
         floor: ['#140c20', () => { for (let i = 0; i < 30; i++) p.fill(hsl(r.float(), 0.9, 0.6), { glow: 0.4 }).ell(r.float(), r.float() * 1.5, 0.015, 0.015); }],
         ceil: ['#080808', () => {}],
@@ -958,7 +960,7 @@ export const ROOMS: Record<number, RoomDef> = {
         for (let i = 0; i < 30; i++) p.fill(hsl(r.float(), 0.7, 0.6), { glow: 0.3 }).ell(x + 0.1 + r.float() * 0.7, 0.88 + r.float() * 0.35, 0.06, 0.05);
         p.fill('#888').rect(x + 0.44, 1.45, 0.015, 0.3).rect(x + 0.4, 1.4, 0.1, 0.05);
         p.fill(fr === '#ffffff' ? '#5a5a66' : '#7a2050', { glow: 0.15, hue: fr === '#ffffff' ? 0.6 : 0 }).rect(x + 0.05, 0.05, 0.8, 0.72);
-        p.fill('#ffffff', { glow: 0.6 }).text(r.pick(['GET!', 'UFO', 'PRIZE', '100円']), x + 0.45, 0.4, 0.14, { maxW: 0.7 });
+        p.fill('#ffffff', { glow: 0.6 }).text(r.pick(TXT.arcadeFlags), x + 0.45, 0.4, 0.14, { maxW: 0.7 });
       }
     },
   },
@@ -1006,7 +1008,7 @@ export const ROOMS: Record<number, RoomDef> = {
         for (let x = 0; x < w; x += 1) p.fill('#5a3a1c').rect(x, 0, 0.03, 2.15);
       };
       room(p, tr, 3, {
-        back: ['#e8e4dc', () => { books(4); for (const [x, s] of [[0.6, '文庫'], [1.8, '新刊'], [3.2, 'コミック']] as const) { p.fill('#ffffff', { hue: 1 }).rect(x - 0.35, 2.25, 0.7, 0.18); p.fill('#ffffff').text(s, x, 2.34, 0.12); } }],
+        back: ['#e8e4dc', () => { books(4); for (const [x, s] of [[0.6, TXT.bookSections[0]], [1.8, TXT.bookSections[1]], [3.2, TXT.bookSections[2]]] as const) { p.fill('#ffffff', { hue: 1 }).rect(x - 0.35, 2.25, 0.7, 0.18); p.fill('#ffffff').text(s, x, 2.34, 0.12); } }],
         side: ['#e8e4dc', () => books(3)],
         floor: ['#3a4a3a', () => { for (let i = 0; i < 20; i++) p.fill('#344434').ell(r.float(), r.float() * 1.5, 0.08, 0.08); }],
         ceil: ['#e8e8e4', () => tubes(p, '#e8e8e4')],
@@ -1017,7 +1019,7 @@ export const ROOMS: Record<number, RoomDef> = {
         p.fill('#6a4a2a').rect(x0, 0, 1.4, 0.78);
         for (let x = x0 + 0.03; x < x0 + 1.35; x += 0.23) { const n = r.int(1, 5); for (let k = 0; k < n; k++) p.fill(hsl(r.float(), 0.5, 0.5)).rect(x, 0.78 + k * 0.035, 0.2, 0.033); }
         p.fill('#ffe020').rect(x0 + 0.5, 0.95, 0.35, 0.18);
-        p.fill('#d01818').text('話題の本', x0 + 0.675, 1.04, 0.06, { maxW: 0.33 });
+        p.fill('#d01818').text(TXT.bookCard, x0 + 0.675, 1.04, 0.06, { maxW: 0.33 });
       }
     },
   },
@@ -1042,7 +1044,7 @@ export const ROOMS: Record<number, RoomDef> = {
       person(p, r, 2.5, 1.4);
       counter(p, 0.6, 3.4, 1.08, dark ? '#e8e4dc' : '#f4f2ee', stone);
       p.fill('#ffffff', { hue: 1, glow: 0.7 }).rect(0.6, 0.94, 2.8, 0.03);
-      p.fill('#202020').text('RECEPTION  受付', 2, 0.6, 0.1);
+      p.fill('#202020').text(TXT.reception, 2, 0.6, 0.1);
       p.begin(tr, 'c', 4);
       plant(p, r, 0.5);
       p.begin(tr, 'a', 4);
@@ -1068,7 +1070,7 @@ export const ROOMS: Record<number, RoomDef> = {
       person(p, r, 2.6, 1.4);
       counter(p, 0.5, 3.5, 1.1, '#3a2010', '#c8a060');
       p.fill('#c8a060', { glow: 0.3 }).rect(1.0, 2.45, 2.0, 0.42);
-      p.fill('#2a1a0c').text('FRONT  フロント', 2, 2.66, 0.18, { maxW: 1.9 });
+      p.fill('#2a1a0c').text(TXT.frontDesk, 2, 2.66, 0.18, { maxW: 1.9 });
       for (let y = 1.55; y < 2.25; y += 0.14) for (let x = 3.1; x < 3.9; x += 0.12) p.fill('#c8a040').rect(x, y, 0.03, 0.08);
       p.begin(tr, 'a', 4);
       p.fill('#c8a040').rect(1.99, 2.6, 0.02, 0.4);
@@ -1134,7 +1136,7 @@ export const ROOMS: Record<number, RoomDef> = {
       person(p, r, 1.6, 1.38);
       counter(p, 0.4, 2.8, 1.05, '#f2f2f0', '#b89a70');
       p.fill('#ffffff', { hue: 1 }).rect(0.9, 2.2, 1.0, 0.25);
-      p.fill('#ffffff').text('受付', 1.4, 2.32, 0.15);
+      p.fill('#ffffff').text(TXT.desk, 1.4, 2.32, 0.15);
       p.begin(tr, 'c', 3);
       bench(p, r, 0.3, 3.7, '#7aa090', 0.4);
       p.begin(tr, 'd', 3);
@@ -1205,7 +1207,7 @@ export const ROOMS: Record<number, RoomDef> = {
         back: ['#e4e4e2', () => {
           for (let y = 1.0; y < 2.15; y += 0.4) { p.fill('#9a9a9a').rect(0, y, 4, 0.03); for (let x = 0.02; x < 3.95; x += 0.075) p.fill(r.chance(0.5) ? '#ffffff' : r.pick(['#3060a0', '#a03030', '#30804a', '#e8c040']), { hue: r.chance(0.3) ? 0.8 : 0 }).rect(x, y + 0.03, 0.065, 0.3); }
           p.fill('#ffffff', { hue: 1 }).rect(1.2, 2.35, 1.6, 0.28);
-          p.fill('#ffffff').text('不動産  賃貸・売買', 2, 2.49, 0.15, { maxW: 1.5 });
+          p.fill('#ffffff').text(TXT.realtor, 2, 2.49, 0.15, { maxW: 1.5 });
         }],
         side: ['#e2e2e0', () => { p.fill('#d8d4c0').rect(0.4, 1.0, 1.8, 1.2); for (let i = 0; i < 12; i++) p.fill(r.pick(['#c8c0a0', '#a8b8a0', '#b0b8c8'])).rect(0.45 + r.float() * 1.5, 1.05 + r.float() * 0.9, 0.3, 0.2); }],
         floor: ['#686c74', () => {}],
@@ -1235,7 +1237,7 @@ export const ROOMS: Record<number, RoomDef> = {
           p.fill('#f8e4d8').ell(x + 0.31, y + 0.42, 0.12, 0.14);
           p.fill(hair).ell(x + 0.31, y + 0.53, 0.14, 0.07);
           p.fill('#3a5aff').ell(x + 0.27, y + 0.41, 0.025, 0.03).ell(x + 0.35, y + 0.41, 0.025, 0.03);
-          p.fill('#ffffff').text(r.pick(['新作', '予約受付中', 'NEW!', '限定']), x + 0.31, y + 0.12, 0.08, { maxW: 0.5 });
+          p.fill('#ffffff').text(r.pick(TXT.hobbyTags), x + 0.31, y + 0.12, 0.08, { maxW: 0.5 });
         }
       };
       room(p, tr, 3, {
@@ -1276,7 +1278,7 @@ export const ROOMS: Record<number, RoomDef> = {
         p.fill('#f0a0c0').rect(0, 0, w, 0.9);
       };
       room(p, tr, 3, {
-        back: ['#f8b8d0', () => { heartWall(4); p.fill('#ffffff').text('おかえりなさいませ ♡', 2, 2.55, 0.17, { maxW: 3.6 }); }],
+        back: ['#f8b8d0', () => { heartWall(4); p.fill('#ffffff').text(TXT.maid, 2, 2.55, 0.17, { maxW: 3.6 }); }],
         side: ['#f8b8d0', () => heartWall(3)],
         floor: ['#f4f0f0', () => tiles(p, 0.25, '#f8f4f4', '#f0a8c4', '#e8e0e0')],
         ceil: ['#f8d8e4', () => downlight(p, '#f8d8e4', '#fff0f8', 0.08)],
@@ -1370,7 +1372,7 @@ export const ROOMS: Record<number, RoomDef> = {
           else p.fill('#e8e0cc', { hue: 0.5 }).rect(x, 0.7, 0.12, 0.12);
         }
         p.fill('#f4f0e4').rect(x0 + 0.6, 0.72, 0.3, 0.16);
-        p.fill('#1a1a1a').text(r.pick(['名物', '手焼', '本日']), x0 + 0.75, 0.8, 0.07);
+        p.fill('#1a1a1a').text(r.pick(TXT.grillCards), x0 + 0.75, 0.8, 0.07);
       }
     },
   },
@@ -1379,7 +1381,7 @@ export const ROOMS: Record<number, RoomDef> = {
     depth: 6, ceiling: 3, layers: [L('b', 2.0), L('a', 4.0)],
     paint: (p, r, tr) => {
       room(p, tr, 3, {
-        back: ['#3a2414', () => { for (let x = 0; x < 4; x += 0.5) p.fill('#2e1c10').rect(x, 0, 0.015, 3); poster(p, r, 0.5, 1.5, 0.5, 0.6, ['東風戦', '禁煙席']); poster(p, r, 2.6, 1.5, 0.5, 0.6, ['点5', '割引']); }],
+        back: ['#3a2414', () => { for (let x = 0; x < 4; x += 0.5) p.fill('#2e1c10').rect(x, 0, 0.015, 3); poster(p, r, 0.5, 1.5, 0.5, 0.6, TXT.mahjongPoster1); poster(p, r, 2.6, 1.5, 0.5, 0.6, TXT.mahjongPoster2); }],
         side: ['#3a2414', () => {}],
         floor: ['#3a1410', () => { for (let i = 0; i < 12; i++) p.fill('#4a1c14').ell(r.float(), r.float() * 1.5, 0.08, 0.08); }],
         ceil: ['#2a2622', () => {}],
@@ -1410,8 +1412,8 @@ export const ROOMS: Record<number, RoomDef> = {
           p.fill('#c0c0c0', { glow: 1, anim: 1 }).rect(0.9, 1.3, 2.2, 1.1);
           p.fill('#ffffff', { glow: 1, anim: 1 }).ell(1.6, 1.85, 0.3, 0.35);
           p.fill('#ffffff', { glow: 1 }).text('♪ NEW HITS', 2.3, 1.45, 0.12);
-          poster(p, r, 0.1, 1.2, 0.6, 0.9, ['30分 ¥100', 'フリータイム']);
-          poster(p, r, 3.3, 1.2, 0.6, 0.9, ['学割', '飲み放題']);
+          poster(p, r, 0.1, 1.2, 0.6, 0.9, TXT.karaokePoster1);
+          poster(p, r, 3.3, 1.2, 0.6, 0.9, TXT.karaokePoster2);
         }],
         side: ['#121218', () => {
           for (let x = 0.3; x < 3; x += 1.6) {
@@ -1426,7 +1428,7 @@ export const ROOMS: Record<number, RoomDef> = {
       person(p, r, 2.0, 1.4);
       p.fill('#ffffff', { hue: 1, glow: 0.9 }).rect(0.8, 0, 2.4, 1.02);
       p.fill('#141414').rect(0.75, 1.0, 2.5, 0.05);
-      p.fill('#ffffff', { glow: 1 }).text('KARAOKE  カラオケ', 2, 0.55, 0.16, { maxW: 2.2 });
+      p.fill('#ffffff', { glow: 1 }).text(TXT.karaokeSign, 2, 0.55, 0.16, { maxW: 2.2 });
     },
   },
 
@@ -1474,7 +1476,7 @@ export const ROOMS: Record<number, RoomDef> = {
             p.fill(r.pick(['#5a6a8a', '#7a5a7a', '#4a6a6a', '#6a5a4a']), { glow: 0.45 }).rect(x - 0.24, 1.35, 0.48, 0.92);
             person(p, r, x, 1.49 + 1.42, { scale: 0.42 });
             p.fill('#141010').rect(x - 0.24, 1.35, 0.48, 0.14);
-            p.fill('#f8e8c0', { glow: 0.6 }).text(r.pick(['蓮', '輝', '翔', '零', '皇', '凛', '聖', '煌']), x, 1.42, 0.09);
+            p.fill('#f8e8c0', { glow: 0.6 }).text(r.pick(TXT.hostNames), x, 1.42, 0.09);
           }
         }],
         side: ['#0a080c', () => mirror(3)],
@@ -1518,7 +1520,7 @@ export const ROOMS: Record<number, RoomDef> = {
             if (free) p.fill('#f4e8d8', { glow: 0.9 }).rect(x + 0.05, y + 0.04, 0.3, 0.1);
             p.fill(free ? '#ffffff' : '#555', { glow: free ? 0.8 : 0 }).text(`${2 + row}0${col + 1}`, x + 0.2, y + 0.36, 0.05);
           }
-          p.fill('#ffffff', { hue: 1, glow: 0.8 }).text('ご休憩 ¥4,980〜', 2, 2.5, 0.14, { maxW: 1.9 });
+          p.fill('#ffffff', { hue: 1, glow: 0.8 }).text(TXT.shortStay, 2, 2.5, 0.14, { maxW: 1.9 });
         }],
         side: ['#24101a', () => p.fill('#ffffff', { hue: 1, glow: 0.8 }).rect(0, 1.1, 3, 0.03)],
         floor: ['#200c14', () => { for (let i = 0; i < 8; i++) p.fill('#2a1018').ell(r.float(), r.float() * 1.5, 0.1, 0.1); }],
@@ -1543,7 +1545,7 @@ export const ROOMS: Record<number, RoomDef> = {
             for (let y = 0.1; y < 1.9; y += 0.5) { p.fill('#6a7a84').rect(x + 0.08, y, 0.74, 0.2); for (let i = 0; i < 14; i++) p.fill(r.pick(BLOOMS), { glow: 0.25 }).ell(x + 0.12 + r.float() * 0.66, y + 0.25 + r.float() * 0.18, 0.04, 0.04); }
           }
           p.fill('#ffffff', { hue: 1 }).rect(0, 2.15, 4, 0.22);
-          p.fill('#ffffff').text('FLOWER  花', 2, 2.26, 0.14);
+          p.fill('#ffffff').text(TXT.flowers, 2, 2.26, 0.14);
         }],
         side: ['#d8dcd8', () => { for (let i = 0; i < 40; i++) p.fill(hsl(0.28 + r.float() * 0.06, 0.5, 0.2 + r.float() * 0.15)).ell(r.float() * 3, 1.3 + r.float() * 0.9, 0.12, 0.08); p.fill('#8a6a4a').rect(0, 1.25, 3, 0.04); }],
         floor: ['#5a5a58', () => { for (let i = 0; i < 10; i++) p.fill('#505050').ell(r.float(), r.float() * 1.5, 0.12, 0.08); }],
@@ -1653,8 +1655,8 @@ const SHADY_WALLS: Record<ShopKind, { c: readonly [string, string, string, strin
       p.fill('#f0ece0').rect(0.5, 1.5, 0.5, 0.36);
       p.fill('#b89040').rect(0.48, 1.48, 0.54, 0.03).rect(0.48, 1.85, 0.54, 0.03);
       p.fill('#f4f0e0').rect(1.6, 1.25, 1.0, 0.8);
-      p.fill('#c02018').text('即日融資', 2.1, 1.85, 0.15);
-      p.fill('#202020').text('ご利用は計画的に', 2.1, 1.6, 0.075).text('毎週月曜日', 2.1, 1.42, 0.1);
+      p.fill('#c02018').text(TXT.loanTitle, 2.1, 1.85, 0.15);
+      p.fill('#202020').text(TXT.loanSmall, 2.1, 1.6, 0.075).text(TXT.loanDay, 2.1, 1.42, 0.1);
       p.fill('#e8e4d4').rect(3.2, 1.4, 0.45, 0.6);
       p.fill('#3a5a9a').rect(3.2, 1.85, 0.45, 0.15);
     },
@@ -1674,7 +1676,7 @@ const SHADY_WALLS: Record<ShopKind, { c: readonly [string, string, string, strin
           p.fill(free ? '#60e080' : '#802020', { glow: 0.9 }).rect(x + 0.2, y - 0.07, 0.1, 0.04);
         }
       }
-      p.fill('#ff70b0', { glow: 1 }).text('空室', 2, 2.3, 0.13);
+      p.fill('#ff70b0', { glow: 1 }).text(TXT.vacant, 2, 2.3, 0.13);
     },
     ceil: (p) => { p.fill('#ffb0d0', { glow: 1 }).ell(0.5, 0.75, 0.06, 0.06); },
     side: [150, 92, 100],
@@ -1697,7 +1699,7 @@ const SHADY_WALLS: Record<ShopKind, { c: readonly [string, string, string, strin
       p.fill('#f0f0e8', { glow: 0.7 }).rect(1.7, 1.1, 1.2, 0.7);
       for (let x = 1.7; x < 2.9; x += 0.12) p.fill('#505050').rect(x, 1.1, 0.015, 0.7);
       p.fill('#f8f0d0').rect(1.5, 1.95, 1.6, 0.26);
-      p.fill('#c02018').text('景品交換所', 2.3, 2.08, 0.15);
+      p.fill('#c02018').text(TXT.prizeExchange, 2.3, 2.08, 0.15);
     },
     ceil: (p) => tubes(p, '#c0c0b8'),
   },
@@ -1749,7 +1751,8 @@ export class ShopAtlas {
   /** The storefronts' masks, and under them the rooms behind the upper floors' glass (windowAtlas.ts). */
   readonly mask: THREE.DataTexture;
 
-  constructor(renderer: THREE.WebGLRenderer) {
+  constructor(renderer: THREE.WebGLRenderer, text: ShopText = TOTO_TEXT) {
+    TXT = text;
     const t0 = performance.now();
     SPRITES = new MobSprites(renderer);
     const tSprites = performance.now();

@@ -1,0 +1,34 @@
+# Manilaya's L0 (format: content/world3d/l0.txt): 42 x 28 cells of 128 m, an alternate-reality Manilaya about the size of
+# Toto. The bay is to the SOUTH (the engine's sea opens past the map's bottom), the river (Pasigan) runs down col 20
+# to its mouth, splitting the city: the walled city Muralya (O), Ermida-Malaya's nightlife (N), the south harbour
+# (H) and the Bagumbago business district (T) on the west bank; the Divisora bazaar (E), Binundo (O), the university
+# belt (U), the Fort Centre towers (T), Poblado (N) and the Pasigan docks (H) on the east. R is the barangays round them.
+# R residential  T tower  N neon  E electric  U campus  O old town  H harbor  B beach  ~ water  . outside
+....................~.....................
+...RRRRRRRRRRRRRRRRR~RRRRRRRRRRRRRRRRRRR..
+...RRRRRRRRRRRRRRRRR~RRRRRRRRRRRRRRRRRRR..
+...RRRRRRRRRRRRRRRRR~RUUUUUURRRRRRRRRRRR..
+...RRRRRRRRRRRRRRRRR~RUUUUUURRRRRRRRRRRR..
+...RRRRRRRRRRRRRRRRR~RUUUUUUTTTTTTTTRRRR..
+...RRRRRRRRRRRRRRRRR~RUUUUUUTTTTTTTTRRRR..
+...RRRRRRRRRRRRRRRRR~RUUUUUUTTTTTTTTRRRR..
+...RRRRRRTTTTTTRRRRR~RRRRRRRTTTTTTTTRRRR..
+...RRRRRRTTTTTTRRRRR~EEEEEERTTTTTTTTRRRR..
+...RRRRRRTTTTTTRRRRR~EEEEEERTTTTTTTTRRRR..
+...RRRRRRTTTTTTRRRRR~EEEEEERNNNNNNRRRRRR..
+...RRRRRRTTTTTTRRRRR~EEEEEERNNNNNNRRRRRR..
+...RRRRRRRRRRRRRRRRR~EEEEEERNNNNNNRRRRRR..
+...RRRRRRRRRRNNNNNNN~OOOOOORNNNNNNRRRRRR..
+...RRRRRRRRRRNNNNNNN~OOOOOORRRRRRRRRRRRR..
+...RRRRRRRRRRNNNNNNN~OOOOOORRRRRRRRRRRRR..
+...RRRRRRRRRRNNNNNNN~OOOOOORRRRRRRRRRRRR..
+...RRRRRRRRRRRROOOOO~OOOOOORRRRRRRRRRRRR..
+...RRHHHHHHHHHHOOOOO~RRRRRRRRRRRRRRRRRRR..
+...RRHHHHHHHHHHOOOOO~HHHHHHHHHHHHHHHHHRR..
+...RRHHHHHHHHHHOOOOO~HHHHHHHHHHHHHHHHHRR..
+...RRHHHHHHHHHHRRRRR~HHHHHHHHHHHHHHHHHRR..
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -9,7 +9,7 @@ const browser = await chromium.launch({ channel: 'msedge', headless: false, args
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   page.on('pageerror', (e) => console.log('pageerror', e.message));
-  await page.goto(`${base}district.html?debug=1&clock=12:00&ride=${leg}`);
+  await page.goto(`${base}?debug=1&clock=12:00&ride=${leg}`);
   for (let i = 0; i < 16; i++) {
     await page.waitForTimeout(8000);
     const s = await page.evaluate(() => ({ riding: window.__subway?.riding ?? null, pos: [Math.round(window.__camera?.position.x ?? 0), Math.round(window.__camera?.position.y ?? 0), Math.round(window.__camera?.position.z ?? 0)], hud: document.body.innerText.split('\n').find((l) => /SHIOMI|KAIGAN|汐見|海岸|Wakaba|若葉/.test(l)) ?? '' }));

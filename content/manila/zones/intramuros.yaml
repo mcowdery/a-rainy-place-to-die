@@ -1,0 +1,39 @@
+# Muralya: the old walled city on the south bank.
+district: oldtown
+area: Muralya
+origin: [15, 18]
+map:
+  - WWWWW
+  - WWWWW
+  - WWWWW
+  - WWWWW
+
+zones:
+  W:
+    id: intramuros_old
+    name: Muralya
+    people: { plain: 6, long: 2, suit: 1 }
+    cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
+    plan:
+      floors: [[2, 3, 70], [4, 5, 25], [6, 8, 5]]
+      lotW: [6, 12]
+      localStreet: [6, 8]
+      block: [18, 40]
+      lotGap: 0.1
+      signChance: 0.6
+      verticalSign: 0.4
+      streetTrees: 0.3
+    signs:
+      words: ["CHURCH", MUSEUM, PLAZA, "CAFE", "LECHON", "HERITAGE"]
+      colors: ['#ffffff', '#ffe45f']
+    ads: { food: 2, mainstream: 1, street: 1 }
+    look:
+      arch: 0.85
+      church: 0.22
+      vending: 0.0
+      street: 0.35
+      windows: { punched: 75, small: 25 }
+      walls: ['#d8d0b8', '#cfc4a8', '#c8bca0', '#e0d8c0']
+      tiled: false
+      shops: { warm: 4, colourful: 3 }
+      open: 0.8

@@ -1,0 +1,36 @@
+# Ermita and Malate: the bayside nightlife, west bank.
+district: neon
+area: Ermida-Malaya
+origin: [13, 14]
+map:
+  - AAAAAAA
+  - AAAAAAA
+  - AAAAAAA
+  - AAAAAAA
+
+zones:
+  A:
+    id: malate_strip
+    name: Malaya strip
+    night: 1
+    people: { plain: 5, long: 5, suit: 3 }
+    cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
+    plan:
+      floors: [[3, 9, 70], [10, 16, 25], [20, 30, 5]]
+      localStreet: [6, 9]
+      block: [20, 46]
+      lotW: [6, 14]
+      signChance: 0.9
+      verticalSign: 0.55
+    signs:
+      words: [KARAOKE, VIDEOKE, BAR, GRILL, "LIVE BAND", CLUB, SISIG, "BEER GARDEN", "24 HRS", HOTEL, "GO-GO", "PAWN", "COCKTAILS"]
+      colors: ['#ff4fa8', '#4fe3ff', '#ffe45f', '#6bff8a', '#ff7a2f']
+    ads: { food: 2, fun: 2, hostess: 1, mainstream: 1, lodging: 1 }
+    look:
+      vending: 0.06
+      street: 0.4
+      vice: 0.6
+      windows: { punched: 40, ribbon: 30, small: 30 }
+      walls: ['#4a3a4a', '#5a4a40', '#6a5a50', '#3a4050', '#8a6a5a']
+      shops: { bar: 5, colourful: 3, warm: 2 }
+      open: 0.9

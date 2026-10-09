@@ -63,6 +63,7 @@ stations:
       - { file: a_letter_from_yunagi.ogg, title: "A Letter from Yūnagi", artist: "Asagiri Jazz Workshop" }
       - { file: takanodai_stroll.ogg, title: "Takanodai Stroll", artist: "Kissa House Trio" }
   - id: noir
+    cities: [toto, manila]
     name: RADIO NOCTURNE
     jp: ラジオ・ノクターン
     freq: '90.9'
@@ -124,11 +125,12 @@ stations:
       - { file: blue_neon_black_coffee.ogg, title: "Blue Neon, Black Coffee", artist: "Dolores Vane" }
       - { file: giri_no_ame.ogg, title: "義理の雨", artist: "竜崎剛" }
   - id: harana
-    # Non-canon and temporary (2026-10-05): Tagalog love songs, nothing to do with the game's world. To be removed.
+    # Manila's station (the user's call, 2026-10-09: Filipino music lives in Manila, not in Tōto; the songs stay in the phone's music app).
+    cities: [manila]
     name: HARANA FM
-    jp: ハラナFM
+    jp: HARANA FM
     freq: '96.3'
-    blurb: Tagalog love songs. (Non-canon, temporary.)
+    blurb: Tagalog love songs and serenades, all night.
     tracks:
       - { file: sayo_lang_titibok.ogg, title: "Sa'yo Lang Titibok", artist: "Lino Amihan" }
       - { file: dahan_dahan_lang.ogg, title: "Dahan-Dahan Lang", artist: "Lino Amihan" }

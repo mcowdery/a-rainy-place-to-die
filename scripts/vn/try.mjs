@@ -25,7 +25,7 @@ if (!entry) {
   process.exit(1);
 }
 if (!entry.scene) console.warn(`No story has ${node} as an entry point yet: the placeholder will show. (Set a frame's entry point to ${node} in Studio.)`);
-const url = `/district.html?debug=1&time=night&vn=${encodeURIComponent(node)}`;
+const url = `/?debug=1&time=night&vn=${encodeURIComponent(node)}`;
 const server = await createServer({ root: ROOT, configFile: path.join(ROOT, 'vite.config.ts'), server: { open: url } });
 await server.listen();
 console.log(`${entry.name} (${entry.place})${entry.scene ? ` -> ${entry.scene}` : ''}`);

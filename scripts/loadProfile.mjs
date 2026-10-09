@@ -1,4 +1,4 @@
-// Where does the district page's load time go? Loads district.html in the installed Edge and reports the boot
+// Where does the district page's load time go? Loads index.html in the installed Edge and reports the boot
 // phases (performance marks in district/main.ts), the slowest and biggest requests, and main-thread long tasks.
 //   node scripts/loadProfile.mjs                  dev server of its own (cold Vite transforms included)
 //   node scripts/loadProfile.mjs --runs 2         load twice in one server: run 2 shows the warm-cache cost
@@ -38,7 +38,7 @@ try {
     const cdp = process.argv.includes('--cpu') ? await ctx.newCDPSession(page) : null;
     if (cdp) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 1000 }); await cdp.send('Profiler.start'); }
     const t0 = Date.now();
-    await page.goto(`${base}district.html?time=night${process.argv.includes('--programs') ? '&bootdiag=1' : ''}${extra}`, { waitUntil: 'commit' });
+    await page.goto(`${base}?time=night${process.argv.includes('--programs') ? '&bootdiag=1' : ''}${extra}`, { waitUntil: 'commit' });
     await page.waitForFunction(() => performance.getEntriesByName('boot:first-frame').length > 0, null, { timeout: 300_000, polling: 250 });
     const wall = Date.now() - t0;
     const r = await page.evaluate(() => {

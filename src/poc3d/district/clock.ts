@@ -53,6 +53,20 @@ export const DAYLIGHT: Readonly<Record<'spring' | 'summer' | 'autumn' | 'winter'
   autumn: { rise: 5 * 60 + 45, set: 17 * 60 + 15, noon: 0.86 },
   winter: { rise: 6 * 60 + 50, set: 16 * 60 + 45, noon: 0.58 },
 };
+/** The turn of the sun's and moon's path about the vertical (rad) for a city whose sea or compass isn't Tōto's (cityConfig.ts `sunYaw`). */
+let SUN_YAW = 0;
+/** Sets the city's day lengths (in place, so everything holding `DAYLIGHT` sees them) and the sun's turn. Once, at startup. */
+export function configureSky(daylight: Readonly<Record<'spring' | 'summer' | 'autumn' | 'winter', DayLight>> | undefined, sunYaw: number): void {
+  SUN_YAW = sunYaw;
+  if (daylight) for (const s of ['spring', 'summer', 'autumn', 'winter'] as const) Object.assign(DAYLIGHT[s], daylight[s]);
+}
+/** A direction turned about the vertical by the city's `sunYaw` (x east, z south). */
+function turned(v: [number, number, number]): [number, number, number] {
+  if (SUN_YAW === 0) return v;
+  const c = Math.cos(SUN_YAW);
+  const s = Math.sin(SUN_YAW);
+  return [v[0] * c - v[2] * s, v[1], v[0] * s + v[2] * c];
+}
 /** (The story begins in spring; the functions below take a season's daylight and default to spring's.) */
 const SPRING = DAYLIGHT.spring;
 
@@ -173,7 +187,7 @@ export function moonAt(total: number): MoonNow {
   const l = Math.hypot(v[0], v[1], v[2]);
   const t = Math.max(0, Math.min(1, (y + 0.02) / 0.12));
   const up = t * t * (3 - 2 * t);
-  return { age, phase, lit, dir: [v[0] / l, v[1] / l, v[2] / l], up, light: lit ** 1.5 * up };
+  return { age, phase, lit, dir: turned([v[0] / l, v[1] / l, v[2] / l]), up, light: lit ** 1.5 * up };
 }
 
 /**
@@ -197,7 +211,7 @@ function sunAngle(minute: number, dl: DayLight): number {
 export function sunAt(minute: number, dl: DayLight = SPRING): { dir: [number, number, number]; up: number } {
   const a = sunAngle(minute, dl);
   const y = Math.sin(a) * Math.sin(dl.noon);
-  const dir: [number, number, number] = [Math.cos(a), y, Math.sin(a) * Math.cos(dl.noon)];
+  const dir = turned([Math.cos(a), y, Math.sin(a) * Math.cos(dl.noon)]);
   const t = Math.max(0, Math.min(1, (y + 0.02) / 0.1));
   return { dir, up: t * t * (3 - 2 * t) };
 }

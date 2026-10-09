@@ -96,7 +96,7 @@ export interface TrafficSigns {
 const LABELS: Record<CarType, string> = {
   sedan: 'Car', luxury: 'Car', taxi: 'Taxi', taxi2: 'Taxi', kei: 'Kei car', minivan: 'Minivan', keitruck: 'Kei truck',
   sports: 'Sports car', hatch: 'Hatchback', rotary: 'Sports car', awd: 'Sports car', roadster: 'Roadster',
-  van: 'Van', keivan: 'Kei van', boxtruck: 'Truck', police: 'Police car', hardtop: 'Car',
+  van: 'Van', keivan: 'Kei van', boxtruck: 'Truck', police: 'Police car', hardtop: 'Car', jeepney: 'Jeepney', tricycle: 'Tricycle',
 };
 
 /**
@@ -569,8 +569,10 @@ export class TrafficSystem {
         // pull away); everyone a little different.
         const brisk = taxi || sporty;
         const work = WORK_TYPES.includes(pick.type) && pick.type !== 'police';
-        const truck = pick.type === 'boxtruck';
-        const driver: Driver = {
+        const truck = pick.type === 'boxtruck' || pick.type === 'jeepney';
+        // A tricycle is a 125 cc with a sidecar: about 40 km/h at most, slow to pull away.
+        const trike = pick.type === 'tricycle';
+        const driver: Driver = trike ? { v0: 7.5 + r(8) * 3.5, a: 0.8 + r(12) * 0.5, b: 2 + r(16), T: 1.2 + r(20) * 0.5, s0: 2 + r(4) * 0.6 } : {
           v0: (brisk ? 12.5 : work ? 10.5 : 11) + r(8) * 3 + (sporty ? 1 : 0),
           a: (truck ? 0.9 : 1.4) + r(12) * (truck ? 0.5 : 1.2) + (brisk ? 0.4 : 0),
           b: 2.2 + r(16) * 1.2,
@@ -1023,14 +1025,14 @@ export class TrafficSystem {
   }
 
   /** The n vehicles nearest a point: position, velocity, acceleration, and whether it's a bus. */
-  nearest(p: THREE.Vector3, n: number): { x: number; z: number; vx: number; vz: number; speed: number; acc: number; bus: boolean }[] {
+  nearest(p: THREE.Vector3, n: number): { x: number; z: number; vx: number; vz: number; speed: number; acc: number; bus: boolean; type?: string }[] {
     // (Your own car has its own engine sound.)
     return this.vehicles
       .filter((v) => !v.own)
       .map((v) => ({ v, d: (v.x - p.x) ** 2 + (v.z - p.z) ** 2 }))
       .sort((a, b) => a.d - b.d)
       .slice(0, n)
-      .map(({ v }) => ({ x: v.x, z: v.z, vx: v.dx * v.v, vz: v.dz * v.v, speed: v.v, acc: v.acc, bus: v.bus }));
+      .map(({ v }) => ({ x: v.x, z: v.z, vx: v.dx * v.v, vz: v.dz * v.v, speed: v.v, acc: v.acc, bus: v.bus, type: v.carType }));
   }
 
   /** Whether a walker (or a driven car's piece) at (x, z) of radius r touches a vehicle (other than `except`). */

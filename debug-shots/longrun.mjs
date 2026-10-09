@@ -21,7 +21,7 @@ page.on('console', (m) => {
   if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300));
 });
 await page.addInitScript(() => localStorage.setItem('citypop.driveView', 'chase'));
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=${spawn}&car=home&clock=22:30&weather=clear`);
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=${spawn}&car=home&clock=22:30&weather=clear`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => {
   document.getElementById('overlay').hidden = true;

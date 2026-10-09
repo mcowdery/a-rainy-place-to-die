@@ -41,7 +41,7 @@ export interface WaterSky {
  * by the alpha written here); and all the sky's horizon colour between these distances from the camera (m), so
  * the open sea meets the sky's horizon without a seam.
  */
-function waterSurface(m: THREE.Material, sky: WaterSky, from = 700, to = 1120): void {
+export function waterSurface(m: THREE.Material, sky: WaterSky, from = 700, to = 1120): void {
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uHorizon = sky.uHorizon;
     shader.uniforms.uZenith = sky.uZenith;

@@ -7,7 +7,8 @@ import { EYE } from '../src/race/shooting';
 
 describe('cockpit layout', () => {
   it('fits every car: eyes under the roof and over the belt, the wheel ahead and below, the dash beyond it', () => {
-    for (const type of CAR_TYPES2) {
+    // (A tricycle has no cabin: nobody drives it from inside.)
+    for (const type of CAR_TYPES2.filter((c) => c !== 'tricycle')) {
       const L = cockpitLayout(type);
       const B = bodyShape(type);
       const x = (z: number): number => z + B.L / 2;

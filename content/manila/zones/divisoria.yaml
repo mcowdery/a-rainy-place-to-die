@@ -1,0 +1,38 @@
+# Divisora: the great bazaar and wholesale markets.
+district: electric
+area: Divisora
+origin: [21, 9]
+map:
+  - DDDDDD
+  - DDDDDD
+  - DDDDDD
+  - DDDDDD
+  - DDDDDD
+
+zones:
+  D:
+    id: divisoria_bazaar
+    name: Divisora bazaar
+    night: 0.6
+    people: { plain: 8, long: 3, school: 2 }
+    cars: { jeepney: 30, van: 18, minivan: 14, boxtruck: 16, keitruck: 10, sedan: 10, taxi: 8, tricycle: 18 }
+    plan:
+      floors: [[3, 6, 60], [7, 12, 30], [14, 20, 10]]
+      lotW: [6, 12]
+      localStreet: [6, 9]
+      block: [18, 40]
+      lotGap: 0.1
+      signChance: 0.95
+      verticalSign: 0.6
+    signs:
+      words: ["WHOLESALE", "TIANGGE", "DIVISORA", "MALL", "CELLPHONE", "FABRIC", "TOYS", "SALE", "BARATILYO", "ELECTRONICS"]
+      colors: ['#ff3a2f', '#ffe45f', '#4fe3ff', '#ffffff']
+    ads: { mainstream: 3, gaming: 2, fun: 1, street: 2 }
+    look:
+      block: 0.1
+      vending: 0.03
+      street: 0.8
+      windows: { punched: 30, ribbon: 30, small: 40 }
+      walls: ['#b8b0a0', '#a89888', '#c8a898', '#98a0a8']
+      shops: { colourful: 6, cool: 3, warm: 2 }
+      open: 0.95

@@ -15,7 +15,7 @@ page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300)); });
 await page.addInitScript(() => { try { if (!sessionStorage.getItem('once')) { sessionStorage.setItem('once', '1'); localStorage.setItem('citypop.thirdPerson', '1'); localStorage.removeItem('citypop.thirdZoom'); } } catch {} });
 const load = async () => {
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1${extra}`);
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1${extra}`);
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
   // A real click captures the mouse: the wheel only zooms while it's captured.
   await page.mouse.click(640, 360);

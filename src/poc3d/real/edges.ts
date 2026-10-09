@@ -52,6 +52,60 @@ function houseGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+/**
+ * A unit palm or banana clump for the tropical hills: a tapered trunk (height `trunk`) and `n` fronds drooping out
+ * from its top to a tip `reach` away, `droop` below the crown; vertex colours (trunk brown, fronds green by their
+ * distance out), two-sided strips. Scaled per instance (x/z by the crown width, y by the height).
+ */
+function plantGeometry(trunk: number, n: number, reach: number, droop: number, halfW: number, trunkR: number): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const col: number[] = [];
+  const tri = (a: number[], b: number[], c: number[], rgb: number[]): void => {
+    pos.push(...a, ...b, ...c);
+    for (let i = 0; i < 3; i++) col.push(...rgb);
+  };
+  const bark = [0.36, 0.3, 0.22];
+  const sides = 4;
+  for (let i = 0; i < sides; i++) {
+    const a0 = (i / sides) * Math.PI * 2;
+    const a1 = ((i + 1) / sides) * Math.PI * 2;
+    const b0 = [Math.cos(a0) * trunkR, 0, Math.sin(a0) * trunkR];
+    const b1 = [Math.cos(a1) * trunkR, 0, Math.sin(a1) * trunkR];
+    const t0 = [Math.cos(a0) * trunkR * 0.5, trunk, Math.sin(a0) * trunkR * 0.5];
+    const t1 = [Math.cos(a1) * trunkR * 0.5, trunk, Math.sin(a1) * trunkR * 0.5];
+    tri(b0, b1, t1, bark);
+    tri(b0, t1, t0, bark);
+  }
+  for (let f = 0; f < n; f++) {
+    const a = (f / n) * Math.PI * 2 + (f % 2) * 0.2;
+    const dx = Math.cos(a);
+    const dz = Math.sin(a);
+    const px = -dz * halfW;
+    const pz = dx * halfW;
+    const up = f % 3 === 0 ? 0.12 : 0.04;
+    const p = (r: number, y: number, w: number): [number[], number[]] => [[dx * r + px * w, trunk + y, dz * r + pz * w], [dx * r - px * w, trunk + y, dz * r - pz * w]];
+    const [bl, br] = p(0.01, 0, 0.5);
+    const [ml, mr] = p(reach * 0.5, up, 1);
+    const [nl, nr] = p(reach * 0.85, up - droop * 0.45, 0.6);
+    const tip = [dx * reach, trunk - droop, dz * reach];
+    const lo = [0.2, 0.46, 0.14];
+    const hi = [0.34, 0.62, 0.2];
+    for (const flip of [false, true]) {
+      const q = (a1: number[], b1: number[], c1: number[], rgb: number[]): void => (flip ? tri(a1, c1, b1, rgb) : tri(a1, b1, c1, rgb));
+      q(bl, br, mr, lo);
+      q(bl, mr, ml, lo);
+      q(ml, mr, nr, hi);
+      q(ml, nr, nl, hi);
+      q(nl, nr, tip, hi);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
 export interface Edges {
   readonly group: THREE.Group;
   /** Show the blocks near the camera; windows lit when the lamps are (0-1). */
@@ -76,7 +130,7 @@ function snowy(m: THREE.MeshStandardMaterial, snow: { value: number }): void {
   };
 }
 
-export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, built: (mx: number, my: number) => boolean): Edges {
+export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, built: (mx: number, my: number) => boolean, tropical = false): Edges {
   const group = new THREE.Group();
   group.name = 'edges';
   const hills = terrain.hills;
@@ -94,7 +148,12 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
   const windowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.15, 0.65), fog: true });
   const blocks: { g: THREE.Group; x: number; z: number; windows: THREE.InstancedMesh | null }[] = [];
   const forests: { im: THREE.InstancedMesh; base: number[]; x: number[] }[] = [];
-  const TREES = [0x28361f, 0x2f4024, 0x243020, 0x34452a, 0x2c3a1e];
+  // (A tropical city's hills are jungle: bright mixed greens, palms and banana clumps among the canopy.)
+  const TREES = tropical ? [0x2f6a22, 0x3e8a2c, 0x4a9a34, 0x357a28, 0x5aa83a, 0x2a5a1e] : [0x28361f, 0x2f4024, 0x243020, 0x34452a, 0x2c3a1e];
+  const palmGeo = tropical ? plantGeometry(0.82, 9, 0.9, 0.55, 0.11, 0.05) : null;
+  const bananaGeo = tropical ? plantGeometry(0.25, 7, 1.0, 0.35, 0.2, 0.08) : null;
+  const plantMat = tropical ? new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, vertexColors: true, flatShading: true, side: THREE.DoubleSide }) : null;
+  if (plantMat) snowy(plantMat, snow);
   const WALLS = [0xc8c0b0, 0xb8b0a0, 0xd8d0c0, 0xa8a49a, 0x9aa0a8, 0xc0b49c];
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
@@ -106,6 +165,7 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
   for (let by = -pad; by < macro.rows + pad; by += BLOCK) {
     for (let bx = -pad; bx < macro.cols + pad; bx += BLOCK) {
       const trees: { x: number; y: number; z: number; r: number; h: number; col: number }[] = [];
+      const plants: { palm: boolean; x: number; y: number; z: number; h: number; k: number }[] = [];
       const houses: { x: number; y: number; z: number; w: number; d: number; h: number; rot: number; col: number; lit: boolean }[] = [];
       for (let my = by; my < by + BLOCK; my++) {
         for (let mx = bx; mx < bx + BLOCK; mx++) {
@@ -132,18 +192,33 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
                 houses.push({ x, z, y: terrain.height(x, z) - 0.3, w, d, h, rot: rnd(mx, my, r * 16 + k + 600) < 0.5 ? 0 : Math.PI / 2, col: WALLS[Math.floor(rnd(mx, my, r * 16 + k + 700) * WALLS.length)], lit: rnd(mx, my, r * 16 + k + 800) < 0.45 });
               }
             }
+            if (tropical) {
+              for (let k = 0; k < 4; k++) {
+                const x = x0 + rnd(mx, my, k + 3000) * cell;
+                const z = z0 + rnd(mx, my, k + 3100) * cell;
+                plants.push({ palm: true, x, z, y: terrain.height(x, z) - 0.5, h: 12 + rnd(mx, my, k + 3200) * 6, k: rnd(mx, my, k + 3400) });
+              }
+            }
             for (let k = 0; k < 8; k++) {
               const x = x0 + rnd(mx, my, k + 900) * cell;
               const z = z0 + rnd(mx, my, k + 950) * cell;
               trees.push({ x, z, y: terrain.height(x, z), r: 3 + rnd(mx, my, k + 990) * 2, h: 5 + rnd(mx, my, k + 999) * 3, col: TREES[k % TREES.length] });
             }
           } else {
-            // Forest: clumps of canopy, denser further up.
-            const n = 26;
+            // Forest: clumps of canopy, denser further up (jungle: denser, taller, with palms and banana clumps).
+            const n = tropical ? 40 : 26;
+            if (tropical) {
+              for (let k = 0; k < 9; k++) {
+                const x = x0 + rnd(mx, my, k + 3000) * cell;
+                const z = z0 + rnd(mx, my, k + 3100) * cell;
+                const palm = k < 6;
+                plants.push({ palm, x, z, y: terrain.height(x, z) - 0.5, h: palm ? 15 + rnd(mx, my, k + 3200) * 9 : 4 + rnd(mx, my, k + 3300) * 2.5, k: rnd(mx, my, k + 3400) });
+              }
+            }
             for (let k = 0; k < n; k++) {
               const x = x0 + rnd(mx, my, k) * cell;
               const z = z0 + rnd(mx, my, k + 500) * cell;
-              trees.push({ x, z, y: terrain.height(x, z), r: 6 + rnd(mx, my, k + 1000) * 5, h: 8 + rnd(mx, my, k + 1500) * 7, col: TREES[Math.floor(rnd(mx, my, k + 2000) * TREES.length)] });
+              trees.push({ x, z, y: terrain.height(x, z), r: (tropical ? 7 : 6) + rnd(mx, my, k + 1000) * 5, h: (tropical ? 11 : 8) + rnd(mx, my, k + 1500) * (tropical ? 11 : 7), col: TREES[Math.floor(rnd(mx, my, k + 2000) * TREES.length)] });
             }
           }
         }
@@ -164,6 +239,22 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
         im.receiveShadow = true;
         g.add(im);
         forests.push({ im, base: trees.map((t) => t.col), x: trees.map((t) => t.x * 31 + t.z) });
+      }
+      for (const palm of [true, false]) {
+        const list = plants.filter((p) => p.palm === palm);
+        if (!list.length || !palmGeo || !bananaGeo || !plantMat) continue;
+        const im = new THREE.InstancedMesh(palm ? palmGeo : bananaGeo, plantMat, list.length);
+        list.forEach((p, i) => {
+          e.set(0, p.k * Math.PI * 2, 0);
+          q.setFromEuler(e);
+          const w = palm ? p.h * 0.38 : p.h;
+          m4.compose(v.set(p.x, p.y, p.z), q, s.set(w, p.h, w));
+          im.setMatrixAt(i, m4);
+          im.setColorAt(i, c.setHex(p.k < 0.5 ? 0xffffff : 0xdce8c8));
+        });
+        im.computeBoundingSphere();
+        im.receiveShadow = true;
+        g.add(im);
       }
       if (houses.length) {
         const im = new THREE.InstancedMesh(houseGeo, houseMat, houses.length);

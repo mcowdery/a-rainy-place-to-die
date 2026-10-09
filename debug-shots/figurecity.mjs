@@ -1,4 +1,4 @@
-// A figure under trial in the city (district.html?figure=..., district/trialFigure.ts): is it loaded and walking,
+// A figure under trial in the city (./?figure=..., district/trialFigure.ts): is it loaded and walking,
 // and pictures of it crossing in front of where you stand, a few moments apart.
 //   node debug-shots/figurecity.mjs <out dir> <the figure's .glb, from the repository's root> [time: day|dusk|night] [shots: 4]
 import { mkdirSync } from 'node:fs';
@@ -20,7 +20,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e).slice(0, 300)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404|GPU stall|WebGL/.test(m.text())) console.log('ERROR', m.text().slice(0, 300)); });
 const figure = encodeURIComponent(`/${file.replace(/\\/g, '/').replace(/^.*?(?=(debug-shots|assets)\/)/, '')}`);
-await page.goto(`${server.resolvedUrls.local[0]}district.html?diag=1&time=${time}&weather=clear&figure=${figure}${process.env.CAM ? `&cam=${process.env.CAM}` : ''}`, { timeout: 240000 });
+await page.goto(`${server.resolvedUrls.local[0]}?diag=1&time=${time}&weather=clear&figure=${figure}${process.env.CAM ? `&cam=${process.env.CAM}` : ''}`, { timeout: 240000 });
 await page.waitForFunction(() => document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
 // (She is in the scene once her file and her walk have loaded.)

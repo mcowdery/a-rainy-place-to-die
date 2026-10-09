@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { splitByTile } from './tiles';
-import { RAMP_FOOT, type Expressway, type Road } from '../district/expressway';
+import { type Expressway, type Road } from '../district/expressway';
 import { addVehicle } from '../models/vehicles';
 import { SignBuilder } from './signs';
 import { taxiPhotos } from './taxiAdLayout';
@@ -29,6 +29,8 @@ export interface ExpresswayView {
 
 export function buildExpressway(ex: Expressway, city: THREE.Material): ExpresswayView {
   const group = new THREE.Group();
+  // (A city with no expressway, Manila's: nothing to draw.)
+  if (ex.roads.length === 0) return { group };
   const mb = new MeshBuilder(1 << 18);
   mb.style = [0, 0, 0, 0];
   const quad = (a: V3, b: V3, c: V3, d: V3, n: V3): void => mb.quadN(a, b, c, d, n, n, n, n);
@@ -106,7 +108,7 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
         // A deck that stops short of its route's point (`Road.trim`): an end wall across it, parapet to parapet.
         // Where the traffic comes at it (the route's end), yellow-and-black boards on the wall, amber flashers on
         // top and the last of the lanes hatched off; everything has left by the ramp before it.
-        if (!road.trim?.[i === 0 ? 0 : 1]) continue;
+        if (!road.trim?.[i === 0 ? 0 : 1] || road.joins?.[i === 0 ? 0 : 1]) continue;
         const ax = Math.abs(road.tx[i]);
         const az = Math.abs(road.tz[i]);
         const y = road.y[i];
@@ -137,7 +139,7 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
       }
     }
     if (road.kind === 'spur') portal(mb, road);
-    if (road.kind === 'ramp') ramp(mb, road);
+    if (road.kind === 'ramp') ramp(mb, road, (road.foot ?? 0) > 8);
   }
   // Piers with crossbeams under the deck (the street's colliders are the same piers, less those in junctions).
   for (const p of ex.piers()) {
@@ -283,17 +285,178 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
     mb.style = [0, 0, 0, 0];
     pools.push({ x: hx, z: hz, y: L.y });
   }
+  // Parking areas (`plazas`): a raised apron the decks end on, drawn here (a road of kind 'deck').
+  for (const road of ex.roads) {
+    if (!road.plaza) continue;
+    const { length: LEN, width: W } = road.plaza;
+    const D = road.y[0];
+    const [sx, sz] = [road.x[0], road.z[0]];
+    const [dx, dz] = [road.tx[0], road.tz[0]];
+    const [lx, lz] = [road.tz[0], -road.tx[0]];
+    const P = (u: number, t: number): [number, number] => [sx + dx * u + lx * t, sz + dz * u + lz * t];
+    const V = (u: number, t: number, y: number): V3 => {
+      const p = P(u, t);
+      return [p[0], y, p[1]];
+    };
+    const sheet = (u0: number, u1: number, t0: number, t1: number, y: number): void => quad(V(u0, t0, y), V(u1, t0, y), V(u1, t1, y), V(u0, t1, y), [0, 1, 0]);
+    const rbox = (hex: number, u0: number, u1: number, t0: number, t1: number, y0: number, y1: number, kind: number = KIND.plain): void => {
+      const [cx, cz] = P((u0 + u1) / 2, (t0 + t1) / 2);
+      const [du, dt] = [u1 - u0, t1 - t0];
+      mb.kind = kind;
+      mb.color = lin(hex);
+      mb.box(cx, cz, y0, y1, Math.abs(dx) * du + Math.abs(lx) * dt, Math.abs(dz) * du + Math.abs(lz) * dt, kind, true);
+    };
+    const glow = (u0: number, u1: number, t0: number, t1: number, y0: number, y1: number, rgb: [number, number, number]): void => {
+      const [cx, cz] = P((u0 + u1) / 2, (t0 + t1) / 2);
+      const [du, dt] = [u1 - u0, t1 - t0];
+      mb.kind = KIND.emit;
+      mb.style = [EMIT.lamp, 0, 0, 0];
+      mb.color = rgb;
+      mb.box(cx, cz, y0, y1, Math.abs(dx) * du + Math.abs(lx) * dt, Math.abs(dz) * du + Math.abs(lz) * dt, KIND.emit, true);
+      mb.style = [0, 0, 0, 0];
+    };
+    const HW = W / 2;
+    // The apron: asphalt on top, dark underneath, and a wall round it (the north side is open where the decks run in).
+    mb.kind = KIND.asphalt;
+    mb.color = lin(0x2c2c30);
+    sheet(0, LEN, -HW, HW, D);
+    mb.kind = KIND.plain;
+    mb.color = lin(UNDER);
+    quad(V(0, -HW, D - 1.2), V(0, HW, D - 1.2), V(LEN, HW, D - 1.2), V(LEN, -HW, D - 1.2), [0, -1, 0]);
+    rbox(CONCRETE, LEN - 0.4, LEN, -HW, HW, D - 1.2, D + 1.05);
+    for (const s of [-1, 1]) {
+      rbox(CONCRETE, 0, LEN, s > 0 ? HW - 0.4 : -HW, s > 0 ? HW : -HW + 0.4, D - 1.2, D + 1.05);
+      rbox(CONCRETE, 0, 0.4, s > 0 ? 10.4 : -HW, s > 0 ? HW : -10.4, D - 1.2, D + 1.05);
+      rbox(0x9aa0a6, 0, LEN, s > 0 ? HW - 0.5 : -HW + 0.1, s > 0 ? HW - 0.1 : -HW + 0.5, D + 1.1, D + 1.2, KIND.chrome);
+    }
+    // What holds it up: columns in the avenue's median below, and on each side a thin building, with the road between
+    // them: stair and lift cores down to the street, offices and shops in the rest, lit windows, a green sign at each
+    // door (the people who park go down through them). Nothing is planted under it.
+    for (let u = 16; u < LEN; u += 28) rbox(CONCRETE, u - 1.2, u + 1.2, -1.2, 1.2, -4, D - 1.2);
+    const WALL = 0xcfcabc;
+    for (const w of road.plaza.wings) {
+      rbox(WALL, w.u0, w.u1, w.t0, w.t1, 0, D - 1.2);
+      const inner = w.t0 > 0 ? w.t0 : w.t1;
+      const face = w.t0 > 0 ? -1 : 1;
+      // The street face: a glazed ground floor, then bands of windows up to the apron, all lit.
+      for (let u = w.u0 + 3; u < w.u1 - 5; u += 6) {
+        glow(u, u + 4.4, inner + 0.1 * face - 0.12, inner + 0.1 * face + 0.12, 0.4, 3.0, [1.5, 1.35, 0.9]);
+        for (const y of [4.6, 8.0, 11.2]) glow(u, u + 4.4, inner + 0.1 * face - 0.1, inner + 0.1 * face + 0.1, y, y + 1.6, [0.9, 1.0, 1.1]);
+      }
+      // The door at the middle: a canopy, a bright doorway, a lift core up the face.
+      const um = (w.u0 + w.u1) / 2;
+      rbox(0x4a4e52, um - 3.5, um + 3.5, w.t0 > 0 ? w.t0 - 1.6 : w.t1, w.t0 > 0 ? w.t0 : w.t1 + 1.6, 3.2, 3.5);
+      glow(um - 1.4, um + 1.4, inner + 0.2 * face - 0.1, inner + 0.2 * face + 0.1, 0.1, 2.9, [2.0, 1.9, 1.5]);
+      rbox(0x9aa0a6, um - 1.4, um + 1.4, inner + face * 0.4 - 0.4, inner + face * 0.4 + 0.4, 3.5, D - 1.2);
+    }
+    // Stair towers on the apron over each wing's end: a roof, a door, a green sign at it for people to the street.
+    for (const s of [-1, 1]) {
+      const [t0, t1] = s > 0 ? [24.5, 31] : [-31, -24.5];
+      rbox(0xcfcabc, 112, 120, t0, t1, D, D + 3.4);
+      rbox(0x6a6e72, 111.6, 120.4, t0 - 0.4, t1 + 0.4, D + 3.4, D + 3.7);
+      glow(112 - 0.1, 112 + 0.1, t0 + 1, t1 - 1, D + 0.1, D + 2.6, [2.0, 1.9, 1.5]);
+      glow(112 - 0.12, 112 + 0.12, t0 + 0.8, t1 - 0.8, D + 3.0, D + 3.35, [0.2, 1.4, 0.7]);
+    }
+    // Paint: bays along the walls and by the island, the aisles' arrows.
+    mb.kind = KIND.paint;
+    mb.color = lin(0xe8e8e0);
+    const BANKS = [[28.4, 33.4], [-33.4, -28.4], [10.4, 15.4], [-15.4, -10.4]] as const;
+    for (const [t0, t1] of BANKS) {
+      const [ua, ub] = Math.abs(t0) < 20 ? [38, 110] : [18, 110];
+      for (let u = ua; u <= ub + 0.01; u += 2.6) sheet(u - 0.06, u + 0.06, t0, t1, D + 0.03);
+      sheet(ua, ub, t0 < 0 ? t0 : t1 - 0.12, t0 < 0 ? t0 + 0.12 : t1, D + 0.03);
+    }
+    for (const [t, dir] of [[21.6, 1], [-21.6, -1]] as const) {
+      for (let u = 20; u < 104; u += 18) {
+        const [a, b] = dir > 0 ? [u, u + 8] : [u + 8, u];
+        sheet(Math.min(a, b), Math.max(a, b), t - 0.2, t + 0.2, D + 0.03);
+        // The head: strips narrowing to the point.
+        for (let k = 0; k < 5; k++) {
+          const w = 1.1 * (1 - k / 5);
+          const [h0, h1] = dir > 0 ? [u + 8 + k * 0.3, u + 8.3 + k * 0.3] : [u - k * 0.3 - 0.3, u - k * 0.3];
+          sheet(h0, h1, t - w, t + w, D + 0.03);
+        }
+      }
+    }
+    // The island between the aisles, with the rest building on it: a glass storey and a flat roof, lit at night.
+    rbox(0xb8bab0, 22, 114, -10, 10, D, D + 0.2);
+    rbox(0xd6d2c6, 34, 66, -7.5, 7.5, D + 0.2, D + 6.4);
+    rbox(0x6a6e72, 33.4, 66.6, -8.1, 8.1, D + 6.4, D + 6.8);
+    for (let u = 36; u < 64; u += 6) for (const s of [-1, 1]) glow(u, u + 4, s > 0 ? 7.45 : -7.7, s > 0 ? 7.7 : -7.45, D + 1.2, D + 2.8, [1.5, 1.35, 0.85]);
+    glow(41, 59, -2, 2, D + 6.8, D + 7.0, [1.6, 0.35, 0.3]);
+    // Vending machines in a row south of it, lit.
+    for (let k = 0; k < 6; k++) {
+      rbox(0x3a4a8a, 70 + k * 1.2, 70 + k * 1.2 + 1.0, -1.6, 1.6, D + 0.2, D + 2.0);
+      glow(70 + k * 1.2 + 0.1, 70 + k * 1.2 + 0.9, -1.65, -1.55, D + 0.7, D + 1.7, [1.8, 1.8, 1.7]);
+    }
+    // Cars in the bays: most bays, in the paints the regulars favour.
+    const PAINTS = [0xc81a1a, 0xe8e8e4, 0x1a1a1c, 0x2a5ad0, 0xe8c020, 0x8a2ac8, 0xd86a1e, 0x2a8a4a, 0xa8b0b8];
+    let nCar = 0;
+    for (const [t0, t1] of BANKS) {
+      for (let u = Math.abs(t0) < 20 ? 38 : 18; u < 108; u += 2.6) {
+        nCar++;
+        if ((nCar * 7919) % 11 < 4) continue;
+        const c = (t0 + t1) / 2;
+        rbox(PAINTS[(nCar * 31) % PAINTS.length], u + 0.45, u + 2.15, c - 2.1, c + 2.1, D + 0.1, D + 0.85, KIND.gloss);
+        rbox(0x1c2026, u + 0.55, u + 2.05, c - 1.0, c + 1.1, D + 0.85, D + 1.35, KIND.gloss);
+      }
+    }
+    // Floodlights: tall poles in the aisles, glowing heads, a pool of light under each.
+    for (const u of [28, 64, 100]) {
+      for (const t of [-21.6, 0, 21.6]) {
+        if (t === 0 && u === 64) continue;
+        rbox(0x5a5e62, u - 0.15, u + 0.15, t - 0.15, t + 0.15, D, D + 11);
+        glow(u - 0.8, u + 0.8, t - 0.4, t + 0.4, D + 11, D + 11.4, [2.0, 1.8, 1.4]);
+        const [px, pz] = P(u, t);
+        pools.push({ x: px, z: pz, y: D });
+      }
+    }
+    // The sign over the throat: the PA's name, the way in over the east deck.
+    const words = road.plaza.name.split(' ');
+    const mat = face(`pa:${road.plaza.name}`, 1024, 300, (cg) => {
+      cg.fillStyle = '#0e6a3a';
+      cg.fillRect(0, 0, 1024, 300);
+      cg.strokeStyle = '#f0f0f0';
+      cg.lineWidth = 8;
+      cg.strokeRect(10, 10, 1004, 280);
+      cg.fillStyle = '#f4f4f0';
+      cg.textAlign = 'center';
+      cg.font = "bold 104px 'Yu Gothic', 'Meiryo', sans-serif";
+      cg.fillText(words[0], 512, 130);
+      cg.font = 'bold 60px Consolas, sans-serif';
+      cg.fillText(`${words.slice(1).join(' ')} · P`, 512, 240);
+    });
+    const sg = new THREE.Group();
+    const steelPa = new THREE.MeshStandardMaterial({ color: 0x8a8e94, metalness: 0.5, roughness: 0.5 });
+    for (const t of [-12.5, 12.5]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.4, 8, 0.4), steelPa);
+      post.position.set(t, 4, 0);
+      sg.add(post);
+    }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(25.4, 0.45, 0.45), steelPa);
+    beam.position.set(0, 7.8, 0);
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(9, 2.6), mat);
+    board.position.set(5.2, 6.1, -0.3);
+    board.rotation.y = Math.PI;
+    sg.add(beam, board);
+    const [gx, gz] = P(12, 0);
+    sg.position.set(gx, D, gz);
+    sg.rotation.y = Math.atan2(dx, dz);
+    group.add(sg);
+  }
   // Gantry signs over the deck before each exit (green, white lettering), and at street level a sign before
   // each entrance, on the avenue's median.
   for (const road of ex.roads) {
     if (road.kind === 'loop' || road.kind === 'route') continue;
     if (road.rampKind === 'on') {
-      group.add(entranceSign(road), entranceGantry(road));
+      group.add(entranceSign(road, road.foot ?? 0, (road.foot ?? 0) > 8), entranceGantry(road, (road.foot ?? 0) > 8));
       continue;
     }
-    if (road.rampKind === 'off') group.add(noEntry(road));
+    if (road.rampKind === 'off') group.add(noEntry(road, (road.foot ?? 0) > 8), noseSign(road, ex));
     const text = road.kind === 'spur' ? [`${road.sign}`, 'TUNNEL · 直進'] : [`出口 EXIT`, `${road.sign}`];
     group.add(gantry(road, 0, text, ex));
+    // An exit is signed well before it: a second gantry 320 m back, with the distance.
+    if (road.rampKind === 'off') group.add(gantry(road, 0, ['出口 EXIT 400 m', `${road.sign}`], ex, 320));
   }
   // In 256 m tiles, so what's off screen isn't drawn (the network as one mesh was ~550k triangles from anywhere).
   for (const g of splitByTile(mb.build()!, 256)) {
@@ -320,7 +483,7 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
  * starts, facing the street traffic coming along the lane under it, a yellow-and-black crash cushion. On an
  * entrance's foot, arrows painted up the lane.
  */
-function ramp(mb: MeshBuilder, road: Road): void {
+function ramp(mb: MeshBuilder, road: Road, slip: boolean): void {
   const n = road.x.length;
   const h = road.half;
   const L = (i: number, lat: number, y: number): V3 => [road.x[i] + road.tz[i] * lat, y, road.z[i] - road.tx[i] * lat];
@@ -351,6 +514,24 @@ function ramp(mb: MeshBuilder, road: Road): void {
       };
       mb.quadN(P(l0, a0), P(l0, a1), P(l1, a1), P(l1, a0), [0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0]);
     };
+    // An entrance's mouth: a hatched gore in front of the wall's nose, so the way on reads from the junction (the lane
+    // lines run on into it), and the lane's edges painted back to the junction.
+    if (road.rampKind === 'on') {
+      const GL = 15;
+      // The gore lies between the ramp and the lanes it leaves: toward the median (its right) from a ramp on the kerb side,
+      // beside the kerb lane on its left from one in the inner lane.
+      const [g0, g1] = slip ? [-(h + 0.3), -(h + 1.6)] : [h + 0.3, h + 2.7];
+      const PP = (lat: number, a: number): V3 => {
+        const p = L(0, lat, 0);
+        return [p[0] + road.tx[0] * a, road.y[0] + 0.03, p[2] + road.tz[0] * a];
+      };
+      const up: V3 = [0, 1, 0];
+      for (let k = 0; k < 8; k++) {
+        const a = -GL + k * (GL / 8);
+        mb.quadN(PP(g0, a), PP(g1, a + 1.1), PP(g1, a + 1.6), PP(g0, a + 0.5), up, up, up, up);
+      }
+      for (const lat of [g0, g1]) mb.quadN(PP(lat, -GL), PP(lat, 0), PP(lat + 0.18, 0), PP(lat + 0.18, -GL), up, up, up, up);
+    }
     for (const i of road.rampKind === 'on' ? [4, 20] : [n - 30, n - 14]) {
       // The shaft, then the head as strips narrowing to its point.
       flat(i, 0.15, -0.15, 0, 3.2);
@@ -390,7 +571,7 @@ function ramp(mb: MeshBuilder, road: Road): void {
  * At street level before an entrance, on the avenue's median: 東都高速 入口 with the district and an arrow up
  * the ramp (the expressway's green, on a post), facing the traffic coming.
  */
-function entranceSign(road: Road): THREE.Group {
+function entranceSign(road: Road, foot: number, slip: boolean): THREE.Group {
   const g = new THREE.Group();
   const c = document.createElement('canvas');
   c.width = 512;
@@ -432,7 +613,8 @@ function entranceSign(road: Road): THREE.Group {
   // On the median's nose by the ramp's foot (the median breaks at the junction before it), so it's in view as
   // you cross the junction toward it.
   const back = -3;
-  const lat = -RAMP_FOOT;
+  // (On the pavement by a kerb-side ramp, on the median's nose by an inner one.)
+  const lat = slip ? road.half + 0.7 : -foot;
   g.position.set(road.x[0] - road.tx[0] * back + road.tz[0] * lat, 0.18, road.z[0] - road.tz[0] * back - road.tx[0] * lat);
   g.rotation.y = Math.atan2(road.tx[0], road.tz[0]);
   return g;
@@ -459,16 +641,18 @@ function face(key: string, w: number, h: number, draw: (g: CanvasRenderingContex
  * Over an entrance's foot, a green gantry: 東都高速 入口 ENTRANCE and an arrow up the ramp, facing the street
  * traffic turning in (so it reads as the way on from the whole block).
  */
-function entranceGantry(road: Road): THREE.Group {
+function entranceGantry(road: Road, slip: boolean): THREE.Group {
   const g = new THREE.Group();
   const i = 10;
   // One post in the median (the ramp's right: -x in the group's frame), its arm out over the ramp.
   const w = road.half + 0.55;
+  // The post stands off the lanes: on the pavement by a kerb-side ramp (the ramp's left: +x in the group's frame), in the median by an inner one.
+  const pk = slip ? 1 : -1;
   const steel = new THREE.MeshStandardMaterial({ color: 0x8a8e94, metalness: 0.5, roughness: 0.5 });
-  const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 6.6, 0.3), steel);
-  post.position.set(-w, 3.3, 0);
-  const beam = new THREE.Mesh(new THREE.BoxGeometry(w + 3, 0.35, 0.35), steel);
-  beam.position.set((w + 3) / 2 - w, 6.3, 0);
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.4, 8.6, 0.4), steel);
+  post.position.set(pk * w, 4.3, 0);
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(w + 5, 0.45, 0.45), steel);
+  beam.position.set(pk * (w - (w + 5) / 2), 8.2, 0);
   g.add(post, beam);
   const mat = face(`entrance:${road.sign}`, 1024, 320, (cg) => {
     cg.fillStyle = '#0e6a3a';
@@ -494,9 +678,9 @@ function entranceGantry(road: Road): THREE.Group {
     cg.closePath();
     cg.fill();
   });
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 1.75), mat);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 2.63), mat);
   // Traffic travels +z in the group's frame: the sign faces -z, toward it.
-  sign.position.set(0, 5.1, -0.25);
+  sign.position.set(-pk * 0.8, 6.6, -0.3);
   sign.rotation.y = Math.PI;
   g.add(sign);
   g.position.set(road.x[i], road.y[i], road.z[i]);
@@ -505,10 +689,82 @@ function entranceGantry(road: Road): THREE.Group {
 }
 
 /**
+ * At the nose where an exit ramp parts from the deck (its inner edge clear of the deck's), on a post by the dividing wall
+ * and facing the traffic: a green board with the way off, an arrow up and to the left, and the ramp's name, lit by
+ * the headlights' reflection like the gantries (the exit has to be seen coming).
+ */
+function noseSign(road: Road, ex: Expressway): THREE.Group {
+  const g = new THREE.Group();
+  // The deck it leaves: the nearest route or loop sample to the ramp's first.
+  let deck = ex.loop;
+  let dk = 0;
+  let bd = Infinity;
+  for (const q of ex.roads) {
+    if (q.kind !== 'loop' && q.kind !== 'route') continue;
+    for (let k = 0; k < q.x.length; k++) {
+      const d = Math.hypot(q.x[k] - road.x[0], q.z[k] - road.z[0]) + Math.abs(q.y[k] - road.y[0]) * 0.5;
+      if (d < bd) [deck, dk, bd] = [q, k, d];
+    }
+  }
+  // Where the wall between them starts: the first ramp sample more than a metre below the deck (while it's level with it
+  // the two are one open surface), and the deck's sample beside it.
+  let i = 0;
+  while (i < road.x.length - 1 && road.y[i] > deck.y[dk] - 1.0) i++;
+  let kd = dk;
+  let dd = Infinity;
+  for (let k = Math.max(0, dk - 60); k < Math.min(deck.x.length, dk + 500); k++) {
+    const d = Math.hypot(deck.x[k] - road.x[i], deck.z[k] - road.z[i]);
+    if (d < dd) [kd, dd] = [k, d];
+  }
+  const mat = face(`nose:${road.sign}`, 640, 420, (cg) => {
+    cg.fillStyle = '#0e6a3a';
+    cg.fillRect(0, 0, 640, 420);
+    cg.strokeStyle = '#f0f0f0';
+    cg.lineWidth = 10;
+    cg.strokeRect(12, 12, 616, 396);
+    cg.fillStyle = '#f4f4f0';
+    cg.textAlign = 'center';
+    cg.font = "bold 110px 'Yu Gothic', 'Meiryo', sans-serif";
+    cg.fillText('出口', 330, 120);
+    cg.font = 'bold 70px Consolas, sans-serif';
+    cg.fillText('EXIT', 330, 200);
+    cg.font = "bold 56px 'Yu Gothic', 'Meiryo', sans-serif";
+    cg.fillText((road.sign ?? '').slice(0, 14), 330, 290);
+    // The arrow, up and to the left (the ramp leaves on the left).
+    cg.save();
+    cg.translate(100, 330);
+    cg.rotate(-Math.PI / 4);
+    cg.beginPath();
+    cg.moveTo(0, -80);
+    cg.lineTo(50, -20);
+    cg.lineTo(18, -20);
+    cg.lineTo(18, 60);
+    cg.lineTo(-18, 60);
+    cg.lineTo(-18, -20);
+    cg.lineTo(-50, -20);
+    cg.closePath();
+    cg.fill();
+    cg.restore();
+  });
+  const steel = new THREE.MeshStandardMaterial({ color: 0x8a8e94, metalness: 0.5, roughness: 0.5 });
+  // On the deck's edge (its left side, where the ramp leaves), just outside the lane, facing the traffic along the deck.
+  const x = deck.half + 0.35;
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, 4.4, 0.22), steel);
+  post.position.set(x, 2.2, 0);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.36), mat);
+  sign.position.set(x, 4.6, -0.2);
+  sign.rotation.y = Math.PI;
+  g.add(post, sign);
+  g.position.set(deck.x[kd], deck.y[kd], deck.z[kd]);
+  g.rotation.y = Math.atan2(deck.tx[kd], deck.tz[kd]);
+  return g;
+}
+
+/**
  * At an exit's foot, facing the street (anyone about to drive up it): a 進入禁止 no-entry sign on a post in the
  * median, a red 逆走 WRONG WAY panel under it.
  */
-function noEntry(road: Road): THREE.Group {
+function noEntry(road: Road, slip: boolean): THREE.Group {
   const g = new THREE.Group();
   const n = road.x.length - 1;
   const round = face('noentry', 256, 256, (cg) => {
@@ -537,7 +793,7 @@ function noEntry(road: Road): THREE.Group {
   });
   // On a post in the median beside the foot (the ramp's right: -x in the group's frame), clear of the lanes.
   const steel = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.5, roughness: 0.5 });
-  const x = -(road.half + 0.55);
+  const x = (slip ? 1 : -1) * (road.half + 0.55);
   const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 3.1, 0.1), steel);
   post.position.set(x, 1.55, 0);
   const disc = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0), round);
@@ -597,17 +853,20 @@ function portal(mb: MeshBuilder, road: Road): void {
 }
 
 /** A green gantry sign over a road near sample i: two posts, a beam, the sign (canvas) facing the traffic. */
-function gantry(road: Road, i: number, lines: string[], ex: Expressway): THREE.Group {
+function gantry(road: Road, i: number, lines: string[], ex: Expressway, back = 120): THREE.Group {
   const g = new THREE.Group();
-  const loop = ex.loop;
-  // Stand it on the loop 120 m before the fork, facing the traffic coming.
+  // Stand it on the deck the ramp leaves (the nearest route or loop), `back` m before the fork, facing the traffic coming.
+  let loop = ex.loop;
   let best = 0;
   let bd = Infinity;
-  for (let k = 0; k < loop.x.length; k++) {
-    const d = Math.hypot(loop.x[k] - road.x[i], loop.z[k] - road.z[i]);
-    if (d < bd) [best, bd] = [k, d];
+  for (const q of ex.roads) {
+    if (q.kind !== 'loop' && q.kind !== 'route') continue;
+    for (let k = 0; k < q.x.length; k++) {
+      const d = Math.hypot(q.x[k] - road.x[i], q.z[k] - road.z[i]) + Math.abs(q.y[k] - road.y[i]) * 0.5;
+      if (d < bd) [loop, best, bd] = [q, k, d];
+    }
   }
-  const k = (best - 120 + loop.x.length) % loop.x.length;
+  const k = loop.closed ? (best - back + loop.x.length) % loop.x.length : Math.max(0, best - back);
   const x = loop.x[k];
   const z = loop.z[k];
   const y = loop.y[k];
@@ -686,7 +945,8 @@ export class ExpresswayTraffic {
   constructor(
     private readonly ex: Expressway,
     city: THREE.Material,
-    count = 22,
+    // (None in a city with no expressway: the stub road standing in for its loop carries nothing.)
+    count = ex.roads.length === 0 ? 0 : 22,
     /** Lettering and taxi ads (none in tests). */
     signs: TrafficSigns | null = null,
   ) {

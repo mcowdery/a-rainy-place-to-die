@@ -68,6 +68,8 @@ export interface Outlook {
   readonly wind: number;
   readonly turn: number;
   readonly after: boolean;
+  /** A tropical city in its monsoon after a day of heavy rain: how deep the streets stand in water (0-1; absent elsewhere). */
+  readonly flood?: number;
 }
 
 /**
@@ -101,7 +103,91 @@ function typhoonStart(total: number, season: Season, seasonStart: number, force:
 
 const rnd = (a: number, b: number, c: number): number => hash(a, b, c, 0x3ea7) / 4294967296;
 
-export function outlookAt(total: number, season: Season, seasonStart = 0, force: ForecastForce = {}): Outlook {
+/**
+ * A tropical city's weather (cityConfig.ts `tropical`: Manila): no winter and no snow, two seasons in a cycle of
+ * `DRY_DAYS + WET_DAYS` days from the story's start: the hot dry season (clear, baking days of 30-38 °C, a thunder-
+ * storm in the afternoon now and then) and the monsoon (habagat: grey days of steady rain from drizzle to a
+ * downpour, typhoons passing through often, and after a day of heavy rain the streets flood). `tsuyu` in the Outlook
+ * is the monsoon, `heat` the dry season's hot days.
+ */
+export const DRY_DAYS = 40;
+export const WET_DAYS = 70;
+const TROPIC_TYPHOON_WINDOW = 4;
+const TROPIC_TYPHOON_CHANCE = 0.4;
+export const isMonsoon = (total: number): boolean => (((Math.floor(total / DAY) % (DRY_DAYS + WET_DAYS)) + DRY_DAYS + WET_DAYS) % (DRY_DAYS + WET_DAYS)) >= DRY_DAYS;
+
+/** The typhoon over this minute (its start), in the monsoon. */
+function tropicTyphoon(total: number, force: ForecastForce): number | null {
+  const len = TYPHOON_HOURS * 60 * 1.5;
+  if (force.typhoonAt != null && total >= force.typhoonAt && total < force.typhoonAt + len) return force.typhoonAt;
+  if (settled(total, force)) return null;
+  const w0 = Math.floor(total / (TROPIC_TYPHOON_WINDOW * DAY));
+  for (const w of [w0, w0 - 1]) {
+    const start = w * TROPIC_TYPHOON_WINDOW * DAY + Math.floor(rnd(w, 1, 0x7f01) * 2 * DAY);
+    if (!isMonsoon(start) || rnd(w, 0, 0x7f01) >= TROPIC_TYPHOON_CHANCE) continue;
+    if (total >= start && total < start + len) return start;
+  }
+  return null;
+}
+
+/** How hard it rains in one block of the monsoon's (0 dry), without a typhoon's. */
+function monsoonRain(block: number, total: number): number {
+  if (!isMonsoon(total)) return 0;
+  const u = rnd(block, 9, 1);
+  return u < 0.5 ? 0.25 + 0.75 * rnd(block, 9, 2) ** 0.7 : 0;
+}
+
+function tropicalOutlook(total: number, force: ForecastForce): Outlook {
+  const block = Math.floor(total / BLOCK);
+  const day = Math.floor(total / DAY);
+  const m = ((total % DAY) + DAY) % DAY;
+  const wet = isMonsoon(total);
+  const hot = !wet && !settled(total, force) && rnd(Math.floor(day / 2), 7, 0x4ea7) < 0.6 || (force.heatUntil != null && total < force.heatUntil);
+  const lo = wet ? 24 : hot ? 28 : 26;
+  const hi = wet ? 31 : hot ? 38 : 34;
+  const swing = (rnd(day, 7, 0x7e3) - 0.5) * 3;
+  const air = (lo + hi) / 2 + swing + ((hi - lo) / 2) * Math.cos((2 * Math.PI * (m / 60 - 14)) / 24);
+  // The streets flood after a day of heavy rain (the last eight blocks' average, and a typhoon's rain at its height).
+  let sum = 0;
+  for (let k = 0; k < 8; k++) sum += monsoonRain(block - k, total - k * BLOCK);
+  const ty = tropicTyphoon(total, force);
+  const flood = Math.max(0, Math.min(1, (sum / 8) * 2.4 - 0.2));
+  const calm = { typhoon: 0, wind: 0.05 + 0.1 * rnd(block, 7, 5), turn: 0, after: false };
+  if (ty !== null) {
+    const p = (total - ty) / (TYPHOON_HOURS * 60);
+    const smooth = (a: number, b: number, v: number): number => {
+      const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    };
+    if (p < 1) {
+      const k = smooth(0, 0.45, p) * (1 - smooth(0.7, 1, p));
+      const band = Math.sin(p * 55 + rnd(ty, 2, 0x7f00) * 6) > 0.1 - k;
+      const raining = k > 0.4 || (k > 0.1 && band);
+      return { weather: raining ? 'rain' : 'clear', amount: raining ? Math.min(1, 0.4 + 0.65 * k) : 0, shower: false, tsuyu: true, heat: false, temp: air - 2 * k, typhoon: k, wind: 0.12 + 1.0 * k, turn: (p - 0.5) * 140, after: false, flood: Math.max(flood, k * 0.95) };
+    }
+    return { weather: 'clear', amount: 0, shower: false, tsuyu: wet, heat: false, temp: air + 1.5, typhoon: 0, wind: 0.35 * (1.5 - p) * 2, turn: 70, after: true, flood: Math.max(flood, 0.5 * (1 - (p - 1) * 2)) };
+  }
+  const rain = monsoonRain(block, total);
+  if (rain > 0) return { weather: 'rain', amount: rain, shower: false, tsuyu: true, heat: false, temp: air - 2, ...calm, flood };
+  // The dry season's afternoon storm: a short, hard burst after the heat of the day.
+  if (!wet && m >= 13 * 60 && m < 19 * 60 && rnd(day, 7, 0x51) < 0.22) {
+    const start = 13 * 60 + 240 * rnd(day, 7, 0x52);
+    const len = 25 + 35 * rnd(day, 7, 0x53);
+    if (m >= start && m < start + len) return { weather: 'rain', amount: 0.8 + 0.2 * rnd(day, 7, 0x54), shower: true, tsuyu: false, heat: hot, temp: air - 5, ...calm, flood: 0 };
+  }
+  if (wet && rnd(block, 9, 3) < 0.12) {
+    const len = 20 + 40 * rnd(block, 9, 4);
+    const start = (BLOCK - len) * rnd(block, 9, 6);
+    const at = total - block * BLOCK;
+    if (at >= start && at < start + len) return { weather: 'rain', amount: 0.5 + 0.4 * rnd(block, 9, 7), shower: true, tsuyu: true, heat: false, temp: air - 2, ...calm, flood };
+  }
+  // A hazy, humid morning, now and then.
+  if (m >= 5 * 60 && m < 8 * 60 && hash(day, 7, 0xf06) / 4294967296 < 0.12) return { weather: 'fog', amount: 0, shower: false, tsuyu: wet, heat: false, temp: air, ...calm, flood };
+  return { weather: 'clear', amount: 0, shower: false, tsuyu: wet, heat: hot, temp: air, ...calm, flood };
+}
+
+export function outlookAt(total: number, season: Season, seasonStart = 0, force: ForecastForce = {}, tropical = false): Outlook {
+  if (tropical) return tropicalOutlook(total, force);
   const block = Math.floor(total / BLOCK);
   const s = seasonIndex(season);
   const day = Math.floor(total / DAY);

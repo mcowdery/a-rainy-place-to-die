@@ -9,7 +9,7 @@ const browser = await chromium.launch({ channel: 'msedge', headless: false, args
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   page.on('pageerror', (e) => console.log('pageerror', e.message));
-  await page.goto(`${base}district.html?debug=1&clock=12:00&weather=clear&fly=1&cam=3328,75,2085,0,-89`);
+  await page.goto(`${base}?debug=1&clock=12:00&weather=clear&fly=1&cam=3328,75,2085,0,-89`);
   await page.waitForTimeout(50_000);
   // Find the times (in the line's clock) when train 0 is entering the crossover, standing at the stub's end, and leaving.
   const times = await page.evaluate(() => {

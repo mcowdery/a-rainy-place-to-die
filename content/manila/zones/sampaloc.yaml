@@ -1,0 +1,36 @@
+# Sampaluan: the university belt, dorms and copy shops.
+district: campus
+area: Sampaluan
+origin: [22, 3]
+map:
+  - CCCCCC
+  - CCCCCC
+  - CCCCCC
+  - CCCCCC
+  - CCCCCC
+
+zones:
+  C:
+    id: sampaloc_belt
+    name: University belt
+    night: 0.4
+    people: { school: 6, plain: 5, long: 2 }
+    cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
+    plan:
+      floors: [[2, 4, 50], [5, 9, 40], [10, 14, 10]]
+      lotW: [8, 16]
+      localStreet: [6, 9]
+      block: [24, 50]
+      streetTrees: 0.6
+    signs:
+      words: ["BOOKS", "COPY CENTER", "DORM", "TUTORIAL", "CAFE", "PRINTING", "MILKTEA"]
+      colors: ['#ffffff', '#6bff8a', '#4fe3ff']
+    ads: { mainstream: 2, food: 2, fun: 1 }
+    look:
+      arch: 0.15
+      vending: 0.06
+      street: 0.5
+      windows: { punched: 40, ribbon: 30, balcony: 30 }
+      walls: ['#cfc7b0', '#b8c4b0', '#d8d0c0', '#a8b0a0']
+      shops: { colourful: 3, warm: 3, cool: 2 }
+      open: 0.8

@@ -7,7 +7,7 @@ const page = await browser.newPage({ viewport: { width: 1100, height: 640 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); else if (/^DBG/.test(m.text())) console.log(m.text()); });
 await page.addInitScript(() => localStorage.setItem('citypop.driveView', 'chase'));
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=kaburo_crossing.view&car=home&clock=14:00&weather=clear`);
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=kaburo_crossing.view&car=home&clock=14:00&weather=clear`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
 await page.waitForFunction(() => typeof window.__drive === 'function' && window.__chase, null, { timeout: 60000 });

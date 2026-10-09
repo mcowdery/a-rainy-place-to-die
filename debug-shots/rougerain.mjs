@@ -16,7 +16,7 @@ const views = {
 };
 const base = server.resolvedUrls.local[0];
 for (const [name, cam] of Object.entries(views)) {
-  await page.goto(`${base}district.html?debug=1&diag=1&spawn=hotel_rouge.floor3&cam=${cam}&clock=00:02&weather=rain&rain=1`);
+  await page.goto(`${base}?debug=1&diag=1&spawn=hotel_rouge.floor3&cam=${cam}&clock=00:02&weather=rain&rain=1`);
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
   await page.evaluate(() => {
     document.getElementById('overlay').hidden = true;
@@ -35,7 +35,7 @@ for (const [name, cam] of Object.entries(views)) {
   }
 }
 // The lobby, looking out of the front doors.
-await page.goto(`${base}district.html?debug=1&diag=1&spawn=hotel_rouge.lobby&clock=00:02&weather=rain&rain=1`);
+await page.goto(`${base}?debug=1&diag=1&spawn=hotel_rouge.lobby&clock=00:02&weather=rain&rain=1`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => {
   document.getElementById('overlay').hidden = true;

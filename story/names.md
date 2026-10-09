@@ -29,7 +29,9 @@ down its east side.
 
 **Roads and places outside the districts:** 東都高速 the Tōto Expressway (its inner loop is **C1**; **the
 Wangan**, "bayshore", runs along the port); the mountain passes 黒神峠 Kurokami ("black god") and 夕凪峠 Yūnagi
-("evening calm"), where the racing is; Manila (a race venue; maybe a map later) and Seoul (maybe later).
+("evening calm"), where the racing is; Manila (**Manilaya** in the game: see below; the city map and a race venue) and Seoul (maybe later).
+
+**Manilaya** (the user's call, 2026-10-09: the game's Manila keeps the real city's sound but not its names, as Tōto is Tokyo): Manila → Manilaya (Manilaya Bay, the Pasigan River); the districts Tondo → Tundo, Paco → Pasko, Santa Mesa → Santa Resa, Pandacan → Pandalan, Sampaloc → Sampaluan, Binondo → Binundo, Intramuros → Muralya (the walled city), Divisoria → Divisora (the bazaar), Ermita-Malate → Ermida-Malaya (nightlife), Poblacion → Poblado, Bagumbayan → Bagumbago (the business district), Fort Centre (towers); the avenues Rizal → Risal, Taft → Tafto, Quezon → Keson, Roxas → Roxal, Bonifacio → Bonifasyo, Magsaysay → Magsalay, Aguinaldo → Aginaldo; Quiapo, Cubao and Pasay → Kiyapo, Kubao and Pasag (on the jeepneys' route boards). Its streets are Filipino in feel: barangays, jeepneys, basketball courts, sari-sari stores, bangkas on the bay.
 
 ## People
 

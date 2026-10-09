@@ -1,0 +1,8 @@
+# The start of the game in Manilaya: a pavilion on the barangay street (a plain building with a spawn on the pavement).
+id: bay_pavilion
+name: Barangay Hall
+footprint: [14, 12]
+height: 8
+front: south
+nodes:
+  start: { kind: spawn, name: Barangay Hall, at: [7, 4], facing: south, view: [180, 4] }

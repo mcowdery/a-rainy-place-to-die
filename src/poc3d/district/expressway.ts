@@ -1,6 +1,6 @@
 import YAML from 'yaml';
 import type { Rect } from '../../core/coords';
-import { CELL } from './plan';
+import { CELL, edgeKey } from './plan';
 
 /**
  * The Tōto Expressway (content/world3d/expressway.yaml): a network of elevated routes over the cell-edge roads,
@@ -46,6 +46,20 @@ export interface ExpresswayDef {
   readonly radius: number;
   readonly half: number;
   readonly routes: readonly RouteDef[];
+  /**
+   * Metres added to the width of every cell-edge road a ramp stands on (the avenue's edge, both sides of its line),
+   * so the ramp has a lane of its own beside the median and the through lanes keep the width they had. 0 or absent:
+   * the ramp's foot takes the inner lane.
+   */
+  readonly slipLane?: number;
+  /**
+   * Junctions between routes that cross: a connector deck leaves route `from` and joins route `to` along a
+   * circular arc of `radius` metres tangent to both (where their lines cross), so a car turns from one to the
+   * other without slowing for a right angle. `cutFrom`: `from` ends where the connector leaves it (a merge, or a
+   * route that has run its course); `cutTo`: `to` begins where the connector joins it (a diverge). What a cut
+   * takes off is the stub that would otherwise run on across the other deck.
+   */
+  readonly links?: readonly { readonly id: string; readonly from: string; readonly to: string; readonly radius: number; readonly cutFrom?: boolean; readonly cutTo?: boolean }[];
   /** On a route's leg (from point `leg` to the next), in its 128 m `block` (counted from the leg's start). */
   readonly ramps: readonly { readonly id: string; readonly kind: 'on' | 'off'; readonly route: string; readonly leg: number; readonly block: number; readonly name: string }[];
   /**
@@ -53,6 +67,13 @@ export interface ExpresswayDef {
    * cols, fractional), straddling `width` metres of deck, main cables slung between them and down to anchors.
    */
   readonly suspension?: readonly { readonly col?: number; readonly row?: number; readonly from: number; readonly to: number; readonly width: number; readonly name: string }[];
+  /**
+   * Parking areas (PA): a raised apron where a route's decks end, on a grid point's line, `length` metres along `dir`
+   * (an axis) from `from` m past the point, `width` across (centred on the line). A road of kind 'deck' (driven
+   * anywhere on it, its edges walls, the routes that end on it merging), drawn by `real/expressway.ts`, with the lots
+   * under it cleared (`expresswayReserved`).
+   */
+  readonly plazas?: readonly { readonly id: string; readonly name: string; readonly at: readonly [number, number]; readonly dir: readonly [number, number]; readonly from: number; readonly length: number; readonly width: number }[];
   /** At a route's point `at` (a loop's corner, or an open route's last point), straight on into a tunnel. */
   readonly exits: readonly { readonly id: string; readonly venue: string; readonly route: string; readonly at: number; readonly length: number; readonly name: string; readonly hill?: number }[];
 }
@@ -68,9 +89,10 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
     return null;
   }
   const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  if (d.slipLane !== undefined && (!num(d.slipLane) || (d.slipLane as number) < 0 || (d.slipLane as number) > 24)) err('slipLane: metres of width added to the road under a ramp, 0-24');
   for (const k of ['deck', 'radius', 'half']) if (!num(d[k]) || (d[k] as number) <= 0) err(`${k}: a positive number`);
   const routes = new Map<string, { loop: boolean; legs: number[]; trim: [number, number] }>();
-  if (!Array.isArray(d.routes) || d.routes.length === 0) err('routes: a list');
+  if (!Array.isArray(d.routes)) err('routes: a list (empty for a city with no expressway)');
   else
     d.routes.forEach((r: Record<string, unknown>, i: number) => {
       const pts = r?.pts as unknown;
@@ -95,6 +117,29 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
       }
       routes.set(r.id as string, { loop: r.loop as boolean, legs, trim });
     });
+  if (d.links !== undefined) {
+    if (!Array.isArray(d.links)) err('links: a list');
+    else
+      d.links.forEach((l: Record<string, unknown>, i: number) => {
+        if (typeof l?.id !== 'string' || typeof l.from !== 'string' || typeof l.to !== 'string' || !num(l.radius) || (l.radius as number) < 20) return err(`links[${i}]: { id, from, to, radius (m, 20 or more), cutFrom?, cutTo? }`);
+        const [A, B] = [routes.get(l.from), routes.get(l.to)];
+        if (!A || !B) return err(`links[${i}]: no route ${A ? l.to : l.from}`);
+        if (l.cutFrom && A.loop) err(`links[${i}]: a loop can't be cut`);
+        if (l.cutTo && B.loop) err(`links[${i}]: a loop can't be cut`);
+      });
+  }
+  if (d.plazas !== undefined) {
+    if (!Array.isArray(d.plazas)) err('plazas: a list');
+    else
+      d.plazas.forEach((p: Record<string, unknown>, i: number) => {
+        const at = p?.at as unknown;
+        const dir = p?.dir as unknown;
+        const pair = (v: unknown): v is number[] => Array.isArray(v) && v.length === 2 && v.every((q) => Number.isFinite(q));
+        if (typeof p?.id !== 'string' || typeof p.name !== 'string' || !pair(at) || !pair(dir) || !num(p.from) || !num(p.length) || !num(p.width)) return err(`plazas[${i}]: { id, name, at: [col, row], dir: [dx, dz], from, length, width }`);
+        if (Math.abs(dir[0]) + Math.abs(dir[1]) !== 1) err(`plazas[${i}]: dir is one axis, [0, 1] south, [1, 0] east, ...`);
+        if (p.length < 40 || p.width < 30 || p.width > 120) err(`plazas[${i}]: length 40+, width 30-120 m`);
+      });
+  }
   if (!Array.isArray(d.ramps)) err('ramps: a list');
   else
     d.ramps.forEach((r: Record<string, unknown>, i: number) => {
@@ -152,6 +197,12 @@ export interface Road {
    * Sample i is `trim[0] + i` metres along the route as written; a trimmed end is closed by an end wall.
    */
   readonly trim?: readonly [number, number];
+  /** A parking area's apron (kind 'deck'): its name and size, for drawing it. */
+  readonly plaza?: { readonly name: string; readonly length: number; readonly width: number; readonly wings: readonly { readonly u0: number; readonly u1: number; readonly t0: number; readonly t1: number }[] };
+  /** Ramps: where the foot stands, metres left of the grid line (a slip lane on the kerb side, or the inner lane by the median). */
+  readonly foot?: number;
+  /** Ends (start, end) where the road runs into another deck (a junction's connector), so no end wall stands there. */
+  readonly joins?: readonly [boolean, boolean];
 }
 
 /** Where a point is on the network. */
@@ -166,13 +217,18 @@ export interface OnRoad {
 const GRID = 16;
 /** A ramp's run (m): the climb to the deck at under 10% at its steepest. */
 export const RAMP = 240;
-/** A ramp's half-width: one wide lane (6 m between the parapets), room to line up with it at speed. */
-export const RAMP_HALF = 3;
+/** A ramp's half-width: one wide lane (7.2 m between the parapets: two cars' width), room to line up with it at speed. */
+export const RAMP_HALF = 3.6;
 /**
  * Where a ramp's foot stands: the avenue's inner lane, its centre this far from the grid line (the 2.4 m median's
  * edge, a gap, then the ramp), so the kerb lane stays open beside it whatever the route above.
  */
 export const RAMP_FOOT = 1.2 + 0.4 + RAMP_HALF;
+/**
+ * Metres a ramp takes to angle into (out of) the deck's outside lane, level with the deck all the way (it climbs over the
+ * rest of its run), so the two are one open surface there and no wall stands between them.
+ */
+export const RAMP_MERGE = 50;
 /**
  * Along a ramp from its foot (m): it stays in the inner lane while it's an embankment, swings out beside the
  * deck over [SWING0, SWING1] once it's high enough to clear the street, then angles into the deck's outside lane
@@ -236,8 +292,22 @@ export class Expressway {
   /** The widest road's half-width (the search reach round a point). */
   private maxHalf: number;
 
-  constructor(readonly def: ExpresswayDef) {
+  constructor(
+    readonly def: ExpresswayDef,
+    /** The width of the cell-edge road under a ramp (edgeKey; the road as widened by `slipLane`), where the city knows it. */
+    roadWidth?: (key: string) => { readonly width: number; readonly slip: number } | undefined,
+  ) {
     this.maxHalf = def.half;
+    const edgeOf = rampEdgeKeys(def);
+    // With a slip lane: in the middle of it, along the kerb (the road's carriageway runs to its width less 2 x 3 m of pavement,
+    // the traffic's lanes to half the slip lane inside that).
+    const footOf = (id: string): number => {
+      if (!def.slipLane) return RAMP_FOOT;
+      const spec = roadWidth ? roadWidth(edgeOf.get(id) ?? '') : { width: 32 + def.slipLane, slip: def.slipLane };
+      // (A road that couldn't be widened, for a set piece beside it, has the ramp in its inner lane as before.)
+      if (!spec || !spec.slip) return RAMP_FOOT;
+      return spec.width / 2 - Math.min(3, spec.width * 0.2) - spec.slip / 4;
+    };
     const R = def.radius;
     const D = def.deck;
     const world = (p: readonly [number, number]): [number, number] => [p[0] * CELL, p[1] * CELL];
@@ -249,6 +319,8 @@ export class Expressway {
       return Array.from({ length: n }, (_, k) => ({ start: P[k], dir: norm(P[(k + 1) % P.length][0] - P[k][0], P[(k + 1) % P.length][1] - P[k][1]) }));
     };
     const routeRoads = new Map<string, Road>();
+    /** Each route's centreline before any cut (its offset applied). */
+    const lines = new Map<string, { x: number[]; z: number[]; r: RouteDef }>();
     for (const r of def.routes) {
       const P = r.pts.map(world);
       const dense: [number, number][] = [];
@@ -283,18 +355,145 @@ export class Expressway {
           L.z[i] = base.z[i] - base.tx[i] * off;
         }
       }
-      // The deck stops short of a point nothing runs on past (its ramps are placed from the points all the same).
-      const [t0, t1] = r.loop ? [0, 0] : (r.trim ?? [0, 0]);
-      const cut = t0 > 0 || t1 > 0;
-      if (cut) {
-        L.x = L.x.slice(t0, L.x.length - t1);
-        L.z = L.z.slice(t0, L.z.length - t1);
+      lines.set(r.id, { x: L.x, z: L.z, r });
+    }
+    // Junctions: a connector deck along an arc tangent to both routes where their lines cross. Each takes the
+    // stub of a route that would run on across the other deck (the cuts), counted in samples (metres).
+    const cuts = new Map<string, [number, number]>();
+    const joins = new Map<string, [boolean, boolean]>();
+    const connectors: Road[] = [];
+    type Line = { x: number[]; z: number[]; r: RouteDef };
+    const at = (q: Line, i: number): [number, number] => {
+      const n = q.x.length;
+      const k = q.r.loop ? ((Math.floor(i) % n) + n) % n : Math.max(0, Math.min(n - 1, Math.floor(i)));
+      const k2 = q.r.loop ? (k + 1) % n : Math.min(n - 1, k + 1);
+      const f = i - Math.floor(i);
+      return [q.x[k] + (q.x[k2] - q.x[k]) * f, q.z[k] + (q.z[k2] - q.z[k]) * f];
+    };
+    const dirAt = (q: Line, i: number): [number, number] => {
+      const a = at(q, i - 1);
+      const b = at(q, i + 1);
+      return norm(b[0] - a[0], b[1] - a[1]);
+    };
+    // An open route's line runs on past its ends for the crossing (an offset deck stops at its grid point, short of
+    // a deck that crosses beyond it); `EXT` samples each way.
+    const EXT = 16;
+    const extended = (q: Line): Line => {
+      if (q.r.loop) return q;
+      const n = q.x.length;
+      const t0 = dirAt(q, 1);
+      const t1 = dirAt(q, n - 2);
+      const x: number[] = [];
+      const z: number[] = [];
+      for (let k = EXT; k >= 1; k--) {
+        x.push(q.x[0] - t0[0] * k);
+        z.push(q.z[0] - t0[1] * k);
       }
-      const road = makeRoad(r.id, r.loop ? 'loop' : 'route', L.x, L.z, () => D, def.half, r.loop, { sign: r.name, ...(off ? { offset: off } : {}), ...(cut ? { trim: [t0, t1] as const } : {}) });
+      for (let i = 0; i < n; i++) {
+        x.push(q.x[i]);
+        z.push(q.z[i]);
+      }
+      for (let k = 1; k <= EXT; k++) {
+        x.push(q.x[n - 1] + t1[0] * k);
+        z.push(q.z[n - 1] + t1[1] * k);
+      }
+      return { x, z, r: q.r };
+    };
+    for (const l of def.links ?? []) {
+      const A = extended(lines.get(l.from)!);
+      const B = extended(lines.get(l.to)!);
+      const [shA, shB] = [A.r.loop ? 0 : EXT, B.r.loop ? 0 : EXT];
+      // Where the two lines cross: the nearest pair of samples, found coarsely then refined.
+      let ia = 0;
+      let ib = 0;
+      let bd = Infinity;
+      for (let i = 0; i < A.x.length; i += 4)
+        for (let j = 0; j < B.x.length; j += 4) {
+          const d2 = (A.x[i] - B.x[j]) ** 2 + (A.z[i] - B.z[j]) ** 2;
+          if (d2 < bd) {
+            bd = d2;
+            ia = i;
+            ib = j;
+          }
+        }
+      const [ci, cj] = [ia, ib];
+      for (let i = Math.max(0, ci - 4); i <= Math.min(A.x.length - 1, ci + 4); i++)
+        for (let j = Math.max(0, cj - 4); j <= Math.min(B.x.length - 1, cj + 4); j++) {
+          const d2 = (A.x[i] - B.x[j]) ** 2 + (A.z[i] - B.z[j]) ** 2;
+          if (d2 < bd) {
+            bd = d2;
+            ia = i;
+            ib = j;
+          }
+        }
+      const ta = dirAt(A, ia);
+      const tb = dirAt(B, ib);
+      const cross = ta[0] * tb[1] - ta[1] * tb[0];
+      const theta = Math.acos(Math.max(-1, Math.min(1, ta[0] * tb[0] + ta[1] * tb[1])));
+      const sg = cross >= 0 ? 1 : -1;
+      const T = l.radius * Math.tan(theta / 2);
+      const S = at(A, ia - T);
+      const nrm: [number, number] = [-ta[1] * sg, ta[0] * sg];
+      const xs: number[] = [];
+      const zs: number[] = [];
+      const steps = Math.max(8, Math.ceil(l.radius * theta));
+      for (let k = 0; k <= steps; k++) {
+        const f = (theta * k) / steps;
+        xs.push(S[0] + l.radius * (ta[0] * Math.sin(f) + nrm[0] * (1 - Math.cos(f))));
+        zs.push(S[1] + l.radius * (ta[1] * Math.sin(f) + nrm[1] * (1 - Math.cos(f))));
+      }
+      const cA = cuts.get(l.from) ?? [0, 0];
+      const cB = cuts.get(l.to) ?? [0, 0];
+      const jA = joins.get(l.from) ?? [false, false];
+      const jB = joins.get(l.to) ?? [false, false];
+      if (l.cutFrom) {
+        cA[1] = Math.max(cA[1], A.x.length - shA - 1 - Math.floor(ia - T));
+        jA[1] = true;
+      }
+      if (l.cutTo) {
+        cB[0] = Math.max(cB[0], Math.ceil(ib - shB + T));
+        jB[0] = true;
+      }
+      cuts.set(l.from, cA);
+      cuts.set(l.to, cB);
+      joins.set(l.from, jA);
+      joins.set(l.to, jB);
+      connectors.push(makeRoad(l.id, 'route', xs, zs, () => D, def.half, false, { sign: `${A.r.name} → ${B.r.name}`, joins: [true, true] as const }));
+    }
+    for (const r of def.routes) {
+      const L = lines.get(r.id)!;
+      // The deck stops short of a point nothing runs on past (its ramps are placed from the points all the same),
+      // and where a junction's connector takes it over.
+      const [y0, y1] = r.loop ? [0, 0] : (r.trim ?? [0, 0]);
+      const [c0, c1] = cuts.get(r.id) ?? [0, 0];
+      const t0 = Math.max(y0, c0);
+      const t1 = Math.max(y1, c1);
+      const cut = t0 > 0 || t1 > 0;
+      const x = cut ? L.x.slice(t0, L.x.length - t1) : L.x;
+      const z = cut ? L.z.slice(t0, L.z.length - t1) : L.z;
+      const j = joins.get(r.id);
+      const off = r.offset ?? 0;
+      const road = makeRoad(r.id, r.loop ? 'loop' : 'route', x, z, () => D, def.half, r.loop, { sign: r.name, ...(off ? { offset: off } : {}), ...(cut ? { trim: [t0, t1] as const } : {}), ...(j ? { joins: j } : {}) });
       routeRoads.set(r.id, road);
       this.roads.push(road);
     }
-    this.loop = this.roads.find((r) => r.kind === 'loop') ?? this.roads[0];
+    this.roads.push(...connectors);
+    // Parking areas: a wide raised deck, one road sampled every metre along its length.
+    for (const p of def.plazas ?? []) {
+      const [sx, sz] = world(p.at);
+      const xs: number[] = [];
+      const zs: number[] = [];
+      for (let u = 0; u <= p.length; u++) {
+        xs.push(sx + p.dir[0] * (p.from + u));
+        zs.push(sz + p.dir[1] * (p.from + u));
+      }
+      // The two thin buildings under its sides that hold it up and take people down to the street: one each side of the
+      // avenue (its pavements 16 m out, so 20 m clears them), from the junction at the north end to the south.
+      const wings = [{ u0: 28, u1: p.length - 6, t0: 20, t1: 31 }, { u0: 28, u1: p.length - 6, t0: -31, t1: -20 }];
+      this.roads.push(makeRoad(p.id, 'deck', xs, zs, () => D, p.width / 2, false, { sign: p.name, plaza: { name: p.name, length: p.length, width: p.width, wings } }));
+    }
+    // (A city with no expressway, Manila's: a stub of road far off the map stands in for the loop, with nothing on or near it.)
+    this.loop = this.roads.find((r) => r.kind === 'loop') ?? this.roads[0] ?? makeRoad('none', 'loop', [-1e7, -1e7 + 10, -1e7 + 20, -1e7 + 30], [-1e7, -1e7, -1e7, -1e7], () => 0, def.half, true);
     // Ramps: a single wide lane. Its foot is in the avenue's inner lane beside the median (keep to the inner
     // lane for the expressway; the kerb lane runs on past it), and it stays there while it's low enough to be a
     // walled embankment; once it clears the street it swings out to stand beside the deck on its left, overlapping
@@ -305,6 +504,10 @@ export class Expressway {
     // the walled part stays inside the block; an off-ramp comes down to its foot at the end of its block.
     const rh = RAMP_HALF;
     for (const r of def.ramps) {
+      const foot = footOf(r.id);
+      // A slip lane ramp swings in over its lane only once it is high enough to clear the through lanes (75 m from its foot) and
+      // is in by 125 m, the far side of the junction box, so its outer edge never reaches the lots on the street's old width.
+      const [sw0, sw1] = foot > 8 ? [75, 125] : [SWING0, SWING1];
       const route = def.routes.find((q) => q.id === r.route)!;
       const { start, dir } = legsOf(route)[r.leg];
       const left: [number, number] = [dir[1], -dir[0]];
@@ -317,14 +520,19 @@ export class Expressway {
       for (let d = 0; d <= RAMP; d++) {
         // Metres from the foot.
         const f = r.kind === 'on' ? d : RAMP - d;
-        const swing = smooth((f - SWING0) / (SWING1 - SWING0));
-        const merge = smooth((f - (RAMP - 60)) / 60);
-        const o = RAMP_FOOT + (beside - RAMP_FOOT) * swing + (lane - beside) * merge;
+        const swing = smooth((f - sw0) / (sw1 - sw0));
+        const merge = smooth((f - (RAMP - RAMP_MERGE)) / RAMP_MERGE);
+        const o = foot + (beside - foot) * swing + (lane - beside) * merge;
         xs.push(start[0] + dir[0] * (a + d) + left[0] * o);
         zs.push(start[1] + dir[1] * (a + d) + left[1] * o);
       }
-      const y = r.kind === 'off' ? (i: number): number => D * (1 - smooth(i / RAMP)) : (i: number): number => D * smooth(i / RAMP);
-      this.roads.push(makeRoad(r.id, 'ramp', xs, zs, y, rh, false, { sign: r.name, rampKind: r.kind }));
+      // Height by metres from the foot: the climb over all but the merge (a half-and-half blend of straight and eased, under 10%).
+      const climb = (f: number): number => {
+        const t = Math.max(0, Math.min(1, f / (RAMP - RAMP_MERGE)));
+        return D * (0.5 * t + 0.5 * smooth(t));
+      };
+      const y = r.kind === 'off' ? (i: number): number => climb(RAMP - i) : (i: number): number => climb(i);
+      this.roads.push(makeRoad(r.id, 'ramp', xs, zs, y, rh, false, { sign: r.name, rampKind: r.kind, foot }));
     }
     // Exits: at a route's point, straight on (the way the route arrived there) into a tunnel.
     for (const e of def.exits) {
@@ -467,6 +675,14 @@ export class Expressway {
       return Math.hypot(x - cx, z - cz) < 20;
     };
     for (const p of this.piers()) if (!nearJunction(p.x, p.z)) out.push({ x: p.x - 0.7, y: p.z - 0.7, w: 1.4, h: 1.4 });
+    // A parking area's two wings, standing on the street.
+    for (const road of this.roads) {
+      for (const w of road.plaza?.wings ?? []) {
+        const a = [road.x[0] + road.tx[0] * w.u0 + road.tz[0] * w.t0, road.z[0] + road.tz[0] * w.u0 - road.tx[0] * w.t0];
+        const b = [road.x[0] + road.tx[0] * w.u1 + road.tz[0] * w.t1, road.z[0] + road.tz[0] * w.u1 - road.tx[0] * w.t1];
+        out.push({ x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), w: Math.abs(b[0] - a[0]), h: Math.abs(b[1] - a[1]) });
+      }
+    }
     for (const road of this.roads) {
       if (road.kind !== 'ramp') continue;
       for (let i = 0; i + 4 < road.x.length; i += 4) {
@@ -493,6 +709,8 @@ export class Expressway {
 
   /** Where the deck's piers stand (every 32 m along the loop and spurs; the ramps stand on their own walls). */
   piers(): { x: number; z: number; top: number }[] {
+    // An avenue's carriageways and pavements: within 17 m of a 128 m grid line.
+    const overStreet = (x: number, z: number): boolean => Math.abs(x - Math.round(x / CELL) * CELL) < 17 || Math.abs(z - Math.round(z / CELL) * CELL) < 17;
     const out: { x: number; z: number; top: number }[] = [];
     for (const road of this.roads) {
       if (road.kind === 'ramp' || road.kind === 'deck') continue;
@@ -501,7 +719,14 @@ export class Expressway {
       const o = road.offset ?? 0;
       // (Every 32 m of the route as written, so a trimmed deck's piers still stand with the other deck's.)
       const lead = road.trim?.[0] ?? 0;
-      for (let i = start + ((32 - (lead % 32)) % 32); i < road.x.length; i += 32) out.push({ x: road.x[i] - road.tz[i] * o, z: road.z[i] + road.tx[i] * o, top: road.y[i] - 1.2 });
+      for (let i = start + ((32 - (lead % 32)) % 32); i < road.x.length; i += 32) {
+        // (A gradual corner cuts across the junction: no pier stands in the street there, the deck spans it.)
+        // (A junction's connector stands on no pier over a street at all: its ends lie beside the decks it joins, which
+        // have their own in the median, and its own would stand in a lane.)
+        const connector = !!road.joins?.[0] && !!road.joins[1] && road.kind === 'route';
+        if (overStreet(road.x[i], road.z[i]) && (connector || (Math.abs(road.tx[i]) > 0.02 && Math.abs(road.tz[i]) > 0.02))) continue;
+        out.push({ x: road.x[i] - road.tz[i] * o, z: road.z[i] + road.tx[i] * o, top: road.y[i] - 1.2 });
+      }
     }
     return out;
   }
@@ -529,4 +754,107 @@ export class Expressway {
 function norm(x: number, z: number): [number, number] {
   const l = Math.hypot(x, z) || 1;
   return [x / l, z / l];
+}
+
+/**
+ * Ground kept clear of buildings where a deck runs over the lots instead of the street: a gradual corner and a
+ * junction's connector cut across the corner of a block, so the lots they pass over are open ground (the deck
+ * stands 15 m up, over trees and plaza). The straights run over the avenues, which are clear already. The same
+ * rects go to the chunk workers and the page (the plan is a pure function of them), so both build one city.
+ */
+export function expresswayReserved(ex: Expressway): Rect[] {
+  const pad = ex.def.half + 4;
+  const unit = 10;
+  const seen = new Set<string>();
+  const out: Rect[] = [];
+  // A parking area's apron: the lots under it are open ground.
+  for (const r of ex.roads) {
+    if (!r.plaza) continue;
+    const n = r.x.length - 1;
+    const [x0, x1] = [Math.min(r.x[0], r.x[n]), Math.max(r.x[0], r.x[n])];
+    const [z0, z1] = [Math.min(r.z[0], r.z[n]), Math.max(r.z[0], r.z[n])];
+    const along = x1 - x0 > z1 - z0;
+    const w = r.plaza.width / 2 + 3;
+    out.push(along ? { x: x0 - 3, y: z0 - w, w: x1 - x0 + 6, h: 2 * w } : { x: x0 - w, y: z0 - 3, w: 2 * w, h: z1 - z0 + 6 });
+  }
+  for (const road of ex.roads) {
+    if (road.kind === 'ramp' || road.kind === 'deck' || road.kind === 'spur') continue;
+    for (let i = 0; i < road.x.length; i += 5) {
+      const x = road.x[i];
+      const z = road.z[i];
+      // Over a street (within 17 m of a grid line) is clear already.
+      if (Math.abs(x - Math.round(x / CELL) * CELL) < 17 || Math.abs(z - Math.round(z / CELL) * CELL) < 17) continue;
+      const kx = Math.round(x / unit);
+      const kz = Math.round(z / unit);
+      const key = `${kx},${kz}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ x: kx * unit - pad, y: kz * unit - pad, w: pad * 2, h: pad * 2 });
+    }
+  }
+  return out;
+}
+
+/** `expresswayReserved` from a city's expressway.yaml text (none for a city without one). */
+export function expresswayReservedFrom(file: string, text: string): Rect[] {
+  if (!text.trim()) return [];
+  const errors: string[] = [];
+  const def = parseExpressway(file, text, errors);
+  return def ? expresswayReserved(new Expressway(def)) : [];
+}
+
+/**
+ * The cell-edge road under each ramp (ramp id to edgeKey: a ramp works within one 128 m block of its leg, which is one
+ * cell edge), for widening it by `slipLane` and standing the ramp's foot in the lane that adds.
+ */
+export function rampEdgeKeys(def: ExpresswayDef): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of def.ramps) {
+    const route = def.routes.find((q) => q.id === r.route);
+    if (!route) continue;
+    const a = route.pts[r.leg];
+    const b = route.pts[(r.leg + 1) % route.pts.length];
+    const dx = Math.sign(b[0] - a[0]);
+    const dz = Math.sign(b[1] - a[1]);
+    if (dx !== 0) out.set(r.id, edgeKey(dx > 0 ? a[0] + r.block : a[0] - r.block - 1, a[1] - 1, false));
+    else out.set(r.id, edgeKey(a[0] - 1, dz > 0 ? a[1] + r.block : a[1] - r.block - 1, true));
+  }
+  return out;
+}
+
+/**
+ * The cell edges a ramp runs along (each once): its foot's block and the neighbours it climbs over, so the road is as wide
+ * wherever it swings in and no lot stands where it passes (it's 240 m long, two blocks and more).
+ */
+export function rampEdges(def: ExpresswayDef): string[] {
+  const out = new Set<string>();
+  for (const r of def.ramps) {
+    const route = def.routes.find((q) => q.id === r.route);
+    if (!route) continue;
+    const a = route.pts[r.leg];
+    const b = route.pts[(r.leg + 1) % route.pts.length];
+    const dx = Math.sign(b[0] - a[0]);
+    const dz = Math.sign(b[1] - a[1]);
+    const cells = Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]);
+    // The metres along the leg it covers, from the block's start.
+    const from = r.block * CELL + (r.kind === 'on' ? 16 : 112 - RAMP);
+    const to = from + RAMP;
+    for (let e = Math.max(0, Math.floor(from / CELL)); e <= Math.min(cells - 1, Math.floor((to - 1) / CELL)); e++) {
+      if (dx !== 0) out.add(edgeKey(dx > 0 ? a[0] + e : a[0] - e - 1, a[1] - 1, false));
+      else out.add(edgeKey(a[0] - 1, dz > 0 ? a[1] + e : a[1] - e - 1, true));
+    }
+  }
+  return [...out];
+}
+
+/** The ground under each parking area's apron: nothing is planted there (no sunlight). */
+export function expresswayCovered(ex: Expressway): Rect[] {
+  return expresswayReserved(ex).filter((_, i) => i < (ex.roads.filter((r) => r.plaza).length));
+}
+
+/** `expresswayCovered` from a city's expressway.yaml text. */
+export function expresswayCoveredFrom(file: string, text: string): Rect[] {
+  if (!text.trim()) return [];
+  const def = parseExpressway(file, text, []);
+  return def ? expresswayCovered(new Expressway(def)) : [];
 }

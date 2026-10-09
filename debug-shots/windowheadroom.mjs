@@ -10,7 +10,7 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true, args:
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 const t0 = Date.now();
-await page.goto(`${server.resolvedUrls.local[0]}district.html?diag=1&weather=clear&res=100${extra}`);
+await page.goto(`${server.resolvedUrls.local[0]}?diag=1&weather=clear&res=100${extra}`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 600000, polling: 250 });
 console.log('page ready (s)', ((Date.now() - t0) / 1000).toFixed(1));
 await page.waitForTimeout(4000);

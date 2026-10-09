@@ -8,7 +8,7 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true, args:
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   page.on('pageerror', (e) => console.log('pageerror', String(e)));
-  await page.goto(`${base}district.html?debug=1&diag=1&clock=17:40&weather=rain&fly=1&cam=3816,95,1562,0,0`);
+  await page.goto(`${base}?debug=1&diag=1&clock=17:40&weather=rain&fly=1&cam=3816,95,1562,0,0`);
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 180_000, polling: 500 });
   await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
   await page.waitForTimeout(2000);

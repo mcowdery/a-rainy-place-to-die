@@ -535,6 +535,12 @@ const common = /* glsl */ `
     // (The last: a room lit by its television, a pale cool grey-blue.)
     return h < 0.55 ? vec3(1.0, 0.62, 0.3) : h < 0.85 ? vec3(1.0, 0.86, 0.66) : h < 0.94 ? vec3(0.8, 0.9, 1.0) : vec3(0.64, 0.72, 0.9);
   }
+  // The rooms as they were before the scenes (uWindow.w < 0, the debug menu's window scenes switch off): every lit room
+  // a plain full-strength light, with the old odd one out lit blue.
+  vec3 roomLightColorOld(float h, bool office) {
+    if (office) return h < 0.8 ? vec3(0.85, 0.95, 1.0) : vec3(1.0, 0.86, 0.66);
+    return h < 0.55 ? vec3(1.0, 0.62, 0.3) : h < 0.85 ? vec3(1.0, 0.86, 0.66) : h < 0.96 ? vec3(0.8, 0.9, 1.0) : vec3(0.45, 0.55, 1.0);
+  }
   float flick(float id) {
     return uFlicker > 0.5 && h2(vec2(id, floor(uTime * 12.0))) > 0.99 ? 0.1 : 1.0;
   }
@@ -690,6 +696,8 @@ const surface = /* glsl */ `
     bool tiled = mod(floor(vFlags / 128.0), 2.0) > 0.5;
     // A home (buildings.ts HOME_FLAG): a door and a window on a lower ground floor instead of a shop.
     bool home = mod(floor(vFlags / 256.0), 2.0) > 0.5;
+    // An informal settlement's shack (buildings.ts INFORMAL_FLAG): patchwork walls.
+    bool informal = mod(floor(vFlags / 4194304.0), 2.0) > 0.5;
     const float FH = 3.0;
     float GF = home ? 3.0 : 4.2;
 
@@ -704,6 +712,15 @@ const surface = /* glsl */ `
     float row = floor(v / 0.1);
     float grout = max(step(fract(v / 0.1), 0.12), step(fract(u / 0.3 + 0.5 * mod(row, 2.0)), 0.035));
     wallCol *= 1.0 - 0.12 * grout * tileFade;
+    // Unplastered hollow block (buildings.ts BLOCK_FLAG, Manila's houses): 0.4 x 0.2 m blocks in running bond, each its own tone, the joints dark.
+    if (mod(floor(vFlags / 2097152.0), 2.0) > 0.5) {
+      float bFade = 1.0 - smoothstep(0.02, 0.06, max(fwUV.x, fwUV.y));
+      float brow = floor(v / 0.2);
+      float bu = u / 0.4 + 0.5 * mod(brow, 2.0);
+      float bj = max(step(fract(v / 0.2), 0.12), step(fract(bu), 0.06));
+      wallCol *= mix(1.0, 0.82 + 0.3 * h3(vec3(vBid, floor(bu), brow)), bFade);
+      wallCol *= 1.0 - 0.32 * bj * bFade;
+    }
     // Wet walls go darker, and unevenly: the rain soaks in in tall runs down the face (broad ones, narrower ones
     // within them), the gaps between filling in as it goes on; the splash zone at the foot is wet through.
     float wetFoot = max(fwUV.x, fwUV.y);
@@ -721,7 +738,72 @@ const surface = /* glsl */ `
     vec3 rd = vec3(dot(Vw, T), Vw.y, dot(Vw, Nw));
     vec3 refl = skyRefl(reflect(Vw, Nw));
 
-    if (isFront && v < GF && home) {
+    if (informal) {
+      // A shack: a patchwork of mismatched panels (corrugated sheet with vertical ribs, plywood, painted planks, blue
+      // tarpaulin, rusted sheet) in patches of about 0.8 x 1.2 m, uneven (each column's rows start at their own
+      // height, each row's columns are shifted), the seams dark, rust and stain running down in streaks. One hash per
+      // patch, two value noises for the streaks; ribs, seams and grain fade out where they're smaller than a pixel.
+      float fine = 1.0 - smoothstep(0.03, 0.09, wetFoot);
+      float col0 = floor(u / 0.8);
+      float vv = v + (h1(col0 * 2.3 + vBid * 0.13) - 0.5) * 0.7;
+      float prow = floor(vv / 1.2);
+      float uu = u + h1(prow * 4.1 + vBid * 0.29) * 0.8;
+      float pcol = floor(uu / 0.8);
+      float pid = h1(pcol * 1.7 + prow * 17.3 + vBid * 0.37);
+      float pid2 = h1(pcol * 5.1 + prow * 3.9 + vBid * 0.11);
+      float lu = (uu / 0.8 - pcol) * 0.8;
+      float lv = (vv / 1.2 - prow) * 1.2;
+      vec3 pc;
+      float pm = 0.0;
+      float pr = 0.8;
+      if (pid < 0.3) {
+        float rib = mix(1.0, 0.7 + 0.3 * abs(fract(u / 0.1) * 2.0 - 1.0), fine);
+        bool rusted = pid2 < 0.45;
+        pc = (rusted ? mix(vec3(0.46, 0.25, 0.12), vec3(0.3, 0.17, 0.1), pid2 * 2.2) : mix(vec3(0.54, 0.57, 0.57), vec3(0.4, 0.43, 0.44), pid2)) * rib;
+        pm = rusted ? 0.1 : 0.55;
+        pr = rusted ? 0.8 : 0.45;
+      } else if (pid < 0.5) {
+        pc = mix(vec3(0.5, 0.36, 0.22), vec3(0.64, 0.5, 0.32), pid2);
+        pc *= mix(1.0, 0.86 + 0.14 * h1(floor(lv * 22.0) + pcol * 3.0 + prow * 7.0 + vBid), fine);
+      } else if (pid < 0.68) {
+        pc = pid2 < 0.25 ? vec3(0.45, 0.62, 0.5) : pid2 < 0.5 ? vec3(0.4, 0.52, 0.66) : pid2 < 0.75 ? vec3(0.74, 0.55, 0.55) : vec3(0.74, 0.64, 0.3);
+        pc *= mix(1.0, 0.55 + 0.45 * smoothstep(0.0, 0.07, fract(uu / 0.14)), fine);
+        pc = mix(pc, vec3(0.46, 0.4, 0.32), smoothstep(0.55, 0.9, vnoise(vec2(u * 5.0 + vBid, v * 2.5))) * 0.6);
+      } else if (pid < 0.8) {
+        float fold = abs(fract((uu + vv * 0.6) / 0.35) * 2.0 - 1.0);
+        pc = mix(vec3(0.08, 0.27, 0.62), vec3(0.15, 0.4, 0.8), mix(0.5, fold, fine));
+        pr = 0.35;
+      } else {
+        pc = mix(vec3(0.42, 0.22, 0.12), vec3(0.58, 0.36, 0.2), vnoise(vec2(u * 3.0, v * 3.0) + vBid));
+      }
+      // Seams, nails' rust, long streaks of rust and stain, grime at the foot.
+      float seam = min(min(lu, 0.8 - lu), min(lv, 1.2 - lv));
+      pc *= mix(1.0, 0.45 + 0.55 * smoothstep(0.0, 0.035, seam), fine);
+      float streak = smoothstep(0.55, 0.85, vnoise(vec2(uu * 3.5 + vBid * 3.1, vv * 0.12)));
+      pc = mix(pc, vec3(0.34, 0.15, 0.07), streak * 0.5 * (1.0 - 0.5 * lv / 1.2));
+      pc *= 1.0 - 0.4 * smoothstep(0.5, 0.85, vnoise(vec2(u * 0.9 + vBid, v * 0.05)));
+      pc *= 1.0 - 0.45 * exp(-v / 0.8);
+      albedo = pow(pc, vec3(2.2)) * (1.0 - 0.3 * uWet);
+      sMetal = pm;
+      sRough = pr;
+      if (isFront) {
+        // A plank door and a small lit window.
+        float ihs = h1(vBid + 5.0);
+        float idx = faceW * (ihs < 0.5 ? 0.26 : 0.74);
+        float iwx = faceW * (ihs < 0.5 ? 0.66 : 0.34);
+        float inLitI = step(h1(vBid + 11.0), clamp(uWindowLit * 1.2, 0.0, 1.0));
+        if (abs(u - idx) < 0.38 && v < 1.95) {
+          bool frameI = abs(u - idx) > 0.33 || v > 1.89;
+          albedo = pow(frameI ? vec3(0.2, 0.16, 0.12) : mix(vec3(0.3, 0.22, 0.15), vec3(0.38, 0.3, 0.2), step(0.5, fract((u - idx) / 0.1))), vec3(2.2));
+          sMetal = 0.0;
+          sRough = 0.8;
+        } else if (abs(u - iwx) < 0.3 && v > 1.15 && v < 1.7 && faceW > 3.0) {
+          bool frameW = abs(u - iwx) > 0.26 || v < 1.2 || v > 1.65;
+          albedo = frameW ? pow(vec3(0.3, 0.24, 0.18), vec3(2.2)) : vec3(0.02);
+          if (!frameW) sEmit = vec3(1.0, 0.78, 0.5) * 0.4 * inLitI;
+        }
+      }
+    } else if (isFront && v < GF && home) {
       // A house front: the door near one end under a little lamp, a window beside it, the wall.
       float hs = h1(vBid + 5.0);
       float dx = faceW * (hs < 0.5 ? 0.24 : 0.76);
@@ -949,6 +1031,17 @@ const surface = /* glsl */ `
       else if (type < 3.5) { float ww = b * 0.86; x0 = (b - ww) * 0.5; x1 = x0 + ww; y0 = 0.05; y1 = 2.25; }
       else { x0 = b * 0.5 - 0.32; x1 = b * 0.5 + 0.32; y0 = 1.45; y1 = 2.05; inGrid = inGrid && h3(vec3(vBid, col, fl)) > 0.45; }
 
+      // Arched windows (buildings.ts ARCH_FLAG, Manila): taller, with a round head.
+      float archD = 9.0;
+      if (type < 0.5 && mod(floor(vFlags / 1048576.0), 2.0) > 0.5) {
+        y1 = FH - 0.3;
+        float rad = (x1 - x0) * 0.5;
+        float cy = y1 - rad;
+        if (yf > cy) {
+          archD = rad - length(vec2(xb - (x0 + x1) * 0.5, yf - cy));
+          if (archD < 0.0) { x1 = x0; }
+        }
+      }
       bool inWin = inGrid && xb > x0 && xb < x1 && yf > y0 && yf < y1;
       // Rooms span 2 bays on ribbon / curtain-wall floors (open-plan offices; the bays are narrow, so a flat or a
       // bar behind them takes two as well, a hotel room one).
@@ -962,6 +1055,10 @@ const surface = /* glsl */ `
       // couple of seconds); an office's hash is mostly its floor's, so floors are lit or dark together.
       float litFrac = clamp(uWindowLit * (0.35 + 1.3 * litBias) * (office ? uLit.x : den || love ? uLit.w : hotel ? uLit.z : uLit.y), 0.0, 1.0);
       float glow = clamp((litFrac - (office ? 0.65 * h3(vec3(vBid, 7.0, fl)) + 0.35 * hr : hr)) / 0.012, 0.0, 1.0);
+      bool legacy = uWindow.w < 0.0;
+      if (legacy) {
+        glow = step(hr, clamp(uWindowLit * (0.35 + 1.3 * litBias), 0.0, 1.0));
+      }
       bool lit = glow > 0.0;
 
       vec3 detailAlbedo = albedo;
@@ -970,7 +1067,7 @@ const surface = /* glsl */ `
       float detailMetal = 0.0;
       if (inWin) {
         float fx = min(xb - x0, x1 - xb);
-        float fy = min(yf - y0, y1 - yf);
+        float fy = min(min(yf - y0, y1 - yf), archD);
         float fr = type > 1.5 && type < 2.5 ? 0.05 : 0.07;
         bool spandrel = type > 1.5 && type < 2.5 && yf < 0.5;
         bool sash = type < 0.5 && (x1 - x0) > 1.3 && abs(xb - (x0 + x1) * 0.5) < 0.03;
@@ -988,10 +1085,10 @@ const surface = /* glsl */ `
           float depth = 3.5 + 3.0 * h1(hr * 91.0);
           vec3 hp = roomHit(vec3(rx, yf, 0.0), rd, rw, FH - 0.25, depth, face);
           float hl = h1(hr * 37.0);
-          vec3 L = roomLightColor(hl, office) * glow;
+          vec3 L = (legacy ? roomLightColorOld(hl, office) : roomLightColor(hl, office)) * glow;
           // The rooms lit by a television: its light drifts, gently (between scenes, not frame to frame: eased from
           // one level to the next about once a second, within a fifth of its brightness).
-          bool tvRoom = !office && !den && hl >= 0.94;
+          bool tvRoom = !legacy && !office && !den && hl >= 0.94;
           float tvT = uTime * 0.9 + hr * 57.0;
           L *= tvRoom ? 0.86 + 0.2 * mix(h1(floor(tvT)), h1(floor(tvT) + 1.0), smoothstep(0.0, 1.0, fract(tvT))) : 1.0;
           // A tenant building's bars and clubs and a love hotel's rooms are lit like any room, only lower and
@@ -999,10 +1096,10 @@ const surface = /* glsl */ `
           // much of the tint; nothing saturated).
           float hc = h1(hr * 41.0);
           vec3 lampL = mix(vec3(1.0, 0.8, 0.58), hc < 0.14 ? vec3(1.0, 0.72, 0.46) : hc < 0.28 ? vec3(1.0, 0.72, 0.62) : vec3(1.0, 0.8, 0.58), ${DEN_TINT});
-          if (den || love) L = lampL * (${DEN_LIGHT} * glow);
+          if ((den || love) && !legacy) L = lampL * (${DEN_LIGHT} * glow);
           // A room that's a place (most are): its furniture and whoever is in it come from the scenes' atlas, below.
           float forced = step(0.0, uWindow.z);
-          bool furnished = type < 3.5 && (h1(hr * 101.0) < uWindow.w || forced > 0.5);
+          bool furnished = !legacy && type < 3.5 && (h1(hr * 101.0) < uWindow.w || forced > 0.5);
           vec3 wallA = mix(vec3(0.78, 0.74, 0.68), vec3(0.62, 0.66, 0.7), h1(hr * 13.0));
           vec3 c;
           float depthT = -hp.z / depth;

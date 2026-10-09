@@ -9,7 +9,7 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true, args:
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   for (const q of ['clock=23:00&weather=clear', 'clock=18:10&weather=clear', 'clock=18:10&weather=clear&skyColors=computed']) {
-    await page.goto(`${base}district.html?debug=1&diag=1&${q}&spawn=kaburo_crossing.view${extra ? '&' + extra : ''}`);
+    await page.goto(`${base}?debug=1&diag=1&${q}&spawn=kaburo_crossing.view${extra ? '&' + extra : ''}`);
     await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 180_000, polling: 500 });
     await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });
     await page.waitForTimeout(6000);

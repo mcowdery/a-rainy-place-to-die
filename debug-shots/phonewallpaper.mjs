@@ -12,7 +12,7 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true, args:
 const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 400)); });
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&clock=21:00&weather=clear`);
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&clock=21:00&weather=clear`);
 await page.waitForFunction(() => document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 400000, polling: 500 });
 await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
 await page.keyboard.press('Tab');

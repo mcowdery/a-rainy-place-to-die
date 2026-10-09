@@ -12,7 +12,7 @@ try {
   await page.addInitScript(() => { try { localStorage.setItem('citypop.thirdPerson', '0'); } catch {} });
   page.on('pageerror', (e) => console.log('pageerror', e.message));
   for (const [name, cam] of Object.entries(shots)) {
-    await page.goto(`${base}district.html?debug=1&diag=1&${query}&cam=${cam}`);
+    await page.goto(`${base}?debug=1&diag=1&${query}&cam=${cam}`);
     for (let i = 0; i < 60; i++) {
       await page.waitForTimeout(3000);
       const s = await page.evaluate(() => ({ d: !!window.__district, o: document.getElementById('overlay')?.textContent?.slice(0, 80) }));

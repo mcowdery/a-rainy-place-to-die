@@ -13,7 +13,7 @@ try {
   page.on('pageerror', (e) => console.log('pageerror', String(e)));
   for (const t of times) {
     for (let tries = 0; tries < 2; tries++) {
-      await page.goto(`${base}district.html?debug=1&diag=1&clock=${t}&weather=clear&fly=1&cam=3816,95,1562,0,0${extra ? '&' + extra : ''}`);
+      await page.goto(`${base}?debug=1&diag=1&clock=${t}&weather=clear&fly=1&cam=3816,95,1562,0,0${extra ? '&' + extra : ''}`);
       try {
         await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 180_000, polling: 500 });
         break;

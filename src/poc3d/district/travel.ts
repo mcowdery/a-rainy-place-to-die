@@ -309,7 +309,7 @@ export class TravelMap {
       for (const r of p.roads) g.fillRect(r.rect.x, r.rect.y, r.rect.w, r.rect.h);
       // Open ground: parks and playgrounds green, plazas paved, car parks and vacant lots dark.
       for (const o of p.open) {
-        g.fillStyle = o.kind === 'park' || o.kind === 'playground' ? '#1f4a2c' : o.kind === 'plaza' ? '#3a3a48' : '#1a1a24';
+        g.fillStyle = o.kind === 'park' || o.kind === 'playground' || o.kind === 'court' ? '#1f4a2c' : o.kind === 'plaza' ? '#3a3a48' : '#1a1a24';
         g.fillRect(o.rect.x, o.rect.y, o.rect.w, o.rect.h);
       }
       g.fillStyle = '#4a4860';

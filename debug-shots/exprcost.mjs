@@ -13,7 +13,7 @@ const browser = await chromium.launch({
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   for (const spot of ['kaburo_crossing.view', 'city_garage.bay', 'city_hall.observatory', 'west_exit.plaza']) {
-    await page.goto(`${base}district.html?diag=1&debug=1&clock=22:00&weather=clear&res=100&spawn=${spot}`);
+    await page.goto(`${base}?diag=1&debug=1&clock=22:00&weather=clear&res=100&spawn=${spot}`);
     await page.waitForFunction(() => window.__perf && window.__scene, null, { timeout: 180_000 });
     await page.waitForTimeout(25_000);
     const measure = () => page.evaluate(async () => {

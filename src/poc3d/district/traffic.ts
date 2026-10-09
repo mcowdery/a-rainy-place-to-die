@@ -242,7 +242,8 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
         const on = vertical ? q.x < line && q.x + q.w > line : q.y < line && q.y + q.h > line;
         if (!on) continue;
         const w = vertical ? q.w : q.h;
-        const c = w / 2 - r.sidewalk;
+        // (A slip lane along each kerb isn't one of the traffic's lanes.)
+        const c = w / 2 - r.sidewalk - (r.slip ?? 0) / 2;
         if (c < best.c) best = { c, w, s: r.sidewalk };
       }
     }

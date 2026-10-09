@@ -14,7 +14,7 @@ try {
   for (const [name, cam] of VIEWS) {
     const page = await browser.newPage({ viewport: { width: 1600, height: 640 } });
     page.on('pageerror', (e) => console.log('pageerror', String(e)));
-    await page.goto(`${base}district.html?debug=1&diag=1&clock=19:10&weather=clear&moonShape=gibbous&fly=1&res=100&cam=${cam}`);
+    await page.goto(`${base}?debug=1&diag=1&clock=19:10&weather=clear&moonShape=gibbous&fly=1&res=100&cam=${cam}`);
     await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 180_000, polling: 500 });
     await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });
     await page.waitForFunction(() => !document.body.innerText.includes("building the city"), null, { timeout: 180_000 });

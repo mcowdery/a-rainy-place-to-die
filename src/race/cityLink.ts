@@ -27,8 +27,8 @@ export function cityReturn(): { href: string; label: string; note: string } {
   } catch {
     /* none */
   }
-  if (from && from !== 'city') return { href: `district.html?from=${encodeURIComponent(from)}&time=night`, label: '◂ Back to the city', note: 'the expressway, where you came off it' };
-  return { href: 'district.html?spawn=city_garage.front&car=home', label: '◂ Back to the city', note: 'your garage, your car in its bay' };
+  if (from && from !== 'city') return { href: `./?from=${encodeURIComponent(from)}&time=night`, label: '◂ Back to the city', note: 'the expressway, where you came off it' };
+  return { href: './?spawn=city_garage.front&car=home', label: '◂ Back to the city', note: 'your garage, your car in its bay' };
 }
 
 /** Taking the garage's way back: from now on, the way back is the garage street. */

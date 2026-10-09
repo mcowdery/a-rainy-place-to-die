@@ -14,7 +14,7 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true, args:
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 1500)); });
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=${spawn}&clock=21:30&weather=clear${extra}`, { timeout: 240000 });
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=${spawn}&clock=21:30&weather=clear${extra}`, { timeout: 240000 });
 await page.waitForFunction(() => window.__district && window.__perf, null, { timeout: 240000 });
 await page.waitForTimeout(9000);
 const key = (code, shiftKey = false) => page.evaluate(([code, shiftKey]) => window.dispatchEvent(new KeyboardEvent('keydown', { code, shiftKey, bubbles: true })), [code, shiftKey]);

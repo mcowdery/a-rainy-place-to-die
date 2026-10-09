@@ -74,6 +74,10 @@ export class Sky {
     uMountains: { value: 0 },
     /** Winter: snow on the ranges' tops as well as the cone (0-1). */
     uWinter: { value: 0 },
+    /** The ranges' azimuth sector (fade in from/to, fade out from/to), the one cone (azimuth, width, height in radians, snow 0-1) and its plume (0-1): Fuji for Tōto, a volcano for Manila (cityConfig.ts `mountains`). */
+    uSector: { value: new THREE.Vector4(-2.6, -2.25, 0.85, 1.25) },
+    uCone: { value: new THREE.Vector4(-1.95, 0.3, 0.092, 1) },
+    uPlume: { value: 0 },
     /** How far the disc is the moon (0 the sun, 1 the moon; clock.ts moonnessAt), and the moon's look (MOON_SHAPE). */
     uMoon: { value: 0 },
     /** Where the sun's disc really is and how far it's up (clock.ts sunAt; the key light, uSunDir, hands over to the moon). */
@@ -142,6 +146,9 @@ export class Sky {
         uniform vec3 uCloudDark;
         uniform float uMountains;
         uniform float uWinter;
+        uniform vec4 uSector;
+        uniform vec4 uCone;
+        uniform float uPlume;
         uniform float uMoon;
         uniform vec3 uSunPos;
         uniform float uSunUp;
@@ -329,16 +336,17 @@ export class Sky {
             col = mix(col, cloud, dens * fade * 0.92);
           }
           // The mountains: ridges by azimuth (0 north, east +), the height of each in radians above the horizon.
-          if (uMountains > 0.5 && d.y < 0.12) {
+          if (uMountains > 0.5 && d.y < 0.2) {
             float az = atan(d.x, -d.z);
             float e = asin(clamp(d.y, -1.0, 1.0));
-            float sector = smoothstep(-2.6, -2.25, az) * (1.0 - smoothstep(0.85, 1.25, az));
+            float sector = smoothstep(uSector.x, uSector.y, az) * (1.0 - smoothstep(uSector.z, uSector.w, az));
             // (Above the wooded hills round the city, which stand about a degree up from the streets.)
             float near = sector * (0.022 + 0.026 * fbm(vec2(az * 7.0, 3.1)) + 0.006 * vn(vec2(az * 40.0, 7.7)));
             float far = sector * (0.034 + 0.034 * fbm(vec2(az * 3.3 + 11.0, 1.3)));
-            float df = abs(az + 1.95) / 0.3;
-            float cone = 0.092 * pow(max(0.0, 1.0 - df), 1.7);
-            cone = min(cone, 0.083);
+            float da = atan(sin(az - uCone.x), cos(az - uCone.x));
+            float df = abs(da) / uCone.y;
+            float cone = uCone.z * pow(max(0.0, 1.0 - df), 1.7);
+            cone = min(cone, uCone.z * 0.9);
             float skyLum = dot(zn, vec3(0.3, 0.55, 0.15));
             vec3 hazeCol = mix(hz, zn, 0.5) * 0.82;
             vec3 nearCol = mix(hz, zn, 0.72) * 0.6;
@@ -348,13 +356,20 @@ export class Sky {
               if (cone > far && e < cone) {
                 m = mix(hz, mix(hazeCol, nearCol, 0.35), feet);
                 // The snow cap, catching the sky's light.
-                float snow = smoothstep(0.052 - 0.02 * uWinter, 0.06 - 0.02 * uWinter, e) * smoothstep(0.0, 0.02, cone);
+                float snow = smoothstep(0.052 - 0.02 * uWinter, 0.06 - 0.02 * uWinter, e) * smoothstep(0.0, 0.02, cone) * uCone.w;
                 vec3 snowCol = hz * 1.25 + vec3(0.05) * clamp(skyLum * 12.0 + 0.25, 0.0, 1.0) + vec3(0.35) * clamp(skyLum * 3.0, 0.0, 1.0);
                 m = mix(m, snowCol, snow * 0.75);
               }
               col = m;
             }
             if (e < near) col = mix(hz, nearCol, 0.25 + 0.75 * feet);
+            // A volcano's steam: a soft column leaning off the crater and thinning as it rises.
+            if (uPlume > 0.0) {
+              float pe = e - uCone.z * 0.9;
+              float pw = abs(da) / (0.008 + 0.55 * max(pe, 0.0));
+              float plume = uPlume * step(0.0, pe) * (1.0 - smoothstep(0.0, 1.0, pw)) * (1.0 - smoothstep(0.0, 0.08, pe)) * (0.45 + 0.55 * fbm(vec2(da * 90.0 + uTime * 0.02, e * 70.0)));
+              col = mix(col, hz * 1.12 + vec3(0.03), plume * 0.55);
+            }
             // Winter: snow along the ranges' tops.
             if (uWinter > 0.0 && e < max(near, far) && e > max(near, far) * 0.72) col = mix(col, hz * 1.2 + (vec3(0.06) + vec3(0.3) * clamp(skyLum * 3.0, 0.0, 1.0)) * clamp(skyLum * 12.0, 0.0, 1.0), 0.55 * uWinter);
           }

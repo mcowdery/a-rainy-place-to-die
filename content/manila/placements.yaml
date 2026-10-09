@@ -1,0 +1,48 @@
+# Manilaya's set pieces (format: content/world3d/placements.yaml). Add new placements at the end.
+# The start, the marshal and your garage stand together on the Baywalk, by the harbour on the bay.
+- id: bayside
+  stamp: bay_pavilion
+  cell: [13, 21]
+  offset: [20, 88]
+- id: city_garage
+  stamp: city_garage
+  cell: [12, 21]
+  offset: [60, 60]
+- id: race_start
+  stamp: race_start
+  cell: [14, 21]
+  offset: [20, 88]
+
+# The Tafto Line (rail.yaml): eight stations up Tafto Avenue (col 15), the building on one side or the other, its face 10 m from the line.
+- id: balintawak_station
+  stamp: station_m_balintawak
+  cell: [14, 3]
+  offset: [94, 34]
+- id: monumento_station
+  stamp: station_m_monumento
+  cell: [15, 5]
+  offset: [10, 34]
+- id: blumentritt_station
+  stamp: station_m_blumentritt
+  cell: [14, 7]
+  offset: [94, 34]
+- id: tayuman_station
+  stamp: station_m_tayuman
+  cell: [15, 10]
+  offset: [10, 34]
+- id: carriedo_station
+  stamp: station_m_carriedo
+  cell: [14, 12]
+  offset: [94, 34]
+- id: pedrogil_station
+  stamp: station_m_pedrogil
+  cell: [15, 15]
+  offset: [10, 34]
+- id: vitocruz_station
+  stamp: station_m_vitocruz
+  cell: [14, 18]
+  offset: [94, 34]
+- id: libertad_station
+  stamp: station_m_libertad
+  cell: [15, 20]
+  offset: [10, 34]

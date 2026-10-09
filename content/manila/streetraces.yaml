@@ -1,0 +1,34 @@
+# Manilaya's street races (format: src/poc3d/district/streetRace.ts): a field of seven cars through gates over the streets.
+# Points are L0 grid points [col, row], the cell corners where the avenues cross (x = col * 128 m, z = row * 128 m);
+# the first is the start (the grid stands on the road out of it), the last the finish. Every driver, you included,
+# finds its own road between the gates: the river is crossed by the bridges at rows 3, 8, 13 and 17.
+races:
+  - id: baywalk_sprint
+    name: BAYWALK SPRINT
+    blurb: From the bay's boulevard up Bonifasyo, over MacArturo Bridge through Binundo, north through the Divisora market, back over Jonas Bridge and down through Bagumbago to the bay. About seven kilometres.
+    host: race_start.marshal
+    points: [[6, 22], [15, 22], [15, 17], [26, 17], [26, 8], [15, 8], [15, 13], [10, 13], [10, 22]]
+    laps: 1
+    pay: [300000, 150000, 80000, 40000, 20000, 10000, 5000]
+    field:
+      - { name: Rico Santos, type: awd, paint: '#1a4ac8', pace: 1.02, power: 1.1, grip: 1.05, gunman: true, aim: 0.9, health: 85 }
+      - { name: Mika Tanabe, type: rotary, paint: '#e0e0e0', pace: 1.0, power: 1.05, grip: 1.05, health: 70 }
+      - { name: Dante Reyes, type: sports, paint: '#d8b020', pace: 0.98, power: 1.0, grip: 1.0, gunman: true, aim: 0.85, health: 70 }
+      - { name: Joaquin Lim, type: hatch, paint: '#2aa060', pace: 0.96, power: 1.0, grip: 1.0, health: 65 }
+      - { name: Lorna Dizon, type: roadster, paint: '#c01818', pace: 0.95, power: 1.0, grip: 1.1, gunman: true, aim: 0.8, health: 60 }
+      - { name: Big Ador, type: luxury, paint: '#16161c', pace: 0.93, power: 1.2, grip: 0.95, health: 95 }
+  - id: ring_road_gp
+    name: RING ROAD GRAND PRIX
+    blurb: Two laps of the Circumferential's east side, the widest and fastest road in the city, with the whole field flat out and not all of them unarmed.
+    host: race_start.marshal
+    points: [[32, 5], [38, 5], [38, 13], [32, 13], [32, 5]]
+    laps: 2
+    pay: [400000, 200000, 100000, 50000, 25000, 12000, 6000]
+    field:
+      - { name: Rico Santos, type: awd, paint: '#1a4ac8', pace: 1.03, power: 1.15, grip: 1.05, gunman: true, aim: 1.0, health: 90 }
+      - { name: Mika Tanabe, type: rotary, paint: '#e0e0e0', pace: 1.01, power: 1.1, grip: 1.05, health: 70 }
+      - { name: Dante Reyes, type: sports, paint: '#d8b020', pace: 1.0, power: 1.05, grip: 1.0, gunman: true, aim: 0.9, health: 70 }
+      - { name: Joaquin Lim, type: hatch, paint: '#2aa060', pace: 0.97, power: 1.0, grip: 1.0, gunman: true, aim: 0.8, health: 65 }
+      - { name: Lorna Dizon, type: roadster, paint: '#c01818', pace: 0.96, power: 1.05, grip: 1.1, health: 60 }
+      - { name: Big Ador, type: luxury, paint: '#16161c', pace: 0.94, power: 1.25, grip: 0.95, gunman: true, aim: 0.85, health: 95 }
+      - { name: The Tagalog Kid, type: sedan, paint: '#5a0c10', pace: 0.95, power: 1.1, grip: 1.0, health: 75 }

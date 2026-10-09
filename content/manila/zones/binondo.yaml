@@ -1,0 +1,39 @@
+# Binundo: Chinatown, the old trading streets on the east bank.
+district: oldtown
+area: Binundo
+origin: [21, 14]
+map:
+  - WWWWWW
+  - WWWWWW
+  - WWWWWW
+  - WWWWWW
+  - WWWWWW
+
+zones:
+  W:
+    id: binondo_old
+    name: Binundo
+    people: { plain: 6, long: 2, suit: 1 }
+    cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
+    plan:
+      floors: [[2, 3, 70], [4, 5, 25], [6, 8, 5]]
+      lotW: [6, 12]
+      localStreet: [6, 8]
+      block: [18, 40]
+      lotGap: 0.1
+      signChance: 0.6
+      verticalSign: 0.4
+      streetTrees: 0.3
+    signs:
+      words: ["RESTAURANT", "HOPIA", "DIM SUM", "GOLD", "JEWELRY", "HERBAL", "NOODLES", "BANK"]
+      colors: ['#ff3a2f', '#ffd24f', '#ffffff']
+    ads: { food: 2, mainstream: 1, street: 1 }
+    look:
+      arch: 0.5
+      vending: 0.04
+      street: 0.5
+      windows: { punched: 50, small: 30, balcony: 20 }
+      walls: ['#a83a30', '#c8a040', '#8a3a30', '#d8c8a8']
+      tiled: true
+      shops: { warm: 4, colourful: 3 }
+      open: 0.8

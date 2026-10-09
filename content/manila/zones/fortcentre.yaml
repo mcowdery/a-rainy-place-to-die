@@ -1,0 +1,73 @@
+# Fort Centre: the east bank's glass towers and plazas (after Bonifasyo Global City).
+district: tower
+area: Fort Centre
+origin: [28, 5]
+map:
+  - KKKKKKKK
+  - KKGGGGKK
+  - KKGGGGKK
+  - KKGGGGKK
+  - KKGGGGKK
+  - KKKKKKKK
+
+zones:
+  K:
+    id: fortcentre_towers
+    name: Fort Centre towers
+    night: 0.08
+    people: { suit: 8, plain: 2, long: 2 }
+    cars: { luxury: 22, sedan: 26, taxi2: 14, taxi: 12, minivan: 12, jeepney: 14, van: 4, tricycle: 8 }
+    plan:
+      floors: [[14, 24, 35], [26, 40, 45], [42, 58, 20]]
+      lotW: [18, 30]
+      localStreet: [8, 12]
+      block: [50, 90]
+      twoRowDepth: 40
+      lotGap: 0.4
+      towerCover: [0.3, 0.45]
+      streetTrees: 1
+      hedges: 0.7
+      signChance: 0.25
+      verticalSign: 0.1
+    signs:
+      words: [BANK, OFFICE, INSURANCE, TOWER, HOTEL, MALL, CAFE, CLINIC, "CALL CENTER", "STOCK EXCHANGE"]
+      colors: ['#ffffff', '#4fe3ff', '#ffe45f']
+    ads: { mainstream: 6, food: 1, lodging: 1 }
+    look:
+      vending: 0.08
+      street: 0.1
+      vice: 0.25
+      windows: { curtain: 50, ribbon: 40, punched: 10 }
+      walls: ['#2e3b45', '#3a4550', '#8e8d88', '#c8c8c4', '#6f7c86', '#a3b3ba']
+      shops: { cool: 6, warm: 3, colourful: 1 }
+      open: 0.8
+  G:
+    id: fortcentre_plaza
+    name: Fort Centre Plaza
+    night: 0.1
+    people: { suit: 6, plain: 3, long: 2 }
+    cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
+    plan:
+      floors: [[44, 60, 70], [30, 40, 30]]
+      lotW: [26, 40]
+      localStreet: [10, 14]
+      block: [70, 130]
+      twoRowDepth: 50
+      lotGap: 0.5
+      towerCover: [0.28, 0.4]
+      streetTrees: 1
+      hedges: 0.8
+      signChance: 0.1
+      verticalSign: 0.05
+    signs:
+      words: [OFFICE, TOWER, HOTEL, "SKY DECK"]
+      colors: ['#ffffff', '#4fe3ff']
+    ads: { mainstream: 1 }
+    look:
+      vending: 0.08
+      street: 0.1
+      vice: 0.2
+      windows: { curtain: 60, ribbon: 40 }
+      walls: ['#2e3b45', '#6f7c86', '#a3b3ba', '#c8c8c4']
+      shops: { cool: 6, warm: 2 }
+      open: 0.9

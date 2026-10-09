@@ -1,6 +1,7 @@
 import type { FlagValue } from '../core/flags';
 import type { PhoneSave } from '../phone/engine';
 import type { Profile } from '../race/profile';
+import { cityFromUrl } from '../poc3d/district/cityConfig';
 
 /**
  * Saved games, in the browser (localStorage `rainyplace.save.<slot>`): the autosave and three manual slots.
@@ -8,7 +9,7 @@ import type { Profile } from '../race/profile';
  * A save is the shared world (story flags, which hold the time of day and the weather too) and each
  * point-of-view character's own state: where they are (and whether they were driving), their phone, their
  * money and cars. The story will jump between characters (a detective, a salaryman, the CEO...), each with a
- * home; for now there is one, the MC. Loading reopens the city from the save (`district.html?load=<slot>`).
+ * home; for now there is one, the MC. Loading reopens the city from the save (`./?load=<slot>`).
  */
 
 export const SAVE_VERSION = 1;
@@ -42,7 +43,7 @@ export interface SaveGame {
   readonly characters: Readonly<Record<string, CharacterSave>>;
 }
 
-const key = (slot: Slot): string => `rainyplace.save.${slot}`;
+const key = (slot: Slot): string => `${cityFromUrl().storage}.save.${slot}`;
 
 /** A save read back, or null if there's none or it isn't one this version can load. */
 export function parseSave(text: string | null): SaveGame | null {

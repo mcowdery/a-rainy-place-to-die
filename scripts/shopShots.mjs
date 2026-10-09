@@ -37,7 +37,7 @@ try {
     });
     await page.waitForTimeout(3500);
   };
-  await page.goto(`${base}district.html?debug=1&diag=1&time=night${extra}`);
+  await page.goto(`${base}?debug=1&diag=1&time=night${extra}`);
   await ready();
   // One shop of each trade, open, with a decent front, from the generated cells.
   const sites = await page.evaluate(async (only) => {

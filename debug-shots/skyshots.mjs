@@ -15,7 +15,7 @@ try {
   for (const sky of ['noir', 'deep'])
     for (const w of ['clear', 'rain'])
       for (const [name, q] of shots) {
-        await page.goto(`${base}district.html?debug=1&diag=1&clock=23:00&weather=${w}&sky=${sky}&${q}`);
+        await page.goto(`${base}?debug=1&diag=1&clock=23:00&weather=${w}&sky=${sky}&${q}`);
         await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 180_000, polling: 500 });
         await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });
         await page.waitForTimeout(4000);

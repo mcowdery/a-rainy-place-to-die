@@ -141,6 +141,8 @@ export class OwnCar {
   onPose: ((dt: number) => void) | null = null;
   private reshape = true;
   private unsaved = false;
+  /** Whether crashes cost the car anything (the debug menu's Car section; off by default in the shared build). */
+  damageOn = true;
   private keptT = 0;
 
   constructor(
@@ -480,7 +482,7 @@ export class OwnCar {
   /** Damage `d` to the parts by their shares: kept, shown on the car, and listed for the HUD. */
   private take(shares: Partial<Parts>, d: number): void {
     // (A bike takes no damage yet.)
-    if (d <= 0 || this.bike) return;
+    if (d <= 0 || this.bike || !this.damageOn) return;
     for (const [k, v] of Object.entries(shares) as [Section, number][]) {
       const before = this.parts[k];
       this.parts[k] = Math.min(WRECKED, before + d * v);

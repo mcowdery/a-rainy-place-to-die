@@ -1,0 +1,28 @@
+# Blumentrato Station on the Tafto Line (rail.yaml): a landmark built by real/station.ts, its street face 10 m from the line.
+id: station_m_blumentritt
+name: Blumentrato Station
+footprint: [24, 60]
+height: 16.6
+front: east
+landmark: station
+station: { jp: BLUMENTRATO, en: BLUMENTRATO, line: tafto }
+nodes:
+  exit:
+    kind: spawn
+    name: Blumentrato Station
+    at: [30, 8]
+    facing: west
+    view: [70, 16]
+  platform:
+    kind: spawn
+    name: Blumentrato Station (platform)
+    at: [44, 3.2]
+    floor: 9.1
+    facing: east
+    view: [-90, 2]
+  board:
+    kind: station
+    name: Tafto Line south to TAYUMIN
+    at: [44, 5.4]
+    floor: 9.1
+    returnSpawn: tayuman_station.platform

@@ -15,7 +15,7 @@ import type { DrivenVehicle, TrafficSystem } from '../src/poc3d/real/traffic';
  * A little town: a north-south street down x = 0 and an east-west one along z = -128 (both on grid lines, 8 m
  * wide with 1.6 m pavements, so where they cross is a signal), and a side street along z = -60.
  */
-const street = (vertical: boolean, centre: number): RoadInfo => ({ vertical, centre, width: 8, sidewalk: 1.6, median: 0, avenue: false });
+const street = (vertical: boolean, centre: number): RoadInfo => ({ vertical, centre, width: 8, sidewalk: 1.6, median: 0, slip: 0, avenue: false });
 const town: RoadFinder = (x, z, vertical) => {
   if (vertical) return Math.abs(x) <= 4.5 ? street(true, 0) : null;
   if (Math.abs(z + 128) <= 4.5) return street(false, -128);

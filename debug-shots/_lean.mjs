@@ -27,7 +27,7 @@ if (parts.includes('saloon') || parts.includes('hardtop'))
       { id: 'car2', type: 'hardtop', paint: 0x0a0a0c, paint2: null, parts: {}, livery: { stripes: null, side: null, number: null, banner: null }, neon: null, neonFitted: false },
     ] })),
   );
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=${spawn}&car=home&clock=${clock}&weather=clear`);
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=${spawn}&car=home&clock=${clock}&weather=clear`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => {
   document.getElementById('overlay').hidden = true;

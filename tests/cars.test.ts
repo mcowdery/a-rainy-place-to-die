@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CITY_CARS, DISTRICT_CARS, pickCar } from '../src/poc3d/district/carMix';
-import { addVehicle, CAR_TYPES2, liveryOf, PAINTS, POLICE_EN, POLICE_NAME, vehicleTexts, WORK_LIVERIES } from '../src/poc3d/models/vehicles';
+import { addVehicle, CAR_TYPES2, JEEPNEY_LIVERIES, jeepneyLiveryOf, liveryOf, marksKey, PAINTS, POLICE_EN, POLICE_NAME, vehicleTexts, WORK_LIVERIES } from '../src/poc3d/models/vehicles';
 import { addCar } from '../src/poc3d/real/cars';
 import { MeshBuilder } from '../src/poc3d/real/meshBuilder';
 import { SignBuilder, SignLayout } from '../src/poc3d/real/signs';
@@ -78,6 +78,24 @@ describe('lettering and ads', () => {
   it('every text a vehicle can carry is in the sign layout', () => {
     for (const l of WORK_LIVERIES) for (const t of [l.name, l.sub]) expect(layout.rect(t, false)).not.toBe(null);
     for (const t of [POLICE_NAME, POLICE_EN]) expect(layout.rect(t, false)).not.toBe(null);
+    for (const l of JEEPNEY_LIVERIES) for (const t of [l.name, l.route, l.board, l.rear]) expect(layout.rect(t, false), t).not.toBe(null);
+  });
+
+  it('a jeepney is always painted: its livery from its seed, in its dressing key, with its boards in the signs', () => {
+    const seen = new Set<number>();
+    const keys = new Set<string>();
+    for (let v = 0; v < 60; v++) {
+      const spec = { x: 0, z: 0, fx: 0, fz: 1, type: 'jeepney' as const, paint: PAINTS.jeepney[0], marks: v };
+      seen.add(JEEPNEY_LIVERIES.indexOf(jeepneyLiveryOf(spec)));
+      keys.add(marksKey(spec));
+      expect(liveryOf(spec)).toBe(null);
+    }
+    expect(seen.size).toBe(JEEPNEY_LIVERIES.length);
+    expect(keys.size).toBe(JEEPNEY_LIVERIES.length);
+    const sb = new SignBuilder();
+    addVehicle(new MeshBuilder(), { x: 0, z: 0, fx: 0, fz: 1, type: 'jeepney', paint: PAINTS.jeepney[0], company: 1, detail: 0.1 }, { sb, layout, photos: taxiPhotos(new SignBuilder()) });
+    // The route on both sides, the board and the name at the front, the route at the back.
+    expect(quads(sb)).toBe(7);
   });
 
   it('parked work vehicles wear their company, or none', () => {

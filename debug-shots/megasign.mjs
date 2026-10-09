@@ -16,7 +16,7 @@ page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 400)); });
 setTimeout(() => { console.log('TIMEOUT: gave up after 9 minutes'); process.exit(2); }, 540000).unref();
 console.log('loading');
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&clock=22:06&cam=3831.5,1.7,1551.7,-53,14`, { timeout: 240000 });
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&clock=22:06&cam=3831.5,1.7,1551.7,-53,14`, { timeout: 240000 });
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 console.log('ready');
 await page.evaluate(() => { document.getElementById('overlay').hidden = true; });

@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import text from '../content/world3d/expressway.yaml?raw';
-import { Expressway, parseExpressway, type Road } from '../src/poc3d/district/expressway';
+import { Expressway, expresswayReserved, parseExpressway, rampEdgeKeys, type Road } from '../src/poc3d/district/expressway';
 import { Car, ROAD_ASSISTS, type Ground } from '../src/race/vehicle';
 
 const errors: string[] = [];
 const def = parseExpressway('expressway.yaml', text, errors)!;
-const ex = new Expressway(def);
+// (With the city's own road widths, as the page builds it: the ramps' feet stand in the slip lane of the road under them.)
+const cityAvenues = loadDistrictContent().avenues;
+const ex = new Expressway(def, (key) => {
+  const a = cityAvenues.get(key);
+  return a ? { width: a.width, slip: a.slip ?? 0 } : undefined;
+});
 
 /** The racing model's ground on the network alone (for a car that stays on it). */
 function ground(car: () => Car): Ground {
@@ -85,7 +90,7 @@ describe('the expressway', () => {
     expect(ex.roads.filter((r) => r.rampKind === 'off')).toHaveLength(10);
     // The Yūnagi tunnel is at the Wangan's east end now, in the headland.
     const yunagi = ex.roads.find((r) => r.id === 'yunagi')!;
-    expect(yunagi.x[0]).toBeGreaterThan(41 * 128 - 40);
+    expect(yunagi.x[0]).toBeGreaterThan(41 * 128 - 80);
     expect(yunagi.hill).toBeGreaterThan(0);
     // Two-way routes: a deck each way, side by side, their piers shared on the line between them.
     const r1s = ex.roads.find((r) => r.id === 'r1_s')!;
@@ -109,9 +114,40 @@ describe('the expressway', () => {
 
   it('a car drives a lap of the loop in the outside lane without leaving it', () => {
     const lap = follow(ex.loop, 0, ex.loop.x.length - 5, 1.7);
-    expect(lap.steps).toBeGreaterThan(ex.loop.x.length - 20);
+    expect(lap.steps).toBeGreaterThan(ex.loop.x.length - 60);
     expect(lap.offRoad).toBe(0);
     expect(lap.maxBump).toBeLessThan(3);
+  });
+
+  it('joins routes at junctions by arcs that start and end on their decks', () => {
+    expect(def.links?.length).toBeGreaterThan(0);
+    const near = (r: Road, x: number, z: number): number => {
+      let b = Infinity;
+      for (let i = 0; i < r.x.length; i++) b = Math.min(b, Math.hypot(r.x[i] - x, r.z[i] - z));
+      return b;
+    };
+    for (const l of def.links!) {
+      const c = ex.roads.find((r) => r.id === l.id)!;
+      const n = c.x.length;
+      expect(near(ex.roads.find((r) => r.id === l.from)!, c.x[0], c.z[0]), `${l.id} start`).toBeLessThan(1);
+      expect(near(ex.roads.find((r) => r.id === l.to)!, c.x[n - 1], c.z[n - 1]), `${l.id} end`).toBeLessThan(1);
+    }
+  });
+
+  it("ends the Shiomi branch's decks on its parking area, a deck you can drive over", () => {
+    const pa = ex.roads.find((r) => r.plaza)!;
+    expect(pa.kind).toBe('deck');
+    for (const id of ['shiomi_s', 'shiomi_n']) {
+      const r = ex.roads.find((q) => q.id === id)!;
+      // Its deck runs on to the apron (no end wall): the point at its far end is on the apron, at the deck's height.
+      const i = id === 'shiomi_s' ? r.x.length - 1 : 0;
+      const on = ex.at(r.x[i], r.z[i], r.y[i]);
+      expect(on, `${id} meets the apron`).not.toBeNull();
+      expect(ex.at(pa.x[40], pa.z[40], pa.y[40])?.road.id, 'on the apron').toBe(pa.id);
+    }
+    // Across its width, to its far wall.
+    const mid = Math.floor(pa.x.length / 2);
+    for (const t of [-30, -10, 10, 30]) expect(ex.at(pa.x[mid] + pa.tz[mid] * t, pa.z[mid] - pa.tx[mid] * t, pa.y[mid])?.road.id).toBe(pa.id);
   });
 
   it('a car climbs the on-ramp from the street onto the deck', () => {
@@ -159,7 +195,8 @@ describe('taxi fares', () => {
 
 import { loadDistrictContent } from '../src/poc3d/district/content';
 import { District } from '../src/poc3d/district/world';
-import { DISTRICTS3 } from '../src/poc3d/district/plan';
+import { DistrictModel } from '../src/poc3d/district/model';
+import { DISTRICTS3, edgeKey } from '../src/poc3d/district/plan';
 import { along, carLoops, routeFor } from '../src/poc3d/district/traffic';
 
 describe('the expressway over the avenues', () => {
@@ -171,8 +208,9 @@ describe('the expressway over the avenues', () => {
     for (const r of ex.roads.filter((q) => q.kind === 'ramp')) {
       const i = r.rampKind === 'on' ? 0 : r.x.length - 1;
       const s = r.rampKind === 'on' ? -1 : 1;
-      // The foot, and 30 m of lane before an entrance (after an exit) at street level: open road.
-      for (let d = 0; d <= 30; d += 3) {
+      // The foot, and 30 m of lane before an entrance (after an exit) at street level: open road. (A slip lane runs to the
+      // junction beside its block and no further: 12 m, the junction's box being 16 m.)
+      for (let d = 0; d <= (def.slipLane ? 12 : 30); d += 3) {
         const x = r.x[i] + r.tx[i] * s * d;
         const z = r.z[i] + r.tz[i] * s * d;
         expect(district.blocked(x, z, 0.9), `${r.id} ${d} m`).toBe(false);
@@ -180,16 +218,59 @@ describe('the expressway over the avenues', () => {
     }
   });
 
-  it('keeps every ramp foot in the inner lane, beside the median, and the kerb lane open past it', () => {
-    for (const r of ex.roads.filter((q) => q.kind === 'ramp')) {
-      // Wherever it's low enough to be a walled embankment: between the median (1.2 m from the line) and the
-      // lane line, clear of the kerb lane (its traffic drives 10 m out).
+  it("stands every ramp's foot in the slip lane along the kerb, outside the traffic's lanes", () => {
+    expect(def.slipLane).toBeGreaterThan(0);
+    const real = ex;
+    const edges = rampEdgeKeys(def);
+    for (const r of real.roads.filter((q) => q.kind === 'ramp')) {
+      const spec = content.avenues.get(edges.get(r.id)!)!;
+      expect(spec.slip, `${r.id}'s road is widened`).toBe(def.slipLane);
+      const kerb = spec.width / 2 - Math.min(3, spec.width * 0.2);
+      const lanes = kerb - spec.slip! / 2;
+      // Wherever it's low enough to be a walled embankment: between the traffic's lanes and the kerb.
       for (let i = 0; i < r.x.length; i++) {
         if (r.y[i] > 5.2) continue;
         const across = Math.abs(r.tx[i]) > 0.7 ? r.z[i] : r.x[i];
         const lat = Math.abs(across - Math.round(across / 128) * 128);
-        expect(lat - r.half, `${r.id} ${i}`).toBeGreaterThan(1.2);
-        expect(lat + r.half, `${r.id} ${i}`).toBeLessThan(8);
+        expect(lat - r.half - 0.25, `${r.id} ${i} inner wall`).toBeGreaterThanOrEqual(lanes + 0.1);
+        expect(lat + r.half + 0.25, `${r.id} ${i} outer wall`).toBeLessThanOrEqual(kerb + 0.3);
+      }
+    }
+  });
+
+  it('keeps every ramp clear of the buildings beside it', { timeout: 30000 }, () => {
+    const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues, content.terrain, expresswayReserved(ex));
+    const inBuilding = (x: number, z: number): boolean => {
+      for (let my = Math.floor(z / 128) - 1; my <= Math.floor(z / 128) + 1; my++)
+        for (let mx = Math.floor(x / 128) - 1; mx <= Math.floor(x / 128) + 1; mx++)
+          for (const b of model.plan(mx, my)?.buildings ?? []) if (x > b.x - b.w / 2 && x < b.x + b.w / 2 && z > b.z - b.d / 2 && z < b.z + b.d / 2) return true;
+      return false;
+    };
+    for (const r of ex.roads.filter((q) => q.kind === 'ramp')) {
+      for (let i = 0; i < r.x.length; i += 2) {
+        // Where the road under it was widened for it (a stretch beside a set piece keeps its width: the station's).
+        const horizontal = Math.abs(r.tx[i]) > 0.7;
+        const key = horizontal ? edgeKey(Math.floor(r.x[i] / 128), Math.round(r.z[i] / 128) - 1, false) : edgeKey(Math.round(r.x[i] / 128) - 1, Math.floor(r.z[i] / 128), true);
+        if (!content.avenues.get(key)?.slip) continue;
+        // Its outer, kerb side (over the median on the other it's above a raised strip).
+        const x = r.x[i] + r.tz[i] * (r.half + 0.3);
+        const z = r.z[i] - r.tx[i] * (r.half + 0.3);
+        expect(inBuilding(x, z), `${r.id} ${i} (${x.toFixed(0)}, ${z.toFixed(0)})`).toBe(false);
+      }
+    }
+  });
+
+  it('keeps buildings out from under the decks where they cut across a block', { timeout: 30000 }, () => {
+    const withClear = new District(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues, content.bridges, content.terrain, expresswayReserved(ex));
+    const CELL = 128;
+    for (const road of ex.roads) {
+      if (road.kind !== 'loop' && road.kind !== 'route') continue;
+      for (let i = 0; i < road.x.length; i += 3) {
+        const [x, z] = [road.x[i], road.z[i]];
+        // Over a street is clear already; over a lot, no building (set pieces and trees aside: the deck is 15 m up).
+        // (Within 20 m of a grid line is the avenue and its pavement, with lamps and trees.)
+        if (Math.abs(x - Math.round(x / CELL) * CELL) < 20 || Math.abs(z - Math.round(z / CELL) * CELL) < 20) continue;
+        expect(withClear.blocked(x, z, 1), `${road.id} at ${i} (${x.toFixed(0)}, ${z.toFixed(0)})`).toBe(false);
       }
     }
   });

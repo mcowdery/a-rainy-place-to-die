@@ -11,6 +11,7 @@
     "build:uncensored": "tsc && vite build --mode uncensored",
     "build:demo": "tsc && vite build --mode demo",
     "build:all": "node scripts/buildAll.mjs",
+    "build:share": "node scripts/buildShare.mjs",
     "audit": "node scripts/audit.mjs",
     "typecheck": "tsc",
     "test": "vitest run",

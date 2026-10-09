@@ -17,7 +17,7 @@ page.on('console', (m) => {
   if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 500));
 });
 await page.addInitScript(() => localStorage.setItem('citypop.driveView', 'cockpit'));
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=kaburo_crossing.view&weather=rain&rain=0.7&wet=1&res=100&clock=14:00${extra}`, { timeout: 240000 });
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=kaburo_crossing.view&weather=rain&rain=0.7&wet=1&res=100&clock=14:00${extra}`, { timeout: 240000 });
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => {
   document.getElementById('overlay').hidden = true;

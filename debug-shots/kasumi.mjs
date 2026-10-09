@@ -16,7 +16,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.addInitScript(() => { try { localStorage.setItem('citypop.thirdPerson', '0'); } catch {} });
 const open = async (q) => {
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1${q}${extra}`, { timeout: 300000 });
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1${q}${extra}`, { timeout: 300000 });
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 500000, polling: 500 });
   await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
   await page.waitForTimeout(6000);

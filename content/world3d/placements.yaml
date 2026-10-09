@@ -57,7 +57,7 @@
 - id: stella_production
   stamp: stella_production
   cell: [22, 9]
-  offset: [40, 76]
+  offset: [40, 66]
 - id: police_hq
   stamp: police_hq
   cell: [20, 12]
@@ -69,7 +69,7 @@
 - id: law_firm
   stamp: law_firm
   cell: [23, 12]
-  offset: [50, 87]
+  offset: [50, 77]
 - id: hakkodo
   stamp: hakkodo
   cell: [23, 10]
@@ -81,7 +81,7 @@
 - id: hotel_totoinn
   stamp: hotel_totoinn
   cell: [24, 12]
-  offset: [60, 93]
+  offset: [60, 83]
 - id: club_shirasagi
   stamp: club_shirasagi
   cell: [21, 12]

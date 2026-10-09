@@ -46,6 +46,8 @@ export const CABIN_STYLE: Record<CarType, CabinStyle> = {
   van: 'van',
   keitruck: 'truck',
   boxtruck: 'truck',
+  jeepney: 'truck',
+  tricycle: 'kei',
   police: 'police',
 };
 

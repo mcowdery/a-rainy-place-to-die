@@ -19,7 +19,7 @@ for (const [name, query] of [['breeze', 'wind=0.2'], ['typhoon', 'wind=1&season=
   page.on('console', (m) => {
     if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 400));
   });
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&clock=13:00&windDir=90&cam=2654.9,1.7,1459.7,46,4&${query}`, { timeout: 240000 });
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&clock=13:00&windDir=90&cam=2654.9,1.7,1459.7,46,4&${query}`, { timeout: 240000 });
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
   await page.evaluate(() => {
     document.getElementById('overlay').hidden = true;

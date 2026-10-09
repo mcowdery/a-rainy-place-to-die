@@ -1,0 +1,3 @@
+# Manilaya is flat: a river delta and a bay. Only the outskirts rise, into jungle hills (format: content/world3d/terrain.yaml).
+hills: { rise: 4, max: 28, pad: 10 }
+terraces: []

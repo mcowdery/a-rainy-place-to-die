@@ -24,6 +24,10 @@ export interface WeatherSource {
   moon(total: number): MoonNow;
   /** The season's sunrise and sunset. */
   daylight(): DayLight;
+  /** A tropical city (cityConfig.ts): Tagalog and English wording, the monsoon and the floods, no kanji. */
+  tropical?: boolean;
+  /** The city's name for the header (Tōto's when absent). */
+  place?: string;
 }
 
 /** The phase's symbol (northern sky: a waxing moon lit on the right). */
@@ -55,6 +59,21 @@ const LABEL: Record<string, [string, string]> = {
   hot: ['猛暑', 'Hot'],
   typhoon: ['台風', 'Typhoon'],
   after: ['台風一過', 'Clear after the typhoon'],
+};
+/** A tropical city's wording (Manilaya): Tagalog with an English gloss. */
+const LABEL_TROPICAL: Record<string, [string, string]> = {
+  clear: ['Maaraw', 'Sunny'],
+  night: ['Maaliwalas', 'Clear night'],
+  cloudy: ['Maulap', 'Cloudy'],
+  shower: ['Ambon', 'Showers'],
+  drizzle: ['Ambon', 'Drizzle'],
+  rain: ['Ulan', 'Rain'],
+  heavy: ['Malakas na ulan', 'Heavy rain'],
+  snow: ['Ulan', 'Rain'],
+  fog: ['Ulap', 'Haze'],
+  hot: ['Napakainit', 'Scorching'],
+  typhoon: ['Bagyo', 'Typhoon'],
+  after: ['Maaliwalas', 'Clear after the typhoon'],
 };
 const ICON: Record<string, string> = { clear: '☀️', night: '🌙', cloudy: '☁️', shower: '🌦️', drizzle: '🌧️', rain: '🌧️', heavy: '⛈️', snow: '❄️', fog: '☁️', hot: '🥵', typhoon: '🌀', after: '☀️' };
 
@@ -115,6 +134,16 @@ export class WeatherApp implements PhoneApp {
     };
     const icon = k === 'night' ? nightIcon(now) : ICON[k];
     const tags: string[] = [];
+    const L = this.src.tropical ? LABEL_TROPICAL : LABEL;
+    if (this.src.tropical) {
+      if (o.tsuyu) tags.push('<span class="wx-tag wx-tsuyu">Habagat · monsoon</span>');
+      if (o.heat) tags.push('<span class="wx-tag wx-heat">Mainit · dry season heat</span>');
+      if (o.heat && o.temp >= 33) tags.push('<span class="wx-tag wx-warn">Heat index warning</span>');
+      if (o.typhoon > 0) tags.push('<span class="wx-tag">Bagyo · typhoon</span>');
+      if (o.typhoon > 0.45) tags.push('<span class="wx-tag wx-warn">Signal No. 3: storm warning</span>');
+      if ((o.flood ?? 0) > 0.3) tags.push('<span class="wx-tag wx-warn">Baha · flooding in low streets</span>');
+      if (o.typhoon === 0 && [...Array(24).keys()].some((h) => this.src.at(now + h * 60).typhoon > 0.3)) tags.push('<span class="wx-tag wx-warn">Bagyo approaching</span>');
+    } else {
     if (o.tsuyu) tags.push('<span class="wx-tag wx-tsuyu">梅雨 rainy season</span>');
     if (o.heat) tags.push('<span class="wx-tag wx-heat">猛暑 heat wave</span>');
     if (o.heat && o.temp >= 31) tags.push('<span class="wx-tag wx-warn">熱中症警戒 heatstroke alert</span>');
@@ -122,6 +151,7 @@ export class WeatherApp implements PhoneApp {
     if (o.typhoon > 0.45) tags.push('<span class="wx-tag wx-warn">暴風警報 storm warning</span>');
     // A typhoon on its way in the next day.
     if (o.typhoon === 0 && [...Array(24).keys()].some((h) => this.src.at(now + h * 60).typhoon > 0.3)) tags.push('<span class="wx-tag wx-warn">台風接近 typhoon approaching</span>');
+    }
     // The next 24 hours.
     const hours: string[] = [];
     for (let h = 1; h <= 24; h++) {
@@ -162,14 +192,14 @@ export class WeatherApp implements PhoneApp {
       const chance = Math.min(100, Math.round(((wet + snow) / 15) * 100 / 10) * 10 + (wet + snow > 0 ? 10 : 0));
       const dk = storm ? 'typhoon' : snow > 2 ? 'snow' : wet > 6 ? 'rain' : wet > 0 ? 'shower' : fogs > 2 ? 'fog' : tsuyu ? 'cloudy' : hot ? 'hot' : 'clear';
       const wd = weekdayOf(today + d + 1);
-      const name = d === 0 ? '今日 Today' : d === 1 ? '明日 Tomorrow' : `${WEEKDAYS[wd]} ${WEEKDAYS_EN[wd]}`;
-      days.push(`<div class="wx-day"><div class="wx-dn">${name}</div><div class="wx-di">${ICON[dk]}</div><div class="wx-dl">${LABEL[dk][0]}</div><div class="wx-dt"><b>${Math.round(hi)}°</b> ${Math.round(lo)}°</div><div class="wx-dc">☂ ${chance}%</div></div>`);
+      const name = this.src.tropical ? (d === 0 ? 'Ngayon Today' : d === 1 ? 'Bukas Tomorrow' : WEEKDAYS_EN[wd]) : d === 0 ? '今日 Today' : d === 1 ? '明日 Tomorrow' : `${WEEKDAYS[wd]} ${WEEKDAYS_EN[wd]}`;
+      days.push(`<div class="wx-day"><div class="wx-dn">${name}</div><div class="wx-di">${ICON[dk]}</div><div class="wx-dl">${L[dk][0]}</div><div class="wx-dt"><b>${Math.round(hi)}°</b> ${Math.round(lo)}°</div><div class="wx-dc">☂ ${chance}%</div></div>`);
     }
     root.innerHTML = `
       <div class="wx-now wx-${k}">
-        <div class="wx-place">東都市 TŌTO · ${this.src.season()} · ${hhmm(minute)}</div>
+        <div class="wx-place">${this.src.place ?? '東都市 TŌTO'} · ${this.src.season()} · ${hhmm(minute)}</div>
         <div class="wx-big"><span class="wx-icon">${icon}</span><span class="wx-temp">${Math.round(airWith(o, cur.weather))}°</span></div>
-        <div class="wx-cond">${LABEL[k][0]} <span>${LABEL[k][1]}</span></div>
+        <div class="wx-cond">${L[k][0]} <span>${L[k][1]}</span></div>
         <div class="wx-tags">${tags.join('')}</div>
       </div>
       <div class="wx-sec">24時間 Next 24 hours</div>

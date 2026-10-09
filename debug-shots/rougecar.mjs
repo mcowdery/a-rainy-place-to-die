@@ -16,7 +16,7 @@ page.on('console', (m) => {
 });
 const views = [['1_snapshot', '3904.1,1.7,1389.7,123,-12'], ['2_low', '3904.1,1.0,1389.7,123,-20']];
 for (const [n, cam] of views) {
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&clock=22:42&cam=${cam}${extra}`, { timeout: 240000 });
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&clock=22:42&cam=${cam}${extra}`, { timeout: 240000 });
   await page.waitForFunction(() => /building/.test(document.getElementById('overlay')?.textContent ?? ''), null, { timeout: 240000, polling: 50 });
   await page.waitForFunction(() => window.__district && window.__scene && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
   await page.evaluate(() => {

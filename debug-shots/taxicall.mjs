@@ -11,7 +11,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   page.on('pageerror', (e) => console.log('pageerror', e.message));
   const toasts = [];
-  await page.goto(`${base}district.html?debug=1&clock=12:00&weather=clear&cam=${cam}`);
+  await page.goto(`${base}?debug=1&clock=12:00&weather=clear&cam=${cam}`);
   await page.waitForTimeout(45_000);
   await page.evaluate(() => window.__taxi.hail());
   await page.waitForTimeout(500);

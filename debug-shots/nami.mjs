@@ -15,7 +15,7 @@ page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => {
   if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300));
 });
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&clock=21:00&weather=rain`);
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&clock=21:00&weather=rain`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 400000, polling: 500 });
 await page.mouse.click(400, 400);
 await page.waitForTimeout(1500);

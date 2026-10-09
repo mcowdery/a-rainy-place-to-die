@@ -10,7 +10,7 @@ await server.listen();
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=kaburo_crossing.view&weather=rain&rain=0.7&wet=1&res=100&clock=14:00&fly=1`, { timeout: 240000 });
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=kaburo_crossing.view&weather=rain&rain=0.7&wet=1&res=100&clock=14:00&fly=1`, { timeout: 240000 });
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => {
   document.getElementById('overlay').hidden = true;

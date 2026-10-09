@@ -15,7 +15,7 @@ const views = [['snap', '3823.8,1.7,1518.7,-131,-4'], ['front', '3819,1.7,1525.5
 for (const [view, cam] of views) {
   const page = await browser.newPage({ viewport: { width: 1155, height: 896 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
-  const url = `${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&clock=22:27&res=100&cam=${cam}`;
+  const url = `${server.resolvedUrls.local[0]}?debug=1&diag=1&clock=22:27&res=100&cam=${cam}`;
   const load = async () => {
     await page.goto(url, { timeout: 240000 });
     await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });

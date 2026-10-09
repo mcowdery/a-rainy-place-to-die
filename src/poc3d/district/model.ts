@@ -42,6 +42,8 @@ export class DistrictModel {
     readonly terrain: Terrain = Terrain.FLAT,
     /** More ground to keep clear (under the rail lines' curves: rail.ts railReserved). */
     private readonly extraReserved: readonly Rect[] = [],
+    /** Ground under something built over it (the expressway's parking area): no trees or planting there. */
+    private readonly covered: readonly Rect[] = [],
   ) {
     for (const [k, v] of avenues) this.edges.set(k, v);
     const cells: [number, number][] = [];
@@ -113,7 +115,7 @@ export class DistrictModel {
     if (!d) {
       const p = this.plan(mx, my);
       if (!p) return null;
-      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my));
+      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my), this.coveredIn(mx, my));
       this.details.set(k, d);
     }
     return d;
@@ -123,6 +125,12 @@ export class DistrictModel {
    * The parts of stamp plazas in this cell that are off the roads (paved, with lamps and trees). A road
    * crossing a plaza piece trims it to the largest side left over.
    */
+  /** The covered ground that touches a cell. */
+  coveredIn(mx: number, my: number): Rect[] {
+    const cell: Rect = { x: mx * 128, y: my * 128, w: 128, h: 128 };
+    return this.covered.filter((r) => overlaps(r, cell));
+  }
+
   /** The cell's pieces of stamps' plazas, each with its landmark's centre (`focus`: what people there look at). */
   plazas(mx: number, my: number): (Rect & { readonly focus?: readonly [number, number] })[] {
     const p = this.plan(mx, my);

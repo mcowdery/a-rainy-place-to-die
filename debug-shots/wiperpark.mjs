@@ -20,7 +20,7 @@ await page.addInitScript(() => {
   const car = { id: 'c1', type: 'sports', paint: 0xc01818, paint2: null, parts: {}, livery: { stripes: null, side: null, number: null, banner: null }, neon: null, neonFitted: false };
   localStorage.setItem('citypop.race.v1.profile', JSON.stringify({ v: 1, yen: 60000, cars: [car], current: 'c1', earned: 0 }));
 });
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=kaburo_crossing.view&res=100&${query}`, { timeout: 240000 });
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=kaburo_crossing.view&res=100&${query}`, { timeout: 240000 });
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => {
   document.getElementById('overlay').hidden = true;

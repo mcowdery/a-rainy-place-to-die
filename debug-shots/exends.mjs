@@ -17,7 +17,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 800 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
   for (const [name, cam] of Object.entries(shots)) {
-    await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&fly=1&res=100&${query}&cam=${cam}`, { timeout: 240000 });
+    await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&fly=1&res=100&${query}&cam=${cam}`, { timeout: 240000 });
     await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
     await page.evaluate(() => {
       document.getElementById('overlay').hidden = true;

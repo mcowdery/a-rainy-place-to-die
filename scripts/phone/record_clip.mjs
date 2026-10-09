@@ -20,7 +20,7 @@ await server.listen();
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 try {
   const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?${query}`);
+  await page.goto(`${server.resolvedUrls.local[0]}?${query}`);
   await page.waitForFunction(() => !/building/.test(document.getElementById('overlay')?.textContent ?? ''), null, { timeout: 180_000, polling: 500 });
   await page.waitForTimeout(8000);
   const b64 = await page.evaluate(async (ms) => {

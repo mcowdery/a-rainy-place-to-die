@@ -22,7 +22,7 @@ try {
   page.on('pageerror', (e) => console.log('pageerror', e.message));
   page.on('console', (m) => m.type() === 'error' && console.log('console', m.text()));
   for (const [name, cam] of Object.entries(shots)) {
-    await page.goto(`${base}district.html?clock=${process.env.CLOCK ?? "12:00"}&weather=clear&fly=1&cam=${cam}`);
+    await page.goto(`${base}?clock=${process.env.CLOCK ?? "12:00"}&weather=clear&fly=1&cam=${cam}`);
     await page.waitForTimeout(45_000);
     await page.screenshot({ path: `debug-shots/ramp_${tag}_${name}.png`, timeout: 120_000 });
   }

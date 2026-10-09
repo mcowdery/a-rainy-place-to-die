@@ -8,7 +8,7 @@ const browser = await chromium.launch({ channel: 'msedge', headless: false, args
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   page.on('pageerror', (e) => console.log('pageerror', e.message));
-  await page.goto(`${base}district.html?debug=1&diag=1&clock=12:00&fly=1&cam=3584,-8,3300,180,-3`);
+  await page.goto(`${base}?debug=1&diag=1&clock=12:00&fly=1&cam=3584,-8,3300,180,-3`);
   await page.waitForTimeout(40_000);
   // Moments in the turn of a wakaba train: crossing over, standing, leaving (the line's clock set to each).
   const moments = await page.evaluate(() => {

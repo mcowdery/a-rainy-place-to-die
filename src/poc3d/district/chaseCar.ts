@@ -155,6 +155,11 @@ export class ChaseCar {
   loud = false;
   /** Its pace with a tyre gone (1: whole). */
   private limp = 1;
+  /** A racer's next gates (the first is the one it's after) and how hard it's driven (district/streetRaceField.ts). */
+  race: { goals: readonly (readonly [number, number])[]; pace: number; base: number } | null = null;
+  /** The gate (its number in the race) its route starts at, and how many it goes through. */
+  private planBase = -1;
+  private planCount = 0;
   /** How it's driving now, for the HUD and checks. */
   mode: 'held' | 'route' | 'direct' | 'backing' | 'out' = 'held';
 
@@ -294,7 +299,15 @@ export class ChaseCar {
   private plan(gx: number, gz: number, pace: number): boolean {
     const s = this.sim;
     const route = this.world.route(s.x, s.z, gx, gz, [Math.sin(s.h), Math.cos(s.h)]);
-    const path = route && lanePath(route, s, this.world.roads, HL);
+    if (!route || !this.follow(route, pace)) return false;
+    this.goal = [gx, gz];
+    return true;
+  }
+
+  /** Drives the road network's `route` from where it stands, at `pace`; false if the route can't be laid out as a lane. */
+  private follow(route: [number, number][], pace: number): boolean {
+    const s = this.sim;
+    const path = lanePath(route, s, this.world.roads, HL, this.race ? 2.2 : 1);
     if (!path) return false;
     const auto: AutoWorld = {
       light: () => 'green',
@@ -306,11 +319,47 @@ export class ChaseCar {
       },
     };
     const prev = this.pilot;
-    this.pilot = new AutoDrive(path, 'pursuit', auto, HL, HW);
+    this.pilot = new AutoDrive(path, this.race ? 'race' : 'pursuit', auto, HL, HW);
     if (prev) this.pilot.carryOn(prev);
     this.pilot.pace = pace;
-    this.goal = [gx, gz];
     return true;
+  }
+
+  /** A route from where it stands through each of `goals` in turn (the road network's, joined end to end). */
+  private planVia(goals: readonly (readonly [number, number])[], pace: number): boolean {
+    const s = this.sim;
+    let route = this.world.route(s.x, s.z, goals[0][0], goals[0][1], [Math.sin(s.h), Math.cos(s.h)]);
+    if (!route) return false;
+    for (let k = 1; k < goals.length; k++) {
+      const a = route[route.length - 1];
+      const b = route[route.length - 2] ?? a;
+      const len = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
+      const leg = this.world.route(a[0], a[1], goals[k][0], goals[k][1], [(a[0] - b[0]) / len, (a[1] - b[1]) / len]);
+      if (!leg) break;
+      route = route.concat(leg.slice(1));
+    }
+    return this.follow(route, pace);
+  }
+
+  /** A racer's driving: along the streets through its next gates (`race`), re-laid when the first changes. */
+  private raceDrive(dt: number): Controls {
+    const r = this.race!;
+    const s = this.sim;
+    const p = this.pilot;
+    // Laid through a few gates at once and laid again part-way along a street (a route made close to a junction has no
+    // room to round its corner: it would take it slowly), when the gates run out, it's held up, or it has missed one.
+    const passed = r.base > this.planBase + this.planCount - 1;
+    const more = r.base + r.goals.length > this.planBase + this.planCount && !!p && p.left < 200;
+    if ((!p || p.arrived || p.blockedFor > 2.5 || passed || more) && (this.replanIn <= 0 || passed)) {
+      this.replanIn = 1.2;
+      if (this.planVia(r.goals, r.pace)) {
+        this.planBase = r.base;
+        this.planCount = r.goals.length;
+      }
+    }
+    if (!this.pilot) return { throttle: 0, brake: 0.5, steer: 0, handbrake: false };
+    this.pilot.pace = r.pace * this.limp;
+    return this.pilot.step(dt, s, this.world.grip());
   }
 
   /** A runner's driving: from goal to goal, away from you; quicker with you close, easing off when you're far behind. */
@@ -368,7 +417,7 @@ export class ChaseCar {
    * One step. `role`: a runner, a pursuer, or a roadblock's car (stood across the road with its brakes on); `you`: your car; `slot`: a pursuer's place about you; `held`: on the
    * grid through the countdown; `gdt`: the world's step (slow motion), `dt` real time for its sound.
    */
-  update(gdt: number, role: 'run' | 'hunt' | 'block', you: Mover, slot: Slot, held: boolean, camera: THREE.Vector3, lamps: number): void {
+  update(gdt: number, role: 'run' | 'hunt' | 'block' | 'race', you: Mover, slot: Slot, held: boolean, camera: THREE.Vector3, lamps: number): void {
     // (Its mark in your mirrors: bigger the further off, so it's a few pixels of red at any distance.)
     const size = THREE.MathUtils.clamp(Math.hypot(you.x - this.sim.x, you.z - this.sim.z) / 13, 0.8, 6);
     this.tag.scale.setScalar(size);
@@ -397,7 +446,7 @@ export class ChaseCar {
       c = { throttle: 0, brake: behind ? 0 : 1, steer: this.backSteer, handbrake: false };
     } else {
       this.mode = 'route';
-      c = role === 'run' ? this.flee(gdt, you) : this.hunt(gdt, you, slot);
+      c = role === 'run' ? this.flee(gdt, you) : role === 'race' && this.race ? this.raceDrive(gdt) : this.hunt(gdt, you, slot);
       // Standing when it wants to go (nose against a wall, wedged among parked cars): back out and try again.
       const wants = c.throttle > 0.2 && !c.handbrake;
       this.stuck = wants && Math.abs(s.u) < 0.8 ? this.stuck + gdt : 0;
@@ -413,9 +462,10 @@ export class ChaseCar {
     }
     this.stalled = !this.out && !held && Math.abs(s.u) < 2 ? this.stalled + gdt : 0;
     // Held up behind the traffic (a queue at a light): it doesn't wait, it shoves through.
-    const queued = !!this.pilot && this.pilot.status === 'following' && Math.abs(s.u) < 3;
+    // (A racer doesn't wait at all: it brakes for the queue and goes through it once it's slow.)
+    const queued = !!this.pilot && this.pilot.status === 'following' && Math.abs(s.u) < (this.race ? 9 : 3);
     this.queued = queued ? this.queued + gdt : 0;
-    if (this.pilot && this.queued > 0.8) this.pilot.shove = 4;
+    if (this.pilot && this.queued > (this.race ? 0.2 : 0.8)) this.pilot.shove = this.race ? 5 : 4;
     // The same with something standing in its way that it can't get round (cars parked both sides): through it.
     const blocked = !!this.pilot && this.pilot.status === 'in the way' && Math.abs(s.u) < 2;
     this.blocked = blocked ? this.blocked + gdt : 0;
@@ -488,6 +538,9 @@ export class ChaseCar {
     this.goal = null;
     this.replanIn = this.sightIn = this.byRoad = this.stuck = this.backing = this.stalled = this.queued = this.blocked = this.barge = 0;
     this.sight = false;
+    this.race = null;
+    this.planBase = -1;
+    this.planCount = 0;
     this.touching = false;
     this.throttle = this.knock = this.outFor = 0;
     this.out = false;

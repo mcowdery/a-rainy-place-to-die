@@ -23,12 +23,12 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: edition === 'standard' ? 'dist' : `dist-${edition}`,
       rollupOptions: {
-        // index.html: 2D tile prototype (set aside). poc3d.html: 3D rendering test block. district.html: Kaburo district.
+        // index.html: the city (the game; the 2D tile prototype it replaced is set aside in archive/2d/). poc3d.html: 3D rendering test block.
         // models.html: showroom for reviewing car, cast and prop models in isolation; mob.html: the mob's own showroom; characters.html: the named characters built on the mob's bodies (the same page's other half).
         // race.html: the racing venue (Kurokami Pass), the handling test.
         // scenes.html: the editor for the rooms behind the windows (it saves through the dev server; built, it downloads).
         // fight.html: the fight test, a yard for trying the melee as Mack in first person.
-        input: { main: 'index.html', poc3d: 'poc3d.html', district: 'district.html', models: 'models.html', mob: 'mob.html', characters: 'characters.html', scenes: 'scenes.html', race: 'race.html', garage: 'garage.html', fight: 'fight.html' },
+        input: { city: 'index.html', poc3d: 'poc3d.html', models: 'models.html', mob: 'mob.html', characters: 'characters.html', scenes: 'scenes.html', race: 'race.html', garage: 'garage.html', fight: 'fight.html' },
       },
     },
     test: {

@@ -22,7 +22,7 @@ for (const spawn of spawns) {
   page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
   page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 600)); });
   const t0 = Date.now();
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?diag=1${/weather=/.test(extra) ? '' : '&weather=clear'}&res=100&spawn=${spawn}${extra}`);
+  await page.goto(`${server.resolvedUrls.local[0]}?diag=1${/weather=/.test(extra) ? '' : '&weather=clear'}&res=100&spawn=${spawn}${extra}`);
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 400000, polling: 250 });
   const warm = ((Date.now() - t0) / 1000).toFixed(1);
   await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });

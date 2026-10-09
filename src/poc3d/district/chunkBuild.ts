@@ -57,6 +57,8 @@ export class ChunkBuilder {
   constructor(
     private readonly model: DistrictModel,
     private readonly layout: SignLayout,
+    /** False for a city without ad art (cityConfig.ts `ads`): no billboards, posters or taxi photo ads. */
+    private readonly ads = true,
   ) {
     this.signals = new Signals(scrambleKeys(model.placed, CELL));
   }
@@ -79,7 +81,7 @@ export class ChunkBuilder {
       return r;
     };
     if (stage === 'base') {
-      addGround(this.mb.reset(), plan, m.plazas(mx, my), m.scrambles(mx, my), m.holes(mx, my), m.detail(mx, my)!.open);
+      addGround(this.mb.reset(), plan, m.plazas(mx, my), m.scrambles(mx, my), m.holes(mx, my), m.detail(mx, my)!.open, m.coveredIn(mx, my));
       const base = lift(this.mb.raw(cx, cz));
       const mb = this.mb.reset();
       for (const b of buildings) addBuilding(mb, b, false);
@@ -110,7 +112,7 @@ export class ChunkBuilder {
       const detail = m.detail(mx, my)!;
       addProps(mb, detail, undefined, 'fixed');
       const pf = this.pf.reset();
-      addProps(pf, detail, { sb, layout: this.layout, photos: taxiPhotos(tb) }, 'swap');
+      addProps(pf, detail, { sb, layout: this.layout, photos: this.ads ? taxiPhotos(tb) : undefined }, 'swap');
       const pm = this.pm.reset();
       addProps(pm, detail, undefined, 'swap', true);
       // Sightlines for billboards and rooftop letters: this cell's and the neighbours' buildings.
@@ -119,7 +121,7 @@ export class ChunkBuilder {
       const seen = sightline(around);
       addSigns([...plan.signs, ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb, seen);
       const ab = this.ab.reset();
-      addDistrictAds(ab, mb, buildings, plan.signs, m.detail(mx, my)!.props, undefined, seen, plan.open);
+      if (this.ads) addDistrictAds(ab, mb, buildings, plan.signs, m.detail(mx, my)!.props, undefined, seen, plan.open);
       return { mx, my, stage, meshes: { near: lift(mb.raw(cx, cz)), props: lift(pf.raw(cx, cz)), propsMid: lift(pm.raw(cx, cz)), signs: lift(sb.raw(cx, cz)), ads: lift(ab.raw(cx, cz)), taxiAds: lift(tb.raw(cx, cz)) }, ms: performance.now() - t0 };
     }
     // People as numbers (the main thread draws them instanced), standing on the lie of the land.

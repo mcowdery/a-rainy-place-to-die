@@ -1,0 +1,11 @@
+# Manilaya has no expressway: the alternate 1980s-90s Manilaya has flyovers and an elevated light railway, but the first
+# elevated expressway (the Skyway) only opened in 1999. The engine's expressway is left empty here (format:
+# content/world3d/expressway.yaml); an elevated rail line (rail.yaml) is Manilaya's raised railway.
+name: none
+nameEn: NONE
+deck: 15
+radius: 22
+half: 4.6
+routes: []
+ramps: []
+exits: []

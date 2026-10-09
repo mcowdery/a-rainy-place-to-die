@@ -4,17 +4,24 @@ import { RaceHud } from './raceHud';
 import { RaceRival } from './raceRival';
 import { CarGun } from './carGun';
 import { CHASES, pursue } from './chase';
-import { CityChase } from './cityChase';
+import { CityChase, type ChaseHost } from './cityChase';
+import { StreetRace } from './streetRaceField';
+import type { StreetRaceDef } from './streetRace';
 import { separateCars } from '../../race/battle';
 import { FLAG_SEASON, isSeason, SEASON_NAMES, seasonFlag, seasonIndex, type Season } from './seasons';
 import { DebugMenu, type DebugHit, type DebugSection, type DebugTab } from './debugMenu';
+import { Playtest } from './playtest';
+import type { SeasonKey, TaskGo } from './playtestTasks';
+import { SHARE } from '../../share';
 import { WaitPanel } from './waitPanel';
-import { airWith, coldBreath, outlookAt } from './forecast';
+import { airWith, coldBreath, isMonsoon, outlookAt } from './forecast';
 import { WeatherApp } from './weatherApp';
-import { puddleAt, weatherGrip, wheelsOf as carWheels, type RoadWeather } from './roadGrip';
+import { puddleAt, weatherGrip, wading, wheelsOf as carWheels, type RoadWeather } from './roadGrip';
+import { buildFlood, FLOOD_MIN } from '../real/flood';
 import { blendAtmosphere } from './atmosphere';
-import { clockAt, clockLabel, DAY, lateAt, phaseAt, RATE, sleepUntil, START_MINUTE, sunDirAt, sunAt, moonnessAt, moonAt, starsAt, DAYLIGHT, type MoonNow, TIMES_OF_DAY, untilMinute, blendAt, type NamedTime } from './clock';
+import { clockAt, clockLabel, DAY, lateAt, phaseAt, RATE, sleepUntil, START_MINUTE, sunDirAt, sunAt, moonnessAt, moonAt, starsAt, DAYLIGHT, configureSky, type MoonNow, TIMES_OF_DAY, untilMinute, blendAt, type NamedTime } from './clock';
 import { buildEdges } from '../real/edges';
+import { buildBoats } from '../real/boats';
 import { railReserved, roadUnder } from './rail';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -22,7 +29,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { FlagStore } from '../../core/flags';
-import { ContentError } from '../../content/load';
+import { ContentError } from '../../content/errors';
 import { FLAG_TIME, FLAG_WEATHER, WEATHERS, type TimeOfDay, type Weather } from '../../atmosphere/rules';
 import { PlaceholderVnBridge } from '../../game/bridge';
 import { loadVnLibrary } from '../../vn/content';
@@ -52,6 +59,7 @@ import { SubwaySystem } from '../real/subway';
 import { buildSubwayStation, subwayShutter, type SubwayStationView } from '../real/subwayStation';
 import { buildRotary, type RotaryBuilt } from '../real/rotary';
 import { ShopAtlas } from '../real/shopAtlas';
+import { MANILA_TEXT, TOTO_TEXT } from '../real/shopText';
 import { interiorFor, type Interior } from '../real/interiors';
 import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem, type DrivenVehicle, setTrafficGround, useNewBuses } from '../real/traffic';
@@ -65,17 +73,17 @@ import { SaveApp } from './saveApp';
 import { readSave, SAVE_VERSION, SLOTS, writeSave, type SaveGame, type Slot } from '../../save/save';
 import { installSnap } from '../../debug/snap';
 import { installPerfLog } from '../../debug/perfLog';
+import { NearObstacle } from './nearProbe';
 import { fare, rideMetres, TaxiPicker } from './taxi';
 import { Approach, sideOf, trimToUnseen } from './taxiDispatch';
 import { MODELS, SALOONS } from '../../race/catalog';
 import { earn, loadProfile, newCar, saveProfile, spend } from '../../race/profile';
-import { Expressway, parseExpressway } from './expressway';
+import { Expressway, expresswayCoveredFrom, expresswayReservedFrom, parseExpressway, type Road } from './expressway';
 import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
 import { buildSea } from '../real/sea';
 import { buildAirport, onAirfield } from '../real/airport';
 import { Occlusion } from '../real/occlusion';
 import { carParkDecks } from '../real/denko';
-import expresswayText from '../../../content/world3d/expressway.yaml?raw';
 import { pointsAhead, Router, type NavMode } from './gps';
 import { AUTO_MODES, AUTO_NAMES, AutoDrive, laneAhead, lanePath, roadFinder, type AutoMode, type AutoWorld, type LanePath } from './autoDrive';
 import { Guide, type GuideDest, type GuideFrom } from './guide';
@@ -86,6 +94,7 @@ import { GradePass } from '../real/grade';
 import { DofPass } from '../real/dof';
 import { SsrPass } from '../real/ssr';
 import { CityAudio } from '../real/audio';
+import { bellLevel, bellRing, courtProximity, hourCrossed, manilaFrame, manilaPlace, NO_MANILA, type ManilaFrame } from '../real/manilaSound';
 import { Radio, loadStations } from '../real/radio';
 import { MusicPlayer } from '../real/musicPlayer';
 import { MusicApp } from './musicApp';
@@ -114,6 +123,9 @@ import { MOON_SHAPE, Sky } from '../real/sky';
 import { SKY_AZ, SKY_EL, SkyModel, type SkyStats } from '../real/skyModel';
 import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
+import { cityFromUrl, setTreeSet } from './cityConfig';
+import { setWorkLiveries } from '../models/vehicles';
+import { money, setCurrency } from '../../money';
 import { signTexts } from './model';
 import { CELL, DISTRICTS3, STYLES3 } from './plan';
 import type { Node3 } from './stamps';
@@ -182,10 +194,15 @@ const HEAT_ZENITH = new THREE.Color(0x3f86d8);
 const HEAT_SUN = new THREE.Color(0xfff2d6);
 const HEAT_FILL = new THREE.Color(0xfff0d8);
 const HEAT_GROUND = new THREE.Color(0x9a7a52);
-const START_SPAWN = 'kaburo_crossing.view';
-const SEED = 0x0c179090;
+const CITY = cityFromUrl();
+configureSky(CITY.daylight, CITY.sunYaw);
+setTreeSet(CITY.id);
+setWorkLiveries(CITY.tropical);
+setCurrency(CITY.currency);
+const START_SPAWN = CITY.startSpawn;
+const SEED = CITY.seed;
 /** What a taxi driver has on the radio, and how loud against your own. */
-const TAXI_STATION = 'jazz';
+const TAXI_STATION = CITY.tropical ? 'harana' : 'jazz';
 const TAXI_RADIO = 0.45;
 /** How muffled the world is driving a car seen from a camera outside it (1 in its cabin: real/audio.ts `cabin`). */
 const CABIN_OUTSIDE = 0.5;
@@ -198,7 +215,7 @@ async function run(): Promise<void> {
   // The uncensored edition asks your age first (src/edition/ageGate.ts); the standard edition goes straight on.
   await edition.ageGate();
   performance.mark('boot:run');
-  const content = loadDistrictContent();
+  const content = loadDistrictContent(CITY.id);
   performance.mark('boot:content');
   // The clock (district/clock.ts): minutes since the story began, in the flags so saves carry it. ?clock=HH:MM and
   // ?day= set it; ?time= (dawn, day, dusk, night) picks a time in that look; ?late=1 starts after the last train.
@@ -210,10 +227,10 @@ async function run(): Promise<void> {
     return byLook[params.get('time') ?? ''] ?? START_MINUTE;
   })();
   const startTotal = (Math.max(1, Number(params.get('day')) || 1) - 1) * DAY + startMinute;
-  const startSeason: Season = isSeason(params.get('season')) ? (params.get('season') as Season) : params.get('weather') === 'snow' ? 'winter' : 'spring';
+  const startSeason: Season = CITY.tropical ? 'summer' : isSeason(params.get('season')) ? (params.get('season') as Season) : params.get('weather') === 'snow' ? 'winter' : 'spring';
   // The weather follows the forecast (district/forecast.ts) unless it's held: ?weather= (and the benchmark) hold it.
   const holdWeather = params.has('weather') || bench;
-  const flags = new FlagStore({ [FLAG_CLOCK]: startTotal, [FLAG_TIME]: phaseAt(startMinute, DAYLIGHT[startSeason]), [FLAG_WEATHER]: params.get('weather') ?? (bench ? 'clear' : outlookAt(startTotal, startSeason).weather), [FLAG_WEATHER_HOLD]: holdWeather, [FLAG_RAIN_AMOUNT]: bench || params.has('weather') ? 0.45 : outlookAt(startTotal, startSeason).amount || 0.45, [FLAG_SEASON_START]: 0, [FLAG_LATE]: lateAt(startMinute), [FLAG_SEASON]: startSeason });
+  const flags = new FlagStore({ [FLAG_CLOCK]: startTotal, [FLAG_TIME]: phaseAt(startMinute, DAYLIGHT[startSeason]), [FLAG_WEATHER]: params.get('weather') ?? (bench ? 'clear' : outlookAt(startTotal, startSeason, 0, {}, CITY.tropical).weather), [FLAG_WEATHER_HOLD]: holdWeather, [FLAG_RAIN_AMOUNT]: bench || params.has('weather') ? 0.45 : outlookAt(startTotal, startSeason, 0, {}, CITY.tropical).amount || 0.45, [FLAG_SEASON_START]: 0, [FLAG_LATE]: lateAt(startMinute), [FLAG_SEASON]: startSeason });
   // ?load=<slot>: a saved game (save/save.ts). Its world's flags now; its character's car, money, place and phone
   // as each of those is set up below.
   const loadSlot = params.get('load') as Slot | null;
@@ -223,7 +240,7 @@ async function run(): Promise<void> {
   const late = (): boolean => flags.get(FLAG_LATE) === true;
   const time = (): TimeOfDay => flags.get(FLAG_TIME) as TimeOfDay;
   const weather = (): Weather => flags.get(FLAG_WEATHER) as Weather;
-  const season = (): Season => (isSeason(flags.get(FLAG_SEASON)) ? (flags.get(FLAG_SEASON) as Season) : 'spring');
+  const season = (): Season => CITY.tropical ? 'summer' : (isSeason(flags.get(FLAG_SEASON)) ? (flags.get(FLAG_SEASON) as Season) : 'spring');
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   const dpr = Math.min(window.devicePixelRatio, 1.5);
@@ -306,16 +323,19 @@ async function run(): Promise<void> {
 
   const cityU = cityUniforms();
   const city = cityMaterial(cityU);
-  const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones, content.avenues, content.bridges, content.terrain, railReserved(content.rails));
+  const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones, content.avenues, content.bridges, content.terrain, [...railReserved(content.rails), ...expresswayReservedFrom('expressway.yaml', content.expresswayText)], expresswayCoveredFrom('expressway.yaml', content.expresswayText));
   // The ground's height (terrain.ts): 0 but on the hills.
   const groundAt = (x: number, z: number): number => content.terrain.height(x, z);
   /** The camera's height over the ground there (so street level is the same on a hill). */
   const camAbove = (): number => camera.position.y - groundAt(camera.position.x, camera.position.z);
   // The Tōto Expressway's layout (expressway.ts): built here, as its entrances are places to go (the map, taxis).
   const exErrors: string[] = [];
-  const exDef = parseExpressway('content/world3d/expressway.yaml', expresswayText, exErrors);
+  const exDef = parseExpressway(`content/${CITY.dir}/expressway.yaml`, content.expresswayText, exErrors);
   if (!exDef) throw new Error(exErrors.join('\n'));
-  const expressway = new Expressway(exDef);
+  const expressway = new Expressway(exDef, (key) => {
+    const a = content.avenues.get(key);
+    return a ? { width: a.width, slip: a.slip ?? 0 } : undefined;
+  });
   /** Every place to go: the named spawns and zones, and the expressway's entrances (the street before each). */
   const allPlaces = (): Destination[] => [
     ...destinations(district, nodes, content.zones),
@@ -336,7 +356,7 @@ async function run(): Promise<void> {
   const lightmap = new Lightmap(renderer, { x: b.minX - M, y: b.minZ - M, w: b.maxX - b.minX + 2 * M, h: b.maxZ - b.minZ + 2 * M }, CELL, LIGHTMAP_WINDOW);
   cityU.tLight.value = lightmap.texture;
   // The storefronts' interiors, painted once.
-  const shopAtlas = new ShopAtlas(renderer);
+  const shopAtlas = new ShopAtlas(renderer, CITY.filipino ? MANILA_TEXT : TOTO_TEXT);
   cityU.tShopCol.value = shopAtlas.color;
   cityU.tShopMask.value = shopAtlas.mask;
   cityU.uLightRect.value = lightmap.uniformRect;
@@ -381,7 +401,8 @@ async function run(): Promise<void> {
   const mood = moodFromUrl(params);
   // Render resolution (the debug menu, ?res=): fixed, or auto: stepped down a tenth while frames run slow (over ~24 ms for
   // 1.5 s) and back up after 3 s of room (under ~17.5 ms), never back up for 20 s after a step down, between 60%
-  // and 100% of the display's. The benchmark keeps it at 100%.
+  // and 100% of the display's. Only while the GPU is the limit (its timer query reads most of the frame): a CPU-bound frame
+  // gains nothing from it. The benchmark keeps it at 100%.
   let resScale = 1;
   const setRes = (s: number): void => {
     resScale = s;
@@ -390,9 +411,17 @@ async function run(): Promise<void> {
   };
   const resFixed = (): number | null => (bench && !params.has('res') ? 1 : mood.resolution === 'auto' ? null : Number(mood.resolution) / 100);
   const resAuto = { slow: 0, room: 0, hold: 0 };
-  const adaptRes = (frameMs: number, windowS: number): void => {
+  // `gpuMs` is the GPU's time of the render over the window (null without a timer): when it is well under the frame's, the
+  // frame is slow for the CPU's sake, fewer pixels buy nothing, and a resolution already lowered is raised again.
+  const adaptRes = (frameMs: number, windowS: number, gpuMs: number | null): void => {
     resAuto.hold = Math.max(0, resAuto.hold - windowS);
-    if (frameMs > 24) {
+    if (frameMs > 24 && gpuMs !== null && gpuMs < frameMs * 0.75) {
+      resAuto.slow = 0;
+      if (++resAuto.room >= 6 && resAuto.hold === 0 && resScale < 0.99) {
+        setRes(Math.min(1, resScale + 0.1));
+        resAuto.room = 0;
+      }
+    } else if (frameMs > 24) {
       resAuto.room = 0;
       if (++resAuto.slow >= 3 && resScale > 0.61) {
         setRes(Math.max(0.6, resScale - 0.1));
@@ -552,6 +581,7 @@ async function run(): Promise<void> {
   const lightning = new Lightning();
   // Sound: starts on the first click (browsers need a gesture); thunder follows each strike.
   const audio = new CityAudio();
+  audio.tropical = CITY.tropical;
   lightning.onStrike = (s) => {
     // Pan: how far right of the view the strike is (yaw 0 looks toward -z; its right is +x).
     const yaw = (lookYaw() * Math.PI) / 180;
@@ -1122,7 +1152,7 @@ async function run(): Promise<void> {
   let clockStopped = false;
   // The forecast's weather last applied: a new spell changes the weather (so a change by hand lasts till then).
   const num = (k: string): number | null => (typeof flags.get(k) === 'number' ? (flags.get(k) as number) : null);
-  const outlookNow = (total = Math.floor(clockTotal)) => outlookAt(total, season(), Number(flags.get(FLAG_SEASON_START) ?? 0), { typhoonAt: num(FLAG_TYPHOON_AT), heatUntil: num(FLAG_HEAT_UNTIL), settledUntil: num(FLAG_SETTLED_UNTIL) });
+  const outlookNow = (total = Math.floor(clockTotal)) => outlookAt(total, season(), Number(flags.get(FLAG_SEASON_START) ?? 0), { typhoonAt: num(FLAG_TYPHOON_AT), heatUntil: num(FLAG_HEAT_UNTIL), settledUntil: num(FLAG_SETTLED_UNTIL) }, CITY.tropical);
   // The forecast's own wind (a typhoon's), and how far it turns the setting's direction.
   let forecastWind = 0;
   let forecastTurn = 0;
@@ -1241,8 +1271,8 @@ async function run(): Promise<void> {
     atmMoon = mood.moonShape;
     const dl = daylight();
     const bl = blendAt(minute, dl);
-    const atmA = content.atmosphere.resolve('neon', bl.a, weather(), mood.sky, season());
-    const atmB = content.atmosphere.resolve('neon', bl.b, weather(), mood.sky, season());
+    const atmA = content.atmosphere.resolve(CITY.atmosphereKind, bl.a, weather(), mood.sky, season());
+    const atmB = content.atmosphere.resolve(CITY.atmosphereKind, bl.b, weather(), mood.sky, season());
     atm = blendAtmosphere(atmA, atmB, bl.f);
     // (The neon fades in and out across the blend rather than switching half way.)
     const neonOf = (x: Atmosphere3): number => (x.neon === 'off' ? 0 : 1);
@@ -1510,7 +1540,8 @@ async function run(): Promise<void> {
     (n.kind === 'hotspot' && !!n.sleep) ||
     (n.kind === 'station' && !!n.returnSpawn) ||
     (n.kind === 'door' && !!n.returnSpawn && !!n.through) ||
-    content.races.some((r) => r.host === n.id);
+    content.races.some((r) => r.host === n.id) ||
+    content.streetRaces.some((r) => r.host === n.id);
   const forward = new THREE.Vector3();
   const target = (): Node3 | null => {
     camera.getWorldDirection(forward);
@@ -1609,18 +1640,35 @@ async function run(): Promise<void> {
   const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), cityU, content.bridges, content.terrain);
   // What stands by the water reflected in it, wet or dry (real/ssr.ts).
   ssr.setWater(cityU);
+  // Manila's monsoon floods (real/flood.ts): water standing in the low streets, as deep as the forecast says (or
+  // ?flood=0..1, or the debug menu's Weather tab says), the low ground by the river and the bay first and deepest.
+  const flood = CITY.tropical ? buildFlood(content.macro, CELL, content.terrain, (mx, my) => district.model.has(mx, my), cityU) : null;
+  if (flood) scene.add(flood.group);
+  const forceFlood = Number(params.get('flood'));
+  let floodForce: number | null = params.has('flood') && Number.isFinite(forceFlood) ? Math.max(0, Math.min(1, forceFlood)) : null;
+  let floodNow = 0;
+  let floodTarget = 0;
+  let floodTimer = 0;
+  /** How much a wheel at (x, z) is wading in flood water, 0-1. */
+  const wadingAt = (x: number, z: number): number => (flood && floodNow >= FLOOD_MIN ? wading(flood.field.depthAt(x, z, floodNow)) : 0);
   // Hanejima's airfield and its traffic (real/airport.ts).
   const airport = buildAirport(transitNew ? city : null);
   scene.add(airport.group);
+  // Boats on the bay and the river (real/boats.ts; Manilaya).
+  const boats = CITY.boats ? buildBoats(city) : null;
+  if (boats) scene.add(boats.group);
   scene.add(sea.group);
   freeze(sea.group);
   // The city's edges (real/edges.ts): forest over the hills, a fringe of houses at their foot; the mountains beyond
   // are in the sky.
-  const edges = buildEdges(content.macro, CELL, content.terrain, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my));
+  const edges = buildEdges(content.macro, CELL, content.terrain, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), CITY.tropical);
   scene.add(edges.group);
   freeze(edges.group);
   surface.push(edges.group);
   sky.uniforms.uMountains.value = 1;
+  sky.uniforms.uSector.value.set(...CITY.mountains.sector);
+  sky.uniforms.uCone.value.set(CITY.mountains.cone.az, CITY.mountains.cone.width, CITY.mountains.cone.height, CITY.mountains.cone.snow ? 1 : 0);
+  sky.uniforms.uPlume.value = CITY.mountains.cone.plume;
   // The season (district/seasons.ts): the trees, the lawns, the forest on the hills, snow on the mountains. The story
   // moves it by flag (season_spring ... season_winter).
   const seasonWind = (): number => (season() === 'autumn' ? 0.3 : season() === 'spring' ? 0.1 : 0);
@@ -1629,7 +1677,7 @@ async function run(): Promise<void> {
     atmKey = '';
     const i = seasonIndex(season());
     cityU.uSeason.value = i;
-    edges.setSeason(i);
+    edges.setSeason(CITY.tropical ? 1 : i);
     sky.uniforms.uWinter.value = season() === 'winter' ? 1 : 0;
   };
   applySeason();
@@ -1648,7 +1696,8 @@ async function run(): Promise<void> {
     }
     // Snow means winter (the forecast only snows then; snow set by hand, from R, the debug menu or the story,
     // brings the winter with it: bare trees, the snowy mountains).
-    if (k === FLAG_WEATHER && weather() === 'snow' && season() !== 'winter') flags.set(FLAG_SEASON, 'winter');
+    if (k === FLAG_WEATHER && weather() === 'snow' && CITY.tropical) flags.set(FLAG_WEATHER, 'rain');
+    else if (k === FLAG_WEATHER && weather() === 'snow' && season() !== 'winter') flags.set(FLAG_SEASON, 'winter');
   });
   // Snow and the traffic (real/tracks.ts, city.ts): the moving cars nearest you have their wipers going, and every
   // wheel on the street near you presses a track into the snow.
@@ -1665,7 +1714,7 @@ async function run(): Promise<void> {
   const splashT = new Map<unknown, number>();
   const updateSplashes = (dt: number, wet: number): void => {
     splashes.update(dt, 0.12 + 0.5 * (1 - cityU.uLamps.value));
-    if (wet <= 0.35) return;
+    if (wet <= 0.35 && floodNow < FLOOD_MIN) return;
     const cp = camera.position;
     const yaw = (lookYaw() * Math.PI) / 180;
     const through = (key: unknown, wheels: readonly (readonly [number, number])[], y: number, fx: number, fz: number, speed: number, you: boolean): void => {
@@ -1673,7 +1722,7 @@ async function run(): Promise<void> {
       let deepest = 0;
       let at = 0;
       wheels.forEach(([x, z], i) => {
-        const d = puddleAt(x, z, wet);
+        const d = Math.max(puddleAt(x, z, wet), wadingAt(x, z));
         if (d > 0.15) splashes.emit(x, y, z, fx, fz, i % 2 === 0 ? 1 : -1, speed, d, dt);
         if (d > deepest) [deepest, at] = [d, i];
       });
@@ -1703,6 +1752,13 @@ async function run(): Promise<void> {
   const insects = (): { cicadas: number; higurashi: number } => {
     const m = Math.floor(clockTotal) % DAY;
     const o = outlookNow();
+    if (CITY.tropical) {
+      // (Crickets through the night and a few at dusk, and the geckos calling off the walls; quiet in the storms.)
+      if (camera.position.y < -2.6 || o.typhoon > 0.2) return { cicadas: 0, higurashi: 0 };
+      const treesT = 0.35 + 0.65 * Math.min(1, treesNear / 10);
+      const night = m >= 19 * 60 || m < 5 * 60 + 30 ? 1 : m >= 18 * 60 || m < 6 * 60 + 30 ? 0.5 : 0;
+      return { cicadas: night * 0.8 * treesT, higurashi: night > 0 ? 0.9 : 0.1 };
+    }
     const autumnDays = (Math.floor(clockTotal) - Number(flags.get(FLAG_SEASON_START) ?? 0)) / DAY;
     const sing = season() === 'summer' ? (o.tsuyu ? 0.3 : o.heat ? 1 : 0.65) : season() === 'autumn' && autumnDays < 10 ? 0.3 : 0;
     if (!sing || camera.position.y < -2.6 || o.typhoon > 0.2) return { cicadas: 0, higurashi: 0 };
@@ -1710,6 +1766,46 @@ async function run(): Promise<void> {
     const day = m >= 7 * 60 && m < 18 * 60 ? 1 : m >= 6 * 60 && m < 19 * 60 ? 0.4 : 0;
     const dusk = (m >= 17 * 60 + 30 && m < 19 * 60 + 30) || (m >= 4 * 60 + 30 && m < 5 * 60 + 45) ? 1 : 0;
     return { cicadas: sing * day * trees, higurashi: (season() === 'summer' ? 0.9 : 0.5) * dusk * trees };
+  };
+  // Manila's street sound (real/manilaSound.ts, played by real/audio.ts; Tōto's is untouched: `manila` is only set in
+  // a tropical city): what the place sounds like at this hour (videoke, radios, vendors, roosters, dogs, a court,
+  // tin roofs, a typhoon's wind), the church bells at each hour, and the jeepneys' musical horns.
+  let bellMinute = Number.NaN;
+  let jeepHornT = 10;
+  const manilaPlaceNow = () => manilaPlace(district.districtAt(camera.position.x, camera.position.z));
+  const manilaNow = (): ManilaFrame | undefined => {
+    if (!CITY.tropical) return undefined;
+    const cp = camera.position;
+    if (cp.y < -2.6) return NO_MANILA;
+    const place = manilaPlaceNow();
+    const barangay = (mx: number, mz: number): boolean => manilaPlace(district.districtAt(mx * CELL + 2, mz * CELL + 2)).barangay;
+    const court = place.barangay ? courtProximity(cp.x, cp.z, CELL, barangay, (mx, mz, k) => hash(0xc0a7, mx, mz, k)) : 0;
+    return manilaFrame(place, Math.floor(clockTotal) % DAY, rainAmount, outlookNow().typhoon, court);
+  };
+  const manilaBells = (dt: number): void => {
+    if (!CITY.tropical) return;
+    const now = clockTotal;
+    const hour = hourCrossed(bellMinute, now);
+    bellMinute = now;
+    if (hour !== null && camera.position.y > -2.6) {
+      const ring = bellRing(hour);
+      if (ring) audio.churchBell(ring.at, bellLevel(manilaPlaceNow()) * (outlookNow().typhoon > 0.4 ? 0.5 : 1), Math.random() * 1.2 - 0.6);
+    }
+    // A jeepney sounds its musical horn now and then, as it passes.
+    jeepHornT -= dt;
+    if (jeepHornT <= 0) {
+      jeepHornT = 7 + Math.random() * 16;
+      const yaw = (lookYaw() * Math.PI) / 180;
+      const cp = camera.position;
+      const jeeps = traffic.movingNear(cp, 45).filter((v) => v.type === 'jeepney' && v.v > 2);
+      const j = jeeps[Math.floor(Math.random() * jeeps.length)];
+      if (j) {
+        const dx = j.x - cp.x;
+        const dz = j.z - cp.z;
+        const d = Math.hypot(dx, dz);
+        audio.jeepneyHorn(d, d > 0.1 ? (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d : 0);
+      }
+    }
   };
   // Wipers (models/wipers.ts), in rain and snow: your car's own blades while you drive it, the nearest moving
   // cars' as one instanced mesh, the fans they clear on the glass (the city shader's uWipers) and, in the cockpit,
@@ -1743,7 +1839,7 @@ async function run(): Promise<void> {
     wiperCars.length = 0;
     for (const v of moving) {
       if (n >= WIPERS) break;
-      if (v.bus || !v.type || v.low || !wiping) continue;
+      if (v.bus || !v.type || v.type === 'tricycle' || v.low || !wiping) continue;
       let off = wiperOffsets.get(v.key);
       if (off === undefined) wiperOffsets.set(v.key, (off = Math.random()));
       const phase = wiperPhase(wiperClock, beat, off);
@@ -1842,7 +1938,7 @@ async function run(): Promise<void> {
   const exTraffic = new ExpresswayTraffic(expressway, city, undefined, { signs, taxiAds, layout: atlas });
   scene.add(exView.group, exTraffic.group);
   freeze(exView.group);
-  const sodium = exView.group.getObjectByName('sodium') as THREE.Mesh;
+  const sodium = exView.group.getObjectByName('sodium') as THREE.Mesh | undefined;
   const bay = nodeById.get('city_garage.bay');
   if (me?.profile) saveProfile(me.profile);
   if (me?.car) {
@@ -1852,12 +1948,14 @@ async function run(): Promise<void> {
       /* this session only */
     }
   }
+  // What your car, your bikes and the auto drive meet: District.obstacle gathered once round them (nearProbe.ts), not ~40-65 us a probe.
+  const driven = new NearObstacle(district);
   const ownCar = new OwnCar(
     city,
     traffic,
     bay ? { x: bay.x, z: bay.z, h: Math.atan2(bay.nx, bay.nz) } : { x: camera.position.x + 4, z: camera.position.z, h: 0 },
     // What's in the way (crash.ts): people stop you; other vehicles are hard; the district says hard or soft.
-    (x, z, r, self) => (npcBlocked(x, z, r) ? 'person' : traffic.blocked(x, z, r, self) ? 'car' : district.obstacle(x, z, r)),
+    (x, z, r, self) => (npcBlocked(x, z, r) ? 'person' : traffic.blocked(x, z, r, self) ? 'car' : driven.probe(x, z, r)),
     expressway,
     () => exTraffic.obstacles,
     params.get('car') === 'home',
@@ -1874,7 +1972,7 @@ async function run(): Promise<void> {
       city,
       traffic,
       home,
-      (x, z, r, self) => (npcBlocked(x, z, r) ? 'person' : traffic.blocked(x, z, r, self) ? 'car' : district.obstacle(x, z, r)),
+      (x, z, r, self) => (npcBlocked(x, z, r) ? 'person' : traffic.blocked(x, z, r, self) ? 'car' : driven.probe(x, z, r)),
       expressway,
       () => exTraffic.obstacles,
       params.get('bike') === 'home',
@@ -2055,7 +2153,7 @@ async function run(): Promise<void> {
       taxiRide = { dest: d, fare: fare(m, late()), t: 0, T: Math.min(24, 5 + (m / 1000) * 5), x0, z0, path, cum };
       controls.held = true;
       controls.lock();
-      toast(`${d.name} · 〜¥${taxiRide.fare.toLocaleString('en-US')} · E to skip the ride`, 4);
+      toast(`${d.name} · ~${money(taxiRide.fare)} · E to skip the ride`, 4);
     });
   };
   const endTaxi = async (): Promise<void> => {
@@ -2077,7 +2175,7 @@ async function run(): Promise<void> {
     controls.setView(r.dest.yaw, r.dest.pitch);
     controls.held = false;
     await fadeTo(0);
-    toast(paid < r.fare ? `The driver takes the ¥${paid.toLocaleString('en-US')} you have, with a look. どうも。` : `¥${paid.toLocaleString('en-US')} · ありがとうございました`, 4);
+    toast(paid < r.fare ? `The driver takes the ${money(paid)} you have, with a look. ${CITY.tropical ? 'Sige po.' : 'どうも。'}` : `${money(paid)} · ${CITY.tropical ? 'Salamat po' : 'ありがとうございました'}`, 4);
   };
   /** The back seat: the camera in the taxi, looking out of the side window, the city passing (a straight line, sped up). */
   const rideTaxi = (dt: number): void => {
@@ -2102,7 +2200,7 @@ async function run(): Promise<void> {
     const look = r.heading + 0.3;
     camera.lookAt(x + Math.sin(look) * 10, 1.25, z + Math.cos(look) * 10);
     meterEl.style.display = 'block';
-    meterEl.innerHTML = `<b>¥${Math.round((r.fare * Math.min(1, 0.3 + e * 0.7)) / 10) * 10}</b> 賃走 ${r.dest.name}`;
+    meterEl.innerHTML = `<b>${money(Math.round((r.fare * Math.min(1, 0.3 + e * 0.7)) / 10) * 10)}</b> ${CITY.tropical ? 'METER' : '賃走'} ${r.dest.name}`;
     if (r.t >= r.T) void endTaxi();
   };
   const meterEl = document.createElement('div');
@@ -2155,7 +2253,7 @@ async function run(): Promise<void> {
   // Car chases (district/chase.ts, cityChase.ts): for trying the pistol from the car. A runner to stop, or cars of
   // gunmen after you; the debug menu's World tab offers them (`__chase.start(id)`).
   const carGun = new CarGun({ camera, gunfire, driving, own: ownCar, crosshair, seated: () => seated, rig: () => mack, live: () => controls.look.isLocked && !inVn && !debugMenu.open && !travel.open });
-  const chase = new CityChase({
+  const chaseHost: ChaseHost = {
     scene,
     material: city,
     camera,
@@ -2174,7 +2272,7 @@ async function run(): Promise<void> {
     height: groundAt,
     grip: () => weatherGrip(ownCar.weather),
     route: (ax, az, bx, bz, heading) => navGrid('drive').route(ax, az, bx, bz, heading),
-    vehicles: (x, z, r, self) => [...traffic.around(x, z, r, null), ...chase.all().filter((c) => c !== self && Math.abs(c.sim.x - x) < r && Math.abs(c.sim.z - z) < r).map((c) => c.vehicle)],
+    vehicles: (x, z, r, self) => [...traffic.around(x, z, r, null), ...[...chase.all(), ...streetRace.all()].filter((c) => c !== self && Math.abs(c.sim.x - x) < r && Math.abs(c.sim.z - z) < r).map((c) => c.vehicle)],
     driving: () => driving.own === ownCar,
     place: (x, z, h) => ownCar.place(x, z, h, groundAt(x, z)),
     warm: () => {
@@ -2207,14 +2305,18 @@ async function run(): Promise<void> {
       earn(profile, yen);
       saveProfile(profile);
     },
+    gpsAt: (g) => guide.set(g, gpsFrom()),
     shake: (k) => driving.jolt(k),
-  });
-  gunfire.onBody = (h, by) => chase.struck(h, by);
+  };
+  const chase = new CityChase(chaseHost);
+  // Street races (district/streetRace.ts, streetRaceField.ts, streets.yaml per city): a field of six or more through gates over the streets.
+  const streetRace = new StreetRace(chaseHost);
+  gunfire.onBody = (h, by) => (streetRace.active ? streetRace.struck(h, by) : chase.struck(h, by));
   gunfire.carHits.skin(ownCar.view.obj, ownCar.view.body, ownCar.view.windows);
   const startChase = (id: string): boolean => {
     const def = CHASES.find((c) => c.id === id);
     if (!def) return false;
-    if (race) return toast('A race is on.'), false;
+    if (race || streetRace.active) return toast('A race is on.'), false;
     if (!driving.car) driveHere();
     return chase.start(def);
   };
@@ -2264,6 +2366,22 @@ async function run(): Promise<void> {
       fire: () => carGun.fire(),
     };
   }
+  /** A street race: you set on the grid in your car (fetched here if you're on foot), the field built behind a fade. */
+  const startStreetRace = async (def: StreetRaceDef): Promise<void> => {
+    if (chase.active) chase.end();
+    inVn = true;
+    await fadeTo(1);
+    if (driving.own !== ownCar) {
+      if (driving.car) exitCar();
+      ownCar.place(camera.position.x, camera.position.z, 0, groundAt(camera.position.x, camera.position.z));
+      enterCar(ownCar.vehicle);
+    }
+    streetRace.start(def);
+    await new Promise((r) => setTimeout(r, 400));
+    await fadeTo(0);
+    inVn = false;
+  };
+  if (debug) (window as unknown as { __streetRace: unknown }).__streetRace = { start: (id: string) => startStreetRace(content.streetRaces.find((r) => r.id === id)!), race: streetRace, end: () => streetRace.end() };
   const endRace = (): void => {
     if (!race) return;
     race.rival.stop();
@@ -2441,6 +2559,45 @@ async function run(): Promise<void> {
   const compassText = document.createElement('div');
   compass.append(compassArrow, compassText);
   document.body.append(compass);
+  /**
+   * On the expressway the street route means nothing (its chevrons ran off the deck's edge): guide along the deck to
+   * the off-ramp whose foot is nearest the destination, then down it; the street route takes over at its foot.
+   */
+  const expresswayAhead = (x: number, z: number, y: number, dest: { x: number; z: number }): { pts: { x: number; y: number; z: number; dx: number; dz: number }[]; exit: string } | null => {
+    const here = expressway.at(x, z, y);
+    if (!here) return null;
+    let ramp: Road | null = null;
+    let best = Infinity;
+    for (const r of expressway.roads) {
+      if (r.kind !== 'ramp' || r.rampKind !== 'off') continue;
+      const k = r.x.length - 1;
+      const d = Math.hypot(r.x[k] - dest.x, r.z[k] - dest.z);
+      if (d < best) { best = d; ramp = r; }
+    }
+    if (!ramp) return null;
+    // Where the ramp leaves the road you're on: the sample nearest its first one.
+    let road: Road = here.road;
+    let join = -1;
+    if (road !== ramp) {
+      let jd = 12;
+      for (let k = 0; k < road.x.length; k++) {
+        const d = Math.hypot(road.x[k] - ramp.x[0], road.z[k] - ramp.z[0]);
+        if (d < jd) { jd = d; join = k; }
+      }
+    }
+    const pts: { x: number; y: number; z: number; dx: number; dz: number }[] = [];
+    let i = here.i;
+    for (let m = 0; m < 100; m++) {
+      if (m % 7 === 0) {
+        const left = road === ramp ? 0 : 1.5;
+        pts.push({ x: road.x[i] + road.tz[i] * left, y: road.y[i], z: road.z[i] - road.tx[i] * left, dx: road.tx[i], dz: road.tz[i] });
+      }
+      if (road !== ramp && i === join) { road = ramp; i = 0; continue; }
+      i++;
+      if (i >= road.x.length) { if (road.closed) i = 0; else break; }
+    }
+    return { pts, exit: ramp.sign ?? ramp.id };
+  };
   /** Per frame: reroute if you've strayed (or got in or out of a car), arrival, chevrons, beacon, compass. */
   const updateGps = (dt: number): void => {
     const from = gpsFrom();
@@ -2461,9 +2618,11 @@ async function run(): Promise<void> {
     const car = from.mode === 'drive';
     // Driving, the chevrons lie along the lane to keep: the line the auto drive follows (autoDrive.ts `lanePath`), so
     // they run where the car does. (With no lane to be had: the route's centre line, a little to its left.)
-    const lane = car && at && route && street ? laneFor(route) : null;
-    let ahead: { x: number; z: number; dx: number; dz: number }[];
-    if (lane) {
+    const onEx = car && driving.own && ownCar.onExpressway() ? expresswayAhead(from.x, from.z, ownCar.sim.y, dest) : null;
+    const lane = car && at && route && street && !onEx ? laneFor(route) : null;
+    let ahead: { x: number; z: number; dx: number; dz: number; y?: number }[];
+    if (onEx) ahead = onEx.pts;
+    else if (lane) {
       const a = laneAhead(lane.path, from.x, from.z, lane.i, 90, 7, 6);
       lane.i = a.i;
       ahead = a.pts;
@@ -2475,16 +2634,16 @@ async function run(): Promise<void> {
       for (const [a, b] of [[0, 0], [0.95, 0], [-0.95, 0], [0, 0.75], [0, -0.75]]) top = Math.max(top, district.pavingAt(x + dz * a + dx * b, z - dx * a + dz * b));
       return groundAt(x, z) + top;
     };
-    gpsMarks.update(dt, ahead.map((p) => ({ ...p, y: (driving.own && ownCar.aloft() ? ownCar.sim.y : pavedAt(p.x, p.z, p.dx, p.dz)) })), { ...dest, y: pavedAt(dest.x, dest.z, 0, 1) });
+    gpsMarks.update(dt, ahead.map((p) => ({ ...p, y: p.y ?? (driving.own && ownCar.aloft() ? ownCar.sim.y : pavedAt(p.x, p.z, p.dx, p.dz)) })), { ...dest, y: pavedAt(dest.x, dest.z, 0, 1) });
     gpsMarks.group.visible = camera.position.y > -2 && !aboard();
     // The compass: toward the route a little way ahead (or the destination itself), from where you're looking.
-    const next = at && route ? (pointsAhead(route, at.seg, at.t, 14, 14, 14)[0] ?? dest) : dest;
+    const next = onEx ? (onEx.pts[2] ?? onEx.pts[onEx.pts.length - 1] ?? dest) : at && route ? (pointsAhead(route, at.seg, at.t, 14, 14, 14)[0] ?? dest) : dest;
     camera.getWorldDirection(forward);
     const tx = next.x - from.x;
     const tz = next.z - from.z;
     const ang = Math.atan2(forward.x * tz - forward.z * tx, forward.x * tx + forward.z * tz);
     compassArrow.style.transform = `rotate(${(ang * 180) / Math.PI}deg)`;
-    compassText.textContent = `${car ? '🚗' : '🚶'} ${metres(at ? at.left : g.direct)} · ${dest.label}`;
+    compassText.textContent = onEx ? `🚗 Take the exit · ${onEx.exit} · ${dest.label}` : `${car ? '🚗' : '🚶'} ${metres(at ? at.left : g.direct)} · ${dest.label}`;
     compass.style.display = 'flex';
   };
   // Auto drive (district/autoDrive.ts): your car or bike drives itself to the GPS's destination, on the streets. N at
@@ -2494,7 +2653,7 @@ async function run(): Promise<void> {
   const autoWorld: AutoWorld = {
     light: (gx, gy, ns) => signals.state(gx, gy, ns, traffic.clock),
     vehicles: (x, z, r) => traffic.around(x, z, r, driving.car),
-    solid: (x, z, r) => (npcBlocked(x, z, r) ? 'person' : district.obstacle(x, z, r)),
+    solid: (x, z, r) => (npcBlocked(x, z, r) ? 'person' : driven.probe(x, z, r)),
   };
   /** The drive in hand: its driver, the GPS route it was planned from, where to, and whether the GPS has called arrival. */
   let auto: { pilot: AutoDrive; path: LanePath; route: unknown; label: string; ending: boolean } | null = null;
@@ -2527,7 +2686,7 @@ async function run(): Promise<void> {
     if (!mode) return stopAuto('Auto drive off: you have the wheel');
     const own = driving.own;
     if (!own) return void toast('Auto drive is for your own car or bike');
-    if (race) return void toast('Not in a race.');
+    if (race || streetRace.active) return void toast('Not in a race.');
     if (own.aloft() || own.onExpressway()) return void toast('Auto drive keeps to the streets: come down off the expressway first.');
     if (!guide.dest) return void toast('Auto drive: mark where to on the map (M) or in Maps first.');
     // Already driving: only the way it drives changes.
@@ -2592,7 +2751,7 @@ async function run(): Promise<void> {
   // ride or a scene (you'd load into a moving train); the autosave waits for those to end.
   const played0 = loaded?.played ?? 0;
   const t0 = performance.now();
-  const saveBlocked = (): string | null => (inVn ? 'Not during a scene.' : taxiRide || aboard() ? 'Not during a ride.' : race ? 'Not during a race.' : null);
+  const saveBlocked = (): string | null => (inVn ? 'Not during a scene.' : taxiRide || aboard() ? 'Not during a ride.' : race || streetRace.active ? 'Not during a race.' : null);
   const gather = (): SaveGame => {
     const d = camera.getWorldDirection(new THREE.Vector3());
     const p = driving.car ? { x: driving.car.x, z: driving.car.z } : camera.position;
@@ -2644,9 +2803,11 @@ async function run(): Promise<void> {
     now: () => clockTotal,
     at: (t) => outlookNow(t),
     current: () => ({ weather: weather(), amount: rainTarget }),
-    season: () => SEASON_NAMES[season()],
+    season: () => (CITY.tropical ? (isMonsoon(clockTotal) ? 'Habagat (monsoon)' : 'Tag-init (dry season)') : SEASON_NAMES[season()]),
     moon: (t) => moonAt(t),
     daylight: () => DAYLIGHT[season()],
+    tropical: CITY.tropical,
+    place: CITY.tropical ? 'MANILAYA' : undefined,
   }));
   if (debug) (window as unknown as { __save: unknown }).__save = { save: saveTo, load: loadFrom, gather };
   // ?debug=1: window.__gps('<spawn id>') marks it as the GPS destination (for checks).
@@ -2660,7 +2821,7 @@ async function run(): Promise<void> {
   // The debug menu (` backquote, district/debugMenu.ts): everything for testing and tuning under one key, in tabs
   // by subject. The settings' rows (moodPanel.ts: weather, light, the crowd, sound, graphics) are in every build; the
   // testing tools (teleport, the clock, the season, your car, the wardrobe...) on the dev server or with ?debug=1.
-  const debugTools = import.meta.env.DEV || debug;
+  const debugTools = import.meta.env.DEV || debug || SHARE;
   // What Mack can look at and touch or talk to as he goes about (district/lookables.ts): the props near him, and the
   // people standing about. `__look` has the investigator and the stance.
   if (debugTools) {
@@ -2740,15 +2901,37 @@ async function run(): Promise<void> {
         flags.set(FLAG_WEATHER_HOLD, true);
         flags.set(FLAG_WEATHER, w);
       } })),
+      ...(flood ? [
+        { label: 'flood auto', on: () => floodForce === null, run: () => (floodForce = null) },
+        { label: 'flood 0', on: () => floodForce === 0, run: () => (floodForce = 0) },
+        { label: 'flood 0.5', on: () => floodForce === 0.5, run: () => (floodForce = 0.5) },
+        { label: 'flood 1', on: () => floodForce === 1, run: () => (floodForce = 1) },
+      ] : []),
       { label: 'snow cover 0', on: () => snowCover < 0.01, run: () => (snowCover = 0) },
       { label: 'snow cover full', on: () => snowCover > 0.99, run: () => (snowCover = 1) },
     ],
   };
+  const setCarDamage = (on: boolean): void => {
+    ownCar.damageOn = on;
+    try {
+      localStorage.setItem('rainyplace.carDamage', on ? '1' : '0');
+    } catch {
+      /* no storage */
+    }
+  };
+  try {
+    ownCar.damageOn = (localStorage.getItem('rainyplace.carDamage') ?? (SHARE ? '0' : '1')) === '1';
+  } catch {
+    ownCar.damageOn = !SHARE;
+  }
   const carSec: DebugSection = {
     title: 'Car',
     items: () => [
       { label: driving.car ? 'driving' : 'drive my car here', on: () => !!driving.car, run: () => void (driving.car || driveHere()) },
       { label: 'repair', run: () => (ownCar.repair(), gunfire.carHits.mend(ownCar.view.obj)) },
+      // Whether crashes cost the car anything (off by default in the shared build; localStorage `rainyplace.carDamage`).
+      { label: 'crash damage on', on: () => ownCar.damageOn, run: () => setCarDamage(true) },
+      { label: 'crash damage off', on: () => !ownCar.damageOn, run: () => setCarDamage(false) },
       // The car picker: any car you can own becomes yours and the one you drive, there and then (`OwnCar.change`):
       // at the wheel, you're put back at it in the new one.
       ...[...MODELS, ...SALOONS].map((m) => ({
@@ -2856,6 +3039,8 @@ async function run(): Promise<void> {
     items: () => [
       ...content.races.map((r) => ({ label: r.name, on: () => race?.path.def.id === r.id, run: () => void (race ? toast('A race is on.') : startRace(r)) })),
       ...(race ? [{ label: 'end race', run: () => endRace() }] : []),
+      ...content.streetRaces.map((r) => ({ label: `${r.name} · ${r.field.length + 1} cars, through the streets`, on: () => streetRace.def?.id === r.id, run: () => void (race || streetRace.active ? toast('A race is on.') : startStreetRace(r)) })),
+      ...(streetRace.active ? [{ label: 'end street race', run: () => streetRace.end() }] : []),
     ],
   };
   const followersSec: DebugSection = {
@@ -2951,6 +3136,39 @@ async function run(): Promise<void> {
     },
   });
   if (debug) (window as unknown as { __menu: DebugMenu }).__menu = debugMenu;
+  // The playtest's list of things to try (F1, the shared build only: playtest.ts, playtestTasks.ts). "Take me there"
+  // sets the season, weather, hour and place the task wants, in that order (a season puts the weather on auto).
+  const SEASON_ITEM: Record<SeasonKey, number> = { spring: 0, tsuyu: 1, summer: 2, heat: 3, typhoon: 4, autumn: 5, winter: 6 };
+  const playtestGo = (g: TaskGo): void => {
+    if (driving.car || taxiRide || aboard()) {
+      toast('Get out of the car, train or taxi first.');
+      return;
+    }
+    if (g.place && !nodeById.has(g.place)) toast(`No such place: ${g.place}`);
+    if (g.season) seasonSec.items()[SEASON_ITEM[g.season]]?.run();
+    if (g.weather) {
+      flags.set(FLAG_WEATHER_HOLD, true);
+      flags.set(FLAG_WEATHER, g.weather);
+    }
+    if (g.time) {
+      const [h, m] = g.time.split(':').map(Number);
+      setClockTo(h * 60 + m);
+    }
+    const n = g.place ? nodeById.get(g.place) : undefined;
+    if (n) {
+      if (n.kind === 'spawn') teleport(n.id);
+      else standBy(n);
+    }
+  };
+  const playtest = SHARE
+    ? new Playtest({
+        go: playtestGo,
+        onOpen: () => document.exitPointerLock(),
+        onClose: () => {
+          if (!inVn) controls.lock();
+        },
+      })
+    : null;
   // The dashboard: speed and gear, while driving.
   const dash = document.createElement('div');
   Object.assign(dash.style, { position: 'fixed', left: '24px', bottom: '22px', zIndex: '16', padding: '8px 14px', background: 'rgba(8,8,14,0.72)', border: '1px solid #3a3850', color: '#e8e6f0', font: "bold 26px 'Consolas', monospace", display: 'none', pointerEvents: 'none' });
@@ -2959,7 +3177,7 @@ async function run(): Promise<void> {
   const damageHud = new DamageHud();
   // The car's radio (real/radio.ts): stations that broadcast on the real clock, and a tape deck for your own
   // music. At the wheel , and . turn the dial and / is the tape's button; a taxi driver has his own on, low.
-  const radio = new Radio(loadStations());
+  const radio = new Radio(loadStations(CITY.id));
   const radioHud = new RadioHud();
   radio.onReadout = (r) => radioHud.show(r);
   if (debug) (window as unknown as { __radio: Radio }).__radio = radio;
@@ -3024,6 +3242,15 @@ async function run(): Promise<void> {
       await new Promise((r) => setTimeout(r, 150));
       await fadeTo(0);
       inVn = false;
+      return;
+    }
+    const offeredStreet = content.streetRaces.filter((r) => r.host === n.id);
+    if (offeredStreet.length && !race && !streetRace.active) {
+      document.exitPointerLock();
+      streetRace.hud.challenge(n.name ?? 'The marshal', offeredStreet, ownCar.name, ownCar.totaled, (r) => {
+        controls.lock();
+        void startStreetRace(r);
+      });
       return;
     }
     const offered = content.races.filter((r) => r.host === n.id);
@@ -3365,10 +3592,11 @@ async function run(): Promise<void> {
   });
   document.body.addEventListener('click', () => {
     audio.start();
-    if (!bench && !inVn && !travel.open && !picker.open && !taxiPicker.open && !debugMenu.open) controls.lock();
+    if (!bench && !inVn && !travel.open && !picker.open && !taxiPicker.open && !debugMenu.open && !playtest?.open) controls.lock();
   });
   controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
   controls.look.addEventListener('unlock', () => ($('overlay').hidden = bench));
+  if (!bench && !debug) playtest?.showFirstTime();
   // Debug: start on a ride, ?debug=1&ride=<from station>,<to station> (placement ids, e.g. y01_station,w03_station).
   // ?debug=1&vn=<node id>: stand in front of the node (a step out from an npc), face it, play its scene.
   const vnParam = debug ? params.get('vn') : null;
@@ -3468,10 +3696,34 @@ async function run(): Promise<void> {
   let fps = 0;
   let work = 0;
   let builtThisWindow = 0;
+  let gpuSum = 0;
+  let gpuN = 0;
   let hudMode: 'fps' | 'full' | 'off' = params.get('hud') === '1' ? 'full' : params.get('hud') === '0' ? 'off' : 'fps';
   if (hudMode === 'off') $('hud').style.display = 'none';
   const clock = new THREE.Clock();
   $('overlay').hidden = bench;
+
+  // What was made after the boot compile and upload near the top (your two bikes, found by the frame recorder and
+  // `debug-shots/driveprograms.mjs`: 8 programs compiling at once the first time the garage came into view, a stall of
+  // seconds in the middle of a drive) compiles and uploads now, still loading, once more the same way.
+  {
+    const label = $('overlay').textContent;
+    $('overlay').textContent = 'compiling the rest...';
+    renderer.setRenderTarget(rt);
+    await renderer.compileAsync(scene, camera);
+    renderer.setRenderTarget(null);
+    const unculled: THREE.Object3D[] = [];
+    scene.traverse((o) => {
+      if (o.frustumCulled) {
+        o.frustumCulled = false;
+        unculled.push(o);
+      }
+    });
+    composer.render(0);
+    for (const o of unculled) o.frustumCulled = true;
+    performance.mark('boot:late-warm', { detail: { programs: renderer.info.programs?.length ?? 0 } });
+    $('overlay').textContent = label;
+  }
 
   let firstFrameMarked = false;
   renderer.setAnimationLoop(() => {
@@ -3553,9 +3805,14 @@ async function run(): Promise<void> {
     updateRace(dt);
     raceHud.update(dt, race?.st ?? null, race?.path.def.name ?? '');
     chase.update(inVn ? 0 : dt, realDt);
+    streetRace.update(inVn ? 0 : dt, realDt);
     airport.update(inVn ? 0 : dt, time() === 'night' || time() === 'dusk');
-    (sodium.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
-    sodium.visible = cityU.uLamps.value > 0.05;
+    boats?.update(camera.position, inVn ? 0 : dt);
+    // (No sodium lamps in a city with no expressway.)
+    if (sodium) {
+      (sodium.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
+      sodium.visible = cityU.uLamps.value > 0.05;
+    }
     sea.setLamps(cityU.uLamps.value);
     edges.update(camera.position, cityU.uLamps.value);
     const tunnel = driving.own ? expressway.portal(ownNow().sim.x, ownNow().sim.z, ownNow().sim.y) : null;
@@ -3693,6 +3950,7 @@ async function run(): Promise<void> {
     moveCalled(inVn ? 0 : dt);
     // (The traffic brakes for the cars in a chase as it does for anyone in the road.)
     if (chase.active) walkers.push(...chase.walkers());
+    if (streetRace.active) walkers.push(...streetRace.walkers());
     traffic.update(dt, camera.position, walkers);
     trial?.update(inVn ? 0 : dt, camera);
     if (cabin?.bus) {
@@ -3705,7 +3963,10 @@ async function run(): Promise<void> {
       const dx = h.x - cp0.x;
       const dz = h.z - cp0.z;
       const d = Math.hypot(dx, dz);
-      audio.horn(d, d > 0.1 ? (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d : 0, h.bus);
+      const pan = d > 0.1 ? (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d : 0;
+      // (In Manila a jeepney's horn is now and then the musical one, a run of notes, at a lower rate than the plain horns.)
+      if (CITY.tropical && !h.bus && Math.random() < 0.4 && traffic.movingNear(cp0, 40).some((v) => v.type === 'jeepney' && Math.hypot(v.x - h.x, v.z - h.z) < 6)) audio.jeepneyHorn(d, pan);
+      else audio.horn(d, pan, h.bus);
     }
     traffic.honks.length = 0;
     signalLamps.update(camera.position, traffic.clock);
@@ -3722,6 +3983,18 @@ async function run(): Promise<void> {
       rainAmount = Math.abs(rainTarget - rainAmount) <= step ? rainTarget : rainAmount + Math.sign(rainTarget - rainAmount) * step;
       applyMood();
     }
+    if (flood) {
+      // The flood rises and falls smoothly toward the forecast's (a forced one comes quickly).
+      floodTimer -= dt;
+      if (floodTimer <= 0) {
+        floodTimer = 0.5;
+        floodTarget = floodForce ?? outlookNow().flood ?? 0;
+      }
+      const fs = dt * (floodForce !== null ? 0.5 : 0.02);
+      floodNow += Math.max(-fs, Math.min(fs, floodTarget - floodNow));
+      flood.set(floodNow);
+      if (flood.group.visible && (inInterior() || camera.position.y < -2.6)) flood.group.visible = false;
+    }
     const wetRate = mood.wetness !== null ? 2 : wetTarget > wetness ? 0.015 + 0.05 * rainAmount : 0.006;
     wetness += Math.max(-wetRate * dt, Math.min(wetRate * dt, wetTarget - wetness));
     cityU.uWet.value = wetness;
@@ -3737,12 +4010,12 @@ async function run(): Promise<void> {
     // with care (slower, longer gaps, gentler braking and corners) in rain, fog and snow.
     {
       const onBridge = content.bridges.some((b) => ownCar.sim.x >= b.road.rect.x && ownCar.sim.x <= b.road.rect.x + b.road.rect.w && ownCar.sim.z >= b.road.rect.y && ownCar.sim.z <= b.road.rect.y + b.road.rect.h);
-      const road: RoadWeather = { wet: Math.max(0, wetness), snow: snowCover, leaves: season() === 'autumn' ? 1 : 0, wind: [windVec.x / 3.2, windVec.y / 3.2] };
+      const road: RoadWeather = { floodAt: flood && floodNow >= FLOOD_MIN ? (x, z) => flood.field.depthAt(x, z, floodNow) : undefined, wet: Math.max(0, wetness), snow: snowCover, leaves: season() === 'autumn' ? 1 : 0, wind: [windVec.x / 3.2, windVec.y / 3.2] };
       ownCar.weather = { ...road, exposure: ownCar.aloft() || onBridge ? 1 : 0.45 };
       for (const b of cityBikes) b.own.weather = { ...road, exposure: b.own.aloft() || onBridge ? 1 : 0.45 };
       if (race) race.rival.weather = { ...road, exposure: 1 };
       const fog = weather() === 'fog' ? 1 : 0;
-      const cond = { speed: 1 - 0.1 * road.wet - 0.3 * snowCover - 0.15 * fog, gap: 1 + 0.3 * road.wet + 0.9 * snowCover + 0.3 * fog, grip: weatherGrip(road) };
+      const cond = { speed: 1 - 0.1 * road.wet - 0.3 * snowCover - 0.15 * fog - 0.4 * floodNow, gap: 1 + 0.3 * road.wet + 0.9 * snowCover + 0.3 * fog + 0.5 * floodNow, grip: weatherGrip(road) };
       traffic.conditions = cond;
       exTraffic.conditions = cond;
       updateSplashes(dt, road.wet);
@@ -3910,7 +4183,9 @@ async function run(): Promise<void> {
       cars: traffic.nearest(cp, 3),
       wet: cityU.uWet.value,
       ...insects(),
+      manila: manilaNow(),
     });
+    manilaBells(dt);
 
     const t0 = performance.now();
     // Turning worker results into meshes is the only streaming work on the main thread: ~2 ms a frame.
@@ -3945,14 +4220,15 @@ async function run(): Promise<void> {
     // (And the rooms behind the windows, real/city.ts: which are lit and who's in, by the hour, the season and the
     // weather; how many people and how much vice, from the debug menu; `?vignette=<scene>` stands one scene in every room.)
     windowHours((((clockTotal % DAY) + DAY) % DAY) / 60, cityU, { season: seasonIndex(season()), tsuyu: flags.get(FLAG_TSUYU) === true, wet: ghost.uniforms.uRain.value as number });
-    cityU.uWindow.value.set(mood.windowPeople ? mood.windowFolk : 0, mood.windowVice, windowSceneIndex(params.get('vignette')), cityU.uWindow.value.w);
+    // (Off: the rooms as they were before the scenes: w is the share of rooms that have a scene, and below 0 the old look, real/city.ts `legacy`.)
+    cityU.uWindow.value.set(mood.windowPeople ? mood.windowFolk : 0, mood.windowVice, windowSceneIndex(params.get('vignette')), mood.windowPeople ? 0.8 : -1);
     overlay.setRain(rainAmount * 0.11 * (inside ? 0 : 1), now / 1000);
     renderer.info.reset();
     // Hidden groups (the subway above ground, interiors you're not in, the surface below ground) skip the matrix
     // update too; the frozen ones always do.
     for (const o of scene.children) o.matrixWorldAutoUpdate = o.visible && !frozen.has(o);
     let query: WebGLQuery | null = null;
-    if (timer && perf.frameQuery && (diagOn || perfLog.active) && queries.length < 6) {
+    if (timer && perf.frameQuery && queries.length < 6) {
       query = gl2.createQuery();
       gl2.beginQuery(timer.TIME_ELAPSED_EXT, query);
     }
@@ -3998,6 +4274,7 @@ async function run(): Promise<void> {
       }
       sun.shadow.autoUpdate = autoSun;
     }
+    const tPre = performance.now();
     composer.render(dt);
     thirdCam.restore(camera);
     if (query) {
@@ -4006,7 +4283,12 @@ async function run(): Promise<void> {
     }
     while (timer && queries.length > 0 && gl2.getQueryParameter(queries[0], gl2.QUERY_RESULT_AVAILABLE)) {
       const q = queries.shift()!;
-      if (!gl2.getParameter(timer.GPU_DISJOINT_EXT)) keep(perf.gpu, gl2.getQueryParameter(q, gl2.QUERY_RESULT) / 1e6);
+      if (!gl2.getParameter(timer.GPU_DISJOINT_EXT)) {
+        const ms = gl2.getQueryParameter(q, gl2.QUERY_RESULT) / 1e6;
+        keep(perf.gpu, ms);
+        gpuSum += Math.min(ms, 60); // (a freeze of hundreds of ms isn't the frame rate)
+        gpuN++;
+      }
       gl2.deleteQuery(q);
     }
     // Test the loaded chunks against this frame's depth (not below ground, where the surface is hidden).
@@ -4017,7 +4299,7 @@ async function run(): Promise<void> {
     const frameMs = performance.now() - t0;
     if (perfLog.active) {
       const info = renderer.info.render;
-      perfLog.frame({ now, cpu: performance.now() - now, gpu: perf.gpu.length ? perf.gpu[perf.gpu.length - 1] : 0, calls: info.calls, tris: info.triangles, x: camera.position.x, z: camera.position.z, res: resScale });
+      perfLog.frame({ now, js: tPre - now, cpu: performance.now() - now, gpu: perf.gpu.length ? perf.gpu[perf.gpu.length - 1] : 0, calls: info.calls, tris: info.triangles, x: camera.position.x, z: camera.position.z, res: resScale, built, programs: renderer.info.programs?.length ?? 0 });
     }
     if (bench && phase && frameMs > 25 && params.get('diag') === '1') console.log(`slow frame ${frameMs.toFixed(1)} ms · update ${(tUpd - t0).toFixed(1)} · render ${(performance.now() - tUpd).toFixed(1)} · integrated ${built} (${(district.lastBytes / 1e6).toFixed(1)} MB) · tris ${renderer.info.render.triangles} · progs ${renderer.info.programs?.length}`);
     if (bench && phase) {
@@ -4033,8 +4315,10 @@ async function run(): Promise<void> {
       const fixedRes = resFixed();
       if (fixedRes !== null) {
         if (Math.abs(resScale - fixedRes) > 0.001) setRes(fixedRes);
-      } else if (!inVn && document.visibilityState === 'visible') adaptRes((now - windowStart) / Math.max(1, frames), (now - windowStart) / 1000);
+      } else if (!inVn && document.visibilityState === 'visible') adaptRes((now - windowStart) / Math.max(1, frames), (now - windowStart) / 1000, gpuN >= 5 ? gpuSum / gpuN : null);
       work = workSum / frames;
+      gpuSum = 0;
+      gpuN = 0;
       frames = 0;
       workSum = 0;
       windowStart = now;
@@ -4046,7 +4330,7 @@ async function run(): Promise<void> {
         (rider.active && cabin ? `${cabin.status()}  ·  [E] ${rider.seated ? 'stand up' : cabin.doors() > 0.85 && cabin.canLeave() ? 'get off' : rider.seatNear() ? 'sit' : cabin.bus ? 'stop button' : 'skip to your stop'}` : null) ??
         trainRiding()?.status ??
         subway.status ??
-        `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${SEASON_NAMES[season()]}${flags.get(FLAG_TSUYU) === true ? ' 梅雨' : ''}${flags.get(FLAG_HEAT) === true ? ' 猛暑' : ''}${flags.get(FLAG_TYPHOON) === true ? ' 台風' : ''} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
+        `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? (CITY.tropical ? 'Manilaya Bay' : '東都湾 Tōto Bay') : CITY.tropical ? 'Manilaya' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${CITY.tropical ? (isMonsoon(clockTotal) ? 'monsoon' : 'dry season') : SEASON_NAMES[season()]}${flags.get(FLAG_TSUYU) === true ? (CITY.tropical ? ' habagat' : ' 梅雨') : ''}${flags.get(FLAG_HEAT) === true ? (CITY.tropical ? ' hot' : ' 猛暑') : ''}${flags.get(FLAG_TYPHOON) === true ? (CITY.tropical ? ' typhoon' : ' 台風') : ''} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
         `${fps} fps${perfLog.active ? ` · ${perfLog.label()}` : ''} · ${work.toFixed(2)} ms/frame · res ${Math.round(resScale * 100)}%${resFixed() === null ? ' (auto)' : ''} · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}`,
@@ -4054,7 +4338,7 @@ async function run(): Promise<void> {
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? (t.sleep ? 'Sleep until morning' : 'Look') : 'Talk'}: ${t.name ?? t.id}` : driving.car ? `[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera${seated ? ' · right button aims the pistol, left fires · R reload' : ''}` : taxiHere() ? '[E] Get in the taxi' : busesNew && !rider.active && traffic.busToBoard(camera.position) ? `[E] Board the bus · ¥${BUS_FARE}` : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
-        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · Q third person (wheel zooms) · J smoke · C squat · F fly · I invert mouse Y${debugTools ? ' · ` debug menu' : ' · ` settings'}`,
+        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · Q third person (wheel zooms) · J smoke · C squat · F fly · I invert mouse Y${debugTools ? ' · ` debug menu' : ' · ` settings'}${SHARE ? ' · F1 things to try' : ''}`,
       ].join('\n');
       builtThisWindow = 0;
     }

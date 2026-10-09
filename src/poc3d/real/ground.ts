@@ -8,7 +8,7 @@ import type { OpenLayout } from './openLots';
  * at crossings), and road paint: centre and lane lines, edge lines, zebra crossings and stop lines at
  * junctions. Paint belongs to the cell containing its centre so shared edge roads aren't painted twice.
  */
-export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rect[] = [], scrambles: readonly Rect[] = [], holes: readonly Rect[] = [], open: readonly OpenLayout[] = []): void {
+export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rect[] = [], scrambles: readonly Rect[] = [], holes: readonly Rect[] = [], open: readonly OpenLayout[] = [], covered: readonly Rect[] = []): void {
   mb.id = 0;
   mb.flags = 0;
   mb.style = [0, 0, 0, 0];
@@ -94,7 +94,8 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rec
     slab(m, 0, 0.18, KIND.plain, KIND.sidewalk, 0x9a968c);
     const inset = 0.35;
     const g: Rect = { x: m.x + inset, y: m.y + inset, w: m.w - 2 * inset, h: m.h - 2 * inset };
-    if (g.w > 0.3 && g.h > 0.3) slab(g, 0.18, 0.22, KIND.grass, KIND.grass, 0x3a5a2e);
+    // (Nothing grows under a parking area's apron: the strip there is bare.)
+    if (g.w > 0.3 && g.h > 0.3 && !covered.some((q) => overlaps(q, g))) slab(g, 0.18, 0.22, KIND.grass, KIND.grass, 0x3a5a2e);
   }
   // Stamp plazas: paving raised to pavement height, in a lighter stone.
   for (const q of plazas) slab(q, 0, 0.15, KIND.plain, KIND.sidewalk, 0xa09a90);
@@ -308,9 +309,15 @@ function paint(mb: MeshBuilder, plan: CellPlan3): void {
       const boulevard = carriage >= 11;
       if (r.median) {
         // Two lanes each way either side of the median: a lane line down the middle of each side.
-        const lane = r.median / 2 + (carriage / 2 - r.median / 2) / 2;
+        // (A slip lane along each kerb (`Road3.slip`) is a lane of its own, set off by a solid line.)
+        const slip = (r.slip ?? 0) / 2;
+        const lane = r.median / 2 + (carriage / 2 - slip - r.median / 2) / 2;
         line(centre - lane, 0.15, WHITE, 5, 5);
         line(centre + lane, 0.15, WHITE, 5, 5);
+        if (slip) {
+          line(centre - (carriage / 2 - slip), 0.2, WHITE, 1e9, 0);
+          line(centre + (carriage / 2 - slip), 0.2, WHITE, 1e9, 0);
+        }
         line(centre - r.median / 2 - 0.3, 0.15, YELLOW, 1e9, 0);
         line(centre + r.median / 2 + 0.3, 0.15, YELLOW, 1e9, 0);
       } else if (boulevard) {

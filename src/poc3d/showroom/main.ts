@@ -19,7 +19,7 @@ import { buildSportBike, SPORT_LOOKS } from '../models/sportbike';
 import { buildHelmet, HELMET_LOOKS } from '../models/helmet';
 import { buildKatana } from '../models/katana';
 import { buildBat } from '../models/bat';
-import { addVehicle, addVehicleLow, addWheel, BIKE_TYPES, CAR_TYPES2, vehicleLights, vehicleTexts, WORK_TYPES, type VehicleSpec, type VehicleType } from '../models/vehicles';
+import { addVehicle, addVehicleLow, addWheel, BIKE_TYPES, CAR_TYPES2, FILIPINO_TYPES, JEEPNEY_LIVERIES, PAINTS, vehicleLights, vehicleTexts, WORK_TYPES, type VehicleSpec, type VehicleType } from '../models/vehicles';
 import { Lightmap, paintLights, type Light } from '../real/lightmap';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { buildMegaSign } from '../real/megaSign';
@@ -27,6 +27,7 @@ import { trainModel } from '../real/rail';
 import { carGlass, carSet2 } from '../real/trainCar';
 import { buildBus2 } from '../real/busModel';
 import { airliner2, AIRLINES } from '../real/airliner';
+import { BOAT_MODELS } from '../real/boats';
 import { airliner } from '../real/airport';
 import { BUS } from '../district/busCabin';
 import { parkedBus } from '../real/traffic';
@@ -185,19 +186,19 @@ const NAMES: Record<VehicleType, string> = {
   sedan: 'sedan', luxury: 'luxury sedan', sports: 'sports coupe', taxi: 'taxi (classic)', taxi2: 'taxi (modern)', kei: 'kei tall-wagon',
   minivan: 'minivan', keitruck: 'kei truck', scooter: 'scooter', motorcycle: 'motorcycle', delivery: 'delivery scooter',
   hatch: 'hatchback (80s)', rotary: 'rotary coupe', awd: 'turbo AWD coupe', roadster: 'kei roadster',
-  van: 'work van', keivan: 'kei van', boxtruck: 'box truck (2 t)', police: 'patrol car', hardtop: 'hardtop saloon (70s, noir)',
+  van: 'work van', keivan: 'kei van', boxtruck: 'box truck (2 t)', police: 'patrol car', hardtop: 'hardtop saloon (70s, noir)', jeepney: 'jeepney (Manila)', tricycle: 'tricycle (Manila)',
 };
 const PAINT_A: Record<VehicleType, number> = {
   sedan: 0xe8e8e4, luxury: 0x07070a, sports: 0xc01818, taxi: 0x121316, taxi2: 0x1c2240, kei: 0xa8d4bc, minivan: 0xb4b6ba, keitruck: 0xe8e8e4,
   scooter: 0xe8e0c8, motorcycle: 0xb81818, delivery: 0xc81818,
   hatch: 0xf0f0ec, rotary: 0xe8c020, awd: 0x5a5e66, roadster: 0xe8c020,
-  van: 0xf0f0ec, keivan: 0xf0f0ec, boxtruck: 0xf0f0ec, police: 0xf2f2ee, hardtop: 0x0a0a0c,
+  van: 0xf0f0ec, keivan: 0xf0f0ec, boxtruck: 0xf0f0ec, police: 0xf2f2ee, hardtop: 0x0a0a0c, jeepney: 0xe6e2d2, tricycle: 0xc81818,
 };
 const PAINT_B: Record<VehicleType, number> = {
   sedan: 0x1c2a44, luxury: 0xf0efe8, sports: 0xf0f0ec, taxi: 0xe0a818, taxi2: 0x121316, kei: 0xd8c09a, minivan: 0x121316, keitruck: 0xb4b6ba,
   scooter: 0x8ab0d0, motorcycle: 0x121316, delivery: 0x1c4a9a,
   hatch: 0xc01818, rotary: 0xc01818, awd: 0x1a2c5a, roadster: 0xc01818,
-  van: 0x1c2a44, keivan: 0x8ab0d0, boxtruck: 0x2a5a9a, police: 0xf2f2ee, hardtop: 0x3a3428,
+  van: 0x1c2a44, keivan: 0x8ab0d0, boxtruck: 0x2a5a9a, police: 0xf2f2ee, hardtop: 0x3a3428, jeepney: 0xc4c8cc, tricycle: 0x1c5aa8,
 };
 const newCars = new MeshBuilder(1 << 17);
 const nightLights: Light[] = [];
@@ -207,7 +208,7 @@ const vehicle = (spec: VehicleSpec, name: string, size: number, labelY = 2.4): v
   genItems.new.push({ name, group: 'Cars', at: new THREE.Vector3(spec.x, 0.8, spec.z), size });
   label('new', name, spec.x, labelY, spec.z);
 };
-CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t)).forEach((type, i) => {
+CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t) && !FILIPINO_TYPES.includes(t)).forEach((type, i) => {
   const x = -13 + i * 3.7;
   vehicle({ x, z: -1.5, fx: 0, fz: 1, type, paint: PAINT_A[type] }, NAMES[type], 4.5);
   // Second row: other paints, facing away; the taxis carry ads.
@@ -215,7 +216,7 @@ CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t)).forEach((type, i) => {
   vehicle({ x, z: -8.5, fx: 0, fz: -1, type, paint: PAINT_B[type], ad }, `${NAMES[type]} (alt${ad ? ' + ad' : ''})`, 4.5);
 });
 // The middle-distance versions (addVehicleLow: parked cars beyond ~140 m, traffic beyond 80 m), in front of row 1.
-CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t)).forEach((type, i) => addVehicleLow(newCars, { x: -13 + i * 3.7, z: 3, fx: 0, fz: 1, type, paint: PAINT_A[type] }));
+CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t) && !FILIPINO_TYPES.includes(t)).forEach((type, i) => addVehicleLow(newCars, { x: -13 + i * 3.7, z: 3, fx: 0, fz: 1, type, paint: PAINT_A[type] }));
 WORK_TYPES.forEach((type, i) => addVehicleLow(newCars, { x: 30 + i * 6.5, z: 3, fx: 0, fz: 1, type, paint: PAINT_A[type] }));
 label('new', 'middle-distance models (parked beyond ~140 m, traffic beyond 80 m)', 4, 2.6, 3);
 genItems.new.push({ name: 'middle-distance cars', group: 'Cars', at: new THREE.Vector3(4, 0.8, 3), size: 16 });
@@ -229,6 +230,23 @@ WORK_TYPES.forEach((type, i) => {
   vehicle({ x, z: -27, fx: 0, fz: 1, type, paint: PAINT_A[type], company: ca, marks: 1 }, NAMES[type], 5.5, 3.4);
   vehicle({ x, z: -33, fx: 0, fz: -1, type, paint: PAINT_B[type], company: cb, marks: 7 }, `${NAMES[type]} (alt)`, 5.5, 3.4);
 });
+// Manila's vehicles (new, under review; in no traffic mix): the jeepney in each of its paint jobs (JEEPNEY_LIVERIES), the second
+// row facing away, and the tricycle (a static model, not a vehicle type) beside them.
+JEEPNEY_LIVERIES.forEach((liv, i) => {
+  const x = -10 + i * 5.4;
+  vehicle({ x, z: -43, fx: 0, fz: 1, type: 'jeepney', paint: PAINT_A.jeepney, company: i, marks: 1 }, `${NAMES.jeepney}: ${liv.name}`, 7, 3.2);
+  vehicle({ x, z: -53, fx: 0, fz: -1, type: 'jeepney', paint: PAINT_B.jeepney, company: i, marks: 1 }, `${NAMES.jeepney}: ${liv.name} (rear)`, 7, 3.2);
+});
+addVehicleLow(newCars, { x: 17, z: -58, fx: 0, fz: 1, type: 'jeepney', paint: PAINT_A.jeepney });
+label('new', 'jeepney, middle-distance model', 17, 3, -58);
+// The tricycle (a motorcycle with a sidecar) in its six paints, a column of three facing the camera and a column facing away.
+PAINTS.tricycle.forEach((paint, i) => {
+  const x = 13 + (i % 3) * 3.2;
+  vehicle({ x, z: -43 - Math.floor(i / 3) * 5, fx: 0, fz: 1, type: 'tricycle', paint, marks: i + 3 }, `${NAMES.tricycle}${i ? ` ${i + 1}` : ''}`, 3.6, 2.1);
+  vehicle({ x, z: -53 - Math.floor(i / 3) * 5, fx: 0, fz: -1, type: 'tricycle', paint, marks: i + 3, lamps: false }, `${NAMES.tricycle} ${i + 1} (parked)`, 3.6, 2.1);
+});
+addVehicleLow(newCars, { x: 24, z: -58, fx: 0, fz: 1, type: 'tricycle', paint: PAINT_A.tricycle });
+label('new', 'tricycle, middle-distance model', 24, 3, -58);
 BIKE_TYPES.forEach((type, i) => {
   for (const [j, paints] of [PAINT_A, PAINT_B].entries()) {
     const x = -9 + i * 6 + j * 2.2;
@@ -391,6 +409,40 @@ cityU.uLightRect.value = showLightmap.uniformRect;
   for (const g of ['new', 'previous'] as const) genItems[g].push({ name: 'airliner', group: 'Transit', at: new THREE.Vector3(at.x, 4, at.z), size: 40, view: new THREE.Vector3(1, 0.35, 0.8).normalize() });
   genItems.new.push({ name: 'airliners (all)', group: 'Transit', at: new THREE.Vector3(at.x + 60, 4, at.z), size: 110, view: new THREE.Vector3(0.2, 0.5, 1).normalize() });
 }
+// Boats (real/boats.ts, Manila's bay and Pasig; under review): the six bangkas, the passenger launch and the lighterage
+// barge in a row on a patch of water, the container ships and tankers behind them.
+{
+  const at = new THREE.Vector3(1500, 0, 1500);
+  const pad = new MeshBuilder();
+  pad.kind = KIND.lot;
+  pad.color = lin(0x1c3a4a);
+  pad.box(at.x + 100, at.z + 120, -0.3, 0.0, 420, 480, KIND.lot);
+  scene.add(new THREE.Mesh(pad.build()!, city));
+  const row = (ids: readonly string[], x0: number, dx: number, z: number): void => {
+    ids.forEach((id, i) => {
+      const bm = BOAT_MODELS.find((b) => b.id === id)!;
+      const g = bm.build().build()!;
+      const mesh = new THREE.Mesh(g, city);
+      mesh.position.set(at.x + x0 + i * dx, 0.02, at.z + z);
+      genRoot.new.add(mesh);
+      label('new', bm.name, mesh.position.x, 6 + bm.len * 0.12, mesh.position.z);
+    });
+  };
+  row(['bangka0', 'bangka1', 'bangka2', 'bangka3', 'bangka4', 'bangka5'], 0, 8, 0);
+  row(['ferry'], 0, 0, 24);
+  row(['lighter'], 24, 0, 24);
+  row(['cargo0', 'cargo1'], 0, 60, 220);
+  row(['tanker0', 'tanker1'], 110, 60, 220);
+  genItems.new.push(
+    { name: 'bangkas (all six)', group: 'Boats', at: new THREE.Vector3(at.x + 20, 1.2, at.z), size: 22, view: new THREE.Vector3(0.4, 0.35, 0.8).normalize() },
+    { name: 'bangka (canopy)', group: 'Boats', at: new THREE.Vector3(at.x, 1.2, at.z), size: 10, view: new THREE.Vector3(1, 0.3, 0.6).normalize() },
+    { name: 'bangka (sail)', group: 'Boats', at: new THREE.Vector3(at.x + 16, 2, at.z), size: 10, view: new THREE.Vector3(1, 0.3, 0.6).normalize() },
+    { name: 'passenger launch', group: 'Boats', at: new THREE.Vector3(at.x, 2, at.z + 24), size: 32, view: new THREE.Vector3(1, 0.35, 0.7).normalize() },
+    { name: 'lighterage barge', group: 'Boats', at: new THREE.Vector3(at.x + 24, 1.5, at.z + 24), size: 28, view: new THREE.Vector3(1, 0.35, 0.7).normalize() },
+    { name: 'container ships', group: 'Boats', at: new THREE.Vector3(at.x + 20, 12, at.z + 220), size: 190, view: new THREE.Vector3(1, 0.25, 0.9).normalize() },
+    { name: 'tankers', group: 'Boats', at: new THREE.Vector3(at.x + 140, 8, at.z + 220), size: 250, view: new THREE.Vector3(1, 0.25, 0.9).normalize() },
+  );
+}
 // Kaburo mega-sign (the corner tower with its screens and the neon dragon) on its own plaza.
 {
   const at = new THREE.Vector3(62, 0, 18);
@@ -426,17 +478,19 @@ cityU.uLightRect.value = showLightmap.uniformRect;
 const TREE_NAMES: Record<TreeSpecies, string> = {
   zelkova: 'zelkova 欅', ginkgo: 'ginkgo 銀杏', ginkgoGold: 'ginkgo (autumn)', sakura: 'sakura 桜', sakuraBloom: 'sakura (in bloom)',
   pine: 'black pine 黒松', camphor: 'camphor 楠', dogwood: 'dogwood 花水木', dogwoodBloom: 'dogwood (in flower)', azalea: 'azalea 躑躅', box: 'clipped box',
+  coconut: 'coconut palm', royalPalm: 'royal palm', banana: 'banana', raintree: 'rain tree', mango: 'mango', bougainvillea: 'bougainvillea',
 };
 const TREE_ROWS: [number, TreeSpecies[], number][] = [
   [70, ['zelkova', 'ginkgo', 'ginkgoGold', 'sakura', 'sakuraBloom', 'camphor'], 11],
   [86, ['pine', 'dogwood', 'dogwoodBloom', 'azalea', 'box'], 8],
+  [56, ['coconut', 'royalPalm', 'banana', 'raintree', 'mango', 'bougainvillea'], 11],
 ];
 const GARDEN_X = -8;
 {
   const pad = new MeshBuilder();
   pad.kind = KIND.grass;
   pad.color = lin(0x3e5a30);
-  pad.box(GARDEN_X + 30, 80, -0.2, 0.1, 76, 30, KIND.grass);
+  pad.box(GARDEN_X + 30, 72, -0.2, 0.1, 76, 46, KIND.grass);
   pad.kind = KIND.plain;
   pad.color = lin(0x8a867e);
   pad.box(GARDEN_X + 30, 102, -0.2, 0.15, 76, 14, KIND.sidewalk);
@@ -714,7 +768,7 @@ const tCast = performance.now() - t0 - tCars;
   const pad = new MeshBuilder();
   pad.kind = KIND.grass;
   pad.color = lin(0x3e5a30);
-  pad.box(GARDEN_X + 30, 80, -0.2, 0.1, 76, 30, KIND.grass);
+  pad.box(GARDEN_X + 30, 72, -0.2, 0.1, 76, 46, KIND.grass);
   genRoot.previous.add(new THREE.Mesh(pad.build()!, city));
   const mb = new MeshBuilder();
   const props: Prop[] = [0, 1, 2, 3].map((i) => ({ kind: 'tree', x: GARDEN_X + i * 11, z: 70, nx: 0, nz: 1, radius: 0.3, variant: i * 3, size: [1, 1.3, 0.8, 1][i], grate: i !== 1 }));

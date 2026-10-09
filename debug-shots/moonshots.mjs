@@ -18,7 +18,7 @@ try {
   page.on('pageerror', (e) => console.log('pageerror', String(e)));
   page.on('console', (m) => m.type() === 'error' && console.log('console', m.text().slice(0, 600)));
   for (const shape of shapes) {
-    await page.goto(`${base}district.html?debug=1&diag=1&${extra}&weather=clear&moonShape=${shape}&spawn=kaburo_crossing.view`);
+    await page.goto(`${base}?debug=1&diag=1&${extra}&weather=clear&moonShape=${shape}&spawn=kaburo_crossing.view`);
     await ready(page);
     // The street with the moon above it.
     await page.evaluate(() => {

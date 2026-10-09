@@ -14,7 +14,7 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true, args:
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 const t0 = Date.now();
-await page.goto(`${server.resolvedUrls.local[0]}district.html?diag=1&weather=clear&res=100&spawn=${spawn}${extra}`);
+await page.goto(`${server.resolvedUrls.local[0]}?diag=1&weather=clear&res=100&spawn=${spawn}${extra}`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 600000, polling: 250 });
 console.log('warm start (s)', ((Date.now() - t0) / 1000).toFixed(1), '· the page says', await page.evaluate(() => /warm start[^\n]*/.exec(document.getElementById('hud').textContent)?.[0]));
 await page.evaluate(() => { document.getElementById('overlay').hidden = true; });

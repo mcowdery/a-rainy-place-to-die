@@ -1,6 +1,8 @@
 import { hash, rng, type Rng } from '../../core/hash';
 import { frontPoint, frontSpan, frontWidth, type Building3, type Corner } from '../district/plan';
 import { EMIT, KIND, lin, scale3, type MeshBuilder } from './meshBuilder';
+import { filipino } from '../district/cityConfig';
+import * as manila from './manilaBuilding';
 import { HUES, hueOfColor, pickTrade, shopFlags, TRADE, TRADES } from './shops';
 
 /**
@@ -29,6 +31,11 @@ export const HOME_FLAG = 256;
  */
 export const VICE_SHIFT = 131072;
 export const DEN_FLAG = 524288;
+/** Filipino looks (city.ts reads both): arched punched windows, and unplastered hollow-block walls (block joints). */
+export const ARCH_FLAG = 1048576;
+export const BLOCK_FLAG = 2097152;
+/** An informal settlement's shack (zones' look `informal`): patchwork walls of mismatched panels, a low corrugated roof weighted with stones and tyres (city.ts reads the flag). */
+export const INFORMAL_FLAG = 4194304;
 const NIGHT_TRADES: readonly number[] = [TRADE.bar, TRADE.snack, TRADE.izakaya, TRADE.mahjong, TRADE.karaoke, TRADE.lounge, TRADE.pachinko, TRADE.arcade];
 
 export interface RealStyle {
@@ -53,9 +60,21 @@ export interface RealStyle {
   readonly home: boolean;
   /** A pitched roof's colour (low homes), or null for a flat roof with a parapet. */
   readonly roof: C3 | null;
+  /** Manila: a hollow-block house (unplastered; a flat roof is left unfinished, with rebar), a church (a bell-tower on the front), grilles over its windows. */
+  readonly block: boolean;
+  readonly church: boolean;
+  readonly grille: boolean;
+  /** An informal-settlement shack (a home with patchwork walls and a low scrap roof). */
+  readonly informal: boolean;
 }
 
+/** A shack's roof: old galvanised sheet, rusted through, a patch of blue tarp. */
+const ROOFS_INFORMAL = [0x7a7c7c, 0x8a5a3c, 0x6a3a28, 0x9a9a94, 0x6a6a68, 0x2a4a7a, 0x8a5a3c];
 const ROOFS = [0x3a4450, 0x2a2c30, 0x5a3a2a, 0x4a5a6a, 0x6a2a22];
+/** Manila's roofs are corrugated iron: grey galvanised, rusted, painted red and green. */
+const ROOFS_IRON = [0x8c8e8c, 0x7a7c7c, 0x8a5a3c, 0x6a3a28, 0x9a9a94, 0x7a2a22, 0x3e5a48];
+/** Unplastered hollow block, a little different each house. */
+const BLOCK_WALLS = [0xb4b4ac, 0xa6a6a0, 0xc0c0b8, 0xaeaea6, 0xb8b2a4];
 
 // Kaburo palette: tiled mid-rises (beige, white, brown), bare concrete, dark bar buildings, and 80s pastels.
 const PALETTES: readonly (readonly [number, readonly number[], boolean])[] = [
@@ -119,8 +138,21 @@ export function styleFor(b: Building3): RealStyle {
   const winH = type === WIN.ribbon ? 1.1 + rnd.float() * 0.4 : 1.2 + rnd.float() * 0.5;
   // Homes (from their own hash, so the rest of the style stays as it was).
   const hr = rng(hash(b.id, 0x40e5));
-  const home = !stamp && hr.chance(look?.homes ?? 0);
-  const roof = home && b.h <= 9.5 && hr.chance(look?.roofs ?? 0) ? lin(hr.pick(ROOFS)) : null;
+  // An informal settlement's shack (its own hash): a home with patchwork walls.
+  const informal = !stamp && rng(hash(b.id, 0x5ac4)).chance(look?.informal ?? 0);
+  const home = !stamp && (hr.chance(look?.homes ?? 0) || informal);
+  // Filipino looks (from their own hashes, so nothing else moves, and only where a zone asks for them).
+  const fil = filipino() && !stamp;
+  const fr = rng(hash(b.id, 0xb10c));
+  const block = fil && b.h <= 16 && fr.chance(look?.block ?? 0) && !informal;
+  const arch = fil && type === WIN.punched && fr.chance(look?.arch ?? 0);
+  const church = fil && !block && b.w >= 9 && b.d >= 8 && b.h <= 22 && rng(hash(b.id, 0xc4c4)).chance(look?.church ?? 0);
+  const grille = fil && fr.chance(0.6) && !informal;
+  if (block) {
+    wallHex = fr.pick(BLOCK_WALLS);
+    tiled = false;
+  }
+  const roof = informal && b.h <= 9.5 ? lin(rng(hash(b.id, 0x5ac5)).pick(ROOFS_INFORMAL)) : home && b.h <= 9.5 && hr.chance(look?.roofs ?? 0) && (!block || fr.chance(0.4)) ? lin(hr.pick(fil ? ROOFS_IRON : ROOFS)) : null;
   const shopOpen = !home && (stamp || rnd.chance(look?.open ?? 0.8));
   const shopPal = stamp ? 3 : weighted(rnd, look?.shops ?? [[40, 0], [30, 1], [15, 2], [15, 3]]);
   const darkFrame = rnd.chance(0.4) || type === WIN.curtain;
@@ -133,7 +165,7 @@ export function styleFor(b: Building3): RealStyle {
   // (From their own hash too.)
   const vice = stamp ? 0 : (look?.vice ?? 0);
   const den = !home && !stamp && b.h < 45 && rng(hash(b.id, 0xde17)).chance(vice * (NIGHT_TRADES.includes(trade) ? 0.95 : 0.5));
-  const flags = (shopOpen ? 1 : 0) + shopPal * 2 + (darkFrame ? 8 : 0) + litBias * 16 + (tiled ? 128 : 0) + (home ? HOME_FLAG : 0) + (home ? 0 : shopFlags(trade, hue)) + Math.min(3, Math.round(vice * 3)) * VICE_SHIFT + (den ? DEN_FLAG : 0);
+  const flags = (shopOpen ? 1 : 0) + shopPal * 2 + (darkFrame ? 8 : 0) + litBias * 16 + (tiled ? 128 : 0) + (home ? HOME_FLAG : 0) + (home ? 0 : shopFlags(trade, hue)) + (arch || church ? ARCH_FLAG : 0) + (block ? BLOCK_FLAG : 0) + (informal ? INFORMAL_FLAG : 0) + Math.min(3, Math.round(vice * 3)) * VICE_SHIFT + (den ? DEN_FLAG : 0);
   s = {
     wall: lin(wallHex),
     trim: lin(rnd.pick(TRIMS)),
@@ -153,6 +185,10 @@ export function styleFor(b: Building3): RealStyle {
     awning: shopOpen && rnd.chance(0.35) && TRADES[trade].awning,
     home,
     roof,
+    block,
+    church,
+    grille,
+    informal,
   };
   cache.set(b.id, s);
   return s;
@@ -322,7 +358,11 @@ export function addBuilding(mb: MeshBuilder, b: Building3, near: boolean): void 
   });
   mb.frontNormal = null;
   mb.style = [0, 0, 0, 0];
-  if (s.roof) pitchedRoof(mb, b, s);
+  if (s.roof) pitchedRoof(mb, b, s, near);
+  if (s.church) {
+    const [c0, c1] = frontSpan(b);
+    manila.churchMass(mb, b, f, c0, c1, ts[ts.length - 1][3], s.wall, near);
+  }
   if (!near) return;
 
   const topTier = ts[ts.length - 1];
@@ -332,12 +372,16 @@ export function addBuilding(mb: MeshBuilder, b: Building3, near: boolean): void 
   mb.color = s.trim;
   const ph = s.parapet;
   const t = 0.2;
-  if (!s.roof) ring(mb, footprint(b, topTier, ts.length === 1).pts, top, top + ph, t);
+  if (!s.roof && !s.block) ring(mb, footprint(b, topTier, ts.length === 1).pts, top, top + ph, t);
   if (s.cornice && !(b.cut && ts.length === 1)) mb.box(b.x + tox, b.z + toz, top - 0.45, top - 0.1, tw + 0.3, td + 0.3);
   // Setback terraces get a low parapet too.
   for (let i = 0; i < ts.length - 1; i++) ring(mb, footprint(b, ts[i], i === 0).pts, ts[i][3], ts[i][3] + 0.9, t);
 
-  if (!s.roof) rooftop(mb, b, rnd, tw, td, top, tox, toz, ts.length === 1 ? b.cut : undefined);
+  if (s.block && !s.roof) manila.unfinishedTop(mb, b, top, tw, td, tox, toz, s.wall, true);
+  else if (!s.roof) {
+    rooftop(mb, b, rnd, tw, td, top, tox, toz, ts.length === 1 ? b.cut : undefined);
+    if (filipino()) manila.roofGear(mb, b, top, tw, td, tox, toz, true);
+  }
 
   const mainTop = ts[0][3];
   const mainFloors = floorsTo(mainTop);
@@ -393,6 +437,8 @@ export function addBuilding(mb: MeshBuilder, b: Building3, near: boolean): void 
     }
   }
 
+  if (filipino()) manila.front(mb, b, f, s0, s1, mainFloors, gf, FH, s.type, s.bay, s.ratio, s.winH, s.grille, !s.home && s.shopOpen, s.accent);
+
   // Storefront awning: a sloped canvas with a valance.
   if (s.awning && sw > 3) {
     mb.kind = KIND.plain;
@@ -441,12 +487,13 @@ const SHRUBS = [0x2e4a26, 0x3e5a2e, 0x4a6a34, 0x36522a];
  * A pitched roof on a low home: the ridge runs along the street face, eaves overhanging 0.4 m, gable
  * ends in the wall's colour. Both windings of each slope are drawn (the eaves are seen from below).
  */
-function pitchedRoof(mb: MeshBuilder, b: Building3, s: RealStyle): void {
+function pitchedRoof(mb: MeshBuilder, b: Building3, s: RealStyle, near: boolean): void {
   const ns = b.front === 'north' || b.front === 'south';
   const over = 0.4;
   const half = (ns ? b.d : b.w) / 2 + over;
   const len = (ns ? b.w : b.d) / 2 + over;
-  const rise = Math.min(2.4, half * 0.55);
+  // A shack's roof is nearly flat: a scrap sheet at a slight pitch, not a gable.
+  const rise = s.informal ? Math.min(0.7, half * 0.26) : Math.min(2.4, half * 0.55);
   const y0 = b.h;
   const y1 = b.h + rise;
   // P(a, c, y): a along the ridge, c across it (from the ridge), in world.
@@ -473,6 +520,10 @@ function pitchedRoof(mb: MeshBuilder, b: Building3, s: RealStyle): void {
     const r = P(e, 0, y1 - 0.05);
     mb.poly4(a, c, r, r);
     mb.poly4(c, a, r, r);
+  }
+  if (filipino()) {
+    manila.ironRoofRibs(mb, b, y0, y1, ns, half, len, near);
+    manila.ironRoofGear(mb, b, y0, y1, ns, half, len, near);
   }
 }
 

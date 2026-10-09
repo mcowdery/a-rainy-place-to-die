@@ -329,7 +329,7 @@ export class MoodPanel {
 
     // The rooms behind the windows (real/windowScenes.ts).
     this.into = this.groups.windows;
-    this.choice('windowPeople', 'People in windows', ['off', 'on'], () => (s.windowPeople ? 'on' : 'off'), (v) => (s.windowPeople = v === 'on'));
+    this.choice('windowPeople', 'Window scenes (people and furniture)', ['off', 'on'], () => (s.windowPeople ? 'on' : 'off'), (v) => (s.windowPeople = v === 'on'));
     this.slider('windowFolk', 'How many', 0, 3, 0.05, () => s.windowFolk, (v) => (s.windowFolk = v), (v) => (v < 0.03 ? 'none' : `x${v.toFixed(2)}`));
     this.slider('windowVice', 'Vice (and shady shops)', 0, 4, 0.05, () => s.windowVice, (v) => (s.windowVice = v), (v) => (v < 0.03 ? 'none' : `x${v.toFixed(2)}`));
     this.note('Off: the rooms stay lit and furnished, with nobody in them. The shady shops at street level follow Vice alone.');

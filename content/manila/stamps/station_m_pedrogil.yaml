@@ -1,0 +1,28 @@
+# Pedro gil Station on the Tafto Line (rail.yaml): a landmark built by real/station.ts, its street face 10 m from the line.
+id: station_m_pedrogil
+name: Pedro gil Station
+footprint: [24, 60]
+height: 16.6
+front: west
+landmark: station
+station: { jp: PEDRO GAL, en: PEDRO GAL, line: tafto }
+nodes:
+  exit:
+    kind: spawn
+    name: Pedro gil Station
+    at: [30, 8]
+    facing: east
+    view: [-110, 16]
+  platform:
+    kind: spawn
+    name: Pedro gil Station (platform)
+    at: [44, 3.2]
+    floor: 9.1
+    facing: west
+    view: [90, 2]
+  board:
+    kind: station
+    name: Tafto Line south to VITO CRUZAN
+    at: [44, 5.4]
+    floor: 9.1
+    returnSpawn: vitocruz_station.platform

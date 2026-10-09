@@ -8,6 +8,8 @@ import { addCar, addCarLow } from './cars';
 import { carMixFor, pickCar } from '../district/carMix';
 import type { CarType, VehicleSigns } from '../models/vehicles';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
+import { filipino, treeSet } from '../district/cityConfig';
+import * as manilaStreet from './manilaStreet';
 import { addTree, foliageVariant, setFoliageVariant, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { addDressing } from './dressing';
 import { openLayout, type OpenLayout } from './openLots';
@@ -29,9 +31,11 @@ export interface Prop {
     | 'lamp' | 'pole' | 'vending' | 'tree' | 'car' | 'signal'
     // Greenery and the furniture of open ground (openLots.ts).
     | 'hedge' | 'pots' | 'planter' | 'bench' | 'postlamp' | 'fence' | 'paymachine' | 'psign' | 'wheelstop'
-    | 'swing' | 'slide' | 'sandbox' | 'toilet' | 'weeds' | 'board' | 'cones' | 'bike'
+    | 'swing' | 'slide' | 'sandbox' | 'toilet' | 'weeds' | 'board' | 'cones' | 'bike' | 'hoop'
     // The port's container yards: a stack of shipping containers (size: how many high; half: half its length).
-    | 'container';
+    | 'container'
+    // Manila's streets (manilaStreet.ts).
+    | 'sarisari' | 'cart' | 'jeepstop' | 'parol' | 'tarp' | 'shrine' | 'garbage' | 'barangay' | 'trusses';
   readonly x: number;
   readonly z: number;
   /**
@@ -95,7 +99,7 @@ function freeSpans(r: Road3, roads: readonly Road3[], margin: number, side = 0):
   return spans;
 }
 
-export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[], plazas: readonly Rect[] = []): CellDetail {
+export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[], plazas: readonly Rect[] = [], covered: readonly Rect[] = []): CellDetail {
   const props: Prop[] = [];
   const wires: C3[][] = [];
   const lights: Light[] = [];
@@ -113,9 +117,90 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
     const out = dx * f.n[0] + dz * f.n[2];
     return u > -3 && u < f.fw + 3 && out > -0.5 && out < 12;
   });
+  // Under something built over it (a parking area's apron): no sunlight, no planting.
+  const under = (x: number, z: number): boolean => covered.some((q) => x > q.x - 1.5 && x < q.x + q.w + 1.5 && z > q.y - 1.5 && z < q.y + q.h + 1.5);
   const inBuilding = (x: number, z: number, m: number): boolean => buildings.some((b) => Math.abs(x - b.x) < b.w / 2 + m && Math.abs(z - b.z) < b.d / 2 + m);
 
   const style = plan.style;
+  // Manila: how much street clutter the cell's zones want (0 for Tōto), and the pole runs with their wire bundles.
+  const fil = filipino();
+  const cellStreet = fil ? plan.buildings.reduce((m, b) => Math.max(m, b.zone?.look.street ?? 0), 0) : 0;
+  const rc = { props, lights, mine };
+  type Along = (t: number, side: number, inset: number) => [number, number, number, number];
+  const poleRun = (r: Road3, side: number, along: Along, rnd: ReturnType<typeof rng>, inset: number): void => {
+    for (const [s, e] of freeSpans(r, plan.roads, 1)) {
+      let prev: [number, number, number, number] | null = null;
+      for (let t = s + 3 + rnd.float() * 6; t < e - 2; t += fil ? 20 : POLE_SPACING) {
+        const pt = along(t, side, inset);
+        const [x, z, nx, nz] = pt;
+        if (!mine(x, z) || inBuilding(x, z, 0.2)) {
+          prev = null;
+          continue;
+        }
+        const variant = hash(Math.round(x * 10), Math.round(z * 10)) % 10;
+        props.push({ kind: 'pole', x, z, nx, nz, radius: 0.25, variant });
+        if (variant < 3) lights.push({ x: x + nx * 1.2, z: z + nz * 1.2, r: 7, color: POLE_LAMP, i: 0.5 });
+        if (fil) {
+          // Service drops: wires from the pole to the nearest building's wall, sagging.
+          const wr = rng(hash(Math.round(x * 10), Math.round(z * 10), 0x31e5));
+          let best: Building3 | null = null;
+          let bd = 14;
+          for (const b of buildings) {
+            const d = Math.hypot(Math.max(Math.abs(x - b.x) - b.w / 2, 0), Math.max(Math.abs(z - b.z) - b.d / 2, 0));
+            if (d < bd) { bd = d; best = b; }
+          }
+          if (best) {
+            for (let k = 0; k < 3; k++) {
+              const tx = Math.min(best.x + best.w / 2, Math.max(best.x - best.w / 2, x)) + (wr.float() - 0.5) * 1.5;
+              const tz = Math.min(best.z + best.d / 2, Math.max(best.z - best.d / 2, z)) + (wr.float() - 0.5) * 1.5;
+              const ya = 6 + wr.float() * 2.6;
+              const yb = Math.min(best.h - 0.5, 4 + wr.float() * 3);
+              const sag = 0.3 + bd * 0.05 + wr.float() * 0.5;
+              const line: C3[] = [];
+              for (let q = 0; q <= 3; q++) {
+                const f = q / 3;
+                line.push([x + (tx - x) * f, ya + (yb - ya) * f - sag * 4 * f * (1 - f), z + (tz - z) * f]);
+              }
+              wires.push(line);
+            }
+          }
+        }
+        if (prev) {
+          if (fil) {
+            // A tangle: the crossarms' wires, a second tier, and a dozen loose ones sagging deeper at random heights.
+            const wr = rng(hash(Math.round(x * 10), Math.round(z * 10), 0x71a9));
+            const lines: [number, number, number][] = [[-0.9, 8.9, 0], [-0.45, 8.9, 0], [0, 8.9, 0], [0.45, 8.9, 0], [0.9, 8.9, 0], [-0.6, 7.5, 0.1], [0, 7.5, 0.1], [0.6, 7.5, 0.1]];
+            for (let k = 0; k < 5; k++) lines.push([(wr.float() - 0.5) * 2.0, 5.4 + wr.float() * 3.2, 0.5 + wr.float() * 1.0]);
+            for (const [off, y, slack] of lines) {
+              const a: C3 = [prev[0] + prev[2] * off, y + (slack > 0 ? (wr.float() - 0.5) * 0.4 : 0), prev[1] + prev[3] * off];
+              const b: C3 = [x + nx * off, y + (slack > 0 ? (wr.float() - 0.5) * 0.4 : 0), z + nz * off];
+              const sag = 0.35 + Math.hypot(b[0] - a[0], b[2] - a[2]) * 0.012 + slack;
+              const line: C3[] = [];
+              for (let k = 0; k <= 3; k++) {
+                const f = k / 3;
+                line.push([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f - sag * 4 * f * (1 - f), a[2] + (b[2] - a[2]) * f]);
+              }
+              wires.push(line);
+            }
+          } else {
+            for (const [off, y] of [[-0.7, 8.9], [0, 8.9], [0.7, 8.9], [0, 7.5]] as const) {
+              // Crossarms run across the street: offset along the pole's facing.
+              const a: C3 = [prev[0] + prev[2] * off, y, prev[1] + prev[3] * off];
+              const b: C3 = [x + nx * off, y, z + nz * off];
+              const sag = 0.35 + Math.hypot(b[0] - a[0], b[2] - a[2]) * 0.012;
+              const line: C3[] = [];
+              for (let k = 0; k <= 4; k++) {
+                const f = k / 4;
+                line.push([a[0] + (b[0] - a[0]) * f, y - sag * 4 * f * (1 - f), a[2] + (b[2] - a[2]) * f]);
+              }
+              wires.push(line);
+            }
+          }
+        }
+        prev = pt;
+      }
+    }
+  };
   /**
    * A riverside walk (plan.ts RIVER_WALK), as Tokyo's along the Sumida: a row of cherries along its land side,
    * lamps along the flood wall, and benches between the trees facing the water.
@@ -139,7 +224,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
     const bay = r.water === 'bay';
     for (let t = t0 + 4; t < t1 - 3; t += 9) {
       const [x, z] = at(t, width - 1.2);
-      if (mine(x, z) && (!bay || Math.round((t - t0) / 9) % 3 !== 2)) props.push({ kind: 'tree', species: bay ? 'pine' : 'sakura', x, z, nx: wx, nz: wz, radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8, size: 0.85, lean: 1.2 });
+      if (mine(x, z) && (!bay || Math.round((t - t0) / 9) % 3 !== 2)) props.push({ kind: 'tree', species: (bay ? treeSet().bay : treeSet().riverWalk)[Math.round((t - t0) / 9) % (bay ? treeSet().bay : treeSet().riverWalk).length], x, z, nx: wx, nz: wz, radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8, size: 0.85, lean: 1.2 });
       const k = Math.round((t - t0) / 9);
       if (k % 2 === 1) {
         const [bx, bz] = at(t + 4.5, 2.6);
@@ -167,7 +252,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       const c = r.vertical ? q.x + q.w / 2 : q.y + q.h / 2;
       for (let t = t0 + 4; t < t1 - 3; t += 8) {
         const [x, z] = r.vertical ? [c, t] : [t, c];
-        if (mine(x, z)) props.push({ kind: 'tree', species: 'camphor', x, z, nx: 0, nz: 1, radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8, size: 0.9 });
+        if (mine(x, z)) props.push({ kind: 'tree', species: treeSet().verge, x, z, nx: 0, nz: 1, radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8, size: 0.9 });
       }
       continue;
     }
@@ -191,9 +276,8 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       const line = hash(Math.round(r.vertical ? q.x + q.w / 2 : q.y + q.h / 2), r.vertical ? 1 : 2, stretch, 0x5ee7) % 100;
       // (Only a street within one cell leans on its own quarter's style: an edge road's two cells may differ.)
       const homey = !edgeRoad && plan.buildings.some((b) => (b.zone?.look.homes ?? 0) > 0.3) ? 12 : 0;
-      const streetSpecies: TreeSpecies = boulevard
-        ? line < 45 ? 'ginkgo' : line < 78 - homey ? 'zelkova' : 'sakura'
-        : line < 32 - homey ? 'ginkgo' : line < 70 - homey ? 'dogwood' : 'sakura';
+      const cuts = boulevard ? treeSet().boulevard : treeSet().street;
+      const streetSpecies: TreeSpecies = cuts.cuts.find(([, upTo, shifts]) => line < upTo - (shifts ? homey : 0))?.[0] ?? cuts.rest;
       const stopClear = (t: number): boolean => !edgeRoad || Math.abs((((t % CELL3) + CELL3) % CELL3) - CELL3 / 2) > 7;
       const bladeClear = (x: number, z: number, m: number): boolean => !plan.signs.some((g) => g.vertical && Math.hypot(g.x - x, g.z - z) < m);
       for (const side of [-1, 1]) {
@@ -210,6 +294,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
             if (mine(x, z)) {
               props.push({ kind: 'lamp', x, z, nx, nz, radius: 0.2, variant: 0 });
               lights.push({ x: x + nx * 1.4, z: z + nz * 1.4, r: 9, color: LAMP_COLOR, i: 0.7 });
+              if (cellStreet > 0) manilaStreet.lampParol(x, z, nx, nz, hash(Math.round(x * 4), Math.round(z * 4), 0x9a401), cellStreet, rc);
             }
             const tt = t + LAMP_SPACING / 2;
             // The tree sits 0.6-0.9 m in from the kerb; its canopy leans out over the road so it stays
@@ -217,7 +302,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
             const inset = boulevard ? r.sidewalk - 0.9 : r.sidewalk - 0.6;
             const [x2, z2, nx2, nz2] = along(tt, side, inset);
             const roll = u01(hash(Math.round(x2 * 4), Math.round(z2 * 4), 0x7ee));
-            if (tt < e - 3 && (boulevard || roll < style.streetTrees) && mine(x2, z2) && stopClear(tt) && bladeClear(x2, z2, 3.2) && !beforeStamp(x2, z2)) {
+            if (tt < e - 3 && (boulevard || roll < style.streetTrees) && mine(x2, z2) && stopClear(tt) && bladeClear(x2, z2, 3.2) && !beforeStamp(x2, z2) && !under(x2, z2)) {
               // Sized to the pavement: the crown reaches no closer than 0.25 m to the building line. A species
               // too big for its pavement even at half size isn't planted (a cherry on a 1.6 m pavement: its
               // crown stood 2 m out, the trunk in the carriageway on a stem leaning further than it rose).
@@ -233,10 +318,24 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
               for (const [c, h] of [[t + 5.5, 3.6], [t + 16.5, 3.6]] as const) {
                 if (c + h > e - 3 || !stopClear(c) || !stopClear(c - h) || !stopClear(c + h)) continue;
                 const [hx, hz, hnx, hnz] = along(c, side, r.sidewalk - 0.55);
-                if (!mine(hx, hz) || u01(hash(Math.round(hx * 4), Math.round(hz * 4), 0x4ed9e)) >= style.hedges) continue;
+                if (!mine(hx, hz) || under(hx, hz) || u01(hash(Math.round(hx * 4), Math.round(hz * 4), 0x4ed9e)) >= style.hedges) continue;
                 if (beforeStamp(hx - (r.vertical ? 0 : h), hz - (r.vertical ? h : 0)) || beforeStamp(hx + (r.vertical ? 0 : h), hz + (r.vertical ? h : 0)) || beforeStamp(hx, hz)) continue;
                 props.push({ kind: 'hedge', x: hx, z: hz, nx: hnx, nz: hnz, radius: 0.35, half: h, variant: 0 });
               }
+            }
+          }
+          // Manila: a jeepney stop or tricycle terminal on some stretches, and a tarpaulin across the road now and then.
+          if (cellStreet > 0 && e - s > 30) {
+            const hs = hash(Math.round(s * 4), Math.round(q.x * 4), Math.round(q.y * 4), side + 9);
+            const ts = s + 10 + ((hs >>> 8) % Math.max(1, Math.round(e - s - 20)));
+            if (hs % 100 < 60 * cellStreet && stopClear(ts) && stopClear(ts - 4) && stopClear(ts + 4)) {
+              const [x, z, nx, nz] = along(ts, side, r.sidewalk - 0.4);
+              manilaStreet.stopSign(x, z, nx, nz, hs >>> 4, rc);
+            }
+            if (side === 1 && width < 20 && (hs >>> 12) % 100 < 24 * cellStreet) {
+              const tt = s + 8 + ((hs >>> 16) % Math.max(1, Math.round(e - s - 16)));
+              const [cx, cz] = along(tt, -1, width / 2);
+              manilaStreet.roadTarp(cx, cz, r.vertical ? 0 : 1, r.vertical ? 1 : 0, width / 2 - 0.5, hs >>> 3, rc);
             }
           }
           // Traffic signals where two cell-edge roads cross (one per approach; traffic keeps left). Their lamps
@@ -265,38 +364,11 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
           }
         }
       }
+      if (cellStreet > 0 && !boulevard) poleRun(r, rnd.chance(0.5) ? -1 : 1, along, rnd, Math.max(0.35, r.sidewalk - 0.35));
     } else if (q.w >= 2.5 && q.h >= 2.5 && Math.min(q.w, q.h) < 8) {
       // Utility poles along one edge of narrow streets, wired pole to pole.
       const side = rnd.chance(0.5) ? -1 : 1;
-      for (const [s, e] of freeSpans(r, plan.roads, 1)) {
-        let prev: [number, number, number, number] | null = null;
-        for (let t = s + 3 + rnd.float() * 6; t < e - 2; t += POLE_SPACING) {
-          const pt = along(t, side, 0.35);
-          const [x, z, nx, nz] = pt;
-          if (!mine(x, z) || inBuilding(x, z, 0.2)) {
-            prev = null;
-            continue;
-          }
-          const variant = hash(Math.round(x * 10), Math.round(z * 10)) % 10;
-          props.push({ kind: 'pole', x, z, nx, nz, radius: 0.25, variant });
-          if (variant < 3) lights.push({ x: x + nx * 1.2, z: z + nz * 1.2, r: 7, color: POLE_LAMP, i: 0.5 });
-          if (prev) {
-            for (const [off, y] of [[-0.7, 8.9], [0, 8.9], [0.7, 8.9], [0, 7.5]] as const) {
-              // Crossarms run across the street: offset along the pole's facing.
-              const a: C3 = [prev[0] + prev[2] * off, y, prev[1] + prev[3] * off];
-              const b: C3 = [x + nx * off, y, z + nz * off];
-              const sag = 0.35 + Math.hypot(b[0] - a[0], b[2] - a[2]) * 0.012;
-              const line: C3[] = [];
-              for (let k = 0; k <= 4; k++) {
-                const f = k / 4;
-                line.push([a[0] + (b[0] - a[0]) * f, y - sag * 4 * f * (1 - f), a[2] + (b[2] - a[2]) * f]);
-              }
-              wires.push(line);
-            }
-          }
-          prev = pt;
-        }
-      }
+      poleRun(r, side, along, rnd, 0.35);
     }
   }
 
@@ -328,11 +400,13 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       const near = (a: number, b: number): boolean => Math.abs(a - Math.round(a / CELL3) * CELL3) < 14 && Math.abs(b - (Math.floor(b / CELL3) + 0.5) * CELL3) < 9;
       return near(x, z) || near(z, x);
     };
+    const used: [number, number][] = [];
     let vendAt: number | null = null;
-    if (sw > 6 && b.hue === undefined && rnd.chance(0.14)) {
+    if (sw > 6 && b.hue === undefined && rnd.chance(b.zone?.look.vending ?? 0.14)) {
       const count = rnd.int(1, 3);
       const start = rnd.chance(0.5) ? s0 + 0.4 : s1 - 0.4 - count * 1.05;
       vendAt = start + (count * 1.05) / 2;
+      used.push([start, start + count * 1.05]);
       for (let i = 0; i < count; i++) {
         const u = start + i * 1.05 + 0.5;
         if (atStop(u)) continue;
@@ -352,6 +426,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       const u = atStart ? s0 + 0.2 + len / 2 : s1 - 0.2 - len / 2;
       const x = f.p[0] + f.r[0] * u + f.n[0] * 0.35;
       const z = f.p[2] + f.r[2] * u + f.n[2] * 0.35;
+      used.push([u - len / 2, u + len / 2]);
       if (!atStop(u - len / 2) && !atStop(u + len / 2)) props.push({ kind: 'pots', x, z, nx: f.n[0], nz: f.n[2], radius: 0.3, half: len / 2, variant: pots.int(0, 99999) });
     }
     // Bicycles (mamachari) parked nose to the wall outside homes, at the other end from the pots.
@@ -366,6 +441,11 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
         const z = f.p[2] + f.r[2] * u + f.n[2] * 0.95;
         props.push({ kind: 'bike', x, z, nx: f.n[0], nz: f.n[2], radius: 0.35, variant: bikes.int(0, 99999) });
       }
+    }
+    // Manila: kiosks, carts, shrines, rubbish, a barangay hall's porch, tarpaulins and parols along the frontage.
+    if (fil && (b.zone?.look.street ?? 0) > 0 && b.hue === undefined) {
+      const gfh = s.home ? 3 : 4.2;
+      manilaStreet.frontage(b, b.zone!.look.street!, { props, lights, atStop, f, s0, s1, used, gf: gfh, floors: Math.max(0, Math.floor((b.h - gfh) / 3)) });
     }
   }
   // Open ground: its props and lights, and solids for collision.
@@ -398,7 +478,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       for (let z = q.y + 7; z < q.y + q.h - 5; z += 9) {
         if (Math.abs(x - cx) < 5 && Math.abs(z - cz) < 5) continue; // keep the middle open
         if (!rnd.chance(0.55) || inBuilding(x, z, 2)) continue;
-        props.push({ kind: 'tree', species: 'zelkova', size: 0.75, x, z, nx: 0, nz: 1, radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8 });
+        props.push({ kind: 'tree', species: treeSet().grove, size: 0.75, x, z, nx: 0, nz: 1, radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8 });
       }
     }
     lights.push({ x: cx, z: cz, r: Math.max(q.w, q.h) * 0.6, color: [0.9, 0.75, 0.85], i: 0.35 });
@@ -471,6 +551,20 @@ export function addProps(mb: MeshBuilder, d: CellDetail, signs?: VehicleSigns, p
         // Pole transformer.
         mb.color = lin(0x7a8288);
         mb.cylinder(p.x - r[0] * 0.35, p.z - r[2] * 0.35, 6.6, 7.6, 0.28, 8);
+      }
+      if (filipino()) {
+        // Manila's poles carry everything: more transformer cans, coloured cable boxes, a coil of slack cable, a second crossarm.
+        const v = p.variant;
+        mb.color = lin(0x7a8288);
+        for (let k = 0; k < (v % 3); k++) mb.cylinder(p.x + n[0] * 0.3 + r[0] * (0.35 * k - 0.1), p.z + n[2] * 0.3 + r[2] * (0.35 * k - 0.1), 6.7, 7.6, 0.26, 8);
+        mb.color = lin([0x2f6a4a, 0x5a5e62, 0x2a3a6a, 0x8a3a2a][v % 4]);
+        mb.frameBox(o, r, n, 0.12, 0.55, 4.6, 5.4, 0.12, 0.5);
+        mb.color = lin([0x5a5e62, 0x2a3a6a, 0x2f6a4a][v % 3]);
+        mb.frameBox(o, r, n, -0.5, -0.15, 5.7, 6.3, 0.12, 0.42);
+        mb.color = lin(0x2a2a2a);
+        mb.lathe(p.x + n[0] * 0.4, p.z + n[2] * 0.4, [[5.0, 0.22], [5.1, 0.28], [5.2, 0.22]], 8);
+        mb.color = lin(0x4a4a4c);
+        mb.frameBox(o, r, n, -0.7, 0.7, 6.4, 6.5, -0.2, 0.2);
       }
       // Yellow-and-black guard sleeve at the foot.
       mb.color = lin(0xc8a020);
@@ -545,7 +639,7 @@ const LEAVES = [0x2e4a26, 0x36522a, 0x2a4222, 0x3e5a2e];
 function tree(mb: MeshBuilder, p: Prop): void {
   if (p.species) {
     const lean = p.lean ?? 0;
-    addTree(mb, { x: p.x, z: p.z, species: p.species, size: p.size, seed: p.variant, lean: [p.nx * lean, p.nz * lean], lift: p.high ? 1.5 : 0, grate: p.grate !== false && p.species !== 'azalea' && p.species !== 'box' });
+    addTree(mb, { x: p.x, z: p.z, species: p.species, size: p.size, seed: p.variant, lean: [p.nx * lean, p.nz * lean], lift: p.high ? 1.5 : 0, grate: p.grate !== false && p.species !== 'azalea' && p.species !== 'box' && p.species !== 'bougainvillea' });
     return;
   }
   const k = p.size ?? 1;

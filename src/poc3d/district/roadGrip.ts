@@ -54,7 +54,12 @@ export function puddleAt(x: number, z: number, wet: number): number {
   return smooth(0.62, 0.68, pn) * smooth(0.35, 0.9, wet);
 }
 
+/** How much a wheel in this depth of flood water (m) is wading, 0-1: nothing at a puddle's depth, full at about 25 cm. */
+export const wading = (depth: number): number => smooth(0.04, 0.25, depth);
+
 export interface RoadWeather {
+  /** The depth of the flood water over the street at (x, z), in m (Manila's monsoon floods, real/flood.ts). */
+  readonly floodAt?: (x: number, z: number) => number;
   /** The ground wet through (0-1, the city's uWet). */
   readonly wet: number;
   /** Snow lying (0-1, the city's uSnow). */
@@ -101,14 +106,17 @@ export interface WheelWater {
  * right; its speed (m/s).
  */
 export function wheelWater(wheels: readonly (readonly [number, number])[], speed: number, w: RoadWeather): WheelWater {
-  const d = wheels.map(([x, z]) => puddleAt(x, z, w.wet));
+  const fl = wheels.map(([x, z]) => (w.floodAt ? wading(w.floodAt(x, z)) : 0));
+  const d = wheels.map(([x, z], i) => Math.max(puddleAt(x, z, w.wet), fl[i]));
   const s = Math.abs(speed);
   // Skimming the water: nothing at a crawl, most by motorway speed.
   const skim = smooth(11, 30, s);
   const grip: [number, number] = [1 - 0.28 * skim * Math.max(d[0], d[1]), 1 - 0.34 * skim * Math.max(d[2], d[3])];
   const water = (d[0] + d[1] + d[2] + d[3]) / 4;
   // The water drags (more with speed), and deep snow a little.
-  const drag = water * Math.min(3.2, 0.9 + s * 0.09) + w.snow * ROAD_SNOW * Math.min(0.9, s * 0.05);
+  const wade = (fl[0] + fl[1] + fl[2] + fl[3]) / 4;
+  // Wading a flood is far worse than a puddle: the water piles up against the car (about 5 m/s^2 at 20 m/s).
+  const drag = water * Math.min(3.2, 0.9 + s * 0.09) + wade * wade * (1.2 + s * 0.2) + w.snow * ROAD_SNOW * Math.min(0.9, s * 0.05);
   // One side in the water: that side slows, so the car turns toward it (softly: you can't always see them).
   const left = d[0] + d[2];
   const right = d[1] + d[3];

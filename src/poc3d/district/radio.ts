@@ -35,6 +35,8 @@ export interface Station {
   readonly freq: string;
   readonly blurb: string;
   readonly tracks: readonly Track[];
+  /** The cities whose dial has it (cityConfig.ts ids): Tōto's when the file doesn't say. */
+  readonly cities?: readonly string[];
 }
 
 /** Silence between one track and the next (seconds). */
@@ -68,7 +70,7 @@ export function parseStations(file: string, text: string, durations: Readonly<Re
       if (!(seconds > 1)) return err(`${at} (${id}): '${t.file}' has no length in assets/radio/durations.json (npm run radio:index)`);
       tracks.push({ file: t.file, title: t.title, artist: String(t.artist ?? ''), seconds });
     });
-    out.push({ id, name: String(s.name ?? id), jp: String(s.jp ?? ''), freq: String(s.freq ?? ''), blurb: String(s.blurb ?? ''), tracks });
+    out.push({ id, name: String(s.name ?? id), jp: String(s.jp ?? ''), freq: String(s.freq ?? ''), blurb: String(s.blurb ?? ''), tracks, cities: Array.isArray(s.cities) ? s.cities.map(String) : ['toto'] });
   });
   return out;
 }

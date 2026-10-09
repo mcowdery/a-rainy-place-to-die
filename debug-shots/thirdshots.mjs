@@ -12,7 +12,7 @@ try {
   await page.addInitScript(() => localStorage.setItem('citypop.thirdPerson', '1'));
   page.on('pageerror', (e) => console.log('pageerror', e.message));
   for (const [name, cam] of Object.entries(shots)) {
-    await page.goto(`${base}district.html?clock=21:00&weather=clear&cam=${cam}`);
+    await page.goto(`${base}?clock=21:00&weather=clear&cam=${cam}`);
     await page.waitForTimeout(40_000);
     await page.screenshot({ path: `debug-shots/${tag}_${name}.png` });
   }

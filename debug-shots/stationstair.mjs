@@ -23,7 +23,7 @@ const views = (process.env.VIEWS ? JSON.parse(process.env.VIEWS) : [
   ['6_under_slab', '3349,1.7,1606,-90,35'],
 ]);
 const load = async (cam) => {
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&clock=22:00&cam=${cam}${extra}`, { timeout: 240000 });
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&clock=22:00&cam=${cam}${extra}`, { timeout: 240000 });
   await page.waitForFunction(() => /building/.test(document.getElementById('overlay')?.textContent ?? ''), null, { timeout: 240000, polling: 50 });
   await page.waitForFunction(() => window.__district && window.__scene && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 };

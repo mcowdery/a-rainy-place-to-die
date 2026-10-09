@@ -25,7 +25,7 @@ const key = new THREE.DirectionalLight(0xffffff, 2.2);
 scene.add(key);
 window.__ready = (async () => {
   const model = (await new GLTFLoader().loadAsync(${JSON.stringify(url)})).scene;
-  model.traverse((o) => { if (o.isMesh) o.material = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.6, metalness: 0, side: THREE.DoubleSide, flatShading: false }); });
+  model.traverse((o) => { if (o.isMesh && ${process.env.SMOOTH ? 'true' : 'false'}) { o.geometry.deleteAttribute('normal'); o.geometry.computeVertexNormals(); } if (o.isMesh) o.material = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.6, metalness: 0, side: THREE.DoubleSide, flatShading: false }); });
   scene.add(model);
   return true;
 })();

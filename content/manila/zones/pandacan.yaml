@@ -1,0 +1,165 @@
+# Pandalan and the south-east, behind the Pasigan docks.
+district: residential
+area: Pandalan
+origin: [21, 11]
+map:
+  - ......M......MMPPBB
+  - ......M......MBPPBB
+  - ......M......MBPPBB
+  - ......M......MBBBBB
+  - ......MMMMMMMSSSSSS
+  - ......MBBBBBBSSSSSS
+  - ......MBBBBBBSSXXXS
+  - ......MBBBBBBSSXXXS
+  - MXXXXXXBBBBBBSSXXXS
+  - .................SS
+  - .................SS
+  - .................SS
+
+zones:
+  B:
+    id: pandacan_barangay
+    name: Pandalan (barangay)
+    people: { plain: 8, long: 2, school: 2, suit: 1 }
+    cars: { jeepney: 26, minivan: 22, van: 14, kei: 8, keitruck: 12, boxtruck: 6, sedan: 18, taxi: 10, taxi2: 4, hatch: 3, tricycle: 16 }
+    plan:
+      floors: [[1, 2, 55], [3, 4, 35], [5, 6, 10]]
+      lotW: [5, 10]
+      localStreet: [6, 9]
+      block: [18, 40]
+      lotGap: 0.3
+      signChance: 0.2
+      streetTrees: 0.2
+      hedges: 0.1
+      pots: 0.5
+      open: { vacant: 0.04, court: 0.09 }
+    signs:
+      words: ["SARI-SARI STORE", KAINAN, CARINDERIA, "LOAD", BOTIKA, VULCANIZING, BARBERSHOP, PAWNSHOP, "WATER REFILL", "FRESH BANGUS", BAKERY, "LAUNDRY"]
+      colors: ['#ffffff', '#ffe45f', '#ff6a4f', '#4fe3ff']
+    ads: { street: 2, food: 1, mainstream: 1 }
+    look:
+      block: 0.4
+      roofs: 0.7
+      vending: 0.03
+      street: 0.9
+      windows: { punched: 40, small: 30, balcony: 30 }
+      walls: ['#9fb0b8', '#d8b0a0', '#b8c4a8', '#c9b79c', '#7a9ab0', '#d8c870', '#c8a0a8']
+      tiled: false
+      shops: { warm: 4, colourful: 2, cool: 1 }
+      open: 0.55
+      homes: 0.85
+      bikes: 0.12
+  M:
+    id: pandacan_condos
+    name: Pandalan (condo belt)
+    people: { plain: 5, suit: 4, long: 2 }
+    cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
+    plan:
+      floors: [[5, 9, 40], [10, 16, 40], [18, 28, 20]]
+      lotW: [14, 24]
+      localStreet: [7, 10]
+      block: [30, 60]
+      twoRowDepth: 36
+      lotGap: 0.35
+      signChance: 0.15
+      streetTrees: 0.5
+      hedges: 0.4
+      pots: 0.2
+      open: { vacant: 0.02, court: 0.04 }
+    signs:
+      words: [CONDO, "FOR RENT", "FOR SALE", PHARMACY, "7 DAYS", CLINIC, CAFE]
+      colors: ['#ffffff', '#4fe3ff']
+    ads: { mainstream: 3, food: 1 }
+    look:
+      vending: 0.06
+      street: 0.25
+      windows: { ribbon: 30, balcony: 50, punched: 20 }
+      walls: ['#d8d4cc', '#b8c0c8', '#a8a49c', '#cfc2b0']
+      shops: { cool: 3, warm: 2 }
+      open: 0.6
+      homes: 0.7
+  S:
+    id: pandacan_village
+    name: Pandalan (village)
+    night: 0.1
+    people: { plain: 6, suit: 3, long: 2 }
+    cars: { sedan: 30, luxury: 14, minivan: 24, hatch: 4, roadster: 2, sports: 2 }
+    plan:
+      floors: [[2, 2, 70], [3, 3, 30]]
+      lotW: [12, 20]
+      localStreet: [7, 9]
+      block: [30, 60]
+      lotGap: 0.6
+      signChance: 0.02
+      streetTrees: 0.7
+      hedges: 0.6
+      pots: 0.5
+      rear: [3, 6]
+      setback: [3, 6]
+    signs:
+      words: [VILLAGE]
+      colors: ['#ffffff']
+    ads: { mainstream: 1 }
+    look:
+      vending: 0.05
+      street: 0.2
+      windows: { balcony: 40, punched: 40, curtain: 20 }
+      walls: ['#e8e0d0', '#d8d0c0', '#f0e8dc', '#cfc7b3']
+      shops: { warm: 3, cool: 2 }
+      open: 0.3
+      homes: 1.0
+      roofs: 0.8
+  X:
+    id: pandacan_shanties
+    name: Pandalan (informal settlement)
+    night: 0.5
+    people: { plain: 10, long: 2, school: 2 }
+    cars: { jeepney: 14, van: 6, kei: 4, keitruck: 4, minivan: 4, tricycle: 8 }
+    plan:
+      floors: [[1, 2, 70], [3, 3, 30]]
+      lotW: [3, 5]
+      localStreet: [3.2, 4.2]
+      block: [10, 22]
+      twoRowDepth: 14
+      lotGap: 0.15
+      signChance: 0.04
+      streetTrees: 0.03
+      hedges: 0
+      pots: 0.5
+      rear: [0.1, 0.6]
+      setback: [0, 0.3]
+      open: { vacant: 0.06, playground: 0.03 }
+    signs:
+      words: ["SARI-SARI STORE", "LOAD", "WATER REFILL"]
+      colors: ['#ffffff', '#ffe45f', '#ff6a4f', '#4fe3ff']
+    ads: { street: 1 }
+    look:
+      block: 0.55
+      roofs: 0.9
+      vending: 0.0
+      street: 1.0
+      windows: { small: 50, blank: 30, punched: 20 }
+      walls: ['#8a8a84', '#a6865a', '#6a8a9a', '#b05a3a', '#7a7a70', '#4a7aa8', '#9a9a8c', '#c8a050']
+      tiled: false
+      shops: { warm: 3, colourful: 3 }
+      open: 1.0
+      homes: 1.0
+      informal: 0.92
+      bikes: 0.1
+  P:
+    id: pandacan_park
+    name: Pandalan Park
+    night: 0.3
+    people: { plain: 6, long: 2, school: 3 }
+    cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
+    plan:
+      park: 0.8
+      streetTrees: 0.8
+      floors: [[2, 3, 100]]
+    signs:
+      words: [PARK]
+      colors: ['#ffffff']
+    ads: { mainstream: 1 }
+    look:
+      windows: { punched: 100 }
+      open: 1.0

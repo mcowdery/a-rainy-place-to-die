@@ -22,6 +22,7 @@ import { roadUnder } from './rail';
 import { stationKerb } from '../real/station';
 import type { Rect } from '../../core/coords';
 import type { Interior } from '../real/interiors';
+import { cityFromUrl } from './cityConfig';
 import { floorLevel, groundSurface, indoorSurface, type Surface } from './footing';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
@@ -151,8 +152,10 @@ export class District {
     readonly terrain: Terrain = Terrain.FLAT,
     /** Ground kept clear under the rail lines' curves (rail.ts railReserved). */
     reserved: readonly Rect[] = [],
+    /** Ground under something built over it: no trees or planting (expressway.ts `expresswayCovered`). */
+    covered: readonly Rect[] = [],
   ) {
-    this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues, terrain, reserved);
+    this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues, terrain, reserved, covered);
     this.nodes = placed.flatMap((p) => p.nodes);
     // Stamps collide as their footprint, or (landmarks you can walk into) as their walls and fixtures.
     const solid = (p: Placed3): Rect[] => [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }];
@@ -441,7 +444,7 @@ export class District {
       );
       w.addEventListener('message', (e) => this.onMessage(i, e.data));
       w.addEventListener('error', (e) => console.error('chunk worker error', e.message));
-      w.postMessage({ type: 'init', kinds: typeof this.kinds === 'string' ? [this.kinds] : [...this.kinds], seed: this.seed, words: kit.words } satisfies WorkerIn);
+      w.postMessage({ type: 'init', kinds: typeof this.kinds === 'string' ? [this.kinds] : [...this.kinds], seed: this.seed, words: kit.words, city: cityFromUrl().id } satisfies WorkerIn);
       this.workers.push(w);
       this.inFlight.push(0);
     }

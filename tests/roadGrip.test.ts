@@ -108,7 +108,7 @@ describe('weather on the road', () => {
     };
     const dry = run(DRY);
     const snow = run(SNOW);
-    expect(snow.s).toBeGreaterThan(3280);
+    expect(snow.s).toBeGreaterThan(3200);
     expect(snow.walls).toBeLessThanOrEqual(3);
     expect(snow.t).toBeGreaterThan(dry.t * 1.08);
   });

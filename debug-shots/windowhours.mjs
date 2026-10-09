@@ -19,7 +19,7 @@ for (const spawn of spawns) {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
   page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 600)); });
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1${/weather=/.test(extra) ? '' : '&weather=clear'}&res=100&spawn=${spawn}&clock=${hours[0]}${extra}`);
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1${/weather=/.test(extra) ? '' : '&weather=clear'}&res=100&spawn=${spawn}&clock=${hours[0]}${extra}`);
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 400000, polling: 250 });
   await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });
   // (With ?debug=1 the page's __look is the car's, so the view is turned here: up a little from the spawn's own.)

@@ -57,7 +57,7 @@ if (parts.includes('city')) {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   watch(page);
   for (const [name, q] of (process.env.ONLY ? [['night', 'clock=21:30']] : [['night', 'clock=21:30'], ['day', 'clock=13:00']])) {
-    await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=${spawn}&${q}&weather=clear&mob=color${extra}`, { timeout: 240000 });
+    await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=${spawn}&${q}&weather=clear&mob=color${extra}`, { timeout: 240000 });
     await page.waitForFunction(() => window.__district && window.__perf, null, { timeout: 240000 });
     await page.waitForTimeout(9000);
     const info = await page.evaluate(() => ({ hemi: window.__ghost?.uniforms.uHemiSky.value.toArray().map((v) => +v.toFixed(3)), gain: window.__ghost?.uniforms.uLightGain.value, smokers: window.__district.crowd?.smokeLayer?.count ?? -1, wind: window.__district.crowd?.smokeLayer?.material.uniforms.uWind.value.toArray() }));
@@ -80,7 +80,7 @@ if (parts.includes('city')) {
       const a = n.yaw + 0.45;
       const c = [n.x + Math.sin(a) * 2.3, n.y + 1.55, n.z + Math.cos(a) * 2.3];
       const yaw = (Math.atan2(c[0] - n.x, c[2] - n.z) * 180) / Math.PI;
-      await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&cam=${c.map((v) => v.toFixed(2)).join(',')},${yaw.toFixed(1)},-4&${q}&weather=clear&mob=color&fly=1${extra}`, { timeout: 240000 });
+      await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&cam=${c.map((v) => v.toFixed(2)).join(',')},${yaw.toFixed(1)},-4&${q}&weather=clear&mob=color&fly=1${extra}`, { timeout: 240000 });
       await page.waitForFunction(() => window.__district && window.__perf, null, { timeout: 240000 });
       await page.waitForTimeout(8000);
       console.log('  camera', JSON.stringify(await page.evaluate(() => { const c = window.__camera; const d = c.getWorldDirection(c.position.clone()); return { at: c.position.toArray().map((v) => +v.toFixed(1)), dir: d.toArray().map((v) => +v.toFixed(2)) }; })), 'smoker', n.x.toFixed(1), n.y.toFixed(1), n.z.toFixed(1), 'yaw', n.yaw.toFixed(2));

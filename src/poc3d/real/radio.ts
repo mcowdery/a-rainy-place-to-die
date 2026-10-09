@@ -18,7 +18,7 @@ const urlOf = (station: string, file: string): string | null => files[`../../../
 export const trackUrl = urlOf;
 
 /** The stations whose music this build has (content/radio/stations.yaml; tests/radio.test.ts checks the file). */
-export function loadStations(): Station[] {
+export function loadStations(city = 'toto'): Station[] {
   const errors: string[] = [];
   let durations: Record<string, number> = {};
   try {
@@ -28,7 +28,7 @@ export function loadStations(): Station[] {
   }
   const stations = parseStations('content/radio/stations.yaml', stationsText, durations, errors);
   for (const e of errors) console.error(e);
-  return onAir(stations, (s, f) => urlOf(s, f) !== null);
+  return onAir(stations.filter((s) => (s.cities ?? ['toto']).includes(city)), (s, f) => urlOf(s, f) !== null);
 }
 
 /** What the radio can be tuned to besides a station's id. */
