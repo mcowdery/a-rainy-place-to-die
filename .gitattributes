@@ -1,0 +1,15 @@
+# Text is stored with LF in the repository, whatever a checkout uses (git's autocrlf on Windows turns it to CRLF in
+# the working folder). Binary formats are never touched.
+* text=auto
+*.glb binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ogg binary
+*.mp3 binary
+*.wav binary
+*.mp4 binary
+*.webm binary
+*.zip binary
+*.blend binary

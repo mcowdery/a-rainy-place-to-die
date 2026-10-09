@@ -1,6 +1,7 @@
 ---
 paths:
   - "src/poc3d/real/mobShape.ts"
+  - "src/poc3d/real/mobMesh.ts"
   - "src/poc3d/real/mobRig.ts"
   - "src/poc3d/real/mobModels.ts"
   - "src/poc3d/real/people.ts"
@@ -112,3 +113,5 @@ Covers the passers-by as figures: the sculpted bodies, outfits and footwear, the
 ## The shady ones
 
 **The shady ones** (2026-10-05, to make the city feel more dangerous; `real/mobShape.ts`, the showroom's 'shady' stage): `yakuza` (a suit open over a loud shirt, a chain, sunglasses; by hair a punch perm, a crop, slicked back, or the old boss in white under a hat), `chinpira` (an aloha shirt, sunglasses, sandals), `irezumi` (tattooed arms and shoulders, an undershirt and belly band; summer), `bosozoku` (the long embroidered coat, headband, mask, a regent), `boss` (a heavy body in a double-breasted suit, bald or a comb-over; with a cap or hat a politician in a sash and white gloves), `hood` (hood up and a mask, or dark glasses, or a cap), `yankee` (teen-sized: a sukeban in a long sailor skirt with a mask and a wooden sword, or a school gang leader in a long uniform coat) and `drunk` (a suit undone, the tie round his head, a box of sushi). An outfit's hair picks its variant (`VARIANT`, `cutOf`). In the city they're in the districts' mixes (Kaburo's zones most, the port, the old town), and alleys have their own people (`ALLEY_PEOPLE` in people.ts: one, two or three against an alley's wall, more where the night is alive, keeping late hours and a shady manner).
+
+**The mesh operations are in `real/mobMesh.ts`** (2026-10-09, split out of `mobShape.ts` to shorten it: `Bulge` and `pushAt`/`displace`, `weld`, `openingOf`, `stitchRings`, `zip`, `tube`, `softenNormals`, `loftAt`, and the row maths `smooth`/`rowAt`/`table`). Moved as they were: the geometry of all 1,152 body, hair and outfit combinations was byte-identical before and after. `mobShape.ts` keeps the measurements and what each body, hair and outfit does with them.
