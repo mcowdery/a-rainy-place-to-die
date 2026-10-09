@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the audit reads the whole history for committed secrets
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # Builds all three editions and checks each holds only its own files (adult/ isn't in the repo, so those
+      # checks cover what's committed: the demo's hidden art and story text, the age check).
+      - run: npm run build:all
+      - run: npm run audit
+      - name: Dependency advisories
+        run: npm audit --audit-level=high
+        continue-on-error: true   # reported, not blocking: dev tooling advisories shouldn't stop a push
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
