@@ -2,7 +2,7 @@
 // demo into dist-demo/; src/edition/types.ts), then check each build holds only what its edition should:
 //   - the demo: none of DEMO_HIDDEN_ART's images or DEMO_HIDDEN_CHARACTERS' models, no VN stills, no story text
 //     (scenes, and chats other than KAIWA's welcome), no age check;
-//   - standard and demo: nothing from adult/ (its files by name, its overlays' text), no age check;
+//   - standard and demo: nothing from adult/ (its files by name, its overlays' text, the bare-body detail's look names), no age check;
 //   - uncensored: the age check;
 //   - every build: the __EDITION__ define replaced everywhere.
 // Exits 1 on any problem, listing them all.
@@ -41,6 +41,8 @@ for (const f of files(path.join(ROOT, 'content/phone'), (f) => f.endsWith('.yaml
 const adultText = new Set();
 for (const f of files(path.join(ROOT, 'adult/content'), (f) => f.endsWith('scene.json'))) collect(JSON.parse(fs.readFileSync(f, 'utf8')).frames, adultText);
 for (const f of files(path.join(ROOT, 'adult/content'), (f) => f.endsWith('.yaml'))) collect(YAML.parse(fs.readFileSync(f, 'utf8')), adultText);
+// adult/src (the bare-body detail, src/poc3d/real/mobBare.ts): its look tables' names, which a build without it must not hold.
+for (const f of files(path.join(ROOT, 'adult/src'), (f) => f.endsWith('.ts'))) for (const m of fs.readFileSync(f, 'utf8').matchAll(/name: '([^']{12,})'/g)) if (searchable(m[1])) adultText.add(m[1]);
 const adultFiles = files(path.join(ROOT, 'adult/content'), (f) => /\.(jpe?g|png|webp|gif|mp4|webm)$/i.test(f)).map((f) => path.parse(f).name);
 const hiddenArt = [...fs.readFileSync(path.join(ROOT, 'src/edition/demoArt.ts'), 'utf8').matchAll(/'(\d{2}_[a-z0-9_]+)'/g)].map((m) => m[1]);
 const hiddenCharacters = [...(fs.readFileSync(path.join(ROOT, 'src/edition/demoArt.ts'), 'utf8').match(/DEMO_HIDDEN_CHARACTERS.*/)?.[0] ?? '').matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]);

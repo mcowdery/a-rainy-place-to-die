@@ -164,6 +164,7 @@ import { TRADE, TRADE_COUNT } from './shops';
  * street and the window's frame hides more of them.
  *
  * NUDITY. The outfit "nude" (a woman's or a man's body with nothing over it: a mannequin's, smooth, no anatomical
+ * detail but a bare woman's breasts' own shape and her navel (the uncensored edition adds more: real/mobBare.ts), and a scene may add none; barefoot) is allowed only in a scene marked `adult` (so never in the demo), on the
  * "woman" and "man" bodies only; "nude_heels" is the same woman in high heels (a cabaret's dancer). CAST: "nude",
  * "nude_heels", "nude_man". Nobody in the street's crowd can wear either.
  *

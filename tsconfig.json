@@ -14,7 +14,7 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     // The edition (src/edition/types.ts): Vite points this at standard.ts or uncensored.ts; both have one type.
-    "paths": { "@edition": ["./src/edition/standard.ts"] }
+    "paths": { "@edition": ["./src/edition/standard.ts"], "@bare": ["./src/edition/bare/none.ts"] }
   },
-  "include": ["src", "tests", "vite.config.ts"]
+  "include": ["src", "tests", "vite.config.ts", "adult/src"]
 }
