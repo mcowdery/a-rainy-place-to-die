@@ -147,6 +147,11 @@ export class MuzzleFlashes {
     if (n) this.at.copy(n.at).addScaledVector(n.dir, 0.1);
   }
 
+  /** For a shader warm-up: every flash's parts shown (a flash that's over isn't drawn, so its programs wouldn't compile), or put away. */
+  warm(on: boolean): void {
+    for (const f of this.list) if (f.t > GLOW_LIFE) f.side.visible = f.front.visible = f.glow.visible = on;
+  }
+
   private pose(f: Flash): void {
     const hot = f.t < LIFE;
     f.side.visible = f.front.visible = hot;

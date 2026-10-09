@@ -39,7 +39,17 @@ export interface ChaseWorld {
   /** The vehicles within r of a point: the traffic, your car, and the other chase cars (not `self`). */
   vehicles(x: number, z: number, r: number, self: ChaseCar): readonly AutoVehicle[];
   readonly gunfire: CityGunfire;
+  /**
+   * `probe` and `solid` for what's within `pad` of (x, z), gathered once (District.obstacleNear): a probe costs ~65 us
+   * on the world's own, and a car makes ~50 a frame. For radii up to 2.5 m.
+   */
+  near(x: number, z: number, pad: number): { probe(x: number, z: number, r: number): HitKind | null; solid(x: number, z: number, r: number): HitKind | null };
 }
+
+/** How far round a car what's near is gathered for (m), how far it may move before that's gathered again, and for how long it's kept (s). */
+const NEAR_PAD = 70;
+const NEAR_MOVE = 18;
+const NEAR_KEEP = 1.5;
 
 const HL = 2.15;
 const HW = 0.85;
@@ -79,7 +89,7 @@ function gunArm(): THREE.Group {
 const idleSounds: CarSound[] = [];
 
 export class ChaseCar {
-  readonly sim: Car;
+  sim: Car;
   readonly view: CarView;
   readonly ground: Ground;
   readonly sound = idleSounds.pop() ?? new CarSound();
@@ -112,7 +122,7 @@ export class ChaseCar {
     return ChaseCar.tagMat;
   }
   private readonly arm = gunArm();
-  private readonly trigger = new Trigger();
+  private trigger = new Trigger();
   private pilot: AutoDrive | null = null;
   /** Where its route goes, and seconds until it may plan another. */
   private goal: [number, number] | null = null;
@@ -135,16 +145,22 @@ export class ChaseCar {
   private throttle = 0;
   /** A knock this frame (m/s into a wall, or the speed it ploughed into something at), for what it costs the car. */
   knock = 0;
+  /** What's near it, gathered for a moment (`ChaseWorld.near`), where from and how long ago. */
+  private nearCache: { x: number; z: number; w: ReturnType<ChaseWorld['near']> } | null = null;
+  private nearAge = Math.random() * NEAR_KEEP;
   /** Out of it (the page says so: chase.ts): it rolls to a stop. */
   out = false;
+  /** Seconds it's been out of it (a gauntlet clears the wrecks away), and whether it has its engine sound running. */
+  outFor = 0;
+  loud = false;
   /** Its pace with a tyre gone (1: whole). */
   private limp = 1;
   /** How it's driving now, for the HUD and checks. */
   mode: 'held' | 'route' | 'direct' | 'backing' | 'out' = 'held';
 
   constructor(
-    readonly def: ChaseCarDef,
-    readonly id: string,
+    public def: ChaseCarDef,
+    public id: string,
     material: THREE.Material,
     private readonly world: ChaseWorld,
   ) {
@@ -201,6 +217,27 @@ export class ChaseCar {
     this.pose(0, 0);
   }
 
+  /** The local probes' gathering, made again once the car has moved on or it has gone stale. */
+  private refreshNear(dt: number): void {
+    const s = this.sim;
+    const c = this.nearCache;
+    this.nearAge += dt;
+    if (c && this.nearAge < NEAR_KEEP && Math.hypot(s.x - c.x, s.z - c.z) < NEAR_MOVE) return;
+    this.nearAge = 0;
+    this.nearCache = { x: s.x, z: s.z, w: this.world.near(s.x, s.z, NEAR_PAD) };
+  }
+
+  /** `world.probe` / `world.solid`, from what's been gathered near the car where the point is inside it. */
+  private probe(x: number, z: number, r: number): HitKind | null {
+    const c = this.nearCache;
+    return c && Math.abs(x - c.x) < NEAR_PAD - 3 && Math.abs(z - c.z) < NEAR_PAD - 3 ? c.w.probe(x, z, r) : this.world.probe(x, z, r);
+  }
+
+  private solid(x: number, z: number, r: number): HitKind | null {
+    const c = this.nearCache;
+    return c && Math.abs(x - c.x) < NEAR_PAD - 3 && Math.abs(z - c.z) < NEAR_PAD - 3 ? c.w.solid(x, z, r) : this.world.solid(x, z, r);
+  }
+
   /** The street's walls: a wall on the car's centre line pushes it back out the nearest way. */
   private collide(x: number, z: number, h: number): { px: number; pz: number; nx: number; nz: number; friction: number } | null {
     const fx = Math.sin(h);
@@ -208,12 +245,12 @@ export class ChaseCar {
     for (const f of PROBES) {
       const cx = x + fx * f;
       const cz = z + fz * f;
-      if (this.world.probe(cx, cz, CL) !== 'wall') continue;
+      if (this.probe(cx, cz, CL) !== 'wall') continue;
       for (let d = 0.05; d <= 1.6; d += 0.05) {
         let nx = 0;
         let nz = 0;
         for (const [dx, dz] of DIRS) {
-          if (this.world.probe(cx + dx * d, cz + dz * d, CL) !== 'wall') {
+          if (this.probe(cx + dx * d, cz + dz * d, CL) !== 'wall') {
             nx += dx;
             nz += dz;
           }
@@ -230,7 +267,7 @@ export class ChaseCar {
   private clearTo(x: number, z: number): boolean {
     const s = this.sim;
     const d = Math.hypot(x - s.x, z - s.z);
-    for (let t = 2.5; t < d - 2; t += 1.3) if (this.world.probe(s.x + ((x - s.x) * t) / d, s.z + ((z - s.z) * t) / d, HW + 0.15) === 'wall') return false;
+    for (let t = 2.5; t < d - 2; t += 1.3) if (this.probe(s.x + ((x - s.x) * t) / d, s.z + ((z - s.z) * t) / d, HW + 0.15) === 'wall') return false;
     return true;
   }
 
@@ -241,13 +278,13 @@ export class ChaseCar {
     const fz = Math.cos(s.h);
     let ahead = Infinity;
     for (const d of [5, 9, 13, 18, 26]) {
-      if (this.world.probe(s.x + fx * d, s.z + fz * d, 0.8) === 'wall') {
+      if (this.probe(s.x + fx * d, s.z + fz * d, 0.8) === 'wall') {
         ahead = d;
         break;
       }
     }
     if (ahead === Infinity) return { ahead, side: 0 };
-    const at = (a: number): boolean => this.world.probe(s.x + Math.sin(s.h + a) * 9, s.z + Math.cos(s.h + a) * 9, 0.8) !== 'wall';
+    const at = (a: number): boolean => this.probe(s.x + Math.sin(s.h + a) * 9, s.z + Math.cos(s.h + a) * 9, 0.8) !== 'wall';
     const l = at(0.6);
     const r = at(-0.6);
     return { ahead, side: l === r ? (this.backSteer > 0 ? 1 : -1) : l ? 1 : -1 };
@@ -264,7 +301,7 @@ export class ChaseCar {
       vehicles: (x, z, r) => this.world.vehicles(x, z, r, this),
       // (Barging through: only walls and people are in its way.)
       solid: (x, z, r) => {
-        const k = this.world.solid(x, z, r);
+        const k = this.solid(x, z, r);
         return this.barge > 0 && k !== 'wall' && k !== 'person' ? null : k;
       },
     };
@@ -328,10 +365,10 @@ export class ChaseCar {
   }
 
   /**
-   * One step. `role`: a runner or a pursuer; `you`: your car; `slot`: a pursuer's place about you; `held`: on the
+   * One step. `role`: a runner, a pursuer, or a roadblock's car (stood across the road with its brakes on); `you`: your car; `slot`: a pursuer's place about you; `held`: on the
    * grid through the countdown; `gdt`: the world's step (slow motion), `dt` real time for its sound.
    */
-  update(gdt: number, role: 'run' | 'hunt', you: Mover, slot: Slot, held: boolean, camera: THREE.Vector3, lamps: number): void {
+  update(gdt: number, role: 'run' | 'hunt' | 'block', you: Mover, slot: Slot, held: boolean, camera: THREE.Vector3, lamps: number): void {
     // (Its mark in your mirrors: bigger the further off, so it's a few pixels of red at any distance.)
     const size = THREE.MathUtils.clamp(Math.hypot(you.x - this.sim.x, you.z - this.sim.z) / 13, 0.8, 6);
     this.tag.scale.setScalar(size);
@@ -339,10 +376,15 @@ export class ChaseCar {
     const s = this.sim;
     this.knock = 0;
     this.replanIn -= gdt;
+    this.refreshNear(gdt);
     let c: Controls;
     if (this.out) {
       this.mode = 'out';
+      this.outFor += gdt;
       c = { throttle: 0, brake: 0.4, steer: 0, handbrake: false };
+    } else if (role === 'block') {
+      this.mode = 'held';
+      c = { throttle: 0, brake: 1, steer: 0, handbrake: true };
     } else if (held) {
       this.mode = 'held';
       c = { throttle: 0, brake: 0, steer: 0, handbrake: false };
@@ -350,7 +392,7 @@ export class ChaseCar {
       // Backing out of where it was held up, the wheel over so the nose comes round.
       this.backing -= gdt;
       this.mode = 'backing';
-      const behind = this.world.probe(s.x - Math.sin(s.h) * (HL + 1.2), s.z - Math.cos(s.h) * (HL + 1.2), HW) === 'wall';
+      const behind = this.probe(s.x - Math.sin(s.h) * (HL + 1.2), s.z - Math.cos(s.h) * (HL + 1.2), HW) === 'wall';
       if (behind) this.backing = 0;
       c = { throttle: 0, brake: behind ? 0 : 1, steer: this.backSteer, handbrake: false };
     } else {
@@ -381,6 +423,8 @@ export class ChaseCar {
     this.throttle = c.throttle;
     s.update(gdt, c, this.ground);
     if (held) s.u = s.w = s.r = 0;
+    // (A roadblock's car stays where it was put, creeping on a slope included; a hard knock still sends it rolling.)
+    else if (role === 'block' && Math.abs(s.u) < 2 && Math.abs(s.w) < 2) s.u = s.w = s.r = 0;
     if (s.bump > 0) this.knock = s.bump;
     this.plough(gdt);
     this.pose(gdt, lamps);
@@ -396,7 +440,7 @@ export class ChaseCar {
     const fz = Math.cos(s.h);
     let k: HitKind | null = null;
     for (const f of PROBES) {
-      const q = this.world.probe(s.x + fx * f, s.z + fz * f, CL + 0.25);
+      const q = this.probe(s.x + fx * f, s.z + fz * f, CL + 0.25);
       if (q && q !== 'wall' && (!k || q === 'car')) k = q;
     }
     if (k && !this.touching && s.speed > 4) {
@@ -418,6 +462,56 @@ export class ChaseCar {
     turnWheels(this.view, this.sim, dt);
     setLamps(this.view, { head: lamps > 0.3 && !this.out, tail: lamps > 0.3 });
     lampsByMotion(this.view, this.sim);
+  }
+
+  /** What a car is built as: a pooled one can only be given another def of the same key (its model, paint and whether it has a gunman). */
+  static key(def: ChaseCarDef): string {
+    return `${def.type}|${def.paint}|${def.gunman}`;
+  }
+
+  /**
+   * Put a retired car back to work as `def` (district/cityChase.ts keeps them in a pool: building one is 25-40 ms of
+   * geometry): as new, with the holes and cracks and broken glass mended, its driver and gunman alive, nothing it
+   * was doing before remembered.
+   */
+  rebind(def: ChaseCarDef, id: string): void {
+    this.def = def;
+    this.id = id;
+    this.sim = new Car(specFor(def), CITY_ASSISTS);
+    for (const v of this.volumes) v.userData.id = id;
+    this.world.gunfire.carHits.mend(this.view.obj);
+    this.marks.clear();
+    this.arm.visible = false;
+    this.tag.visible = true;
+    this.trigger = new Trigger();
+    this.pilot = null;
+    this.goal = null;
+    this.replanIn = this.sightIn = this.byRoad = this.stuck = this.backing = this.stalled = this.queued = this.blocked = this.barge = 0;
+    this.sight = false;
+    this.touching = false;
+    this.throttle = this.knock = this.outFor = 0;
+    this.out = false;
+    this.limp = 1;
+    this.mode = 'held';
+    this.nearCache = null;
+    this.nearAge = Math.random() * NEAR_KEEP;
+    this.view.obj.visible = true;
+  }
+
+  /** Off the street but kept (its sound silent, its holes cleared): `rebind` brings it back. */
+  retire(): void {
+    this.sound.setVolume(0);
+    this.marks.clear();
+    this.arm.visible = false;
+    this.view.obj.removeFromParent();
+  }
+
+  /** For the shader warm-up (CityChase.warmUp): everything it only shows in time (his arm, its mirror tag, a hole) shown, or put away. */
+  warm(on: boolean): void {
+    this.arm.visible = on;
+    this.tag.visible = on;
+    if (on) this.marks.add(new THREE.Vector3(this.sim.x, this.sim.y + 0.8, this.sim.z), new THREE.Vector3(0, 1, 0), 'bullet');
+    else this.marks.clear();
   }
 
   /** A tyre's shot out: it swerves, and limps on slower and loose at the back. */

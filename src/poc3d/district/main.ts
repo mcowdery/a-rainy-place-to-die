@@ -2113,7 +2113,7 @@ async function run(): Promise<void> {
     height: groundAt,
     grip: () => weatherGrip(ownCar.weather),
     route: (ax, az, bx, bz, heading) => navGrid('drive').route(ax, az, bx, bz, heading),
-    vehicles: (x, z, r, self) => [...traffic.around(x, z, r, null), ...chase.cars.filter((c) => c !== self && Math.abs(c.sim.x - x) < r && Math.abs(c.sim.z - z) < r).map((c) => c.vehicle)],
+    vehicles: (x, z, r, self) => [...traffic.around(x, z, r, null), ...chase.all().filter((c) => c !== self && Math.abs(c.sim.x - x) < r && Math.abs(c.sim.z - z) < r).map((c) => c.vehicle)],
     driving: () => driving.own === ownCar,
     hold: (on) => (driving.hold = on),
     seen: (x, z) => {
@@ -2163,11 +2163,24 @@ async function run(): Promise<void> {
       state: () => chase.state && { phase: chase.state.phase, t: +chase.state.t.toFixed(1), you: chase.state.health, result: chase.state.result, cars: chase.cars.map((c, i) => ({ mode: c.status, kmh: Math.round(c.sim.u * 3.6), d: Math.round(Math.hypot(c.sim.x - ownCar.sim.x, c.sim.z - ownCar.sim.z)), at: [Math.round(c.sim.x), Math.round(c.sim.z)], ...chase.state!.cars[i] })) },
       tail: (on: boolean) => {
         if (on && !tailing) {
+    near: (x, z, pad) => {
+      const o = district.obstacleNear(x, z, pad);
+      return {
+        probe: (px, pz, r) => (npcBlocked(px, pz, r) ? 'person' : traffic.blocked(px, pz, r, ownCar.vehicle) ? 'car' : o(px, pz, r)),
+        solid: (px, pz, r) => (npcBlocked(px, pz, r) ? 'person' : o(px, pz, r)),
+      };
+    },
           tailing = driving.pilot;
           driving.pilot = () => (chase.cars[0] && !ownCar.totaled ? pursue(ownCar.sim, chase.cars[0].sim, { along: -9, across: 0 }, 38) : null);
         } else if (!on && tailing) {
           driving.pilot = tailing;
           tailing = null;
+    place: (x, z, h) => ownCar.place(x, z, h, groundAt(x, z)),
+    warm: () => {
+      renderer.setRenderTarget(rt);
+      renderer.compile(scene, camera);
+      renderer.setRenderTarget(null);
+    },
         }
       },
       aim: (i: number) => {
@@ -2775,7 +2788,7 @@ async function run(): Promise<void> {
     // Car chases (district/chase.ts): the pistol from your car, against cars that run from you or come after you.
     title: 'Car chases (your car, the pistol)',
     items: () => [
-      ...CHASES.map((c) => ({ label: `${c.name} · ${c.kind === 'hunt' ? 'run him down' : c.reach ? 'get away' : 'hunted'}`, on: () => chase.state?.def.id === c.id, run: () => void startChase(c.id) })),
+      ...CHASES.map((c) => ({ label: `${c.name} · ${c.kind === 'hunt' ? 'run him down' : c.kind === 'gauntlet' ? 'across the city' : c.reach ? 'get away' : 'hunted'}`, on: () => chase.state?.def.id === c.id, run: () => void startChase(c.id) })),
       ...(chase.active ? [{ label: 'end chase', run: () => chase.end() }] : []),
     ],
   };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHASES, ChaseState, fleeGoals, GUNMAN, LOST, missBy, pursue, ramDamage, SHAKEN, SHOT, shotAt, SLOTS, Trigger, YOUR_HEALTH, type ChaseView, type Mover } from '../src/poc3d/district/chase';
+import { Blocker, CHASES, ChaseState, fleeGoals, GUNMAN, LOST, missBy, pickAttacker, pursue, RAM_SLOTS, ramDamage, SHAKEN, SHOT, shotAt, SLOTS, Spawner, swarmTarget, Trigger, YOUR_HEALTH, type ChaseView, type Mover } from '../src/poc3d/district/chase';
 import { Car, COUPE } from '../src/race/vehicle';
 import { CITY_ASSISTS } from '../src/poc3d/district/ownCar';
 
@@ -14,8 +14,10 @@ describe('The jobs', () => {
   it('are well formed: a hunt has a clock and a runner, the hunted have gunmen after them', () => {
     expect(new Set(CHASES.map((c) => c.id)).size).toBe(CHASES.length);
     for (const c of CHASES) {
-      expect(c.cars.length).toBeGreaterThan(0);
       expect(c.pay).toBeGreaterThan(0);
+      // (A gauntlet's cars come from its swarm.)
+      if (c.kind === 'gauntlet') continue;
+      expect(c.cars.length).toBeGreaterThan(0);
       for (const k of c.cars) {
         expect(k.health).toBeGreaterThan(0);
         expect(k.pace).toBeGreaterThan(0.6);
@@ -287,5 +289,117 @@ describe('A gunman', () => {
     expect(g.raised).toBe(1);
     for (let t = 0; t < 2; t += 1 / 60) expect(g.step(1 / 60, false)).toBe(false);
     expect(g.raised).toBe(0);
+  });
+});
+
+describe('The gauntlet', () => {
+  const def = CHASES.find((c) => c.kind === 'gauntlet')!;
+  const sw = def.swarm!;
+
+  it('runs from one node to another, with a swarm and roadblocks', () => {
+    expect(def.from).toBeTruthy();
+    expect(def.reach).toBeTruthy();
+    expect(def.from).not.toBe(def.reach);
+    expect(sw.roster.some((r) => r.def.ram)).toBe(true);
+    expect(sw.roster.some((r) => r.def.gunman)).toBe(true);
+    expect(sw.blocks.length).toBeGreaterThan(1);
+    expect(RAM_SLOTS.length).toBeGreaterThan(1);
+  });
+
+  it('has no end but the far side: wiping out the cars on you ends nothing, arriving wins', () => {
+    const st = new ChaseState(def);
+    const v = (toGoal: number): ChaseView => ({ driving: true, wrecked: false, dist: st.cars.map(() => 30), seen: st.cars.map(() => true), toGoal });
+    for (let i = 0; i < 3; i++) st.add(sw.roster[0].def);
+    for (let t = 0; t < 6; t += 0.1) st.update(0.1, v(3000));
+    expect(st.running).toBe(true);
+    for (let i = 0; i < 3; i++) st.ram(i, 40);
+    expect(st.live).toBe(0);
+    expect(st.kills).toBe(3);
+    for (let t = 0; t < 30; t += 0.1) st.update(0.1, v(3000));
+    expect(st.result).toBeNull();
+    st.update(0.1, v(10));
+    expect(st.result).toMatchObject({ won: true });
+  });
+
+  it('counts a kill once, whether shot or rammed, and keeps its lists in step as cars come and go', () => {
+    const st = new ChaseState(def);
+    st.update(5.1, view({ n: 0 }));
+    const a = st.add(sw.roster[0].def);
+    const b = st.add(sw.roster[1].def);
+    st.shoot(a, 'head', 'driver');
+    st.shoot(a, 'head', 'driver');
+    st.ram(a, 40);
+    expect(st.kills).toBe(1);
+    st.drop(a);
+    expect(st.cars.length).toBe(1);
+    expect(st.defs[0]).toBe(sw.roster[1].def);
+    expect(st.cars[0].health).toBe(sw.roster[1].def.health);
+    expect(b).toBe(1);
+  });
+
+  it('gives you more health than an ordinary job, and a longer countdown', () => {
+    const st = new ChaseState(def);
+    expect(st.maxHealth).toBeGreaterThan(YOUR_HEALTH);
+    expect(st.health).toBe(st.maxHealth);
+    expect(st.countdown).toBeGreaterThan(job('tail').countdown);
+  });
+
+  it('sends more of them the further you go, and the rarer ones only later', () => {
+    expect(swarmTarget(sw, 0)).toBe(sw.start);
+    expect(swarmTarget(sw, 1)).toBe(sw.max);
+    expect(swarmTarget(sw, 0.5)).toBeGreaterThan(sw.start);
+    const early = new Set<string>();
+    const late = new Set<string>();
+    for (let k = 0; k < 400; k++) {
+      early.add(pickAttacker(sw, 0, () => (k + 0.5) / 400).paint.toString());
+      late.add(pickAttacker(sw, 1, () => (k + 0.5) / 400).paint.toString());
+    }
+    expect(late.size).toBeGreaterThan(early.size);
+    expect(pickAttacker(sw, 0, () => 0.999).type).not.toBe('sports');
+  });
+
+  it('puts a new car on the road as soon as one is gone, mostly ahead of you', () => {
+    const sp = new Spawner(() => 0.5);
+    expect(sp.step(1, 5, 5)).toBeNull();
+    let ahead = 0;
+    let n = 0;
+    let seed = 12345;
+    const r = (): number => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const sp2 = new Spawner(r);
+    for (let t = 0; t < 600; t += 0.1) {
+      const w = sp2.step(0.1, 2, 6);
+      if (w) {
+        n++;
+        if (w === 'ahead') ahead++;
+      }
+    }
+    expect(n).toBeGreaterThan(100);
+    expect(ahead / n).toBeGreaterThan(0.6);
+    expect(ahead / n).toBeLessThan(0.95);
+    // Well under the number it wants it sends one at least every 1.5 s.
+    expect(n).toBeGreaterThan(600 / 1.6);
+    sp.failed();
+    expect(sp.step(0.1, 0, 5)).toBeNull();
+    expect(sp.step(0.5, 0, 5)).not.toBeNull();
+  });
+
+  it('lays a roadblock now and then, never more than it is allowed', () => {
+    const b = new Blocker([24, 40], 2, () => 0.5);
+    let laid = 0;
+    let standing = 0;
+    for (let t = 0; t < 400; t += 0.5) {
+      expect(standing).toBeLessThanOrEqual(2);
+      if (b.step(0.5, standing)) {
+        laid++;
+        standing++;
+      }
+      if (t % 60 === 0 && standing > 0) standing--;
+    }
+    expect(laid).toBeGreaterThan(5);
+    const never = new Blocker([5, 5], 0, () => 0.5);
+    for (let t = 0; t < 100; t += 0.5) expect(never.step(0.5, 0)).toBe(false);
   });
 });

@@ -213,6 +213,12 @@ export class CityGunfire {
   private seen = 0;
   private wasReloading = false;
 
+  /** For a shader warm-up: the tracers and the flashes, drawn only while they last, shown so their shaders compile, or put away. */
+  warm(on: boolean): void {
+    this.tracers.visible = on;
+    this.flashes.warm(on);
+  }
+
   /** The probe for the shot being made, and whether your own car's place in the traffic is left out of it. */
   private probe: ShotProbe = () => null;
   private skipOwn = false;

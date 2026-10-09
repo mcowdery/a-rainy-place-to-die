@@ -25,6 +25,8 @@ import type { Interior } from '../real/interiors';
 import { floorLevel, groundSurface, indoorSurface, type Surface } from './footing';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
+/** The largest radius `District.obstacleNear` is asked with (m). */
+export const OBSTACLE_R = 2.5;
 export const LOAD_RADIUS = 620;
 export const UNLOAD_RADIUS = 820;
 /** The lightmap's wrapping window in cells (real/lightmap.ts): every loaded chunk must stay within half of it. */
@@ -528,6 +530,77 @@ export class District {
    * each step of the march only tests that short list.
    */
   shotProbe(ax: number, az: number, bx: number, bz: number, pad: number): (x: number, y: number, z: number) => ShotHit | null {
+  /**
+   * `obstacle` for points within `pad` of (cx, cz) and radii up to `OBSTACLE_R`: what could be met there is gathered
+   * once (buildings, set pieces, solids, medians, and the props in a grid of 8 m buckets), so each probe tests a
+   * handful of things, not every prop in nine cells (~65 us a probe, 50 a frame for each chase car: two thirds of the
+   * CPU in the long run). What's gathered is as of now: a chunk's props that load later aren't in it, so a caller keeps
+   * it for a moment only (`ChaseCar`, which rebuilds it as it moves on or after a second or two).
+   */
+  obstacleNear(cx: number, cz: number, pad: number): (x: number, z: number, r: number) => 'wall' | 'car' | 'pole' | 'soft' | null {
+    const R = OBSTACLE_R;
+    const box: Rect = { x: cx - pad, y: cz - pad, w: 2 * pad, h: 2 * pad };
+    const touches = (q: Rect, m = 0): boolean => q.x - m < box.x + box.w && q.x + q.w + m > box.x && q.y - m < box.y + box.h && q.y + q.h + m > box.y;
+    const inRects = (rs: readonly Rect[], x: number, z: number, r: number): boolean => {
+      for (const q of rs) if (x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r) return true;
+      return false;
+    };
+    const interior: Rect[] = [];
+    for (const it of this.interiors.values()) for (const q of it.colliders(0)) if (touches(q, R)) interior.push(q);
+    const fixed: Rect[] = [...this.stampColliders.flat(), ...this.extraColliders].filter((q) => touches(q, R));
+    const buildings: Building3[] = [];
+    const medians: Rect[] = [];
+    const solids: Rect[] = [];
+    const BUCKET = 8;
+    const buckets = new Map<number, Prop[]>();
+    const key = (bx: number, bz: number): number => bx * 100003 + bz;
+    for (let my = Math.floor(box.y / CELL) - 1; my <= Math.floor((box.y + box.h) / CELL) + 1; my++) {
+      for (let mx = Math.floor(box.x / CELL) - 1; mx <= Math.floor((box.x + box.w) / CELL) + 1; mx++) {
+        const p = this.model.plan(mx, my);
+        if (p) {
+          for (const b of p.buildings) if (touches({ x: b.x - b.w / 2, y: b.z - b.d / 2, w: b.w, h: b.d }, R)) buildings.push(b);
+          for (const q of p.medians) if (touches(q, R)) medians.push(q);
+        }
+        const d = this.model.detail(mx, my);
+        if (!d) continue;
+        for (const q of d.solids) if (touches(q, R)) solids.push(q);
+        for (const q of d.props) {
+          if (q.solid === false) continue;
+          const m = q.radius + (q.half ?? 0) + R;
+          if (!touches({ x: q.x, y: q.z, w: 0, h: 0 }, m)) continue;
+          for (let bz = Math.floor((q.z - m) / BUCKET); bz <= Math.floor((q.z + m) / BUCKET); bz++) {
+            for (let bx = Math.floor((q.x - m) / BUCKET); bx <= Math.floor((q.x + m) / BUCKET); bx++) {
+              const k = key(bx, bz);
+              const list = buckets.get(k);
+              if (list) list.push(q);
+              else buckets.set(k, [q]);
+            }
+          }
+        }
+      }
+    }
+    const rank = { soft: 1, pole: 2, car: 3 } as const;
+    return (x, z, r) => {
+      if (inRects(interior, x, z, r)) return 'wall';
+      if (!this.inDistrict(x, z)) return 'wall';
+      if (inRects(fixed, x, z, r)) return 'wall';
+      if (this.onBridgeMedian(x, z, r)) return 'soft';
+      for (const b of buildings) if (Math.abs(x - b.x) < b.w / 2 + r && Math.abs(z - b.z) < b.d / 2 + r) return 'wall';
+      if (inRects(solids, x, z, r)) return 'wall';
+      let found: 'car' | 'pole' | 'soft' | null = inRects(medians, x, z, r) ? 'soft' : null;
+      const list = buckets.get(key(Math.floor(x / BUCKET), Math.floor(z / BUCKET)));
+      if (list) {
+        for (const q of list) {
+          if (propDist(q, x, z) >= q.radius + r) continue;
+          if (WALL_PROPS.has(q.kind)) return 'wall';
+          const k = SOFT_PROPS.has(q.kind) ? 'soft' : CAR_PROPS.has(q.kind) ? 'car' : 'pole';
+          if (!found || rank[k] > rank[found]) found = k;
+        }
+      }
+      return found;
+    };
+  }
+
     const box: Rect = { x: Math.min(ax, bx) - pad, y: Math.min(az, bz) - pad, w: Math.abs(bx - ax) + 2 * pad, h: Math.abs(bz - az) + 2 * pad };
     const touches = (q: Rect, m = 0): boolean => q.x - m < box.x + box.w && q.x + q.w + m > box.x && q.y - m < box.y + box.h && q.y + q.h + m > box.y;
     const buildings: Building3[] = [];

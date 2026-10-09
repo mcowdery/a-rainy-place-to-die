@@ -11,11 +11,15 @@ import type { CarType } from '../models/vehicles';
  *   the road. It's lost if it gets clean away or the clock runs out.
  * - `hunted`: cars come after you, their gunmen shooting from the passenger window (the left: they come up on
  *   your right for the line). See them all off, lose them, or (a getaway) reach the place you're running to.
+ * - `gauntlet`: a long run across the city with the whole of the Rindō-gumi after you. You start at one node and the
+ *   place to reach is on the far side; the cars never run out (a `Spawner` keeps the number on you up, putting new
+ *   ones on the road ahead, out of sight, as fast as you shoot, ram or outrun the old) and a `Blocker` has roadblocks
+ *   put across your route. Only arriving ends it well.
  * This is the pure part the tests drive (tests/chase.test.ts): the jobs, the rules of damage, how a job is won
  * and lost, how a pursuer steers when it has you in sight, where a runner runs to, and a gunman's trigger.
  */
 
-export type ChaseKind = 'hunt' | 'hunted';
+export type ChaseKind = 'hunt' | 'hunted' | 'gauntlet';
 
 /** A car in a chase: what it is, how well it's driven and shot from, what it takes. */
 export interface ChaseCarDef {
@@ -31,6 +35,24 @@ export interface ChaseCarDef {
   readonly gunman: boolean;
   readonly aim: number;
   readonly health: number;
+  /** A rammer: it drives its nose at your back corners (`RAM_SLOTS`) rather than keeping alongside for a gunman. */
+  readonly ram?: boolean;
+}
+
+/** A gauntlet's endless supply: who is sent, how many at once, how often the road is blocked. */
+export interface SwarmDef {
+  /** Cars on you at the start and, near the end, at most (between, by the share of the way gone). */
+  readonly start: number;
+  readonly max: number;
+  /** Who is sent: a weight, and how far along the run (0-1) they first appear. */
+  readonly roster: readonly { readonly def: ChaseCarDef; readonly weight: number; readonly from?: number }[];
+  /** What a roadblock is made of. */
+  readonly blocks: readonly ChaseCarDef[];
+  /** Seconds between roadblocks (least, most), and how many may stand at once. */
+  readonly blockEvery: readonly [number, number];
+  readonly blocksMax: number;
+  /** What each car put down pays, won. */
+  readonly killPay: number;
 }
 
 export interface ChaseDef {
@@ -43,12 +65,34 @@ export interface ChaseDef {
   readonly time?: number;
   /** A getaway: the node to reach (you needn't shake them first). */
   readonly reach?: string;
+  /** A gauntlet: the node you start at, your health (else `YOUR_HEALTH`), and the swarm. */
+  readonly from?: string;
+  readonly health?: number;
+  readonly swarm?: SwarmDef;
   /** What it pays, won. */
   readonly pay: number;
 }
 
 const SALOON = 0x0b0b0e;
 const car = (name: string, type: CarType, paint: number, o: Partial<ChaseCarDef> = {}): ChaseCarDef => ({ name, type, paint, power: 1, grip: 1, pace: 0.9, gunman: false, aim: 1, health: 70, ...o });
+
+const BLACK = 0x16181c;
+/** The gauntlet's attackers: gunners that keep alongside, rammers that go for your back corners. */
+const SWARM: SwarmDef = {
+  start: 4,
+  max: 9,
+  roster: [
+    { def: car('Rindō-gumi', 'sedan', SALOON, { gunman: true, pace: 0.97, power: 1.15, health: 60 }), weight: 4 },
+    { def: car('Rindō-gumi', 'luxury', BLACK, { gunman: true, aim: 0.85, pace: 0.94, power: 1.15, health: 75 }), weight: 3 },
+    { def: car('Rindō-gumi ram', 'minivan', 0x1c1c22, { ram: true, pace: 1, power: 1.3, health: 95 }), weight: 2.5 },
+    { def: car('Rindō-gumi', 'sports', 0x5a0c10, { gunman: true, pace: 1.04, power: 1.1, grip: 1.05, health: 50 }), weight: 1.5, from: 0.25 },
+    { def: car('Rindō-gumi ram', 'luxury', SALOON, { ram: true, pace: 1.02, power: 1.3, health: 85 }), weight: 1.5, from: 0.4 },
+  ],
+  blocks: [car('Roadblock', 'minivan', 0x1c1c22, { gunman: true }), car('Roadblock', 'sedan', SALOON, { gunman: true }), car('Roadblock', 'luxury', BLACK), car('Roadblock', 'minivan', 0x26262c), car('Roadblock', 'sedan', BLACK, { gunman: true })],
+  blockEvery: [24, 40],
+  blocksMax: 2,
+  killPay: 4000,
+};
 
 /** The jobs on offer (the debug menu's Car chases; `__chase.start(id)`). */
 export const CHASES: readonly ChaseDef[] = [
@@ -99,10 +143,24 @@ export const CHASES: readonly ChaseDef[] = [
     reach: 'city_garage.front',
     pay: 70000,
   },
+  {
+    id: 'long_run',
+    name: 'The long run',
+    blurb: 'Nishihara in the far west to the detective’s flat in Kawabata, across the whole city, with the entire Rindō-gumi out for you. Put cars down and more come out of the side streets; they ram, they shoot, they block the road. Don’t stop.',
+    kind: 'gauntlet',
+    cars: [],
+    from: 'nishihara_danchi.front',
+    reach: 'kopo.front',
+    health: 260,
+    swarm: SWARM,
+    pay: 250000,
+  },
 ];
 
 /** You: what you take before you're done (a job's own health, apart from the car's bodywork). */
 export const YOUR_HEALTH = 100;
+/** A gauntlet's countdown (s): long enough for the district round the start to load. */
+const GAUNTLET_COUNTDOWN = 5;
 /** A round into a car's body, or through its glass; and what a tyre shot out costs it besides. */
 export const SHOT = { body: 8, glass: 14, tyre: 15 } as const;
 /** A car's done once this many of its tyres are shot out; with one gone it's this much slower. */
@@ -158,12 +216,20 @@ export interface ChaseView {
 export type ChasePhase = 'countdown' | 'running' | 'over';
 
 /** A job under way: the countdown, the clock, your health and theirs, and how it ends. */
+const fresh = (c: ChaseCarDef): ChaseCarState => ({ health: c.health, out: null, gunman: c.gunman, tyres: 0 });
+
 export class ChaseState {
   phase: ChasePhase = 'countdown';
-  countdown = 3;
+  countdown: number;
   t = 0;
-  health = YOUR_HEALTH;
+  health: number;
+  readonly maxHealth: number;
   readonly cars: ChaseCarState[];
+  /** Who each of `cars` is (a gauntlet's change as cars come and go). */
+  readonly defs: ChaseCarDef[];
+  /** A gauntlet: cars put down so far, and the straight-line run from start to finish (m). */
+  kills = 0;
+  span = 1;
   result: { won: boolean; why: string } | null = null;
   /** Seconds the runner's been out of reach (a hunt), every pursuer's been shaken off (hunted), you've been on foot. */
   lostFor = 0;
@@ -171,7 +237,29 @@ export class ChaseState {
   private onFoot = 0;
 
   constructor(readonly def: ChaseDef) {
-    this.cars = def.cars.map((c) => ({ health: c.health, out: null, gunman: c.gunman, tyres: 0 }));
+    this.cars = def.cars.map(fresh);
+    this.defs = [...def.cars];
+    this.maxHealth = def.health ?? YOUR_HEALTH;
+    this.health = this.maxHealth;
+    this.countdown = def.kind === 'gauntlet' ? GAUNTLET_COUNTDOWN : 3;
+  }
+
+  /** A gauntlet's new car; its place in `cars`. */
+  add(cd: ChaseCarDef): number {
+    this.cars.push(fresh(cd));
+    this.defs.push(cd);
+    return this.cars.length - 1;
+  }
+
+  /** A gauntlet's car gone from the road (put down and cleared away, or left behind). */
+  drop(i: number): void {
+    this.cars.splice(i, 1);
+    this.defs.splice(i, 1);
+  }
+
+  /** How far along a gauntlet you are (0-1), `toGoal` metres from the end. */
+  progress(toGoal: number): number {
+    return Math.max(0, Math.min(1, 1 - toGoal / Math.max(1, this.span)));
   }
 
   get running(): boolean {
@@ -209,7 +297,8 @@ export class ChaseState {
     if (s.out) c.out = s.out;
     else if (c.tyres >= TYRES_OUT) c.out = 'tyres shot out';
     else if (c.health === 0) c.out = 'shot to pieces';
-    return c.out && !s.out ? `${this.def.cars[i].name.toUpperCase()} DOWN` : s.note;
+    if (c.out) this.kills++;
+    return c.out && !s.out ? `${this.defs[i].name.toUpperCase()} DOWN` : s.note;
   }
 
   /** Chase car i took a knock (from you, or a wall at speed). */
@@ -218,7 +307,10 @@ export class ChaseState {
     if (!c || c.out || !this.running) return 0;
     const d = ramDamage(closing);
     c.health = Math.max(0, c.health - d);
-    if (c.health === 0) c.out = 'wrecked';
+    if (c.health === 0) {
+      c.out = 'wrecked';
+      this.kills++;
+    }
     return d;
   }
 
@@ -243,6 +335,11 @@ export class ChaseState {
     if (v.wrecked) return this.finish(false, 'Your car is wrecked.');
     if (this.onFoot > ON_FOOT) return this.finish(false, 'You left the car.');
     const live = this.cars.map((c, i) => (c.out ? -1 : i)).filter((i) => i >= 0);
+    // (A gauntlet has no end but the far side: more come as these go.)
+    if (this.def.kind === 'gauntlet') {
+      if ((v.toGoal ?? Infinity) < REACHED) this.finish(true, 'You made it.');
+      return;
+    }
     if (this.def.kind === 'hunt') {
       if (live.length === 0) return this.finish(true, this.cars.length > 1 ? 'You stopped them.' : `You stopped him: ${this.cars[0].out}.`);
       if (this.left <= 0) return this.finish(false, 'Out of time: he got away.');
@@ -281,6 +378,12 @@ export const SLOTS: readonly Slot[] = [
   { along: -0.5, across: -3.1 },
   { along: -6.5, across: 0 },
   { along: -1.5, across: 3.1 },
+];
+/** A rammer's: its nose at your left back corner, your right, then square onto your tail. */
+export const RAM_SLOTS: readonly Slot[] = [
+  { along: -3.2, across: 0.9 },
+  { along: -3.2, across: -0.9 },
+  { along: -3.6, across: 0 },
 ];
 
 /**
@@ -390,5 +493,67 @@ export class Trigger {
       this.left = 2 + Math.floor(this.rand() * 3);
     }
     return true;
+  }
+}
+
+/** How many cars a gauntlet keeps on you, `progress` (0-1) of the way: more as you go on. */
+export const swarmTarget = (sw: SwarmDef, progress: number): number => Math.round(sw.start + (sw.max - sw.start) * Math.max(0, Math.min(1, progress)));
+
+/** Who is sent next: by weight among those who have appeared by now. `rand`: [0, 1). */
+export function pickAttacker(sw: SwarmDef, progress: number, rand: () => number): ChaseCarDef {
+  const pool = sw.roster.filter((r) => (r.from ?? 0) <= progress);
+  let at = rand() * pool.reduce((a, r) => a + r.weight, 0);
+  for (const r of pool) if ((at -= r.weight) < 0) return r.def;
+  return pool[pool.length - 1].def;
+}
+
+/**
+ * When a gauntlet puts another car on the road, and from where: mostly ahead of you, out of sight, now and then
+ * behind. Quick while well under the number it wants, a breath between otherwise.
+ */
+export class Spawner {
+  /** The share of cars that come from ahead. */
+  static readonly AHEAD = 0.78;
+  cool = 0.6;
+
+  constructor(private readonly rand: () => number = Math.random) {}
+
+  step(dt: number, live: number, target: number): 'ahead' | 'behind' | null {
+    this.cool -= dt;
+    if (live >= target || this.cool > 0) return null;
+    this.cool = live <= target - 3 ? 0.7 + this.rand() * 0.8 : 1.6 + this.rand() * 2;
+    return this.rand() < Spawner.AHEAD ? 'ahead' : 'behind';
+  }
+
+  /** There was no place for it (no road, in sight): try again soon. */
+  failed(): void {
+    this.cool = 0.4;
+  }
+}
+
+/** When the road ahead is blocked: the first a little after the start, then every so often, never past `max` standing. */
+export class Blocker {
+  private cool = 14;
+
+  constructor(
+    private readonly every: readonly [number, number],
+    private readonly max: number,
+    private readonly rand: () => number = Math.random,
+  ) {}
+
+  step(dt: number, standing: number): boolean {
+    this.cool -= dt;
+    if (this.cool > 0) return false;
+    if (standing >= this.max) {
+      this.cool = 3;
+      return false;
+    }
+    this.cool = this.every[0] + this.rand() * (this.every[1] - this.every[0]);
+    return true;
+  }
+
+  /** No straight stretch to put it on: try again soon. */
+  failed(): void {
+    this.cool = 2;
   }
 }

@@ -97,7 +97,7 @@ export class ChaseHud {
       def.kind === 'hunt'
         ? `stop ${live > 1 ? `${live} cars` : 'the car'}${st.left < Infinity ? ` · ${clock(st.left)} left` : ''}${st.lostFor > 2 ? ' · <span style="color:#ff8a8a">LOSING HIM</span>' : ''}`
         : def.reach
-          ? `get to ${goal?.label ?? 'safety'}${goal ? ` · ${goal.dist >= 1000 ? `${(goal.dist / 1000).toFixed(1)} km` : `${Math.round(goal.dist)} m`}` : ''} · ${live} on you`
+          ? `get to ${goal?.label ?? 'safety'}${goal ? ` · ${goal.dist >= 1000 ? `${(goal.dist / 1000).toFixed(1)} km` : `${Math.round(goal.dist)} m`}` : ''} · ${live} on you${def.kind === 'gauntlet' ? ` · ${st.kills} down` : ''}`
           : `${live} on you: see them off or lose them${st.clearFor > 2 ? ` · <span style="color:#7cffb0">LOSING THEM ${Math.ceil(12 - st.clearFor)}</span>` : ''}`;
     this.top.innerHTML = `${def.name} · ${clock(st.t)} · ${what}`;
     this.list.innerHTML = cars
@@ -107,7 +107,7 @@ export class ChaseHud {
       })
       .join('');
     const hp = Math.round(st.health);
-    this.you.innerHTML = `YOU <span style="display:inline-block;width:160px;height:8px;background:rgba(255,255,255,0.18);border-radius:4px;vertical-align:middle;margin:0 8px;overflow:hidden"><span style="display:block;height:100%;width:${hp}%;background:${hp > 50 ? '#7cffb0' : hp > 25 ? '#ffd27c' : '#ff5a5a'}"></span></span>${hp}`;
+    this.you.innerHTML = `YOU <span style="display:inline-block;width:160px;height:8px;background:rgba(255,255,255,0.18);border-radius:4px;vertical-align:middle;margin:0 8px;overflow:hidden"><span style="display:block;height:100%;width:${Math.round((hp / st.maxHealth) * 100)}%;background:${hp > st.maxHealth / 2 ? '#7cffb0' : hp > st.maxHealth / 4 ? '#ffd27c' : '#ff5a5a'}"></span></span>${hp}`;
     if (st.phase === 'countdown') {
       this.big.style.display = 'block';
       this.big.textContent = String(Math.max(1, Math.ceil(st.countdown)));
@@ -156,7 +156,7 @@ export class ChaseHud {
     this.card.innerHTML = `<div style="font-size:30px;font-weight:900;color:${r.won ? '#7cffb0' : '#ff8a8a'}">${r.won ? 'DONE' : 'FAILED'}</div>
       <div style="opacity:.8;margin:4px 0 12px">${r.why}</div>
       <div>${st.def.name} · ${clock(st.t)}</div>
-      ${st.cars.map((c, i) => `<div style="opacity:.8">${st.def.cars[i].name} · ${c.out ?? `still running (${Math.round(c.health)})`}</div>`).join('')}
+      ${st.def.kind === 'gauntlet' ? `<div style="opacity:.8">Cars put down · ${st.kills}</div>` : st.cars.map((c, i) => `<div style="opacity:.8">${st.defs[i].name} · ${c.out ?? `still running (${Math.round(c.health)})`}</div>`).join('')}
       <div style="opacity:.8">You · ${Math.round(st.health)} left</div>
       ${pay > 0 ? `<div style="margin-top:10px;font-weight:700">+ ${yen(pay)}</div>` : ''}
       <div style="opacity:.6;font-size:12px;margin-top:10px">Enter: again · Esc: done</div>`;
