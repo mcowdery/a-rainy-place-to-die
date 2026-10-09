@@ -115,9 +115,12 @@ export const ALL_DISTRICT_ADS: readonly DistrictAd[] = [
   { art: '78_maruyoshi_pawn', format: 'poster', cat: 'loan', brand: '質 まるよし', copy: 'ブランド品・貴金属 高価買取', accent: 0x101010, ink: 0xe8c060 },
 ];
 
-/** The district ads an edition shows: the demo leaves out the revealing ones (src/edition/demoArt.ts). */
+/**
+ * The district ads an edition shows: only the uncensored edition has the revealing ones (src/edition/demoArt.ts; their
+ * pictures are in adult/, so the others have no file for them).
+ */
 export const districtAdsFor = (edition: string): readonly DistrictAd[] =>
-  edition === 'demo' ? ALL_DISTRICT_ADS.filter((a) => !DEMO_HIDDEN_ART.has(a.art)) : ALL_DISTRICT_ADS;
+  edition === 'uncensored' ? ALL_DISTRICT_ADS : ALL_DISTRICT_ADS.filter((a) => !DEMO_HIDDEN_ART.has(a.art));
 
 /** This build's district ads (the chunk workers place them, the atlas draws them; indexes agree). */
 export const DISTRICT_ADS: readonly DistrictAd[] = districtAdsFor(__EDITION__);

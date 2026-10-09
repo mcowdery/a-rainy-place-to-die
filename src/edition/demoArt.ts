@@ -1,6 +1,7 @@
 /**
- * Kaburo ad art the demo edition leaves out: nudity (even censored) and the most suggestive. The demo's own glob
- * (demo.ts) excludes the same files so they aren't even bundled; tests/edition.test.ts keeps the two in step.
+ * Kaburo ad art only the uncensored edition has: nudity (even censored) and the most suggestive. The files are in
+ * adult/assets/ads/kaburo/ (never in this repository; uncensored.ts globs them), so the standard build has none of them
+ * and its ad list drops them (models/ads.ts). The demo's glob (demo.ts) excludes the same names as well; tests/edition.test.ts keeps the two in step.
  */
 export const DEMO_HIDDEN_ART: ReadonlySet<string> = new Set([
   '09_annaijo_girls',
@@ -23,7 +24,8 @@ export const DEMO_HIDDEN_ART: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Cast models the demo leaves out (it has no story): Mack nude, for the arrival (a smooth, censored body, but
- * nudity all the same). The demo's own glob (demo.ts) excludes the same files; tests/edition.test.ts checks.
+ * Cast models only the uncensored edition has: Mack nude, for the arrival (a smooth, censored body, but nudity all
+ * the same), in adult/assets/characters/ (uncensored.ts globs it; the wardrobe offers only the outfits whose model is
+ * there). The demo's glob (demo.ts) excludes the same files; tests/edition.test.ts checks.
  */
 export const DEMO_HIDDEN_CHARACTERS: ReadonlySet<string> = new Set(['mack_nude']);
