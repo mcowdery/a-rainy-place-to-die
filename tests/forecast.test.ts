@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BLOCK, forecastAt, ODDS, outlookAt, TSUYU_DAYS, TYPHOON_HOURS } from '../src/poc3d/district/forecast';
+import { airWith, BLOCK, coldBreath, forecastAt, ODDS, outlookAt, TSUYU_DAYS, TYPHOON_HOURS } from '../src/poc3d/district/forecast';
 import { SEASONS } from '../src/poc3d/district/seasons';
 
 const DAY = 24 * 60;
@@ -125,6 +125,37 @@ describe('forecast', () => {
     expect(after.after).toBe(true);
     expect(after.weather).toBe('clear');
     expect(o(TYPHOON_HOURS * 2).typhoon).toBe(0);
+  });
+
+  it("shows people's breath only in the cold: never at 10 °C, on winter nights, whenever it snows", () => {
+    expect(coldBreath(10)).toBe(0);
+    expect(coldBreath(7)).toBe(0);
+    expect(coldBreath(4.5)).toBeCloseTo(0.5, 5);
+    expect(coldBreath(2)).toBe(1);
+    expect(coldBreath(-3)).toBe(1);
+    // Summer and autumn: none at any hour. Spring: none in the dry, and none from morning to mid-evening even in
+    // the rain (a wet spring night can dip under 7 °C toward dawn, and a little shows then).
+    for (const s of ['summer', 'autumn'] as const) {
+      for (let t = 0; t < 200 * DAY; t += 30) expect(coldBreath(outlookAt(t, s, LATE).temp)).toBe(0);
+    }
+    for (let t = 0; t < 200 * DAY; t += 30) {
+      const o = outlookAt(t, 'spring', LATE);
+      if (o.weather === 'clear') expect(coldBreath(o.temp)).toBe(0);
+      const h = (t % DAY) / 60;
+      if (h >= 9 && h <= 21) expect(coldBreath(o.temp)).toBe(0);
+    }
+    // Winter: before dawn always some, mid-afternoon in the dry none.
+    let nights = 0;
+    for (let d = 0; d < 200; d++) {
+      if (coldBreath(outlookAt(d * DAY + 5 * 60, 'winter', LATE).temp) > 0.5) nights++;
+      const noon = outlookAt(d * DAY + 14 * 60, 'winter', LATE);
+      if (noon.weather === 'clear') expect(coldBreath(noon.temp)).toBe(0);
+    }
+    expect(nights).toBe(200);
+    // Snow, the forecast's or set by hand over a milder spell, is freezing.
+    const mild = outlookAt(14 * 60, 'winter', LATE);
+    expect(coldBreath(airWith({ ...mild, weather: 'clear', temp: 9 }, 'snow'))).toBe(1);
+    expect(airWith({ ...mild, temp: 9 }, 'clear')).toBe(9);
   });
 
   it('keeps a heat wave going when told to', () => {

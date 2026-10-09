@@ -58,6 +58,9 @@ export interface AudioFrame {
    * drums on the car's roof (1 as built). Only the car: buildings have their own cover. */
   readonly cabinDamp?: number;
   readonly cabinRoof?: number;
+  /** What's on the listener's ears (real/musicPlayer.ts): headphones shut some of the world out, and with their
+   * noise cancelling on nearly all of it. The music and the phone's own sounds are heard in them. */
+  readonly ears?: 'none' | 'worn' | 'nc';
   /** Summer: the cicadas' daytime chorus (0-1, louder in a heat wave and among trees), and the higurashi at dusk. */
   readonly cicadas?: number;
   readonly higurashi?: number;
@@ -67,6 +70,11 @@ const TYRE_VOICES = 3;
 /** Going in under cover or back out, and getting into a car's cabin: seconds for the sound to cross over. */
 const COVER_FADE = 0.9;
 const CABIN_FADE = 0.6;
+/** Headphones going on or off, and their noise cancelling: seconds to cross over, and how loud the world is
+ * through the cups, and with the cancelling on. */
+const EARS_FADE = 0.35;
+const WORN_LEVEL = 0.6;
+const NC_LEVEL = 0.13;
 /** How loud the outside is through walls. */
 const INDOOR_LEVEL = 0.4;
 
@@ -131,6 +139,10 @@ export class CityAudio {
   private indoorT = 0;
   private roofT = 0;
   private cabinT = 0;
+  /** Everything the city makes, heard bare, through headphones' cups, or with their noise cancelling on. */
+  private ears!: Blend;
+  private wornT = 0;
+  private ncT = 0;
   private patterBus!: GainNode;
   private roofGain!: GainNode;
   // Wind.
@@ -173,7 +185,11 @@ export class CityAudio {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14;
     comp.ratio.value = 4;
-    this.master.connect(comp).connect(ctx.destination);
+    comp.connect(ctx.destination);
+    // On the way out, the listener's ears: bare; under headphones (the cups take the top off); and with their
+    // noise cancelling on, which takes out the low drone as well, leaving a little of the middle.
+    this.ears = this.blend(comp, [[], [['lowpass', 2600, 0.5], ['highshelf', 4200, 0, -8]], [['highpass', 240, 0.5], ['lowpass', 1300, 0.5], ['highshelf', 2200, 0, -12]]]);
+    this.master.connect(this.ears.input);
     // Music (the car's radio) goes round the compressor: the city's sound mustn't pump it.
     this.music = ctx.createGain();
     this.music.gain.value = 0;
@@ -673,7 +689,8 @@ export class CityAudio {
   ping(): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime + 0.02;
-    const out = this.speaker();
+    // (With headphones on, the phone's sounds are in them: clear, whatever they shut out.)
+    const out = this.wornT > 0.5 ? this.music : this.speaker();
     this.bell(t, 1567.98, 0.25, 0.1, out);
     this.bell(t + 0.11, 2093.0, 0.4, 0.1, out);
   }
@@ -800,6 +817,14 @@ export class CityAudio {
     const cabin = ease(this.cabinT) * Math.min(1, damp * 2);
     set(this.world.gains[0].gain, 1 - cabin, 0.03);
     set(this.world.gains[1].gain, cabin * (1 - 0.8 * damp), 0.03);
+    // Headphones: one more crossfade, over everything.
+    this.wornT = ramp(this.wornT, f.ears && f.ears !== 'none' ? 1 : 0, EARS_FADE);
+    this.ncT = ramp(this.ncT, f.ears === 'nc' ? 1 : 0, EARS_FADE);
+    const worn = ease(this.wornT);
+    const nc = worn * ease(this.ncT);
+    set(this.ears.gains[0].gain, 1 - worn, 0.03);
+    set(this.ears.gains[1].gain, (worn - nc) * WORN_LEVEL, 0.03);
+    set(this.ears.gains[2].gain, nc * NC_LEVEL, 0.03);
     const r = f.rain;
     const bedLevel = r <= 0 ? 0 : 0.12 + 0.55 * r;
     set(this.bedGain.gain, bedLevel);

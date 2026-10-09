@@ -1,0 +1,21 @@
+{
+  "file": "giri_no_ame_1.flac",
+  "id": "giri_no_ame",
+  "take": 1,
+  "station": "last_call",
+  "title": "義理の雨",
+  "artist": "竜崎剛",
+  "caption": "Dark 1960s Japanese enka ballad in the yakuza film style, slow and heavy. A deep, rough male voice singing in Japanese with strong enka vibrato and ornamented phrase endings, stoic and sorrowful. Mournful shakuhachi bamboo flute, a twangy electric guitar playing the melody between lines, low strings, upright bass, slow drums with a heavy backbeat, a distant taiko. Grim, dignified, a gangster walking alone in the rain toward a debt of honour. Vintage studio sound with plate reverb.",
+  "lyrics": "[Intro - Shakuhachi and Guitar]\n\n[Verse 1]\n杯ひとつ 交わした夜に\n捨てた故郷と 親の名前\n筋を通して 生きると決めた\n戻る道など ありゃしない\n\n[Chorus]\n雨よ降れ降れ 背中に降れ\n肩の刺青を 濡らして降れ\n誰が泣こうと 引くに引けない\nこれが俺の 生きる道\n\n[Verse 2]\n惚れた女に 別れも告げず\n路地の灯りを 背にして歩く\n幸せなんて 似合わぬ男\n忘れてくれと 風に言う\n\n[Chorus]\n雨よ降れ降れ 背中に降れ\n肩の刺青を 濡らして降れ\n誰が泣こうと 引くに引けない\nこれが俺の 生きる道\n\n[Instrumental Break - Shakuhachi and Guitar]\n\n[Verse 3]\n受けた恩には 命で返す\n散るも咲くも 花のさだめ\n夜明けの橋で 見上げた空に\nおふくろの顔が 浮かんで消える\n\n[Chorus]\n雨よ降れ降れ 背中に降れ\n肩の刺青を 濡らして降れ\n誰が泣こうと 引くに引けない\nこれが俺の 生きる道\n\n[Outro]",
+  "language": "ja",
+  "bpm": 70,
+  "key": "D minor",
+  "seconds": 205.0,
+  "seed": 6010,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:42",
+  "took": 122,
+  "batch": "noir-02",
+  "model": "acestep-v15-turbo"
+}

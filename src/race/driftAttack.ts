@@ -74,7 +74,7 @@ export function rankFor(score: number, ranks: readonly [number, number, number, 
 /** What a rank pays (yen). */
 export const ATTACK_PAY: Readonly<Record<Rank, number>> = { S: 40000, A: 24000, B: 12000, C: 5000, D: 1000 };
 
-const key = (venue: string): string => `citypop.race.v1.${venue}.drift`;
+const key = (venue: string): string => `rainyplace.race.v1.${venue}.drift`;
 
 export function loadAttackBest(venue: string): { score: number; rank: Rank } | null {
   try {

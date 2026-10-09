@@ -25,8 +25,9 @@ import { clock, GhostTrack, loadBest, medalFor, saveBest, Trial, trialPlan, type
 import { Targets } from './targets';
 import { Car, DRIFT_ASSISTS, ROAD_ASSISTS, type Assists, type Controls } from './vehicle';
 import { bikeIdOf, BikeRide } from './bikeRide';
-import { CarDriver } from './carDriver';
+import { CarDriver, driverLine } from './carDriver';
 import { Crosshair } from '../poc3d/models/crosshair';
+import { MuzzleFlashes } from '../poc3d/models/muzzleFlash';
 
 /**
  * The racing venues (race.html): a venue (course.ts, scene.ts) in its own time of day, the coupe on the
@@ -245,10 +246,10 @@ const startTrial = (): void => {
 interface GpRival { readonly name: string; readonly car: Car; readonly drv: RivalDriver; readonly view: ReturnType<typeof buildCar> }
 let gp: { race: CircuitRace; slots: ReturnType<typeof gridSlots>; rivals: GpRival[]; paid: boolean; result: { place: number; pay: number; bestLap: number | null; best: GpBest | null; newBest: boolean } | null } | null = null;
 interface GpBest { readonly place: number; readonly lap: number | null }
-const gpKey = `citypop.race.v1.${venueId}.gp`;
+const gpKey = `rainyplace.race.v1.${venueId}.gp`;
 const loadGpBest = (id = venueId): GpBest | null => {
   try {
-    return JSON.parse(localStorage.getItem(`citypop.race.v1.${id}.gp`) ?? 'null') as GpBest | null;
+    return JSON.parse(localStorage.getItem(`rainyplace.race.v1.${id}.gp`) ?? 'null') as GpBest | null;
   } catch {
     return null;
   }
@@ -327,6 +328,11 @@ const rivalCar = new Car(mineModel.spec, DRIFT_ASSISTS);
 const rivalView = buildCar({ type: mine.type, paint: mine.paint === 0xc01818 ? 0x121316 : 0xc01818 }, carMat);
 const rivalDrv = new RivalDriver(rivalCar, course, dir, Number(params.get('skill') ?? 1));
 const rivalShooting = new Shooting(course, targets);
+// (Both sides' muzzle flashes are the footage: models/muzzleFlash.ts.)
+for (const s of [shooting, rivalShooting]) {
+  s.flashes = new MuzzleFlashes();
+  scene.add(s.flashes.group);
+}
 rivalShooting.assist = false;
 // The rival car carries a gunman in the passenger (left) seat: his wide arc is out of the left window.
 rivalShooting.seat = 'left';
@@ -730,8 +736,8 @@ document.addEventListener('pointerlockchange', () => {
 });
 // Mouse look: a click captures the mouse (Esc lets it go); moving it swings the camera round the car and up
 // or down, and it eases back behind the car a moment after you stop. Mouse Y follows the district's choice
-// (the same 'citypop.invertY' in localStorage; I toggles it here too; ?invertY=1 / 0).
-const INVERT_KEY = 'citypop.invertY';
+// (the same 'rainyplace.invertY' in localStorage; I toggles it here too; ?invertY=1 / 0).
+const INVERT_KEY = 'rainyplace.invertY';
 let invertY = false;
 {
   let saved: string | null = null;
@@ -1040,7 +1046,7 @@ const placeCamera = (dt: number, snap = false): void => {
     const left = his || (rel > 32 * (Math.PI / 180) && rel < 165 * (Math.PI / 180));
     pov += ((left ? 1 : 0) - pov) * Math.min(1, dt * 10);
     const k = pov * pov * (3 - 2 * pov);
-    const eye = carObj.localToWorld(eyeAt.clone());
+    const eye = carObj.localToWorld(eyeAt.clone().add(driver?.eyeShift ?? new THREE.Vector3()));
     camera.position.copy(camPos).lerp(eye, k);
     camera.lookAt(camera.position.clone().add(d));
     cabin.visible = pov > 0.5;
@@ -1064,7 +1070,7 @@ const placeCamera = (dt: number, snap = false): void => {
     head.update(dt, car.ax, car.ay, speed, car.bump);
     cockpitYaw += (lookInto(car.steer, speed, car.slide) - cockpitYaw) * Math.min(1, dt * 3);
     const look = THREE.MathUtils.clamp(orbitYaw, -2.2, 2.2) + cockpitYaw + backYaw;
-    placeInCar(camera, carObj, turnedEye(eyeAt.clone(), look).add(head.offset), look, lookPitch - 0.06, 0.5);
+    placeInCar(camera, carObj, turnedEye(eyeAt.clone(), look).add(head.offset).add(driver?.eyeShift ?? new THREE.Vector3()), look, lookPitch - 0.06, 0.5);
     camPos.copy(camera.position);
     return;
   }
@@ -1309,9 +1315,11 @@ function frame(now: number): void {
     const dl = aimPoint.clone().sub(head).applyQuaternion(toCar).normalize();
     const rel = Math.atan2(dl.x, dl.z);
     const pitch = Math.asin(THREE.MathUtils.clamp(dl.y, -1, 1));
-    side = sideFor(rel, pitch);
+    // (Mack's own arm swings from his shoulder: too near straight ahead and his gun's inside, at the windscreen.)
+    const line = hisGun() && driver ? driverLine(rel, pitch, driver.outFrom) : { side: sideFor(rel, pitch), wait: nearestShot(rel, pitch) };
+    side = line.side;
     // Off every window (the windscreen, behind on the left), the weapon waits at the nearest shot it has.
-    const n = nearestShot(rel, pitch);
+    const n = line.wait;
     const nd = new THREE.Vector3(Math.sin(n.rel) * Math.cos(n.pitch), Math.sin(n.pitch), Math.cos(n.rel) * Math.cos(n.pitch)).applyQuaternion(carObj.quaternion);
     const armAt = side ? aimPoint : head.clone().addScaledVector(nd, 20);
     driveAim = armAt;
@@ -1348,7 +1356,7 @@ function frame(now: number): void {
     if (driver.rig && driver.rig.kind !== want) driver.rig.setKind(want);
     // (His hands on the cabin's own wheel as it shows; his feet on the pedals as they're pressed.)
     driver.cabin = interior;
-    driver.update(car, { raised: out && hisGun(), window: out ? driveWindow : null, aimPoint: driveAim, pov, throttle: c.throttle, brake: c.brake, calm: calmDrive }, gdt, dt);
+    driver.update(car, { raised: out && hisGun(), blocked: out && hisGun() && !side, window: out ? driveWindow : null, aimPoint: driveAim, pov, throttle: c.throttle, brake: c.brake, calm: calmDrive }, gdt, dt);
     // His shots: nine pellets from the muzzle at what's under the crosshair.
     for (let k = driver.newShots(); k > 0; k--) {
       camera.updateMatrixWorld();
@@ -1366,6 +1374,8 @@ function frame(now: number): void {
     }
   }
   shooting.update(gdt);
+  shooting.flashes?.update(gdt, camera.position);
+  rivalShooting.flashes?.update(gdt, camera.position);
   if (inBattle) {
     rivalGun(gdt);
     rivalShooting.update(gdt);

@@ -1,0 +1,15 @@
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e).slice(0, 800)));
+page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('CONSOLE', m.type(), m.text().slice(0, 1500)); });
+await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&mob=colordistrict.html?debug=1&diag=1&mob=color&clock=22:00&weather=clear&res=100clock=22:00district.html?debug=1&diag=1&mob=color&clock=22:00&weather=clear&res=100mobShadows=0&weather=clear&res=100`);
+await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
+await page.waitForTimeout(8000);
+console.log(await page.evaluate(() => JSON.stringify({ perf: typeof window.__perf, scene: typeof window.__scene, hud: document.getElementById('hud')?.textContent?.slice(0, 120) })));
+await page.screenshot({ path: 'debug-shots/mobcity/night_dbg.png' });
+await browser.close();
+await server.close();

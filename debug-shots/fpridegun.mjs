@@ -1,0 +1,46 @@
+// Riding the black cruiser with the shotgun out: upright, aimed ahead and to the right, mid flip-cock, from outside.
+//   node debug-shots/fpridegun.mjs <out dir>
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const out = process.argv[2];
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1000, height: 600 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
+await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
+await page.waitForTimeout(2500);
+await page.evaluate(() => { document.getElementById('panel').style.display = 'none'; document.querySelectorAll('.label').forEach((l) => (l.style.display = 'none')); });
+const shot = (n) => page.screenshot({ path: `${out}/${n}.png` });
+const outside = async (n, dx, dy, dz) => {
+  await page.evaluate(([dx, dy, dz]) => { __fp.freeze(true); const r = __fp.riding(); __view(r.x + dx, 1.3 + dy, r.z + dz, r.x, 1.0, r.z); }, [dx, dy, dz]);
+  await page.waitForTimeout(400);
+  await shot(n);
+  await page.evaluate(() => __fp.freeze(false));
+};
+await page.evaluate(async () => { await __fp.enter(13.0, 38.6, 0); __fp.ride(); });
+await page.waitForTimeout(600);
+await shot('g0_bars');
+await page.evaluate(() => { __fp.armed(true); __fp.look(0, -0.1); });
+await page.waitForTimeout(900);
+await shot('g1_upright');
+await outside('g2_upright_out', -2.4, 0.2, -1.2);
+await page.evaluate(() => { __fp.aim(true); });
+await page.waitForTimeout(900);
+await shot('g3_aim');
+await outside('g4_aim_out', -2.4, 0.2, -1.2);
+await page.evaluate(() => { __fp.look(-1.1, -0.05); });
+await page.waitForTimeout(900);
+await shot('g5_aim_right');
+await outside('g6_aim_right_out', 1.0, 1.4, -2.8);
+await page.evaluate(() => { __fp.look(0, -0.05); });
+await page.waitForTimeout(700);
+await page.evaluate(() => __fp.fire());
+await page.waitForTimeout(340);
+await shot('g7_flip');
+await page.evaluate(() => { __fp.aim(false); __fp.key('KeyW', true); });
+await page.waitForTimeout(2200);
+await shot('g8_riding');
+await page.evaluate(() => __fp.key('KeyW', false));
+await browser.close(); await server.close();

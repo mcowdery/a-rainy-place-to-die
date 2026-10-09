@@ -92,6 +92,8 @@ zones:
       colors: ['#ffffff', '#4fe3ff', '#ffe45f']
     ads: { mainstream: 3, food: 2, street: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.2
       windows: { ribbon: 45, curtain: 25, punched: 30 }
       walls: ['#8a8e94', '#a8aab0', '#6a6e74', '#c8c4bc', '#5a5e64']
       tiled: false
@@ -101,6 +103,7 @@ zones:
   S:
     id: kasumi_shotengai
     name: Kasumi-chō shopping street
+    night: 0.3
     plan:
       floors: [[2, 3, 60], [4, 5, 40]]
       lotW: [5, 9]

@@ -2,7 +2,7 @@
 //   node scripts/bench3d.mjs            headless (GPU flags on; check the reported GPU)
 //   node scripts/bench3d.mjs --headed   visible window, real desktop GPU path
 import { chromium } from 'playwright-core';
-import { createServer } from 'vite';
+import { shotServer } from './shotServer.mjs';
 
 const headed = process.argv.includes('--headed');
 const configs = [
@@ -13,7 +13,7 @@ const configs = [
   { label: '+20,000 buildings, merged per chunk', query: '&grid=20000&merge=1' },
 ];
 
-const server = await createServer({ server: { port: 0 }, logLevel: 'silent' });
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' }, { gpu: 'exclusive' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
 const browser = await chromium.launch({

@@ -4,7 +4,7 @@ import type { Assists, Car, CarSpec } from './vehicle';
  * Driving tuning, for testing (the race page's ` key; the district's debug menu, Car: tune driving): the handling
  * model's numbers as multipliers on your car's own (so every model keeps its character) and the assists set
  * outright, for the race venues (`drift`) and the city (`road`) apart. Kept in the browser (localStorage
- * `citypop.tuning`) and applied to your car on both pages; rivals and traffic stay stock. `TuningPanel` is the
+ * `rainyplace.tuning`) and applied to your car on both pages; rivals and traffic stay stock. `TuningPanel` is the
  * panel: sliders by group with the value each gives your car, reset, copy as JSON (to bake a setup in), and a
  * live readout of what the car is doing.
  */
@@ -18,7 +18,7 @@ export interface Tuning {
 }
 export type AssistContext = 'drift' | 'road';
 
-const KEY = 'citypop.tuning';
+const KEY = 'rainyplace.tuning';
 
 export const EMPTY: Tuning = { spec: {}, assists: {} };
 

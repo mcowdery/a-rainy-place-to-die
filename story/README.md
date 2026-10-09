@@ -45,8 +45,6 @@ scripts           (not built yet) scenes and chats as text, compiled to the form
 content/vn/       VN exports (schema 2/3 scene.json): scenes, with stills or without
 content/phone/    KAIWA chats (one YAML per contact)
   ↑
-Krea Studio       stills for the scenes that need them, Cast looks and LoRAs, media-heavy chats
+Studio (Trame)    stills for the scenes that need them, Cast looks and LoRAs, media-heavy chats
 ```
 
-Studio's own "story bible" (the generated `story-bible/<user>.md` in krea-2-turbo) is a snapshot of Studio's
-data, not this. It's still handy for a character's look (Cast) when briefing art.

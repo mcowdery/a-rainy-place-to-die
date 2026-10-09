@@ -1,4 +1,4 @@
-import { OUTFITS } from './peopleMix';
+import { isBare, OUTFITS } from './peopleMix';
 import YAML from 'yaml';
 import { ID_PATTERN } from '../../content/stamps';
 import type { DistrictId, MacroMap } from '../../gen/macro';
@@ -24,11 +24,15 @@ import { LOT_OPEN, STYLES3, type DistrictStyle3, type Zone3, type ZoneLook } fro
  *       ads: { loan: 4, street: 3 }
  *       look: { windows: { punched: 50, small: 40 }, walls: ['#6c5242'], tiled: true, shops: { warm: 2, bar: 3 }, open: 0.9 }
  *       # look may also set homes (share of buildings that are homes: a door, not a shop), roofs (share of
- *       # low homes with a pitched roof) and bikes (share of homes with bicycles out front).
+ *       # low homes with a pitched roof), bikes (share of homes with bicycles out front) and vice (0 to 1: how
+ *       # much of the city's vice goes on behind its windows at night, and how many of its buildings have bars
+ *       # and clubs upstairs; real/windowScenes.ts).
  *       cars: { luxury: 3, taxi: 4, sedan: 2 }   # optional: the cars parked and driving here, by model
  *       # (models/vehicles.ts); otherwise the district's (district/carMix.ts).
  *       people: { suit: 4, plain: 2 }   # optional: what the people here wear, by outfit (district/peopleMix.ts:
  *       # plain, long, suit, maid, school, kimono); otherwise the district's.
+ *       night: 1   # optional: how alive the streets are at night, 0 asleep to 1 sleepless (district/peopleHours.ts);
+ *       # otherwise the district's.
  *
  * plan overrides any DistrictStyle3 field (localStreet, block, twoRowDepth, lotW, lotGap, floors,
  * signChance, verticalSign); anything not given comes from the district's style. Zones are part of the
@@ -177,12 +181,17 @@ export function parseZones3(file: string, text: string, macro: MacroMap, errors:
       if (!isObj(raw.people)) err(`${at}: people must map outfits to weights`);
       else {
         for (const [k, v] of Object.entries(raw.people)) {
-          if (!(OUTFITS as readonly string[]).includes(k)) err(`${at}: unknown outfit '${k}' (${OUTFITS.join(', ')})`);
+          if (!(OUTFITS as readonly string[]).includes(k) || isBare(k)) err(`${at}: unknown outfit '${k}' (${OUTFITS.filter((o) => !isBare(o)).join(', ')})`);
           else if (typeof v !== 'number' || v <= 0) err(`${at}: outfit weight for ${k} must be a positive number`);
           else people[k] = v;
         }
         style.people = people;
       }
+    }
+
+    if (raw.night !== undefined) {
+      if (typeof raw.night !== 'number' || raw.night < 0 || raw.night > 1) err(`${at}: night must be a number from 0 (asleep at night) to 1 (sleepless)`);
+      else style.night = raw.night;
     }
 
     const lookRaw = isObj(raw.look) ? raw.look : {};
@@ -218,13 +227,13 @@ export function parseZones3(file: string, text: string, macro: MacroMap, errors:
     }
     const open = lookRaw.open === undefined ? null : Number(lookRaw.open);
     if (open !== null && !(open >= 0 && open <= 1)) err(`${at}: look.open must be between 0 and 1`);
-    const share = (key: 'homes' | 'roofs' | 'bikes'): number => {
+    const share = (key: 'homes' | 'roofs' | 'bikes' | 'vice'): number => {
       if (lookRaw[key] === undefined) return 0;
       const v = Number(lookRaw[key]);
       if (!(v >= 0 && v <= 1)) err(`${at}: look.${key} must be between 0 and 1`);
       return v;
     };
-    const look: ZoneLook = { windows, walls, tiled: lookRaw.tiled === true, shops, open, homes: share('homes'), roofs: share('roofs'), bikes: share('bikes') };
+    const look: ZoneLook = { windows, walls, tiled: lookRaw.tiled === true, shops, open, homes: share('homes'), roofs: share('roofs'), bikes: share('bikes'), vice: share('vice') };
     zones.set(key, { key, id, name: String(raw.name), style: style as unknown as DistrictStyle3, look, ads, area });
   }
   const ids = [...zones.values()].map((z) => z.id);

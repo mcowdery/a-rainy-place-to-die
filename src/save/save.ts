@@ -3,7 +3,7 @@ import type { PhoneSave } from '../phone/engine';
 import type { Profile } from '../race/profile';
 
 /**
- * Saved games, in the browser (localStorage `citypop.save.<slot>`): the autosave and three manual slots.
+ * Saved games, in the browser (localStorage `rainyplace.save.<slot>`): the autosave and three manual slots.
  *
  * A save is the shared world (story flags, which hold the time of day and the weather too) and each
  * point-of-view character's own state: where they are (and whether they were driving), their phone, their
@@ -42,7 +42,7 @@ export interface SaveGame {
   readonly characters: Readonly<Record<string, CharacterSave>>;
 }
 
-const key = (slot: Slot): string => `citypop.save.${slot}`;
+const key = (slot: Slot): string => `rainyplace.save.${slot}`;
 
 /** A save read back, or null if there's none or it isn't one this version can load. */
 export function parseSave(text: string | null): SaveGame | null {

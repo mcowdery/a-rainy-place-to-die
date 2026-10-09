@@ -14,6 +14,8 @@ import { Tape } from './tape';
 
 const files = import.meta.glob('../../../assets/radio/*/*.{ogg,opus,mp3}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const urlOf = (station: string, file: string): string | null => files[`../../../assets/radio/${station}/${file}`] ?? null;
+/** Where a station's track is served from (the phone's music app plays the same files: real/musicPlayer.ts). */
+export const trackUrl = urlOf;
 
 /** The stations whose music this build has (content/radio/stations.yaml; tests/radio.test.ts checks the file). */
 export function loadStations(): Station[] {
@@ -33,7 +35,7 @@ export function loadStations(): Station[] {
 export const OFF = 'off';
 export const TAPE = 'tape';
 
-const KEY = 'citypop.radio';
+const KEY = 'rainyplace.radio';
 /** The crackle on changing station (seconds), and how long after going quiet the stream is stopped. */
 const BURST = 0.28;
 const STOP_AFTER = 0.4;

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { hash, rng, type Rng } from '../../core/hash';
 import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Hair, type Outfit, type Pose } from './people';
 import { TRADE as T, TRADE_COUNT } from './shops';
+import { paintWindowAtlas, sceneLayerImage } from './windowAtlas';
+import { SHOP_KINDS, shopScenes, WINDOW_ATLAS, type Scene, type ShopKind } from './windowScenes';
 
 /**
  * The storefront interiors' art: each shop trade's room (shops.ts) painted once on canvas into an atlas, which
@@ -19,10 +21,20 @@ import { TRADE as T, TRADE_COUNT } from './shops';
  * 3 m deep (192 x 192), floor and ceiling tiles 1 x 1.5 m (64 x 96 each), layers a and b 4 x 3 m (256 x 192), c and
  * d 4 x 2 m (256 x 128). Walls and layers repeat every 4 m along the shop, centred on it (or stand once in the
  * middle: `centred`).
+ *
+ * After the trades' blocks come the shady rooms' (windowScenes.ts SHOP_KINDS: a strip club, a hostess club, a back
+ * room...), which some shops of a few trades are instead of their own where the zone has vice enough (the wall
+ * shader picks: city.ts). Their people and furniture are scenes of windowScenes.ts, posed and drawn as the rooms
+ * behind the upper windows are (windowAtlas.ts), over walls painted here.
+ *
+ * The mask texture also carries the rooms behind the upper floors' glass (windowAtlas.ts, windowScenes.ts): their
+ * cells lie in rows under the storefronts' masks (its alpha theirs too), so the wall shader reads both through one
+ * texture unit.
  */
 
 export const ATLAS_W = 4096;
-export const ATLAS_H = 2048;
+// (Four rows of blocks for the trades' rooms, a fifth for the shady rooms: SHADY, below.)
+export const ATLAS_H = 2560;
 export const BLOCK = 512;
 export const BLOCK_COLS = 8;
 /** Atlas pixels per metre (the colour texture). */
@@ -40,6 +52,7 @@ export const REGIONS: Record<RegionName, readonly [x: number, y: number, w: numb
   c: [0, 384, 256, 128, 4, 2],
   d: [256, 384, 256, 128, 4, 2],
 };
+
 export const LAYER_REGIONS = ['a', 'b', 'c', 'd'] as const;
 type LayerName = (typeof LAYER_REGIONS)[number];
 
@@ -145,6 +158,13 @@ class Painter {
     return this;
   }
 
+  /** An image over the region, its bottom-left at (x, y), w x h metres (colour only: nothing of the mask's). */
+  image(img: CanvasImageSource, x: number, y: number, w: number, h: number): this {
+    this.col.setTransform(1, 0, 0, 1, 0, 0);
+    this.col.drawImage(img, this.ox + x * this.sx, this.oy + this.rh - (y + h) * this.sy, w * this.sx, h * this.sy);
+    return this;
+  }
+
   /** The upper half of an ellipse. */
   cap(cx: number, cy: number, rx: number, ry: number): this {
     return this.draw((g) => g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI));
@@ -242,6 +262,9 @@ class MobSprites {
     for (const sp of specs) addFigure(gb, sp);
     const mat = ghostMaterial();
     mat.uniforms.uTime.value = 7.3;
+    // (As the crowd outside is by default: all black.)
+    mat.uniforms.uBlack.value = 1;
+    (mat.uniforms.uFlat.value as THREE.Vector4).set(0.02, 0.02, 0.022, 0);
     const mesh = new THREE.Mesh(gb.build(0, 0)!, mat);
     mesh.frustumCulled = false;
     const scene = new THREE.Scene();
@@ -292,7 +315,10 @@ class MobSprites {
 
   /** A figure of a kind: its cell in the sheet (px; the sheet's bottom row is world y 0 to 2). */
   pick(kind: MobKind, r: Rng): [number, number, number, number] {
-    const n = r.pick(this.cells.get(kind)!);
+    return this.at(r.pick(this.cells.get(kind)!));
+  }
+
+  private at(n: number): [number, number, number, number] {
     return [(n % SPRITE_COLS) * SPRITE_PPM, (this.rows - 1 - Math.floor(n / SPRITE_COLS)) * 2 * SPRITE_PPM, SPRITE_PPM, 2 * SPRITE_PPM];
   }
 }
@@ -1540,7 +1566,163 @@ export const ROOMS: Record<number, RoomDef> = {
   },
 };
 
-/** The room per trade (D, ceiling) and its layers nearest first (depth, region index, mode: 0 repeat, 1 centred, 2 repeat mirrored at random), for the shader. */
+// ---- the shady rooms ----
+
+/**
+ * The shady rooms (windowScenes.ts SHOP_KINDS), rooms TRADE_COUNT and on: each 5 m deep under a low dark ceiling,
+ * its walls painted here by kind, its furniture and people a scene's (the first two layers 3 m high, the third 2):
+ * the furniture in front of the people, the people, and what stands close behind them. None is mirrored, so the
+ * people keep to their chairs.
+ */
+export const SHADY = { depth: 5, ceiling: 2.6, front: 1.5, people: 1.9, behind: 2.4 } as const;
+const INK: readonly [number, number, number] = [5, 5, 6];
+
+/**
+ * A back wall lit low and from the front of the room, the way a dim club's is: the wall tinted and glowing in bands,
+ * most at sitting to standing height, fading to the ceiling and the floor. The people and furniture of a shady room
+ * are ink (INK), so without a lit wall behind them they are black on black and nothing shows through the door: this
+ * is what makes them outlines. Drawn over the wall's own paint (the tint lets it through) and under what's lit on it.
+ */
+function wallWash(p: Painter, rgb: readonly [number, number, number], tint: number, glow: number): void {
+  const N = 12;
+  for (let i = 0; i < N; i++) {
+    // (Nested bands, each a little brighter than the one round it.)
+    const k = (i + 1) / N;
+    const y0 = 1.15 - 1.15 * (1 - k * 0.72), y1 = 1.15 + 1.45 * (1 - k * 0.6);
+    p.fill(`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(tint * (0.35 + 0.65 * k)).toFixed(3)})`, { glow: glow * k * k }).rect(0, y0, 4, y1 - y0);
+  }
+}
+
+/** A kind's walls, floor and ceiling: [back wall, side wall, floor, ceiling] colours and what's on the back wall. */
+const SHADY_WALLS: Record<ShopKind, { c: readonly [string, string, string, string]; back: (p: Painter, r: Rng) => void; ceil?: (p: Painter, r: Rng) => void; side?: readonly [number, number, number] }> = {
+  g_cabaret: {
+    c: ['#2e0e16', '#240b11', '#160a0c', '#0a0608'],
+    back: (p, r) => {
+      // A curtain of dark red velvet in folds under the stage's wash, a strip of dusty pink neon over it, the bar's
+      // bottles lit at one end.
+      for (let x = 0; x < 4; x += 0.16) p.fill(x % 0.32 < 0.16 ? '#3c1019' : '#2a0b13').rect(x, 0, 0.16, 2.6);
+      wallWash(p, [150, 84, 78], 0.42, 0.36);
+      p.fill('#e07a90', { glow: 1, anim: 0.5 }).rect(0, 2.34, 4, 0.03);
+      p.fill('#e8a050', { glow: 0.6 }).rect(2.9, 1.0, 1.1, 1.1);
+      for (const y of [1.05, 1.42, 1.78]) { p.fill('#3a1a10').rect(2.9, y - 0.03, 1.1, 0.03); bottles(p, r, 2.9, 4, y, 0.3, 0.5); }
+    },
+    ceil: (p) => { p.fill('#e88aa0', { glow: 1 }).ell(0.5, 0.75, 0.05, 0.05); },
+    side: [150, 84, 78],
+  },
+  g_hostess: {
+    c: ['#2a1a16', '#22140f', '#1a100c', '#0e0a08'],
+    back: (p, r) => {
+      // Padded panels in lamplight, gilt, a lit alcove of bottles.
+      for (let x = 0; x < 4; x += 0.8) p.fill('#38221a').rrect(x + 0.05, 0.3, 0.7, 1.9, 0.06);
+      wallWash(p, [178, 126, 66], 0.4, 0.4);
+      p.fill('#d8a040', { glow: 0.4 }).rect(0, 2.3, 4, 0.02);
+      p.fill('#f0c070', { glow: 0.7 }).rect(1.4, 1.2, 1.2, 0.8);
+      for (const y of [1.24, 1.62]) { p.fill('#5a3a18').rect(1.4, y - 0.03, 1.2, 0.03); bottles(p, r, 1.4, 2.6, y, 0.3, 0.6); }
+    },
+    ceil: (p, r) => { for (let i = 0; i < 8; i++) p.fill('#fff0d0', { glow: 1, anim: 0.5 }).ell(r.float(), r.float() * 1.5, 0.012, 0.012); },
+    side: [178, 126, 66],
+  },
+  g_host: {
+    c: ['#1c1814', '#18140f', '#12100e', '#0a0908'],
+    back: (p) => {
+      // Smoked mirror catching the room's light, in gold strips, and a tower of champagne glasses lit from under.
+      wallWash(p, [160, 130, 80], 0.4, 0.4);
+      for (let x = 0; x < 4; x += 0.9) p.fill('#d8a040', { glow: 0.4 }).rect(x, 0, 0.025, 2.6);
+      for (let y = 0.5; y < 2.6; y += 0.7) p.fill('#d8a040', { glow: 0.4 }).rect(0, y, 4, 0.02);
+      for (let k = 0; k < 5; k++) for (let i = 0; i <= k; i++) p.fill('#f8e8b0', { glow: 0.9, anim: 0.5 }).poly([3.2 + (i - k / 2) * 0.12 - 0.04, 2.0 - k * 0.16, 3.2 + (i - k / 2) * 0.12 + 0.04, 2.0 - k * 0.16, 3.2 + (i - k / 2) * 0.12 + 0.012, 1.88 - k * 0.16, 3.2 + (i - k / 2) * 0.12 - 0.012, 1.88 - k * 0.16]);
+    },
+    ceil: (p, r) => { for (let i = 0; i < 12; i++) p.fill('#fff0d0', { glow: 1, anim: 0.5 }).ell(r.float(), r.float() * 1.5, 0.012, 0.012); },
+    side: [160, 130, 80],
+  },
+  g_cards: {
+    c: ['#2a2620', '#262218', '#1a1612', '#141210'],
+    back: (p) => {
+      // Stained plaster under a strip light's pool, a calendar.
+      p.fill('#322c24').rect(0, 0, 4, 0.9);
+      wallWash(p, [150, 140, 104], 0.4, 0.4);
+      p.fill('#d8d0b8').rect(2.2, 1.5, 0.4, 0.55);
+      p.fill('#a02018').rect(2.2, 1.9, 0.4, 0.15);
+      p.fill('#e8f0e0', { glow: 0.8 }).rect(0.8, 2.3, 1.2, 0.05);
+    },
+    side: [150, 140, 104],
+  },
+  g_loan: {
+    c: ['#c8c4b4', '#b8b4a4', '#6a6a64', '#c8c8c0'],
+    back: (p) => {
+      // An office's wall: the licence in its frame, the rates on a board, the month's calendar.
+      p.fill('#f0ece0').rect(0.5, 1.5, 0.5, 0.36);
+      p.fill('#b89040').rect(0.48, 1.48, 0.54, 0.03).rect(0.48, 1.85, 0.54, 0.03);
+      p.fill('#f4f0e0').rect(1.6, 1.25, 1.0, 0.8);
+      p.fill('#c02018').text('即日融資', 2.1, 1.85, 0.15);
+      p.fill('#202020').text('ご利用は計画的に', 2.1, 1.6, 0.075).text('毎週月曜日', 2.1, 1.42, 0.1);
+      p.fill('#e8e4d4').rect(3.2, 1.4, 0.45, 0.6);
+      p.fill('#3a5a9a').rect(3.2, 1.85, 0.45, 0.15);
+    },
+    ceil: (p) => tubes(p, '#c8c8c0'),
+  },
+  g_lobby: {
+    c: ['#2a1420', '#24101c', '#3a1a2a', '#140a10'],
+    back: (p, r) => {
+      // The panel of rooms: lit photographs of the free ones, the taken ones dark, a button under each; its light
+      // spilt on the wall round it.
+      wallWash(p, [150, 92, 100], 0.38, 0.4);
+      p.fill('#120810').rect(0.7, 0.9, 2.6, 1.25);
+      for (const y of [1.12, 1.57]) {
+        for (let i = 0; i < 4; i++) {
+          const x = 0.85 + i * 0.6, free = r.chance(0.6);
+          p.fill(free ? r.pick(['#e87aa8', '#7ab0e8', '#e8c070', '#b07ae8']) : '#241420', free ? { glow: 0.8 } : {}).rect(x, y, 0.5, 0.36);
+          p.fill(free ? '#60e080' : '#802020', { glow: 0.9 }).rect(x + 0.2, y - 0.07, 0.1, 0.04);
+        }
+      }
+      p.fill('#ff70b0', { glow: 1 }).text('空室', 2, 2.3, 0.13);
+    },
+    ceil: (p) => { p.fill('#ffb0d0', { glow: 1 }).ell(0.5, 0.75, 0.06, 0.06); },
+    side: [150, 92, 100],
+  },
+  g_slumped: {
+    c: ['#2a160a', '#3a1e0c', '#2a1a10', '#141010'],
+    back: (p, r) => {
+      p.fill('#3a2010').rect(0, 0, 4, 1.0);
+      p.fill('#e8b060', { glow: 0.55 }).rect(0, 1.25, 4, 0.95);
+      for (const y of [1.28, 1.74]) { p.fill('#c8a060').rect(0, y - 0.03, 4, 0.03); bottles(p, r, 0, 4, y, 0.38, 0.5); }
+      p.fill('#1a0e06').rect(0, 2.2, 4, 0.4);
+    },
+    ceil: (p) => { p.fill('#ffd8a0', { glow: 1 }).ell(0.5, 0.75, 0.05, 0.05); },
+    side: [176, 124, 64],
+  },
+  g_exchange: {
+    c: ['#b8b8b0', '#a8a8a0', '#5a5a58', '#c0c0b8'],
+    back: (p) => {
+      // The window in its wall, a grille across it, the notice over it.
+      p.fill('#f0f0e8', { glow: 0.7 }).rect(1.7, 1.1, 1.2, 0.7);
+      for (let x = 1.7; x < 2.9; x += 0.12) p.fill('#505050').rect(x, 1.1, 0.015, 0.7);
+      p.fill('#f8f0d0').rect(1.5, 1.95, 1.6, 0.26);
+      p.fill('#c02018').text('景品交換所', 2.3, 2.08, 0.15);
+    },
+    ceil: (p) => tubes(p, '#c0c0b8'),
+  },
+};
+
+/** Paints a shady room: its kind's walls, the scene's wall furniture over the back one, and its three layers. */
+function paintShady(p: Painter, r: Rng, n: number, kind: ShopKind, s: Scene): void {
+  const W = SHADY_WALLS[kind];
+  const ch = SHADY.ceiling;
+  room(p, n, ch, {
+    back: [W.c[0], () => {
+      W.back(p, r);
+      p.image(sceneLayerImage(s, 'wall', 3, [14, 10, 10]), 0, 0, 4, 3);
+    }],
+    // (The side walls catch a little of the same light, so a door seen from along the street isn't a black hole.)
+    side: [W.c[1], () => W.side && wallWash(p, W.side, 0.34, 0.15)],
+    floor: [W.c[2], () => undefined],
+    ceil: [W.c[3], () => W.ceil?.(p, r)],
+  });
+  p.begin(n, 'b', ch).image(sceneLayerImage(s, 'front', 3, INK), 0, 0, 4, 3);
+  p.begin(n, 'a', ch).image(sceneLayerImage(s, 'people', 3, INK), 0, 0, 4, 3);
+  p.begin(n, 'c', ch).image(sceneLayerImage(s, 'behind', 2, INK), 0, 0, 4, 2);
+}
+
+/** The room per trade and then per shady room (D, ceiling) and its layers nearest first (depth, region index, mode: 0 repeat, 1 centred, 2 repeat mirrored at random), for the shader. */
 export function roomTables(): { rooms: [number, number][]; layers: [number, number, number][] } {
   const rooms: [number, number][] = [];
   const layers: [number, number, number][] = [];
@@ -1553,16 +1735,24 @@ export function roomTables(): { rooms: [number, number][]; layers: [number, numb
       layers.push(l ? [-l.depth, LAYER_REGIONS.indexOf(l.region), l.centred ? 1 : l.text ? 0 : 2] : [0, 0, 0]);
     }
   }
+  // The shady rooms after them: all one shape (SHADY), whatever their scenes.
+  for (let k = 0; k < SHOP_KINDS.length; k++) {
+    rooms.push([SHADY.depth, SHADY.ceiling]);
+    layers.push([-SHADY.front, LAYER_REGIONS.indexOf('b'), 0], [-SHADY.people, LAYER_REGIONS.indexOf('a'), 0], [-SHADY.behind, LAYER_REGIONS.indexOf('c'), 0], [0, 0, 0]);
+  }
   return { rooms, layers };
 }
 
 /** The atlas textures (made once, on the main thread). */
 export class ShopAtlas {
   readonly color: THREE.CanvasTexture;
-  readonly mask: THREE.CanvasTexture;
+  /** The storefronts' masks, and under them the rooms behind the upper floors' glass (windowAtlas.ts). */
+  readonly mask: THREE.DataTexture;
 
   constructor(renderer: THREE.WebGLRenderer) {
+    const t0 = performance.now();
     SPRITES = new MobSprites(renderer);
+    const tSprites = performance.now();
     const col = document.createElement('canvas');
     col.width = ATLAS_W;
     col.height = ATLAS_H;
@@ -1570,7 +1760,7 @@ export class ShopAtlas {
     mask.width = ATLAS_W / 2;
     mask.height = ATLAS_H / 2;
     const gc = col.getContext('2d')!;
-    const gm = mask.getContext('2d')!;
+    const gm = mask.getContext('2d', { willReadFrequently: true })!;
     gm.fillStyle = '#000';
     gm.fillRect(0, 0, mask.width, mask.height);
     const p = new Painter(gc, gm);
@@ -1580,10 +1770,31 @@ export class ShopAtlas {
       d.paint(p, rng(hash(t, 0x5409)), t);
       p.end();
     }
+    const tTrades = performance.now();
+    // The shady rooms this edition has (the demo none of the adult ones: their blocks stay empty and are never read).
+    const shady = shopScenes();
+    SHOP_KINDS.forEach((kind, k) => {
+      const s = shady[kind];
+      if (!s) return;
+      paintShady(p, rng(hash(k, 0x5ad1)), TRADE_COUNT + k, kind, s);
+      p.end();
+    });
     this.color = new THREE.CanvasTexture(col);
     this.color.colorSpace = THREE.SRGBColorSpace;
     this.color.premultiplyAlpha = true;
-    this.mask = new THREE.CanvasTexture(mask);
+    const tShady = performance.now();
+    // The masks' bytes with the window scenes' rows under them: one texture (canvas pixels are premultiplied, which
+    // the scenes' four independent channels can't be, so it's a plain byte array).
+    const rooms = paintWindowAtlas();
+    if (rooms.width !== mask.width || WINDOW_ATLAS.maskH !== mask.height) throw new Error('shop atlas: the window scenes are laid out for a mask of another size');
+    const bytes = new Uint8Array(mask.width * (mask.height + rooms.height) * 4);
+    bytes.set(gm.getImageData(0, 0, mask.width, mask.height).data);
+    bytes.set(rooms.data, mask.width * mask.height * 4);
+    this.mask = new THREE.DataTexture(bytes, mask.width, mask.height + rooms.height, THREE.RGBAFormat, THREE.UnsignedByteType);
+    this.mask.userData = { windowMs: rooms.ms, scenes: rooms.scenes.map((s) => s.id), rows: rooms.height };
+    this.mask.needsUpdate = true;
+    // (How long each part took, for debug-shots/windowheadroom.mjs: the mob's sprites, the trades' rooms, the shady rooms.)
+    this.color.userData = { ms: Math.round(performance.now() - t0) - rooms.ms, sprites: Math.round(tSprites - t0), trades: Math.round(tTrades - tSprites), shady: Math.round(tShady - tTrades) };
     for (const tex of [this.color, this.mask]) {
       tex.generateMipmaps = true;
       tex.minFilter = THREE.LinearMipmapLinearFilter;

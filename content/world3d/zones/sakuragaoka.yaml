@@ -71,6 +71,7 @@ zones:
   S:
     id: sakuragaoka_ginza
     name: Sakuragaoka Ginza (shopping street)
+    night: 0.3
     people: { plain: 6, long: 3, school: 1.5, suit: 1 }
     plan:
       floors: [[2, 3, 60], [4, 5, 40]]

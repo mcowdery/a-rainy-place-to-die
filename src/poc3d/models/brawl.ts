@@ -2,13 +2,13 @@ import * as THREE from 'three';
 import type { FirstPersonRig } from './firstPerson';
 import { Gore } from './gore';
 import { KILL_CHANCE, KILL_MOVES, KillRun, pickKill, type KillCtx, type KillMove, type KillQuery } from './killMoves';
-import { goreSetting, Melee, partFactor, segmentDistance, sweepHit, type Capsule, type Dir, type MeleeWeapon } from './melee';
+import { goreSetting, Melee, partFactor, segmentDistance, sweepHit, type Capsule, type Dir, type Doing, type MeleeWeapon, type Zone } from './melee';
 import { MeleeSound } from './meleeSound';
 import { ELITE, HEALTH, sideOf, Thug, type GuardSide, type Side } from './thug';
 
 /**
  * A fight against a group (models/thug.ts), from Mack's first-person body (models/firstPerson.ts), for any page
- * that has one (the showroom's first person now, the city later). Ordinary fighters die in a few blows and hit
+ * that has one (the fight page now, fight.html; the city later). Ordinary fighters die in a few blows and hit
  * as hard; several come at once and work round behind you, so the danger is being surrounded. A killing blow
  * rolls the kill-move chance (`killChance`; models/killMoves.ts) and, if it comes up and a move fits, plays it:
  * you're untouchable through it, the others keep coming.
@@ -35,6 +35,8 @@ const ATTACK_GAP = 0.22;
 const DEFLECT = 0.2;
 const MY_POSTURE = 100;
 const MY_DRAIN = 20;
+/** A blow at a man whose guard is broken, without kill moves: more than he has. */
+const OPEN_BLOW = 1e4;
 /** Damage of a pellet or a bullet. */
 const PELLET = 16;
 const BULLET = 45;
@@ -64,6 +66,10 @@ export class Brawl {
   health = YOUR_HEALTH;
   /** Seconds you've been down for (knocked out: the group stands back, then it starts again). */
   down = 0;
+  /** Kill moves (models/killMoves.ts): shelved since 2026-10-06 (the user: not a fan of them so far, kept to
+   * come back to), so off unless the page's URL asks for them (`?killmoves=<chance>`). Off, a killing blow just
+   * kills, and a blow at a man whose guard is broken finishes him. */
+  killMoves = false;
   killChance = KILL_CHANCE;
   run: KillRun | null = null;
   lastKill: string | null = null;
@@ -78,8 +84,15 @@ export class Brawl {
   private loading = 0;
   private lastRig: FirstPersonRig | null = null;
   private lastView: BrawlView | null = null;
-  /** Each spawn's number: fighters still loading from an older one stay put away when they arrive. */
+  /** Each spawn's number: a swordsman still loading from an older one stays put away when he arrives. */
   private gen = 0;
+  /** The group the last spawn asked for: fighters still loading (from this spawn or an older one) take their
+   * places in it as they arrive, the ones past its number put away. */
+  private group: { n: number; place: (t: Thug, i: number) => void } = { n: 0, place: () => {} };
+  /** Whose models the ordinary fighters are, in turn, and the elite's (models/characters.ts names); `setCast`. */
+  private cast: readonly string[] = ['salaryman'];
+  private eliteModel = 'salaryman';
+  private castGen = 0;
   private sinceHurt = 99;
   private hitstop = 0;
   private shakeV = 0;
@@ -105,7 +118,27 @@ export class Brawl {
     Object.assign(this.hurtEl.style, { position: 'fixed', inset: '0', pointerEvents: 'none', opacity: '0', zIndex: '6', background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(150,0,0,0.8) 100%)' });
     overlay.appendChild(this.hurtEl);
     const q = new URLSearchParams(location.search).get('killmoves');
-    if (q !== null && Number.isFinite(Number(q))) this.killChance = THREE.MathUtils.clamp(Number(q), 0, 1);
+    if (q !== null && Number.isFinite(Number(q))) {
+      this.killChance = THREE.MathUtils.clamp(Number(q), 0, 1);
+      this.killMoves = this.killChance > 0;
+    }
+  }
+
+  /** Other people to fight: the ordinary fighters take `mooks`' models in turn, the elite `elite`'s. Those here
+   * (and any still loading) are put away for good; the next `spawn` or `spawnDuel` brings on the new ones. */
+  setCast(mooks: readonly string[], elite = mooks[0]): void {
+    if (mooks.length === 0) return;
+    this.cast = [...mooks];
+    this.eliteModel = elite;
+    this.castGen++;
+    this.loading = 0;
+    this.gore.clear();
+    this.bleed = [];
+    this.run = null;
+    this.enemyPrev.clear();
+    for (const t of this.thugs) this.scene.remove(t.root);
+    this.thugs.length = 0;
+    this.group = { n: 0, place: () => {} };
   }
 
   /** Brings on a group of `n` round you (from ahead and the sides), fresh; the blood cleared away. */
@@ -115,7 +148,7 @@ export class Brawl {
     this.run = null;
     for (const t of this.thugs) if (t.tier === 'elite') t.root.visible = false;
     const mooks = this.thugs.filter((t) => t.tier === 'mook');
-    const gen = ++this.gen;
+    this.gen++;
     const place = (t: Thug, i: number): void => {
       // Spread over an arc ahead of you, a couple of them further round.
       const a = view.yaw + (n > 1 ? (i - (n - 1) / 2) * (2.4 / (n - 1)) : 0);
@@ -124,15 +157,19 @@ export class Brawl {
       const z = view.eye.z - Math.cos(a) * d;
       t.place(x, this.floorAt(x, z), z, Math.atan2(view.eye.x - x, view.eye.z - z));
     };
+    this.group = { n, place };
     mooks.slice(0, n).forEach(place);
     for (const t of mooks.slice(n)) t.root.visible = false;
     for (let i = mooks.length + this.loading; i < n; i++) {
       this.loading++;
-      void Thug.load('salaryman', i + 1).then((t) => {
+      const cast = this.castGen;
+      void Thug.load(this.cast[i % this.cast.length], i + 1).then((t) => {
+        if (cast !== this.castGen) return;
         this.loading--;
         this.thugs.push(t);
         this.scene.add(t.root);
-        if (gen === this.gen) place(t, this.thugs.filter((x) => x.tier === 'mook').length - 1);
+        const k = this.thugs.filter((x) => x.tier === 'mook').length - 1;
+        if (k < this.group.n) this.group.place(t, k);
         else t.root.visible = false;
       });
     }
@@ -144,6 +181,7 @@ export class Brawl {
     this.bleed = [];
     this.run = null;
     for (const t of this.thugs) t.root.visible = false;
+    this.group = { n: 0, place: () => {} };
     const gen = ++this.gen;
     const place = (t: Thug): void => {
       const x = view.eye.x - Math.sin(view.yaw) * 3.2;
@@ -156,7 +194,9 @@ export class Brawl {
       return;
     }
     this.loading++;
-    void Thug.load('salaryman', 99, { tier: 'elite', weapon: 'katana', name: '剣客 Swordsman' }).then((t) => {
+    const cast = this.castGen;
+    void Thug.load(this.eliteModel, 99, { tier: 'elite', weapon: 'katana', name: '剣客 Swordsman' }).then((t) => {
+      if (cast !== this.castGen) return;
       this.loading--;
       this.thugs.push(t);
       this.scene.add(t.root);
@@ -211,18 +251,37 @@ export class Brawl {
   attack(dir: Dir): void {
     if (this.run || this.down > 0 || this.stun > 0) return;
     // An elite open in front of you: the deathblow, whatever you swing.
-    if (this.lastRig && this.lastView && this.melee.drawn) {
+    if (this.killMoves && this.lastRig && this.lastView && this.melee.drawn) {
       const v = this.lastView;
       const ahead = new THREE.Vector3(-Math.sin(v.yaw), 0, -Math.cos(v.yaw));
       for (const t of this.thugs) {
         if (!t.broken || !t.root.visible) continue;
         const to = t.root.position.clone().sub(v.eye).setY(0);
-        if (to.length() < 2.3 && to.normalize().dot(ahead) > 0.7 && this.startKill(t, this.hand === 'katana' ? 'katana' : 'fists', this.lastRig, v)) return;
+        if (to.length() < 2.3 && to.normalize().dot(ahead) > 0.7 && this.startKill(t, this.killWeapon, this.lastRig, v)) return;
       }
     }
     const was = this.melee.drawn;
     this.melee.attack(dir);
     if (!was && this.melee.drawn && this.hand === 'katana') this.sound.draw(true);
+  }
+
+  /** A click to attack, as it's read now: aimed at a zone, or the attack for what you're doing (`Melee.strike`). */
+  strike(o: { zone?: Zone; doing?: Doing; hand?: 'l' | 'r' }): void {
+    if (this.run || this.down > 0 || this.stun > 0) return;
+    const was = this.melee.drawn;
+    this.melee.strike(o);
+    if (!was && this.melee.drawn && this.hand === 'katana') this.sound.draw(true);
+  }
+
+  /** What a kill move is made with: what's in hand (the guns' own is the shotgun's, asked for apart). */
+  private get killWeapon(): MeleeWeapon {
+    return this.hand === 'gun' ? 'fists' : this.hand;
+  }
+
+  /** A dodge to your left (-1) or right (1). */
+  dodge(side: -1 | 1): void {
+    if (this.run || this.down > 0 || this.stun > 0 || this.hand === 'gun') return;
+    this.melee.dodge(side);
   }
 
   kick(): void {
@@ -240,7 +299,7 @@ export class Brawl {
 
   /** With the shotgun up close: the kill move instead of the shot, if it comes up. */
   tryGunKill(rig: FirstPersonRig, view: BrawlView): boolean {
-    if (this.run || rig.shells <= 0 || (rig.kind !== 'lever' && rig.kind !== 'double')) return false;
+    if (!this.killMoves || this.run || rig.shells <= 0 || (rig.kind !== 'lever' && rig.kind !== 'double')) return false;
     const fwd = new THREE.Vector3(-Math.sin(view.yaw), 0, -Math.cos(view.yaw));
     let best: Thug | null = null;
     for (const t of this.thugs) {
@@ -261,7 +320,7 @@ export class Brawl {
     const pool = this.thugs.filter((t) => t.root.visible && (id === 'stomp' ? t.floored : t.alive && !t.floored));
     pool.sort((a, b) => this.distTo(a) - this.distTo(b));
     if (!pool[0]) return false;
-    const weapon: KillQuery['weapon'] = id === 'shotgun_jaw' ? 'shotgun' : id === 'run_through' || id === 'decapitate' ? 'katana' : 'fists';
+    const weapon: KillQuery['weapon'] = id === 'shotgun_jaw' ? 'shotgun' : id === 'run_through' || id === 'decapitate' ? 'katana' : id.startsWith('bat_') ? 'bat' : 'fists';
     return this.startKill(pool[0], weapon, rig, view, def);
   }
 
@@ -313,6 +372,8 @@ export class Brawl {
       hitstop: (s) => (this.hitstop = Math.max(this.hitstop, s)),
     };
     this.melee.cancel();
+    // (A kill move ends at the weapon's guard: the mid stance.)
+    this.melee.setStance('mid', true);
     this.run = new KillRun(def, ctx);
     this.lastKill = def.id;
     this.lastHit = `kill move: ${def.label}`;
@@ -364,7 +425,7 @@ export class Brawl {
       cine = r.cine;
       if (this.run.done) {
         const victim = this.run.c.victim;
-        if (this.run.def.id === 'run_through' || this.run.def.id === 'decapitate' || this.run.def.id === 'shotgun_jaw') this.bleed.push({ t: 0.9, who: victim });
+        if (this.run.def.bleeds) this.bleed.push({ t: 0.9, who: victim });
         this.run = null;
         rig.poseOverride = null;
         rig.gunOverride = null;
@@ -383,7 +444,7 @@ export class Brawl {
       this.prevStrike = null;
       const mv = m.move;
       if (mv && mv.hitter) {
-        setTimeout(() => this.sound.whoosh(mv.hitter === 'blade', mv.id === 'kick' ? 1.3 : 1), (mv.time * mv.active[0] * 600) / m.rate);
+        setTimeout(() => this.sound.whoosh(mv.hitter === 'blade', mv.id === 'kick' ? 1.3 : mv.hitter === 'bat' ? 1.6 : 1), (mv.time * mv.active[0] * 600) / Math.max(0.05, m.rate));
         // An elite near you reads it (by his skill) and moves his guard to meet it.
         for (const t of this.thugs) if (t.tier === 'elite' && t.root.visible && this.distTo(t) < 3) t.noticeSwing(sideOf(mv.id));
       }
@@ -392,6 +453,12 @@ export class Brawl {
     if (lunge > 0 && !this.run) {
       view.eye.x += -Math.sin(view.yaw) * lunge * dt;
       view.eye.z += -Math.cos(view.yaw) * lunge * dt;
+    }
+    // A dodge carries you sideways.
+    const slide = m.slideSpeed;
+    if (slide !== 0 && !this.run) {
+      view.eye.x += Math.cos(view.yaw) * slide * dt;
+      view.eye.z += -Math.sin(view.yaw) * slide * dt;
     }
     // Not through them while they're up.
     for (const t of this.thugs) {
@@ -410,7 +477,8 @@ export class Brawl {
       const seg = rig.strike(h);
       if (this.prevStrike) {
         const mv = m.move;
-        const most = mv.hitter === 'blade' ? 2 : 1;
+        // A blade or a bat can catch two in one swing.
+        const most = mv.hitter === 'blade' || mv.hitter === 'bat' ? 2 : 1;
         for (const t of this.thugs) {
           if (this.swingHits.size >= most) break;
           if (this.swingHits.has(t) || !t.root.visible || t.state === 'dead' || t.state === 'scripted') continue;
@@ -420,11 +488,13 @@ export class Brawl {
           const dir = seg.b.clone().sub(this.prevStrike[1]);
           if (dir.lengthSq() < 1e-6) dir.set(-Math.sin(view.yaw), 0, -Math.cos(view.yaw));
           dir.normalize();
-          const info = { point: hit.point, dir, part: hit.part.name, damage: mv.damage, force: mv.force, cut: mv.cut, move: mv.id, hitter: h };
-          const weaponNow = this.hand === 'katana' ? 'katana' : 'fists';
+          // (Without kill moves, a blow at an elite whose guard is broken finishes him.)
+          const open = t.tier === 'elite' && t.broken && !this.killMoves;
+          const info = { point: hit.point, dir, part: hit.part.name, damage: open ? OPEN_BLOW : mv.damage * m.power, force: mv.force * m.power, cut: mv.cut, move: mv.id, hitter: h };
+          const weaponNow = this.killWeapon;
           if (t.tier === 'elite') {
             // Guard broken: the deathblow.
-            if (t.broken && this.startKill(t, weaponNow, rig, view)) break;
+            if (t.broken && this.killMoves && this.startKill(t, weaponNow, rig, view)) break;
             const res = t.defend(sideOf(mv.id));
             if (res !== 'none') {
               this.gore.sparks(hit.point, res === 'deflect' ? 16 : 8);
@@ -446,15 +516,19 @@ export class Brawl {
             }
           }
           // A killing blow rolls for a kill move.
-          if (t.healthAfter(info) <= 0 && Math.random() < this.killChance && this.startKill(t, this.hand === 'katana' ? 'katana' : 'fists', rig, view)) break;
+          if (this.killMoves && t.healthAfter(info) <= 0 && Math.random() < this.killChance && this.startKill(t, weaponNow, rig, view)) break;
           t.hit(info);
           t.addPosture(mv.damage * 0.25);
           const strength = Math.min(1, mv.damage / 45);
           g.hit(hit.point, dir, mv.cut, strength, hit.part.name, t.boneOf(hit.part.name), view.eye);
+          const byBat = mv.hitter === 'bat';
           if (mv.cut) this.sound.cut(g.level !== 'off');
+          else if (byBat) this.sound.knock(strength);
           else this.sound.thud(mv.id === 'kick' || mv.id === 'stomp' ? 1 : strength);
-          this.hitstop = Math.max(this.hitstop, mv.cut ? 0.075 : mv.id === 'kick' ? 0.07 : 0.05);
-          this.shakeV = Math.max(this.shakeV, mv.cut ? 0.5 : 0.35);
+          // The bat comes away bloody from a head.
+          if (byBat && g.level !== 'off' && (hit.part.name === 'head' || hit.part.name === 'neck')) g.blade = Math.min(g.level === 'full' ? 1 : 0.35, g.blade + (g.level === 'full' ? 0.4 : 0.12));
+          this.hitstop = Math.max(this.hitstop, mv.cut ? 0.075 : byBat ? 0.085 : mv.id === 'kick' ? 0.07 : 0.05);
+          this.shakeV = Math.max(this.shakeV, mv.cut || byBat ? 0.5 : 0.35);
           this.lastHit = `${mv.id} → ${hit.part.name}`;
           if ((t.state as string) === 'dead') {
             this.kills++;
@@ -507,7 +581,10 @@ export class Brawl {
             const dmg = mv.damage * (t.tier === 'elite' ? ELITE.damage[t.weapon] : ENEMY_DAMAGE) * (hit.part.name === 'head' ? 1.2 : 1);
             const guarding = this.hand !== 'gun' && m.guarding && !m.move && this.stun <= 0 && from.dot(ahead) > 0.42;
             const steel = this.hand === 'katana' || t.weapon === 'katana';
-            if (guarding && this.clock - this.guardAt < DEFLECT) {
+            if (this.hand !== 'gun' && m.evading) {
+              // Dodged: it goes past.
+              this.lastHit = 'dodged';
+            } else if (guarding && this.clock - this.guardAt < DEFLECT) {
               // Deflected: turned aside at the last moment; he reels, his posture takes it.
               t.blocked();
               t.addPosture(t.tier === 'elite' ? 34 : 0);
@@ -570,6 +647,7 @@ export class Brawl {
     g.viewer.copy(view.eye);
     g.update(dt);
     rig.katana.setBlood(g.blade);
+    rig.bat.setBlood(g.blade);
     return { dt, shake: this.shakeV, locked: !!this.run || this.down > 0, cine };
   }
 
@@ -616,8 +694,9 @@ export class Brawl {
 
   hud(): string {
     const m = this.melee;
-    const what = this.hand === 'gun' ? 'gun' : this.hand === 'katana' ? (m.drawn ? 'katana drawn' : 'katana sheathed') : m.drawn ? 'fists up' : 'hands down';
-    return `FIGHTING · ${what}${m.move ? ` · ${m.move.id}` : ''}${this.stun > 0 ? ' · REELING' : ''}${m.guard > 0.5 ? ' · guarding' : ''} · you ${Math.round(this.health)}${this.down > 0 ? ' (DOWN)' : ''} · ${this.standing} standing · ${this.kills} down · kill moves ${Math.round(this.killChance * 100)}% · gore ${this.gore.level}${this.lastHit ? ` · ${this.lastHit}` : ''}`;
+    const what = this.hand === 'gun' ? 'gun' : this.hand === 'katana' ? (m.drawn ? 'katana drawn' : 'katana sheathed') : this.hand === 'bat' ? (m.drawn ? 'bat up' : 'bat down') : m.drawn ? 'fists up' : 'hands down';
+    const stance = (this.hand === 'gun' || !m.drawn ? '' : m.style === 'clips' ? ' · library swings' : this.hand === 'fists' ? '' : ` · ${m.stance} stance${m.oneHand ? ' · one hand' : ''}`) + (m.heavy ? ' · HEAVY' : '');
+    return `FIGHTING · ${what}${stance}${m.move ? ` · ${m.move.id}` : ''}${this.stun > 0 ? ' · REELING' : ''}${m.guard > 0.5 ? ' · guarding' : ''} · you ${Math.round(this.health)}${this.down > 0 ? ' (DOWN)' : ''} · ${this.standing} standing · ${this.kills} down${this.killMoves ? ` · kill moves ${Math.round(this.killChance * 100)}%` : ''} · gore ${this.gore.level}${this.lastHit ? ` · ${this.lastHit}` : ''}`;
   }
 
   /** For checks: the state in brief. */

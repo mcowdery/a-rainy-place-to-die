@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 /**
  * Driving cameras shared by the race page and the city (district/driving.ts): the views Q cycles through,
- * remembered in the browser (`citypop.driveView`); the driver's head in the cockpit, thrown about by the car's
+ * remembered in the browser (`rainyplace.driveView`); the driver's head in the cockpit, thrown about by the car's
  * accelerations on a spring and jolted by knocks; where the driver looks (into a bend, along a slide); placing the
  * cockpit and bonnet cameras in a car's frame; and the rear-view mirror's picture.
  *
@@ -19,7 +19,7 @@ export const VIEW_NAMES: Record<DriveViewId, string> = {
   bumper: 'Bumper',
 };
 
-const KEY = 'citypop.driveView';
+const KEY = 'rainyplace.driveView';
 
 /** The next view. On a bike only two: behind it, and his eyes (`cockpit`). */
 export function nextView(v: DriveViewId, bike = false): DriveViewId {
@@ -151,23 +151,30 @@ export function placeInCar(camera: THREE.Camera, obj: THREE.Object3D, at: THREE.
  * rendered into a texture the glass shows (flipped, as a mirror is), every `every` frames. Half-float, so the
  * picture keeps its brightness for the page's tone mapping.
  */
+/** The layer of things only a mirror shows. */
+export const MIRROR_LAYER = 5;
+
 export class RearMirror {
   readonly target: THREE.WebGLRenderTarget;
   readonly camera: THREE.PerspectiveCamera;
   readonly material: THREE.MeshBasicMaterial;
   private frame = 0;
 
-  constructor(width = 384, height = 100, far = 900, private readonly every = 2) {
+  /** `every`: a picture each so many calls (the page may change it: how often is how much it costs). */
+  constructor(width = 384, height = 100, far = 900, public every = 2, phase = 0, samples = 0) {
+    this.frame = phase;
     this.camera = new THREE.PerspectiveCamera(14, width / height, 0.08, far);
-    this.target = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true, type: THREE.HalfFloatType });
+    // (What's drawn only for mirrors: the markers over the cars that are after you, district/chaseCar.ts.)
+    this.camera.layers.enable(MIRROR_LAYER);
+    this.target = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true, type: THREE.HalfFloatType, samples });
     const tex = this.target.texture;
     tex.repeat.x = -1;
     tex.offset.x = 1;
     this.material = new THREE.MeshBasicMaterial({ map: tex });
   }
 
-  /** Renders the picture for the driver at `eye` (world); `hide` are left out of it (the glass, his head). */
-  render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, glass: THREE.Mesh, eye: THREE.Vector3, hide: readonly THREE.Object3D[] = []): void {
+  /** Renders the picture for the driver at `eye` (world); `hide` are left out of it (the glass, his head). `half`: half the glass's height (m: the cabin's mirror). */
+  render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, glass: THREE.Mesh, eye: THREE.Vector3, hide: readonly THREE.Object3D[] = [], half = 0.031): void {
     if (this.frame++ % this.every) return;
     glass.updateMatrixWorld();
     const c = glass.getWorldPosition(new THREE.Vector3());
@@ -181,7 +188,7 @@ export class RearMirror {
     cam.up.set(0, 1, 0).applyQuaternion(glass.getWorldQuaternion(new THREE.Quaternion()));
     cam.lookAt(cam.position.clone().add(refl));
     // As wide as the glass looks from the eyes, and a little more (it's slightly convex).
-    const fov = THREE.MathUtils.radToDeg(2 * Math.atan(0.031 / Math.max(0.2, dist))) * 1.7;
+    const fov = THREE.MathUtils.radToDeg(2 * Math.atan(half / Math.max(0.2, dist))) * 1.7;
     if (Math.abs(cam.fov - fov) > 0.01) {
       cam.fov = fov;
       cam.updateProjectionMatrix();
@@ -191,10 +198,45 @@ export class RearMirror {
     for (const o of hide) o.visible = false;
     const prev = renderer.getRenderTarget();
     renderer.setRenderTarget(this.target);
-    renderer.render(scene, cam);
+    this.draw(renderer, scene);
     renderer.setRenderTarget(prev);
     glass.visible = was[0];
     hide.forEach((o, i) => (o.visible = was[i + 1]));
+  }
+
+  /**
+   * The picture without a glass to reflect in: straight back from `at` along `toward` (world), `fov` degrees high
+   * (for a mirror drawn over the view from the cameras outside the cabin). `hide` are left out (your own car).
+   */
+  renderBack(renderer: THREE.WebGLRenderer, scene: THREE.Scene, at: THREE.Vector3, toward: THREE.Vector3, fov: number, hide: readonly THREE.Object3D[] = []): void {
+    if (this.frame++ % this.every) return;
+    const cam = this.camera;
+    cam.position.copy(at);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(at.clone().add(toward));
+    if (Math.abs(cam.fov - fov) > 0.01) {
+      cam.fov = fov;
+      cam.updateProjectionMatrix();
+    }
+    const was = hide.map((o) => o.visible);
+    for (const o of hide) o.visible = false;
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(this.target);
+    this.draw(renderer, scene);
+    renderer.setRenderTarget(prev);
+    hide.forEach((o, i) => (o.visible = was[i]));
+  }
+
+  /**
+   * The picture drawn, without the scene working out every object's place again first: the view's own render does
+   * that each frame, and for a mirror it was half the cost (measured in the city: 4.7 ms a picture with it, 2.4
+   * without). So a mirror shows things where they were a frame ago, which nobody can see.
+   */
+  private draw(renderer: THREE.WebGLRenderer, scene: THREE.Scene): void {
+    const auto = scene.matrixWorldAutoUpdate;
+    scene.matrixWorldAutoUpdate = false;
+    renderer.render(scene, this.camera);
+    scene.matrixWorldAutoUpdate = auto;
   }
 
   dispose(): void {

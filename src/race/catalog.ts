@@ -87,7 +87,30 @@ export const MODELS: readonly Model[] = [
   },
 ];
 
-export const model = (type: CarType): Model => MODELS.find((m) => m.type === type) ?? MODELS[0];
+/**
+ * The cars you can own that aren't for racing (the user asked for one that fits the noir, 2026-10-05: "not a race
+ * car but a normal car"): the Seika Kurofune 3000 Brougham (黒船, the black ship), the big black saloon of late
+ * Showa, the kind a detective, a fixer or a boss's driver has: long, heavy and soft, a lazy straight six, light
+ * slow steering. Its body is its own (`hardtop` in models/vehicles.ts: a four-door pillared hardtop, under review in
+ * the showroom's Cars row; the first version borrowed the traffic's `luxury` body, and the user asked for a
+ * bespoke one); for now it's
+ * yours through the debug menu's car picker (district/main.ts), not yet sold in the garage.
+ */
+export const SALOONS: readonly Model[] = [
+  {
+    type: 'hardtop',
+    maker: 'Seika',
+    name: 'Kurofune 3000 Brougham',
+    year: 1979,
+    price: 160000,
+    blurb: 'The black ship: five metres of late-Showa saloon with a lazy straight six and lace on the seats. It wallows, it leans, it takes a while to stop, and nobody looks twice at it parked outside a mahjong parlour at three in the morning.',
+    spec: { ...COUPE, mass: 1520, a: 1.38, b: 1.42, inertia: 1.25, power: 112000, maxDrive: 6600, brake: 0.88, drag: 0.78, rolling: 190, gripFront: 0.92, gripRear: 0.97, lock: 0.6, steerRate: 2.5, handbrakeGrip: 0.45, shift: [13, 24, 36, 999, 999] },
+    sound: { maxRpm: 5600, fire: 3, buzz: 0.12 },
+    paint: 0x0a0a0c,
+  },
+];
+
+export const model = (type: CarType): Model => [...MODELS, ...SALOONS].find((m) => m.type === type) ?? MODELS[0];
 
 /** Tuning parts: each has levels (0 stock) with a price and what it does to the spec. */
 export type PartId = 'engine' | 'turbo' | 'weight' | 'tyres' | 'suspension' | 'brakes' | 'lsd';

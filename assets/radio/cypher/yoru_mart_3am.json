@@ -1,0 +1,21 @@
+{
+  "file": "yoru_mart_3am_1.flac",
+  "id": "yoru_mart_3am",
+  "take": 1,
+  "station": "cypher",
+  "title": "ヨルマート午前三時",
+  "artist": "MC 夜風",
+  "caption": "Mellow jazzy hip hop with a Japanese city pop mood, intimate and late-night. A low, unhurried male voice raps in Japanese, almost speaking, close to the microphone; a soft female voice sings the short hook. Dusty, laid-back boom-bap drums with brushed hi-hats, warm upright bass, mellow Rhodes electric piano chords, a muted trumpet drifting in and out, vinyl crackle. Lonely but warm, a convenience store glowing on an empty street at three in the morning.",
+  "lyrics": "[Intro]\n\n[Verse 1 - Rap]\n午前三時の 自動ドア\nチャイムが鳴って 蛍光灯の朝\n棚に並んだ おにぎりとパン\nレジの兄ちゃん あくびをかみ殺す\n雑誌コーナー 立ち読みの男\n外には野良猫 濡れたアスファルト\nあったかい缶コーヒー 手のひらに\n小さな幸せ 百円玉ひとつ\n誰も知らない 俺の名前\nそれが心地いい この街の夜\n窓のガラスに 映る顔は\n昨日より少し 大人になった\n\n[Chorus - Sung]\nヨルマート 午前三時\n灯りがともる ひとりの夜に\nヨルマート 午前三時\nここだけ朝が 先に来てる\n\n[Verse 2 - Rap]\nタクシーの運ちゃん 夜食を選ぶ\n仕事帰りの姉さん ヒールを脱ぐ\nみんなそれぞれ 帰り道の途中\n言葉はなくても 同じ夜の住人\n肉まんの湯気が ガラスを曇らす\nラジオの音が かすかに流れる\n外に出たら 風が冷たい\nそれでも歩く 家まであと少し\n東の空が 紫に変わる\n新聞配達の バイクが走る\n今日も一日 なんとか生きた\n明日もたぶん ここに来るんだ\n\n[Chorus - Sung]\nヨルマート 午前三時\n灯りがともる ひとりの夜に\nヨルマート 午前三時\nここだけ朝が 先に来てる\n\n[Instrumental Break - Muted Trumpet Solo]\n\n[Chorus - Sung]\nヨルマート 午前三時\n灯りがともる ひとりの夜に\nヨルマート 午前三時\nここだけ朝が 先に来てる\n\n[Outro]",
+  "language": "ja",
+  "bpm": 86,
+  "key": "D minor",
+  "seconds": 195.0,
+  "seed": 2404,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:06",
+  "took": 47,
+  "batch": "citypop-rap-01",
+  "model": "acestep-v15-turbo"
+}

@@ -1,0 +1,27 @@
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11'] });
+const page = await browser.newPage({ viewport: { width: 320, height: 200 } });
+await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
+await page.evaluate(() => { __fp.kind('lever'); __fp.oneHand(false); __fp.aim(true); __fp.look(0, 0); });
+await page.waitForTimeout(1000);
+await page.evaluate(() => __fp.freeze(true));
+console.log(await page.evaluate(() => {
+  const rig = __fp.rig();
+  const gun = rig.guns.lever;
+  const inv = gun.gripParent.matrixWorld.clone().invert();
+  const V = gun.root.position.constructor;
+  const local = (b) => b.getWorldPosition(new V()).applyMatrix4(inv);
+  const f = (v) => v.toArray().map((x) => x.toFixed(3)).join(',');
+  const arm = rig.arms.r;
+  const lines = [];
+  lines.push('hand ' + f(local(arm.hand)));
+  arm.thumb.forEach((b, i) => lines.push(`thumb${i} ` + f(local(b))));
+  arm.fingers.forEach((c, k) => lines.push(`finger${k} ` + c.map((b) => f(local(b))).join(' | ')));
+  lines.push('rod a ' + f(gun.grip.wrap.a) + ' b ' + f(gun.grip.wrap.b));
+  return lines.join('\n');
+}));
+await browser.close(); await server.close();

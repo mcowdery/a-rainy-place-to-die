@@ -1,0 +1,40 @@
+// A CPU profile (Chrome's sampling profiler) of the long run with the swarm at 9 cars: the functions with the most
+// self time. node debug-shots/longruncpu.mjs [seconds]
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const secs = Number(process.argv[2] ?? 20);
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' }, { gpu: 'exclusive' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1100, height: 640 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
+await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=city_garage.front&car=home&clock=22:30&weather=clear`, { timeout: 180000 });
+await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
+await page.evaluate(() => (document.getElementById('overlay').hidden = true));
+await page.waitForFunction(() => typeof window.__drive === 'function' && window.__chase, null, { timeout: 60000 });
+await page.waitForTimeout(3000);
+await page.evaluate(() => window.__drive());
+await page.evaluate(() => window.__chase.start('long_run'));
+await page.evaluate(() => Object.assign(window.__chase.chase.state.def.swarm, { start: 9, max: 9 }));
+await page.waitForTimeout(9000);
+await page.evaluate(() => window.__auto.set('fast'));
+const cdp = await page.context().newCDPSession(page);
+await cdp.send('Profiler.enable');
+await cdp.send('Profiler.setSamplingInterval', { interval: 500 });
+await cdp.send('Profiler.start');
+await page.waitForTimeout(secs * 1000);
+const { profile } = await cdp.send('Profiler.stop');
+const self = new Map();
+const byId = new Map(profile.nodes.map((n) => [n.id, n]));
+const dt = profile.timeDeltas;
+profile.samples.forEach((id, i) => {
+  const n = byId.get(id);
+  const f = n.callFrame;
+  const key = `${f.functionName || '(anon)'} ${f.url.split('/').slice(-2).join('/').replace(/\?.*/, '')}:${f.lineNumber + 1}`;
+  self.set(key, (self.get(key) ?? 0) + (dt[i] ?? 0));
+});
+const total = [...self.values()].reduce((a, b) => a + b, 0);
+console.log(`total ${(total / 1000).toFixed(0)} ms sampled over ${secs}s`);
+for (const [k, v] of [...self].sort((a, b) => b[1] - a[1]).slice(0, 28)) console.log(`${((v / total) * 100).toFixed(1).padStart(5)}%  ${(v / 1000).toFixed(0).padStart(6)} ms  ${k}`);
+await browser.close();
+await server.close();

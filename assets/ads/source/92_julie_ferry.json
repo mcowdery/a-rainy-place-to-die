@@ -1,0 +1,28 @@
+{
+  "file": "julie_ferry_v2.png",
+  "item": "julie_ferry",
+  "brand": null,
+  "copy": null,
+  "notes": null,
+  "prompt": "candid 35mm film snapshot, late 1980s Japan, city pop mood, natural light, soft film grain, a photograph taken by someone who loves her, ohwx julie, a woman in her twenties on the open deck of a harbour ferry at dusk, wind in her dark hair, a light trench coat, turning to look back at the camera with a small unguarded smile, the bay and the distant city lights behind her, a deep blue evening sky above, tall vertical composition, the woman in the lower half of the frame, the upper third of the frame dark, open and uncluttered, no text, no lettering, no logos, no watermark",
+  "lora": {
+    "trigger": "ohwx julie",
+    "scale": 0.85
+  },
+  "model": "krea-2-turbo",
+  "size": [
+    736,
+    1536
+  ],
+  "steps": 12,
+  "seed": 1581831121,
+  "studioJob": "72d150d1-a04d-4a73-82ca-c96a13b4b780-u2",
+  "generated": "2026-10-05T09:09:16.654Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/92_julie_ferry.png",
+  "decided": "2026-10-05T09:17:31.459Z",
+  "batch": "phone_wallpaper_01",
+  "purpose": "A wallpaper for Mack's phone: a snapshot of a woman from the cast (a stand-in for Megumi for now). Portrait, the home screen's clock and apps sit over the dark upper part.",
+  "use": "poster",
+  "district": null
+}

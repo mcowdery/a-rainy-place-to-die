@@ -60,19 +60,44 @@ const nearJunction = (x: number, z: number): boolean => {
   return dx < JUNCTION_CLEAR && dz < JUNCTION_CLEAR;
 };
 
-/** The piers' places along the line (s), outside the stations and junctions, and one under each end. */
-function pierPlaces(line: RailLine3, stations: readonly RailStation[]): number[] {
+/**
+ * Whether a column at (x, z) stands on a carriageway (a road without a median: the median is where a column belongs,
+ * the pavements are clear of it). The grid roads run along the multiples of the cell size.
+ */
+function onCarriageway(x: number, z: number, under: RoadUnder): boolean {
+  for (const vertical of [true, false]) {
+    const road = under(x, z, vertical);
+    if (!road || road.median) continue;
+    const lateral = Math.abs(vertical ? x - Math.round(x / 128) * 128 : z - Math.round(z / 128) * 128);
+    if (lateral < road.half) return true;
+  }
+  return false;
+}
+
+/**
+ * The piers' places along the line (s), outside the stations and junctions, and one under each end. With the road
+ * under it known, none whose columns would stand in a carriageway: on a corner's arc the line swings out of its
+ * road, and its portal frames' columns would land in the crossing street.
+ */
+function pierPlaces(line: RailLine3, stations: readonly RailStation[], under: RoadUnder | null = null): number[] {
   const out: number[] = [];
   const step = PIER_STEP[line.kind];
   const L = line.path.length;
   const clear = (s: number): boolean => !stations.some((st) => s > st.s0 - 2 && s < st.s1 + 2);
-  if (clear(2)) out.push(2);
+  const free = (s: number): boolean => {
+    if (!under) return true;
+    const p = pierAt(line, s, under);
+    if (!p.off) return !onCarriageway(p.x, p.z, under);
+    const [lx, lz] = [p.hz, -p.hx];
+    return [1, -1].every((side) => !onCarriageway(p.x + lx * p.off * side, p.z + lz * p.off * side, under));
+  };
+  if (clear(2) && free(2)) out.push(2);
   for (let s = step / 2; s < L; s += step) {
     if (!clear(s) || s < 8 || s > L - 8) continue;
     const p = line.path.at(s);
-    if (!nearJunction(p.x, p.z)) out.push(s);
+    if (!nearJunction(p.x, p.z) && free(s)) out.push(s);
   }
-  if (clear(L - 2)) out.push(L - 2);
+  if (clear(L - 2) && free(L - 2)) out.push(L - 2);
   return out;
 }
 
@@ -93,7 +118,7 @@ function pierAt(line: RailLine3, s: number, under: RoadUnder | null): { x: numbe
 
 /** The ground-level colliders of a line's piers (the stations add their own). */
 export function viaductPiers(line: RailLine3, stations: readonly RailStation[], under: RoadUnder | null = null): { x: number; y: number; w: number; h: number }[] {
-  return pierPlaces(line, stations).flatMap((s) => {
+  return pierPlaces(line, stations, under).flatMap((s) => {
     const p = pierAt(line, s, under);
     if (!p.off) {
       const half = line.kind === 'monorail' ? 0.7 : 1.2;
@@ -735,7 +760,7 @@ export class TrainSystem {
     // without a median, a portal frame: a column on each pavement and a beam across. They reach below the
     // ground, into the water where the line crosses it.
     set(0x9a9894);
-    for (const s of pierPlaces(this.line, this.stations)) {
+    for (const s of pierPlaces(this.line, this.stations, this.under)) {
       const p = pierAt(this.line, s, this.under);
       if (p.off) {
         const c = COLUMN[this.line.kind];

@@ -1,0 +1,21 @@
+{
+  "file": "bituin_sa_mata_mo_1.flac",
+  "id": "bituin_sa_mata_mo",
+  "take": 1,
+  "station": "harana",
+  "title": "Bituin sa Mata Mo",
+  "artist": "Lino Amihan",
+  "caption": "Dreamy Filipino soul-pop ballad sung in Tagalog. A smooth young male tenor with a light, floating falsetto carrying most of the chorus, wide stacked harmonies and gentle vocal runs. Shimmering electric piano, soft synth pads, a clean chorus-effect guitar picking arpeggios, round bass, relaxed R&B drums with brushed hi-hats, spacious reverb. Starry, wide-eyed, in love with a girl under the night sky. Modern, polished, warm production.",
+  "lyrics": "[Intro]\n\n[Verse 1]\nTumingala ako sa langit kagabi\nNaghahanap ng liwanag sa dilim\nNgunit nang lumingon ka sa akin\nNakita ko ang hinahanap kong bituin\n\n[Pre-Chorus]\nHindi na kailangan ng kalawakan\nNasa harap ko na ang kagandahan\n\n[Chorus]\nMay bituin sa mata mo\nKumikislap tuwing ngumingiti ka\nMay bituin sa mata mo\nAt doon ako naliligaw, sinta\nKahit milyon pa ang tala sa langit\nSa'yo lang ako tumitingin\nMay bituin sa mata mo\nLiwanag ng aking dilim\n\n[Verse 2]\nSabihin mo sa akin ang iyong mga pangarap\nPakikinggan ko hanggang sumikat ang araw\nBawat salita mo ay aking iingatan\nParang hiling sa bulalakaw\n\n[Pre-Chorus]\nHindi na kailangan ng kalawakan\nNasa harap ko na ang kagandahan\n\n[Chorus]\nMay bituin sa mata mo\nKumikislap tuwing ngumingiti ka\nMay bituin sa mata mo\nAt doon ako naliligaw, sinta\nKahit milyon pa ang tala sa langit\nSa'yo lang ako tumitingin\nMay bituin sa mata mo\nLiwanag ng aking dilim\n\n[Bridge]\nKung mawala man ang lahat ng ilaw\nHindi ako matatakot\nHangga't nandito ka\nHangga't hawak kita\n\n[Chorus]\nKahit milyon pa ang tala sa langit\nSa'yo lang ako tumitingin\nMay bituin sa mata mo\nLiwanag ng aking dilim\n\n[Outro]",
+  "language": "tl",
+  "bpm": 84,
+  "key": "E major",
+  "seconds": 215.0,
+  "seed": 4303,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:50",
+  "took": 69,
+  "batch": "opm-01",
+  "model": "acestep-v15-turbo"
+}

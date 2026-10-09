@@ -1,0 +1,21 @@
+{
+  "file": "sayaw_sa_sala_1.flac",
+  "id": "sayaw_sa_sala",
+  "take": 1,
+  "station": "harana",
+  "title": "Sayaw sa Sala",
+  "artist": "Lino Amihan",
+  "caption": "Groovy Filipino neo-soul and R&B love song sung in Tagalog. A smooth, playful young male tenor with an easy falsetto in the chorus, stacked harmonies answering the lead. A melodic, bouncing electric bass line up front, warm Rhodes electric piano with jazzy chords, clean funk guitar plucks, a relaxed head-nodding drum groove with a tight snare and handclaps, soft horn pads. Sweet, flirtatious, slow dancing with a girl in the living room. Modern, polished, warm production.",
+  "lyrics": "[Intro]\n\n[Verse 1]\nPatayin mo na ang ilaw, buksan ang radyo\nMay kantang mabagal, tamang-tama sa'tin 'to\nHubarin ang sapatos, halika sa gitna\nWalang ibang tao, tayo lang dalawa\n\n[Pre-Chorus]\nHindi ako marunong sumayaw\nPero para sa'yo, susubukan ko\n\n[Chorus]\nSayaw sa sala, hawak ang baywang mo\nPaikot-ikot, mabagal ang mundo\nSayaw sa sala, hanggang hatinggabi\nAng ulo mo'y nakasandal sa aking dibdib\nHindi kailangan ng entablado\nSapat na ang sahig at ang puso ko\nSayaw sa sala\nIkaw ang musika ko\n\n[Verse 2]\nNatatapakan ko ang iyong mga paa\nTumatawa ka lang, sabi mo, okay lang\nSa bawat hakbang, lalo kong nadarama\nNa sa'yo ko gustong tumanda\n\n[Pre-Chorus]\nHindi ako marunong sumayaw\nPero para sa'yo, susubukan ko\n\n[Chorus]\nSayaw sa sala, hawak ang baywang mo\nPaikot-ikot, mabagal ang mundo\nSayaw sa sala, hanggang hatinggabi\nAng ulo mo'y nakasandal sa aking dibdib\nHindi kailangan ng entablado\nSapat na ang sahig at ang puso ko\nSayaw sa sala\nIkaw ang musika ko\n\n[Bridge]\nIsa pa, isa pang kanta\nHuwag muna tayong huminto\nIsa pa, isa pang ikot\nBago matapos ang gabing ito\n\n[Chorus]\nHindi kailangan ng entablado\nSapat na ang sahig at ang puso ko\nSayaw sa sala\nIkaw ang musika ko\n\n[Outro]",
+  "language": "tl",
+  "bpm": 94,
+  "key": "B minor",
+  "seconds": 200.0,
+  "seed": 4505,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:00",
+  "took": 125,
+  "batch": "opm-01",
+  "model": "acestep-v15-turbo"
+}

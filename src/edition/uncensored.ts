@@ -1,8 +1,8 @@
 import { askAge } from './ageGate';
-import { kaburoArt } from './art';
-import { characters } from './characters';
+import { kaburoArt as baseArt } from './art';
+import { characters as baseCharacters } from './characters';
 import { after, byFolder, story } from './story';
-import type { Edition } from './types';
+import { byModel, byName, type Edition } from './types';
 
 /**
  * The uncensored edition: the story, with the overlays in adult/ (see types.ts). Only the uncensored build imports
@@ -13,6 +13,16 @@ const vnScenes = import.meta.glob('../../adult/content/vn/*/scene.json', { eager
 const vnAssets = import.meta.glob('../../adult/content/vn/*/assets/*', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const phoneFiles = import.meta.glob('../../adult/content/phone/*.yaml', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const phoneMedia = import.meta.glob('../../adult/content/phone/media/*', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+// (In file-name order, so the scenes keep their cells from build to build.)
+const windowScenes = import.meta.glob('../../adult/content/windows/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
+
+// The ads and the cast's models the other editions don't have (demoArt.ts: nudity, the most suggestive), from adult/
+// (in the mirrored folders: adult/assets/ads/kaburo/, adult/assets/characters/). Without the folder they're simply
+// missing, and this edition has what standard has.
+const adultArt = import.meta.glob('../../adult/assets/ads/kaburo/*.jpg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const adultModels = import.meta.glob('../../adult/assets/characters/*.glb', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const kaburoArt = { ...baseArt, ...byName(adultArt) };
+const characters = { ...baseCharacters, ...byModel(adultModels) };
 
 export const edition: Edition = {
   name: 'uncensored',
@@ -28,4 +38,5 @@ export const edition: Edition = {
   },
   kaburoArt,
   characters,
+  windowScenes: Object.keys(windowScenes).sort().map((k) => windowScenes[k]),
 };

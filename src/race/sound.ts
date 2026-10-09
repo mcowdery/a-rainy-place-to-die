@@ -33,7 +33,7 @@ export class CarSound {
     const ctx = new AudioContext();
     this.ctx = ctx;
     this.master = ctx.createGain();
-    this.master.gain.value = 0.7 * this.volume;
+    this.master.gain.value = 0.7 * this.volume * this.duck;
     this.lp = ctx.createBiquadFilter();
     this.lp.type = 'lowpass';
     this.lp.frequency.value = 20000;
@@ -88,11 +88,19 @@ export class CarSound {
 
   /** Overall volume (0 silences it: the engine off). */
   setVolume(v: number): void {
-    if (this.ctx) this.master.gain.setTargetAtTime(0.7 * v, this.ctx.currentTime, 0.15);
+    if (this.ctx) this.master.gain.setTargetAtTime(0.7 * v * this.duck, this.ctx.currentTime, 0.15);
     this.volume = v;
   }
 
+  /** How much of it the listener's ears let through (1 bare; less under headphones in the city). */
+  setDuck(d: number): void {
+    if (d === this.duck) return;
+    this.duck = d;
+    this.setVolume(this.volume);
+  }
+
   private volume = 1;
+  private duck = 1;
 
   /** The car's engine: its redline, firing pulses per revolution (four-cylinder 2, six 3, triple 1.5), buzz. */
   configure(p: { maxRpm: number; fire: number; buzz: number }): void {

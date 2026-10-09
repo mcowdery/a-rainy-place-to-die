@@ -60,3 +60,32 @@ are in the .json beside it.
 - `kissa/takanodai_stroll.ogg`: Takanodai Stroll · Kissa House Trio
 - `bay/kaburo_lights.ogg`: 歌舞路ライツ · 歌舞路ブギー・クラブ
 - `bay/shiomi_breeze.ogg`: 汐見ブリーズ · 汐見ベイ・フュージョン
+- `cypher/kaburo_cypher.ogg`: 歌舞路サイファー · MC 夜風 & ザ・ネオン・クルー
+- `cypher/wangan_flow.ogg`: 湾岸フロウ · ワンガン・スムース
+- `cypher/shuden_freestyle.ogg`: 終電フリースタイル · ミッドナイト・キャンディ
+- `cypher/yoru_mart_3am.ogg`: ヨルマート午前三時 · MC 夜風
+- `cypher/neon_moyou.ogg`: ネオン模様 · 真夜中シアター feat. MC 夜風
+- `cypher/ebisujima_night.ogg`: 恵比寿島ナイト · 恵比寿島クルー
+- `cypher/toto_city_lights.ogg`: Tōto City Lights · Harbor Kid
+- `cypher/denko_breaks.ogg`: 電光ブレイクス · DJ デンコー
+- `cypher/ame_no_kosaten.ogg`: 雨の交差点 · レディ・カスミ
+- `cypher/asa_made_boogie.ogg`: 朝までブギー · 東都ブギー・エクスプレス
+- `cypher/b_men_no_yoru.ogg`: B面の夜 · DJ 終電
+- `harana/sayo_lang_titibok.ogg`: Sa'yo Lang Titibok · Lino Amihan
+- `harana/dahan_dahan_lang.ogg`: Dahan-Dahan Lang · Lino Amihan
+- `harana/bituin_sa_mata_mo.ogg`: Bituin sa Mata Mo · Lino Amihan
+- `harana/kape_at_ulan.ogg`: Kape at Ulan · Lino Amihan
+- `harana/sayaw_sa_sala.ogg`: Sayaw sa Sala · Lino Amihan
+- `harana/kung_papayag_ka.ogg`: Kung Papayag Ka · Lino Amihan
+- `harana/sa_ngiti_mo.ogg`: Sa Ngiti Mo · Lino Amihan
+- `harana/uuwi_ako_sayo.ogg`: Uuwi Ako Sa'yo · Lino Amihan
+- `last_call/kiri_no_hatoba.ogg`: 霧の波止場 · 黒木譲とナイト・シャドウズ
+- `last_call/kaburo_blues.ogg`: 歌舞路ブルース · 氷室朱実
+- `last_call/the_last_cigarette.ogg`: The Last Cigarette · Dolores Vane
+- `last_call/nobody_leaves_kaburo.ogg`: Nobody Leaves Kaburo · Johnny Vesper & The Night Shift
+- `last_call/gozen_niji_no_tango.ogg`: 午前二時のタンゴ · 紅マリ子
+- `last_call/wakare_no_saishu_densha.ogg`: 別れの最終電車 · 黒木譲 & 紅マリ子
+- `last_call/rain_check.ogg`: Rain Check · The Night Desk
+- `last_call/ame_no_counter.ogg`: 雨のカウンター · 汐見かおる
+- `last_call/blue_neon_black_coffee.ogg`: Blue Neon, Black Coffee · Dolores Vane
+- `last_call/giri_no_ame.ogg`: 義理の雨 · 竜崎剛

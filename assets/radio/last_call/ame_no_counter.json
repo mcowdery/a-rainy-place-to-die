@@ -1,0 +1,21 @@
+{
+  "file": "ame_no_counter_1.flac",
+  "id": "ame_no_counter",
+  "take": 1,
+  "station": "last_call",
+  "title": "雨のカウンター",
+  "artist": "汐見かおる",
+  "caption": "Slow, dark bossa nova ballad with a noir mood, sung in Japanese. A soft, whispery female voice, cool and melancholy, almost murmuring into the microphone. Nylon-string guitar playing a gentle bossa rhythm, upright bass, brushes and soft rim clicks, a breathy alto flute, quiet vibraphone, late-night piano fills. Lonely, quiet, a woman alone at a bar counter while it rains outside. Intimate, warm, vintage studio sound.",
+  "lyrics": "[Intro - Guitar]\n\n[Verse 1]\n雨の音を 聞きながら\nグラスの氷 まわしてる\n隣の席は 空いたまま\nあなたの好きな 曲が流れる\n\n[Chorus]\n雨のカウンター ひとりきり\nマスターは何も 聞かないわ\n雨のカウンター もう一杯\n酔えない夜も あるものね\n\n[Verse 2]\nマッチの箱に 書いた番号\nにじんで読めなく なってゆく\n忘れることが 上手になって\n大人になった つもりでいたの\n\n[Chorus]\n雨のカウンター ひとりきり\nマスターは何も 聞かないわ\n雨のカウンター もう一杯\n酔えない夜も あるものね\n\n[Instrumental Break - Guitar and Flute]\n\n[Verse 3]\n傘を持たずに 出てきたの\n濡れて帰るわ 今夜は\nさよならよりも 静かなものが\nこの世にあると 知ったから\n\n[Chorus]\n雨のカウンター ひとりきり\nマスターは何も 聞かないわ\n雨のカウンター もう一杯\n酔えない夜も あるものね\n\n[Outro]",
+  "language": "ja",
+  "bpm": 84,
+  "key": "F# minor",
+  "seconds": 205.0,
+  "seed": 5808,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:38",
+  "took": 85,
+  "batch": "noir-02",
+  "model": "acestep-v15-turbo"
+}

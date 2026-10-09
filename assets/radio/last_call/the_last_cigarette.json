@@ -1,0 +1,21 @@
+{
+  "file": "the_last_cigarette_1.flac",
+  "id": "the_last_cigarette",
+  "take": 1,
+  "station": "last_call",
+  "title": "The Last Cigarette",
+  "artist": "Dolores Vane",
+  "caption": "1950s torch song, a slow jazz ballad in the film noir style. A smoky, intimate female jazz singer in English, low and unhurried, close to the microphone, heartbroken but composed. Late-night piano, a lush string orchestra, soft upright bass, brushed drums, a lonely muted trumpet between the lines. Bittersweet, elegant, a woman alone in a nightclub after closing time. Warm vintage studio sound.",
+  "lyrics": "[Intro - Piano]\n\n[Verse 1]\nThe band packed up an hour ago\nThe barman's stacking chairs\nThere's lipstick on an empty glass\nAnd smoke still on the stairs\n\n[Verse 2]\nYou said you'd only be a while\nYou said you'd be right back\nI watched the door till closing time\nAnd the rain turned the windows black\n\n[Chorus]\nSo I'll smoke the last cigarette\nAnd I'll let the last record play\nI'll wear the dress that you loved best\nAnd I'll walk home the long, long way\nDon't ask me if I'm lonely\nDon't ask me if I'm blue\nI've got the last cigarette, darling\nBut I haven't got you\n\n[Verse 3]\nThey say this town forgets a face\nAs quick as neon dies\nBut every stranger in the rain\nHas you behind his eyes\n\n[Chorus]\nSo I'll smoke the last cigarette\nAnd I'll let the last record play\nI'll wear the dress that you loved best\nAnd I'll walk home the long, long way\nDon't ask me if I'm lonely\nDon't ask me if I'm blue\nI've got the last cigarette, darling\nBut I haven't got you\n\n[Instrumental Break - Piano Solo]\n\n[Chorus]\nDon't ask me if I'm lonely\nDon't ask me if I'm blue\nI've got the last cigarette, darling\nBut I haven't got you\n\n[Outro]",
+  "language": "en",
+  "bpm": 58,
+  "key": "C minor",
+  "seconds": 215.0,
+  "seed": 5303,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:29",
+  "took": 59,
+  "batch": "noir-02",
+  "model": "acestep-v15-turbo"
+}

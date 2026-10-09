@@ -13,6 +13,8 @@ describe('kill moves', () => {
     expect(all(q({ weapon: 'shotgun' }))).toEqual(['shotgun_jaw']);
     expect(all(q({ weapon: 'shotgun', facing: false }))).toEqual([]);
     expect(all(q({ weapon: 'katana', dist: 3 }))).toEqual([]);
+    expect(all(q({ weapon: 'bat' }))).toEqual(['bat_breaker', 'bat_homerun']);
+    expect(all(q({ weapon: 'bat', floored: true }))).toEqual(['stomp']);
   });
 
   it("don't play the same one twice running when another fits", () => {

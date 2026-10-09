@@ -1,0 +1,21 @@
+{
+  "file": "kaburo_cypher_1.flac",
+  "id": "kaburo_cypher",
+  "take": 1,
+  "station": "cypher",
+  "title": "歌舞路サイファー",
+  "artist": "MC 夜風 & ザ・ネオン・クルー",
+  "caption": "Late 1980s Japanese city pop fused with old-school hip hop. The verses are rapped in Japanese by a relaxed, confident male MC with a deep voice; the chorus is sung by a sweet, clear female vocalist with soft harmonies. Punchy drum machine boom-bap beat with a crisp snare and swung hi-hats, funky slap bass, bright Rhodes electric piano playing jazzy major seventh chords, clean chorus-effect rhythm guitar, horn section stabs, vinyl record scratches between phrases. Cool, stylish, neon nightlife in the big city. Warm analog tape production.",
+  "lyrics": "[Intro]\nイェー 歌舞路 午前零時\nマイクチェック ワン・ツー\n\n[Verse 1 - Rap]\nネオンが滲む スクランブル交差点\n赤い龍が見下ろす サインの下で\nポケットに小銭 胸には野心\nこの街じゃ誰もが 夜の詩人\n裏通り抜ければ 横丁の灯り\nグラスの氷が 刻むメモリー\n終電逃して 始まるストーリー\n朝まで続く 俺らのテリトリー\nタクシーの列 流れるテールランプ\nビートに合わせて 踏み出すステップ\n言葉を並べて 韻を重ねて\n夜の果てまで 声を届けて\n\n[Chorus - Sung]\n歌舞路サイファー 夜が回る\nネオンの海で 夢を語る\n眠らない街 リズムに乗って\n朝が来るまで 踊りつづけて\n\n[Verse 2 - Rap]\nビルの谷間に 月が引っかかる\n高架の上を 最終が走る\nコンビニの前で 缶コーヒー開けて\n仲間が集まる 輪になって\n誰かが刻めば 誰かが返す\n言葉のボールを 夜空に飛ばす\n金はなくても リズムがあれば\nこの交差点が 俺らのステージさ\n雨が降っても 風が吹いても\nマイク一本 握りしめてよ\n明日のことなど 明日に任せて\n今夜のビートに 全てを乗せて\n\n[Chorus - Sung]\n歌舞路サイファー 夜が回る\nネオンの海で 夢を語る\n眠らない街 リズムに乗って\n朝が来るまで 踊りつづけて\n\n[Break - Scratch Solo]\n\n[Chorus - Sung]\n歌舞路サイファー 夜が回る\nネオンの海で 夢を語る\n眠らない街 リズムに乗って\n朝が来るまで 踊りつづけて\n\n[Outro]\n歌舞路サイファー\nまた明日の夜に",
+  "language": "ja",
+  "bpm": 96,
+  "key": "A minor",
+  "seconds": 190.0,
+  "seed": 2101,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:03",
+  "took": 149,
+  "batch": "citypop-rap-01",
+  "model": "acestep-v15-turbo"
+}

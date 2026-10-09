@@ -47,7 +47,7 @@ export interface DeckObstacle {
  * Your own car in the city: the one you're driving in the garage (race/profile.ts), with its paint, livery,
  * neon and tuning, on the racing handling model (race/vehicle.ts) with calmer road assists. It joins the
  * traffic as a parked vehicle (traffic stops behind it and honks; E by it takes the wheel), and it stays where
- * you leave it (localStorage `citypop.city.car`; at first, and after ?car=home, in its bay at the garage).
+ * you leave it (localStorage `rainyplace.city.car`; at first, and after ?car=home, in its bay at the garage).
  *
  * The racing model wants a Ground. On the street: height 0, and what's in the way from `probe` (crash.ts:
  * a wall, a car, a pole, something soft or a person). Crashing is forgiving (crash.ts): walls and people stop
@@ -65,14 +65,14 @@ export interface DeckObstacle {
  * lamps from how it's driven; `beam`: where they shine from, for the city shader); parked, they're off.
  *
  * Or your motorcycle (`bike`: race/bikeRide.ts' BIKES): the same model, ground and crashing, its own spec and
- * saved spot (`citypop.city.bike`); no dents or damage yet; the page draws it and its rider (`onPose`).
+ * saved spot (`rainyplace.city.bike`); no dents or damage yet; the page draws it and its rider (`onPose`).
  */
 
 /** The city: road assists, but with room to slide (the expressway's long bends). */
 export const CITY_ASSISTS: Assists = { ...ROAD_ASSISTS, maxSlide: (38 * Math.PI) / 180 };
 
-const SAVE_KEY = 'citypop.city.car';
-const BIKE_SAVE_KEY = 'citypop.city.bike';
+const SAVE_KEY = 'rainyplace.city.car';
+const BIKE_SAVE_KEY = 'rainyplace.city.bike';
 /** The car's centre line is probed with small circles (what can stop it), its sides with more (drive through). */
 const CL = 0.35;
 const SIDE = 0.55;
@@ -84,7 +84,7 @@ const DIRS = Array.from({ length: 16 }, (_, i) => [Math.cos((i / 16) * Math.PI *
 
 export class OwnCar {
   /** The car's spec with its parts (before the driving tuning). */
-  readonly baseSpec: CarSpec;
+  baseSpec: CarSpec;
   /** A new driving tuning (race/tuning.ts): re-spec the car and its assists. */
   retune(t: Tuning): void {
     this.sim.spec = tunedBy(this.baseSpec, t);
@@ -97,18 +97,20 @@ export class OwnCar {
   readonly sim: Car;
   readonly view: CarView;
   /** How to fit its cabin (models/carInterior.ts), built the first time it's wanted; a bike has none. */
-  private readonly cabinFor: (() => CarInterior) | null;
+  private cabinFor: (() => CarInterior) | null;
+  /** What the body builder put in the car's group (the rest there is other people's: a driver's seat, hit volumes, marks). */
+  private built: THREE.Object3D[] = [];
   private cabin: CarInterior | null = null;
   readonly vehicle: DrivenVehicle;
   readonly ground: Ground;
-  readonly name: string;
+  name: string;
   readonly sound = new CarSound();
   private saveT = 0;
   /** Damage by part (0 whole to 100 gone), and which owned car this is (for keeping it). */
   readonly parts: Parts;
-  private readonly carId: string;
+  private carId: string;
   /** Where the wheels are along the car (rear, front), for which tyre a hit catches. */
-  private readonly wheelAlong: [number, number];
+  private wheelAlong: [number, number];
   /** What stopped the car this step and where on it (car frame: along forward, across to the left). */
   private contact: { kind: HitKind; along: number; across: number; nx: number; nz: number } | null = null;
   /** What the car was driving through last frame (the knock is on the way in, once per kind of thing). */
@@ -124,9 +126,12 @@ export class OwnCar {
   readonly smoke: THREE.Points;
   private readonly smokePos: Float32Array;
   private readonly smokeLife: Float32Array;
+  /** Which puffs are the engine's (they're carried over the car), and how high its roof is. */
+  private readonly smokeEngine: Uint8Array;
+  private roof: number;
   private smokeNext = 0;
   /** The damage showing on the car (race/dents.ts), redone when it changes. */
-  private readonly dents: Dents | null;
+  private dents: Dents | null;
   /** A motorcycle (else a car), its half length and width, where it's kept. */
   readonly bike: BikeId | null;
   private readonly hl: number;
@@ -179,6 +184,7 @@ export class OwnCar {
       this.baseSpec = tunedSpec(mine.type, mine.parts);
       this.sim = new Car(tunedBy(this.baseSpec, tuning), assistsBy(CITY_ASSISTS, 'road', tuning));
       this.view = buildCar({ type: mine.type, paint: mine.paint, paint2: mine.paint2, livery: mine.livery, neon: mine.neonFitted ? mine.neon : null }, material);
+      this.built = [...this.view.obj.children];
       this.sound.configure(m.sound);
       const zs = wheelLayout(mine.type).spots.map((s) => s.z);
       this.wheelAlong = [Math.min(...zs), Math.max(...zs)];
@@ -218,10 +224,13 @@ export class OwnCar {
     this.sim.y = this.ex?.at(at.x, at.z, y0)?.height ?? this.sim.y;
     this.vehicle = traffic.addOwn(this.view.obj, this.hl + 0.05, this.hw * 2, this.name, at.x, at.z, Math.sin(at.h), Math.cos(at.h));
     this.sync();
-    // Engine smoke (grey puffs from under the bonnet), for a car with a smashed front.
-    const N = 90;
+    // Smoke: grey puffs from under the bonnet of a car with a smashed front, and off the rear tyres when they
+    // spin or slide (a burnout, a donut, a drift).
+    const N = 280;
     this.smokePos = new Float32Array(N * 3);
     this.smokeLife = new Float32Array(N);
+    this.smokeEngine = new Uint8Array(N);
+    this.roof = THREE.MathUtils.clamp(new THREE.Box3().setFromObject(this.view.obj).max.y - this.view.obj.position.y, 1.1, 2.2);
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(this.smokePos, 3));
     g.setAttribute('life', new THREE.BufferAttribute(this.smokeLife, 1));
@@ -234,8 +243,9 @@ export class OwnCar {
           attribute float life;
           varying float vLife;
           void main() {
-            vLife = life;
             vec4 mv = modelViewMatrix * vec4(position, 1.0);
+            // (A puff right by the eye, seen from inside the car, would fill the view: it thins away instead.)
+            vLife = life * smoothstep(0.4, 1.3, -mv.z);
             gl_PointSize = (1.0 + (1.0 - life) * 2.5) * 500.0 / -mv.z;
             gl_Position = projectionMatrix * mv;
           }`,
@@ -250,6 +260,41 @@ export class OwnCar {
     );
     this.smoke.frustumCulled = false;
     this.pose(0);
+  }
+
+  /**
+   * A different car of yours in this one's place (the profile's current car: the debug menu's car picker), without
+   * the page loading again: its body, wheels, lamps, cabin, handling, sound and condition. Where it stands and how
+   * it's moving stay, and so does the group it's drawn in (`view.obj`: the traffic's, and whatever else rides in it).
+   * Call it with nobody at the wheel.
+   */
+  change(material: THREE.Material): void {
+    if (this.bike) return;
+    this.keepCondition();
+    const mine = currentCar(loadProfile());
+    const m = model(mine.type);
+    const obj = this.view.obj;
+    for (const c of this.built) obj.remove(c);
+    if (this.cabin) obj.remove(this.cabin.group);
+    this.cabin = null;
+    const next = buildCar({ type: mine.type, paint: mine.paint, paint2: mine.paint2, livery: mine.livery, neon: mine.neonFitted ? mine.neon : null }, material);
+    this.built = [...next.obj.children];
+    for (const c of this.built) obj.add(c);
+    Object.assign(this.view as { -readonly [K in keyof CarView]: CarView[K] }, { type: next.type, body: next.body, windows: next.windows, wheels: next.wheels, r: next.r, wipers: next.wipers, lamps: next.lamps });
+    this.carId = mine.id;
+    Object.assign(this.parts, partsOf(mine));
+    this.name = `${m.maker} ${m.name}`;
+    this.baseSpec = tunedSpec(mine.type, mine.parts);
+    this.retune(loadTuning());
+    this.sound.configure(m.sound);
+    const zs = wheelLayout(mine.type).spots.map((s) => s.z);
+    this.wheelAlong = [Math.min(...zs), Math.max(...zs)];
+    setLamps(this.view, { head: false, tail: false });
+    this.dents = new Dents(this.view);
+    this.cabinFor = () => new CarInterior(mine.type, material, { rpmMax: m.sound.maxRpm, turbo: !!this.baseSpec.turbo });
+    this.reshape = true;
+    this.pose(0);
+    this.roof = THREE.MathUtils.clamp(new THREE.Box3().setFromObject(next.body).max.y - obj.position.y, 1.1, 2.2);
   }
 
   /** Its cabin (models/carInterior.ts), for the cockpit view: fitted the first time it's asked for; a bike has none. */
@@ -419,6 +464,19 @@ export class OwnCar {
     s.r *= 0.6;
   }
 
+  /**
+   * Something struck the car that the street didn't (another car in a chase ramming it, a round in a tyre): at
+   * (along, across) in its own frame (metres from its centre: forward, and to its left), costing `d`.
+   */
+  struck(along: number, across: number, d: number): void {
+    this.take(sectionsAt(along, across, this.hl, this.hw, this.wheelAlong), d);
+  }
+
+  /** A tyre's shot out: flat at once. */
+  burst(tyre: 'fl' | 'fr' | 'rl' | 'rr'): void {
+    this.take({ [tyre]: 1 }, WRECKED);
+  }
+
   /** Damage `d` to the parts by their shares: kept, shown on the car, and listed for the HUD. */
   private take(shares: Partial<Parts>, d: number): void {
     // (A bike takes no damage yet.)
@@ -514,14 +572,51 @@ export class OwnCar {
       const k = this.smokeNext++ % this.smokeLife.length;
       this.smokePos.set([s.x + Math.sin(s.h) * 1.5 + (Math.random() - 0.5) * 0.6, s.y + 1.0, s.z + Math.cos(s.h) * 1.5 + (Math.random() - 0.5) * 0.6], k * 3);
       this.smokeLife[k] = 1;
+      this.smokeEngine[k] = 1;
     }
+    this.tyreSmoke(dt);
+    // The engine's smoke goes over the car, not through it: as the car drives into a puff the air carries it up
+    // the windscreen and over the roof (a line over the bonnet, the glass, the roof and down the back).
+    const fx = Math.sin(s.h);
+    const fz = Math.cos(s.h);
+    const L = this.hl;
+    const over = (along: number): number => {
+      const bonnet = this.roof * 0.7;
+      if (along > L * 0.4) return bonnet;
+      if (along > L * 0.05) return bonnet + ((this.roof - bonnet) * (L * 0.4 - along)) / (L * 0.35);
+      if (along > -L * 0.55) return this.roof;
+      return this.roof - ((this.roof - bonnet) * Math.min(1, (-L * 0.55 - along) / (L * 0.45)));
+    };
     for (let k = 0; k < this.smokeLife.length; k++) {
       if (this.smokeLife[k] <= 0) continue;
       this.smokeLife[k] -= dt / 2.2;
       this.smokePos[k * 3 + 1] += dt * 1.1;
+      if (!this.smokeEngine[k]) continue;
+      const dx = this.smokePos[k * 3] - s.x;
+      const dz = this.smokePos[k * 3 + 2] - s.z;
+      const along = dx * fx + dz * fz;
+      if (Math.abs(along) > L + 0.3 || Math.abs(dx * fz - dz * fx) > this.hw + 0.35) continue;
+      this.smokePos[k * 3 + 1] = Math.max(this.smokePos[k * 3 + 1], s.y + over(along) + 0.22);
     }
     this.smoke.geometry.attributes.position.needsUpdate = true;
     this.smoke.geometry.attributes.life.needsUpdate = true;
+  }
+
+  /** Smoke off the rear tyres while they spin (a burnout, a donut) or slide (as the race page's). */
+  private tyreSmoke(dt: number): void {
+    const s = this.sim;
+    const amount = Math.max(0, Math.abs(s.slide) - 0.18) * 3 * Math.min(1, Math.abs(s.u) / 8) + s.spin;
+    if (amount <= 0.15 || dt <= 0) return;
+    const fx = Math.sin(s.h);
+    const fz = Math.cos(s.h);
+    const back = this.wheelAlong[0];
+    for (const side of this.bike ? [0] : [-0.7, 0.7]) {
+      if (Math.random() > Math.min(0.9, amount * 0.7) * dt * 60) continue;
+      const k = this.smokeNext++ % this.smokeLife.length;
+      this.smokePos.set([s.x + fx * back + fz * side + (Math.random() - 0.5) * 0.3, s.y + 0.2, s.z + fz * back - fx * side + (Math.random() - 0.5) * 0.3], k * 3);
+      this.smokeLife[k] = 1;
+      this.smokeEngine[k] = 0;
+    }
   }
 
   /**
@@ -590,6 +685,7 @@ export class OwnCar {
   /** Stop the engine (getting out): its sound fades to nothing. */
   park(): void {
     this.sim.u = this.sim.w = this.sim.r = 0;
+    this.sim.spin = 0;
     this.braking = false;
     this.sync();
     this.sound.setVolume(0);

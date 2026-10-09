@@ -1,0 +1,13 @@
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
+await page.goto(`${server.resolvedUrls.local[0]}models.html`);
+await page.waitForTimeout(9000);
+await page.evaluate(() => { document.getElementById('panel').style.display = 'none'; __view(-2.2, 1.5, 42.5, -1.1, 1.05, 38); });
+await page.waitForTimeout(1200);
+await page.screenshot({ path: process.argv[2] });
+await browser.close(); await server.close();

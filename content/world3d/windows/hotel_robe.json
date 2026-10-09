@@ -1,0 +1,73 @@
+{
+  "id": "hotel_robe",
+  "label": "out of the bath, in the hotel yukata",
+  "cat": "hotel",
+  "back": [
+    [
+      "bedend",
+      0.1,
+      1.4
+    ],
+    [
+      "picture",
+      0.3,
+      1.6
+    ]
+  ],
+  "a": [
+    {
+      "who": "robe",
+      "x": -0.05,
+      "pose": {
+        "yaw": 30,
+        "aR": [
+          24,
+          20,
+          90,
+          20,
+          0,
+          26
+        ],
+        "hR": [
+          0,
+          35
+        ],
+        "twist": -11
+      },
+      "hold": [
+        [
+          "R",
+          "bottle",
+          11
+        ]
+      ]
+    }
+  ],
+  "b": [
+    {
+      "who": "robe",
+      "x": -0.05,
+      "pose": {
+        "yaw": 30,
+        "nod": -22,
+        "aR": [
+          90.7,
+          22.6,
+          117.5,
+          20
+        ]
+      },
+      "hold": [
+        [
+          "R",
+          "bottle",
+          120
+        ]
+      ]
+    }
+  ],
+  "anim": [
+    4.5,
+    0.82
+  ]
+}

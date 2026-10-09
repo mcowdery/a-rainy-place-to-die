@@ -23,3 +23,10 @@ Footwear: `boots`, `shoes` (dress shoes), `bare`. So `step_gravel_boots_1.ogg`, 
 Levels still follow the rain, wind and cover (roof, indoors), so the recordings should be fairly even.
 Free CC0 recordings: freesound.org (filter the licence to Creative Commons 0), or sonniss.com's GDC bundles.
 Check each file's licence before committing it.
+
+## Gunshots (`guns/`)
+
+The guns' shots are recordings: `guns/<pistol|shotgun>_<voice>_<near|far>_<n>.ogg`, with their handling sounds as
+`guns/foley_<name>.ogg` (the magazine out and in, the slide, a dry click, the lever), cut by `scripts/audio/cut_guns.py` from the Free Firearm
+Sound Library (CC0; see `guns/CREDITS.md`). `src/race/gunSound.ts` plays them; the voices are listed in `src/race/gunVoices.ts`.
+To add a voice, add its files to the script's `VOICES`, run it, and add the name to `GUN_VOICES`.

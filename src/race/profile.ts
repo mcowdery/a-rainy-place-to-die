@@ -4,7 +4,7 @@ import { model, type Parts } from './catalog';
 import type { Medal } from './trial';
 
 /**
- * Your racing life, kept in the browser (localStorage `citypop.race.v1.profile`): your yen, the cars you own
+ * Your racing life, kept in the browser (localStorage `rainyplace.race.v1.profile`): your yen, the cars you own
  * (each with its paint, parts, livery and neon), and which one you're driving. What races pay is here too.
  * Pure except load/save, so the tests drive it.
  */
@@ -43,7 +43,7 @@ export interface Profile {
   earned: number;
 }
 
-const KEY = 'citypop.race.v1.profile';
+const KEY = 'rainyplace.race.v1.profile';
 export const START_YEN = 60000;
 
 export const NO_LIVERY: Livery = { stripes: null, side: null, number: null, banner: null };

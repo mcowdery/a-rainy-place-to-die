@@ -1,7 +1,7 @@
 import type { Weather } from '../../atmosphere/rules';
 import type { PhoneApp } from '../../phone/ui';
 import { DAY, hhmm, SYNODIC, WEEKDAYS, WEEKDAYS_EN, weekdayOf, type DayLight, type MoonNow } from './clock';
-import type { Outlook } from './forecast';
+import { airWith, type Outlook } from './forecast';
 
 /**
  * 天気 Tenki, the phone's weather app (an invented one, no real brands): the forecast (district/forecast.ts) for
@@ -168,7 +168,7 @@ export class WeatherApp implements PhoneApp {
     root.innerHTML = `
       <div class="wx-now wx-${k}">
         <div class="wx-place">東都市 TŌTO · ${this.src.season()} · ${hhmm(minute)}</div>
-        <div class="wx-big"><span class="wx-icon">${icon}</span><span class="wx-temp">${Math.round(o.temp)}°</span></div>
+        <div class="wx-big"><span class="wx-icon">${icon}</span><span class="wx-temp">${Math.round(airWith(o, cur.weather))}°</span></div>
         <div class="wx-cond">${LABEL[k][0]} <span>${LABEL[k][1]}</span></div>
         <div class="wx-tags">${tags.join('')}</div>
       </div>

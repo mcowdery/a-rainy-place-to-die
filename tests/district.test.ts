@@ -257,11 +257,13 @@ describe('Kaburo zones', () => {
     expect(alleys.n).toBeGreaterThan(crossing.n * 1.5);
   });
 
-  it('fills the Love District with love hotel and adult ads only', () => {
+  it('fills the Love District with love hotel and adult ads only (where the build has them)', () => {
     const out: AdPlacement[] = [];
     for (const [mx, my] of inZone('love_district')) addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), model.plan(mx, my)!.signs, model.detail(mx, my)!.props, out);
     expect(out.length).toBeGreaterThan(20);
-    for (const a of out) expect(['lovehotel', 'adult']).toContain(DISTRICT_ADS[a.ad].cat);
+    // Those ads' pictures are in adult/ (src/edition/demoArt.ts), so the standard build has none and the district takes
+    // whatever ads there are; only the uncensored build, with them, is themed.
+    if (DISTRICT_ADS.some((a) => a.cat === 'lovehotel' || a.cat === 'adult')) for (const a of out) expect(['lovehotel', 'adult']).toContain(DISTRICT_ADS[a.ad].cat);
   });
 
   it('rejects malformed zones', () => {
@@ -342,6 +344,15 @@ describe('Open ground and greenery', () => {
       for (const t of model.detail(mx, my)!.props.filter((q) => q.kind === 'tree' && q.grate !== false)) {
         expect(blades.some((s) => Math.hypot(s.x - t.x, s.z - t.z) < 3.2)).toBe(false);
       }
+    }
+  });
+
+  it('plants no street tree too big for its pavement: no crown hangs further than 1.5 m out over the road', () => {
+    const trees = model.cells.flatMap(([mx, my]) => model.detail(mx, my)!.props.filter((q) => q.kind === 'tree' && q.lean !== undefined));
+    expect(trees.length).toBeGreaterThan(1000);
+    for (const t of trees) {
+      expect(t.lean!, `${t.species} at ${t.x.toFixed(0)}, ${t.z.toFixed(0)}`).toBeLessThan(1.5);
+      expect(t.size ?? 1).toBeGreaterThanOrEqual(0.5);
     }
   });
 

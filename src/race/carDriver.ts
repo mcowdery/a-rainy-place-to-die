@@ -6,6 +6,7 @@ import type { FirstPersonRig } from '../poc3d/models/firstPerson';
 import { loadDressed } from '../poc3d/models/wardrobe';
 import { CabinMotion, cockpitLayout, deadPedal, padAt, pedalsOf, shifterOf, type CarInterior, type CockpitLayout, type Pedal } from '../poc3d/models/carInterior';
 import { rollWindows, type CarView } from './carView';
+import { nearestShot, sideFor, type Side } from './shooting';
 
 /**
  * Mack at the wheel of your car (models/firstPerson.ts), on the race page and in the city: seated with his eyes at
@@ -17,8 +18,14 @@ import { rollWindows, type CarView } from './carView';
  * to the lever's knob and back, his left foot off the dead pedal onto the clutch in a manual; the same hand to the
  * handbrake when it's pulled. In ordinary driving (`DriveView.calm`: the city) he drives as people do: the left
  * hand resting on the lever between changes, the right up the rim toward the top; both hands back at quarter to
- * three whenever the driving asks for them. Raising his shotgun (the page's weapon 'shotgun') takes the right hand off the wheel and the gun out
- * of whichever window you aim through, arm straight; the window rolls down first and back up after. The other
+ * three whenever the driving asks for them. Raising his gun takes the right hand off the wheel: down to his belt
+ * for it (it's drawn, and put back there after: models/firstPerson.ts), then his whole arm straight from the
+ * shoulder at what you aim at, as on a bike: out of the driver's window to that side, or across the car at the
+ * passenger window, the gun inside. He leans to his window to shoot from it, and right out of it to shoot nearly
+ * ahead (`eyeShift`: the cameras at his eyes go with him). Aimed nearer straight ahead than that allows, his arm
+ * would be inside the car with the gun at the windscreen: that's no line of fire (`outFrom`, `driverLine`), and he
+ * pulls the gun back in and holds it by his chest (`DriveView.blocked`).
+ * The window rolls down first and back up after. The other
  * weapons' arm (shooting.ts) still rolls the windows. Shown with his head except in the driver's-eye view.
  */
 
@@ -27,13 +34,39 @@ const v = (x: number, y: number, z: number): THREE.Vector3 => new THREE.Vector3(
 /** The car's frame to the seat's (the car's turned half round, so -z is forward and +x the driver's right, as a bike's). */
 const toSeat = (p: THREE.Vector3): THREE.Vector3 => v(-p.x, p.y, -p.z);
 /** How fast a window winds (fraction a second), and how long after the gun's down it waits to wind up (s). */
-const WIND = 1.8;
+const WIND = 3;
 const WIND_UP_AFTER = 1.5;
+/** Shooting out of his window he leans to it: his eyes (and all above the seat) this far toward the door and forward (right-hand drive: -x). */
+const LEAN = new THREE.Vector3(-0.17, -0.01, 0.09);
+/**
+ * Aiming near straight ahead out of it he leans right out, his head and shoulder in the window's opening, so his
+ * straight arm is past the door nearer to ahead: right out within the first of `OUT_WITHIN` (rad from ahead), only
+ * to `LEAN` past the second.
+ */
+const LEAN_OUT = new THREE.Vector3(-0.3, 0.02, 0.15);
+const OUT_WITHIN = [0.5, 0.95] as const;
+/** How far outside the cabin's inside width his gun hand has to be to be clear of the door's skin and glass (m). */
+const SKIN = 0.08;
+
+/**
+ * Where a shot at (rel, pitch) from the driver's seat goes (race/shooting.ts `sideFor`, right-hand drive: rel
+ * positive to the left), for a driver whose arm swings from his shoulder: out of his own window only from `outFrom`
+ * to its side of straight ahead (nearer ahead than that the gun's inside the car, pointing through the windscreen:
+ * no line of fire); and where the gun waits while there's no shot (the nearest it has).
+ */
+export function driverLine(rel: number, pitch: number, outFrom: number): { side: Side | null; wait: { rel: number; pitch: number; side: Side } } {
+  const r = Math.atan2(Math.sin(rel), Math.cos(rel));
+  const open = sideFor(r, pitch);
+  const n = nearestShot(r, pitch);
+  return { side: open === 'driver' && r > -outFrom ? null : open, wait: n.side === 'driver' && n.rel > -outFrom ? { rel: -outFrom, pitch, side: 'driver' } : n };
+}
 const ENV_GAIN = 0.35;
 
 export interface DriveView {
   /** The gun's up (aimed or fired from the hip) and Mack's to hold (the shotgun). */
   readonly raised: boolean;
+  /** Raised, but there's no line of fire where he aims (the windscreen): he pulls the gun back in and holds it by his shoulder. */
+  readonly blocked?: boolean;
   /** Any weapon out of a window (for the windows): which. */
   readonly window: 'driver' | 'across' | null;
   /** What he aims at. */
@@ -45,6 +78,11 @@ export interface DriveView {
   readonly brake?: number;
   /** Ordinary driving, not racing: he may drive one-handed (models/carInterior.ts `DriverInput.calm`). */
   readonly calm?: boolean;
+  /**
+   * The page's camera while the view is from his eyes (the cab): what's at his face (a cigarette between his lips,
+   * the hand that brings it there: models/smoking.ts) goes where his head is turned, not where the seat faces.
+   */
+  readonly view?: THREE.Camera | null;
 }
 
 const smooth = (k: number): number => k * k * (3 - 2 * k);
@@ -85,6 +123,18 @@ export class CarDriver {
   private readonly lever = new THREE.Vector3();
   /** The right hand's grip for where it is up the rim (the steering's frame): set by `rightGrip`. */
   private readonly rim: { c: THREE.Vector3; r: number; up: THREE.Vector3; across: THREE.Vector3; away: THREE.Vector3 };
+  /**
+   * How far to his window's side of straight ahead he must aim for his gun to be out of it (rad). His arm swings
+   * whole from the shoulder at what he aims at; nearer ahead than this the gun would be inside the car, pointing
+   * through the windscreen, so there's no shot (`driverLine`).
+   */
+  outFrom = 0.33;
+  /** How far he's leaning to that window (0-1), and where that puts his eyes from the seat's (the car's frame: for the camera). */
+  private lean = 0;
+  /** Seconds since his gun was last up (it takes a moment to put away). */
+  private gunAway = 99;
+  private leanOut = 0;
+  readonly eyeShift = new THREE.Vector3();
 
   private constructor(private readonly view: CarView) {
     const L = (this.layout = cockpitLayout(view.type));
@@ -277,17 +327,43 @@ export class CarDriver {
     M.advance({ steer: car.steer, throttle: dv.throttle ?? 0, brake: dv.brake ?? 0, gear: car.gear ?? 1, handbrake: car.handbrake, speed: car.u, slide: car.slide, calm: dv.calm }, dt);
     this.mount.steer.quaternion.setFromAxisAngle(this.wheelAxis, -M.wheel);
     this.limbs(M);
-    // Raised: the gun up at once (no upright hold in a car), the right hand off the wheel.
+    // Raised: the gun up at once (no upright hold in a car), the right hand off the wheel: to his belt for it (in
+    // real time, whatever the world's doing), then his whole arm straight from the shoulder at what he aims at:
+    // out of his own window to that side, across the car at the passenger window.
     if (dv.raised && !this.wasRaised) rig.raise();
+    rig.drawDt = realDt;
+    // He leans to the window he's shooting from: his shoulder nearer it, so the arm's out of it nearer to ahead.
+    const leaning = dv.raised && dv.window === 'driver' ? 1 : 0;
+    this.lean += Math.max(-realDt * 4, Math.min(realDt * 4, leaning - this.lean));
+    // (Right out of it to shoot nearly ahead: the nearer ahead, the further out.)
+    const to = leaning && dv.aimPoint ? this.view.obj.worldToLocal(dv.aimPoint.clone()).sub(this.layout.eye) : null;
+    const far = to ? 1 - THREE.MathUtils.smoothstep(Math.abs(Math.atan2(to.x, to.z)), OUT_WITHIN[0], OUT_WITHIN[1]) : 0;
+    this.leanOut += Math.max(-realDt * 3, Math.min(realDt * 3, far - this.leanOut));
+    this.eyeShift.copy(LEAN).multiplyScalar(smooth(this.lean)).addScaledVector(LEAN_OUT.clone().sub(LEAN), smooth(this.leanOut));
+    if (this.layout.side > 0) this.eyeShift.x *= -1;
+    this.mount.rider.eye!.copy(toSeat(this.layout.eye.clone().add(this.eyeShift)));
     rig.armed = dv.raised;
     rig.aiming = dv.raised;
+    rig.pulledBack = dv.raised && !!dv.blocked;
     this.wasRaised = dv.raised;
     // His eyes: the driver's, looking at what he aims at, else ahead.
-    this.eye.position.copy(this.view.obj.localToWorld(this.layout.eye.clone()));
+    this.eye.position.copy(this.view.obj.localToWorld(this.layout.eye.clone().add(this.eyeShift)));
     const ahead = this.eye.position.clone().add(v(Math.sin(car.h), -0.08, Math.cos(car.h)));
     this.eye.lookAt(dv.raised && dv.aimPoint ? dv.aimPoint : ahead);
+    // (Looking about from the cab with the gun away: his head is where the view is, and turned as it is.)
+    this.gunAway = dv.raised ? 0 : this.gunAway + realDt;
+    if (dv.view && dv.pov > 0.5 && this.gunAway > 0.6) {
+      dv.view.updateMatrixWorld();
+      dv.view.getWorldPosition(this.eye.position);
+      dv.view.getWorldQuaternion(this.eye.quaternion);
+    }
     this.eye.updateMatrixWorld();
     rig.setHeadless(dv.pov > 0.5);
     rig.update(dt, this.eye, 0, 0);
+    // How far to the window's side of ahead he has to aim for the gun to be out of it: his straight arm's hand
+    // past the door's skin, from where his shoulder is with him leant right over.
+    const arm = rig.gunArm();
+    const sx = Math.abs(this.view.obj.worldToLocal(arm.shoulder).x - this.eyeShift.x + (this.layout.side > 0 ? -LEAN_OUT.x : LEAN_OUT.x));
+    this.outFrom = Math.asin(THREE.MathUtils.clamp((this.layout.halfW + SKIN - sx) / arm.reach, 0.05, 0.95));
   }
 }

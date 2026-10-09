@@ -2,11 +2,11 @@
  * The way back to the city from the racing pages (race.html, garage.html). The city is the hub, so the way
  * back is always there, whatever page you're on and however you got there: through the garage door (back to the
  * street outside it, your car in its bay), or through an expressway tunnel (back onto the loop past that
- * exit, driving). How you last left the city is kept in the browser (`citypop.return`), since the links
+ * exit, driving). How you last left the city is kept in the browser (`rainyplace.return`), since the links
  * between the passes and the garage don't carry it.
  */
 
-const KEY = 'citypop.return';
+const KEY = 'rainyplace.return';
 
 /** Note how you came from the city, if this page's address says (?from=city, or ?from=<exit id>). */
 export function rememberCityReturn(params: URLSearchParams): void {

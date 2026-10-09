@@ -20,10 +20,14 @@ import { CELL, type CellPlan3, type Road3 } from './plan';
  *   allows, red lights as give-way lines, overtaking in an avenue's inner lane (never the oncoming one).
  * It doesn't see the crowd (nobody stands in the road, and people cross on the walk light); story npcs, parked
  * cars, poles and walls it steers round or stops for (`AutoWorld.solid`). Pure: tests/autoDrive.test.ts.
+ *
+ * A fourth way, `pursuit`, is not yours to pick: it's how the cars in a chase drive (district/chaseCar.ts): flat out,
+ * corners as fast as they'll go, no lights, no giving way, round anything on either side.
  */
-export type AutoMode = 'traffic' | 'careful' | 'fast';
+export type AutoMode = 'traffic' | 'careful' | 'fast' | 'pursuit';
+/** The ways you can pick (N at the wheel, the Maps app). */
 export const AUTO_MODES: readonly AutoMode[] = ['traffic', 'careful', 'fast'];
-export const AUTO_NAMES: Readonly<Record<AutoMode, string>> = { traffic: 'with the traffic', careful: 'slow, no rules', fast: 'fast' };
+export const AUTO_NAMES: Readonly<Record<AutoMode, string>> = { traffic: 'with the traffic', careful: 'slow, no rules', fast: 'fast', pursuit: 'pursuit' };
 
 interface Style {
   /** Cruising speed (m/s) in a narrow lane, on a street, on an avenue. */
@@ -44,12 +48,17 @@ interface Style {
   readonly minor: number;
   /** Going round what's ahead: never, onto the other side of the road too, or only into a lane going its way. */
   readonly pass: 'none' | 'any' | 'same';
+  /** The sideways pull it takes a street corner at (the traffic's, unless it's in a chase). */
+  readonly corner: number;
+  /** In a chase: junctions are nothing to it (no lights, no giving way, no slowing for a side street). */
+  readonly reckless?: boolean;
 }
 
 const STYLE: Readonly<Record<AutoMode, Style>> = {
-  traffic: { cruise: [5, 12, 13.5], pull: 2.2, brake: 2.4, hard: 7, throttle: 0.45, gap: 1.3, s0: 2.6, lights: true, creep: 4.5, minor: 8, pass: 'none' },
-  careful: { cruise: [4, 6.5, 6.5], pull: 1.8, brake: 2.2, hard: 7, throttle: 0.3, gap: 1.2, s0: 2.4, lights: false, creep: 3, minor: 5, pass: 'any' },
-  fast: { cruise: [7, 19, 26], pull: 4.4, brake: 4.6, hard: 8, throttle: 1, gap: 0.8, s0: 3, lights: false, creep: 6, minor: 11, pass: 'same' },
+  traffic: { cruise: [5, 12, 13.5], pull: 2.2, brake: 2.4, hard: 7, throttle: 0.45, gap: 1.3, s0: 2.6, lights: true, creep: 4.5, minor: 8, pass: 'none', corner: 2.6 },
+  careful: { cruise: [4, 6.5, 6.5], pull: 1.8, brake: 2.2, hard: 7, throttle: 0.3, gap: 1.2, s0: 2.4, lights: false, creep: 3, minor: 5, pass: 'any', corner: 2.6 },
+  fast: { cruise: [7, 19, 26], pull: 4.4, brake: 4.6, hard: 8, throttle: 1, gap: 0.8, s0: 3, lights: false, creep: 6, minor: 11, pass: 'same', corner: 2.6 },
+  pursuit: { cruise: [9, 23, 31], pull: 6, brake: 6, hard: 9, throttle: 1, gap: 0.45, s0: 2, lights: false, creep: 14, minor: 18, pass: 'any', corner: 5.2, reckless: true },
 };
 
 /** A road as the driver needs it: where its centreline is, how wide, its pavements and its median. */
@@ -483,6 +492,10 @@ export class AutoDrive {
   arrived = false;
   /** Seconds it has stood with no way on (the page gives up on it after a while). */
   blockedFor = 0;
+  /** Its pace: a share of the style's cruising speeds (a chase car's own). */
+  pace = 1;
+  /** Seconds for which it takes no notice of other vehicles (a chase car held up in a queue shoves through). */
+  shove = 0;
   /** Where it is along the path (sample index). */
   private i = 0;
   /** The junction ahead (index), and whether it's gone past its line. */
@@ -520,6 +533,19 @@ export class AutoDrive {
     private readonly hl = 2.2,
     private readonly hw = 0.85,
   ) {}
+
+  /**
+   * Carries on from another drive of the same car (its route planned again from where it is: a chase car's, as what
+   * it's after moves): the controls as they were held, so it doesn't lift off and start again.
+   */
+  carryOn(prev: AutoDrive): void {
+    this.steer = prev.steer;
+    this.gas = prev.gas;
+    this.brake = prev.brake;
+    this.wanted = prev.wanted;
+    this.easing = prev.easing;
+    this.shove = prev.shove;
+  }
 
   /** Metres still to go. */
   get left(): number {
@@ -666,7 +692,9 @@ export class AutoDrive {
     const steer = this.steer;
     const pull = S.pull * grip;
     const b = S.brake * grip;
-    const vs = this.world.vehicles(car.x, car.z, 90);
+    this.shove = Math.max(0, this.shove - dt);
+    const vs = this.shove > 0 ? [] : this.world.vehicles(car.x, car.z, 90);
+    const cruise = (cls: number): number => S.cruise[cls] * this.pace;
     // Backing out of a tight spot (nose-in at a wall, the way on behind it): a little way back, the wheel turned
     // so the nose swings round to the lane.
     if (this.backing > 0) {
@@ -686,14 +714,14 @@ export class AutoDrive {
     if (u < -0.6) return { throttle: 0.5, brake: 0, steer: -steer, handbrake: false };
 
     // The speed it wants: the road's, the bends ahead (braking in time for each), and the end.
-    let want: number = S.cruise[P.cls[i]];
+    let want: number = cruise(P.cls[i]);
     let status: AutoStatus = 'driving';
     const reach = (u * u) / (2 * b) + 14;
     for (let j = i; j < P.n && P.s[j] - s <= reach; j++) {
       const d = Math.max(0, P.s[j] - s - 1);
       // (A street corner is taken as the traffic takes it, however quick the driver: the pull it likes is for the sweeps.)
-      const bend = Math.sqrt(Math.min(pull, P.k[j] > 0.1 ? 2.6 * grip : pull) / Math.max(P.k[j], 1e-4));
-      want = Math.min(want, Math.sqrt(Math.min(bend, S.cruise[P.cls[j]]) ** 2 + 2 * b * d));
+      const bend = Math.sqrt(Math.min(pull, P.k[j] > 0.1 ? S.corner * grip : pull) / Math.max(P.k[j], 1e-4));
+      want = Math.min(want, Math.sqrt(Math.min(bend, cruise(P.cls[j])) ** 2 + 2 * b * d));
     }
     if (left < 40) status = 'arriving';
     want = Math.min(want, Math.sqrt(2 * b * Math.max(0, left - 0.6)) + (left > 0.8 ? 0.5 : 0));
@@ -711,7 +739,7 @@ export class AutoDrive {
       nearJunction = dist < 45 && (J.turn === 'left' || dist < 12);
       // (Over the line: it's going through.)
       if (dist < -1) this.committed = true;
-      if (!this.committed && dist < 90) {
+      if (!this.committed && dist < 90 && !S.reckless) {
         const d: readonly [number, number] = [P.dx[i], P.dz[i]];
         const near = vs.filter((o) => Math.hypot(o.x - J.x, o.z - J.z) < 70);
         const light = J.kind === 'signal' ? this.world.light(J.gx, J.gy, J.ns) : null;

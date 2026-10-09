@@ -1,0 +1,15 @@
+{
+  "batch": "prop-tanuki-test",
+  "purpose": "A picture of a tanuki statue to try the image-to-3D tool on (scripts/props/image_to_3d.py): one object, whole, front on, level, on a plain ground. Not an ad, and not for the world as a picture.",
+  "use": "sign",
+  "defaults": { "lora": null, "variants": 2 },
+  "items": [
+    {
+      "id": "tanuki_statue",
+      "style": "product photograph for a catalogue, soft even studio lighting, sharp focus",
+      "subject": "a single glazed ceramic tanuki statue of the kind that stands outside Japanese restaurants, standing upright, round belly, straw hat on its back, a sake flask in one paw, big friendly eyes, the whole figure in frame from hat to feet, seen straight on from the front at eye level",
+      "composition": "centred, isolated on a plain light grey seamless background, no other objects, no ground shadow",
+      "notes": "Input for image-to-3D. The back will be invented by the model."
+    }
+  ]
+}

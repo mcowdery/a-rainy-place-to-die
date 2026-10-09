@@ -218,11 +218,16 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
             const [x2, z2, nx2, nz2] = along(tt, side, inset);
             const roll = u01(hash(Math.round(x2 * 4), Math.round(z2 * 4), 0x7ee));
             if (tt < e - 3 && (boulevard || roll < style.streetTrees) && mine(x2, z2) && stopClear(tt) && bladeClear(x2, z2, 3.2) && !beforeStamp(x2, z2)) {
-              // Sized to the pavement: the crown reaches no closer than 0.25 m to the building line.
+              // Sized to the pavement: the crown reaches no closer than 0.25 m to the building line. A species
+              // too big for its pavement even at half size isn't planted (a cherry on a 1.6 m pavement: its
+              // crown stood 2 m out, the trunk in the carriageway on a stem leaning further than it rose).
               const reach = TREE_REACH[streetSpecies];
-              const size = Math.max(0.5, Math.min(1, (inset + (boulevard ? 0.9 : 1.2)) / reach));
-              const lean = Math.max(0, reach * size - (inset - 0.25));
-              props.push({ kind: 'tree', species: streetSpecies, x: x2, z: z2, nx: nx2, nz: nz2, radius: 0.3, variant: hash(Math.round(x2), Math.round(z2)) % 8, size, lean, high: !boulevard });
+              const fit = (inset + (boulevard ? 0.9 : 1.2)) / reach;
+              if (fit >= 0.5) {
+                const size = Math.min(1, fit);
+                const lean = Math.max(0, reach * size - (inset - 0.25));
+                props.push({ kind: 'tree', species: streetSpecies, x: x2, z: z2, nx: nx2, nz: nz2, radius: 0.3, variant: hash(Math.round(x2), Math.round(z2)) % 8, size, lean, high: !boulevard });
+              }
             }
             if (r.sidewalk >= 2.4) {
               for (const [c, h] of [[t + 5.5, 3.6], [t + 16.5, 3.6]] as const) {

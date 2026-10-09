@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { edition } from '@edition';
 import { kaburoArt } from '../src/edition/art';
@@ -31,13 +32,13 @@ const base = (): Record<string, unknown> => ({
 });
 
 describe('editions', () => {
-  it('tests and the dev server run the standard edition: the story, all the art, nothing from adult/', () => {
+  it('tests and the dev server run the standard edition: the story, the art in this repository, nothing from adult/', () => {
     expect(edition.name).toBe('standard');
     expect(edition.narrative).toBe(true);
     expect(edition.overlay.vnScenes).toEqual({});
     expect(edition.overlay.phoneFiles).toEqual({});
     expect(Object.keys(edition.story.phoneFiles)).toContain('kaiwa.yaml');
-    expect(DISTRICT_ADS).toBe(ALL_DISTRICT_ADS);
+    expect(DISTRICT_ADS.length).toBe(ALL_DISTRICT_ADS.filter((a) => !DEMO_HIDDEN_ART.has(a.art)).length);
   });
 
   it("the uncensored edition's own overlays (adult/, if checked out) apply cleanly", () => {
@@ -55,19 +56,34 @@ describe('editions', () => {
     expect(demo.overlay.vnScenes).toEqual({});
   });
 
-  it('the demo leaves out exactly the revealing ads, from its art and from the ad list', () => {
-    for (const name of DEMO_HIDDEN_ART) expect(kaburoArt[name], `${name} is a real file`).toBeTruthy();
-    const kept = Object.keys(kaburoArt).filter((n) => !DEMO_HIDDEN_ART.has(n)).sort();
-    expect(Object.keys(demo.kaburoArt).sort()).toEqual(kept);
-    const ads = districtAdsFor('demo');
-    expect(ads.some((a) => DEMO_HIDDEN_ART.has(a.art))).toBe(false);
-    expect(ads.length).toBe(ALL_DISTRICT_ADS.filter((a) => !DEMO_HIDDEN_ART.has(a.art)).length);
-    for (const a of ads) expect(demo.kaburoArt[a.art], a.art).toBeTruthy();
+  it('only the uncensored edition has the revealing ads: not standard, not the demo, and their ad list drops them', () => {
+    for (const name of DEMO_HIDDEN_ART) {
+      expect(kaburoArt[name], `${name} is not in the repository`).toBeUndefined();
+      expect(demo.kaburoArt[name], name).toBeUndefined();
+    }
+    expect(Object.keys(demo.kaburoArt).sort()).toEqual(Object.keys(kaburoArt).sort());
+    for (const ed of ['standard', 'demo']) {
+      const ads = districtAdsFor(ed);
+      expect(ads.some((a) => DEMO_HIDDEN_ART.has(a.art)), ed).toBe(false);
+      expect(ads.length).toBe(ALL_DISTRICT_ADS.filter((a) => !DEMO_HIDDEN_ART.has(a.art)).length);
+      for (const a of ads) expect((ed === 'demo' ? demo : edition).kaburoArt[a.art], `${ed}: ${a.art}`).toBeTruthy();
+    }
+    expect(districtAdsFor('uncensored')).toBe(ALL_DISTRICT_ADS);
+    expect(DISTRICT_ADS).toEqual(districtAdsFor('standard'));
   });
-  it('the demo leaves out exactly the hidden cast models (Mack nude)', () => {
-    for (const name of DEMO_HIDDEN_CHARACTERS) expect(characters[name], `${name} is a real file`).toBeTruthy();
-    const kept = Object.keys(characters).filter((n) => !DEMO_HIDDEN_CHARACTERS.has(n)).sort();
-    expect(Object.keys(demo.characters).sort()).toEqual(kept);
+  it('the uncensored edition adds them from adult/ when that folder is there, and is standard without it', () => {
+    const here = existsSync('adult/assets/ads/kaburo');
+    for (const name of DEMO_HIDDEN_ART) if (here) expect(uncensored.kaburoArt[name], name).toBeTruthy();
+    for (const name of Object.keys(kaburoArt)) expect(uncensored.kaburoArt[name], name).toBe(kaburoArt[name]);
+    if (!here) expect(Object.keys(uncensored.kaburoArt).sort()).toEqual(Object.keys(kaburoArt).sort());
+  });
+  it('only the uncensored edition has the hidden cast models (Mack nude), when adult/ is there', () => {
+    for (const name of DEMO_HIDDEN_CHARACTERS) {
+      expect(characters[name], `${name} is not in the repository`).toBeUndefined();
+      expect(demo.characters[name], name).toBeUndefined();
+      if (existsSync('adult/assets/characters')) expect(uncensored.characters[name], name).toBeTruthy();
+    }
+    expect(Object.keys(demo.characters).sort()).toEqual(Object.keys(characters).sort());
     expect(Object.keys(edition.characters).sort()).toEqual(Object.keys(characters).sort());
   });
 });

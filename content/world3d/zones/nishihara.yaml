@@ -72,6 +72,7 @@ zones:
   S:
     id: nishihara_shotengai
     name: Nishihara Shōtengai
+    night: 0.25
     plan:
       floors: [[2, 3, 70], [4, 5, 30]]
       lotW: [5, 9]

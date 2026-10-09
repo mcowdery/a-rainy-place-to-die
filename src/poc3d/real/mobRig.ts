@@ -19,6 +19,66 @@ export const ROOT = 11;
 /** The feet (on the shins, held nearly level through the stride so the toes don't dig in). */
 export const FOOT_L = 12, FOOT_R = 13;
 export const BONES = 14;
+/**
+ * A named character's fingers and toes (real/mobCharacters.ts; the crowd has none): bones after the fourteen, posed
+ * only by the characters' material (real/people.ts `characterMaterial`). A hand has five digits (0 the thumb, then
+ * index to little), each two bones (0 at its root on the palm, 1 at its middle joint, a child of 0), children of
+ * that side's forearm; a foot's toes are one bone at the ball of the foot, a child of that foot.
+ */
+export const DIGIT_BONES = 24;
+export const digitBone = (hand: 0 | 1, digit: number, joint: 0 | 1): number => BONES + hand * 10 + digit * 2 + joint;
+export const toeBone = (foot: 0 | 1): number => BONES + 20 + foot;
+/** A hand's own bone, at the wrist (a child of that side's forearm; the fingers are its children): turned only where a character is posed freely (real/characterPose.ts). */
+export const handBone = (hand: 0 | 1): number => BONES + 22 + hand;
+/**
+ * More joints up a named character's spine (after the digits'; a child each of the one before): 0 the lower chest, on
+ * the waist's bone (SPINE) at the bottom of the ribs; 1 the upper chest, which the arms and the neck (HEAD, whose joint
+ * is the neck's base) are on; 2 the head itself, on top of the neck. Turned only where a character is posed freely
+ * (real/characterPose.ts); anywhere else each goes with the bone it is on (`digitParent`).
+ */
+export const SPINE_BONES = 3;
+export const spineBone = (i: 0 | 1 | 2): number => BONES + DIGIT_BONES + i;
+/**
+ * A named character's toes each (after the spine's): a bone a toe (0 the big toe), at the toe's root, a child of that
+ * foot's toes' bone (`toeBone`, which turns them all at the ball of the foot). Turned only where a character is posed
+ * freely; anywhere else each goes with its foot's toes' bone.
+ */
+export const TOE_BONES = 10;
+export const toeDigit = (foot: 0 | 1, toe: number): number => BONES + DIGIT_BONES + SPINE_BONES + foot * 5 + toe;
+/**
+ * A named character's hips each have a bone half-way between the pelvis and that thigh (after the toes'): turned half
+ * as far as the thigh about the hip's joint. The skin across the hip goes pelvis, half-way, thigh, so a thigh turned
+ * a right angle (sitting) is two bends of half that, and keeps its roundness; blended straight from the pelvis to
+ * the thigh it fell in toward the joint. Worked out from the two it is between, wherever a character is drawn.
+ */
+export const HELPER_BONES = 18;
+export const hipHalf = (side: 0 | 1): number => BONES + DIGIT_BONES + SPINE_BONES + TOE_BONES + side;
+/** The same at each shoulder: half-way between the chest and that arm, about the shoulder's joint. */
+export const shoulderHalf = (side: 0 | 1): number => BONES + DIGIT_BONES + SPINE_BONES + TOE_BONES + 2 + side;
+/**
+ * A collar bone each side (as the rigged reference has, refs/models: the skin just inside a shoulder goes with it, not
+ * with the chest): from near the breastbone out to the shoulder, on the upper chest; the arm is on it. It isn't posed
+ * by hand: it lifts by a share of how far its arm is raised from hanging (real/characterPose.ts CLAVICLE), so a raised
+ * arm lifts its shoulder.
+ */
+export const clavicle = (side: 0 | 1): number => BONES + DIGIT_BONES + SPINE_BONES + TOE_BONES + 4 + side;
+/**
+ * The upper arm without its twist (the reference's twist bones): where the arm points, but not turned about its own
+ * length. The skin at the shoulder goes with it and the twist comes on down the upper arm, so an arm rolled about
+ * itself doesn't wring the shoulder.
+ */
+export const armSwing = (side: 0 | 1): number => BONES + DIGIT_BONES + SPINE_BONES + TOE_BONES + 6 + side;
+/** Every bone a character has. */
+/**
+ * A finger's last joint (and the thumb's), on its middle joint's bone (the rigged reference has three bones a
+ * finger): not posed by hand, it turns a share of what the middle joint is closed (real/characterPose.ts
+ * TIP_FOLLOW), as a finger's last joint does, so a closed finger curls round instead of folding in two straight
+ * pieces. Where a character isn't posed freely it goes with the middle joint's bone.
+ */
+export const fingerTip = (hand: 0 | 1, digit: number): number => BONES + DIGIT_BONES + SPINE_BONES + TOE_BONES + 8 + hand * 5 + digit;
+export const ALL_BONES = BONES + DIGIT_BONES + SPINE_BONES + TOE_BONES + HELPER_BONES;
+/** The fourteen-bone skeleton's bone a digit's (or a further spine joint's) goes with (where they aren't posed: the CPU's reference, the crowd's material). */
+export const digitParent = (b: number): number => (b < BONES ? b : b >= BONES + DIGIT_BONES + SPINE_BONES + TOE_BONES ? [THIGH_L, THIGH_R, ARM_L, ARM_R, SPINE, SPINE, ARM_L, ARM_R, FORE_L, FORE_L, FORE_L, FORE_L, FORE_L, FORE_R, FORE_R, FORE_R, FORE_R, FORE_R][b - (BONES + DIGIT_BONES + SPINE_BONES + TOE_BONES)] : b >= BONES + DIGIT_BONES + SPINE_BONES ? (b < BONES + DIGIT_BONES + SPINE_BONES + 5 ? FOOT_L : FOOT_R) : b >= BONES + DIGIT_BONES ? (b === BONES + DIGIT_BONES + 2 ? HEAD : SPINE) : b >= BONES + 22 ? (b === BONES + 22 ? FORE_L : FORE_R) : b >= BONES + 20 ? (b === BONES + 20 ? FOOT_L : FOOT_R) : b < BONES + 10 ? FORE_L : FORE_R);
 export const PARENT = [-1, PELVIS, SPINE, PELVIS, THIGH_L, PELVIS, THIGH_R, SPINE, ARM_L, SPINE, ARM_R, -1, SHIN_L, SHIN_R];
 /** How much of the leg's pitch a foot takes back (1: level; a little less, a toe-off behind and a heel strike ahead). */
 export const FOOT_LEVEL = 0.85;

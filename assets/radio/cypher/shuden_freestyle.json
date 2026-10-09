@@ -1,0 +1,21 @@
+{
+  "file": "shuden_freestyle_1.flac",
+  "id": "shuden_freestyle",
+  "take": 1,
+  "station": "cypher",
+  "title": "終電フリースタイル",
+  "artist": "ミッドナイト・キャンディ",
+  "caption": "Late 1980s Japanese pop with a new jack swing beat and playful rap. A bright, cheeky young woman raps the verses in Japanese with bounce and attitude, and sings the catchy chorus herself with girl-group backing vocals. Swinging drum machine with hard snare hits and shuffled hi-hats, punchy synth bass, orchestra hit stabs, bright synth brass, funky clean guitar, handclaps. Fun, energetic, a night out in the city after missing the last train. Glossy digital studio production.",
+  "lyrics": "[Intro]\nねえ 今何時？\nあ 終電 行っちゃった\n\n[Verse 1 - Rap]\n時計を見たら 零時四十分\n改札の前で 立ちつくす自分\nシャッターが降りる ガラガラと\nヒールの音だけ 響くホーム\n財布の中身は 千円ちょっと\nタクシーなんて 無理よ きっと\nだけど不思議ね 心は軽い\n夜はこれから 街は明るい\n友達に電話 「まだ起きてる？」\n「歌舞路にいるよ」って 声が弾ける\n帰れないなら 帰らなきゃいい\n朝まで遊ぶ それが正しい\n\n[Chorus - Sung]\n終電フリースタイル 行っちゃった\nでもいいじゃない 夜は長い\n終電フリースタイル 踊りましょう\n始発が来るまで ノンストップ\n\n[Verse 2 - Rap]\nゲームセンターで クレーンに夢中\n取れないぬいぐるみ もう一回挑戦中\n屋台のラーメン 湯気の向こう\n知らないおじさんと 乾杯しよう\nカラオケボックス マイク握って\n下手でもいいの 大声で歌って\n上司には内緒 明日は休み\nこんな夜こそ 人生の楽しみ\n空が青く 染まりはじめて\n始発のベルが 遠くで鳴って\n眠い目こすり 笑いあえば\n最高の夜ね また来週ね\n\n[Chorus - Sung]\n終電フリースタイル 行っちゃった\nでもいいじゃない 夜は長い\n終電フリースタイル 踊りましょう\n始発が来るまで ノンストップ\n\n[Break]\n\n[Chorus - Sung]\n終電フリースタイル 行っちゃった\nでもいいじゃない 夜は長い\n終電フリースタイル 踊りましょう\n始発が来るまで ノンストップ\n\n[Outro]\nおやすみ じゃなくて おはよう",
+  "language": "ja",
+  "bpm": 106,
+  "key": "G minor",
+  "seconds": 185.0,
+  "seed": 2303,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:06",
+  "took": 48,
+  "batch": "citypop-rap-01",
+  "model": "acestep-v15-turbo"
+}

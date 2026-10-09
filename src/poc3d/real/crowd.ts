@@ -1,5 +1,10 @@
 import * as THREE from 'three';
-import { FIGURE_ATTRS, FIGURE_STRIDE, TEMPLATE_COUNT, templateGeometry } from './people';
+import { Emotes, type EmoteLooks } from './emotes';
+import { BODY_LIST, FIGURE_ATTRS, FIGURE_STRIDE, POSE_LIST, mobDepthMaterial, TEMPLATE_COUNT, templateGeometry } from './people';
+import { CrowdSmoke } from './smoke';
+import { HOURS, MANNERS, outAt } from '../district/peopleHours';
+import type { Body } from './mobRig';
+import type { Pose } from './people';
 
 interface Batch {
   readonly mesh: THREE.Mesh;
@@ -13,8 +18,23 @@ interface Batch {
  * figure in range, each figure a few numbers (people.ts `packFigures`) that the material poses and animates.
  * Chunks hand over their figures as they're built and drop them when they go; `show` says which chunks'
  * people are drawn (in range and not hidden behind others); the instance buffers are rebuilt only when that
- * changes.
+ * changes. Their emotes, and their breath in the cold (real/emotes.ts), are a draw more each, on the same figures;
+ * and so are the smokers' cigarettes, embers and smoke (real/smoke.ts).
  */
+/** Someone standing about, as the crowd's numbers give them. */
+export interface StandingPerson {
+  readonly id: string;
+  readonly x: number;
+  readonly z: number;
+  /** The floor under them. */
+  readonly y: number;
+  readonly yaw: number;
+  readonly body: Body;
+  readonly pose: Pose;
+  readonly manner: string;
+  readonly seed: number;
+}
+
 export class Crowd {
   readonly group = new THREE.Group();
   /** People carry their umbrellas (while it rains). */
@@ -24,10 +44,85 @@ export class Crowd {
   private readonly batches = new Map<number, Batch>();
   private dirty = false;
   private umbrellasShown = false;
+  private casts = true;
+  /** The marks at their heads and their breath in the cold (null with a material that isn't the mob's). */
+  readonly emoteLayer: Emotes | null;
+  /** The smokers' cigarettes and cigars, their embers and their smoke (null with a material that isn't the mob's). */
+  readonly smokeLayer: CrowdSmoke | null;
 
   constructor(private readonly material: THREE.Material) {
     this.group.name = 'crowd';
     this.group.matrixAutoUpdate = false;
+    const mob = material as THREE.ShaderMaterial;
+    this.emoteLayer = mob.uniforms?.tJoints ? new Emotes(mob) : null;
+    if (this.emoteLayer) this.group.add(this.emoteLayer.mesh, this.emoteLayer.breath);
+    this.smokeLayer = mob.uniforms?.tJoints ? new CrowdSmoke(mob) : null;
+    if (this.smokeLayer) this.group.add(this.smokeLayer.mesh);
+  }
+
+  /** How many of those who smoke have one lit (0 none to 1: the setting), and the wind their smoke goes with (m/s, world x and z). */
+  set smoking(v: number) {
+    const u = (this.material as THREE.ShaderMaterial).uniforms?.uSmoking;
+    if (u) u.value = v;
+  }
+  set wind(w: THREE.Vector2) {
+    if (this.smokeLayer) this.smokeLayer.wind = w;
+  }
+
+  /** Whether people show emotes now and then (manga's marks at the head: real/emotes.ts). */
+  get emotes(): boolean {
+    return this.emoteLayer?.on ?? false;
+  }
+  set emotes(on: boolean) {
+    if (this.emoteLayer) this.emoteLayer.on = on;
+  }
+
+  /** How the blush, the hearts and the stars are drawn (real/emotes.ts EmoteLooks). */
+  set emoteLooks(looks: EmoteLooks) {
+    if (this.emoteLayer) this.emoteLayer.looks = looks;
+  }
+
+  /** How cold it is for people's breath to show (0 to 1: district/forecast.ts coldBreath). */
+  get cold(): number {
+    return this.emoteLayer?.cold ?? 0;
+  }
+  set cold(v: number) {
+    if (this.emoteLayer && v !== this.emoteLayer.cold) this.emoteLayer.cold = v;
+  }
+
+  /** Whether the people cast shadows (those near the viewer: people.ts mobDepthMaterial). */
+  get shadows(): boolean {
+    return this.casts;
+  }
+  set shadows(on: boolean) {
+    if (on === this.casts) return;
+    this.casts = on;
+    for (const b of this.batches.values()) b.mesh.castShadow = on;
+  }
+
+  /**
+   * The people standing about within r metres of (x, z) at `hour`: those in the chunks shown who aren't walking and
+   * are out at this hour (a walker's place is the shader's alone). For talking to and looking at.
+   */
+  standingNear(x: number, z: number, r: number, hour: number): StandingPerson[] {
+    const out: StandingPerson[] = [];
+    for (const key of this.shown) {
+      const f = this.chunks.get(key);
+      if (!f) continue;
+      for (let k = 0; k < f.length; k += FIGURE_STRIDE) {
+        const fx = f[k + 1];
+        const fz = f[k + 2];
+        if (Math.abs(fx - x) > r || Math.abs(fz - z) > r || Math.hypot(fx - x, fz - z) > r) continue;
+        const pose = POSE_LIST[f[k + 6]];
+        // (Walking, crossing, running; riding or at a strap is elsewhere.)
+        if (f[k + 11] !== 0 || !pose || pose === 'walk' || pose === 'gait' || pose === 'ride' || pose === 'strap' || pose === 'sit') continue;
+        const hours = f[k + 20] < 0 ? null : HOURS[f[k + 20]];
+        if (hours && outAt(hours, hour) <= f[k + 22]) continue;
+        const body = BODY_LIST[f[k + 5]] ?? 'man';
+        out.push({ id: `${key}:${k}`, x: fx, z: fz, y: f[k + 13], yaw: f[k + 3], body, pose, manner: MANNERS[f[k + 21]] ?? 'plain', seed: f[k + 4] });
+      }
+    }
+    return out;
   }
 
   /** A chunk's figures (FIGURE_STRIDE floats each), or null when it's dropped. */
@@ -90,6 +185,12 @@ export class Crowd {
         a.needsUpdate = true;
       }
     }
+    // Their emotes and their breath: everyone shown, whatever their template.
+    if (this.emoteLayer) {
+      const shown = [...this.shown].map((key) => this.chunks.get(key)).filter((f): f is Float32Array => !!f);
+      this.emoteLayer.fill(shown, shown.reduce((n, f) => n + f.length / FIGURE_STRIDE, 0));
+    }
+    this.smokeLayer?.fill([...this.shown].map((key) => this.chunks.get(key)).filter((f): f is Float32Array => !!f));
   }
 
   private write(t: number, f: Float32Array, k: number, fill: Map<number, number>): void {
@@ -118,6 +219,8 @@ export class Crowd {
       mesh.frustumCulled = false;
       mesh.renderOrder = 2;
       mesh.matrixAutoUpdate = false;
+      mesh.customDepthMaterial = mobDepthMaterial(this.material);
+      mesh.castShadow = this.casts && !!mesh.customDepthMaterial;
       this.group.add(mesh);
       b = { mesh, geo, attrs: [], cap: 0 };
       this.batches.set(t, b);

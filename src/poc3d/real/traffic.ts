@@ -96,7 +96,7 @@ export interface TrafficSigns {
 const LABELS: Record<CarType, string> = {
   sedan: 'Car', luxury: 'Car', taxi: 'Taxi', taxi2: 'Taxi', kei: 'Kei car', minivan: 'Minivan', keitruck: 'Kei truck',
   sports: 'Sports car', hatch: 'Hatchback', rotary: 'Sports car', awd: 'Sports car', roadster: 'Roadster',
-  van: 'Van', keivan: 'Kei van', boxtruck: 'Truck', police: 'Police car',
+  van: 'Van', keivan: 'Kei van', boxtruck: 'Truck', police: 'Police car', hardtop: 'Car',
 };
 
 /**
@@ -503,9 +503,9 @@ const ahead = (a: number, b: number, L: number): number => (((b - a) % L) + L) %
 
 export class TrafficSystem {
   readonly group = new THREE.Group();
-  /** Cars beyond this are drawn as their low model (CAR_LOD; the K panel's Detail sets it). */
+  /** Cars beyond this are drawn as their low model (CAR_LOD; the debug menu's Detail sets it). */
   carLod = CAR_LOD;
-  /** Vehicles beyond this aren't drawn (DRAW; the K panel's Detail sets it). */
+  /** Vehicles beyond this aren't drawn (DRAW; the debug menu's Detail sets it). */
   drawDistance = DRAW;
   readonly colliders: Rect[] = [];
   private readonly vehicles: Vehicle[] = [];
@@ -1045,6 +1045,18 @@ export class TrafficSystem {
       if (Math.abs(a) < v.half + r && Math.abs(c) < v.width / 2 + r) return true;
     }
     return false;
+  }
+
+  /** The vehicle over (x, z), if any: its object (for what's to ride on it: a bullet's mark). */
+  objectAt(x: number, z: number, except: DrivenVehicle | null = null): THREE.Object3D | null {
+    for (const v of this.vehicles) {
+      if (v === except || v.aloft) continue;
+      const ox = x - v.x;
+      const oz = z - v.z;
+      if (Math.abs(ox) > 7 || Math.abs(oz) > 7) continue;
+      if (Math.abs(ox * v.dx + oz * v.dz) < v.half + 0.3 && Math.abs(ox * v.dz - oz * v.dx) < v.width / 2 + 0.3) return v.obj;
+    }
+    return null;
   }
 
   /**

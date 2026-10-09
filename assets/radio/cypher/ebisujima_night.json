@@ -1,0 +1,21 @@
+{
+  "file": "ebisujima_night_1.flac",
+  "id": "ebisujima_night",
+  "take": 1,
+  "station": "cypher",
+  "title": "恵比寿島ナイト",
+  "artist": "恵比寿島クルー",
+  "caption": "Hard-hitting late 1980s funk rap with a Japanese city pop gloss. An energetic male MC raps in Japanese with a punchy, rhythmic delivery, and a crew shouts the chorus together in call and response. Heavy drum machine beat with a booming kick and a cracking snare, growling synth bass, sharp funk guitar, synth brass riffs, record scratches, a talk box melody. Tough, exciting, street racers gathering in a floodlit parking area by the bay at night. Loud, punchy production.",
+  "lyrics": "[Intro]\nエンジン かけろ\n\n[Verse 1 - Rap]\n土曜の夜だ 橋を渡れ\n恵比寿島の パーキングへ集まれ\n水銀灯の下 並んだマシン\nボンネット開けて 見せ合う自信\nターボの音が 夜を切り裂く\nタイヤの煙が 月を隠す\nロータリー 四駆 軽のロードスター\n誰の愛車も 今夜はスター\n自販機の前で 作戦会議\n湾岸一本 勝負は一度\n負けたら缶コーヒー おごりのルール\n笑って握手 それが俺らのクルー\n\n[Chorus - Crew]\n恵比寿島ナイト（ヘイ！）\nアクセル全開（ホー！）\n恵比寿島ナイト（ヘイ！）\n朝まで走れ（ゴー！）\n\n[Verse 2 - Rap]\nスリー ツー ワンで 飛び出す二台\nコンテナの影が 流れる視界\n潮風巻いて コーナー攻める\nミラーの光が 少しずつ離れる\nサイレンの音が 遠くで鳴れば\n散り散りになる いつものパターン\nだけど来週 また同じ場所\n約束なしでも みんな揃うよ\n仕事じゃ怒られ 頭を下げる\nそれでも週末 ここで生き返る\nハンドル握れば 誰もが主役\nこの夜だけは 誰にも譲れない\n\n[Chorus - Crew]\n恵比寿島ナイト（ヘイ！）\nアクセル全開（ホー！）\n恵比寿島ナイト（ヘイ！）\n朝まで走れ（ゴー！）\n\n[Break - Talk Box Solo]\n\n[Chorus - Crew]\n恵比寿島ナイト（ヘイ！）\nアクセル全開（ホー！）\n恵比寿島ナイト（ヘイ！）\n朝まで走れ（ゴー！）\n\n[Outro]",
+  "language": "ja",
+  "bpm": 112,
+  "key": "E minor",
+  "seconds": 180.0,
+  "seed": 2606,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:13",
+  "took": 49,
+  "batch": "citypop-rap-01",
+  "model": "acestep-v15-turbo"
+}

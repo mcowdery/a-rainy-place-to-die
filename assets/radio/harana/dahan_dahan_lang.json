@@ -1,0 +1,21 @@
+{
+  "file": "dahan_dahan_lang_1.flac",
+  "id": "dahan_dahan_lang",
+  "take": 1,
+  "station": "harana",
+  "title": "Dahan-Dahan Lang",
+  "artist": "Lino Amihan",
+  "caption": "Slow, sensual Filipino R&B slow jam sung in Tagalog. A soft, breathy young male tenor almost whispering the verses, rising into a delicate, aching falsetto in the chorus, with layered airy harmonies. Warm electric piano, deep sub bass, a muted clean guitar, very slow sparse drums with rim clicks and finger snaps, lush pads, long reverb tails. Intimate, hushed, two people awake together in the small hours. Modern, polished, warm production.",
+  "lyrics": "[Intro]\n\n[Verse 1]\nAlas-dos na ng umaga, gising pa rin tayo\nNag-uusap tungkol sa kahit ano\nAng liwanag ng buwan sa iyong mukha\nAng ganda mo, 'di ko masabi sa salita\n\n[Pre-Chorus]\nHuwag kang magmadali\nNarito lang ako sa tabi\n\n[Chorus]\nDahan-dahan, mahal\nWalang kailangang habulin\nDahan-dahan, mahal\nAng gabi ay atin\nIpikit mo ang iyong mga mata\nSumandal ka sa akin, sinta\nDahan-dahan lang\nHanggang mag-umaga\n\n[Verse 2]\nAng init ng yakap mo'y aking tahanan\nSa gulo ng mundo, ikaw ang kapayapaan\nBawat hininga mo'y aking naririnig\nParang musika ang tibok ng dibdib\n\n[Pre-Chorus]\nHuwag kang magmadali\nNarito lang ako sa tabi\n\n[Chorus]\nDahan-dahan, mahal\nWalang kailangang habulin\nDahan-dahan, mahal\nAng gabi ay atin\nIpikit mo ang iyong mga mata\nSumandal ka sa akin, sinta\nDahan-dahan lang\nHanggang mag-umaga\n\n[Bridge]\nHindi kailangan ng pangako ngayon\nSapat na ang ikaw at ako\nDito sa dilim, sa tahimik na kuwarto\nDahan-dahan nating buuin ang mundo\n\n[Chorus]\nDahan-dahan, mahal\nAng gabi ay atin\nDahan-dahan lang\nHanggang mag-umaga\n\n[Outro]",
+  "language": "tl",
+  "bpm": 68,
+  "key": "A major",
+  "seconds": 225.0,
+  "seed": 4202,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:49",
+  "took": 156,
+  "batch": "opm-01",
+  "model": "acestep-v15-turbo"
+}

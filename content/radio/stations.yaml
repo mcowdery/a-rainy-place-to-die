@@ -90,3 +90,51 @@ stations:
       - { file: shuden_no_ato_de.ogg, title: "終電のあとで", artist: "サンセット・パレード" }
       - { file: neon_no_ame.ogg, title: "ネオンの雨", artist: "真夜中シアター" }
       - { file: toto_bay_drive.ogg, title: "東都ベイ・ドライブ", artist: "ルナ・パシフィカ" }
+  - id: cypher
+    name: MIDNIGHT CYPHER
+    jp: ミッドナイト・サイファー
+    freq: '93.3'
+    blurb: Rap over city pop grooves, from Kaburo's back streets.
+    tracks:
+      - { file: kaburo_cypher.ogg, title: "歌舞路サイファー", artist: "MC 夜風 & ザ・ネオン・クルー" }
+      - { file: wangan_flow.ogg, title: "湾岸フロウ", artist: "ワンガン・スムース" }
+      - { file: shuden_freestyle.ogg, title: "終電フリースタイル", artist: "ミッドナイト・キャンディ" }
+      - { file: yoru_mart_3am.ogg, title: "ヨルマート午前三時", artist: "MC 夜風" }
+      - { file: neon_moyou.ogg, title: "ネオン模様", artist: "真夜中シアター feat. MC 夜風" }
+      - { file: ebisujima_night.ogg, title: "恵比寿島ナイト", artist: "恵比寿島クルー" }
+      - { file: toto_city_lights.ogg, title: "Tōto City Lights", artist: "Harbor Kid" }
+      - { file: denko_breaks.ogg, title: "電光ブレイクス", artist: "DJ デンコー" }
+      - { file: ame_no_kosaten.ogg, title: "雨の交差点", artist: "レディ・カスミ" }
+      - { file: asa_made_boogie.ogg, title: "朝までブギー", artist: "東都ブギー・エクスプレス" }
+      - { file: b_men_no_yoru.ogg, title: "B面の夜", artist: "DJ 終電" }
+  - id: last_call
+    name: LAST CALL
+    jp: ラストコール
+    freq: '94.5'
+    blurb: Torch songs and mood kayō for the last drink of the night.
+    tracks:
+      - { file: kiri_no_hatoba.ogg, title: "霧の波止場", artist: "黒木譲とナイト・シャドウズ" }
+      - { file: kaburo_blues.ogg, title: "歌舞路ブルース", artist: "氷室朱実" }
+      - { file: the_last_cigarette.ogg, title: "The Last Cigarette", artist: "Dolores Vane" }
+      - { file: nobody_leaves_kaburo.ogg, title: "Nobody Leaves Kaburo", artist: "Johnny Vesper & The Night Shift" }
+      - { file: gozen_niji_no_tango.ogg, title: "午前二時のタンゴ", artist: "紅マリ子" }
+      - { file: wakare_no_saishu_densha.ogg, title: "別れの最終電車", artist: "黒木譲 & 紅マリ子" }
+      - { file: rain_check.ogg, title: "Rain Check", artist: "The Night Desk" }
+      - { file: ame_no_counter.ogg, title: "雨のカウンター", artist: "汐見かおる" }
+      - { file: blue_neon_black_coffee.ogg, title: "Blue Neon, Black Coffee", artist: "Dolores Vane" }
+      - { file: giri_no_ame.ogg, title: "義理の雨", artist: "竜崎剛" }
+  - id: harana
+    # Non-canon and temporary (2026-10-05): Tagalog love songs, nothing to do with the game's world. To be removed.
+    name: HARANA FM
+    jp: ハラナFM
+    freq: '96.3'
+    blurb: Tagalog love songs. (Non-canon, temporary.)
+    tracks:
+      - { file: sayo_lang_titibok.ogg, title: "Sa'yo Lang Titibok", artist: "Lino Amihan" }
+      - { file: dahan_dahan_lang.ogg, title: "Dahan-Dahan Lang", artist: "Lino Amihan" }
+      - { file: bituin_sa_mata_mo.ogg, title: "Bituin sa Mata Mo", artist: "Lino Amihan" }
+      - { file: kape_at_ulan.ogg, title: "Kape at Ulan", artist: "Lino Amihan" }
+      - { file: sayaw_sa_sala.ogg, title: "Sayaw sa Sala", artist: "Lino Amihan" }
+      - { file: kung_papayag_ka.ogg, title: "Kung Papayag Ka", artist: "Lino Amihan" }
+      - { file: sa_ngiti_mo.ogg, title: "Sa Ngiti Mo", artist: "Lino Amihan" }
+      - { file: uuwi_ako_sayo.ogg, title: "Uuwi Ako Sa'yo", artist: "Lino Amihan" }

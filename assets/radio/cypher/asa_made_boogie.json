@@ -1,0 +1,21 @@
+{
+  "file": "asa_made_boogie_1.flac",
+  "id": "asa_made_boogie",
+  "take": 1,
+  "station": "cypher",
+  "title": "朝までブギー",
+  "artist": "東都ブギー・エクスプレス",
+  "caption": "Upbeat early 1980s disco-rap party record in a Japanese city pop style. A cheerful male MC and a sassy female MC trade rapped lines in Japanese in a bouncy old-school party flow, and everyone sings the chorus together. Four-on-the-floor drums with handclaps and congas, bouncing slap bass, scratchy funk rhythm guitar, bright horn section riffs, sparkling electric piano, a cheering crowd. Joyful, glamorous, a dance floor that doesn't stop until morning. Warm analog tape sound.",
+  "lyrics": "[Intro]\nレディース・アンド・ジェントルメン\n今夜も始まるよ\n\n[Verse 1 - Rap]\n右手を上げて 左手も上げて\nフロアのみんな 声を合わせて\n仕事のことは ロッカーに預けて\n今夜は踊ろう 靴がすり減るまで\n俺はマイクを 握るミスター\n私はフロアの 輝くシスター\nベースが鳴ったら 腰を揺らして\nホーンが吠えたら 拳を突き上げて\nサラリーマンも ホステスさんも\nタクシードライバーの おじさんも\nミラーボールの 下では平等\nリズムがあれば みんな最高\n\n[Chorus - All]\n朝までブギー 止まらない\n朝までブギー 帰らない\n朝までブギー もう一回\n東都の夜は 終わらない\n\n[Verse 2 - Rap]\n時計の針が 三時を回る\nそれでもフロアは まだまだ熱い\nDJ 次の曲 かけてちょうだい\nとびきりファンキーな やつをお願い\n汗をかいたら ソーダで乾杯\n知らない同士も 今夜は仲間\n右へステップ 左へターン\n手を叩いて ワン・ツー・スリー\n外は少しずつ 明るくなるけど\nここだけ時間が 止まってるの\n最後の一曲 終わるまでは\n誰も帰さない それがルールさ\n\n[Chorus - All]\n朝までブギー 止まらない\n朝までブギー 帰らない\n朝までブギー もう一回\n東都の夜は 終わらない\n\n[Break - Horn Section and Handclaps]\n\n[Chorus - All]\n朝までブギー 止まらない\n朝までブギー 帰らない\n朝までブギー もう一回\n東都の夜は 終わらない\n\n[Outro]",
+  "language": "ja",
+  "bpm": 116,
+  "key": "A major",
+  "seconds": 180.0,
+  "seed": 3010,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:16",
+  "took": 45,
+  "batch": "citypop-rap-01",
+  "model": "acestep-v15-turbo"
+}

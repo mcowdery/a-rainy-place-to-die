@@ -1,0 +1,21 @@
+{
+  "file": "sayo_lang_titibok_1.flac",
+  "id": "sayo_lang_titibok",
+  "take": 1,
+  "station": "harana",
+  "title": "Sa'yo Lang Titibok",
+  "artist": "Lino Amihan",
+  "caption": "Contemporary Filipino R&B and soul-pop love song sung in Tagalog. A smooth, breathy young male tenor, intimate and close to the microphone, gliding into a silky falsetto in the chorus, with stacked airy vocal harmonies and soft ad-libs. Mellow Rhodes electric piano chords, warm sub bass, a gentle clean electric guitar, slow laid-back R&B drums with finger snaps and crisp hi-hats, dreamy reverb. Tender, romantic, late at night, devoted to one girl. Modern, polished, warm production.",
+  "lyrics": "[Intro]\n\n[Verse 1]\nHindi ko alam kung paano nagsimula\nIsang tingin mo lang, ako'y natulala\nAng ngiti mong kay tamis, 'di ko malimutan\nSa bawat gabi, ikaw ang laman ng isipan\n\n[Pre-Chorus]\nDahan-dahan, lumalapit ang puso ko\n'Di na kayang itago pa ito\n\n[Chorus]\nSa'yo lang, sa'yo lang ako\nWala nang iba, ikaw lang ang gusto\nSa'yo lang, sa'yo lang, mahal\nHawakan mo ang kamay ko nang matagal\nSa'yo lang, sa'yo lang ako\nKahit saan, kahit kailan, pangako\nSa'yo lang titibok\nAng puso kong ito\n\n[Verse 2]\nAng boses mo'y himig na paulit-ulit\nSa aking isip, kay sarap pakinggan\nKapag kasama ka, humihinto ang mundo\nAyoko nang matapos ang sandaling ito\n\n[Pre-Chorus]\nDahan-dahan, lumalapit ang puso ko\n'Di na kayang itago pa ito\n\n[Chorus]\nSa'yo lang, sa'yo lang ako\nWala nang iba, ikaw lang ang gusto\nSa'yo lang, sa'yo lang, mahal\nHawakan mo ang kamay ko nang matagal\nSa'yo lang, sa'yo lang ako\nKahit saan, kahit kailan, pangako\nSa'yo lang titibok\nAng puso kong ito\n\n[Bridge]\nKung panaginip man ito\nAyoko nang magising\nDito lang sa piling mo\nAng gusto kong marating\n\n[Chorus]\nSa'yo lang, sa'yo lang ako\nKahit saan, kahit kailan, pangako\nSa'yo lang titibok\nAng puso kong ito\n\n[Outro]\nSa'yo lang, sa'yo lang",
+  "language": "tl",
+  "bpm": 78,
+  "key": "D major",
+  "seconds": 215.0,
+  "seed": 4101,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:47",
+  "took": 68,
+  "batch": "opm-01",
+  "model": "acestep-v15-turbo"
+}

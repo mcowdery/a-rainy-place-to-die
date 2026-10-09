@@ -9,7 +9,7 @@ import type { Footwear } from '../district/footing';
 /**
  * Mack's wardrobe: what he's wearing (an outfit is a model of its own, built from his definition with other clothes:
  * scripts/blender/characters/mack_*.json, `base: mack.json`) and his sunglasses (models/sunglasses.ts, worn on the
- * head bone, any outfit). Kept in the browser for now (localStorage `citypop.wardrobe`); how he gets clothes in
+ * head bone, any outfit). Kept in the browser for now (localStorage `rainyplace.wardrobe`); how he gets clothes in
  * play (shops, homes, the story) is still to come.
  */
 
@@ -77,7 +77,7 @@ export function nextHelmet(h: HelmetName | null): HelmetName | null {
 /** The next face style round. */
 export const nextFace = (f: FaceStyle): FaceStyle => FACE_STYLES[(FACE_STYLES.indexOf(f) + 1) % FACE_STYLES.length];
 
-const KEY = 'citypop.wardrobe';
+const KEY = 'rainyplace.wardrobe';
 
 export function loadWardrobe(): WardrobeState {
   try {

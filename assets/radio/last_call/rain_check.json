@@ -1,0 +1,21 @@
+{
+  "file": "rain_check_1.flac",
+  "id": "rain_check",
+  "take": 1,
+  "station": "last_call",
+  "title": "Rain Check",
+  "artist": "The Night Desk",
+  "caption": "Spoken word over slow film noir jazz. A deep, weary male voice speaks, not sings, a hard-boiled detective's monologue in English, dry and unhurried, close to the microphone, with long pauses. Behind him a smoky tenor saxophone, soft brushed drums, a slow walking upright bass and sparse late-night piano chords, the hush of rain. Cynical, tired, a private eye alone in his office after midnight. Intimate vintage studio sound.",
+  "lyrics": "[Intro - Saxophone]\n\n[Spoken Word]\nIt was raining the night she walked in.\nIt's always raining the night they walk in.\nShe had a photograph, an envelope, and a story.\nThe photograph was real. The envelope was thick.\nThe story had more holes than my umbrella.\n\n[Spoken Word]\nI took the case. I always take the case.\nRent's due on the first,\nand the first doesn't care who's lying to who.\n\n[Instrumental Break - Saxophone]\n\n[Spoken Word]\nThree days. Two bars. One black sedan,\nparked where a black sedan had no business being.\nA man in a good suit told me to forget her name.\nI told him I was never good with names.\nHe wasn't good with jokes.\n\n[Spoken Word]\nBy Thursday I knew where the husband was.\nBy Friday I knew why she never wanted him found.\nIn this town the truth is like the last train.\nYou either catch it, or you walk home in the rain.\n\n[Instrumental Break - Piano]\n\n[Spoken Word]\nShe paid me in cash and didn't count it.\nI didn't count it either.\nSome things you'd rather not know the price of.\n\n[Spoken Word]\nThe rain stopped around four.\nIt'll be back.\nIt always comes back.\n\n[Outro - Saxophone]",
+  "language": "en",
+  "bpm": 60,
+  "key": "B flat minor",
+  "seconds": 200.0,
+  "seed": 5707,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:36",
+  "took": 64,
+  "batch": "noir-02",
+  "model": "acestep-v15-turbo"
+}

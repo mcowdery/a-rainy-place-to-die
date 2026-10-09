@@ -1,0 +1,21 @@
+{
+  "file": "wakare_no_saishu_densha_1.flac",
+  "id": "wakare_no_saishu_densha",
+  "take": 1,
+  "station": "last_call",
+  "title": "別れの最終電車",
+  "artist": "黒木譲 & 紅マリ子",
+  "caption": "1960s Japanese mood kayo duet, slow and bittersweet. A deep male baritone crooner and a husky female alto trade lines in Japanese, then sing the chorus together in close harmony. Sobbing tenor saxophone, tremolo electric guitar, soft Latin-tinged brushed drums with a gentle beguine rhythm, upright bass, vibraphone, a quiet string section. Tender, resigned, two lovers parting on a station platform at night in the rain. Warm vintage studio sound with plate reverb.",
+  "lyrics": "[Intro - Saxophone]\n\n[Verse 1 - Male]\n時計の針が せかしてる\n言えない言葉を 残したまま\n\n[Verse 1 - Female]\nホームの端で うつむいて\n私はベルを 待っている\n\n[Chorus - Duet]\n別れの最終電車\nドアが閉まれば それきりね\n別れの最終電車\n窓のしずくは 雨か涙か\n\n[Verse 2 - Male]\n幸せになれと 言いながら\n本当は腕を 離せない\n\n[Verse 2 - Female]\nやさしい嘘は もういいの\nあなたの背中 忘れない\n\n[Chorus - Duet]\n別れの最終電車\nドアが閉まれば それきりね\n別れの最終電車\n窓のしずくは 雨か涙か\n\n[Instrumental Break - Saxophone Solo]\n\n[Bridge - Duet]\nもしもあの日に 戻れたら\n同じ道を また歩く\n\n[Chorus - Duet]\n別れの最終電車\nドアが閉まれば それきりね\n別れの最終電車\n窓のしずくは 雨か涙か\n\n[Outro]",
+  "language": "ja",
+  "bpm": 78,
+  "key": "C minor",
+  "seconds": 195.0,
+  "seed": 5606,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:35",
+  "took": 117,
+  "batch": "noir-02",
+  "model": "acestep-v15-turbo"
+}

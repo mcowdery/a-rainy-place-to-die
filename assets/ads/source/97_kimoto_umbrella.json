@@ -1,0 +1,28 @@
+{
+  "file": "kimoto_umbrella_v1.png",
+  "item": "kimoto_umbrella",
+  "brand": null,
+  "copy": null,
+  "notes": null,
+  "prompt": "candid 35mm film snapshot, late 1980s Japan, city pop mood, natural light, soft film grain, a photograph taken by someone who loves her, ohwx kimoto, a woman in her twenties under a clear umbrella on a rainy Tokyo backstreet at night, glancing back over her shoulder at the camera, soft pink and amber neon out of focus behind her and reflected in the wet street, dark buildings and night sky above, tall vertical composition, the woman in the lower half of the frame, the upper third of the frame dark, open and uncluttered, no text, no lettering, no logos, no watermark",
+  "lora": {
+    "trigger": "ohwx kimoto",
+    "scale": 0.85
+  },
+  "model": "krea-2-turbo",
+  "size": [
+    736,
+    1536
+  ],
+  "steps": 12,
+  "seed": 1036075818,
+  "studioJob": "553f3791-7ff3-49a6-a6c6-69d71cb63136-u2",
+  "generated": "2026-10-05T09:12:49.662Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/97_kimoto_umbrella.png",
+  "decided": "2026-10-05T09:20:33.703Z",
+  "batch": "phone_wallpaper_01",
+  "purpose": "A wallpaper for Mack's phone: a snapshot of a woman from the cast (a stand-in for Megumi for now). Portrait, the home screen's clock and apps sit over the dark upper part.",
+  "use": "poster",
+  "district": null
+}

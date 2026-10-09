@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
-import { createServer } from 'vite';
+import { shotServer } from '../shotServer.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', '..');
 const [out, query, secs = '8'] = process.argv.slice(2);
@@ -15,7 +15,7 @@ if (!out || !query) {
   console.log('Usage: node scripts/phone/record_clip.mjs <out.webm> "<district query>" [seconds]');
   process.exit(1);
 }
-const server = await createServer({ root: ROOT, configFile: path.join(ROOT, 'vite.config.ts'), server: { port: 0 }, logLevel: 'silent' });
+const server = await shotServer({ root: ROOT, configFile: path.join(ROOT, 'vite.config.ts'), server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 try {

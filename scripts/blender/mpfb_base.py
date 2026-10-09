@@ -76,6 +76,7 @@ AssetService = mpfb_module('services.assetservice').AssetService
 LocationService = mpfb_module('services.locationservice').LocationService
 HumanObjectProperties = mpfb_module('entities.objectproperties').HumanObjectProperties
 ObjectService = mpfb_module('services.objectservice').ObjectService
+ClothesService = mpfb_module('services.clothesservice').ClothesService
 
 
 def parse_args():
@@ -391,7 +392,7 @@ def triangles(obj):
     return sum(len(p.vertices) - 2 for p in obj.data.polygons)
 
 
-def export_glb(path, rig, meshes):
+def export_glb(path, rig, meshes, morph=False):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     bpy.ops.object.select_all(action='DESELECT')
     rig.select_set(True)
@@ -405,7 +406,8 @@ def export_glb(path, rig, meshes):
         export_yup=True,
         export_apply=False,  # already applied (except the armature) in finish_meshes
         export_skins=True,
-        export_morph=False,
+        export_morph=morph,  # shape keys as morph targets (a face's expressions), positions only
+        export_morph_normal=False,
         export_animations=False,
         export_materials='EXPORT',
         export_image_format='AUTO',

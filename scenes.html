@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scene Editor · the rooms behind the windows</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #17181c; color: #d8d8e0; }
+      body { font: 12px/1.4 Consolas, 'Cascadia Mono', 'Yu Gothic', monospace; display: grid; grid-template-columns: 250px minmax(660px, 1fr) 380px; overflow: hidden; }
+      h3 { margin: 10px 0 4px; font-size: 11px; color: #9aa0b0; font-weight: normal; text-transform: uppercase; letter-spacing: 1px; }
+      button, select, input, a.btn {
+        font: inherit; color: #d8d8e0; background: #22242c; border: 1px solid #3a3c48; padding: 2px 6px; box-sizing: border-box; text-decoration: none;
+      }
+      button, a.btn { cursor: pointer; }
+      button:hover, a.btn:hover { background: #2e3140; }
+      button.on { border-color: #e0b060; color: #f3d9a0; }
+      button:disabled { opacity: 0.45; cursor: default; }
+      input[type="number"] { width: 62px; }
+      input[type="text"] { width: 100%; }
+      input.bad, select.bad { border-color: #d05050; }
+      #list, #side { overflow: auto; padding: 8px 10px 30px; background: #1c1d22; }
+      #list { border-right: 1px solid #2c2d33; }
+      #side { border-left: 1px solid #2c2d33; }
+      #scenes button { display: block; width: 100%; text-align: left; margin: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #scenes button .tag { color: #8e8a80; }
+      #scenes button.bad { color: #d08080; }
+      #scenes .kind { margin-top: 8px; color: #9aa0b0; }
+      #mid { overflow: auto; padding: 10px 12px 30px; }
+      #stage { position: relative; display: inline-block; line-height: 0; cursor: crosshair; user-select: none; }
+      #room { image-rendering: auto; }
+      #over { position: absolute; left: 0; top: 0; }
+      .bar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 6px 0; }
+      .row { display: grid; grid-template-columns: 78px 1fr 62px; gap: 5px; align-items: center; margin: 1px 0; }
+      .row input[type="range"] { width: 100%; margin: 0; }
+      .row.two { grid-template-columns: 78px 1fr; }
+      .limb { display: grid; grid-template-columns: 42px repeat(4, 1fr); gap: 4px; align-items: center; margin: 1px 0; }
+      .limb input { width: 100%; }
+      .limb .head { color: #8e8a80; font-size: 11px; text-align: center; }
+      .line { display: flex; gap: 4px; align-items: center; margin: 2px 0; }
+      .line input[type="number"] { width: 54px; }
+      .line .name { min-width: 64px; color: #c8c4ba; cursor: pointer; }
+      .line.sel .name { color: #f3d9a0; }
+      #errors { color: #e09090; white-space: pre-wrap; min-height: 1.4em; }
+      #errors.ok { color: #80c890; }
+      #status { color: #c8c4ba; min-height: 1.4em; white-space: pre-wrap; }
+      #timeline button.pose { min-width: 30px; }
+      #timeline .ghost { color: #666a78; padding: 0 3px; }
+      #atlas { image-rendering: auto; border: 1px solid #2c2d33; background: #000; }
+      .hint { color: #8e8a80; }
+      .cats label { display: inline-block; margin: 0 8px 2px 0; white-space: nowrap; }
+      details summary { cursor: pointer; color: #9aa0b0; margin: 8px 0 2px; }
+    </style>
+  </head>
+  <body>
+    <div id="list"></div>
+    <div id="mid"></div>
+    <div id="side"></div>
+    <script type="module" src="/src/poc3d/showroom/scenes.ts"></script>
+  </body>
+</html>

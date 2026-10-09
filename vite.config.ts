@@ -15,13 +15,20 @@ export default defineConfig(({ mode }) => {
     resolve: { alias: { '@edition': `/src/edition/${edition}.ts` } },
     // For code that only needs the edition's name (the chunk workers' ad list), without importing its files.
     define: { __EDITION__: JSON.stringify(edition) },
+    // Other agents' checkouts (.claude/worktrees, scripts/worktree.mjs) and the shots are inside this folder but are
+    // none of this server's business: a save or a git operation in one mustn't reload the page being played here.
+    // No hot reload: the game can't swap a module in place, so every save of a source file (an agent's, mid-play)
+    // reloaded the whole page. A change is picked up when you refresh (F5); the files are still watched for that.
+    server: { hmr: false, watch: { ignored: ['**/.claude/**', '**/debug-shots/**', '**/.cache/**'] } },
     build: {
       outDir: edition === 'standard' ? 'dist' : `dist-${edition}`,
       rollupOptions: {
         // index.html: 2D tile prototype (set aside). poc3d.html: 3D rendering test block. district.html: Kaburo district.
-        // models.html: showroom for reviewing car, cast and prop models in isolation; mob.html: the mob's own showroom.
+        // models.html: showroom for reviewing car, cast and prop models in isolation; mob.html: the mob's own showroom; characters.html: the named characters built on the mob's bodies (the same page's other half).
         // race.html: the racing venue (Kurokami Pass), the handling test.
-        input: { main: 'index.html', poc3d: 'poc3d.html', district: 'district.html', models: 'models.html', mob: 'mob.html', race: 'race.html', garage: 'garage.html' },
+        // scenes.html: the editor for the rooms behind the windows (it saves through the dev server; built, it downloads).
+        // fight.html: the fight test, a yard for trying the melee as Mack in first person.
+        input: { main: 'index.html', poc3d: 'poc3d.html', district: 'district.html', models: 'models.html', mob: 'mob.html', characters: 'characters.html', scenes: 'scenes.html', race: 'race.html', garage: 'garage.html', fight: 'fight.html' },
       },
     },
     test: {

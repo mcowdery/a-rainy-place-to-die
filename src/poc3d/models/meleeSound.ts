@@ -78,6 +78,13 @@ export class MeleeSound {
     this.burst(0.07, 'lowpass', 2400, 600, 0.7, 0.5 + 0.3 * heavy);
   }
 
+  /** The bat landing: wood on a body, a hard knock over the thud; `heavy` 0..1. (Synthesised, unheard by its author.) */
+  knock(heavy: number): void {
+    this.tone(0.05 + 0.03 * heavy, 520 + 80 * Math.random(), 300, 0.5 + 0.3 * heavy, 'triangle');
+    this.burst(0.04, 'bandpass', 2200, 1100, 2.5, 0.45 + 0.25 * heavy, 0.002);
+    this.thud(heavy);
+  }
+
   /** A blade cutting; `wet` with blood. */
   cut(wet: boolean): void {
     this.burst(0.2, 'highpass', 2500, 5000, 0.8, 0.45);

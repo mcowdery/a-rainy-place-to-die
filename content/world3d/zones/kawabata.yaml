@@ -40,6 +40,8 @@ zones:
       colors: ['#ffffff', '#ffe45f', '#ff4f4f']
     ads: { street: 3, food: 1, loan: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.2
       windows: { punched: 50, small: 40, balcony: 10 }
       walls: ['#8a6a4a', '#6a5040', '#c8b8a0', '#a89070', '#d8ccb8', '#5a4a3a', '#b8a888']
       tiled: true
@@ -52,6 +54,7 @@ zones:
   R:
     id: kawabata_riverside
     name: Kawabata riverside
+    night: 0.5
     people: { plain: 5, long: 2, kimono: 1, yukata: 1.5 }
     plan:
       floors: [[2, 3, 60], [4, 6, 40]]
@@ -63,6 +66,8 @@ zones:
       colors: ['#ffffff', '#ffe45f', '#ff4f4f']
     ads: { food: 3, street: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.35
       windows: { punched: 60, small: 40 }
       walls: ['#8a6a4a', '#c8b8a0', '#a89070', '#d8ccb8', '#5a4a3a']
       tiled: true
@@ -98,6 +103,7 @@ zones:
   M:
     id: kawabata_nakamise
     name: Kawabata shopping streets
+    night: 0.3
     people: { plain: 5, kimono: 1.5, long: 2 }
     plan:
       floors: [[2, 3, 60], [4, 5, 40]]
@@ -133,6 +139,8 @@ zones:
       colors: ['#ffffff', '#4fe3ff', '#ffe45f', '#ff4f4f']
     ads: { mainstream: 2, food: 2, street: 2, loan: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.2
       windows: { punched: 50, ribbon: 30, balcony: 20 }
       walls: ['#9a9890', '#b8b4a8', '#7a7870', '#c2b49a']
       tiled: true

@@ -16,6 +16,7 @@ zones:
   K:
     id: skyscraper_row
     name: Skyscraper Row
+    night: 0.08
     people: { suit: 8, plain: 2, long: 2, police: 0.2 }
     cars: { luxury: 24, sedan: 26, taxi2: 20, taxi: 8, minivan: 14, kei: 4, van: 4, police: 4 }
     plan:
@@ -35,6 +36,8 @@ zones:
       colors: ['#ffffff', '#4fe3ff', '#ffe45f']
     ads: { mainstream: 6, food: 1, lodging: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.25
       windows: { curtain: 50, ribbon: 40, punched: 10 }
       walls: ['#2e3b45', '#3a4550', '#8e8d88', '#c8c8c4', '#6f7c86', '#a3b3ba']
       shops: { cool: 6, warm: 3, colourful: 1 }
@@ -43,6 +46,7 @@ zones:
   G:
     id: tower_plaza
     name: Tower Plaza
+    night: 0.1
     people: { suit: 6, plain: 3, long: 2 }
     plan:
       floors: [[44, 60, 70], [30, 40, 30]]
@@ -61,6 +65,8 @@ zones:
       colors: ['#ffffff', '#4fe3ff']
     ads: { mainstream: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.2
       windows: { curtain: 60, ribbon: 40 }
       walls: ['#d8d5cc', '#b8b4ac', '#2e3b45', '#9aa4ac']
       shops: { cool: 8, warm: 2 }
@@ -69,6 +75,7 @@ zones:
   E:
     id: west_exit
     name: West Exit
+    night: 0.6
     plan:
       floors: [[6, 10, 45], [11, 18, 55]]
       lotW: [14, 24]
@@ -83,6 +90,8 @@ zones:
       colors: ['#ffffff', '#ffe45f', '#ff4f4f', '#4fe3ff', '#6bff8a']
     ads: { mainstream: 5, food: 3, lodging: 2, fun: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.45
       windows: { ribbon: 40, blank: 20, punched: 25, curtain: 15 }
       walls: ['#d8d5cc', '#c2b49a', '#8e8d88', '#e0ddd2', '#3a3a3e']
       shops: { colourful: 4, cool: 4, warm: 2 }
@@ -91,6 +100,7 @@ zones:
   Y:
     id: omoide_lane
     name: Omoide Lane
+    night: 0.9
     people: { suit: 4, plain: 4, long: 2 }
     plan:
       floors: [[2, 3, 80], [4, 5, 20]]
@@ -111,6 +121,8 @@ zones:
       colors: ['#ffb040', '#ff4f4f', '#ffe45f']
     ads: { food: 5, street: 2, loan: 1 }
     look:
+      # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
+      vice: 0.7
       windows: { punched: 50, small: 50 }
       walls: ['#6c5242', '#5a4a3a', '#7c604c', '#4a4644']
       tiled: true

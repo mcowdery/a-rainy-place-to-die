@@ -1,0 +1,21 @@
+// The blank (smooth) face close up, three-quarter, shadows on and off.
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const out = process.argv[2] ?? 'debug-shots/faces';
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
+await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
+await page.waitForTimeout(2000);
+await page.addStyleTag({ content: '.label { visibility: hidden !important; }' });
+await page.evaluate(() => { document.getElementById('panel').style.display = 'none'; __fp.armed(false); __fp.look(Math.PI * 0.8, 0); __fp.face('smooth'); __fp.mirror(2); });
+await page.waitForTimeout(700);
+await page.screenshot({ path: `${out}/blank_shadows.png` });
+console.log(await page.evaluate(() => { const n = []; __fp.rig().object.children[0].traverse((o) => { if (o.isMesh) n.push(o.name + ':' + (Array.isArray(o.material) ? o.material.map((m) => m.name).join('|') : o.material.name)); }); return n.join('  '); }));
+await page.evaluate(() => { __fp.rig().object.children[0].traverse((o) => { if (o.isMesh && /body/.test(o.material.name)) { o.material.map = null; o.material.color.setRGB(0.2, 0.9, 0.2); o.material.needsUpdate = true; } }); });
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${out}/blank_noshadow.png` });
+await browser.close(); await server.close();

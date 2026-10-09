@@ -1,0 +1,21 @@
+{
+  "file": "kiri_no_hatoba_1.flac",
+  "id": "kiri_no_hatoba",
+  "take": 1,
+  "station": "last_call",
+  "title": "霧の波止場",
+  "artist": "黒木譲とナイト・シャドウズ",
+  "caption": "1960s Japanese mood kayo ballad, slow and smoky, film noir atmosphere. A deep, velvety male baritone crooner singing in Japanese with a slow vibrato, restrained and world-weary. A breathy tenor saxophone answering every line, tremolo electric guitar, soft brushed drums, upright bass, a quiet string section and vibraphone. Lonely, fatalistic, a man in a raincoat waiting on a foggy wharf at night. Warm vintage mono-era studio sound with plate reverb.",
+  "lyrics": "[Intro - Saxophone]\n\n[Verse 1]\n霧にけむる 波止場の灯り\n汽笛がひとつ 夜を裂く\nコートの襟を 立てたまま\nお前の影を 探してる\n\n[Chorus]\nああ 霧の波止場\n帰らぬ船を 待つ男\n煙草の火だけが 赤く燃えて\n未練をそっと 照らしてる\n\n[Verse 2]\nあの夜お前は 何も言わず\n小さな鞄を ひとつ提げ\n振り向きもせず 桟橋を\nヒールの音が 遠ざかる\n\n[Chorus]\nああ 霧の波止場\n帰らぬ船を 待つ男\n煙草の火だけが 赤く燃えて\n未練をそっと 照らしてる\n\n[Instrumental Break - Saxophone Solo]\n\n[Verse 3]\n忘れてくれと 置き手紙\n忘れられたら 苦労はしない\nグラスの底に 沈めても\n浮かんでくるのは お前だけ\n\n[Chorus]\nああ 霧の波止場\n帰らぬ船を 待つ男\n夜明けの鴎が 鳴く頃に\nひとり背中を 向けてゆく\n\n[Outro]",
+  "language": "ja",
+  "bpm": 72,
+  "key": "D minor",
+  "seconds": 205.0,
+  "seed": 5101,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 06:27",
+  "took": 418,
+  "batch": "noir-02",
+  "model": "acestep-v15-turbo"
+}

@@ -1,0 +1,21 @@
+{
+  "file": "toto_city_lights_1.flac",
+  "id": "toto_city_lights",
+  "take": 1,
+  "station": "cypher",
+  "title": "Tōto City Lights",
+  "artist": "Harbor Kid",
+  "caption": "Smooth early 1990s hip hop built on a Japanese city pop groove. A laid-back male MC raps the verses in English with a warm, storytelling flow; a sweet female vocalist sings the chorus in English. Head-nodding boom-bap drums, round melodic bass, jazzy Rhodes electric piano chords, soft string pads, a clean chorus-effect guitar lick, mellow saxophone fills, light vinyl scratches. Nostalgic, romantic, a stranger falling for a neon city at night. Warm, polished production.",
+  "lyrics": "[Intro]\nYeah. Toto after dark.\n\n[Verse 1 - Rap]\nStepped off the last train, neon in the rain\nA city full of strangers and nobody knows my name\nRed dragon on the tower watching over the crossing\nTaxi lights are flowing like a river, never stopping\nGot a pocket full of change and a head full of dreams\nNothing in this town is ever quite what it seems\nSmoke curling slow from a basement bar\nSomebody's saxophone sounds like a falling star\nI walk the back alleys where the lanterns glow\nEvery door's a story that I'm dying to know\nThe night's still young and the streets are wide\nSo I turn my collar up and I let the rhythm ride\n\n[Chorus - Sung]\nToto city lights, shining on me\nEvery color of the night is all I see\nToto city lights, don't let me go\nHold me till the morning in your neon glow\n\n[Verse 2 - Rap]\nMidnight on the bayside, windows rolled down\nRadio is humming with that city pop sound\nFerris wheel is turning pink and blue on the water\nEngine purring low and the summer night's getting hotter\nShe said, where you from? I said, far from here\nShe laughed and poured another, said, you'll stay a year\nNow the bridges and the towers feel a little like home\nEven when I'm walking through the small hours alone\nSunrise creeping over the old town roofs\nVending machine coffee and some worn-out shoes\nI came here for a weekend, now I can't say goodbye\nThis city's got a hold on me and I don't ask why\n\n[Chorus - Sung]\nToto city lights, shining on me\nEvery color of the night is all I see\nToto city lights, don't let me go\nHold me till the morning in your neon glow\n\n[Instrumental Break - Saxophone Solo]\n\n[Chorus - Sung]\nToto city lights, shining on me\nEvery color of the night is all I see\nToto city lights, don't let me go\nHold me till the morning in your neon glow\n\n[Outro]",
+  "language": "en",
+  "bpm": 94,
+  "key": "C minor",
+  "seconds": 195.0,
+  "seed": 2707,
+  "steps": 8,
+  "lm": null,
+  "generated": "2026-10-05 05:14",
+  "took": 56,
+  "batch": "citypop-rap-01",
+  "model": "acestep-v15-turbo"
+}

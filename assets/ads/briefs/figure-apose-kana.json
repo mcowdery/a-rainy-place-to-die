@@ -1,0 +1,15 @@
+{
+  "batch": "figure-apose-kana",
+  "purpose": "Reference pictures of one person in an A-pose from in front, to make a figure from (scripts/props/mesh_endpoint.mjs --engine hunyuan, an experiment only: see generated-art.md). A second character and a different outfit from figure-apose-julie, to see how the generator does on another face and on a coat and skirt. Candidates; not ads, and not for the world as pictures.",
+  "use": "poster",
+  "defaults": { "lora": "ohwx kana", "variants": 4 },
+  "items": [
+    {
+      "id": "front_only",
+      "style": "full-length reference photograph for a costume catalogue, soft even studio lighting, sharp focus",
+      "subject": "a young Japanese woman standing straight in an A-pose facing the camera, feet shoulder-width apart, legs straight, arms held straight and a little away from her sides, hands open with fingers apart, neutral expression, hair tucked behind her shoulders; wearing an open beige trench coat over a black turtleneck, a grey pleated knee-length skirt, black tights and black leather loafers; the whole figure in frame from the top of her head to the soles of her shoes, seen straight on from the front at chest height",
+      "composition": "centred, isolated on a plain light grey seamless background, no other objects, no ground shadow",
+      "notes": "A front view alone: the generator paints the back itself."
+    }
+  ]
+}

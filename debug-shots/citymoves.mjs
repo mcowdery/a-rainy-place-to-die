@@ -1,0 +1,54 @@
+// Mack's moves from the animation library in the city itself (district.html): does the library arrive and reach his
+// rig, which clips play standing, walking and running, and a picture of him walking in third person.
+//   node debug-shots/citymoves.mjs <out dir> [the city's address, to check a server that's already running]
+import { mkdirSync } from 'node:fs';
+import { chromium } from 'playwright-core';
+import { shotServer } from '../scripts/shotServer.mjs';
+const out = process.argv[2] ?? 'debug-shots/citymoves';
+mkdirSync(out, { recursive: true });
+const server = process.argv[3] ? null : await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
+if (server) await server.listen();
+const base = process.argv[3] ?? server.resolvedUrls.local[0];
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e).slice(0, 300)));
+page.on('console', (m) => { if ((m.type() === 'error' || m.type() === 'warning') && !/404|GPU stall|WebGL/.test(m.text())) console.log(m.type().toUpperCase(), m.text().slice(0, 300)); });
+const fetched = [];
+page.on('response', (r) => { if (/anims/.test(r.url())) fetched.push(`${r.status()} ${r.url().replace(/^.*\/(assets|src|@fs)/, '$1').slice(0, 80)}`); });
+await page.goto(`${base}district.html?debug=1&time=day`, { timeout: 240000 });
+await page.waitForFunction(() => window.__mack && window.__mack(), null, { timeout: 240000, polling: 500 });
+console.log('his rig is in; waiting for the library');
+const got = await page.waitForFunction(() => window.__mack().moves, null, { timeout: 60000, polling: 500 }).then(() => true, () => false);
+console.log('moves on his rig:', got, '| has the walk:', await page.evaluate(() => { const r = window.__mack(); return !!r.anims && r.anims.clips.some((c) => c.name === 'Walk_35_Loop'); }));
+console.log('fetched:', fetched.join(' | ') || 'nothing with "anims" in its address');
+// On foot (once the city's ready: its overlay says so): stand, walk, run, and say which clips are over his pose.
+await page.waitForFunction(() => document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
+await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
+await page.waitForTimeout(3000);
+const key = (code, down) => page.evaluate(([c, d]) => window.dispatchEvent(new KeyboardEvent(d ? 'keydown' : 'keyup', { code: c })), [code, down]);
+const layers = () => page.evaluate(() => { const m = window.__mack().moves; return m ? m.out.filter((l) => l.weight > 0.3).map((l) => `${l.name} ${l.weight.toFixed(2)}`).join(', ') || 'none' : 'no moves'; });
+console.log('standing |', await layers(), '| his body shown:', await page.evaluate(() => window.__mack().object.visible));
+await key('KeyW', true);
+await page.waitForTimeout(1500);
+console.log('walking |', await layers());
+await key('KeyQ', true);
+await key('KeyQ', false);
+await page.waitForTimeout(900);
+await page.screenshot({ path: `${out}/walking_third_person.png` });
+await key('ShiftLeft', true);
+await page.waitForTimeout(1500);
+console.log('running |', await layers());
+await page.screenshot({ path: `${out}/running_third_person.png` });
+await key('ShiftLeft', false);
+await key('KeyW', false);
+await page.waitForTimeout(600);
+await key('Space', true);
+await key('Space', false);
+await page.waitForTimeout(250);
+console.log('in the air |', await layers(), '| feet off the ground by', await page.evaluate(() => +window.__mack().air.toFixed(2)), 'm');
+await page.waitForTimeout(1200);
+await key('KeyQ', true);
+await key('KeyQ', false);
+await browser.close();
+if (server) await server.close();
+process.exit(0);

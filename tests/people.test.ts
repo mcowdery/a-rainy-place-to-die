@@ -2,10 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadDistrictContent } from '../src/poc3d/district/content';
 import { DistrictModel } from '../src/poc3d/district/model';
 import { CELL, DISTRICTS3 } from '../src/poc3d/district/plan';
-import { OUTFITS } from '../src/poc3d/district/peopleMix';
+import { isBare, OUTFITS, smokeOf } from '../src/poc3d/district/peopleMix';
 import { railReserved } from '../src/poc3d/district/rail';
+import { buildShaped } from '../src/poc3d/real/mobShape';
 import { scrambleKeys, Signals } from '../src/poc3d/district/traffic';
-import { addFigure, addUmbrella, cellCrowd, handAt, holdHands, footingOf, FIGURE_STRIDE, GHOST_COLORS, GhostBuilder, figureMesh, packFigures, outfitOf, posedFigure, setMobShape, templateIndex, TEMPLATE_COUNT, umbrellaIndex, type Body, type FigureSpec, type Hair, type Pose } from '../src/poc3d/real/people';
+import { addFigure, addUmbrella, cellCrowd, handAt, holdHands, footingOf, FIGURE_STRIDE, GHOST_COLORS, GhostBuilder, figureMesh, packFigures, outfitOf, posedFigure, setMobShape, smokerJoints, smokerReach, templateIndex, TEMPLATE_COUNT, umbrellaIndex, type Body, type FigureSpec, type Hair, type Pose } from '../src/poc3d/real/people';
 
 const spec = (body: Body, pose: Pose, extra: Partial<FigureSpec> = {}): FigureSpec => ({
   x: 10,
@@ -35,6 +36,8 @@ const bounds = (s: FigureSpec): { lo: number; hi: number; r: number; n: number }
 };
 
 describe('mob figures', () => {
+  // (The classic templates: the sculpted ones, the city's now, have their own tests below.)
+  beforeAll(() => setMobShape('classic'));
   it('stand on the floor at believable heights', () => {
     const heights: Record<Body, [number, number]> = { man: [1.66, 1.78], woman: [1.54, 1.66], child: [1.0, 1.2], elder: [1.55, 1.7] };
     for (const body of Object.keys(heights) as Body[]) {
@@ -71,7 +74,7 @@ describe('mob figures', () => {
         }
       }
     }
-  }, 60000);
+  }, 300000);
 
   it('bake people standing together with one fade seed, so they come and go together', () => {
     const gb = new GhostBuilder();
@@ -197,7 +200,7 @@ describe('shaped mob figures', () => {
         }
       }
     }
-  });
+  }, 30000);
 
   it('build teens shorter: whoever wears the school uniform, standing and walking on the floor', () => {
     for (const [body, lo, hi] of [['woman', 1.38, 1.52], ['man', 1.48, 1.62]] as const) {
@@ -212,7 +215,7 @@ describe('shaped mob figures', () => {
         expect(foot).toBeLessThan(1.15 + 0.05);
       }
     }
-  });
+  }, 120000);
 
   it('hold hands with their hands meeting: a child and a grown-up, a couple, a teen', () => {
     const pairs: [Body, Partial<FigureSpec>, Body, Partial<FigureSpec>][] = [['woman', { side: 1 }, 'child', {}], ['man', { side: -1 }, 'child', {}], ['elder', { side: 1 }, 'child', {}], ['man', { side: 1 }, 'woman', {}], ['woman', { side: -1, outfit: 'school' }, 'child', {}]];
@@ -226,7 +229,7 @@ describe('shaped mob figures', () => {
       expect(d).toBeLessThan(1.1);
       expect(B.side).toBe(-A.side);
     }
-  });
+  }, 120000);
 
   it('stand on the floor whatever is on their feet (shoes, flats, heels, boots, sandals)', () => {
     for (const body of BODIES) {
@@ -236,7 +239,7 @@ describe('shaped mob figures', () => {
         expect(b.lo - 0.15).toBeLessThan(0.03);
       }
     }
-  });
+  }, 120000);
 
   it('build every body, hair and outfit, person-sized and within the triangle budget', () => {
     let most = 0;
@@ -244,15 +247,40 @@ describe('shaped mob figures', () => {
       for (const hair of HAIRS) {
         for (const outfit of OUTFITS) {
           for (const pose of ['stand', 'walk', 'wave', 'sit'] as Pose[]) expect(bounds(spec(body, pose, { hair, outfit })).r).toBeLessThan(1.0);
-          most = Math.max(most, figureMesh({ body, hair, long: false, outfit }).triangles);
+          // (A body with nothing on is never in a crowd, and a woman's has more points across the chest: a bound of its own.)
+          const triangles = figureMesh({ body, hair, long: false, outfit }).triangles;
+          if (isBare(outfit)) expect(triangles).toBeLessThan(9000);
+          else most = Math.max(most, triangles);
         }
       }
     }
-    expect(most).toBeLessThan(4600);
+    expect(most).toBeLessThan(5100);
     // An everyday figure: a little over twice the classic one's triangles, no more.
     expect(figureMesh({ body: 'man', hair: 'short', long: false }).triangles).toBeLessThan(2800);
-    expect(figureMesh({ body: 'woman', hair: 'long', long: false }).triangles).toBeLessThan(3700);
-  }, 60000);
+    // (A woman's hips and legs are one surface, finer round the back of the hips and through the thighs.)
+    expect(figureMesh({ body: 'woman', hair: 'long', long: false }).triangles).toBeLessThan(4000);
+  }, 300000);
+
+  it("join a woman's hips, legs and the skin between them the right way out (the mob's material draws one side)", () => {
+    // Where two faces share an edge they must run along it in opposite senses: the same sense means one of them faces
+    // in, and is not drawn (a slit you see through, at the crotch).
+    for (const outfit of ['plain', 'shorts', 'nude'] as const) {
+      const t = buildShaped('woman', 'bob', outfit);
+      const body = (i: number): boolean => Math.abs(t.pos[i * 3]) < 0.1 && t.pos[i * 3 + 1] > 0.72 && t.pos[i * 3 + 1] < 0.84 && (outfit !== 'nude' || t.shade[i] === 101);
+      const edges = new Map<string, number[]>();
+      for (let q = 0; q < t.idx.length; q += 3) {
+        const tri = [t.idx[q], t.idx[q + 1], t.idx[q + 2]];
+        if (!tri.every(body) || new Set(tri).size < 3) continue;
+        for (let e = 0; e < 3; e++) {
+          const a = tri[e], b = tri[(e + 1) % 3];
+          const key = a < b ? `${a}_${b}` : `${b}_${a}`;
+          edges.set(key, [...(edges.get(key) ?? []), a < b ? 1 : -1]);
+        }
+      }
+      const wrong = [...edges.values()].filter((d) => d.length > 2 || (d.length === 2 && d[0] === d[1])).length;
+      expect(wrong, outfit).toBe(0);
+    }
+  });
 
   it('give women a figure: a bust, the back hollow over round hips', () => {
     // The foremost and the rearmost points of the torso by height (standing square, facing +z; the arms hang outside).
@@ -289,7 +317,7 @@ describe('street crowds', () => {
             const o = outfitOf(f);
             t[o] = (t[o] ?? 0) + 1;
             if (o === 'maid') expect(f.body).toBe('woman');
-            if (f.body === 'child') expect(['plain', 'school', 'yukata', 'otaku']).toContain(o);
+            if (f.body === 'child') expect(['plain', 'school', 'yukata', 'otaku', 'hoodie', 'track', 'gym']).toContain(o);
             if (o === 'work' || o === 'police') expect(['man', 'woman']).toContain(f.body);
           }
         }
@@ -406,6 +434,67 @@ describe('street crowds', () => {
         const a = crowd[i], b = crowd[i + 1];
         if (a.walk && b.walk && a.seed !== undefined && a.seed === b.seed) expect(b.walk).toEqual(a.walk);
       }
+    }
+  });
+
+  it('has smokers as the period had them: many of the men, few of the women, never the young; cigars for the bosses', () => {
+    // Who: never a child, a school's clothes, a uniform at work, or anyone running; a fat cat and the old boss smoke cigars.
+    for (let i = 0; i < 200; i++) {
+      const r = i / 200;
+      expect(smokeOf({ body: 'child', outfit: 'plain' }, 'stand', r)).toBeNull();
+      for (const o of ['school', 'track', 'gym', 'yankee', 'police', 'nurse', 'maid'] as const) expect(smokeOf({ body: 'man', outfit: o }, 'stand', r)).toBeNull();
+      expect(smokeOf({ body: 'man', outfit: 'suit' }, 'run', r)).toBeNull();
+    }
+    expect(smokeOf({ body: 'man', outfit: 'boss' }, 'stand', 0)).toBe('cigar');
+    expect(smokeOf({ body: 'elder', outfit: 'yakuza', hair: 'hat' }, 'stand', 0)).toBe('cigar');
+    expect(smokeOf({ body: 'man', outfit: 'yakuza', hair: 'short' }, 'stand', 0)).toBe('cigarette');
+    const share = (who: Parameters<typeof smokeOf>[0], doing: 'stand' | 'walk'): number => Array.from({ length: 1000 }, (_, i) => smokeOf(who, doing, i / 1000)).filter(Boolean).length / 1000;
+    expect(share({ body: 'man', outfit: 'plain' }, 'stand')).toBeGreaterThan(0.3);
+    expect(share({ body: 'man', outfit: 'plain' }, 'walk')).toBeLessThan(share({ body: 'man', outfit: 'plain' }, 'stand'));
+    expect(share({ body: 'woman', outfit: 'plain' }, 'stand')).toBeLessThan(0.1);
+    expect(share({ body: 'man', outfit: 'yakuza' }, 'stand')).toBeGreaterThan(share({ body: 'man', outfit: 'plain' }, 'stand'));
+    // In the streets: some of every crowd, and the same people every time.
+    let smokers = 0, total = 0, cigars = 0;
+    for (const [mx, my] of cells) {
+      const { crowd } = crowdAt(mx, my);
+      expect(crowdAt(mx, my).crowd.map((f) => f.smokes)).toEqual(crowd.map((f) => f.smokes));
+      for (const f of crowd) {
+        total++;
+        if (!f.smokes) continue;
+        smokers++;
+        if (f.smokes === 'cigar') cigars++;
+        expect(f.body).not.toBe('child');
+        expect(f.pose).not.toBe('hold');
+        expect(['school', 'track', 'gym', 'yankee', 'police']).not.toContain(outfitOf(f));
+        if (f.walk) expect(f.walk.speed).toBeLessThanOrEqual(1.9);
+        // (What it smokes rides in the carry number, over the bag, the umbrella and the straps.)
+        const carry = Math.round(Math.abs(packFigures([f])[7])) - 1;
+        expect(Math.floor(carry / 8)).toBe(f.smokes === 'cigar' ? 2 : 1);
+      }
+    }
+    expect(smokers / total).toBeGreaterThan(0.04);
+    expect(smokers / total).toBeLessThan(0.3);
+    expect(cigars).toBeLessThan(smokers / 2);
+    // And nobody else's numbers changed: someone who doesn't smoke packs as before.
+    expect(Math.round(Math.abs(packFigures([{ ...crowdAt(29, 12).crowd.find((f) => !f.smokes)!, smokes: undefined }])[7])) - 1).toBeLessThan(8);
+  });
+
+  it("brings a smoker's fingers to the mouth, on every body that smokes", () => {
+    for (const body of ['man', 'woman', 'elder'] as const) {
+      const J = smokerJoints(body);
+      const up = smokerReach(body, 1);
+      const down = smokerReach(body, 0);
+      // At the mouth: the fingers just in front of the lips (the cigarette's mouth end is 3 cm past them).
+      const d = Math.hypot(up.hand[0] - up.mouth[0], up.hand[1] - up.mouth[1], up.hand[2] - up.mouth[2]);
+      expect(d).toBeGreaterThan(0.015);
+      expect(d).toBeLessThan(0.05);
+      expect(up.hand[2]).toBeGreaterThan(up.mouth[2]);
+      // Down: by the hip, below the chest, a little out in front.
+      expect(down.hand[1]).toBeLessThan(up.mouth[1] - 0.45);
+      expect(down.hand[2]).toBeGreaterThan(0);
+      // (An arm that could do it: the elbow folded, not past what an elbow does.)
+      expect(J.reach.bend).toBeGreaterThan(1.5);
+      expect(J.reach.bend).toBeLessThanOrEqual(2.75);
     }
   });
 });

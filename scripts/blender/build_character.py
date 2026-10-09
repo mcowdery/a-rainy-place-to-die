@@ -4,10 +4,12 @@
   blender -b --python scripts/blender/build_character.py -- scripts/blender/characters/maid.json --preview-only
 
 Options after the definition: --preview-only (no GLB), --head-only (only the head close-ups),
+--expr-sheet out.png (the head with each expression full on, side by side, to check them),
 --compare-only (only the side-by-side with a reference photo, if the definition has "compare"),
 --no-compare, and
---view x,y,z,tx,ty,tz out.png (one more render from a camera at x,y,z looking at tx,ty,tz, in
-Blender's frame: Z up, the character facing -Y), for checking a detail; repeat it for more views.
+--view x,y,z,tx,ty,tz[,lens] out.png (one more render from a camera at x,y,z looking at tx,ty,tz, in
+Blender's frame: Z up, the character facing -Y; a 50 mm lens unless given), for checking a detail;
+repeat it for more views.
 
 Uses mpfb_base.py (next to this file) for the MPFB side: the human preset, the height search, the rig.
 On top of that a definition says, per part, how it should look in the game: texture size and edits
@@ -31,7 +33,10 @@ The definition (all keys but body optional):
     decimate             ratio for the visible body after clothes have masked the skin under them
     protect              vertex group kept at full detail when decimating (default "head")
   max_tex                largest texture side unless a part says otherwise (default 1024)
-  skin, eyes, eyebrows, eyelashes, hair:  {"asset": name, ...part settings}
+  skin, eyes, eyebrows, eyelashes, hair, teeth:  {"asset": name, ...part settings}
+  expressions            {"smile": {"mouth-corner-puller": 1, ...}, ...}: the face's morph targets, each a mix
+                         of MakeHuman's expression units (see capture_expressions); with them the model
+                         gets the inside of a mouth, and wants "teeth"
   clothes                [{"asset": name, ...part settings}]
   garments               [{"type": "apron" | "headband" | "hair_cards" | "haircut" | "jacket", ...}]: see garments.py
   about                  a line saying what the outfit is (for people; the build ignores it)
@@ -43,16 +48,19 @@ Part settings:
   roughness, metallic    set on the material (and any texture feeding them unlinked)
   double_sided           for cards (hair, lashes, frills)
   decimate               collapse to this ratio of the part's triangles
+  max_tris               collapse the part to at most this many triangles (with decimate: whichever is fewer)
   max_tex                texture size for this part
   ops                    texture edits in order, see edit_pixels
   normal_map             false drops the part's normal map
   sheen                  {"weight", "roughness", "tint"}: satin, exported as KHR_materials_sheen
   specular               the specular level (0.5 default)
   masks                  {name: {"expr": ...}}: masks from the geometry, for ops' "uvmask"
-                         (see mask_weights); the skin also has "under_hair"
+                         (see mask_weights); the skin also has "under_hair", and {name: {"brow": {...}}}
+                         draws eyebrows (see brow_mask)
   delete_uv, delete_where  faces to drop (see delete_faces)
   inflate                metres to push the part out along its normals
-  kind                   (clothes) the asset kind to look it up as (default "clothes")
+  kind                   (clothes) the asset's kind if it isn't clothes ("hair": a second hair asset, say for its
+                         fringe, with the rest cut away by delete_where)
   hem_cm                 (clothes) cut the garment off level at this height and show the skin below
   color                  (eyes) the iris colour: blue, brown, brownlight, deepblue, green, grey ...
 """
@@ -113,8 +121,9 @@ def human_info(d):
         'eyebrows': part('eyebrows', 'eyebrows'),
         'eyelashes': part('eyelashes', 'eyelashes'),
         'hair': part('hair', 'hair'),
+        'teeth': part('teeth', 'teeth'),
         'proxy': mb.asset('proxymeshes', body['proxy'], '.proxy') if body.get('proxy') else '',
-        'clothes': [mb.asset(c.get('kind', 'clothes'), c['asset'], '.mhclo') for c in d.get('clothes', [])],
+        'clothes': [mb.asset('clothes', c['asset'], '.mhclo') for c in d.get('clothes', []) if c.get('kind', 'clothes') == 'clothes'],
         'skin_mhmat': part('skin', 'skins', '.mhmat'),
         'skin_material_type': 'GAMEENGINE',
         'eyes_material_type': 'GAMEENGINE',
@@ -263,6 +272,7 @@ def edit_pixels(px, ops):
 
 _done_images = {}
 UV_MASKS = {}
+UNDER_HAIR = None  # per vertex of the body, see under_hair_weights
 
 
 def uv_mask(obj, weights, size, blur=4):
@@ -304,6 +314,79 @@ def uv_mask(obj, weights, size, blur=4):
             mask = (np.take(c, np.arange(2 * r + 1, c.shape[axis]), axis=axis)
                     - np.take(c, np.arange(0, c.shape[axis] - 2 * r - 1), axis=axis)) / (2 * r + 1)
     return np.clip(mask, 0, 1)
+
+
+def uv_raster(obj, values, select, size):
+    """Rasterises per-vertex values (n, k) into the object's UV space, over the triangles whose vertices are all
+    selected: (size, size, k), rows bottom-up, and which pixels were covered. For a mask worked out per pixel
+    (brow_mask), where one worked out per vertex would be as coarse as the mesh."""
+    me = obj.data
+    me.calc_loop_triangles()
+    uvs = np.empty(len(me.loops) * 2, dtype=np.float32)
+    me.uv_layers.active.data.foreach_get('uv', uvs)
+    uvs = uvs.reshape(-1, 2)
+    out = np.zeros((size, size, values.shape[1]), dtype=np.float32)
+    cov = np.zeros((size, size), dtype=bool)
+    for tri in me.loop_triangles:
+        vi = list(tri.vertices)
+        if not select[vi].all():
+            continue
+        p = uvs[list(tri.loops)] * size
+        x0, y0 = np.floor(p.min(axis=0)).astype(int)
+        x1, y1 = np.ceil(p.max(axis=0)).astype(int)
+        xs, ys = np.meshgrid(np.arange(max(x0, 0), min(x1 + 1, size)), np.arange(max(y0, 0), min(y1 + 1, size)))
+        if xs.size == 0:
+            continue
+        px, py = xs + 0.5, ys + 0.5
+        (ax, ay), (bx, by), (cx, cy) = p
+        den = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+        if abs(den) < 1e-12:
+            continue
+        l1 = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / den
+        l2 = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / den
+        l3 = 1 - l1 - l2
+        inside = (l1 >= -0.02) & (l2 >= -0.02) & (l3 >= -0.02)
+        val = l1[..., None] * values[vi[0]] + l2[..., None] * values[vi[1]] + l3[..., None] * values[vi[2]]
+        out[ys[inside], xs[inside]] = val[inside]
+        cov[ys[inside], xs[inside]] = True
+    return out, cov
+
+
+def brow_mask(body, spec, L, size):
+    """Eyebrows drawn into the skin, as a mask ("masks": {"brows": {"brow": {...}}}, then an op with that uvmask):
+    MakeHuman's brow assets are soft-edged cards, and cut at half alpha (cards can't be blended in the game) they
+    come out as a pen line. Seen from the front, measured from each eye's centre (metres): the brow starts `inner`
+    towards the nose and ends `outer` towards the temple; its middle line is `height` up at the start, rises by
+    `arch` to its peak `peak` of the way along, and comes down by `drop` from there to the tail; `thick` over its
+    first half, tapering to `tail` of that; `soft` is the edge's blur, `strands` how much it's streaked along the hairs."""
+    b = spec['brow']
+    inner, outer = float(b.get('inner', 0.016)), float(b.get('outer', 0.027))
+    height, arch, drop = float(b.get('height', 0.019)), float(b.get('arch', 0.004)), float(b.get('drop', 0.004))
+    peak, thick, tail = float(b.get('peak', 0.62)), float(b.get('thick', 0.0062)), float(b.get('tail', 0.25))
+    soft, strands = float(b.get('soft', 0.0016)), float(b.get('strands', 0.35))
+    co, _ = world_verts(body)
+    eyes = np.stack([L['eye_l'], L['eye_r']])
+    near_eye = np.linalg.norm(co[:, None, :] - eyes[None], axis=2).min(axis=1) < 0.07
+    pos, cov = uv_raster(body, co.astype(np.float32), near_eye & (co[:, 2] > eyes[:, 2].mean()) & (co[:, 1] < eyes[:, 1].mean() + 0.05), size)
+    streak = np.random.default_rng(int(b.get('seed', 3))).random(8192).astype(np.float32)
+    streak = np.convolve(streak, np.ones(2) / 2, mode='same')
+    mask = np.zeros((size, size), dtype=np.float32)
+    for eye, side in ((L['eye_l'], L['left'][0]), (L['eye_r'], -L['left'][0])):
+        dx = (pos[..., 0] - eye[0]) * side
+        dz = pos[..., 2] - eye[2]
+        t = (dx + inner) / (inner + outer)
+        up = np.clip(t / peak, 0, 1)
+        down = np.clip((t - peak) / (1 - peak), 0, 1)
+        mid = height + arch * up * up * (3 - 2 * up) - drop * down ** 1.6
+        half = thick / 2 * (1 - (1 - tail) * np.clip((t - 0.45) / 0.55, 0, 1) ** 1.3)
+        a = np.clip((half - np.abs(dz - mid)) / soft + 0.5, 0, 1)
+        # The ends: rounded at the start, drawn out to a point at the tail.
+        a *= np.clip(t / 0.14, 0, 1) ** 0.7 * np.clip((1 - t) / 0.05, 0, 1)
+        # Streaks along the hairs, which lean outwards: up at the start, level at the tail.
+        q = dz - (0.55 - 0.7 * np.clip(t, 0, 1)) * dx
+        a *= 1 - strands * streak[(np.abs(q) * 5200).astype(np.int64) % len(streak)]
+        mask = np.maximum(mask, a * cov)
+    return mask
 
 
 def world_verts(obj):
@@ -425,6 +508,8 @@ def mask_weights(obj, spec, L):
       onface(p)                p moved onto the skin straight in from the front
       P(base, dx, dy, dz)      base plus an offset, dx towards her left (mirror with -dx)
       boundary()               the vertices on open edges (eye openings, hems)
+      under_hair()             (the skin) how far under the hair each vertex is, as the "under_hair" mask has it:
+                               for a mask of the scalp alone, where long hair also lies on the cheeks and shoulders
       dist(sel)                each vertex's distance to the nearest of the selected ones"""
     co, no = world_verts(obj)
     x, y, z = co[:, 0], co[:, 1], co[:, 2]
@@ -480,7 +565,8 @@ def mask_weights(obj, spec, L):
 
     env = dict(np=np, x=x, y=y, z=z, nx=no[:, 0], ny=no[:, 1], nz=no[:, 2], L=L, near=near, near3=near3,
                lin=lin, group=lambda n: group_weights(obj, n), onface=onface, P=P, abs=np.abs,
-               boundary=boundary, dist=dist, u=u, v=v)
+               boundary=boundary, dist=dist, u=u, v=v,
+               under_hair=lambda: UNDER_HAIR if UNDER_HAIR is not None and len(UNDER_HAIR) == len(co) else np.zeros(len(co), dtype=np.float32))
     w = eval(spec['expr'], {'__builtins__': {}}, env)
     return np.clip(np.broadcast_to(np.asarray(w, dtype=np.float32), (len(co),)), 0, 1).astype(np.float32)
 
@@ -718,6 +804,156 @@ def decimate(obj, ratio, protect=None):
     bpy.ops.object.modifier_apply(modifier=mod.name)
 
 
+def part_ratio(obj, part):
+    # A part's decimation: its "decimate" ratio, or what brings it down to "max_tris" (whichever leaves fewer).
+    ratio = part.get('decimate')
+    if 'max_tris' in part:
+        n = mb.triangles(obj)
+        if n > part['max_tris']:
+            ratio = min(float(ratio or 1), part['max_tris'] / n)
+    return ratio
+
+
+# --- expressions -------------------------------------------------------------------------------
+
+def expression_target(unit, race='asian'):
+    root = os.path.dirname(os.path.abspath(sys.modules[mb.HumanService.__module__].__file__))
+    path = os.path.join(root, '..', 'data', 'targets', 'expression', 'units', race, unit + '.target.gz')
+    if not os.path.exists(path):
+        raise SystemExit('No expression unit ' + unit + ' (' + os.path.normpath(path) + ')')
+    return path
+
+
+def capture_expressions(basemesh, followers, expressions, race='asian'):
+    """A face's expressions, worked out on the base mesh while it's whole: each is a mix of MakeHuman's expression
+    units (targets/expression/units/<race>: eye-left-closure, mouth-open, mouth-corner-puller, eyebrows-left-up
+    ..., offsets of the face's own vertices), and for each the parts fitted to the face (the lashes, the teeth) are
+    fitted again to it. Returns, by object name, where every vertex is at rest (world) and how far each expression
+    moves it; add_morphs gives them to the meshes once those are cut down, as shape keys, which export as morph
+    targets (the game_engine rig has no bones in the face)."""
+    units = {}
+    for u in sorted({u for mix in expressions.values() for u in mix}):
+        units[u] = mb.TargetService.load_target(basemesh, expression_target(u, race), weight=0.0, name='expr.' + u)
+
+    def fitted(obj):
+        mb.ClothesService.fit_clothes_to_human(obj, basemesh, set_parent=False)
+        co = np.empty(len(obj.data.vertices) * 3)
+        obj.data.vertices.foreach_get('co', co)
+        mw = np.array(obj.matrix_world)
+        return co.reshape(-1, 3) @ mw[:3, :3].T + mw[:3, 3]
+
+    bpy.context.view_layer.update()
+    rest = {basemesh.name: rest_coords(basemesh)}
+    for f in followers:
+        rest[f.name] = fitted(f)
+    moves = {name: {} for name in rest}
+    for name, mix in expressions.items():
+        for u, w in mix.items():
+            units[u].value = float(w)
+        bpy.context.view_layer.update()
+        moves[basemesh.name][name] = rest_coords(basemesh) - rest[basemesh.name]
+        for f in followers:
+            moves[f.name][name] = fitted(f) - rest[f.name]
+        for u in mix:
+            units[u].value = 0.0
+    bpy.context.view_layer.update()
+    for f in followers:
+        fitted(f)
+    for key in units.values():
+        basemesh.shape_key_remove(key)
+    return rest, moves
+
+
+def add_morphs(obj, rest, moves, tol=2e-4):
+    """Shape keys on a finished mesh from what capture_expressions recorded for it. Its vertices are matched to the
+    whole mesh's by where they are: masks and deleted faces renumber them, and decimation moves some (those, away
+    from the face, which is kept whole, get no movement)."""
+    from mathutils.kdtree import KDTree
+    co, _ = world_verts(obj)
+    kd = KDTree(len(rest))
+    for i, p in enumerate(rest):
+        kd.insert(Vector(p), i)
+    kd.balance()
+    idx = np.full(len(co), -1, dtype=np.int64)
+    for i, p in enumerate(co):
+        _, j, dist = kd.find(Vector(p))
+        if dist < tol:
+            idx[i] = j
+    hit = idx >= 0
+    inv = np.array(obj.matrix_world.inverted())[:3, :3]
+    me = obj.data
+    local = np.empty(len(me.vertices) * 3)
+    me.vertices.foreach_get('co', local)
+    local = local.reshape(-1, 3)
+    obj.shape_key_add(name='Basis', from_mix=False)
+    moved = 0
+    for name, d in moves.items():
+        dl = np.zeros_like(local)
+        dl[hit] = d[idx[hit]] @ inv.T
+        moved = max(moved, int((np.linalg.norm(dl, axis=1) > 1e-5).sum()))
+        key = obj.shape_key_add(name=name, from_mix=False)
+        key.data.foreach_set('co', (local + dl).ravel())
+        key.value = 0.0
+    print('build_character: %s: %d expressions, %d of %d vertices matched, up to %d move' % (obj.name, len(moves), int(hit.sum()), len(co), moved))
+
+
+def mouth_bag(name, rig, L):
+    """The inside of the mouth: a dark bowl behind the teeth, open to the front, on the head bone. Without it an open
+    mouth shows straight through the head (the skin is one-sided, and MakeHuman's base mesh has nothing in there)."""
+    c = np.asarray(L['lips']) + np.array([0.0, 0.016, -0.004])
+    rx, ry, rz = 0.027, 0.042, 0.023
+    rows = []
+    for j in range(9):
+        th = math.radians(-84 + 21 * j)
+        rows.append([c + np.array([rx * math.cos(th) * math.cos(ph), ry * math.cos(th) * math.sin(ph), rz * math.sin(th)])
+                     for ph in (math.radians(15 * i) for i in range(13))])
+    mesh = garments.MeshOut()
+    mesh.add_grid(rows, 0)
+    obj = mesh.build(name + '.mouth', [garments.material(name + '.mouth', '#2c0e10', 0.75)])
+    vg = obj.vertex_groups.new(name='head')
+    vg.add(list(range(len(obj.data.vertices))), 1.0, 'REPLACE')
+    garments.skin_to(obj, rig)
+    return obj
+
+
+def set_expression(meshes, name, value):
+    for obj in meshes:
+        keys = obj.data.shape_keys
+        if keys and name in keys.key_blocks:
+            keys.key_blocks[name].value = value
+
+
+def render_expressions(path, meshes, names, L):
+    """The head with each expression full on, side by side (neutral first), from a little to one side."""
+    scene = bpy.context.scene
+    cam = scene.camera
+    cam.data.type = 'PERSP'
+    cam.data.lens = 100
+    z = float(L['eye_l'][2]) - 0.035
+    cam.location = (0.22 * float(L['left'][0]), -0.82, z)
+    look_at(cam, (0, 0, z))
+    tmp = tempfile.mkdtemp()
+    shots = []
+    for name in [None] + list(names):
+        if name:
+            set_expression(meshes, name, 1.0)
+        shots.append(render_view(scene, tmp, 'expr', 380, 380))
+        if name:
+            set_expression(meshes, name, 0.0)
+    cols = 7
+    rows = -(-len(shots) // cols)
+    sheet = np.zeros((rows * 380, cols * 380, 4), dtype=np.float32)
+    for i, px in enumerate(shots):
+        r, c = rows - 1 - i // cols, i % cols  # pixel rows run bottom-up
+        sheet[r * 380:(r + 1) * 380, c * 380:(c + 1) * 380] = px
+    out = bpy.data.images.new('expressions', width=sheet.shape[1], height=sheet.shape[0], alpha=False)
+    out.pixels.foreach_set(sheet.ravel())
+    out.filepath_raw = path
+    out.file_format = 'PNG'
+    out.save()
+    print('build_character: expressions, in order: neutral ' + ' '.join(names))
+
+
 # --- preview -----------------------------------------------------------------------------------
 
 def look_at(cam, target):
@@ -951,6 +1187,18 @@ def main():
     if 'height_cm' in d['body']:
         mb.solve_height_macro(info, float(d['body']['height_cm']))
     basemesh, rig = mb.build(info)
+    # Worn assets of another kind (a second hair asset, for its fringe): MPFB's preset only looks for clothes among
+    # the clothes, so these are put on one by one.
+    for c in d.get('clothes', []):
+        kind = c.get('kind', 'clothes')
+        if kind == 'clothes':
+            continue
+        before = set(bpy.data.objects)
+        path = mb.AssetService.find_asset_absolute_path(mb.asset(kind, c['asset'], '.mhclo'), kind)
+        mb.HumanService.add_mhclo_asset(path, basemesh, asset_type=kind.capitalize(), subdiv_levels=0, material_type='GAMEENGINE')
+        for o in set(bpy.data.objects) - before:
+            if o.type == 'MESH':
+                o.name = name + '.' + c['asset']
     if d['body'].get('sculpt'):
         sculpt(basemesh, bpy.data.objects[name + '.' + d['eyes']['asset']], d['body']['sculpt'])
     height = mb.standing_height(basemesh)
@@ -959,13 +1207,20 @@ def main():
 
     # MPFB names everything after the character: <name>.body, <name>.<asset folder>.
     parts = []  # (object, settings)
-    for key in ('eyes', 'eyebrows', 'eyelashes', 'hair'):
+    for key in ('eyes', 'eyebrows', 'eyelashes', 'hair', 'teeth'):
         if d.get(key) and d[key].get('asset'):
             parts.append((bpy.data.objects[name + '.' + d[key]['asset']], d[key]))
     for c in d.get('clothes', []):
         parts.append((bpy.data.objects[name + '.' + c['asset']], c))
         if 'hem_cm' in c:
             uncover_below(basemesh, c['asset'], c['hem_cm'] / 100)
+
+    # The face's expressions are worked out now, on the whole base mesh, and given to the finished meshes below.
+    expr = None
+    if d.get('expressions') and not info['proxy']:
+        followers = [o for o, p in parts if p is d.get('eyelashes') or p is d.get('teeth')]
+        expr = capture_expressions(basemesh, followers, d['expressions'], d.get('expression_race', 'asian'))
+        expr_objects = [basemesh] + followers
 
     body = basemesh
     if info['proxy']:
@@ -987,23 +1242,30 @@ def main():
             for v in me.vertices:
                 v.co += v.normal * float(part['inflate'])
             me.update()
-        decimate(obj, part.get('decimate'))
+        decimate(obj, part_ratio(obj, part))
     decimate(body, d['body'].get('decimate'), d['body'].get('protect', 'head'))
 
     meshes += made
     for g in d.get('garments', []):
         meshes += garments.build(g, name, rig, body, meshes, L, tmpdir)
 
+    if expr:
+        for obj in expr_objects:
+            add_morphs(obj, expr[0][obj.name], expr[1][obj.name])
+        if d.get('mouth_bag', True):
+            meshes.append(mouth_bag(name, rig, L))
     for obj in meshes:
         mb.limit_weights(obj)
     # Masks for texture edits, made from the geometry: the skin under the hair, and any a part
-    # defines ("masks": {name: {"expr": ..., "size": px, "blur": px}}, see mask_weights).
+    # defines ("masks": {name: {"expr": ..., "size": px, "blur": px, "levels": [lo, hi]}}, see mask_weights).
     hair_part = next((o for o, p in parts if p is d.get('hair')), None)
     if hair_part is None:
         # A haircut garment in place of a hair asset.
         hair_part = next((o for o in meshes if o.name == name + '.haircut'), None)
     if hair_part is not None:
-        UV_MASKS['under_hair'] = uv_mask(body, under_hair_weights(body, hair_part), 1024)
+        global UNDER_HAIR
+        UNDER_HAIR = under_hair_weights(body, hair_part)
+        UV_MASKS['under_hair'] = uv_mask(body, UNDER_HAIR, 1024)
     # The skin's creases, for a built body's definition (an op with "uvmask": "cavity"; "cavity": {"radius", "gain"}
     # on the skin tunes it).
     if any(op.get('uvmask') == 'cavity' for op in d.get('skin', {}).get('ops', [])):
@@ -1012,7 +1274,15 @@ def main():
         UV_MASKS['cavity'] = uv_mask(body, cavity_weights(body, cv.get('radius', 0.04), cv.get('gain', 18.0), top), 1024, cv.get('blur', 8))
     for obj, part in [(body, d.get('skin', {}))] + parts:
         for mname, spec in part.get('masks', {}).items():
-            UV_MASKS[mname] = uv_mask(obj, mask_weights(obj, spec, L), int(spec.get('size', 1024)), spec.get('blur', 3))
+            if 'brow' in spec:
+                UV_MASKS[mname] = brow_mask(obj, spec, L, int(spec.get('size', 2048)))
+                continue
+            m = uv_mask(obj, mask_weights(obj, spec, L), int(spec.get('size', 1024)), spec.get('blur', 3))
+            if 'levels' in spec:
+                # [lo, hi]: the blurred mask stretched so lo is 0 and hi is 1, which draws its edge in (or lets it out).
+                lo, hi = spec['levels']
+                m = np.clip((m - lo) / (hi - lo), 0, 1)
+            UV_MASKS[mname] = m
     set_material(body, d.get('skin', {}), max_tex, tmpdir)
     for obj, part in parts:
         set_material(obj, part, max_tex, tmpdir)
@@ -1028,12 +1298,14 @@ def main():
     }
     print('CHARACTER_REPORT ' + json.dumps(report))
     if d.get('out') and not preview_only:
-        mb.export_glb(repo_path(d['out']), rig, meshes)
+        mb.export_glb(repo_path(d['out']), rig, meshes, morph=bool(expr))
         print('CHARACTER_GLB %s %.2f MB' % (d['out'], os.path.getsize(repo_path(d['out'])) / 1e6))
     if d.get('compare') and '--no-compare' not in argv:
         render_compare(d['compare'], meshes, rig, L)
     if d.get('preview') and not compare_only:
         render_preview(repo_path(d['preview']), meshes, rig, head_only='--head-only' in argv)
+    if expr and '--expr-sheet' in argv:
+        render_expressions(argv[argv.index('--expr-sheet') + 1], meshes, list(d['expressions']), L)
     # Close looks from anywhere, for checking a detail: --view x,y,z,tx,ty,tz out.png (as many as wanted).
     views = [(argv[i + 1], argv[i + 2]) for i, a in enumerate(argv) if a == '--view']
     for spec, path in views:
@@ -1044,7 +1316,7 @@ def main():
             bpy.context.scene.collection.objects.link(cam)
             bpy.context.scene.camera = cam
         cam.data.type = 'PERSP'
-        cam.data.lens = 50
+        cam.data.lens = v[6] if len(v) > 6 else 50
         cam.location = v[:3]
         look_at(cam, v[3:6])
         img = render_view(bpy.context.scene, tempfile.mkdtemp(), 'view', 900, 900)

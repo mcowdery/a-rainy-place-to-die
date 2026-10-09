@@ -1,0 +1,28 @@
+{
+  "file": "kimoto_sakura_v1.png",
+  "item": "kimoto_sakura",
+  "brand": null,
+  "copy": null,
+  "notes": null,
+  "prompt": "candid 35mm film snapshot, late 1980s Japan, city pop mood, natural light, soft film grain, a photograph taken by someone who loves her, ohwx kimoto, a woman in her twenties standing under cherry blossom at night by a river, paper lanterns glowing along the bank, petals falling, a pale cardigan, laughing at something off camera, the dark night sky above the branches, tall vertical composition, the woman in the lower half of the frame, the upper third of the frame dark, open and uncluttered, no text, no lettering, no logos, no watermark",
+  "lora": {
+    "trigger": "ohwx kimoto",
+    "scale": 0.85
+  },
+  "model": "krea-2-turbo",
+  "size": [
+    736,
+    1536
+  ],
+  "steps": 12,
+  "seed": 1094672525,
+  "studioJob": "a77c102a-5039-427d-a159-b3e5711251f1-u1",
+  "generated": "2026-10-05T09:12:11.189Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/93_kimoto_sakura.png",
+  "decided": "2026-10-05T09:19:19.799Z",
+  "batch": "phone_wallpaper_01",
+  "purpose": "A wallpaper for Mack's phone: a snapshot of a woman from the cast (a stand-in for Megumi for now). Portrait, the home screen's clock and apps sit over the dark upper part.",
+  "use": "poster",
+  "district": null
+}

@@ -1,6 +1,7 @@
 # Mob models: where they came from
 
-The figures here are the mob's modelled generation, under review in `mob.html` (none is in the district yet). Each
+The figures here are the mob's modelled generation, under review on the MakeHuman test page, `humans.html`
+(`mob.html` until 2026-10-06; none is in the district yet). Each
 is a MakeHuman body built with MPFB (`scripts/blender/mpfb_base.py`), then converted by
 `scripts/blender/mob_from_model.py`: the face blanked and sealed, cut to about 3,200 triangles, re-bound to the
 mob's skeleton. `scripts/blender/mob_figures.json` lists every figure with its body, hair and clothes;

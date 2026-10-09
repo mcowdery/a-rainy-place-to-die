@@ -1,0 +1,73 @@
+{
+  "id": "v_den_nod",
+  "label": "drugs: slumped in a chair, far away",
+  "cat": "v_den",
+  "back": [
+    [
+      "picture",
+      -1,
+      1.6
+    ],
+    [
+      "boxes",
+      1.5
+    ]
+  ],
+  "front": [
+    [
+      "armchair",
+      -0.2,
+      1
+    ],
+    [
+      "roundtable",
+      0.75,
+      0.6,
+      0.5
+    ]
+  ],
+  "a": [
+    {
+      "who": "hood",
+      "x": -0.32,
+      "pose": {
+        "yaw": 90,
+        "lL": [
+          70,
+          0,
+          50
+        ],
+        "lR": [
+          60,
+          0,
+          30
+        ],
+        "lean": -24,
+        "nod": -70,
+        "aL": [
+          -30,
+          0,
+          6
+        ],
+        "aR": [
+          -24,
+          0,
+          4
+        ]
+      },
+      "seat": 0.43
+    }
+  ],
+  "aItems": [
+    [
+      "packets",
+      0.75,
+      0.505
+    ],
+    [
+      "ashtray",
+      0.55,
+      0.505
+    ]
+  ]
+}
