@@ -4,6 +4,10 @@ Things decided or noticed that aren't done yet. Newest first within a section; s
 
 ## Repository, security and upkeep
 
+- [ ] **Choose a licence** for the public repository. With no `LICENSE` file the code is all rights reserved (nobody may reuse it), which is the safe default; the third-party assets keep their own licences (`CREDITS.md`). Decide: keep it closed, or add MIT / Apache-2.0 for the code only.
+- [ ] **Branch protection on `main`** (require CI to pass, no force pushes) once the way of working settles; it would stop direct pushes, so changes go through pull requests.
+- [ ] **Formatting**: add Prettier and an `.editorconfig`, applied once in a commit of its own so it doesn't muddy later diffs. Line endings are mixed (git warns LF to CRLF); a `.gitattributes` would settle them.
+- [ ] **Dev-tooling advisories** (`npm audit`: braces, micromatch, source-map-js, all denial of service in build tools): Dependabot security updates are on and will open PRs; `@gltf-transform/cli`'s only offered fix is a downgrade, so leave it.
 - [ ] **Delete the history backup** `../rainy-place-backup-2026-10-09.git` (a mirror of the repository from before the history was cleaned; it still holds the removed material, so never push it anywhere). Also delete `../rainy-clean.git` and `../purge-paths.txt` (scratch from the rewrite). Decided 2026-10-09: keep it for a while first.
 - [ ] **Old commits on GitHub.** After the 2026-10-09 history rewrite the old commits are unreachable from any branch but GitHub may still serve them by hash. Not urgent (private until then, no forks). To be certain: ask GitHub Support to garbage-collect, or delete and recreate the repository and push the clean history.
 - [ ] **Credits and notices before any release.** `CREDITS.md`: the game has no credits screen, and section 1's credits have to be shown to players and section 2's notices shipped in the build. Blocked on the game having a menu screen and a story (neither exists yet).
