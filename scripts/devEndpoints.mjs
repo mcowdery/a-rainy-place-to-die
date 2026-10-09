@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 
 // The dev server's own endpoints (paths starting /__), each a function of (server, req, res). scripts/debugShots.mjs
@@ -221,14 +221,77 @@ function animCast(server, req, res) {
   });
 }
 
+/**
+ * POST /__perf (src/debug/perfLog.ts, F10 in the game): the frame-rate recorder. `{session, kind, data}`; an
+ * 'event' (a dip or a hitch) is appended to debug-shots/perf/<session>.events.jsonl, a 'summary' rewrites
+ * <session>.summary.json.
+ */
+const PERF_SESSIONS = 30;
+function perf(server, req, res) {
+  if (req.method !== 'POST') {
+    res.statusCode = 405;
+    res.end();
+    return;
+  }
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    try {
+      const { session, kind, data } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      const name = String(session).replace(/[^a-z0-9_-]/gi, '');
+      if (!name) throw new Error('no session');
+      const dir = resolve(server.config.root, 'debug-shots', 'perf');
+      mkdirSync(dir, { recursive: true });
+      // Keep the newest PERF_SESSIONS sessions; a new session's first write clears the oldest.
+      if (!existsSync(resolve(dir, `${name}.events.jsonl`)) && !existsSync(resolve(dir, `${name}.summary.json`))) {
+        const files = readdirSync(dir).filter((f) => /\.(events\.jsonl|summary\.json)$/.test(f));
+        const sessions = [...new Set(files.map((f) => f.replace(/\.(events\.jsonl|summary\.json)$/, '')))].sort();
+        for (const old of sessions.slice(0, Math.max(0, sessions.length - (PERF_SESSIONS - 1)))) {
+          for (const f of files.filter((f) => f.startsWith(`${old}.`))) unlinkSync(resolve(dir, f));
+        }
+      }
+      if (kind === 'event') appendFileSync(resolve(dir, `${name}.events.jsonl`), `${JSON.stringify(data)}\n`);
+      else if (kind === 'summary') writeFileSync(resolve(dir, `${name}.summary.json`), JSON.stringify(data, null, 2));
+      else throw new Error('kind?');
+      res.end('ok');
+    } catch (err) {
+      res.statusCode = 400;
+      res.end(String(err));
+    }
+  });
+}
+
 /** The endpoints by path. A new one goes here. */
-export const ENDPOINTS = { '/__shot': shot, '/__window': windowLab, '/__scene': scene, '/__anims': anims, '/__animcast': animCast };
+export const ENDPOINTS = { '/__perf': perf, '/__shot': shot, '/__window': windowLab, '/__scene': scene, '/__anims': anims, '/__animcast': animCast };
+
+// These endpoints write files, so a web page open in the same browser mustn't be able to drive them (a cross-site POST
+// to localhost, or a DNS-rebinding name that points at it). The game and the tools are on localhost; scripts send no
+// Origin at all. A body over MAX_BODY is cut off (a snapshot's PNG is a few MB).
+const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+const MAX_BODY = 64 * 1024 * 1024;
+
+function refuse(res, code, why) {
+  res.statusCode = code;
+  res.end(why);
+}
 
 /** Answers the request if its path is an endpoint's; false if it's nobody's (Vite's own /__ paths). */
 export function handle(server, req, res) {
   const path = (req.url ?? '').split('?')[0];
   const endpoint = ENDPOINTS[path];
   if (!endpoint) return false;
+  if (!LOCAL.test(req.headers.host ?? '')) return refuse(res, 403, 'dev endpoints answer on localhost only'), true;
+  const origin = req.headers.origin;
+  if (origin && origin !== 'null' && !LOCAL.test(origin.replace(/^https?:\/\//, ''))) return refuse(res, 403, 'cross-site request refused'), true;
+  if (origin === 'null') return refuse(res, 403, 'cross-site request refused'), true;
+  let size = 0;
+  req.on('data', (c) => {
+    size += c.length;
+    if (size > MAX_BODY && !res.writableEnded) {
+      refuse(res, 413, 'body too large');
+      req.destroy();
+    }
+  });
   endpoint(server, req, res);
   return true;
 }

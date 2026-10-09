@@ -320,6 +320,19 @@ export class District {
     return this.shelters.filter((s) => d(s) < r).sort((a, b) => d(a) - d(b)).slice(0, max);
   }
 
+  /** Every prop (street furniture, greenery, an open lot's furnishings) within r metres of (x, z), for looking at. */
+  propsNear(x: number, z: number, r: number): Prop[] {
+    const out: Prop[] = [];
+    for (let my = Math.floor((z - r) / CELL); my <= Math.floor((z + r) / CELL); my++) {
+      for (let mx = Math.floor((x - r) / CELL); mx <= Math.floor((x + r) / CELL); mx++) {
+        const d = this.model.detail(mx, my);
+        if (!d) continue;
+        for (const list of [d.props, ...d.open.map((o) => o.props)]) for (const p of list) if (Math.hypot(p.x - x, p.z - z) < r) out.push(p);
+      }
+    }
+    return out;
+  }
+
   /** Traffic signal poles within r metres of (x, z). */
   signalsNear(x: number, z: number, r: number): Prop[] {
     const out: Prop[] = [];
@@ -518,19 +531,6 @@ export class District {
   };
 
   /**
-   * What a shot meets at a point in the air (real/gunfire.ts): the `ground` (or a floor), a building's or set
-   * piece's walls up to its height (`wall`), and near the ground parked cars, poles and hedges; null for open air.
-   * Vehicles in traffic are the traffic's. For one point; a shot marching along a line uses `shotProbe`.
-   */
-  shotAt = (x: number, y: number, z: number): ShotHit | null => this.shotProbe(x, z, x, z, 0)(x, y, z);
-
-  /**
-   * `shotAt` for points along a shot's line from (ax, az) to (bx, bz) and within `pad` of it: what could be hit
-   * there is gathered once (buildings, set pieces, props, open-lot solids, medians, the expressway's piers), so
-   * each step of the march only tests that short list.
-   */
-  shotProbe(ax: number, az: number, bx: number, bz: number, pad: number): (x: number, y: number, z: number) => ShotHit | null {
-  /**
    * `obstacle` for points within `pad` of (cx, cz) and radii up to `OBSTACLE_R`: what could be met there is gathered
    * once (buildings, set pieces, solids, medians, and the props in a grid of 8 m buckets), so each probe tests a
    * handful of things, not every prop in nine cells (~65 us a probe, 50 a frame for each chase car: two thirds of the
@@ -601,6 +601,19 @@ export class District {
     };
   }
 
+  /**
+   * What a shot meets at a point in the air (real/gunfire.ts): the `ground` (or a floor), a building's or set
+   * piece's walls up to its height (`wall`), and near the ground parked cars, poles and hedges; null for open air.
+   * Vehicles in traffic are the traffic's. For one point; a shot marching along a line uses `shotProbe`.
+   */
+  shotAt = (x: number, y: number, z: number): ShotHit | null => this.shotProbe(x, z, x, z, 0)(x, y, z);
+
+  /**
+   * `shotAt` for points along a shot's line from (ax, az) to (bx, bz) and within `pad` of it: what could be hit
+   * there is gathered once (buildings, set pieces, props, open-lot solids, medians, the expressway's piers), so
+   * each step of the march only tests that short list.
+   */
+  shotProbe(ax: number, az: number, bx: number, bz: number, pad: number): (x: number, y: number, z: number) => ShotHit | null {
     const box: Rect = { x: Math.min(ax, bx) - pad, y: Math.min(az, bz) - pad, w: Math.abs(bx - ax) + 2 * pad, h: Math.abs(bz - az) + 2 * pad };
     const touches = (q: Rect, m = 0): boolean => q.x - m < box.x + box.w && q.x + q.w + m > box.x && q.y - m < box.y + box.h && q.y + q.h + m > box.y;
     const buildings: Building3[] = [];

@@ -15,6 +15,7 @@ A browser-based engine for a large, sparse, walkable ASCII city: an alternate-re
 - `models.html`, `mob.html`, `characters.html`, `scenes.html` (`src/poc3d/showroom/`): the showrooms where car, cast, prop, mob and named-character designs are reviewed, and the editor for the rooms behind the windows.
 - `anims.html`, `animbatch.html` (`src/poc3d/anims/`): the animation review pages, the cast playing clips from the animation library fitted to their own skeletons, one at a time or the whole library a page at a time with ticks to pick from ([cast.md](.claude/rules/cast.md)). Dev only.
 - `fight.html` (`src/poc3d/fight/`): the fight test, a walled yard for trying the melee (fists, katana, bat, kill moves, duels) as Mack in first person. Fighting isn't in the city yet, nor in the showroom any more.
+- `figures.html` (`src/poc3d/figures/`): the figures test area, for the generated, rigged figures of `debug-shots/props/` ([generated-art.md](.claude/rules/generated-art.md)): pick the figure, clip, light and distance. Dev only.
 - `humans.html` (`src/poc3d/humans/`): the MakeHuman test: every figure made with MakeHuman but Mack (the salaryman, the maid, Julie, a generated crowd of 76) on a street and in line-ups, textured as built or in the mob's looks, to try them as passers-by and as the people you fight. A test only; on the dev server only.
 
 ## Area docs

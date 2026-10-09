@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { Emotes, type EmoteLooks } from './emotes';
-import { FIGURE_ATTRS, FIGURE_STRIDE, mobDepthMaterial, TEMPLATE_COUNT, templateGeometry } from './people';
+import { BODY_LIST, FIGURE_ATTRS, FIGURE_STRIDE, POSE_LIST, mobDepthMaterial, TEMPLATE_COUNT, templateGeometry } from './people';
 import { CrowdSmoke } from './smoke';
+import { HOURS, MANNERS, outAt } from '../district/peopleHours';
+import type { Body } from './mobRig';
+import type { Pose } from './people';
 
 interface Batch {
   readonly mesh: THREE.Mesh;
@@ -18,6 +21,20 @@ interface Batch {
  * changes. Their emotes, and their breath in the cold (real/emotes.ts), are a draw more each, on the same figures;
  * and so are the smokers' cigarettes, embers and smoke (real/smoke.ts).
  */
+/** Someone standing about, as the crowd's numbers give them. */
+export interface StandingPerson {
+  readonly id: string;
+  readonly x: number;
+  readonly z: number;
+  /** The floor under them. */
+  readonly y: number;
+  readonly yaw: number;
+  readonly body: Body;
+  readonly pose: Pose;
+  readonly manner: string;
+  readonly seed: number;
+}
+
 export class Crowd {
   readonly group = new THREE.Group();
   /** People carry their umbrellas (while it rains). */
@@ -81,6 +98,31 @@ export class Crowd {
     if (on === this.casts) return;
     this.casts = on;
     for (const b of this.batches.values()) b.mesh.castShadow = on;
+  }
+
+  /**
+   * The people standing about within r metres of (x, z) at `hour`: those in the chunks shown who aren't walking and
+   * are out at this hour (a walker's place is the shader's alone). For talking to and looking at.
+   */
+  standingNear(x: number, z: number, r: number, hour: number): StandingPerson[] {
+    const out: StandingPerson[] = [];
+    for (const key of this.shown) {
+      const f = this.chunks.get(key);
+      if (!f) continue;
+      for (let k = 0; k < f.length; k += FIGURE_STRIDE) {
+        const fx = f[k + 1];
+        const fz = f[k + 2];
+        if (Math.abs(fx - x) > r || Math.abs(fz - z) > r || Math.hypot(fx - x, fz - z) > r) continue;
+        const pose = POSE_LIST[f[k + 6]];
+        // (Walking, crossing, running; riding or at a strap is elsewhere.)
+        if (f[k + 11] !== 0 || !pose || pose === 'walk' || pose === 'gait' || pose === 'ride' || pose === 'strap' || pose === 'sit') continue;
+        const hours = f[k + 20] < 0 ? null : HOURS[f[k + 20]];
+        if (hours && outAt(hours, hour) <= f[k + 22]) continue;
+        const body = BODY_LIST[f[k + 5]] ?? 'man';
+        out.push({ id: `${key}:${k}`, x: fx, z: fz, y: f[k + 13], yaw: f[k + 3], body, pose, manner: MANNERS[f[k + 21]] ?? 'plain', seed: f[k + 4] });
+      }
+    }
+    return out;
   }
 
   /** A chunk's figures (FIGURE_STRIDE floats each), or null when it's dropped. */

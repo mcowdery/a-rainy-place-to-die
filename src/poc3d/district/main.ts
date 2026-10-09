@@ -64,6 +64,7 @@ import { RadioHud } from './radioHud';
 import { SaveApp } from './saveApp';
 import { readSave, SAVE_VERSION, SLOTS, writeSave, type SaveGame, type Slot } from '../../save/save';
 import { installSnap } from '../../debug/snap';
+import { installPerfLog } from '../../debug/perfLog';
 import { fare, rideMetres, TaxiPicker } from './taxi';
 import { Approach, sideOf, trimToUnseen } from './taxiDispatch';
 import { MODELS, SALOONS } from '../../race/catalog';
@@ -134,6 +135,8 @@ import { wiperBeat, wiperLayout, wiperPhase, WiperSet, wiperSwing, wiperUniforms
 import { outside, RearMirror, VIEW_NAMES } from '../../race/driveCam';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Crosshair } from '../models/crosshair';
+import { Investigator, Stance } from './investigate';
+import { PeopleLookables, PropLookables } from './lookables';
 import { CityGunfire } from '../real/gunfire';
 
 /**
@@ -145,6 +148,11 @@ import { CityGunfire } from '../real/gunfire';
  * ` the debug menu (district/debugMenu.ts: everything for testing and tuning, in tabs; no other key is spent on it). At the wheel: , and . the radio's dial, / the tape deck (Shift+/ another folder).
  */
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
+/** The loading screen: the phase's name under the pink text, and the thin bar's fill (0..1). */
+const loadStep = (text: string, fraction: number): void => {
+  $('overlay').textContent = text;
+  ($('loadbar').firstElementChild as HTMLElement).style.width = `${fraction * 100}%`;
+};
 const params = new URLSearchParams(location.search);
 const bench = params.get('bench') === '1';
 /** Debug: M opens the map and teleports (players get around by train and on foot; they have no map). */
@@ -189,7 +197,9 @@ type C3 = [number, number, number];
 async function run(): Promise<void> {
   // The uncensored edition asks your age first (src/edition/ageGate.ts); the standard edition goes straight on.
   await edition.ageGate();
+  performance.mark('boot:run');
   const content = loadDistrictContent();
+  performance.mark('boot:content');
   // The clock (district/clock.ts): minutes since the story began, in the flags so saves carry it. ?clock=HH:MM and
   // ?day= set it; ?time= (dawn, day, dusk, night) picks a time in that look; ?late=1 starts after the last train.
   const startMinute = ((): number => {
@@ -221,7 +231,9 @@ async function run(): Promise<void> {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // (PCFSoftShadowMap is removed in three: it swaps in PCFShadowMap at the first shadow render, which recompiled
+  // every shadowed shader after the warm start's compile. Ask for what it will use.)
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.info.autoReset = false;
   document.body.prepend(renderer.domElement);
 
@@ -719,6 +731,34 @@ async function run(): Promise<void> {
   // the scene: a new light recompiles every city shader.
   let mack: FirstPersonRig | null = null;
   const crosshair = new Crosshair();
+  // Looking, the aim without the gun (district/investigate.ts): with no threat about the right button raises Mack's
+  // attention and what he looks at he remarks on; with one (`stance.fight`) he draws and it raises the gun.
+  const stance = new Stance();
+  const speechEl = document.createElement('div');
+  Object.assign(speechEl.style, { position: 'fixed', bottom: '14%', left: '50%', transform: 'translateX(-50%)', maxWidth: '60vw', padding: '8px 16px', background: 'rgba(8, 8, 14, 0.8)', border: '1px solid #3a3850', color: '#e8e6f0', font: "italic 15px 'Consolas', monospace", zIndex: '16', display: 'none', pointerEvents: 'none' });
+  document.body.append(speechEl);
+  let speechTimer = 0;
+  const investigator = new Investigator((text, _id, who) => {
+    speechEl.textContent = `${who ?? 'Mack'}: “${text}”`;
+    speechEl.style.display = 'block';
+    clearTimeout(speechTimer);
+    speechTimer = window.setTimeout(() => (speechEl.style.display = 'none'), 3500 + text.length * 40);
+  });
+  /** The right button is held with no gun out: Mack is looking. */
+  // What he can look at: the props about him, the people standing about (the walking ones' places are the shader's).
+  const moment = { rain: () => weather() === 'rain', night: () => time() === 'night' };
+  const propWords = new PropLookables(moment);
+  const peopleWords = new PeopleLookables(moment);
+  investigator.source((o) => [
+    ...propWords.of(district.propsNear(o.x, o.z, 40), groundAt),
+    ...peopleWords.of(district.crowd?.standingNear(o.x, o.z, 30, (((clockTotal % DAY) + DAY) % DAY) / 60) ?? []),
+  ]);
+  const lookDir = new THREE.Vector3();
+  const lookRay = new THREE.Vector3();
+  let lookHeld = false;
+  let lookRaised = 0;
+  /** He drew because a fight began (so he puts it away when it ends), not by hand. */
+  let drewForFight = false;
   // Shots land on the district (walls to each building's height, the ground, parked cars, poles) and the traffic.
   // (A shot from your own car, or at it, doesn't count its place in the traffic: it has hit volumes of its own.)
   const gunfire = new CityGunfire((ax, az, bx, bz, pad) => district.shotProbe(ax, az, bx, bz, pad), (x, y, z, skipOwn) => y - district.terrain.height(x, z) < 1.7 && traffic.blocked(x, z, 0, skipOwn ? ownCar.vehicle : null));
@@ -880,6 +920,9 @@ async function run(): Promise<void> {
   // The right button raises the shotgun while it's out.
   document.addEventListener('mousedown', (e) => {
     if (e.button === 2 && mack?.armed && controls.look.isLocked && !seated) mack.aiming = true;
+    else if (e.button === 2 && mack && !mack.armed && controls.look.isLocked && !seated && !inVn) lookHeld = true;
+    // Looking (no gun out): the left button does what the hand is over.
+    if (e.button === 0 && lookHeld && mack && !mack.armed && controls.look.isLocked && !inVn && !seated) investigator.use();
     // The left fires it (on foot or on a bike; from your car's seat it's district/carGun.ts').
     if (e.button === 0 && mack?.armed && mack.object.visible && controls.look.isLocked && !inVn && !seated) {
       gunfire.resume();
@@ -887,6 +930,7 @@ async function run(): Promise<void> {
     }
   });
   document.addEventListener('mouseup', (e) => {
+    if (e.button === 2) lookHeld = false;
     if (e.button === 2 && mack && !seated) mack.aiming = false;
   });
   document.addEventListener('contextmenu', (e) => {
@@ -1064,9 +1108,11 @@ async function run(): Promise<void> {
     controls.setView(me.at.yaw, me.at.pitch);
   }
   // Warm start: the workers build the neighbourhood (every stage) before the first frame.
-  $('overlay').textContent = 'building the city...';
+  loadStep('building the city...', 0.1);
   const warm0 = performance.now();
+  performance.mark('boot:warm-start');
   await district.warm(camera.position);
+  performance.mark('boot:warm-end');
   const warmMs = performance.now() - warm0;
   const warmChunks = district.loaded;
 
@@ -1392,8 +1438,14 @@ async function run(): Promise<void> {
   // Compile every shader variant and upload the warm-start geometry now, rather than in the first frames.
   // Compile for the composer's HDR target (the scene is drawn into it, not the canvas): programs are keyed
   // by the target's colour space, so compiling for the canvas left every material to compile again later.
+  // ?bootdiag=1 records every shader program's cache key at the boot marks (node scripts/loadProfile.mjs --programs).
+  const bootDiag = params.get('bootdiag') === '1';
   renderer.setRenderTarget(rt);
+  performance.mark('boot:compile-start', { detail: { programs: renderer.info.programs?.length ?? 0 } });
+  loadStep('compiling shaders...', 0.4);
   await renderer.compileAsync(scene, camera);
+  performance.mark('boot:compile-end', { detail: { programs: renderer.info.programs?.length ?? 0, names: bootDiag ? renderer.info.programs?.map((p) => `${p.name || String(p.cacheKey)}#${p.id}`) : undefined } });
+  loadStep('uploading textures and geometry...', 0.8);
   renderer.setRenderTarget(null);
   // Upload every texture now too (sign canvases, posters): otherwise each uploads the first time its object
   // comes into view, a hitch of tens of milliseconds for the big ones.
@@ -1417,8 +1469,10 @@ async function run(): Promise<void> {
     }
   });
   composer.render(0);
+  performance.mark('boot:render-end', { detail: { programs: renderer.info.programs?.length ?? 0, names: bootDiag ? renderer.info.programs?.map((p) => `${p.name || String(p.cacheKey)}#${p.id}`) : undefined } });
   for (const o of culled) o.frustumCulled = true;
   $('overlay').textContent = 'click to walk';
+  $('loadbar').hidden = true;
 
   // Interaction: nearest visible interactable within reach, roughly in front of you.
   // VN mode: the stories exported from the VN generator (content/vn/); a node no story knows shows the placeholder.
@@ -2110,11 +2164,24 @@ async function run(): Promise<void> {
     roads: (x, z, vertical) => roadsFor(x, z, vertical),
     probe: (x, z, r) => (npcBlocked(x, z, r) ? 'person' : traffic.blocked(x, z, r, ownCar.vehicle) ? 'car' : district.obstacle(x, z, r)),
     solid: (x, z, r) => (npcBlocked(x, z, r) ? 'person' : district.obstacle(x, z, r)),
+    near: (x, z, pad) => {
+      const o = district.obstacleNear(x, z, pad);
+      return {
+        probe: (px, pz, r) => (npcBlocked(px, pz, r) ? 'person' : traffic.blocked(px, pz, r, ownCar.vehicle) ? 'car' : o(px, pz, r)),
+        solid: (px, pz, r) => (npcBlocked(px, pz, r) ? 'person' : o(px, pz, r)),
+      };
+    },
     height: groundAt,
     grip: () => weatherGrip(ownCar.weather),
     route: (ax, az, bx, bz, heading) => navGrid('drive').route(ax, az, bx, bz, heading),
     vehicles: (x, z, r, self) => [...traffic.around(x, z, r, null), ...chase.all().filter((c) => c !== self && Math.abs(c.sim.x - x) < r && Math.abs(c.sim.z - z) < r).map((c) => c.vehicle)],
     driving: () => driving.own === ownCar,
+    place: (x, z, h) => ownCar.place(x, z, h, groundAt(x, z)),
+    warm: () => {
+      renderer.setRenderTarget(rt);
+      renderer.compile(scene, camera);
+      renderer.setRenderTarget(null);
+    },
     hold: (on) => (driving.hold = on),
     seen: (x, z) => {
       const dx = x - camera.position.x;
@@ -2163,24 +2230,11 @@ async function run(): Promise<void> {
       state: () => chase.state && { phase: chase.state.phase, t: +chase.state.t.toFixed(1), you: chase.state.health, result: chase.state.result, cars: chase.cars.map((c, i) => ({ mode: c.status, kmh: Math.round(c.sim.u * 3.6), d: Math.round(Math.hypot(c.sim.x - ownCar.sim.x, c.sim.z - ownCar.sim.z)), at: [Math.round(c.sim.x), Math.round(c.sim.z)], ...chase.state!.cars[i] })) },
       tail: (on: boolean) => {
         if (on && !tailing) {
-    near: (x, z, pad) => {
-      const o = district.obstacleNear(x, z, pad);
-      return {
-        probe: (px, pz, r) => (npcBlocked(px, pz, r) ? 'person' : traffic.blocked(px, pz, r, ownCar.vehicle) ? 'car' : o(px, pz, r)),
-        solid: (px, pz, r) => (npcBlocked(px, pz, r) ? 'person' : o(px, pz, r)),
-      };
-    },
           tailing = driving.pilot;
           driving.pilot = () => (chase.cars[0] && !ownCar.totaled ? pursue(ownCar.sim, chase.cars[0].sim, { along: -9, across: 0 }, 38) : null);
         } else if (!on && tailing) {
           driving.pilot = tailing;
           tailing = null;
-    place: (x, z, h) => ownCar.place(x, z, h, groundAt(x, z)),
-    warm: () => {
-      renderer.setRenderTarget(rt);
-      renderer.compile(scene, camera);
-      renderer.setRenderTarget(null);
-    },
         }
       },
       aim: (i: number) => {
@@ -2607,9 +2661,14 @@ async function run(): Promise<void> {
   // by subject. The settings' rows (moodPanel.ts: weather, light, the crowd, sound, graphics) are in every build; the
   // testing tools (teleport, the clock, the season, your car, the wardrobe...) on the dev server or with ?debug=1.
   const debugTools = import.meta.env.DEV || debug;
+  // What Mack can look at and touch or talk to as he goes about (district/lookables.ts): the props near him, and the
+  // people standing about. `__look` has the investigator and the stance.
+  if (debugTools) {
+    Object.assign(window, { __look: { investigator, stance } });
+  }
   // A figure under trial, walking where you are (the dev server only: `?figure=<a .glb's path>`, district/trialFigure.ts).
   let trial: { update(dt: number, camera: THREE.Camera): void } | null = null;
-  if (import.meta.env.DEV && params.get('figure')) void import('./trialFigure').then(async (m) => (trial = await m.trialFigure(scene, params.get('figure')!, groundAt)));
+  if (import.meta.env.DEV && params.get('figure')) void import('./trialFigure').then(async (m) => (trial = await m.trialFigure(scene, params.get('figure')!, groundAt, () => cityU.uLamps.value)));
   const setClockTo = (minute: number): void => {
     clockTotal = Math.floor(clockTotal / DAY) * DAY + minute;
     syncClockFlags();
@@ -3265,6 +3324,12 @@ async function run(): Promise<void> {
       }
       toast(thirdPerson ? 'Third person · mouse wheel nearer or further · Q back to first person' : 'First person · Q for third person');
     }
+    // F3: the text block at the top left, cycling fps only (the start) → everything → hidden.
+    if (e.code === 'F3') {
+      e.preventDefault();
+      hudMode = hudMode === 'fps' ? 'full' : hudMode === 'full' ? 'off' : 'fps';
+      $('hud').style.display = hudMode === 'off' ? 'none' : '';
+    }
     if (e.code === 'KeyI') {
       setInvertY(!controls.invertY, true);
       toast(controls.invertY ? 'Mouse Y inverted (mouse up looks down) · I to switch back' : 'Mouse Y normal (mouse up looks up) · I to invert');
@@ -3290,10 +3355,12 @@ async function run(): Promise<void> {
       else toast('Can’t light up now: put the gun away, and not at a run');
     }
     if (e.code === 'KeyX' && mack && (!driving.car || ridingNow()) && !inVn) {
-      mack.armed = !mack.armed;
-      if (!mack.armed) mack.aiming = false;
-      const what = mack.gun.kind === 'pistol' ? 'Pistol' : 'Shotgun';
-      toast(mack.armed ? `${what} out · right button raises it · left button fires · X puts it away` : `${what} put away`);
+      // The gun comes out by itself when a fight starts (`stance`); by hand only for testing.
+      if (!debugTools) toast('He draws when there is trouble. Right button: look');
+      else {
+        stance.threat('manual', !stance.fight || !mack.armed);
+        toast(stance.fight ? 'Fight mode (test) · X ends it' : 'Fight mode ended');
+      }
     }
   });
   document.body.addEventListener('click', () => {
@@ -3338,12 +3405,40 @@ async function run(): Promise<void> {
   const px = new Uint8Array(4);
   // ?diag=1: GPU time per frame (a timer query round the render, read back a few frames later) and the CPU
   // time of the frame's work, the last 600 frames each in window.__perf, so a scene can be told GPU- or CPU-bound.
-  const timer = params.get('diag') === '1' ? gl.getExtension('EXT_disjoint_timer_query_webgl2') : null;
+  // (Also there for the frame-rate recorder, F10 / ?perflog=1 (debug/perfLog.ts), which times the render while it records.)
+  const diagOn = params.get('diag') === '1';
+  const timer = !bench || diagOn ? gl.getExtension('EXT_disjoint_timer_query_webgl2') : null;
   // frameQuery off lets a script time passes itself (timer queries can't nest).
   const perf = { gpu: [] as number[], cpu: [] as number[], timer: !!timer, frameQuery: true };
   const queries: WebGLQuery[] = [];
   const gl2 = gl as WebGL2RenderingContext;
-  if (params.get('diag') === '1') Object.assign(window, { __perf: perf });
+  if (diagOn) Object.assign(window, { __perf: perf });
+  const perfLog = installPerfLog({
+    page: 'district',
+    machine: () => ({ gpu, canvas: [renderer.domElement.width, renderer.domElement.height], dpr: window.devicePixelRatio, gpuTimer: !!timer, cores: navigator.hardwareConcurrency, ua: navigator.userAgent }),
+    paused: () => inVn,
+    context: () => {
+      const p = camera.position;
+      const mode = inVn ? 'vn' : chase.active ? 'chase' : driving.car ? (driving.own ? 'driving own' : 'driving') : rider.active ? 'rider' : taxiRide ? 'taxi' : controls.fly ? 'fly' : 'foot';
+      return {
+        cell: `${Math.floor(p.x / CELL)},${Math.floor(p.z / CELL)}`,
+        district: district.districtAt(p.x, p.z) ?? 'Tōto',
+        zone: district.zoneAt(p.x, p.z) ?? null,
+        place: district.placeAt(p.x, p.z) ?? null,
+        mode,
+        pos: [Math.round(p.x), Math.round(p.y), Math.round(p.z)],
+        yaw: Math.round(lookYaw()),
+        kmh: driving.car ? Math.round(driving.kmh) : 0,
+        time: time(),
+        clock: clockNow(),
+        weather: weather(),
+        season: SEASON_NAMES[season()],
+        chaseCars: chase.active ? chase.cars.length : 0,
+        chunks: { loaded: district.loaded, detailed: district.detailedChunks, inFlight: district.inFlightCount, buildings: district.loadedBuildings, people: district.loadedPeople },
+        settings: { res: resFixed() ?? 'auto', resScale: +resScale.toFixed(2), lampShadows: mood.shadows, dof: mood.dof, bloom: bloom.enabled, ascii: overlay.preset, grade: grade.grade },
+      };
+    },
+  });
   const keep = (a: number[], v: number): void => {
     a.push(v);
     if (a.length > 600) a.shift();
@@ -3373,10 +3468,14 @@ async function run(): Promise<void> {
   let fps = 0;
   let work = 0;
   let builtThisWindow = 0;
+  let hudMode: 'fps' | 'full' | 'off' = params.get('hud') === '1' ? 'full' : params.get('hud') === '0' ? 'off' : 'fps';
+  if (hudMode === 'off') $('hud').style.display = 'none';
   const clock = new THREE.Clock();
   $('overlay').hidden = bench;
 
+  let firstFrameMarked = false;
   renderer.setAnimationLoop(() => {
+    if (!firstFrameMarked) { firstFrameMarked = true; performance.mark('boot:first-frame'); }
     // (Aiming from the car slows the world while the focus lasts: district/carGun.ts. `realDt` is the wall clock's.)
     const realDt = Math.min(clock.getDelta(), 0.1);
     const dt = realDt * carGun.timeScale;
@@ -3505,7 +3604,32 @@ async function run(): Promise<void> {
       thirdNow = shown && thirdPerson;
       controls.gaitBob = shown ? bodyBob : null;
       if (shown) mack.setHeadless(!thirdNow);
-      if (!seated) crosshair.update((shown || riding) && mack.armed, mack.aim, dt);
+      // Fight mode draws and puts away by itself; the gun's aim in it, the looking ring out of it.
+      if (!seated && !inVn && !driving.car || riding) {
+        if (stance.fight && !mack.armed) {
+          mack.armed = true;
+          drewForFight = true;
+        } else if (!stance.fight && mack.armed && drewForFight) {
+          mack.armed = false;
+          mack.aiming = false;
+          drewForFight = false;
+        }
+      }
+      if (mack.armed) lookHeld = false;
+      lookRaised += ((lookHeld && shown && !mack.armed ? 1 : 0) - lookRaised) * Math.min(1, dt * 12);
+      const looking = lookHeld && shown && !mack.armed && !seated && controls.look.isLocked;
+      const eye = camera.position;
+      camera.getWorldDirection(lookDir);
+      const seen = investigator.update(looking, eye, lookDir, dt, (to) => {
+        lookRay.subVectors(to, eye);
+        const far = lookRay.length();
+        const met = gunfire.pick(eye, lookRay.normalize(), far);
+        return !!met && met.distance < far - 1;
+      });
+      if (!seated) {
+        if (mack.armed) crosshair.update((shown || riding) && mack.armed, mack.aim, dt);
+        else crosshair.look(shown && (looking || lookRaised > 0.02), lookRaised, dt, seen.canUse ? seen.target!.interact!.label : (seen.target?.label ?? null), seen.progress, seen.canUse ? 'hand' : 'eye');
+      }
       gunfire.dark = cityU.uHeadlights.value;
       gunfire.setSound(mood.gun, (mood.volume / MOOD_DEFAULTS.volume) * mood.guns, mood.gunEcho, mood.shotgun);
       gunfire.update(mack, camera, inVn ? 0 : dt);
@@ -3828,11 +3952,11 @@ async function run(): Promise<void> {
     // update too; the frozen ones always do.
     for (const o of scene.children) o.matrixWorldAutoUpdate = o.visible && !frozen.has(o);
     let query: WebGLQuery | null = null;
-    if (timer && perf.frameQuery && queries.length < 6) {
+    if (timer && perf.frameQuery && (diagOn || perfLog.active) && queries.length < 6) {
       query = gl2.createQuery();
       gl2.beginQuery(timer.TIME_ELAPSED_EXT, query);
     }
-    if (thirdNow && mack) thirdCam.place(camera, footOffset(mack.aim, thirdCam.zoom), dt, thirdClear);
+    if (thirdNow && mack) thirdCam.place(camera, footOffset(Math.max(mack.aim, lookRaised), thirdCam.zoom), dt, thirdClear);
     censor.track(mack?.object.visible ? mack : null, camera);
     // The rear-view mirror's picture, in the cockpit (without Mack; the sun's shadows as they are).
     const atWheel = driving.own === ownCar && !ownCar.bike && driving.interior === ownCar.interior;
@@ -3887,10 +4011,14 @@ async function run(): Promise<void> {
     }
     // Test the loaded chunks against this frame's depth (not below ground, where the surface is hidden).
     occlusion.update(!under, camera, district.occlusionBoxes(camera.position));
-    if (perf.timer || params.get('diag') === '1') keep(perf.cpu, performance.now() - t0);
+    if (diagOn) keep(perf.cpu, performance.now() - t0);
     shot.afterRender();
     if (bench) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
     const frameMs = performance.now() - t0;
+    if (perfLog.active) {
+      const info = renderer.info.render;
+      perfLog.frame({ now, cpu: performance.now() - now, gpu: perf.gpu.length ? perf.gpu[perf.gpu.length - 1] : 0, calls: info.calls, tris: info.triangles, x: camera.position.x, z: camera.position.z, res: resScale });
+    }
     if (bench && phase && frameMs > 25 && params.get('diag') === '1') console.log(`slow frame ${frameMs.toFixed(1)} ms · update ${(tUpd - t0).toFixed(1)} · render ${(performance.now() - tUpd).toFixed(1)} · integrated ${built} (${(district.lastBytes / 1e6).toFixed(1)} MB) · tris ${renderer.info.render.triangles} · progs ${renderer.info.programs?.length}`);
     if (bench && phase) {
       let log = benchLog.find((l) => l.phase === phase);
@@ -3914,12 +4042,12 @@ async function run(): Promise<void> {
       const p = camera.position;
       const t = target();
       const s = district.stats;
-      $('hud').textContent = [
+      $('hud').textContent = hudMode === 'fps' ? `${fps} fps${perfLog.active ? ` · ${perfLog.label()}` : ''}` : [
         (rider.active && cabin ? `${cabin.status()}  ·  [E] ${rider.seated ? 'stand up' : cabin.doors() > 0.85 && cabin.canLeave() ? 'get off' : rider.seatNear() ? 'sit' : cabin.bus ? 'stop button' : 'skip to your stop'}` : null) ??
         trainRiding()?.status ??
         subway.status ??
         `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? '東都湾 Tōto Bay' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${SEASON_NAMES[season()]}${flags.get(FLAG_TSUYU) === true ? ' 梅雨' : ''}${flags.get(FLAG_HEAT) === true ? ' 猛暑' : ''}${flags.get(FLAG_TYPHOON) === true ? ' 台風' : ''} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
-        `${fps} fps · ${work.toFixed(2)} ms/frame · res ${Math.round(resScale * 100)}%${resFixed() === null ? ' (auto)' : ''} · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
+        `${fps} fps${perfLog.active ? ` · ${perfLog.label()}` : ''} · ${work.toFixed(2)} ms/frame · res ${Math.round(resScale * 100)}%${resFixed() === null ? ' (auto)' : ''} · draw calls ${info.calls} · triangles ${info.triangles.toLocaleString()}`,
         `chunks ${district.loaded} loaded (${district.detailedChunks} detailed) / ${district.cells.length} · ${district.loadedBuildings} buildings · ${district.loadedPeople} people`,
         `bloom ${bloom.enabled ? `strength ${bloom.strength.toFixed(2)} · threshold ${bloom.threshold.toFixed(1)}` : 'off'}`,
         `${district.workerCount} chunk workers · build avg base ${avg(s.base)} / detail ${avg(s.near)} / people ${avg(s.ghosts)} ms · main-thread integrate avg ${avg(s.integrate)} ms (max ${s.integrate.msMax.toFixed(1)}) · in flight ${district.inFlightCount} · integrated last 0.5 s ${builtThisWindow}`,

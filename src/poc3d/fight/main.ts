@@ -33,7 +33,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap; // (PCFSoftShadowMap is removed in three: it swaps this in at the first render, recompiling every shadowed shader)
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();

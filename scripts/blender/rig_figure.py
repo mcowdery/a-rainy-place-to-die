@@ -259,20 +259,32 @@ else:
     only(figure)
     bpy.ops.object.duplicate()
     proxy = bpy.context.view_layer.objects.active
-proxy.name = 'stand_in'
-remesh = proxy.modifiers.new('remesh', 'REMESH')
-remesh.mode = 'VOXEL'
-remesh.voxel_size = VOXEL
-bpy.ops.object.modifier_apply(modifier='remesh')
-bpy.ops.object.select_all(action='DESELECT')
-proxy.select_set(True)
-rig.select_set(True)
-bpy.context.view_layer.objects.active = rig
-bpy.ops.object.parent_set(type='ARMATURE_AUTO')
-weighted = sum(1 for v in proxy.data.vertices if any(g.weight > 0 for g in v.groups))
-print(f'WEIGHTS stand-in of {len(proxy.data.vertices)} points, {weighted} with weights')
-if weighted < 0.9 * len(proxy.data.vertices):
-    raise SystemExit('Bone heat failed on the stand-in: try another --voxel.')
+source = proxy
+source.name = 'stand_in_source'
+# (Bone heat either solves a stand-in or gives it nothing at all, and which depends on the voxel size in no way that
+# can be told beforehand: the same figure failed at 12 mm and took at 12.5. So a few sizes are tried in turn.)
+for size in (VOXEL, VOXEL * 1.04, VOXEL * 0.92, VOXEL * 1.17, VOXEL * 1.33, VOXEL * 0.8):
+    only(source)
+    bpy.ops.object.duplicate()
+    proxy = bpy.context.view_layer.objects.active
+    proxy.name = 'stand_in'
+    remesh = proxy.modifiers.new('remesh', 'REMESH')
+    remesh.mode = 'VOXEL'
+    remesh.voxel_size = size
+    bpy.ops.object.modifier_apply(modifier='remesh')
+    bpy.ops.object.select_all(action='DESELECT')
+    proxy.select_set(True)
+    rig.select_set(True)
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+    weighted = sum(1 for v in proxy.data.vertices if any(g.weight > 0 for g in v.groups))
+    print(f'WEIGHTS stand-in at {size * 1000:.1f} mm: {len(proxy.data.vertices)} points, {weighted} with weights')
+    if weighted >= 0.9 * len(proxy.data.vertices):
+        break
+    bpy.data.objects.remove(proxy)
+else:
+    raise SystemExit('Bone heat failed on the stand-in at every size tried: try another --voxel.')
+bpy.data.objects.remove(source)
 
 only(figure)
 carry_over = figure.modifiers.new('weights', 'DATA_TRANSFER')
@@ -511,7 +523,28 @@ if HANDS:
 skin = figure.modifiers.new('skin', 'ARMATURE')
 skin.object = rig
 figure.parent = rig
-bare = sum(1 for v in figure.data.vertices if not v.groups)
+# A point the stand-in gave nothing (it lay too far from the stand-in's skin: a loose lock of hair, a fingertip) would
+# stay where it was while the figure walked away: it takes the weights of the nearest point that has some.
+def weighted(v):
+    return any(g.weight > 0 for g in v.groups)
+
+
+have = [v for v in figure.data.vertices if weighted(v)]
+lost = [v for v in figure.data.vertices if not weighted(v)]
+if lost and have:
+    from mathutils import kdtree as _kd
+
+    near = _kd.KDTree(len(have))
+    for i, v in enumerate(have):
+        near.insert(v.co, i)
+    near.balance()
+    for v in lost:
+        donor = have[near.find(v.co)[1]]
+        for g in donor.groups:
+            if g.weight > 0:
+                figure.vertex_groups[g.group].add([v.index], g.weight, 'REPLACE')
+    print(f'  {len(lost)} points with no weight took those of their nearest neighbour')
+bare = sum(1 for v in figure.data.vertices if not weighted(v))
 print(f'  the figure: {len(figure.data.vertices)} points, {bare} with no weight')
 
 # 5. Out, as the cast's are.

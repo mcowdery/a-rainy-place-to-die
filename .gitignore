@@ -36,4 +36,4 @@ refs/*
 __pycache__/
 
 # claude-model-guard decision log (contains prompt text)
-.claude/model-guard.log.jsonl
+.claude/model-guard.log.jsonl*

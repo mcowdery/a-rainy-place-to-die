@@ -113,7 +113,7 @@ export const COUPE: CarSpec = {
   lockHalf: 26,
   steerRate: 3.2,
   handbrakeGrip: 0.42,
-  reverse: 8,
+  reverse: 20,
   shift: [13, 22, 31, 41, 999],
 };
 
@@ -198,6 +198,8 @@ const SPIN_TOP = 3.3;
 /** Backing up: the sideways pull (g) the steering's kept to, the engine's drag feet off (m/s^2), a J-turn's least speed (m/s). */
 const REVERSE_PULL = 0.45;
 const REVERSE_DRAG = 1.5;
+/** (And more the faster it backs, per m/s: at a good pace the engine's braking is a lot, so feet off it still stops short.) */
+const REVERSE_DRAG_SPEED = 0.4;
 const J_SPEED = 5.5;
 
 export class Car {
@@ -325,7 +327,9 @@ export class Car {
     if (c.handbrake && this.handbrakeHeld === 0) this.pulledAt = this.h;
     this.handbrakeHeld = c.handbrake ? this.handbrakeHeld + dt : 0;
     const reversing = u < 0.5 && c.brake > 0 && c.throttle === 0;
-    this.sinceReverse = reversing ? 0 : this.sinceReverse + dt;
+    // (Going backwards at speed with the pedals off, after a half turn on the handbrake, is backing up too.)
+    const backing = reversing || (u < -J_SPEED && c.throttle === 0 && !c.handbrake);
+    this.sinceReverse = backing ? 0 : this.sinceReverse + dt;
     // Stunts (see the header). The rears lit up: throttle against the brake at a standstill, or against the
     // handbrake at low speed; they stay lit while the throttle's down and the car's slow.
     const speed = Math.hypot(u, w);
@@ -339,16 +343,18 @@ export class Car {
     else if (this.lit > 0 && c.throttle > 0.5 && c.brake === 0 && speed < LIT_SPEED && this.sinceLock < DONUT_GRACE) this.lit = LIT_HOLD;
     else this.lit = Math.max(0, this.lit - dt);
     const lit = this.lit > 0;
-    // A J-turn: backing at speed (on purpose, a moment ago), the wheel over and the throttle down.
-    if (u < -J_SPEED && c.throttle > 0.5 && Math.abs(c.steer) > 0.5 && this.sinceReverse < 1.5 && !S.twoWheels) {
+    // A J-turn: backing at speed (on purpose, a moment ago), the wheel over and the throttle down, or the handbrake
+    // (a half turn either way, so the 180 out of a reverse is the same move as the 180 into one).
+    const jask = c.throttle > 0.5 || c.handbrake;
+    if (u < -J_SPEED && jask && Math.abs(c.steer) > 0.5 && this.sinceReverse < 2.5 && !S.twoWheels) {
       if (this.jturn <= 0) this.jdir = -Math.sign(c.steer);
       this.jturn = 1.6;
-    } else this.jturn = c.throttle > 0.5 ? Math.max(0, this.jturn - dt) : 0;
+    } else this.jturn = jask ? Math.max(0, this.jturn - dt) : 0;
     const jturn = this.jturn > 0;
     // A handbrake turn: held, with the wheel over.
     // (One turn a pull: once it's been brought right round, the handbrake has to come off before another.)
     if (!c.handbrake) this.flipped = false;
-    const spun = !S.twoWheels && !this.flipped && this.handbrakeHeld > HANDBRAKE_HOLD && Math.abs(c.steer) > 0.3 && speed < 34;
+    const spun = !S.twoWheels && !jturn && !this.flipped && this.handbrakeHeld > HANDBRAKE_HOLD && Math.abs(c.steer) > 0.3 && speed < 34;
     if (spun && !this.flip) {
       this.flip = true;
       this.flipFrom = this.pulledAt;
@@ -411,7 +417,10 @@ export class Car {
     let brakeR = 0;
     if (burnout) {
       // (The fronts hold it, below; the rears are the engine's.)
-    } else if (reversing && u > -S.reverse) drive = -c.brake * Math.min(4200, S.maxDrive * 0.5);
+    } else if (reversing && u > -S.reverse) {
+      // (Strong off the line, power-limited after, easing off over the last 2 m/s to the top reverse speed.)
+      drive = -c.brake * Math.min(S.maxDrive * 0.75, (S.power * 0.8) / Math.max(-u, 4)) * Math.min(1, (u + S.reverse) / 2);
+    }
     else if (c.brake > 0 && u > 0.5) {
       const B = c.brake * S.brake * m * G;
       brakeF = B * S.brakeFront;
@@ -431,11 +440,12 @@ export class Car {
     // All-wheel drive: the front takes its share (pulling the car through, at the cost of front grip).
     const driveF = drive > 0 && S.awd && !burnout ? drive * S.awd : 0;
     drive -= driveF;
-    if (c.handbrake) brakeR += 0.55 * Nr;
+    // (Not in a J-turn on the handbrake: that's a pivot that keeps its speed, not a stop.)
+    if (c.handbrake && !jturn) brakeR += 0.55 * Nr;
     const sgn = u >= 0 ? 1 : -1;
     // Rear: drive or braking shares the tyre's grip with cornering (a friction ellipse: pulling costs less
     // cornering than sliding does), and past the traction limit the wheels spin and the rear lets go.
-    const Dr = S.gripRear * this.gripMul[1] * Nr * surf * (c.handbrake ? S.handbrakeGrip : 1);
+    const Dr = S.gripRear * this.gripMul[1] * Nr * surf * (c.handbrake && !jturn ? S.handbrakeGrip : 1);
     const cap = Dr * 1.1;
     let Fxr = drive - brakeR * sgn;
     const sideways = Math.abs(u) > 3 && Math.abs(Math.atan2(w, Math.abs(u))) > 0.14;
@@ -473,7 +483,7 @@ export class Car {
       Fyr -= c.steer * BURNOUT_WALK * Dr * Math.max(0, 1 - Math.abs(r) / BURNOUT_TURN);
     }
     // (Backing up with your feet off, the engine slows the car: a tap of reverse is a short move.)
-    const coasting = u < -0.5 && thr === 0 && c.brake === 0 && !this.free ? -REVERSE_DRAG * m : 0;
+    const coasting = u < -0.5 && thr === 0 && c.brake === 0 && !this.free ? -(REVERSE_DRAG + REVERSE_DRAG_SPEED * -u) * m : 0;
     const resist = S.drag * u * Math.abs(u) + (Math.abs(u) > 0.05 ? S.rolling * sgn : 0) + coasting;
     const cd = burnout ? 1 : Math.cos(d);
     const sd = burnout ? 0 : Math.sin(d);

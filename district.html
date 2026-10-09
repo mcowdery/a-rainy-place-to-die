@@ -17,6 +17,12 @@
         color: #ff5fc8; font-size: 18px; text-shadow: 0 0 12px rgba(255, 95, 200, 0.6);
       }
       #overlay[hidden] { display: none; }
+      #loadbar {
+        position: fixed; left: 50%; top: calc(50% + 34px); z-index: 1; width: 180px; height: 2px; margin-left: -90px;
+        background: rgba(255, 95, 200, 0.15); pointer-events: none; transition: opacity 0.4s;
+      }
+      #loadbar > div { height: 100%; width: 0; background: rgba(255, 95, 200, 0.7); transition: width 0.6s ease-out; }
+      #loadbar[hidden] { display: none; }
       .panel {
         position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 3; min-width: 420px; max-width: 70vw;
         padding: 16px 20px; background: rgba(12, 10, 18, 0.95); border: 1px solid #ff5fc8;
@@ -30,6 +36,7 @@
   <body>
     <div id="hud"></div>
     <div id="overlay">click to walk</div>
+    <div id="loadbar"><div></div></div>
     <div id="vn" class="panel" hidden></div>
     <pre id="errors" hidden></pre>
     <script type="module" src="/src/poc3d/district/main.ts"></script>

@@ -273,7 +273,7 @@ describe('Stunts', () => {
     expect(e.u).toBeGreaterThan(8);
     // Backing out and going forward again with the wheel over (a three-point turn) is not a J-turn.
     const f = new Car(spec, CITY_ASSISTS);
-    drive(f, 1.3, { brake: 1, steer: -1 });
+    drive(f, 0.8, { brake: 1, steer: -1 });
     expect(f.u).toBeGreaterThan(-5.5);
     const three = watch(f, 3, { throttle: 1, steer: 1 });
     expect(three.stunt).toBe(0);
@@ -296,7 +296,8 @@ describe('Stunts', () => {
     drive(car, 4, { brake: 1, steer: 1 }, FLAT, () => (worst = Math.max(worst, Math.abs(car.slide))));
     // A steady arc (steering left in reverse swings the tail left: the heading turns right), barely sliding.
     expect(deg(worst)).toBeLessThan(12);
-    expect(deg(car.h)).toBeLessThan(-60);
+    // (Faster backing keeps to less lock, so the arc is wider than it was at the old 8 m/s top.)
+    expect(deg(car.h)).toBeLessThan(-30);
     expect(car.u).toBeLessThan(-5);
     // Feet off, the engine slows it: a tap of reverse is a short move.
     drive(car, 4, {});
@@ -314,6 +315,23 @@ describe('Stunts', () => {
     expect(Math.abs(Math.abs(deg(car.h)) - 180)).toBeLessThan(35);
     expect(car.u).toBeGreaterThan(8);
     expect(car.z).toBeLessThan(-25);
+    expect(car.stunt).toBeNull();
+  });
+
+  it.each(cars)('%s: a 180 into reverse, backing fast, and a 180 out of it keep their speed', (_n, spec) => {
+    const car = new Car(spec, CITY_ASSISTS);
+    car.u = 90 / 3.6;
+    drive(car, 1.3, { steer: 1, handbrake: true });
+    drive(car, 2, { brake: 1 });
+    // Backing at a good pace (not the old 8 m/s crawl), facing the way it came from.
+    expect(car.u).toBeLessThan(-8);
+    expect(Math.abs(Math.abs(deg(car.h)) - 180)).toBeLessThan(40);
+    const was = car.h;
+    // The handbrake with the wheel over, backing at speed, swings it round again and it drives on with its speed.
+    drive(car, 0.7, { steer: 1, handbrake: true });
+    drive(car, 1.5, { throttle: 1 });
+    expect(Math.abs(Math.abs(deg(car.h - was)) - 180)).toBeLessThan(45);
+    expect(car.u).toBeGreaterThan(10);
     expect(car.stunt).toBeNull();
   });
 

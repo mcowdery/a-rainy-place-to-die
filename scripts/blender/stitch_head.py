@@ -2,7 +2,8 @@
 picture (the head piece from a crop of it, where the face has the pixels a whole figure's doesn't). Placed by where
 each lies in the picture, then nudged to fit. Above the neckline everything is the head piece's; below it the body's,
 with the head piece's hair laid over (its hair hangs past the cut) and the body's own hair drawn in a little under it.
-  blender -b --python stitch_head.py -- <body x0,x1,y0,y1> <head x0,x1,y0,y1> <body.glb> <head.glb> <neckline y> <hair's end y> <out.glb>
+  blender -b --python stitch_head.py -- <body x0,x1,y0,y1> <head x0,x1,y0,y1> <body.glb> <head.glb> <neckline y> <hair's end y> <out.glb> [face 0.45] [emit t.json]
+  (`face 0.45`: the head piece's face alone, as a mask, the body's own hair and back of the head kept.)
   (The boxes and the two heights are in the picture's pixels, y down: where each object lies in it.)
 """
 import sys
@@ -12,7 +13,10 @@ import bpy
 import numpy as np
 from mathutils import Vector, kdtree
 
-body_box, bust_box, body_file, bust_file, neck_px, hair_px, out = sys.argv[sys.argv.index('--') + 1 :]
+body_box, bust_box, body_file, bust_file, neck_px, hair_px, out, *more = sys.argv[sys.argv.index('--') + 1 :]
+# `face 0.45` after the output: only the front of the head piece is used, a mask (below).
+FACE = float(more[1]) if len(more) >= 2 and more[0] == 'face' else None
+EMIT = more[more.index('emit') + 1] if 'emit' in more else None  # `emit t.json`: where the head piece lies on the body, for project_picture.py --face-transform
 neck_px, hair_px = float(neck_px), float(hair_px)
 bx0, bx1, by0, by1 = (float(v) for v in body_box.split(','))
 ux0, ux1, uy0, uy1 = (float(v) for v in bust_box.split(','))
@@ -84,6 +88,7 @@ move = Vector((
 # Depth: the heads' middles, of what lies above the cut.
 U2 = U * k + np.array(move)
 move.y = np.median(B[B[:, 2] > z_cut][:, 1]) - np.median(U2[U2[:, 2] > z_cut][:, 1])
+total_move = Vector(move)  # where the head piece's points go: p * k + total_move (the fit's nudges are added below)
 bust.scale = (k, k, k)
 bust.location = move
 bpy.context.view_layer.update()
@@ -105,13 +110,58 @@ for step in range(12):
     far = np.linalg.norm(pairs, axis=1)
     shift = pairs[far < np.percentile(far, 60)].mean(axis=0)
     bust.location = Vector(bust.location) + Vector(shift)
+    total_move += Vector(shift)
     bpy.context.view_layer.update()
     bpy.ops.object.transform_apply(location=True, rotation=False, scale=False)
     if step in (0, 11):
         print(f'FIT step {step}: moved {np.round(shift, 4)}, pairs apart {np.median(far):.4f} (median)')
 
+if EMIT:
+    import json
+    json.dump({'scale': k, 'translate': list(total_move)}, open(EMIT, 'w'))
+    print('EMIT', EMIT, k, list(total_move))
 tall = B[:, 2].max() - B[:, 2].min()
 overlap = 0.004 * tall
+
+
+if FACE is not None:
+    # The face alone, as a mask. A close-up shows the head from in front only, so the head piece's sides are a guess
+    # and its back has no picture at all, where the body's own hair, laid with pictures from behind and from the
+    # sides, is whole. So of the head piece only the front is kept (above the neckline and in front of a plane FACE of
+    # the way from the tip of the nose to the back of the head), and of the body only that part is taken away: the
+    # join runs over the crown and down through the hair in front of the ears, dark on dark.
+    U = points(bust)
+    top = U[U[:, 2] > z_cut]
+    y_cut = top[:, 1].min() + FACE * (top[:, 1].max() - top[:, 1].min())
+    x_lo, x_hi = top[:, 0].min() - overlap, top[:, 0].max() + overlap
+    _, tris = dark(bust)
+    mids = U[tris].mean(axis=1)
+    keep = (mids[:, 2] > z_cut - overlap) & (mids[:, 1] < y_cut + overlap)
+    bm = bmesh.new()
+    bm.from_mesh(bust.data)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.faces[i] for i in np.where(~keep)[0]], context='FACES')
+    bm.to_mesh(bust.data)
+    bm.free()
+    B = points(body)
+    _, tris = dark(body)
+    mids = B[tris].mean(axis=1)
+    gone = (mids[:, 2] > z_cut + overlap) & (mids[:, 1] < y_cut - overlap) & (mids[:, 0] > x_lo) & (mids[:, 0] < x_hi)
+    bm = bmesh.new()
+    bm.from_mesh(body.data)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.faces[i] for i in np.where(gone)[0]], context='FACES')
+    bm.to_mesh(body.data)
+    bm.free()
+    print(f'FACE MASK: {int(keep.sum())} faces of the head piece kept (the front {FACE:.2f} of the head), {int(gone.sum())} of the body taken away')
+    bpy.ops.object.select_all(action='DESELECT')
+    body.select_set(True)
+    bust.select_set(True)
+    bpy.context.view_layer.objects.active = body
+    bpy.ops.object.join()
+    bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', use_selection=True, export_image_format='JPEG')
+    print('WROTE', out, len(body.data.polygons), 'faces')
+    sys.exit(0)
 
 # The head piece: all of it above the neckline, and only its hair below.
 hair, tris = dark(bust)

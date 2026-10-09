@@ -17,15 +17,31 @@ const STRETCH = 14;
 const AHEAD = 5;
 const LOST = 70;
 
+/** The glow her materials give themselves in the dark (of their own colour), at full lamps: the city's street lights don't reach a character's materials (and a light added would recompile every city shader), so she'd be a black shape. */
+const NIGHT_GLOW = 0.3;
+
 export interface TrialFigure {
   update(dt: number, camera: THREE.Camera): void;
 }
 
-export async function trialFigure(scene: THREE.Scene, file: string, groundAt: (x: number, z: number) => number): Promise<TrialFigure> {
+export async function trialFigure(scene: THREE.Scene, file: string, groundAt: (x: number, z: number) => number, lamps: () => number): Promise<TrialFigure> {
   registerCharacters({ figure: file });
   const figure = await Character.load('figure');
   await figure.play(WALK, 0, true);
   const speed = (await figure.pace(WALK)) || 1.2;
+  const glow: THREE.MeshStandardMaterial[] = [];
+  figure.root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+      const s = mat as THREE.MeshStandardMaterial;
+      if (!s.map || s.alphaTest > 0) continue;
+      s.emissiveMap = s.map;
+      s.emissive.set(0xffffff);
+      s.emissiveIntensity = 0;
+      glow.push(s);
+    }
+  });
   scene.add(figure.root);
   const middle = new THREE.Vector3();
   const along = new THREE.Vector3(1, 0, 0);
@@ -56,6 +72,7 @@ export async function trialFigure(scene: THREE.Scene, file: string, groundAt: (x
       figure.root.position.set(x, groundAt(x, z), z);
       // (The models face +z.)
       figure.root.rotation.y = Math.atan2(along.x * way, along.z * way);
+      for (const m of glow) m.emissiveIntensity = NIGHT_GLOW * lamps();
       figure.update(dt);
     },
   };

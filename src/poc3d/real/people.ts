@@ -968,9 +968,9 @@ function poseBones(T: Template, s: FigureSpec, umbrella = false): THREE.Matrix4[
 
 // ---- Templates by index, and figures as data ----
 
-const BODY_LIST: readonly Body[] = ['man', 'woman', 'child', 'elder'];
+export const BODY_LIST: readonly Body[] = ['man', 'woman', 'child', 'elder'];
 const HAIR_LIST: readonly Hair[] = ['short', 'long', 'bun', 'hat', 'cap', 'none', 'bob', 'ponytail', 'twin'];
-const POSE_LIST: readonly Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold', 'sit', 'strap', 'gait', 'ride'];
+export const POSE_LIST: readonly Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold', 'sit', 'strap', 'gait', 'ride'];
 
 /** Body templates are 0 to TEMPLATE_COUNT - 1 (body, outfit, hair); the umbrellas follow, one per body. */
 export const TEMPLATE_COUNT = BODY_LIST.length * OUTFITS.length * HAIR_LIST.length;

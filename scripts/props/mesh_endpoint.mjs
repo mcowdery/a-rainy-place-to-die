@@ -8,7 +8,7 @@
 //                                        [--steps 50] [--guidance 3] [--detail-steps 6] [--detail-guidance 3]
 //                                        [--cutout yes] [--engine hunyuan [--texture 2048] [--views 8]
 //                                        [--view-size 768] [--octree 384] [--texture-seed n]]
-//                                        [--engine pixal3d [--resolution 1024] [--fov 0.35]] [--job <id>]
+//                                        [--engine pixal3d [--resolution 1024] [--fov 0.35] [--view 180:back.png ...]] [--job <id>]
 //
 //   `--engine pixal3d` sends the picture to the third mesh worker (Trame/trame-mesh-pixal3d: Pixal3D, MIT, shape
 //   only like Hi3DGen's: no colour, no normal.png), whose mesh is made IN THE PICTURE'S OWN CAMERA, so the picture can be
@@ -21,6 +21,18 @@
 //   7.5 (the coarse shape), `--detail-steps` and `--detail-guidance` 12 and 7.5. Its .glb is y up with the pictured side
 //   towards +z like the others, but in the model's own units: the cut-out's frame is the unit square, so the object is
 //   about 0.9 across, not a unit tall, and is not centred (move it and camera.json no longer fits it).
+//
+//   MORE THAN ONE VIEW (`--engine pixal3d`): `--view <azimuth>:<picture>`, repeated, adds a picture of the SAME figure from
+//   another side (Pixal3D's multi-view mode: its own multi-view weights; the shape is conditioned on every view, so the
+//   far side is seen, not invented: heels, the back of a hand). The main <picture> is the front (azimuth 0). Azimuth 90 =
+//   the camera at the figure's LEFT (the right of the front picture), 180 = the back, 270 = its right; `--view
+//   180:back.png`, or with an elevation in degrees `--view 90,10:left.png`. (Not `--views`, which is the Hunyuan
+//   worker's count of texture views.) The views must be the same size in pixels, the same pose, the figure at the same
+//   scale and on the same vertical axis in each (the worker cuts them all with ONE frame; it does not rescale one to fit
+//   another): see Trame/trame-mesh-pixal3d/handler.py. `--fov` (radians) is then the camera of all of them. Each is
+//   treated like the main picture (its background removed on the worker unless `--cutout yes`). The first multi-view job
+//   on a worker reads 16.5GB of weights (a minute or three); camera.json and cutout.png are the FRONT view's, in the
+//   shared frame, and the mesh is about 1.0 across (the frame 1.1: camera.json's `extent`).
 //
 //   `--job <id>` takes up a job already sent (one this script gave up waiting for) instead of sending the picture again.
 //
@@ -55,8 +67,10 @@ const STUDIO_ENV = process.env.KREA_STUDIO_ENV ?? join(ROOT, '..', 'Trame', 'tra
 const args = process.argv.slice(2);
 const opt = {};
 const rest = [];
+const extraViews = []; // `--view 180:back.png`, repeated: Pixal3D's other views
 for (let i = 0; i < args.length; i++) {
-  if (args[i].startsWith('--')) opt[args[i].slice(2)] = args[++i];
+  if (args[i] === '--view') extraViews.push(args[++i] ?? '');
+  else if (args[i].startsWith('--')) opt[args[i].slice(2)] = args[++i];
   else rest.push(args[i]);
 }
 const picture = rest[0];
@@ -94,13 +108,32 @@ const out = join(ROOT, 'debug-shots', 'image_to_3d', name);
 // Unless it's said to be cut out already, the picture goes without its alpha channel, so the worker removes the
 // background itself: a pasted or exported PNG often carries a trace of transparency that means nothing, and the
 // first worker (v1) took any at all to mean "already cut out" and modelled the whole scene.
-let bytes = readFileSync(picture);
-if (opt.cutout !== 'yes' && /\.(png|webp)$/i.test(picture)) {
-  const flat = spawnSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-i', picture, '-vf', 'format=rgb24', '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'png', '-'], { maxBuffer: 256 * 2 ** 20 });
-  if (flat.status === 0 && flat.stdout.length > 0) bytes = flat.stdout;
-  else console.log(`  (couldn't drop the picture's transparency: sent as it is. ${String(flat.stderr).trim().slice(0, 200)})`);
+const prepared = (file) => {
+  let bytes = readFileSync(file);
+  if (opt.cutout !== 'yes' && /\.(png|webp)$/i.test(file)) {
+    const flat = spawnSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-i', file, '-vf', 'format=rgb24', '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'png', '-'], { maxBuffer: 256 * 2 ** 20 });
+    if (flat.status === 0 && flat.stdout.length > 0) bytes = flat.stdout;
+    else console.log(`  (couldn't drop the picture's transparency: sent as it is. ${String(flat.stderr).trim().slice(0, 200)})`);
+  }
+  return bytes;
+};
+const input = { image: prepared(picture).toString('base64') };
+if (extraViews.length) {
+  if (engine !== 'pixal3d') {
+    console.log('--view is for --engine pixal3d (several pictures of one figure).');
+    process.exit(1);
+  }
+  // The main picture is the front (its bytes are `image`, not sent twice); the others as `azimuth[,elevation]:file`.
+  input.views = [{ azimuth_deg: 0, name: 'front' }];
+  for (const spec of extraViews) {
+    const m = /^(-?[\d.]+)(?:,(-?[\d.]+))?:(.+)$/.exec(spec);
+    if (!m || !existsSync(m[3])) {
+      console.log(`--view is <azimuth>[,<elevation>]:<picture> (180:back.png, 90,10:left.png), not "${spec}"${m && !existsSync(m[3]) ? ` (no file ${m[3]})` : ''}.`);
+      process.exit(1);
+    }
+    input.views.push({ image_b64: prepared(m[3]).toString('base64'), azimuth_deg: Number(m[1]), elevation_deg: Number(m[2] ?? 0), name: basename(m[3], extname(m[3])).replace(/[^\w.-]+/g, '_') });
+  }
 }
-const input = { image: bytes.toString('base64') };
 // (Five of them are the Hunyuan worker's and the last two the Pixal3D worker's; each worker reads only its own.)
 for (const [flag, field] of [['faces', 'faces'], ['seed', 'seed'], ['steps', 'steps'], ['guidance', 'guidance'], ['detail-steps', 'detail_steps'], ['detail-guidance', 'detail_guidance'], ['texture', 'texture'], ['views', 'views'], ['view-size', 'view_size'], ['octree', 'octree'], ['texture-seed', 'texture_seed'], ['resolution', 'resolution'], ['fov', 'fov']]) {
   if (opt[flag] !== undefined) input[field] = Number(opt[flag]);
@@ -121,6 +154,10 @@ const call = async (path, init) => {
   return data;
 };
 
+if (!opt.job && JSON.stringify({ input }).length > 9.5 * 2 ** 20) {
+  console.log('The pictures together are over RunPod\'s 10 MB limit for a job: send smaller ones (the worker works at 1024 px at most).');
+  process.exit(1);
+}
 const started = Date.now();
 // (`--job`: one already sent, which an earlier run of this gave up waiting for; the picture isn't sent again.)
 const job = opt.job ? await call(`/status/${opt.job}`) : await call('/run', { method: 'POST', body: JSON.stringify({ input }) });
@@ -162,5 +199,6 @@ console.log(`${join(out, `${name}.glb`)}`);
 console.log(`  ${result.triangles.toLocaleString('en')} triangles (${result.triangles_generated.toLocaleString('en')} as generated), ${(Buffer.byteLength(result.mesh, 'base64') / 2 ** 20).toFixed(1)} MB`);
 if (result.textured) console.log(`  textured: ${result.texture} px maps from ${result.views} views of ${result.view_size} px (an experiment only: see this script's header for the licence)`);
 if (result.camera) console.log(`  camera.json: field of view ${result.camera.fov_degrees.toFixed(1)} degrees (${result.camera.fov_from}), the mesh's outline through it against the cut-out's ${result.camera_iou} (1 = the same)`);
+if (result.views_used) console.log(`  ${result.views_used.length} views: ${result.views_used.map((v) => `${v.name} ${v.azimuth_deg}\u00b0`).join(', ')}; the front's frame in the picture sent: ${result.camera?.source_box?.map((v) => Math.round(v)).join(',')}`);
 for (const note of result.notes ?? []) console.log(`  note: ${note}`);
 console.log(`  ${result.seconds?.all ?? '?'} s on the worker, GPU peak ${result.gpu_peak_gib} GiB; waited ${Math.round((Date.now() - started) / 1000)} s in all`);
