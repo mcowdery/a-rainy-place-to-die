@@ -50,6 +50,24 @@ network:
   websocket_port: $PORT
   ssl:
     require_ssl: false
+# The stream is tuned for slow links by default (the web client's own default caps video mode at 960x540 and its
+# quality sliders sit in the middle). This path is a tunnel to a pod a few milliseconds away, so ask for the best:
+# the server's values rule, and the client's settings can't pull the picture back down to a quarter of 1080p.
+runtime_configuration:
+  allow_client_to_override_kasm_server_settings: false
+encoding:
+  max_frame_rate: 60
+  rect_encoding_mode:
+    min_quality: 9
+    max_quality: 9
+    consider_lossless_quality: 9
+  video_encoding_mode:
+    jpeg_quality: 9
+    webp_quality: 9
+    max_resolution:
+      width: ${GEOMETRY%x*}
+      height: ${GEOMETRY#*x}
+    scaling_algorithm: progressive_bilinear
 EOF
 cat > "$HOME/.vnc/xstartup" <<EOF
 #!/bin/sh
