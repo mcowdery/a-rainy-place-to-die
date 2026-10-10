@@ -255,7 +255,8 @@ async function runOnPod(argv) {
   const script = `cd ${q(dir)} && ${env} && touch -d '2 seconds ago' ${marker}; ${command.map(q).join(' ')}`;
   mkdirSync(RUNS, { recursive: true });
   const runFile = join(RUNS, `${process.pid}.json`);
-  writeFileSync(runFile, JSON.stringify({ pid: process.pid, checkout: root, command: command.join(' ').slice(0, 160), started: Date.now() }));
+  // The session id is how the dashboard says which agent this is: Claude Code gives its Bash tool CLAUDE_CODE_SESSION_ID.
+  writeFileSync(runFile, JSON.stringify({ pid: process.pid, checkout: root, command: command.join(' ').slice(0, 300), title: runTitle(command), session: process.env.CLAUDE_CODE_SESSION_ID, started: Date.now() }));
   let status;
   try { status = spawnSync('ssh', [...sshArgs(p), `bash -c ${q(script)}`], { stdio: 'inherit' }).status ?? 1; }
   finally { try { unlinkSync(runFile); } catch {} }
@@ -277,6 +278,15 @@ async function runOnPod(argv) {
   return status;
 }
 
+/** What a run is doing, in a few words: the script it runs, without `env`, VAR=value words and the interpreter. */
+function runTitle(argv) {
+  const words = argv.filter((w, i) => !(i === 0 && w === 'env') && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
+  if (['node', 'python', 'python3', 'bash', 'sh', 'npx', 'tsx'].includes(words[0])) {
+    const target = words.slice(1).find((w) => !w.startsWith('-'));
+    if (target) return target;
+  }
+  return words.slice(0, 3).join(' ') || argv.join(' ');
+}
 const money = (n) => '$' + (Math.round(n * 100) / 100).toFixed(2);
 const span = (ms) => { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
 /**
@@ -301,10 +311,10 @@ async function dashboardStatus() {
     const up = Number.isFinite(since) ? Date.now() - since : null;
     fields.unshift({ label: 'Cost', value: `${money(p.costPerHr)}/hr${up !== null ? `, about ${money((up / 3600000) * p.costPerHr)} this run` : ''}` });
     if (up !== null) fields.push({ label: 'Up for', value: span(up) });
-    const onIt = runs.map((r) => `${r.command} (${span(Date.now() - r.started)}, ${basename(r.checkout)})`).join('\n');
-    fields.push({ label: 'On it now', value: onIt || 'nothing from agents' });
+    // Who is using it: one row per `run` in flight, tied to the agent session that started it (the Resources tab draws these).
+    const activity = runs.map((r) => ({ session: r.session, title: r.title ?? r.command, detail: r.command, since: r.started, where: basename(r.checkout) }));
     const ready = spawnSync('ssh', [...sshArgs(p), 'test -f /tmp/pod-boot-done'], { stdio: 'ignore', timeout: 12000 }).status === 0;
-    return { state: ready ? 'running' : 'starting', title, fields, actions: ready ? ['stop', autoAction] : [], note: ready ? 'Stops itself after 45 idle minutes.' : 'Booting: installing its libraries (about a minute).' };
+    return { state: ready ? 'running' : 'starting', title, fields, activity, actions: ready ? ['stop', autoAction] : [], note: ready ? 'Stops itself after 45 idle minutes.' : 'Booting: installing its libraries (about a minute).' };
   }
   fields.unshift({ label: 'Cost', value: lock ? 'starting' : 'nothing while stopped (only the 60 GB volume)' });
   return { state: lock ? 'starting' : 'stopped', title, fields, actions: lock ? [] : ['start', autoAction], note: lock ? 'Starting (2-4 minutes, up to 11 if its host must be replaced).' : undefined };
