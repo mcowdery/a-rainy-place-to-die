@@ -14,7 +14,7 @@ zones:
     id: sampaloc_belt
     name: University belt
     night: 0.4
-    people: { school: 6, plain: 5, long: 2 }
+    people: { pinoy_school: 6, plain: 5, vendor: 0.8, baller: 1, trike_driver: 0.5, long: 0.3 }
     cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
     plan:
       floors: [[2, 4, 50], [5, 9, 40], [10, 14, 10]]

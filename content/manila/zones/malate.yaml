@@ -13,7 +13,7 @@ zones:
     id: malate_strip
     name: Malaya strip
     night: 1
-    people: { plain: 5, long: 5, suit: 3 }
+    people: { plain: 5, long: 0.5, suit: 3, guard: 1.5, barong: 0.4, vendor: 0.5, baller: 0.5 }
     cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
     plan:
       floors: [[3, 9, 70], [10, 16, 25], [20, 30, 5]]

@@ -20,6 +20,8 @@ export interface CityConfig {
   readonly atmosphereKind: CellKind;
   /** Prefix for localStorage keys that are the city's own (saves). */
   readonly storage: string;
+  /** The crowd's skin tone (a colour): Tōto's, and Manila's deeper tan (the user's call: Filipinos are more tanned than Japanese). */
+  readonly skin: string;
   /** The money's symbol: ¥ in Tōto, ₱ in Manila. */
   readonly currency: string;
   /** Whether the city has ad art (district billboards, posters, taxi photo ads). Manilaya has none until it has Filipino ads: its signs are plain fascia signs. */
@@ -43,8 +45,9 @@ export interface CityConfig {
 }
 
 export const CITIES: Readonly<Record<CityId, CityConfig>> = {
-  toto: { id: 'toto', name: '東都 Tōto', dir: 'world3d', startSpawn: 'kaburo_crossing.view', seed: 0x0c179090, atmosphereKind: 'neon', storage: 'rainyplace', currency: '¥', ads: true, rooftopSigns: true, tropical: false, filipino: false, boats: false, trees: TOTO_TREES, sunYaw: 0, mountains: { sector: [-2.6, -2.25, 0.85, 1.25], cone: { az: -1.95, width: 0.3, height: 0.092, snow: true, plume: 0 } } },
+  toto: { id: 'toto', name: '東都 Tōto', dir: 'world3d', startSpawn: 'kaburo_crossing.view', seed: 0x0c179090, atmosphereKind: 'neon', storage: 'rainyplace', skin: '#b08e74', currency: '¥', ads: true, rooftopSigns: true, tropical: false, filipino: false, boats: false, trees: TOTO_TREES, sunYaw: 0, mountains: { sector: [-2.6, -2.25, 0.85, 1.25], cone: { az: -1.95, width: 0.3, height: 0.092, snow: true, plume: 0 } } },
   manila: { id: 'manila', name: 'Manilaya', dir: 'manila', startSpawn: 'bayside.start', seed: 0x4d4e4c31, atmosphereKind: 'neon', storage: 'rainyplace.manila',
+    skin: '#8c6244',
     currency: '₱',
     ads: false,
     rooftopSigns: false,

@@ -13,7 +13,7 @@ zones:
   W:
     id: binondo_old
     name: Binundo
-    people: { plain: 6, long: 2, suit: 1 }
+    people: { plain: 6, long: 0.3, suit: 1, vendor: 1.5, barong: 0.6, pinoy_school: 0.6, guard: 0.5, trike_driver: 0.6 }
     cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
     plan:
       floors: [[2, 3, 70], [4, 5, 25], [6, 8, 5]]

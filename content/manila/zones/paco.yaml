@@ -18,7 +18,7 @@ zones:
   B:
     id: paco_barangay
     name: Pasko (barangay)
-    people: { plain: 8, long: 2, school: 2, suit: 1 }
+    people: { plain: 6, long: 0.3, pinoy_school: 2, baller: 1.2, vendor: 1.2, jeep_crew: 0.6, trike_driver: 0.6, guard: 0.3, barong: 0.3, suit: 0.5 }
     cars: { jeepney: 26, minivan: 22, van: 14, kei: 8, keitruck: 12, boxtruck: 6, sedan: 18, taxi: 10, taxi2: 4, hatch: 3, tricycle: 16 }
     plan:
       floors: [[1, 2, 55], [3, 4, 35], [5, 6, 10]]
@@ -50,7 +50,7 @@ zones:
   M:
     id: paco_condos
     name: Pasko (condo belt)
-    people: { plain: 5, suit: 4, long: 2 }
+    people: { plain: 5, suit: 3, barong: 0.8, long: 0.3, vendor: 0.8, guard: 0.8, pinoy_school: 0.6, trike_driver: 0.4 }
     cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
     plan:
       floors: [[5, 9, 40], [10, 16, 40], [18, 28, 20]]
@@ -80,7 +80,7 @@ zones:
     id: paco_shanties
     name: Pasko (informal settlement)
     night: 0.5
-    people: { plain: 10, long: 2, school: 2 }
+    people: { plain: 7, long: 0.3, pinoy_school: 2, baller: 1.5, vendor: 1.2, jeep_crew: 0.6, trike_driver: 0.8 }
     cars: { jeepney: 14, van: 6, kei: 4, keitruck: 4, minivan: 4, tricycle: 8 }
     plan:
       floors: [[1, 2, 70], [3, 3, 30]]
@@ -117,7 +117,7 @@ zones:
     id: paco_park
     name: Pasko Park
     night: 0.3
-    people: { plain: 6, long: 2, school: 3 }
+    people: { plain: 5, long: 0.3, pinoy_school: 3, baller: 1.2, vendor: 1, trike_driver: 0.6, jeep_crew: 0.4 }
     cars: { jeepney: 20, sedan: 20, taxi: 14, taxi2: 8, minivan: 14, van: 6, keitruck: 4, tricycle: 12 }
     plan:
       park: 0.8

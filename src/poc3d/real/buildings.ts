@@ -499,6 +499,15 @@ function pitchedRoof(mb: MeshBuilder, b: Building3, s: RealStyle, near: boolean)
   const y1 = b.h + rise;
   // P(a, c, y): a along the ridge, c across it (from the ridge), in world.
   const P = (a: number, c: number, y: number): C3 => (ns ? [b.x + a, y, b.z + c] : [b.x + c, y, b.z + a]);
+  // Manila's roofs are not all gables: about a third are mono-pitch (a shed roof, one slope, high at the back or the
+  // front) and a fifth hipped (four slopes, a short ridge): corrugated iron on each.
+  if (filipino() && !s.informal) {
+    const roll = rng(hash(b.id, 0x600f)).float();
+    if (roll >= 0.45) {
+      filipinoRoof(mb, b, s, ns, half, len, over, y0, Math.min(1.1, half * 0.24), roll >= 0.8 && len > half * 0.9, rng(hash(b.id, 0x600e)).chance(0.5), P);
+      return;
+    }
+  }
   const slope = (side: number): void => {
     const e0 = P(-len, side * half, y0 - over * 0.4);
     const e1 = P(len, side * half, y0 - over * 0.4);
@@ -525,6 +534,50 @@ function pitchedRoof(mb: MeshBuilder, b: Building3, s: RealStyle, near: boolean)
   if (filipino()) {
     manila.ironRoofRibs(mb, b, y0, y1, ns, half, len, near);
     manila.ironRoofGear(mb, b, y0, y1, ns, half, len, near);
+  }
+}
+
+/**
+ * A mono-pitch (a shed roof: one slope, its low edge at the front or the back, the end walls trapezoids) or a hipped
+ * roof (four slopes up to a short ridge) of corrugated iron, for Manila's low homes. Both windings are drawn.
+ */
+function filipinoRoof(mb: MeshBuilder, b: Building3, s: RealStyle, ns: boolean, half: number, len: number, over: number, y0: number, rise: number, hip: boolean, lowFront: boolean, P: (a: number, c: number, y: number) => C3): void {
+  const ye = y0 - over * 0.4;
+  const quad = (a: C3, c: C3, d: C3, e: C3): void => {
+    mb.kind = KIND.roof;
+    mb.color = s.roof!;
+    mb.poly4(a, c, d, e);
+    mb.poly4(e, d, c, a);
+  };
+  if (hip) {
+    const yr = y0 + rise;
+    const ridge = Math.max(0.2, len - half);
+    const a0 = -ridge;
+    const a1 = ridge;
+    quad(P(-len, -half, ye), P(len, -half, ye), P(a1, 0, yr), P(a0, 0, yr));
+    quad(P(len, half, ye), P(-len, half, ye), P(a0, 0, yr), P(a1, 0, yr));
+    quad(P(-len, half, ye), P(-len, -half, ye), P(a0, 0, yr), P(a0, 0, yr));
+    quad(P(len, -half, ye), P(len, half, ye), P(a1, 0, yr), P(a1, 0, yr));
+    return;
+  }
+  // The front side: the street's (c negative is north or west).
+  const front = b.front === 'north' || b.front === 'west' ? -1 : 1;
+  const low = lowFront ? front : -front;
+  const yHi = y0 + rise * 1.5;
+  quad(P(-len, low * half, ye), P(len, low * half, ye), P(len, -low * half, yHi), P(-len, -low * half, yHi));
+  // The end walls, in the wall's colour: a trapezoid from the wall's low side up to the roof's height there.
+  mb.kind = KIND.plain;
+  mb.color = s.wall;
+  const g = (ns ? b.w : b.d) / 2;
+  const wl = half - over;
+  const yAt = (c: number): number => ye + ((yHi - ye) * (c * -low + half)) / (2 * half);
+  for (const e of [-g, g]) {
+    const a = P(e, low * wl, y0);
+    const c = P(e, -low * wl, y0);
+    const d = P(e, -low * wl, yAt(-low * wl));
+    const f = P(e, low * wl, yAt(low * wl));
+    mb.poly4(a, c, d, f);
+    mb.poly4(f, d, c, a);
   }
 }
 

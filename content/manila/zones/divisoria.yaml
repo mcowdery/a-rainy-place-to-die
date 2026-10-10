@@ -14,7 +14,7 @@ zones:
     id: divisoria_bazaar
     name: Divisora bazaar
     night: 0.6
-    people: { plain: 8, long: 3, school: 2 }
+    people: { plain: 6, vendor: 3, pinoy_school: 1.5, jeep_crew: 1, trike_driver: 0.8, baller: 0.6, guard: 0.5, long: 0.3 }
     cars: { jeepney: 30, van: 18, minivan: 14, boxtruck: 16, keitruck: 10, sedan: 10, taxi: 8, tricycle: 18 }
     plan:
       floors: [[3, 6, 60], [7, 12, 30], [14, 20, 10]]

@@ -13,7 +13,7 @@ zones:
     id: southharbor_docks
     name: South Harbor
     night: 0.2
-    people: { plain: 6, suit: 1 }
+    people: { plain: 6, suit: 1, vendor: 1, jeep_crew: 1, trike_driver: 0.6, baller: 0.5, guard: 0.4 }
     cars: { boxtruck: 24, jeepney: 14, van: 12, keitruck: 10, sedan: 8, taxi: 6, minivan: 6, tricycle: 8 }
     plan:
       floors: [[1, 3, 70], [4, 6, 30]]

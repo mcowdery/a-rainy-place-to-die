@@ -116,7 +116,7 @@ import { RoutePicker } from './routePicker';
 import { subwayRoute } from './subway';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
-import { addFigure, GhostBuilder, ghostMaterial, setMobEye, setMobLook, setMobSun, setPassengerMaterial, type FigureSpec, type MobLook } from '../real/people';
+import { addFigure, GhostBuilder, ghostMaterial, setMobEye, setMobLook, setMobSun, setPassengerMaterial, setSkinTone, type FigureSpec, type MobLook } from '../real/people';
 import { SignAtlas, signMaterial } from '../real/signs';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
 import { TAXI_ADS } from '../models/ads';
@@ -201,6 +201,7 @@ setTreeSet(CITY.id);
 setSceneCity(CITY.filipino);
 setWorkLiveries(CITY.tropical);
 setCurrency(CITY.currency);
+setSkinTone(CITY.skin);
 const START_SPAWN = CITY.startSpawn;
 const SEED = CITY.seed;
 /** What a taxi driver has on the radio, and how loud against your own. */

@@ -673,7 +673,9 @@ const CLOTH_TOPS: readonly V3[] = ['#b5b1a5', '#7a7a78', '#232c44', '#4a5a6e', '
 const CLOTH_BOTTOMS: readonly V3[] = ['#36465e', '#232c40', '#333336', '#857660', '#5e5e60', '#4a3828', '#454a30', '#222224'].map(hex);
 const CLOTH_SUITS: readonly V3[] = ['#323236', '#20283c', '#5a5a5e', '#44362c'].map(hex);
 /** The body: skin (tag 1, a little lighter or darker by the figure), hair (19; an elder's grey), shoes (20). These go to the one colour when it's on. */
-const SKIN_TONE = hex('#b08e74');
+let SKIN_TONE = hex('#b08e74');
+/** The crowd's skin tone for the city (cityConfig.ts `skin`: Manila's is a deeper, tanned brown). Set once at startup, before the people's shader is built. */
+export const setSkinTone = (color: string): void => void (SKIN_TONE = hex(color));
 const HAIR_COLORS: readonly V3[] = ['#17161a', '#1e1a18', '#17161a', '#2e221a'].map(hex);
 const ELDER_HAIR: readonly V3[] = ['#7c7c7e', '#a6a6a4', '#5a5a5c'].map(hex);
 const SHOE_COLORS: readonly V3[] = ['#1c1b1c', '#2e2420', '#151516', '#3a2c22'].map(hex);
