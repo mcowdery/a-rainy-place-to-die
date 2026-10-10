@@ -22,7 +22,7 @@ export PLAYWRIGHT_BROWSERS_PATH="$WORKDIR/.playwright"   # on the volume, so it 
 echo "== apt packages (fonts, GL/Vulkan, tools)"
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
-  git curl ca-certificates xz-utils rsync \
+  git curl ca-certificates xz-utils rsync fontconfig \
   fonts-noto-cjk fonts-liberation fonts-dejavu-core fonts-ipafont-gothic fonts-noto-color-emoji \
   libvulkan1 vulkan-tools libegl1 libgl1 libglx-mesa0 libgbm1 pciutils >/dev/null
 
