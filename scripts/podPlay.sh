@@ -30,6 +30,7 @@ export HOME="${HOME:-/root}"
 stop() {
   pkill -f play-watch.sh 2>/dev/null || true
   vncserver -kill :1 >/dev/null 2>&1 || true
+  pkill -f "/usr/bin/perl /usr/bin/vncserver" 2>/dev/null || true
   pkill -x Xvnc 2>/dev/null || true
   pkill -f "vite --port 5173" 2>/dev/null || true
   rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
@@ -90,7 +91,7 @@ cd $REPO
 (npx vite --port 5173 --host 127.0.0.1 > /tmp/vite-play.log 2>&1 &)
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do curl -fs -o /dev/null http://127.0.0.1:5173/ && break; sleep 1; done
 exec "$CHROME" --no-sandbox --user-data-dir=/tmp/play-profile --no-first-run --disable-infobars \\
-  --use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface --ignore-gpu-blocklist --enable-gpu-rasterization \
+  --use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface --disable-gpu-compositing --ignore-gpu-blocklist --enable-gpu-rasterization \
   --remote-debugging-port=9222 --remote-allow-origins=* --window-position=0,0 --window-size=${GEOMETRY%x*},${GEOMETRY#*x} \\
   --kiosk $URL
 EOF
@@ -98,7 +99,10 @@ chmod +x "$HOME/.vnc/xstartup"
 # Nothing else can reach the port (127.0.0.1 only, behind the SSH tunnel), so the web login is switched off
 # (-disableBasicAuth). vncserver still asks whether to create a user with write access: "2" answers no, and
 # -select-de manual stops it asking which desktop (our xstartup is the desktop). Neither has a flag of its own.
-printf '2\n' | vncserver :1 -select-de manual -geometry "$GEOMETRY" -depth 24 -disableBasicAuth -xstartup "$HOME/.vnc/xstartup" 2>&1 | tail -6
+# Not piped into `tail`: vncserver's perl process lingers, and with `| tail -6` both stayed alive at 100% and 55% CPU
+# for hours, slowing everything else on the pod.
+printf '2\n' | vncserver :1 -select-de manual -geometry "$GEOMETRY" -depth 24 -disableBasicAuth -xstartup "$HOME/.vnc/xstartup" > /tmp/vncserver.log 2>&1 || true
+tail -6 /tmp/vncserver.log
 
 # The game keeps rendering whether or not anyone watches, which would keep the GPU busy and the pod's idle stop from
 # ever firing. So the desktop stops itself: with no viewer connected for PLAY_NO_VIEWER_MIN minutes (the browser tab

@@ -51,7 +51,7 @@ setsid nohup openbox > /tmp/openbox.log 2>&1 < /dev/null &
 (cd "$REPO" && setsid nohup npx vite --port 5173 --host 127.0.0.1 > /tmp/vite-play.log 2>&1 < /dev/null &)
 for _ in $(seq 1 20); do curl -fs -o /dev/null http://127.0.0.1:5173/ && break; sleep 1; done
 setsid nohup "$CHROME" --no-sandbox --user-data-dir=/tmp/play-profile --no-first-run --disable-infobars \
-  --use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface --ignore-gpu-blocklist --enable-gpu-rasterization \
+  --use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface --disable-gpu-compositing --ignore-gpu-blocklist --enable-gpu-rasterization \
   --remote-debugging-port=9222 --remote-allow-origins=* --window-position=0,0 --window-size="$W,$H" \
   --kiosk http://127.0.0.1:5173/ > /tmp/chrome-play.log 2>&1 < /dev/null &
 STREAM_W="$W" STREAM_H="$H" STREAM_PORT="$PORT" setsid nohup node "$REPO/scripts/stream/server.mjs" > /tmp/stream-server.log 2>&1 < /dev/null &

@@ -12,7 +12,9 @@
 // no display (a pod) falls back to headless.
 import { chromium } from 'playwright-core';
 
-const VULKAN = ['--use-angle=vulkan', '--enable-features=Vulkan', '--disable-vulkan-surface'];
+// --disable-gpu-compositing: with it off the pod's Vulkan renders corrupted pictures (big dark rectangles, garbled text, green
+// patches on the ground); the game's WebGL stays on the GPU either way. Found by rendering the same view on a PC and the pod.
+const VULKAN = ['--use-angle=vulkan', '--enable-features=Vulkan', '--disable-vulkan-surface', '--disable-gpu-compositing'];
 
 export function launchBrowser(options = {}) {
   const opts = { ...options };

@@ -8,8 +8,11 @@
   :root { color-scheme: dark; }
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font: 13px/1.4 Consolas, "Cascadia Mono", monospace; color: #cfd; }
   canvas { display: block; width: 100vw; height: 100vh; object-fit: contain; cursor: none; background: #000; }
-  #hud { position: fixed; left: 8px; top: 6px; padding: 3px 7px; background: rgba(0, 0, 0, .55); pointer-events: none; white-space: pre; }
-  #msg { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; background: rgba(0, 0, 0, .55); font: 18px/1.6 system-ui, sans-serif; cursor: pointer; }
+  /* the stats line is off unless asked for (F2): its once-a-second text change sits over the game's own counter */
+  #hud { position: fixed; left: 8px; bottom: 6px; padding: 3px 7px; background: rgba(0, 0, 0, .55); pointer-events: none; white-space: pre; display: none; }
+  #hud.on { display: block; }
+  /* the overlay must not take the click: the click that captures the mouse goes to the canvas under it */
+  #msg { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; background: rgba(0, 0, 0, .55); font: 18px/1.6 system-ui, sans-serif; pointer-events: none; }
   #msg small { display: block; color: #9ab; font-size: 13px; margin-top: 6px; }
   #msg.hide { display: none; }
 </style>
@@ -21,7 +24,7 @@
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const canvas = $('c'), ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+  const canvas = $('c'), ctx = canvas.getContext('2d', { alpha: false });   // not `desynchronized`: it can tear or flicker on some GPUs
   const hud = $('hud'), msg = $('msg');
   let ws = null, decoder = null, configured = false, hello = null;
   let latest = null;                       // the newest decoded frame, drawn on the next animation frame
@@ -88,7 +91,7 @@
     ws.onmessage = (e) => {
       if (typeof e.data === 'string') {
         const j = JSON.parse(e.data);
-        if (j.type === 'hello') { hello = j; canvas.width = j.w; canvas.height = j.h; say('Click to play<small>Esc releases the mouse. Fullscreen: F</small>'); }
+        if (j.type === 'hello') { hello = j; canvas.width = j.w; canvas.height = j.h; say('Click to play<small>Esc releases the mouse. F: fullscreen. F2: stats</small>'); }
         else if (j.type === 'pong') m.rtt = performance.now() - j.ts;
       } else onVideo(new Uint8Array(e.data));
     };
@@ -154,6 +157,7 @@
     if (!locked()) { send({ t: 'k', k: 'Escape', d: true }); send({ t: 'k', k: 'Escape', d: false }); say('Click to play<small>Esc releases the mouse. Fullscreen: F</small>'); }
   });
   window.addEventListener('keydown', (e) => {
+    if (e.code === 'F2') { e.preventDefault(); hud.classList.toggle('on'); return; }
     if (e.code === 'KeyF' && !locked() && e.ctrlKey === false) { document.documentElement.requestFullscreen?.(); return; }
     const k = keysym(e.code);
     if (!k || e.repeat) { if (k) e.preventDefault(); return; }
