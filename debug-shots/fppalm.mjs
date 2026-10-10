@@ -4,7 +4,7 @@ const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11'] });
 const page = await browser.newPage({ viewport: { width: 320, height: 200 } });
-await page.goto(`${server.resolvedUrls.local[0]}models.html`);
+await page.goto(`${server.resolvedUrls.local[0]}models-mack.html`);
 const r = await page.evaluate(async () => {
   const THREE = await import('/node_modules/.vite/deps/three.js').catch(() => import('three'));
   const { loadCharacterModel } = await import('/src/poc3d/models/characters.ts');

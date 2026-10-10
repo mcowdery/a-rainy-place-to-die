@@ -24,11 +24,12 @@ export default defineConfig(({ mode }) => {
       outDir: edition === 'standard' ? 'dist' : `dist-${edition}`,
       rollupOptions: {
         // index.html: the city (the game; the 2D tile prototype it replaced is set aside in archive/2d/). poc3d.html: 3D rendering test block.
-        // models.html: showroom for reviewing car, cast and prop models in isolation; mob.html: the mob's own showroom; characters.html: the named characters built on the mob's bodies (the same page's other half).
+        // models.html: the index of the showrooms; models-<room>.html (Tōto's cars, mack, plants, buildings, transit) and models-<room>-ph.html (Manila's cars, plants, boats, buildings) review models in isolation, one room a page (src/poc3d/showroom/shell.ts, rooms/);
+        // mob.html: the mob's own showroom, mob-ph.html its Manila half; characters.html: the named characters built on the mob's bodies (the same page's other half).
         // race.html: the racing venue (Kurokami Pass), the handling test.
         // scenes.html: the editor for the rooms behind the windows (it saves through the dev server; built, it downloads).
         // fight.html: the fight test, a yard for trying the melee as Mack in first person.
-        input: { city: 'index.html', poc3d: 'poc3d.html', models: 'models.html', mob: 'mob.html', characters: 'characters.html', scenes: 'scenes.html', race: 'race.html', garage: 'garage.html', fight: 'fight.html' },
+        input: { city: 'index.html', poc3d: 'poc3d.html', models: 'models.html', modelsCars: 'models-cars.html', modelsMack: 'models-mack.html', modelsPlants: 'models-plants.html', modelsBuildings: 'models-buildings.html', modelsTransit: 'models-transit.html', modelsCarsPh: 'models-cars-ph.html', modelsPlantsPh: 'models-plants-ph.html', modelsBoatsPh: 'models-boats-ph.html', modelsBuildingsPh: 'models-buildings-ph.html', mob: 'mob.html', mobPh: 'mob-ph.html', characters: 'characters.html', scenes: 'scenes.html', race: 'race.html', garage: 'garage.html', fight: 'fight.html' },
       },
     },
     test: {

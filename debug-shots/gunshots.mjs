@@ -6,7 +6,7 @@ await server.listen();
 const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
-await page.goto(`${server.resolvedUrls.local[0]}models.html`);
+await page.goto(`${server.resolvedUrls.local[0]}models-mack.html`);
 await page.waitForTimeout(8000);
 await page.evaluate(() => { document.getElementById('panel').style.display = 'none'; document.querySelectorAll('.label').forEach((l) => (l.style.display = 'none')); });
 const gx = await page.evaluate(() => 0);

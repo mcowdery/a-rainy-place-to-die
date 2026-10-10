@@ -11,7 +11,7 @@ const base = server.resolvedUrls.local[0];
 const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
-await page.goto(`${base}models.html?fp=1`);
+await page.goto(`${base}models-mack.html?fp=1`);
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
 await page.waitForTimeout(2500);
 await page.evaluate(() => { document.getElementById('panel').style.display = 'none'; __fp.third(true); __fp.armed(false); __fp.look(0, 0); });

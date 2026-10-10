@@ -53,7 +53,7 @@ Covers your car and garage, driving, crashing and damage, races in the city, the
 
 **The noir saloon** (`SALOONS`): the Seika Kurofune 3000 Brougham (黒船), a big black late-Showa saloon, heavy, soft and slow to turn, with a body of its own (the user asked for a bespoke one after a first version on the traffic's `luxury` body): `hardtop` in models/vehicles.ts (`HARDTOP`), a late-70s four-door pillared hardtop: a long level bonnet and boot, an upright squared roof on a thick rear pillar with a near-vertical back window, a straight waistline, chrome bumpers, belt and grille between rectangular lamps, chrome mirrors out on the front wings (`Design.fenderMirrors`), steel wheels, the luxury cabin (`CABIN_STYLE`).
 
-**Under review**: it's at the end of the showroom's Cars row (`models.html`) and yours through the picker; it's in no traffic mix and not sold in the garage until the user approves it. `debug-shots/_lean.mjs <dir> saloon [clock] [spawn]` photographs it in the city.
+**Under review**: it's at the end of the showroom's Cars row (`models-cars.html`) and yours through the picker; it's in no traffic mix and not sold in the garage until the user approves it. `debug-shots/_lean.mjs <dir> saloon [clock] [spawn]` photographs it in the city.
 
 **Engine smoke stays outside** (ownCar.ts): the puffs of a smashed front are world-space sprites the car used to drive through, so they came in through the windscreen; now the engine's puffs are carried over the car (a line over the bonnet, up the glass, along the roof and down the back: `over`, from the body's height) and any puff within about a metre of the camera thins to nothing (it would fill the view).
 

@@ -1,4 +1,4 @@
-// The boats in the showroom (models.html): the bangkas, the launch, the barge, the ships, from a few views.
+// The boats in the showroom (models-boats-ph.html): the bangkas, the launch, the barge, the ships, from a few views.
 //   node debug-shots/boatshots.mjs <out dir>
 import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
@@ -11,11 +11,11 @@ const browser = await launchBrowser({ channel: 'msedge', headless: true, args: [
 const page = await browser.newPage({ viewport: { width: 1100, height: 680 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300)); });
-await page.goto(`${server.resolvedUrls.local[0]}models.html`, { timeout: 300000 });
+await page.goto(`${server.resolvedUrls.local[0]}models-boats-ph.html`, { timeout: 300000 });
 await page.waitForTimeout(9000);
 if (process.env.NIGHT) await page.keyboard.press('Digit2');
 await page.waitForTimeout(2000);
-const X = 1500, Z = 1500;
+const X = 0, Z = 0;
 const views = {
   bangkas: [X + 20, 1.2, Z, 22, 0.4, 0.35, 0.8],
   bangka_a: [X, 1.2, Z, 10, 1, 0.3, 0.6],

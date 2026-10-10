@@ -5,7 +5,7 @@ const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11'] });
 const page = await browser.newPage({ viewport: { width: 320, height: 200 } });
-await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.goto(`${server.resolvedUrls.local[0]}models-mack.html?fp=1`);
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
 await page.evaluate(async () => { await __fp.enter(14, 30, 0); __fp.kind('lever'); __fp.oneHand(false); __fp.aim(false); __fp.look(0, 0); __fp.walk(true); __fp.run(true); });
 await page.waitForTimeout(1500);

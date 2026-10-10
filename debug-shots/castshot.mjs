@@ -5,7 +5,7 @@ await server.listen();
 const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
-await page.goto(`${server.resolvedUrls.local[0]}models.html`);
+await page.goto(`${server.resolvedUrls.local[0]}models-mack.html`);
 await page.waitForTimeout(9000);
 await page.evaluate(() => { document.getElementById('panel').style.display = 'none'; __view(-2.2, 1.5, 42.5, -1.1, 1.05, 38); });
 await page.waitForTimeout(1200);

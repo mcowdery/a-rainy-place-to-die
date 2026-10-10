@@ -12,7 +12,8 @@ import type { FigureShape } from '../real/mobShape';
 import { setShapedHeadScale } from '../real/mobShape';
 import { packFigures } from '../real/people';
 import { CrowdSmoke } from '../real/smoke';
-import { addFigure, characterMaterial, figureMesh, holdHands, GHOST_COLORS, GhostBuilder, ghostMaterial, MOB_LOOK_NAMES, setMobLook, setMobShape, type Body, type FigureSpec, type Hair, type MobLook, type MobShape, type Pose } from '../real/people';
+import { CITIES } from '../district/cityConfig';
+import { addFigure, characterMaterial, figureMesh, holdHands, GHOST_COLORS, GhostBuilder, ghostMaterial, MOB_LOOK_NAMES, setMobLook, setMobShape, setSkinTone, type Body, type FigureSpec, type Hair, type MobLook, type MobShape, type Pose } from '../real/people';
 
 /**
  * The mob's showroom (mob.html): the city's passers-by (real/people.ts) on their own, apart from the model
@@ -63,6 +64,8 @@ scene.add(floor);
 const lamp = new THREE.DataTexture(new Float32Array([1, 0.78, 0.5, 1]), 1, 1, THREE.RGBAFormat, THREE.FloatType);
 lamp.needsUpdate = true;
 const light = { tLight: { value: lamp as THREE.Texture | null }, uLightRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uLightFade: { value: new THREE.Vector2(0, 0) }, uLightGain: { value: 0 } };
+// (Manila's page, mob-ph.html: the crowd's deeper tan there, a shader constant set before the material is built.)
+if (document.body.dataset.page === 'ph') setSkinTone(CITIES.manila.skin);
 // (The characters' page: the same material with their fingers' and toes' bones posed.)
 const ghost = document.body.dataset.page === 'characters' ? characterMaterial(light) : ghostMaterial(light);
 
@@ -100,10 +103,11 @@ const wall = (z: number): void => {
 // Each row is a stage of its own: looking at one, the others are put away ('everything' brings them all back).
 let stage = 0;
 const stageOf = { people: [] as number[], tags: [] as number[], items: [] as number[] };
-// Two pages share this file: mob.html (the crowd) and characters.html (named characters built on the crowd's bodies,
-// and the bare body they start from). A stage belongs to the page set when it ends; the other page's are not built.
-type Page = 'mob' | 'characters';
-const PAGE: Page = document.body.dataset.page === 'characters' ? 'characters' : 'mob';
+// Three pages share this file: mob.html (the crowd), characters.html (named characters built on the crowd's bodies,
+// and the bare body they start from) and mob-ph.html (Manila's Filipino outfits, in Manila's skin tone). A stage belongs
+// to the page set when it ends; the other pages' are not built.
+type Page = 'mob' | 'characters' | 'ph';
+const PAGE: Page = document.body.dataset.page === 'characters' ? 'characters' : document.body.dataset.page === 'ph' ? 'ph' : 'mob';
 let stageFor: Page = 'mob';
 const stagePages: Page[] = [];
 const endStage = (): void => {
@@ -334,6 +338,7 @@ function outfitStage(title: string, DRESSED: Dressed[]): void {
 outfitStage('outfits', DRESSED_FIRST);
 outfitStage('new outfits', DRESSED_NEW);
 outfitStage('shady', DRESSED_SHADY);
+stageFor = 'ph';
 outfitStage('filipino (under review)', DRESSED_FILIPINO);
 // ---- characters.html: the named characters, and the bare body they are built on ----
 stageFor = 'characters';
@@ -881,11 +886,17 @@ function renderPanel(): void {
   for (const it of items) if (it.close) button(it.name, false, () => focus(it));
   const a = document.createElement('a');
   a.href = 'models.html';
-  a.textContent = '→ model showroom (cars, cast, props)';
+  a.textContent = '→ the showrooms (cars, plants, buildings, ...)';
   panel.appendChild(a);
   const other = document.createElement('a');
   other.href = PAGE === 'mob' ? 'characters.html' : 'mob.html';
   other.textContent = PAGE === 'mob' ? '→ characters (named, built on these bodies)' : "→ mob showroom (the crowd's bodies and outfits)";
+  if (PAGE === 'mob') {
+    const ph = document.createElement('a');
+    ph.href = 'mob-ph.html';
+    ph.textContent = "→ Manila's people (the Filipino outfits)";
+    panel.appendChild(ph);
+  }
   panel.appendChild(other);
   // The figures modelled with MakeHuman (they used to stand here) have a page of their own.
   const humans = document.createElement('a');
@@ -938,7 +949,7 @@ window.addEventListener('resize', () => {
   labels.setSize(window.innerWidth, window.innerHeight);
 });
 
-focus(items.find((i) => i.name === query.get('view')) ?? items.find((i) => i.name === (PAGE === 'characters' ? CHARACTERS[0]?.name : 'woman turned round')) ?? (items.find((i) => i.name === 'all bodies') ?? items[0]), true);
+focus(items.find((i) => i.name === query.get('view')) ?? items.find((i) => i.name === (PAGE === 'characters' ? CHARACTERS[0]?.name : PAGE === 'ph' ? 'filipino (under review)' : 'woman turned round')) ?? (items.find((i) => i.name === 'all bodies') ?? items[0]), true);
 
 const clock = new THREE.Clock();
 const fwd = new THREE.Vector3();
@@ -984,7 +995,7 @@ renderer.setAnimationLoop(() => {
   labels.render(scene, camera);
   const S = stats.shaped, C = stats.classic;
   $('hud').textContent = [
-    `${PAGE === 'characters' ? 'CHARACTERS' : 'MOB SHOWROOM'} · ${gen === 'new' ? 'NEW figures (under review)' : gen === 'current' ? 'current figures (the district)' : 'both: new in front, current behind'} · ${mode} · look ${look}`,
+    `${PAGE === 'characters' ? 'CHARACTERS' : PAGE === 'ph' ? 'MOB SHOWROOM (MANILA)' : 'MOB SHOWROOM'} · ${gen === 'new' ? 'NEW figures (under review)' : gen === 'current' ? 'current figures (the district)' : 'both: new in front, current behind'} · ${mode} · look ${look}`,
     `triangles a figure (plain man / woman): new ${S.man} / ${S.woman}, current ${C.man} / ${C.woman} · built in ${S.ms.toFixed(0)} ms / ${C.ms.toFixed(0)} ms`,
     'left-drag orbit · right-drag pan · wheel zoom · WASD / Q E fly (Shift faster)',
     `M figures · 1 studio · 2 day · 3 night · K look · C one colour · G edges · N skin · T ${still ? 'still' : 'routine'} · L labels · X wireframe${wire ? ' (on)' : ''} · R turntable${turntable ? ' (on)' : ''}`,

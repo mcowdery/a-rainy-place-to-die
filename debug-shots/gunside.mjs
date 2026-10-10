@@ -8,7 +8,7 @@ await server.listen();
 const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1000, height: 560 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
-await page.goto(`${server.resolvedUrls.local[0]}models.html`);
+await page.goto(`${server.resolvedUrls.local[0]}models-mack.html`);
 await page.waitForTimeout(7000);
 await page.keyboard.press('Digit1');
 await page.evaluate(async () => {

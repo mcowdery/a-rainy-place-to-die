@@ -5,7 +5,7 @@ await server.listen();
 const base = server.resolvedUrls.local[0];
 const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
-await page.goto(`${base}models.html?fp=1`);
+await page.goto(`${base}models-mack.html?fp=1`);
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
 for (const [kind, aim] of [['lever', true], ['lever', false], ['double', true]]) {
   await page.evaluate(([k, a]) => { __fp.kind(k); __fp.look(0, 0); __fp.aim(a); }, [kind, aim]);

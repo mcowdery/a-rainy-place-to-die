@@ -10,7 +10,7 @@ const browser = await launchBrowser({ channel: 'msedge', headless: true, args: [
 const page = await browser.newPage({ viewport: { width: 1000, height: 640 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300)); });
-await page.goto(`${server.resolvedUrls.local[0]}models.html`);
+await page.goto(`${server.resolvedUrls.local[0]}models-mack.html`);
 await page.waitForTimeout(7000);
 await page.keyboard.press('Digit1');
 await page.keyboard.press('KeyB');

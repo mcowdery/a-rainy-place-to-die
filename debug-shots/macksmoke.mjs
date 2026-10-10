@@ -14,7 +14,7 @@ const browser = await launchBrowser({ channel: 'msedge', headless: true, args: [
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' || (m.type() === 'warning' && /GL_|WebGL|X\d{4}|Shader/.test(m.text()))) console.log('CONSOLE', m.text().slice(0, 900)); });
-await page.goto(`${base}models.html?fp=1`, { timeout: 240000 });
+await page.goto(`${base}models-mack.html?fp=1`, { timeout: 240000 });
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
 await page.waitForTimeout(2500);
 await page.evaluate(() => { document.getElementById('panel').style.display = 'none'; });

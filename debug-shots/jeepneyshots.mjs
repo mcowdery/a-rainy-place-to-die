@@ -1,4 +1,4 @@
-// The jeepney and the tricycle in the showroom (models.html), lit, from several angles.
+// The jeepney and the tricycle in the showroom (models-cars-ph.html), lit, from several angles.
 //   node debug-shots/jeepneyshots.mjs <out dir> [studio|night|day] [livery 0-3]
 import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
@@ -11,7 +11,7 @@ const browser = await launchBrowser({ channel: 'msedge', headless: true, args: [
 const page = await browser.newPage({ viewport: { width: 1100, height: 680 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300)); });
-await page.goto(`${server.resolvedUrls.local[0]}models.html`);
+await page.goto(`${server.resolvedUrls.local[0]}models-cars-ph.html`);
 await page.waitForTimeout(9000);
 await page.keyboard.press(mode === 'night' ? 'Digit2' : mode === 'day' ? 'Digit3' : 'Digit1');
 await page.addStyleTag({ content: '.label{display:none !important}' });
@@ -20,7 +20,7 @@ await page.evaluate(() => {
   document.querySelectorAll('.label').forEach((l) => (l.style.display = 'none'));
 });
 const cx = -10 + li * 5.4;
-const z = -43;
+const z = 0;
 const shots = {
   side: [cx - 12, 1.5, z, cx, 1.15, z],
   sideclose: [cx - 6.5, 1.4, z + 1.6, cx, 1.1, z + 1.6],

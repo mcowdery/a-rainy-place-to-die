@@ -4,7 +4,7 @@ const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11'] });
 const page = await browser.newPage({ viewport: { width: 320, height: 200 } });
-await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.goto(`${server.resolvedUrls.local[0]}models-mack.html?fp=1`);
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
 await page.evaluate(async () => { await __fp.enter(13.0, 38.6, 0); __fp.ride(); __fp.armed(true); __fp.aim(true); });
 for (const yaw of [0, -0.6, -1.1, -1.6]) {

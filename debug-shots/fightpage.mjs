@@ -60,7 +60,7 @@ await shot('5_third_day');
 console.log('state:', JSON.stringify(await page.evaluate(() => ({ standing: __fp.brawl().standing, visible: __fp.thugs().filter((t) => t.root.visible).length }))));
 
 // The showroom's first person: Mack and his guns, and none of the fight's keys.
-await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
+await page.goto(`${server.resolvedUrls.local[0]}models-mack.html?fp=1`);
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });
 await wait(1500);
 await page.keyboard.press('Digit2');
