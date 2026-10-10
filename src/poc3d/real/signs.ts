@@ -181,6 +181,18 @@ const signCommon = /* glsl */ `
   varying vec3 vInk;
   varying vec3 vPlate;
   flat varying vec2 vSign;
+  varying vec2 vOutP;
+  uniform float uOut[64];
+  uniform vec3 uOutMap;
+  // 1 where the power is out (district/brownout.ts's cells, packed 24 to a float).
+  float blackoutAt(vec2 p) {
+    if (uOutMap.x < 0.5) return 0.0;
+    vec2 c = floor(p / uOutMap.z);
+    if (c.x < 0.0 || c.y < 0.0 || c.x >= uOutMap.x || c.y >= uOutMap.y) return 0.0;
+    float i = c.y * uOutMap.x + c.x;
+    float w = floor(i / 24.0);
+    return mod(floor(uOut[int(w)] / exp2(i - w * 24.0)), 2.0);
+  }
   float sh2(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 `;
 
@@ -196,6 +208,8 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
     shader.uniforms.uTime = u.uTime;
     shader.uniforms.uNeon = u.uNeon;
     shader.uniforms.uFlicker = u.uFlicker;
+    shader.uniforms.uOut = u.uOut;
+    shader.uniforms.uOutMap = u.uOutMap;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec2 aUv;
@@ -205,15 +219,17 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
         varying vec2 vSUv;
         varying vec3 vInk;
         varying vec3 vPlate;
-        flat varying vec2 vSign;`)
+        flat varying vec2 vSign;
+        varying vec2 vOutP;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        vSUv = aUv; vInk = aInk; vPlate = aPlate; vSign = aSign;`);
+        vSUv = aUv; vInk = aInk; vPlate = aPlate; vSign = aSign;
+        vOutP = (modelMatrix * vec4(position, 1.0)).xz;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${signCommon}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec2 st = texture2D(tSigns, vSUv).rg;
         float flk = uFlicker > 0.5 && sh2(vec2(vSign.x, floor(uTime * 12.0))) > 0.992 ? 0.08 : 1.0;
-        float on = uNeon * flk;
+        float on = uNeon * flk * (1.0 - blackoutAt(vOutP));
         if (vSign.y > 2.5) {
           if (st.r < 0.4) discard;
           diffuseColor.rgb = vInk;
@@ -230,7 +246,7 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
           totalEmissiveRadiance += mix(vPlate * 0.9, vInk * inkGlow, st.r) * on;
         }`);
   };
-  m.customProgramCacheKey = () => 'signs-v2';
+  m.customProgramCacheKey = () => 'signs-v3';
   return m;
 }
 

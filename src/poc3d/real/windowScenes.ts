@@ -232,7 +232,7 @@ export const CAST = {
 export type CastName = keyof typeof CAST;
 
 /** The outfits cut to a teen's size (mobShape.ts): never in a vice scene. */
-export const TEEN_OUTFITS: readonly Outfit[] = ['school', 'track', 'gym', 'yankee'];
+export const TEEN_OUTFITS: readonly Outfit[] = ['school', 'pinoy_school', 'track', 'gym', 'yankee'];
 export const whoOf = (w: CastName | Who): Who => (typeof w === 'string' ? CAST[w] : w);
 export const isAdult = (w: CastName | Who): boolean => whoOf(w)?.body !== 'child' && !TEEN_OUTFITS.includes(whoOf(w)?.outfit);
 
@@ -727,6 +727,48 @@ export const ITEMS = {
     p.line(x - w / 2, y, x + w / 2, y + 0.04, 0.3);
     p.line(x - w / 2 + 0.3, y - 0.16, x - w / 2 + 0.3, y + 0.16, 0.035);
     p.line(x + w / 2 - 0.35, y - 0.13, x + w / 2 - 0.35, y + 0.2, 0.035);
+  },
+  /** Manila: an electric stand fan (the guard a disc, a pole and a round base). */
+  fan: (p: Pen, x: number, h = 1.05) => {
+    p.ell(x, 0.03, 0.2, 0.035);
+    p.rect(x - 0.018, 0.04, 0.036, h - 0.06);
+    p.ell(x, h + 0.14, 0.24, 0.24);
+    p.rect(x - 0.05, h + 0.02, 0.1, 0.12);
+  },
+  /** Manila: a wall shelf with a Santo Nino in his robe and crown, two candles and a vase, a framed print above. */
+  altar: (p: Pen, x: number) => {
+    p.rect(x - 0.45, 1.1, 0.9, 0.04);
+    p.rect(x - 0.4, 0.98, 0.04, 0.12);
+    p.rect(x + 0.36, 0.98, 0.04, 0.12);
+    p.rr(x - 0.06, 1.14, 0.12, 0.2, 0.04);
+    p.poly([x - 0.085, 1.14, x + 0.085, 1.14, x + 0.05, 1.3, x - 0.05, 1.3]);
+    p.ell(x, 1.38, 0.04, 0.045);
+    p.poly([x - 0.04, 1.42, x - 0.025, 1.47, x, 1.44, x + 0.025, 1.47, x + 0.04, 1.42]);
+    for (const d of [-0.22, 0.24]) p.rect(x + d - 0.012, 1.14, 0.024, 0.14);
+    p.rr(x - 0.36, 1.14, 0.06, 0.12, 0.02);
+    p.rr(x + 0.06, 1.55, 0.3, 0.4, 0.02);
+    p.rr(x - 0.36, 1.5, 0.3, 0.46, 0.02);
+  },
+  /** Manila: laundry on a line across the room: shirts and a towel hung by their shoulders. */
+  laundry: (p: Pen, x: number, y = 1.9) => {
+    p.line(x - 1.3, y, x + 1.3, y - 0.06, 0.012);
+    for (const [d, w, h] of [[-1.0, 0.34, 0.5], [-0.45, 0.4, 0.56], [0.1, 0.3, 0.42], [0.55, 0.36, 0.5], [1.0, 0.32, 0.46]] as const) {
+      const yy = y - 0.03 * (d / 1.3 + 1);
+      p.poly([x + d - w / 2, yy - 0.05, x + d + w / 2, yy - 0.05, x + d + w * 0.62, yy - 0.2, x + d + w / 2, yy - 0.2, x + d + w * 0.34, yy - h, x + d - w * 0.34, yy - h, x + d - w / 2, yy - 0.2, x + d - w * 0.62, yy - 0.2]);
+    }
+  },
+  /** Manila: a woven sleeping mat (a banig) on the floor, with a pillow. */
+  mat: (p: Pen, x: number, w = 1.9) => {
+    p.rr(x - w / 2, 0, w, 0.05, 0.02);
+    p.rr(x - w / 2 + 0.05, 0.04, 0.4, 0.1, 0.05);
+  },
+  /** Manila: a mosquito net hung over the mat: a ring above, cords down to the corners and the sides. */
+  net: (p: Pen, x: number, w = 1.9) => {
+    p.line(x - 0.12, 2.2, x + 0.12, 2.2, 0.03);
+    for (const [dx, y] of [[-w / 2, 0.02], [w / 2, 0.02], [-w / 2, 0.9], [w / 2, 0.9]] as const) p.line(x + dx * 0.1, 2.2, x + dx, y, 0.01);
+    p.line(x - w / 2, 0.02, x - w / 2, 0.9, 0.008);
+    p.line(x + w / 2, 0.02, x + w / 2, 0.9, 0.008);
+    p.line(x - w / 2, 0.9, x + w / 2, 0.9, 0.008);
   },
 } as const;
 export type ItemName = keyof typeof ITEMS;
@@ -1445,6 +1487,61 @@ export const SCENES: readonly Scene[] = [
   },
 ];
 
+/**
+ * Manila's own rooms (setSceneCity): each takes the place of the Japanese built-in scene of its key's id, in its cell
+ * (a futon, a kotatsu, the morning exercises on the radio, a mahjong table, the izakaya's kanpai), the same sort of room
+ * with a Filipino household in it: the plastic table and chairs, an electric fan, the laundry on a line, a sleeping mat
+ * under a net, the Santo Nino's altar, a drinking session on plastic stools with the videoke machine behind.
+ */
+export const MANILA_SWAP: Readonly<Record<string, Scene>> = {
+  home_kotatsu: {
+    id: 'm_home_fan', label: 'at the plastic table with the electric fan on, the laundry behind', cat: 'home',
+    back: [['laundry', 0, 1.95], ['cabinets', -1.4, 2]], front: [['table', 0.05, 1.1], ['chair', -0.78, 1], ['chair', 0.88, -1], ['fan', 1.5]],
+    a: [fig('man2', -0.78, { yaw: R, ...SIT, lean: 6, aR: [30, 0, 70], aL: [26, 0, 70] }, { seat: 0.45, hold: [['R', 'glass', 90]] }), fig('mom', 0.88, { yaw: L, ...SIT, aL: [30, 0, 76], aR: [30, 0, 70] }, { seat: 0.45 })],
+    b: [fig('man2', -0.78, { yaw: R, ...SIT, lean: 8, aR: [58, 0, 118], aL: [26, 0, 70], nod: -10 }, { seat: 0.45, hold: [['R', 'glass', 100]] }), fig('mom', 0.88, { yaw: L, ...SIT, aL: [48, 0, 90], aR: [30, 0, 70] }, { seat: 0.45 })], anim: NOW_AND_THEN,
+    aItems: [['bottle', -0.2], ['glass', 0.3]], bItems: [['bottle', -0.2], ['glass', 0.3]],
+  },
+  home_futon: {
+    id: 'm_home_mat', label: 'someone asleep on a mat under a net, someone sitting up', cat: 'home', low: true,
+    back: [['cabinets', 1.4, 2], ['picture', -1.3, 1.5]], front: [['mat', -0.2, 2.0], ['net', -0.2, 2.0]],
+    a: [fig('woman2', 0.1, { yaw: R, pitch: -90, aL: [10, 0, 10], aR: [10, 0, 10] }, { floor: 0.06 }), fig('man', -0.7, { yaw: R, ...FLOOR_SIT, lean: 20, nod: 20 }, { seat: 0.06 })],
+  },
+  home_taiso: {
+    id: 'm_home_altar', label: 'praying at the Santo Nino altar', cat: 'home',
+    back: [['altar', -0.2], ['fan', 1.45]], front: [['plant', 1.8, 1.0]],
+    a: [fig('elder2', -0.2, { yaw: B, aL: [52, 14, 118], aR: [52, -14, 118] })], b: [fig('elder2', -0.2, { yaw: B, lean: 16, nod: 18, aL: [52, 14, 118], aR: [52, -14, 118] })], anim: [3.4, 0.55],
+  },
+  den_kanpai: {
+    id: 'm_den_inuman', label: 'a drinking session on plastic stools, the videoke machine behind', cat: 'den',
+    back: [['karaoke', 1.35], ['picture', -1.0, 1.6, 0.9, 0.35]], front: [['table', 0, 1.5], ['pendant', 0, 1.75], ['stool', -0.95, 0.45], ['stool', 0.95, 0.45]],
+    a: [fig('worker', -0.92, { yaw: R, ...SIT, aR: [30, 0, 84] }, { seat: 0.45, hold: [['R', 'glass', 90]] }), fig('shirt', 0.92, { yaw: L, ...SIT, aL: [30, 0, 84] }, { seat: 0.45, hold: [['L', 'glass', 90]] }), fig('clerk2', 0, { ...SIT, aL: [30, 30, 100, 40] }, { seat: 0.45 })],
+    b: [fig('worker', -0.92, { yaw: R, ...SIT, aR: [86, 0, 30], lean: 12 }, { seat: 0.45, hold: [['R', 'glass', 90]] }), fig('shirt', 0.92, { yaw: L, ...SIT, aL: [86, 0, 30], lean: 12 }, { seat: 0.45, hold: [['L', 'glass', 90]] }), fig('clerk2', 0, { ...SIT, aL: [130, 40, 40] }, { seat: 0.45 })], anim: NOW_AND_THEN,
+    aItems: [['bottles3', -0.1]], bItems: [['bottles3', -0.1]],
+  },
+  v_den_mahjong: {
+    when: 'evening', id: 'm_den_tongits', label: 'gambling: a game of tong-its, cards and bills on the table', cat: 'v_den',
+    back: [['picture', 0, 1.75, 1.2, 0.3], ['hanger', 1.7]], front: [['table', 0, 1.3], ['pendant', 0, 1.6], ['chair', -0.85, 1], ['chair', 0.85, -1]],
+    a: [fig('fatcat', -0.84, { yaw: R, ...SIT, lean: 12, aR: [44, 0, 60], aL: [36, 0, 74] }, { seat: 0.45 }), fig('hood', 0.84, { yaw: L, ...SIT, lean: 10, aL: [44, 0, 64], aR: [36, 0, 74] }, { seat: 0.45 }), fig('tattoo', 0, { ...SIT, lean: 8, aL: [30, 30, 100, 40], aR: [30, 30, 100, 40] }, { seat: 0.45 })],
+    b: [fig('fatcat', -0.84, { yaw: R, ...SIT, lean: 22, aR: [70, 0, 16], aL: [36, 0, 74] }, { seat: 0.45, hold: [['R', 'cards', 0]] }), fig('hood', 0.84, { yaw: L, ...SIT, lean: 10, aL: [44, 0, 64], aR: [36, 0, 74] }, { seat: 0.45 }), fig('tattoo', 0, { ...SIT, lean: 8, aL: [30, 30, 100, 40], aR: [30, 30, 100, 40] }, { seat: 0.45 })], anim: [2.4, 0.72],
+    aItems: [['stacks', 0.1, 0.705, 2]], bItems: [['stacks', 0.1, 0.705, 2]],
+  },
+};
+
+/** The clothes of Tōto's people that Manila's wouldn't wear: the yukata, the kimono, the yakuza's, mapped to its own. */
+const MANILA_WHO: Partial<Record<CastName, CastName>> = {
+  robe: 'man2', robe2: 'woman2', mama: 'dress', yakuza: 'hood', yakuza2: 'hood', oyabun: 'fatcat', chinpira: 'man2',
+};
+const whoFor = (f: Fig): Fig => (typeof f.who === 'string' && MANILA_WHO[f.who] ? { ...f, who: MANILA_WHO[f.who]! } : f);
+function localise(s: Scene): Scene {
+  const map = (l?: readonly Fig[]): Fig[] | undefined => l?.map(whoFor);
+  return { ...s, a: map(s.a)!, ...(s.b ? { b: map(s.b)! } : {}), ...(s.deep ? { deep: map(s.deep)! } : {}), ...(s.frames ? { frames: s.frames.map((fr) => ({ ...fr, a: map(fr.a)! })) } : {}) };
+}
+let MANILA = false;
+/** Manila (CityConfig.filipino): the rooms behind its windows are its own (MANILA_SWAP) and its people dress as it does. Before the atlas is built. */
+export function setSceneCity(manila: boolean): void {
+  MANILA = manila;
+}
+
 // ---- a scene's poses in order ----
 
 /** As many poses as a scene can play (the first two in its cell, the rest in frame slots). */
@@ -1669,7 +1766,7 @@ const markOf = (raw: unknown): string => {
  */
 export function allScenes(name: string = typeof __EDITION__ === 'undefined' ? 'standard' : __EDITION__, extra: readonly unknown[] = name === edition.name ? editionScenes() : [], over: readonly unknown[] = sceneOverrides()): readonly Scene[] {
   // (By what it's made from: the very objects of the edition's scenes and of the overrides.)
-  const key = `${name}|${extra.map(markOf).join(',')}|${over.map(markOf).join(',')}`;
+  const key = `${name}|${MANILA}|${extra.map(markOf).join(',')}|${over.map(markOf).join(',')}`;
   const made = sceneLists.get(key);
   if (made) return made;
   const overErrors: string[] = [];
@@ -1677,7 +1774,7 @@ export function allScenes(name: string = typeof __EDITION__ === 'undefined' ? 's
   for (const m of overErrors) console.warn(m);
   // (The last file of an id wins; ids keep their places, so an override never moves a scene's cell.)
   const byId = new Map(good.map((s) => [s.id, s]));
-  const merged = [...SCENES.map((s) => byId.get(s.id) ?? s), ...[...byId.values()].filter((s) => !SCENES.some((b) => b.id === s.id))];
+  const merged = [...SCENES.map((s) => (MANILA ? localise(MANILA_SWAP[s.id] ?? byId.get(s.id) ?? s) : byId.get(s.id) ?? s)), ...[...byId.values()].filter((s) => !SCENES.some((b) => b.id === s.id))];
   const out: Scene[] = merged.filter((s) => name !== 'demo' || !s.adult);
   // (A window scene takes a cell, and a quarter of one for each pose after its first two.)
   let cells = out.filter(isWindowScene).length;

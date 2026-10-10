@@ -73,12 +73,12 @@ export function whenOf(outfit: Outfit, body: 'man' | 'woman' | 'child' | 'elder'
   if (outfit === 'chinpira') return { hours: r < 0.5 ? 'evening' : 'always', manner: 'shady' };
   if (outfit === 'irezumi' || outfit === 'yankee') return { hours: 'evening', manner: 'shady' };
   if (body === 'child') return { hours: 'day', manner: 'young' };
-  if (outfit === 'school' || outfit === 'track' || outfit === 'gym') return { hours: 'school', manner: 'young' };
+  if (outfit === 'school' || outfit === 'pinoy_school' || outfit === 'track' || outfit === 'gym') return { hours: 'school', manner: 'young' };
   if (body === 'elder' || outfit === 'kimono') return { hours: 'day', manner: 'plain' };
   if (outfit === 'gown' || outfit === 'mini' || outfit === 'maid') return { hours: 'evening', manner: 'plain' };
   // (A fat cat: at the office by day where there are offices, at dinners and clubs where the night is alive.)
-  if (outfit === 'boss' || outfit === 'suit' || outfit === 'office') return { hours: r < night ? 'evening' : 'commute', manner: 'formal' };
-  if (outfit === 'work' || outfit === 'apron' || outfit === 'nurse' || outfit === 'doctor') return { hours: 'day', manner: 'plain' };
+  if (outfit === 'boss' || outfit === 'suit' || outfit === 'office' || outfit === 'barong') return { hours: r < night ? 'evening' : 'commute', manner: 'formal' };
+  if (outfit === 'work' || outfit === 'apron' || outfit === 'vendor' || outfit === 'nurse' || outfit === 'doctor') return { hours: 'day', manner: 'plain' };
   if (outfit === 'police') return { hours: 'always', manner: 'formal' };
   // Everyone else: where the night is alive they're out in the evening, else by day and thinner after dark.
   return { hours: r < night ? 'evening' : 'always', manner: 'plain' };

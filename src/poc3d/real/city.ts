@@ -38,6 +38,11 @@ export interface CityUniforms extends ScreenUniforms {
   uWindowLit: { value: number };
   uLamps: { value: number };
   uNeon: { value: number };
+  /** The cells in a brownout (district/brownout.ts): a bit field, 24 cells to a float; uOutMap is the map's columns, rows and cell size (columns 0: none). */
+  uOut: { value: Float32Array };
+  uOutMap: { value: THREE.Vector3 };
+  /** 1 in a Filipino city (CityConfig.filipino): none of Tōto's noren over its shopfronts. */
+  uFil: { value: number };
   uFlicker: { value: number };
   uWet: { value: number };
   /** The season (district/seasons.ts): 0 spring, 1 summer, 2 autumn, 3 winter: tree crowns and lawns follow it. */
@@ -140,6 +145,9 @@ export function cityUniforms(): CityUniforms {
     uWindowLit: { value: 0.4 },
     uLamps: { value: 1 },
     uNeon: { value: 1 },
+    uOut: { value: new Float32Array(64) },
+    uOutMap: { value: new THREE.Vector3(0, 0, 128) },
+    uFil: { value: 0 },
     uFlicker: { value: 0 },
     uWet: { value: 0 },
     uSeason: { value: 0 },
@@ -239,6 +247,18 @@ const common = /* glsl */ `
   uniform float uWindowLit;
   uniform float uLamps;
   uniform float uNeon;
+  uniform float uOut[64];
+  uniform vec3 uOutMap;
+  uniform float uFil;
+  // 1 where the power is out (a brownout's cell), else 0: a cell is one bit of the packed floats.
+  float blackoutAt(vec2 p) {
+    if (uOutMap.x < 0.5) return 0.0;
+    vec2 c = floor(p / uOutMap.z);
+    if (c.x < 0.0 || c.y < 0.0 || c.x >= uOutMap.x || c.y >= uOutMap.y) return 0.0;
+    float i = c.y * uOutMap.x + c.x;
+    float w = floor(i / 24.0);
+    return mod(floor(uOut[int(w)] / exp2(i - w * 24.0)), 2.0);
+  }
   uniform float uFlicker;
   uniform float uWet;
   uniform float uSeason;
@@ -376,7 +396,7 @@ const common = /* glsl */ `
     return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
   }
   vec3 lightAt(vec2 p) {
-    vec3 L = texture2D(tLight, (p - uLightRect.xy) * uLightRect.zw).rgb * uLightGain;
+    vec3 L = texture2D(tLight, (p - uLightRect.xy) * uLightRect.zw).rgb * uLightGain * (1.0 - 0.97 * blackoutAt(p));
     if (uLightFade.y > 0.0) {
       vec2 dc = abs(p - cameraPosition.xz);
       L *= 1.0 - smoothstep(uLightFade.x, uLightFade.y, max(dc.x, dc.y));
@@ -547,6 +567,19 @@ const common = /* glsl */ `
   ${shopGlsl()}
 `;
 
+/**
+ * A brownout's cells (district/brownout.ts) put the lights out where they stand: the surface code below reads
+ * `uLampsB`, `uNeonB` and `uWindowLitB` (its own copies of the uniforms, switched off in the dark); a few shops run
+ * a generator and keep their lights, and a few windows a candle. (`boK`: 1 in the dark.)
+ */
+const BLACKOUT_PRELUDE = /* glsl */ `
+  float boK = blackoutAt(vWPos.xz);
+  float uLampsB = uLamps * (1.0 - boK);
+  float uNeonB = uNeon * (1.0 - boK);
+  float uWindowLitB = uWindowLit * (1.0 - boK);
+  float shopPower = 1.0 - boK * (h1(vBid + 9.0) < 0.18 ? 0.0 : 0.94);
+`;
+
 const surface = /* glsl */ `
   // ---- city surface (see city.ts) ----
   // Derivatives first, in uniform control flow.
@@ -607,13 +640,22 @@ const surface = /* glsl */ `
         float edgeOn = abs(dot(geoN, Vw));
         float keep = (1.0 - d) * 1.4 + (vnoise(q * 4.0 + seed) - 0.5) * 0.9 - (1.0 - smoothstep(0.12, 0.45, edgeOn)) * 0.9;
         if (keep < 0.25) discard;
-        vec2 lq = q * 11.0 + seed;
+        // (Tropical broadleaves have their own leaf: rain tree and flame tree a fine feathery leaflet, mango a long
+        // narrow glossy blade, banyan a broad ovate one; the rest the common leaf.)
+        float lScale = 11.0;
+        vec2 lShape = vec2(0.54, 0.3);
+        float spc = vStyle.x - 20.0;
+        if (spc > 13.5 && spc < 14.5) { lScale = 17.0; lShape = vec2(0.56, 0.15); }
+        else if (spc > 14.5 && spc < 15.5) { lScale = 8.0; lShape = vec2(0.68, 0.19); }
+        else if (spc > 16.5 && spc < 17.5) { lScale = 9.0; lShape = vec2(0.52, 0.4); }
+        else if (spc > 17.5 && spc < 18.5) { lScale = 19.0; lShape = vec2(0.56, 0.13); }
+        vec2 lq = q * lScale + seed;
         vec2 cell = floor(lq);
         // A leaf per cell: a pointed ellipse, turned at random, in the cell's middle.
         vec2 f = fract(lq) - 0.5 - (vec2(h2(cell), h2(cell + 3.7)) - 0.5) * 0.35;
         float ang = h2(cell + 9.1) * 6.2832;
         vec2 rq = vec2(cos(ang) * f.x + sin(ang) * f.y, -sin(ang) * f.x + cos(ang) * f.y);
-        float leaf = 1.0 - smoothstep(0.85, 1.0, length(rq / vec2(0.54, 0.3)));
+        float leaf = 1.0 - smoothstep(0.85, 1.0, length(rq / lShape));
         if (closeL > 0.2 && leaf < 0.5) discard;
         leafShade = mix(0.72, 1.18, h2(cell + 5.3)) * mix(0.8, 1.0, 1.0 - d * 0.5);
         bumpK = 0.6;
@@ -926,7 +968,7 @@ const surface = /* glsl */ `
           float cw = mw - 2.0 * ft;
           float cx = mx - ft;
           bool covered = true;
-          if (door && v > 2.05 && (shady || tr == ${TRADE.noodles} || tr == ${TRADE.izakaya} || (tr == ${TRADE.craft} && hb < 0.6))) {
+          if (door && v > 2.05 && uFil < 0.5 && (shady || tr == ${TRADE.noodles} || tr == ${TRADE.izakaya} || (tr == ${TRADE.craft} && hb < 0.6))) {
             // Noren over the door of a noodle shop, an izakaya or an old shop: cloth in the shop's colour (deep
             // indigo in most), split in three, the shop's mark in white. A shady house's is dark red.
             vec3 cloth = shady ? vec3(0.2, 0.015, 0.04) : mix(hue, vec3(0.04, 0.06, 0.2), hb < 0.5 ? 0.75 : 0.25);
@@ -974,7 +1016,7 @@ const surface = /* glsl */ `
               sRough = 0.1;
               sEmit = refl * F * 0.8 + hue * step(v, lowTop + 0.04) * 0.5 * uLamps;
             } else {
-              vec3 interior = shopInterior(vec2(sx, v), rd, sw, roomN, vBid, hue, L, length(vWPos - cameraPosition), pxAng) * max(uLamps, shady ? 0.2 : 0.55);
+              vec3 interior = shopInterior(vec2(sx, v), rd, sw, roomN, vBid, hue, L, length(vWPos - cameraPosition), pxAng) * max(uLamps, shady ? 0.2 : 0.55) * shopPower;
               // At a tower's foot the glass is tinted like the curtain wall above it.
               if (towerFoot) interior *= vec3(0.75, 0.85, 0.88);
               albedo = vec3(0.02);
@@ -1053,7 +1095,7 @@ const surface = /* glsl */ `
       // How many rooms are lit: the atmosphere's share, the building's own bias, and what the building is at this
       // hour (uLit). A room's hash against it is its bedtime, so the lights go out one by one (each eased over a
       // couple of seconds); an office's hash is mostly its floor's, so floors are lit or dark together.
-      float litFrac = clamp(uWindowLit * (0.35 + 1.3 * litBias) * (office ? uLit.x : den || love ? uLit.w : hotel ? uLit.z : uLit.y), 0.0, 1.0);
+      float litFrac = max(clamp(uWindowLit * (0.35 + 1.3 * litBias) * (office ? uLit.x : den || love ? uLit.w : hotel ? uLit.z : uLit.y), 0.0, 1.0), boK * 0.05);
       float glow = clamp((litFrac - (office ? 0.65 * h3(vec3(vBid, 7.0, fl)) + 0.35 * hr : hr)) / 0.012, 0.0, 1.0);
       bool legacy = uWindow.w < 0.0;
       if (legacy) {
@@ -1560,7 +1602,7 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
         #endif`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${WIPER_GLSL}\n${common}\n${WATER_GLSL}\n${CAR_RAIN_GLSL}\n${WALL_RAIN_GLSL}`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n${surface}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>\n${BLACKOUT_PRELUDE}\n${surface.replace(/\buLamps\b/g, 'uLampsB').replace(/\buNeon\b/g, 'uNeonB').replace(/\buWindowLit\b/g, 'uWindowLitB')}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         // normalFoliage: a tree crown's leaf clusters catch the light (city surface: leafBump, world space).
         if (leafy > 0.5) normal = normalize(normal + (viewMatrix * vec4(leafBump, 0.0)).xyz);

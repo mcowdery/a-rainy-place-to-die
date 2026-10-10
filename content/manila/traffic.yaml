@@ -1,6 +1,15 @@
 # Manilaya's traffic (format: content/world3d/traffic.yaml): generated car loops over the whole city (cars keep left, like
-# Toto's: the alternate-reality Manilaya drives on the left). Loops of its own and the jeepney routes come with the city's
-# bus lines.
+# Toto's: the alternate-reality Manilaya drives on the left), and the jeepney lines.
+#
+# A jeepney line (`jeepney: n`) is a bus line whose vehicle is the jeepney in livery n (JEEPNEY_LIVERIES in
+# models/vehicles.ts: its route board is the line's name). Four edges, one stop each (the pole and bench are the
+# jeepney stop sign, real/traffic.ts busStops), a dwell at each, and you can wave one down anywhere along its loop
+# (Shift+H) or ask it to stop ('Para po!', P inside). Loops are on the avenues and radials, on either bank (the
+# Pasigan River, column 20, has no loop across it). Stops: north, east, south and west edge.
 auto: { size: 2, spacing: 72 }
 cars: []
-buses: []
+buses:
+  - { id: kubao_divisora, name: 'KUBAO - DIVISORA', en: 'KUBAO - DIVISORA', jeepney: 0, rect: [26, 8, 32, 13], buses: 3, stops: ['Divisora Palengke', 'Kubao Rotonda', 'Keson Bayan', 'Pook Divisora'] }
+  - { id: pasag_kiyapo, name: 'PASAG - KIYAPO', en: 'PASAG - KIYAPO', jeepney: 1, rect: [10, 13, 15, 22], buses: 3, stops: ['Kiyapo Simbahan', 'Risal Tulay', 'Pasag Baybay', 'Malaya Kanto'] }
+  - { id: divisora_tundo, name: 'DIVISORA', en: 'DIVISORA - TUNDO', jeepney: 2, rect: [26, 13, 32, 17], buses: 3, stops: ['Binundo Arko', 'Tundo Gilid', 'Divisora Bodega', 'Fort Sentro'] }
+  - { id: sampaluan_kiyapo, name: 'SAMPALUAN - KIYAPO', en: 'SAMPALUAN - KIYAPO', jeepney: 3, rect: [26, 2, 32, 8], buses: 3, stops: ['Sampaluan Pamantasan', 'Bonifasyo Kanto', 'Poblado Plaza', 'Tundo Gate'] }

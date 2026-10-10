@@ -92,3 +92,8 @@ exits:
   - { id: kurokami, venue: kurokami, route: c1, at: 0, length: 110, name: 黒神峠 KUROKAMI }
 # Yūnagi: at the Wangan's east end, past the river mouth, into the headland (hill: its height in metres).
   - { id: yunagi, venue: yunagi, route: wangan_e, at: 1, length: 110, name: 夕凪峠 YŪNAGI, hill: 70 }
+# The way out of the Yūnagi tunnel, the other carriageway: it comes out of the hill beside the exit spur's mouth (the
+# spur's mouth is 14 m short of its end wall, 96 m past the Wangan's end) down a 60 m tube, and runs on as the westbound
+# Wangan: where the game starts.
+entries:
+  - { id: yunagi_out, route: wangan_w, length: 96, tube: 60, name: 夕凪峠 YŪNAGI }

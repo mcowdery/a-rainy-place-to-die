@@ -45,6 +45,8 @@ const SPECIES: Record<string, readonly Line[]> = {
   banana: ['Banana plants, torn leaves and all. They grow back faster than you can cut them.'],
   raintree: ['A rain tree, shade enough for a whole market to stand under.', 'The rain tree folds its leaves when the sky turns.'],
   mango: ['A mango tree, dark and dense. Somebody’s grandmother planted it.'],
+  banyan: ['A balete, roots coming down out of the branches like something that could not wait for the ground.', 'The old people say a balete has a tenant. Nobody sits under it after dark.'],
+  flametree: ['A flame tree, the whole crown gone red. Every school yard has one.', 'Flame tree petals on the road, like someone spilled paint and walked on.'],
   bougainvillea: ['Bougainvillea, magenta over every wall that will hold it.'],
 };
 

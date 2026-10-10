@@ -3,6 +3,8 @@ import type { Building3 } from '../district/plan';
 import type { Light } from './lightmap';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
 import type { Prop } from './props';
+import type { VehicleSigns } from '../models/vehicles';
+import { DECK_HALF, DECK_Y, KERB_Y, STAIR_HALF, STAIR_LEN, STEPS, TREAD, type Footbridge } from '../district/footbridges';
 
 /**
  * Manila's street dressing (CityConfig.filipino): what the zones' `look.street` share puts along the frontages and
@@ -14,7 +16,7 @@ import type { Prop } from './props';
 
 type C3 = [number, number, number];
 
-export const MANILA_KINDS = new Set<Prop['kind']>(['sarisari', 'cart', 'jeepstop', 'parol', 'tarp', 'shrine', 'garbage', 'barangay', 'trusses']);
+export const MANILA_KINDS = new Set<Prop['kind']>(['sarisari', 'cart', 'jeepstop', 'parol', 'parolline', 'tarp', 'shrine', 'garbage', 'barangay', 'trusses', 'footbridge']);
 
 const PAINTS = [0x2f6ab0, 0xb8363a, 0x3a8a5a, 0xe0b830, 0x8a5a3a, 0xd8d4c8, 0x6a3a8a, 0xd86a1e];
 const UMBRELLA = [0xb8363a, 0x2f6ab0, 0xe0b830, 0x3a8a5a, 0xd86a9a, 0xe8e8e0];
@@ -100,14 +102,15 @@ export function frontage(b: Building3, street: number, c: FrontCtx): void {
     const u = s0 + 0.5 + w / 2 + rnd.float() * Math.max(0, sw - 1 - w);
     add('tarp', u, 0.06, { radius: 0.1, half: w / 2, solid: false, arm: Math.min(b.h - 2.6, c.gf + 1.0 + rnd.int(0, Math.max(0, c.floors - 1)) * 3) });
   }
-  if (c.floors >= 1 && rnd.chance(0.32 * street)) {
-    const k = rnd.chance(0.35) ? 2 : 1;
+  if (c.floors >= 1 && rnd.chance(0.5 * street)) {
+    const k = rnd.chance(0.5) ? 3 : 2;
     for (let i = 0; i < k; i++) {
       const u = s0 + 0.8 + rnd.float() * Math.max(0.1, sw - 1.6);
       const [x, z] = pt(u, 0.5);
       const fl = rnd.int(0, Math.max(0, c.floors - 1));
       const y = c.gf + fl * 3 + 1.7;
-      c.props.push({ kind: 'parol', x, z, nx: f.n[0], nz: f.n[2], radius: 0, variant: rnd.int(0, 5), solid: false, arm: y });
+      // (Hung at the windows: the star about half to three quarters the size of a street lamp's.)
+      c.props.push({ kind: 'parol', x, z, nx: f.n[0], nz: f.n[2], radius: 0, variant: rnd.int(0, 5), solid: false, arm: y, size: 0.5 + rnd.float() * 0.25 });
       c.lights.push({ x: x + f.n[0] * 1.2, z: z + f.n[2] * 1.2, r: 3.2, color: PAROLS[rnd.int(0, 5)], i: 0.45 });
     }
   }
@@ -146,7 +149,7 @@ const quad2 = (mb: MeshBuilder, c: C3, a: C3, b: C3): void => {
   mb.quad(c, b, a);
 };
 
-export function addManilaProp(mb: MeshBuilder, p: Prop): void {
+export function addManilaProp(mb: MeshBuilder, p: Prop, signs?: VehicleSigns): void {
   if (!MANILA_KINDS.has(p.kind)) return;
   const r: C3 = [p.nz, 0, -p.nx];
   const n: C3 = [p.nx, 0, p.nz];
@@ -164,12 +167,22 @@ export function addManilaProp(mb: MeshBuilder, p: Prop): void {
       mb.cylinder(p.x, p.z, 0, 2.7, 0.045, 6);
       // The plate: blue for a jeepney stop (white bus-ish bars), yellow-green for a tricycle terminal.
       mb.color = lin(tri ? 0xe0b830 : 0x2a5aaa);
-      mb.frameBox(o, r, n, -0.32, 0.32, 1.95, 2.65, 0.05, 0.1);
-      mb.color = lin(tri ? 0x2a6a3a : 0xe8e8e0);
-      mb.frameBox(o, r, n, -0.24, 0.24, 2.25, 2.45, 0.1, 0.12);
-      mb.frameBox(o, r, n, -0.2, 0.2, 2.05, 2.2, 0.1, 0.12);
+      mb.frameBox(o, r, n, -0.45, 0.45, 2.0, 2.66, 0.05, 0.1);
+      if (signs) {
+        // The words on both faces: JEEPNEY / SAKAYAN, or TRICYCLE / TERMINAL.
+        const ink: C3 = tri ? lin(0x1a3a22) : lin(0xf4f0e4);
+        const [l1, l2] = STOP_COPY[tri ? 1 : 0];
+        for (const sd of [1, -1]) {
+          faceText(signs, l1, at, r, sd, sd > 0 ? 0.112 : 0.038, -0.4, 0.4, 2.38, 2.6, ink);
+          faceText(signs, l2, at, r, sd, sd > 0 ? 0.112 : 0.038, -0.4, 0.4, 2.06, 2.3, ink);
+        }
+      } else {
+        mb.color = lin(tri ? 0x2a6a3a : 0xe8e8e0);
+        mb.frameBox(o, r, n, -0.36, 0.36, 2.4, 2.58, 0.1, 0.12);
+        mb.frameBox(o, r, n, -0.3, 0.3, 2.1, 2.3, 0.1, 0.12);
+      }
       mb.color = lin(0x1a1a1a);
-      for (const u of [-0.14, 0.14]) mb.frameBox(o, r, n, u - 0.045, u + 0.045, 1.97, 2.03, 0.1, 0.12);
+      for (const u of [-0.4, 0.4]) mb.frameBox(o, r, n, u - 0.03, u + 0.03, 2.0, 2.66, 0.1, 0.12);
       // A bench beside it.
       mb.color = lin(0x7a5a3c);
       mb.frameBox(o, r, n, 0.55, 2.0, 0.42, 0.47, -0.2, 0.2);
@@ -177,8 +190,9 @@ export function addManilaProp(mb: MeshBuilder, p: Prop): void {
       for (const u of [0.7, 1.85]) mb.frameBox(o, r, n, u - 0.03, u + 0.03, 0, 0.42, -0.15, 0.15);
       return;
     }
-    case 'parol': return parol(mb, p, o, r, n);
-    case 'tarp': return tarp(mb, p, rnd, o, r, n, at);
+    case 'parol': return parolAt(mb, p.x, p.arm ?? 4.5, p.z, r, n, p.variant, p.size ?? 1);
+    case 'tarp': return tarp(mb, p, rnd, o, r, n, at, signs);
+    case 'parolline': return parolLine(mb, p, rnd, r, n, at);
     case 'shrine': {
       // A glass-fronted box on the wall: the Santo Nino in his robe, a candle, a plastic garland.
       mb.color = lin(0x2a4a8a);
@@ -254,6 +268,7 @@ export function addManilaProp(mb: MeshBuilder, p: Prop): void {
       return;
     }
     case 'trusses': return trusses(mb, p, rnd, o, r, n, at);
+    case 'footbridge': return footbridge(mb, p, rnd, o, r, n, at);
     default:
   }
 }
@@ -367,12 +382,12 @@ function cart(mb: MeshBuilder, p: Prop, rnd: Rng, o: C3, r: C3, n: C3, at: At): 
   mb.lathe(u[0], u[2], [[1.95, 1.3], [2.15, 0.7], [2.3, 0.04]], 8);
 }
 
-/** A parol: a five-pointed star lantern hung from `arm` m, facing n, with its tails; lit at night. */
-function parol(mb: MeshBuilder, p: Prop, _o: C3, r: C3, n: C3): void {
+/** A parol: a five-pointed star lantern with its centre at (x, y, z), its plane along r, k times the usual size, with its tails; lit at night. */
+function parolAt(mb: MeshBuilder, x: number, y: number, z: number, r: C3, n: C3, variant: number, k: number): void {
+  const p = { x, z, variant };
   const col = PAROLS[p.variant % PAROLS.length];
-  const y = p.arm ?? 4.5;
-  const R = 0.5;
-  const ri = 0.2;
+  const R = 0.5 * k;
+  const ri = 0.2 * k;
   const pts: C3[] = [];
   for (let i = 0; i < 10; i++) {
     const a = Math.PI / 2 + (i * Math.PI) / 5;
@@ -400,13 +415,76 @@ function parol(mb: MeshBuilder, p: Prop, _o: C3, r: C3, n: C3): void {
   mb.beam([p.x, y + R, p.z], [p.x - n[0] * 0.15, y + R + 0.5, p.z - n[2] * 0.15], 0.008);
 }
 
-/** A political tarpaulin: a coloured sheet with a title band, a head and bars of print (no real names; lettering is not drawn). */
-function tarp(mb: MeshBuilder, p: Prop, rnd: Rng, _o: C3, r: C3, _n: C3, at: At): void {
+/** What the tarpaulins and banners say: invented people, places and slogans (no real names), by line. */
+interface TarpCopy {
+  readonly lines: readonly [string, string];
+  /** A candidate's portrait on the left (a wall tarp only). */
+  readonly portrait: boolean;
+}
+const TARP_COPY: readonly TarpCopy[] = [
+  { lines: ['KAPITAN BEN SANTOS', 'SERBISYONG TAPAT'], portrait: true },
+  { lines: ['MAYOR LITO REYES', 'PARA SA LAHAT'], portrait: true },
+  { lines: ['KAGAWAD ROSA DELA CRUZ', 'TUNAY NA SERBISYO'], portrait: true },
+  { lines: ['WELCOME TO', 'BARANGAY PASKO'], portrait: false },
+  { lines: ['WELCOME TO', 'BARANGAY TUNDO'], portrait: false },
+  { lines: ['WELCOME TO', 'BARANGAY SANTA RESA'], portrait: false },
+  { lines: ['WELCOME TO', 'BARANGAY PANDALAN'], portrait: false },
+  { lines: ['MALIGAYANG PISTA', 'BARANGAY SAMPALUAN'], portrait: false },
+  { lines: ['HAPPY FIESTA', 'SALAMAT PO'], portrait: false },
+  { lines: ['ENROLLMENT NOW OPEN', 'BATANG MASAYA SCHOOL'], portrait: false },
+  { lines: ['MALIGAYANG PASKO', 'SALAMAT PO'], portrait: false },
+  { lines: ['INTER-BARANGAY LEAGUE', 'BASKETBALL FINALS'], portrait: false },
+];
+const STOP_COPY: readonly (readonly [string, string])[] = [['JEEPNEY', 'SAKAYAN'], ['TRICYCLE', 'TERMINAL']];
+
+/** Every text Manila's street dressing prints (for the sign atlas; the same on every thread). */
+export function manilaTexts(): { text: string; vertical: boolean }[] {
+  const out: { text: string; vertical: boolean }[] = [];
+  for (const c of TARP_COPY) for (const t of c.lines) out.push({ text: t, vertical: false });
+  for (const c of STOP_COPY) for (const t of c) out.push({ text: t, vertical: false });
+  return out;
+}
+
+/** Whether a sheet of this colour wants dark print. */
+const lightSheet = (hex: number): boolean => ((hex >> 16) & 255) * 0.3 + ((hex >> 8) & 255) * 0.59 + (hex & 255) * 0.11 > 150;
+
+/**
+ * Lettering on a flat face: a decal of the text fitted in a box of the face (its left and right in u, bottom and top
+ * in y) centred in it, reading from the side the face looks at (s > 0: from the front, along r; s < 0: from behind).
+ */
+function faceText(signs: VehicleSigns, text: string, at: At, r: C3, s: number, out: number, u0: number, u1: number, y0: number, y1: number, ink: C3): void {
+  const rect = signs.layout.rect(text, false);
+  if (!rect) return;
+  let w = (y1 - y0) * (rect.w / rect.h);
+  let h = y1 - y0;
+  if (w > u1 - u0) {
+    w = u1 - u0;
+    h = w * (rect.h / rect.w);
+  }
+  const uc = (u0 + u1) / 2;
+  const ym = (y0 + y1) / 2;
+  const c = at(s > 0 ? uc - w / 2 : uc + w / 2, out);
+  signs.sb.ink = ink;
+  signs.sb.plate = ink;
+  signs.sb.sign = [0, 3];
+  signs.sb.quad([c[0], ym - h / 2, c[2]], [r[0] * w * s, 0, r[2] * w * s], [0, h, 0], [rect.u0, rect.v0, rect.u1, rect.v1]);
+}
+
+/**
+ * A political tarpaulin or a fiesta banner: a coloured sheet with its lettering (the atlas's words; bars of print where
+ * the atlas isn't to hand, in the middle distance), a candidate's head and shoulders on the political ones.
+ */
+function tarp(mb: MeshBuilder, p: Prop, rnd: Rng, _o: C3, r: C3, _n: C3, at: At, signs?: VehicleSigns): void {
   const half = p.half ?? 2;
   const y0 = p.arm ?? 5.0;
   const h = half > 2.5 ? 1.7 : 1.3;
   const base = TARPS[p.variant % TARPS.length];
   const high = p.high === true;
+  // (A string across the road is a banner, a wall tarp may be a candidate's.)
+  const banners = TARP_COPY.filter((c) => !c.portrait);
+  const copy = high ? banners[(p.variant >> 3) % banners.length] : TARP_COPY[(p.variant >> 3) % TARP_COPY.length];
+  const light = lightSheet(base);
+  const ink: C3 = light ? lin(0x1a1a2a) : lin(0xf4efe0);
   if (high) {
     // Bamboo poles at the kerbs, the sheet tied between with a sag in its rope.
     mb.color = lin(0x8a7a4a);
@@ -418,30 +496,218 @@ function tarp(mb: MeshBuilder, p: Prop, rnd: Rng, _o: C3, r: C3, _n: C3, at: At)
     mb.beam(at(-half - 0.2, 0, y0 + h + 0.4), at(0, 0, y0 + h + 0.2), 0.01);
     mb.beam(at(0, 0, y0 + h + 0.2), at(half + 0.2, 0, y0 + h + 0.4), 0.01);
   }
-  const side = (s: number): void => {
-    const out = (high ? 0 : 0.02) * s + 0.02 * s;
+  const head = copy.portrait ? Math.min(1.0, h * 0.62) : 0;
+  const side = (sd: number): void => {
+    const out = 0.02 * sd + (high ? 0 : 0.02 * sd);
     const Q = (u0: number, u1: number, ya: number, yb: number): void => {
-      const c = at(s > 0 ? u0 : u1, out);
-      mb.quad([c[0], ya, c[2]], [r[0] * (u1 - u0) * s, 0, r[2] * (u1 - u0) * s], [0, yb - ya, 0]);
+      const c = at(sd > 0 ? u0 : u1, out);
+      mb.quad([c[0], ya, c[2]], [r[0] * (u1 - u0) * sd, 0, r[2] * (u1 - u0) * sd], [0, yb - ya, 0]);
     };
-    if (!high && s < 0) return;
+    if (!high && sd < 0) return;
     mb.color = lin(base);
     Q(-half, half, y0, y0 + h);
-    const dark = base === 0xe8e8e0 || base === 0xe0b830 ? 0x1a1a2a : 0xf0ece0;
-    // A title band at the top, a head and body on one side, bars of print on the other, a slogan at the foot.
-    mb.color = lin(dark);
-    Q(-half + 0.1, half - 0.1, y0 + h - 0.32, y0 + h - 0.12);
-    mb.color = lin(0xd8a878);
-    Q(-half + 0.35, -half + 0.35 + Math.min(0.7, h * 0.4), y0 + 0.28, y0 + 0.28 + Math.min(0.7, h * 0.4));
-    mb.color = lin(rnd.pick([0x1a1a2a, 0x2a2a4a, 0x2a4a3a]));
-    Q(-half + 0.2, -half + 0.2 + Math.min(1.0, h * 0.6), y0 + 0.08, y0 + 0.28);
-    mb.color = lin(dark);
-    for (let i = 0; i < 3; i++) Q(-half + 1.4 + (i % 2) * 0.2, half - 0.3 - rnd.float() * 0.8, y0 + h - 0.62 - i * 0.22, y0 + h - 0.5 - i * 0.22);
-    Q(-half + 0.1, half - 0.1, y0 + 0.05, y0 + 0.17);
+    const edge = light ? 0x1a1a2a : 0xf0ece0;
+    mb.color = lin(edge);
+    Q(-half + 0.06, half - 0.06, y0 + h - 0.1, y0 + h - 0.06);
+    Q(-half + 0.06, half - 0.06, y0 + 0.06, y0 + 0.1);
+    if (copy.portrait) {
+      // The candidate: a head and a coat, faceless at this size, on a lighter panel.
+      mb.color = lin(light ? 0xe8e4d8 : 0x20284a);
+      Q(-half + 0.14, -half + 0.2 + head, y0 + 0.14, y0 + h - 0.14);
+      mb.color = lin(0xd8a878);
+      Q(-half + 0.14 + head * 0.28, -half + 0.14 + head * 0.7, y0 + h * 0.5, y0 + h * 0.5 + head * 0.42);
+      mb.color = lin(rnd.pick([0x1a1a2a, 0x2a2a4a, 0x2a4a3a]));
+      Q(-half + 0.2, -half + 0.08 + head, y0 + 0.14, y0 + h * 0.5 - 0.04);
+    }
+    if (signs) {
+      const u0 = -half + (copy.portrait ? head + 0.45 : 0.2);
+      const u1 = half - 0.2;
+      faceText(signs, copy.lines[0], at, r, sd, out + 0.012 * sd, u0, u1, y0 + h * 0.46, y0 + h - 0.2, ink);
+      faceText(signs, copy.lines[1], at, r, sd, out + 0.012 * sd, u0 + (u1 - u0) * 0.08, u1 - (u1 - u0) * 0.08, y0 + 0.2, y0 + h * 0.36, ink);
+    } else {
+      mb.color = lin(edge);
+      for (let i = 0; i < 2; i++) Q(-half + head + 0.45, half - 0.3 - rnd.float() * 0.8, y0 + h - 0.45 - i * 0.4, y0 + h - 0.25 - i * 0.4);
+    }
   };
   side(1);
   if (!high) return;
   side(-1);
+}
+
+/** Parols (star lanterns) strung on a cable across the street at (x, z), `half` each way, from a pole at each kerb. */
+export function roadParols(x: number, z: number, axisX: number, axisZ: number, half: number, hashed: number, c: RoadCtx): void {
+  if (!c.mine(x, z)) return;
+  c.props.push({ kind: 'parolline', x, z, nx: axisX, nz: axisZ, radius: 0.1, variant: hashed % 99991, half, solid: false, high: true, arm: 6.1 });
+  // A glow under the string: four stars' worth, in their colours.
+  const r: [number, number] = [axisZ, -axisX];
+  for (let i = 0; i < 4; i++) {
+    const u = (-0.75 + i * 0.5) * half;
+    c.lights.push({ x: x + r[0] * u, z: z + r[1] * u, r: 3.6, color: PAROLS[(hashed + i) % 6], i: 0.42 });
+  }
+}
+
+/** Parols on a cable between two poles at the kerbs, with a cord down to each star; a second string a metre along. */
+function parolLine(mb: MeshBuilder, p: Prop, rnd: Rng, r: C3, n: C3, at: At): void {
+  const half = p.half ?? 6;
+  const y = p.arm ?? 6.1;
+  mb.color = lin(0x8a7a4a);
+  for (const u of [-half - 0.2, half + 0.2]) {
+    const c = at(u, 0);
+    mb.cylinder(c[0], c[2], 0, y + 0.5, 0.05, 5);
+  }
+  for (const k of [0, 1]) {
+    const out = k * 1.1;
+    const sag = 0.7;
+    const cable = (u: number): number => y - sag * (1 - (u / (half + 0.2)) ** 2);
+    mb.color = lin(0x2a2a2a);
+    const steps = 8;
+    for (let i = 0; i < steps; i++) {
+      const ua = -half - 0.2 + (i * (half + 0.2) * 2) / steps;
+      const ub = -half - 0.2 + ((i + 1) * (half + 0.2) * 2) / steps;
+      mb.beam(at(ua, out, cable(ua) + 0.4), at(ub, out, cable(ub) + 0.4), 0.012);
+    }
+    const gap = 1.7;
+    const count = Math.max(2, Math.floor((half * 2) / gap));
+    for (let i = 0; i < count; i++) {
+      const u = -half + gap * (i + 0.5) + (k ? gap * 0.5 : 0) - (rnd.float() - 0.5) * 0.2;
+      if (Math.abs(u) > half) continue;
+      const hang = 0.55 + rnd.float() * 0.25;
+      const c = at(u, out);
+      mb.color = lin(0x3a3a3a);
+      mb.beam([c[0], cable(u) + 0.4, c[2]], [c[0], cable(u) + 0.4 - hang, c[2]], 0.006);
+      parolAt(mb, c[0], cable(u) + 0.4 - hang - 0.32, c[2], r, n, p.variant + i * 3 + k, 0.62);
+    }
+  }
+}
+
+/** The glow a footbridge throws on the street (sodium lamps under its roof): over the road and at the foot of each stair. */
+export function footbridgeLights(b: Footbridge, lights: Light[]): void {
+  const [ax, az] = b.alongX ? [1, 0] : [0, 1];
+  const [cx, cz] = b.alongX ? [0, 1] : [1, 0];
+  const T = b.width / 2 - 1.5;
+  const at = (s: number, t: number): [number, number] => [b.x + ax * s + cx * t, b.z + az * s + cz * t];
+  for (const t of [-T * 0.6, 0, T * 0.6]) {
+    const [x, z] = at(0, t);
+    lights.push({ x, z, r: 9, color: [1.0, 0.68, 0.34], i: 0.55 });
+  }
+  for (const e of [-1, 1]) for (const d of [-1, 1]) {
+    const [x, z] = at(d * (DECK_HALF + STAIR_LEN - 1), e * T);
+    lights.push({ x, z, r: 5, color: [1.0, 0.68, 0.34], i: 0.5 });
+  }
+}
+
+const ROOF_SHEETS = [0x6a7a6a, 0x8c8e8c, 0x8a5a3c, 0x3e5a6a];
+
+/**
+ * A pedestrian footbridge (district/footbridges.ts has its layout and the walking): a covered concrete deck on steel
+ * girders over the avenue, a landing and a straight concrete stair each way along both pavements, a parapet and
+ * handrail, a corrugated roof on posts (over the stairs too), sodium lamps under it, columns in the median. s runs
+ * along the avenue, t across it from the centre line.
+ */
+function footbridge(mb: MeshBuilder, p: Prop, rnd: Rng, o: C3, r: C3, n: C3, at: At): void {
+  const T = (p.half ?? 12) - 1.5;
+  const H = DECK_Y;
+  const B = (s0: number, s1: number, y0: number, y1: number, t0: number, t1: number): void => mb.frameBox(o, r, n, s0, s1, y0, y1, t0, t1);
+  const stairY = (s: number): number => KERB_Y + (H - KERB_Y) * (1 - (Math.abs(s) - DECK_HALF) / STAIR_LEN);
+  const concrete = lin(0x9a968c);
+  const dark = lin(0x3c4046);
+  const sheet = lin(ROOF_SHEETS[p.variant % ROOF_SHEETS.length]);
+  const rail = lin(rnd.chance(0.5) ? 0x2f6a4a : 0xc8a230);
+  // The deck: a slab over two steel girders with cross ties, and the landings' towers of concrete (the stairs are solid).
+  mb.color = concrete;
+  B(-DECK_HALF - 0.1, DECK_HALF + 0.1, H - 0.35, H, -T - 1.1, T + 1.1);
+  mb.color = dark;
+  for (const s of [-0.8, 0.8]) B(s - 0.07, s + 0.07, H - 0.9, H - 0.35, -T - 1.0, T + 1.0);
+  for (let t = -T; t <= T + 0.01; t += 3) B(-DECK_HALF, DECK_HALF, H - 0.5, H - 0.4, t - 0.05, t + 0.05);
+  mb.color = concrete;
+  for (const e of [-1, 1]) {
+    B(-DECK_HALF - 0.1, DECK_HALF + 0.1, 0, H - 0.35, e * T - 1.05, e * T + 1.05);
+    // Each way down: solid concrete steps.
+    for (const d of [-1, 1]) {
+      for (let i = 1; i <= STEPS; i++) {
+        const s0 = DECK_HALF + (i - 1) * TREAD;
+        const y = H - ((H - KERB_Y) * i) / STEPS;
+        mb.color = i % 2 ? concrete : lin(0x8a867c);
+        if (d > 0) B(s0, s0 + TREAD, 0, y, e * T - STAIR_HALF, e * T + STAIR_HALF);
+        else B(-s0 - TREAD, -s0, 0, y, e * T - STAIR_HALF, e * T + STAIR_HALF);
+      }
+    }
+  }
+  // Columns in the median, with a cross-beam under the deck.
+  if ((p.size ?? 0) > 0) {
+    mb.color = concrete;
+    for (const s of [-0.8, 0.8]) B(s - 0.25, s + 0.25, 0, H - 0.9, -0.25, 0.25);
+    B(-1.1, 1.1, H - 1.2, H - 0.9, -0.35, 0.35);
+  }
+  // Parapet and handrails along the deck and down the stairs; the landings' outer ends.
+  for (const d of [-1, 1]) {
+    mb.color = lin(0xb0aba0);
+    B(d > 0 ? DECK_HALF : -DECK_HALF - 0.12, d > 0 ? DECK_HALF + 0.12 : -DECK_HALF, H, H + 0.55, -T + 1.0, T - 1.0);
+    mb.color = rail;
+    for (const y of [0.85, 1.2]) B(d > 0 ? DECK_HALF : -DECK_HALF - 0.05, d > 0 ? DECK_HALF + 0.05 : -DECK_HALF, H + y - 0.03, H + y + 0.03, -T + 1.0, T - 1.0);
+    for (let t = -T + 1.0; t <= T - 1.0 + 0.01; t += 1.5) B(d * DECK_HALF - 0.03, d * DECK_HALF + 0.03, H, H + 1.2, t - 0.03, t + 0.03);
+  }
+  for (const e of [-1, 1]) {
+    mb.color = lin(0xb0aba0);
+    B(-DECK_HALF - 0.12, DECK_HALF + 0.12, H, H + 0.55, e > 0 ? T + 1.0 : -T - 1.12, e > 0 ? T + 1.12 : -T - 1.0);
+    mb.color = rail;
+    B(-DECK_HALF - 0.05, DECK_HALF + 0.05, H + 1.17, H + 1.23, e > 0 ? T + 1.0 : -T - 1.05, e > 0 ? T + 1.05 : -T - 1.0);
+    for (const d of [-1, 1]) {
+      for (const k of [-1, 1]) {
+        const t = e * T + k * (STAIR_HALF + 0.05);
+        const s0 = d * DECK_HALF;
+        const s1 = d * (DECK_HALF + STAIR_LEN);
+        mb.color = rail;
+        for (const hy of [0.9, 1.25]) mb.beam(at(s0, t, H + hy), at(s1, t, KERB_Y + hy), 0.03);
+        mb.color = lin(0xb0aba0);
+        mb.beam(at(s0, t, H + 0.3), at(s1, t, KERB_Y + 0.3), 0.09);
+        for (let q = 0; q <= STAIR_LEN + 0.01; q += 2.24) {
+          const s = d * (DECK_HALF + q);
+          mb.color = rail;
+          mb.beam(at(s, t, stairY(s)), at(s, t, stairY(s) + 1.25), 0.03);
+        }
+      }
+    }
+  }
+  // The roof: a shallow gable over the deck and landings on posts, then a sloped sheet down each stair.
+  const RY = H + 2.9;
+  mb.color = lin(0x4a5058);
+  for (const d of [-1, 1]) for (let t = -T - 0.9; t <= T + 0.9 + 0.01; t += 3) B(d * DECK_HALF - 0.05, d * DECK_HALF + 0.05, H, RY, t - 0.05, t + 0.05);
+  for (let t = -T - 1.1; t <= T + 1.1 + 0.01; t += 3) mb.beam(at(-1.25, t, RY - 0.05), at(1.25, t, RY - 0.05), 0.04);
+  mb.color = sheet;
+  const t0 = -T - 1.3;
+  const t1 = T + 1.3;
+  for (const d of [-1, 1]) {
+    quad2(mb, at(0, t0, RY + 0.3), [n[0] * (t1 - t0), 0, n[2] * (t1 - t0)], [r[0] * d * 1.45, -0.55, r[2] * d * 1.45]);
+  }
+  mb.color = lin(0x56585a);
+  for (const d of [-1, 1]) for (const k of [0.3, 0.6, 0.9, 1.2]) mb.beam(at(d * k, t0, RY + 0.3 - 0.38 * k), at(d * k, t1, RY + 0.3 - 0.38 * k), 0.012);
+  for (const e of [-1, 1]) {
+    for (const d of [-1, 1]) {
+      mb.color = sheet;
+      const sa = d * (DECK_HALF + 0.2);
+      const sb = d * (DECK_HALF + STAIR_LEN);
+      const ta = e * T - 1.25;
+      const tb = e * T + 1.25;
+      quad2(mb, at(sa, ta, stairY(sa) + 2.9), [n[0] * (tb - ta), 0, n[2] * (tb - ta)], [r[0] * (sb - sa), stairY(sb) - stairY(sa), r[2] * (sb - sa)]);
+      mb.color = lin(0x4a5058);
+      for (let q = 2.24; q <= STAIR_LEN + 0.01; q += 2.24) {
+        const s = d * (DECK_HALF + q);
+        for (const k of [-1, 1]) mb.beam(at(s, e * T + k * 1.0, stairY(s) + 1.25), at(s, e * T + k * 1.0, stairY(s) + 2.9), 0.04);
+      }
+    }
+  }
+  // Sodium lamps under the roof (lit at night).
+  mb.kind = KIND.emit;
+  mb.style = [EMIT.lamp, 0, 0, 0];
+  mb.color = [1.0, 0.7, 0.36];
+  for (let t = -T; t <= T + 0.01; t += 6) B(-0.2, 0.2, RY - 0.2, RY - 0.1, t - 0.4, t + 0.4);
+  for (const e of [-1, 1]) for (const d of [-1, 1]) for (const q of [3, 7]) {
+    const s = d * (DECK_HALF + q);
+    B(s - 0.2, s + 0.2, stairY(s) + 2.55, stairY(s) + 2.65, e * T - 0.4, e * T + 0.4);
+  }
+  mb.kind = KIND.plain;
+  mb.style = [0, 0, 0, 0];
 }
 
 /** The covered court's steel trusses: columns on the fence line, shallow gable rafters, a corrugated roof, purlins. */

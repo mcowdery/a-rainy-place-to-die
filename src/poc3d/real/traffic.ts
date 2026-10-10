@@ -3,11 +3,13 @@ import type { Rect } from '../../core/coords';
 import { hash } from '../../core/hash';
 import { along, SIDES, Signals, TURN, type BusLine, type Junction, type Route } from '../district/traffic';
 import type { Prop } from './props';
-import { addVehicle, addVehicleLow, addWheel, marksKey, wheelLayout, SPORT_TYPES, WORK_TYPES, type CarType } from '../models/vehicles';
+import { addVehicle, addVehicleLow, addWheel, marksKey, PAINTS, wheelLayout, SPORT_TYPES, WORK_TYPES, type CarType } from '../models/vehicles';
 import { SignBuilder, type SignLayout } from './signs';
 import { taxiPhotos } from './taxiAdLayout';
 import { buildBus2, type Bus2 } from './busModel';
 import { BUS } from '../district/busCabin';
+import { jeepLayout, jeepSeats } from '../district/jeepCabin';
+import { addManilaProp } from './manilaStreet';
 import { dwellDoors } from '../district/rideTimeline';
 import type { CarMaterials } from './trainCar';
 import type { Ridable } from './cabinRider';
@@ -56,6 +58,7 @@ export interface Walker {
   readonly r?: number;
 }
 const BUS_DWELL = 12;
+const JEEP_LAYOUT = jeepLayout();
 const BUS_LEN = 10.5;
 /** A bus's wheels: big steel wheels, standing just proud of the body's side over dark wells. */
 const BUS_WHEELS: ReturnType<typeof wheelLayout> = {
@@ -103,14 +106,14 @@ const LABELS: Record<CarType, string> = {
  * A car model at the origin pointing +z (models/vehicles.ts at street detail, its own head and tail lamps lit
  * at night), its wheels apart (`wheelLayout`: they turn), and its brake lights as a separate mesh.
  */
-function carModel(type: CarType, paint: number, marks: number, layout: SignLayout | null): Model {
+function carModel(type: CarType, paint: number, marks: number, layout: SignLayout | null, company?: number): Model {
   const mb = new MeshBuilder();
   const brake = new MeshBuilder(1024);
   brake.kind = KIND.plain;
   brake.color = [1, 1, 1];
   const sb = new SignBuilder();
   const pb = new SignBuilder();
-  addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type, paint, detail: 0.12, wheels: false, marks }, layout ? { sb, layout, photos: taxiPhotos(pb) } : undefined, brake);
+  addVehicle(mb, { x: 0, z: 0, fx: 0, fz: 1, type, paint, detail: 0.12, wheels: false, marks, company }, layout ? { sb, layout, photos: taxiPhotos(pb) } : undefined, brake);
   const body = mb.build()!;
   const lb = new MeshBuilder(256);
   addVehicleLow(lb, { x: 0, z: 0, fx: 0, fz: 1, type, paint });
@@ -271,6 +274,46 @@ function busStops(lines: readonly { line: BusLine; route: Route }[], city: THREE
       const a = e.dir;
       const kl = Math.hypot(e.kerb[0], e.kerb[1]) || 1;
       const o: [number, number] = [e.kerb[0] / kl, e.kerb[1] / kl];
+      if (line.jeepney !== undefined) {
+        // A jeepney stop (real/manilaStreet.ts's own sign and bench) where you climb on: by the back step, a pole's
+        // length behind the jeepney's centre; a round plate on the pole names the stop and the route.
+        const px = cx - a[0] * 4.2 - o[0] * 0.3;
+        const pz = cz - a[1] * 4.2 - o[1] * 0.3;
+        addManilaProp(mb, { kind: 'jeepstop', x: px, z: pz, nx: -o[0], nz: -o[1], radius: 0.35, variant: 0, half: 0.9 });
+        colliders.push({ x: px - 0.15, y: pz - 0.15, w: 0.3, h: 0.3 });
+        const bx = px + a[0] * 1.3;
+        const bz = pz + a[1] * 1.3;
+        colliders.push({ x: bx - Math.abs(a[0]) * 0.75 - Math.abs(o[0]) * 0.2, y: bz - Math.abs(a[1]) * 0.75 - Math.abs(o[1]) * 0.2, w: Math.abs(a[0]) * 1.5 + Math.abs(o[0]) * 0.4, h: Math.abs(a[1]) * 1.5 + Math.abs(o[1]) * 0.4 });
+        const c = document.createElement('canvas');
+        c.width = c.height = 256;
+        const g = c.getContext('2d')!;
+        g.fillStyle = '#2a5aaa';
+        g.beginPath();
+        g.arc(128, 128, 124, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = '#f4f0e4';
+        g.beginPath();
+        g.arc(128, 128, 98, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = '#1c2a44';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.font = "bold 30px 'Arial', sans-serif";
+        g.fillText('JEEPNEY', 128, 66);
+        g.font = `bold ${name.length > 9 ? 26 : 34}px 'Arial', sans-serif`;
+        g.fillText(name, 128, 124);
+        g.font = `bold ${line.en.length > 12 ? 17 : 21}px 'Arial', sans-serif`;
+        g.fillText(line.en, 128, 178);
+        const tex = new THREE.CanvasTexture(c);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        for (const flip of [0, Math.PI]) {
+          const sign = new THREE.Mesh(new THREE.CircleGeometry(0.4, 32), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(1.05, 1.05, 1.05) }));
+          sign.position.set(px, 1.5, pz);
+          sign.rotation.y = Math.atan2(a[0], a[1]) + flip;
+          group.add(sign);
+        }
+        return;
+      }
       const put = (hex: number | null, rgb: [number, number, number] | null, along0: number, along1: number, out0: number, out1: number, y0: number, y1: number, solid = false): void => {
         const pa = (along0 + along1) / 2;
         const po = (out0 + out1) / 2;
@@ -424,6 +467,9 @@ interface Vehicle extends DrivenVehicle {
   line?: BusLine;
   /** Someone aboard pressed the stop button (the next stop's screen says so). */
   requested?: boolean;
+  /** A line jeepney (Manila): you board it at the open back; `hailAt` is a stop it has been asked to make (route s). */
+  jeep?: boolean;
+  hailAt?: number;
 }
 
 /**
@@ -538,14 +584,14 @@ export class TrafficSystem {
     };
     const brakeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 0.12, 0.06) });
     let k = 0;
-    const add = (obj: THREE.Object3D, brakeGeo: THREE.BufferGeometry, route: Route, half: number, width: number, bus: boolean, driver: Driver, s: number, label: string, wheels: WheelLayout): void => {
+    const add = (obj: THREE.Object3D, brakeGeo: THREE.BufferGeometry, route: Route, half: number, width: number, bus: boolean, driver: Driver, s: number, label: string, wheels: WheelLayout, axleOver?: number): void => {
       const brake = new THREE.Mesh(brakeGeo, brakeMat);
       brake.visible = false;
       obj.add(brake);
       obj.rotation.order = 'YXZ';
       this.group.add(obj);
       // The rear axle sits about a fifth of the length in from the back (a car's overhang; a bus's longer).
-      const axle = bus ? half - 2.6 : half - 0.95;
+      const axle = axleOver ?? (bus ? half - 2.6 : half - 0.95);
       this.vehicles.push({ obj, brake, route, half, width, bus, driver, label, mode: 'traffic', s, v: driver.v0 * 0.6, acc: 0, curv: 0, hideBody: false, stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle, waited: 0, hornIn: 0, x: 0, z: 0, dx: 0, dz: 1, wheels, turned: 0, live: true });
     };
     for (const { route, spacing } of cars) {
@@ -596,6 +642,29 @@ export class TrafficSystem {
     for (const sd of [-1, 1]) bus2Brake.box(sd * 1.11, -BUS.H - 0.02, 0.66, 1.28, 0.2, 0.02, KIND.plain, true);
     const bus2BrakeGeo = bus2Brake.build()!;
     for (const { line, route } of buses) {
+      if (line.jeepney !== undefined) {
+        // A jeepney line: the jeepney model in the line's livery, its passengers on the benches.
+        const m = models.get(`line:${line.id}`) ?? carModel('jeepney', PAINTS.jeepney[line.jeepney % PAINTS.jeepney.length], 1, signs?.layout ?? null, line.jeepney);
+        models.set(`line:${line.id}`, m);
+        const seats = jeepSeats().map((q) => ({ x: q.x, z: q.z, y: 0.54, yaw: q.side > 0 ? -Math.PI / 2 : Math.PI / 2 }));
+        for (let i = 0; i < line.buses; i++) {
+          const obj = new THREE.Mesh(m.geo, city);
+          obj.castShadow = true;
+          const marks: THREE.Object3D[] = [];
+          if (signs && m.text) marks.push(new THREE.Mesh(m.text, signs.signs));
+          const people = passengerMesh(seats, [], hash(k++, 0x1ee9), { seat: 0.4, stand: 0 });
+          if (people) marks.push(people);
+          for (const mk of marks) obj.add(mk);
+          const lowest = Math.min(...m.wheels.spots.map((w) => w.z));
+          add(obj, m.brake, route, m.half, m.width, true, { v0: 9.5, a: 1.0, b: 2.0, T: 1.4, s0: 2.5 }, (route.length * (i + 0.3)) / line.buses, 'Jeepney', m.wheels, -lowest);
+          const v = this.vehicles[this.vehicles.length - 1];
+          v.lod = { full: m.geo, low: m.low, marks, isLow: false };
+          v.carType = 'jeepney';
+          v.jeep = true;
+          v.line = line;
+        }
+        continue;
+      }
       if (transit) {
         for (let i = 0; i < line.buses; i++) {
           const bus2 = buildBus2(line, transit);
@@ -679,9 +748,77 @@ export class TrafficSystem {
     return { line: v.line, at: v.dwell > 0 ? name(next) : null, next: name(next) };
   }
 
-  /** The stop button (someone aboard wants the next stop): the screens say so until the doors open. */
+  /** The stop button (someone aboard wants the next stop): the screens say so until the doors open. A jeepney stops anywhere. */
   requestStop(v: Vehicle): void {
     v.requested = true;
+    if (v.jeep && !(v.hailAt !== undefined && v.hailAt >= 0)) this.stopSoon(v, 0, 12);
+  }
+
+  /**
+   * A line jeepney stops where asked (a wave from the kerb, or 'Para po!' from inside): `s` metres along its route
+   * and `lead` more than it needs to stop, moved on past any junction (nobody stops in the box).
+   */
+  private stopSoon(v: Vehicle, from: number, lead: number): void {
+    const L = v.route.length;
+    let at = from;
+    const need = (v.v * v.v) / (2 * 2.2) + v.half + lead;
+    if (ahead(v.s, at, L) < need || at <= 0) at = v.s + need;
+    for (let pass = 0; pass < 6; pass++) {
+      const j = v.route.junctions.find((q) => Math.abs(((((at - q.s) % L) + L + L / 2) % L) - L / 2) < q.cross / 2 + 14);
+      if (!j) break;
+      at = j.s + j.cross / 2 + 14;
+    }
+    v.hailAt = ((at % L) + L) % L;
+  }
+
+  /** A line jeepney standing at a stop with its back open, the step within r of p: to board. */
+  jeepToBoard(p: THREE.Vector3, r = 3.2): Vehicle | null {
+    for (const v of this.vehicles) {
+      if (!v.jeep || this.busDoors(v) < 0.85) continue;
+      // Just behind the step (the model's frame: z along the body, the step's back at -3.95).
+      const x = v.obj.position.x - v.dx * 4.4;
+      const z = v.obj.position.z - v.dz * 4.4;
+      if (Math.hypot(p.x - x, p.z - z) < r) return v;
+    }
+    return null;
+  }
+
+  /** Ride a line jeepney: its one car, the way out the back while it stands. */
+  jeepRide(v: Vehicle): Ridable {
+    return { cars: [{ obj: v.obj, layout: JEEP_LAYOUT }], doorSide: 1, doors: () => this.busDoors(v) };
+  }
+
+  /**
+   * Wave down a line jeepney from the kerb at p: the nearest one coming your way on its route (the point of its
+   * route nearest you within 14 m, ahead of it by a stopping distance and within 220 m) stops there, its back step
+   * at you. Returns it, or null.
+   */
+  hailJeepney(p: THREE.Vector3): Vehicle | null {
+    let best: { v: Vehicle; at: number; d: number } | null = null;
+    for (const v of this.vehicles) {
+      if (!v.jeep || v.mode !== 'traffic' || (v.hailAt !== undefined && v.hailAt >= 0) || v.dwell > 0) continue;
+      const L = v.route.length;
+      let at = 0;
+      let bd = Infinity;
+      for (let q = 0; q < L; q += 4) {
+        const m = along(v.route, q);
+        const dd = (m.x - p.x) ** 2 + (m.z - p.z) ** 2;
+        if (dd < bd) [at, bd] = [q, dd];
+      }
+      for (let q = at - 4; q <= at + 4; q += 0.5) {
+        const m = along(v.route, q);
+        const dd = (m.x - p.x) ** 2 + (m.z - p.z) ** 2;
+        if (dd < bd) [at, bd] = [(q + L) % L, dd];
+      }
+      if (Math.sqrt(bd) > 14) continue;
+      // Its centre stands 4.2 m past you, so the back step is at your feet.
+      const toGo = ahead(v.s, at + 4.2, L);
+      if (toGo < (v.v * v.v) / (2 * 2.2) + v.half + 4 || toGo > 220) continue;
+      if (!best || toGo < best.d) best = { v, at: at + 4.2, d: toGo };
+    }
+    if (!best) return null;
+    this.stopSoon(best.v, best.at, 0);
+    return best.v;
   }
 
   /** Keeps a ridden bus's screens current (the next stop, the stop request). */
@@ -867,7 +1004,7 @@ export class TrafficSystem {
       v.waited = v.v < 0.5 ? v.waited + dt : 0;
       // The horn: a hard stop, or someone just standing there.
       if (v.hornIn === 0 && (hard || v.waited > 2.5)) {
-        this.honks.push({ x: v.x + v.dx * v.half, z: v.z + v.dz * v.half, bus: v.bus });
+        this.honks.push({ x: v.x + v.dx * v.half, z: v.z + v.dz * v.half, bus: v.bus && !v.jeep });
         v.hornIn = 5 + (hash(Math.floor(this.time), v.s | 0) % 40) / 10;
         v.waited = 0;
       }
@@ -924,6 +1061,19 @@ export class TrafficSystem {
         v.v = 0;
         obstacle(d.s0 * 0.2, 0);
       } else if (dist < L / 2) obstacle(dist + d.s0 - 0.5, 0);
+    }
+    // A jeepney asked to stop (a wave, 'Para po!') pulls in there and waits with its back open.
+    if (v.jeep && v.hailAt !== undefined && v.hailAt >= 0) {
+      const dist = ahead(v.s, v.hailAt, L);
+      if (dist < 1.5 && v.v < 0.5) {
+        v.dwell += dt;
+        if (v.dwell > BUS_DWELL) {
+          v.hailAt = -1;
+          v.dwell = 0;
+        }
+        obstacle(d.s0 * 0.2, 0);
+      } else if (dist < L / 2) obstacle(dist + d.s0 - 0.5, 0);
+      else v.hailAt = -1;
     }
     // Buses pull in at each edge's stop and wait there.
     if (v.bus) {
@@ -1285,7 +1435,7 @@ export class SignalLamps {
     const LIT: [number, number, number][] = [[0.2, 2.2, 1.4], [2.6, 1.5, 0.1], [3.0, 0.15, 0.08]];
     for (const h of this.heads) {
       const st = this.signals.state(h.gx, h.gy, h.ns, time);
-      const on = st === 'green' ? 0 : st === 'amber' ? 1 : 2;
+      const on = this.signals.dead(h.gx, h.gy) ? -1 : st === 'green' ? 0 : st === 'amber' ? 1 : 2;
       for (let k = 0; k < 6; k++) {
         const i = k % 3;
         if (i === on) this.col.setRGB(...LIT[i]);

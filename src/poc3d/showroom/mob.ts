@@ -273,6 +273,36 @@ const DRESSED_SHADY: Dressed[] = [
   ['drunk', { body: 'man', pose: 'stand', outfit: 'drunk' }],
   ['drunk', { body: 'man', pose: 'walk', outfit: 'drunk', hair: 'none', phase: 0.3 }],
 ];
+// Filipino outfits for Manila's crowd (2026-10-09), UNDER REVIEW: in no district's mix until the user approves them
+// (content/manila/PEOPLE-REVIEW.md says how to turn them on). The hair asked for picks a look, as for the shady ones
+// (vendor: 'hat' is the salakot; guard: bareheaded kinds carry the shotgun; trike driver: always a cap).
+const DRESSED_FILIPINO: Dressed[] = [
+  ['pinoy school', { body: 'woman', pose: 'stand', outfit: 'pinoy_school', hair: 'ponytail' }],
+  ['pinoy school', { body: 'woman', pose: 'walk', outfit: 'pinoy_school', hair: 'bob', phase: 0.3 }],
+  ['pinoy school', { body: 'man', pose: 'stand', outfit: 'pinoy_school' }],
+  ['pinoy school', { body: 'man', pose: 'walk', outfit: 'pinoy_school', phase: 0.6 }],
+  ['pinoy school', { body: 'child', pose: 'stand', outfit: 'pinoy_school', hair: 'twin' }],
+  ['pinoy school', { body: 'child', pose: 'walk', outfit: 'pinoy_school', hair: 'short', phase: 0.2 }],
+  ['baller', { body: 'man', pose: 'stand', outfit: 'baller' }],
+  ['baller', { body: 'man', pose: 'walk', outfit: 'baller', hair: 'none', phase: 0.4 }],
+  ['baller', { body: 'woman', pose: 'stand', outfit: 'baller', hair: 'ponytail' }],
+  ['barong', { body: 'man', pose: 'stand', outfit: 'barong' }],
+  ['barong', { body: 'man', pose: 'walk', outfit: 'barong', hair: 'none', phase: 0.3 }],
+  ['barong', { body: 'elder', pose: 'stand', outfit: 'barong', hair: 'none' }],
+  ['vendor', { body: 'man', pose: 'stand', outfit: 'vendor', hair: 'hat' }],
+  ['vendor', { body: 'woman', pose: 'stand', outfit: 'vendor', hair: 'hat' }],
+  ['vendor', { body: 'woman', pose: 'walk', outfit: 'vendor', hair: 'bun', phase: 0.5 }],
+  ['vendor', { body: 'elder', pose: 'stand', outfit: 'vendor', hair: 'hat' }],
+  ['jeepney crew', { body: 'man', pose: 'stand', outfit: 'jeep_crew', hair: 'none' }],
+  ['jeepney crew', { body: 'man', pose: 'pockets', outfit: 'jeep_crew', hair: 'cap' }],
+  ['jeepney crew', { body: 'man', pose: 'walk', outfit: 'jeep_crew', hair: 'short', phase: 0.7 }],
+  ['tricycle driver', { body: 'man', pose: 'stand', outfit: 'trike_driver', hair: 'cap' }],
+  ['tricycle driver', { body: 'man', pose: 'walk', outfit: 'trike_driver', hair: 'cap', phase: 0.2 }],
+  ['guard (pistol)', { body: 'man', pose: 'stand', outfit: 'guard', hair: 'short' }],
+  ['guard (shotgun)', { body: 'man', pose: 'stand', outfit: 'guard', hair: 'none' }],
+  ['guard (shotgun)', { body: 'man', pose: 'walk', outfit: 'guard', hair: 'none', phase: 0.5 }],
+  ['guard (pistol)', { body: 'woman', pose: 'stand', outfit: 'guard', hair: 'short' }],
+];
 function outfitStage(title: string, DRESSED: Dressed[]): void {
   const z = rowZ();
   wall(z);
@@ -304,6 +334,7 @@ function outfitStage(title: string, DRESSED: Dressed[]): void {
 outfitStage('outfits', DRESSED_FIRST);
 outfitStage('new outfits', DRESSED_NEW);
 outfitStage('shady', DRESSED_SHADY);
+outfitStage('filipino (under review)', DRESSED_FILIPINO);
 // ---- characters.html: the named characters, and the bare body they are built on ----
 stageFor = 'characters';
 // Posing one by hand (showroom/poser.ts): a stage of its own, the figure the poser's.

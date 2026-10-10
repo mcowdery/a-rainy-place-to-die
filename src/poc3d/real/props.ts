@@ -12,6 +12,7 @@ import { filipino, treeSet } from '../district/cityConfig';
 import * as manilaStreet from './manilaStreet';
 import { addTree, foliageVariant, setFoliageVariant, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { addDressing } from './dressing';
+import { footbridges, underFootbridge } from '../district/footbridges';
 import { openLayout, type OpenLayout } from './openLots';
 
 /** Cell size (district/plan.ts CELL): signals stand where cell-edge roads cross. */
@@ -35,7 +36,7 @@ export interface Prop {
     // The port's container yards: a stack of shipping containers (size: how many high; half: half its length).
     | 'container'
     // Manila's streets (manilaStreet.ts).
-    | 'sarisari' | 'cart' | 'jeepstop' | 'parol' | 'tarp' | 'shrine' | 'garbage' | 'barangay' | 'trusses';
+    | 'sarisari' | 'cart' | 'jeepstop' | 'parol' | 'parolline' | 'tarp' | 'shrine' | 'garbage' | 'barangay' | 'trusses' | 'footbridge';
   readonly x: number;
   readonly z: number;
   /**
@@ -133,7 +134,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       for (let t = s + 3 + rnd.float() * 6; t < e - 2; t += fil ? 20 : POLE_SPACING) {
         const pt = along(t, side, inset);
         const [x, z, nx, nz] = pt;
-        if (!mine(x, z) || inBuilding(x, z, 0.2)) {
+        if (!mine(x, z) || inBuilding(x, z, 0.2) || underFootbridge(x, z, 1.5)) {
           prev = null;
           continue;
         }
@@ -291,7 +292,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
             const mid = t - (((t % CELL3) + CELL3) % CELL3) + CELL3 / 2;
             const tl = stopClear(t) ? t : t < mid ? mid - 7.5 : mid + 7.5;
             const [x, z, nx, nz] = along(tl, side, r.sidewalk - 0.45);
-            if (mine(x, z)) {
+            if (mine(x, z) && !underFootbridge(x, z, 1.2)) {
               props.push({ kind: 'lamp', x, z, nx, nz, radius: 0.2, variant: 0 });
               lights.push({ x: x + nx * 1.4, z: z + nz * 1.4, r: 9, color: LAMP_COLOR, i: 0.7 });
               if (cellStreet > 0) manilaStreet.lampParol(x, z, nx, nz, hash(Math.round(x * 4), Math.round(z * 4), 0x9a401), cellStreet, rc);
@@ -302,7 +303,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
             const inset = boulevard ? r.sidewalk - 0.9 : r.sidewalk - 0.6;
             const [x2, z2, nx2, nz2] = along(tt, side, inset);
             const roll = u01(hash(Math.round(x2 * 4), Math.round(z2 * 4), 0x7ee));
-            if (tt < e - 3 && (boulevard || roll < style.streetTrees) && mine(x2, z2) && stopClear(tt) && bladeClear(x2, z2, 3.2) && !beforeStamp(x2, z2) && !under(x2, z2)) {
+            if (tt < e - 3 && (boulevard || roll < style.streetTrees) && mine(x2, z2) && stopClear(tt) && bladeClear(x2, z2, 3.2) && !beforeStamp(x2, z2) && !under(x2, z2) && !underFootbridge(x2, z2, 2.5)) {
               // Sized to the pavement: the crown reaches no closer than 0.25 m to the building line. A species
               // too big for its pavement even at half size isn't planted (a cherry on a 1.6 m pavement: its
               // crown stood 2 m out, the trunk in the carriageway on a stem leaning further than it rose).
@@ -318,7 +319,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
               for (const [c, h] of [[t + 5.5, 3.6], [t + 16.5, 3.6]] as const) {
                 if (c + h > e - 3 || !stopClear(c) || !stopClear(c - h) || !stopClear(c + h)) continue;
                 const [hx, hz, hnx, hnz] = along(c, side, r.sidewalk - 0.55);
-                if (!mine(hx, hz) || under(hx, hz) || u01(hash(Math.round(hx * 4), Math.round(hz * 4), 0x4ed9e)) >= style.hedges) continue;
+                if (!mine(hx, hz) || under(hx, hz) || underFootbridge(hx, hz, 2) || u01(hash(Math.round(hx * 4), Math.round(hz * 4), 0x4ed9e)) >= style.hedges) continue;
                 if (beforeStamp(hx - (r.vertical ? 0 : h), hz - (r.vertical ? h : 0)) || beforeStamp(hx + (r.vertical ? 0 : h), hz + (r.vertical ? h : 0)) || beforeStamp(hx, hz)) continue;
                 props.push({ kind: 'hedge', x: hx, z: hz, nx: hnx, nz: hnz, radius: 0.35, half: h, variant: 0 });
               }
@@ -336,6 +337,11 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
               const tt = s + 8 + ((hs >>> 16) % Math.max(1, Math.round(e - s - 16)));
               const [cx, cz] = along(tt, -1, width / 2);
               manilaStreet.roadTarp(cx, cz, r.vertical ? 0 : 1, r.vertical ? 1 : 0, width / 2 - 0.5, hs >>> 3, rc);
+            }
+            if (side === -1 && width < 20 && (hs >>> 9) % 100 < 34 * cellStreet) {
+              const tt = s + 8 + ((hs >>> 14) % Math.max(1, Math.round(e - s - 16)));
+              const [cx, cz] = along(tt, 1, width / 2);
+              manilaStreet.roadParols(cx, cz, r.vertical ? 0 : 1, r.vertical ? 1 : 0, width / 2 - 0.5, hs >>> 5, rc);
             }
           }
           // Traffic signals where two cell-edge roads cross (one per approach; traffic keeps left). Their lamps
@@ -483,6 +489,13 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
     }
     lights.push({ x: cx, z: cz, r: Math.max(q.w, q.h) * 0.6, color: [0.9, 0.75, 0.85], i: 0.35 });
   }
+  // Manila's footbridges over the avenues: drawn with the cell the span's centre is in; the walking is district/world.ts.
+  for (const b of footbridges()) {
+    if (!mine(b.x, b.z)) continue;
+    const [nx, nz] = b.alongX ? [0, 1] : [1, 0];
+    props.push({ kind: 'footbridge', x: b.x, z: b.z, nx, nz, radius: 0, variant: hash(Math.round(b.x), Math.round(b.z)) % 9973, half: b.width / 2, size: b.median, solid: false });
+    manilaStreet.footbridgeLights(b, lights);
+  }
   // Parked cars (the kerbs' and the open lots'): the models this part of the city has.
   const mix = carMixFor(plan.style, plan.kind);
   for (let i = 0; i < props.length; i++) {
@@ -503,7 +516,7 @@ const VENDING = [0xd8d8d4, 0xb8242a, 0x2a4a8a, 0x2a2a2e];
  * set twice, full and `mid`, and show one or the other by distance (district/world.ts).
  */
 export type PropPart = 'all' | 'swap' | 'fixed';
-const SWAP_KINDS = new Set<Prop['kind']>(['car', 'tree', 'hedge', 'bike']);
+const SWAP_KINDS = new Set<Prop['kind']>(['car', 'tree', 'hedge', 'bike', 'tarp', 'jeepstop']);
 
 export function addProps(mb: MeshBuilder, d: CellDetail, signs?: VehicleSigns, part: PropPart = 'all', mid = false): void {
   mb.id = 0;
@@ -587,7 +600,7 @@ export function addProps(mb: MeshBuilder, d: CellDetail, signs?: VehicleSigns, p
     } else if (p.kind === 'signal') {
       signal(mb, p);
     } else if (p.kind !== 'vending') {
-      addDressing(mb, p);
+      addDressing(mb, p, signs);
     } else {
       // Vending machine: body, a glowing display front, and a dark slot strip.
       mb.kind = KIND.plain;
@@ -604,9 +617,23 @@ export function addProps(mb: MeshBuilder, d: CellDetail, signs?: VehicleSigns, p
     }
   }
   if (mid) setFoliageVariant(variant);
-  if (part === 'swap') return;
+  // Manila's wire bundles (about 13 wires a span, ~10k triangles a cell) are a swap part too: full within the middle
+  // distance, beyond it every other wire in two segments (a third of the triangles). Tōto's stay in the fixed part.
+  const swapWires = filipino();
+  if (part === 'swap' && !swapWires) return;
+  if (part === 'fixed' && swapWires) return;
   mb.kind = KIND.plain;
   mb.color = [0.02, 0.02, 0.02];
+  if (mid) {
+    for (let k = 0; k < d.wires.length; k += 2) {
+      const w = d.wires[k];
+      if (w.length < 2) continue;
+      const m = w[w.length >> 1];
+      mb.beam(w[0], m, 0.035);
+      mb.beam(m, w[w.length - 1], 0.035);
+    }
+    return;
+  }
   for (const w of d.wires) for (let i = 0; i + 1 < w.length; i++) mb.beam(w[i], w[i + 1], 0.035);
 }
 

@@ -21,6 +21,8 @@ export interface BusLine {
   readonly rect: readonly [number, number, number, number];
   readonly buses: number;
   readonly stops: readonly string[];
+  /** A jeepney line (Manila): the livery its jeepneys wear (index into JEEPNEY_LIVERIES, whose route board is the line's). */
+  readonly jeepney?: number;
 }
 
 export interface TrafficContent {
@@ -62,7 +64,7 @@ export function parseTraffic3(file: string, text: string, macro: MacroMap, error
     if (!isRect(r.rect)) err(`buses ${i}: rect must be [col0, row0, col1, row1]`);
     else if (!loopValid(macro, r.rect)) err(`buses ${i}: every edge of [${r.rect.join(', ')}] needs generated cells on both sides`);
     else if (!Array.isArray(r.stops) || r.stops.length !== 4) err(`buses ${i}: stops must name the 4 stops (north, east, south, west edge)`);
-    else buses.push({ id: String(r.id), name: String(r.name), en: String(r.en), rect: r.rect, buses: typeof r.buses === 'number' ? r.buses : 1, stops: r.stops.map(String) });
+    else buses.push({ id: String(r.id), name: String(r.name), en: String(r.en), rect: r.rect, buses: typeof r.buses === 'number' ? r.buses : 1, stops: r.stops.map(String), ...(Number.isInteger(r.jeepney) ? { jeepney: r.jeepney as number } : {}) });
   }
   let auto: TrafficContent['auto'] = null;
   if (doc.auto !== undefined) {
@@ -182,7 +184,15 @@ export class Signals {
   }
 
   /** The light facing traffic on the north-south (ns) or east-west road at a junction, at time t. */
+  /** A junction with no power (a brownout, Manila): its lamps are dark and the traffic takes turns. */
+  dead: (gx: number, gy: number) => boolean = () => false;
+
   state(gx: number, gy: number, ns: boolean, t: number): 'green' | 'amber' | 'red' {
+    if (this.dead(gx, gy)) {
+      // Give way: each road in turn, 6 s a go with the gaps between, nothing lit.
+      const u = (((t + gx * 3 + gy * 5) % 16) + 16) % 16;
+      return (ns ? u < 6 : u >= 8 && u < 14) ? 'green' : 'red';
+    }
     const cycle = this.cycle(gx, gy);
     const offset = (((gx * 7919 + gy * 104729) % cycle) + cycle) % cycle;
     const leg = Signals.GREEN + Signals.AMBER + Signals.CLEAR;

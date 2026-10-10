@@ -447,7 +447,7 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
   // Gantry signs over the deck before each exit (green, white lettering), and at street level a sign before
   // each entrance, on the avenue's median.
   for (const road of ex.roads) {
-    if (road.kind === 'loop' || road.kind === 'route') continue;
+    if (road.kind === 'loop' || road.kind === 'route' || road.out) continue;
     if (road.rampKind === 'on') {
       group.add(entranceSign(road, road.foot ?? 0, (road.foot ?? 0) > 8), entranceGantry(road, (road.foot ?? 0) > 8));
       continue;
@@ -807,23 +807,31 @@ function noEntry(road: Road, slip: boolean): THREE.Group {
   return g;
 }
 
-/** A tunnel portal at a spur's end: a concrete headwall round a dark mouth, lamps inside, the name over it. */
+/**
+ * A tunnel portal at a spur's end: a concrete headwall round a dark mouth, lamps inside, the name over it. An entry
+ * (`Road.out`) has it at its start, the same seen from the other way: the tube is its first `tube` metres, closed at
+ * sample 0 by the black wall, and it comes out at the mouth.
+ */
 function portal(mb: MeshBuilder, road: Road): void {
   const n = road.x.length;
-  const i = n - 1;
+  const out = !!road.out;
+  const i = out ? 0 : n - 1;
+  // Which way the hill is from the road's end: ahead of an exit spur, behind an entry.
+  const s = out ? -1 : 1;
+  const tube = out ? road.tube ?? 14 : 14;
   // The headland it bores into: a wooded mound over the far end of the tunnel.
   if (road.hill) {
     mb.kind = KIND.plain;
     mb.color = lin(0x26301e);
-    const cx = road.x[i] + road.tx[i] * 150;
-    const cz = road.z[i] + road.tz[i] * 150;
+    const cx = road.x[i] + road.tx[i] * s * 150;
+    const cz = road.z[i] + road.tz[i] * s * 150;
     const H = road.hill;
     mb.lathe(cx, cz, [[-3, 230], [H * 0.35, 190], [H * 0.7, 120], [H, 50], [H + 6, 8]], 24);
   }
-  const fx = road.tx[i];
-  const fz = road.tz[i];
-  const lx = road.tz[i];
-  const lz = -road.tx[i];
+  const fx = road.tx[i] * s;
+  const fz = road.tz[i] * s;
+  const lx = fz;
+  const lz = -fx;
   const y = road.y[i];
   const at = (along: number, lat: number): [number, number] => [road.x[i] + fx * along + lx * lat, road.z[i] + fz * along + lz * lat];
   const put = (hex: number, a0: number, a1: number, l0: number, l1: number, y0: number, y1: number, kind: number = KIND.plain): void => {
@@ -835,12 +843,12 @@ function portal(mb: MeshBuilder, road: Road): void {
   };
   const h = road.half + 1.5;
   // The headwall and the tube behind (a long box: the mountain it bores into is far away).
-  put(0x6a6a66, -14, 0, -h, h, y + 6.5, y + 9);
-  put(0x6a6a66, -14, 0, -h - 1.2, -h, y - 1.2, y + 9);
-  put(0x6a6a66, -14, 0, h, h + 1.2, y - 1.2, y + 9);
+  put(0x6a6a66, -tube, 0, -h, h, y + 6.5, y + 9);
+  put(0x6a6a66, -tube, 0, -h - 1.2, -h, y - 1.2, y + 9);
+  put(0x6a6a66, -tube, 0, h, h + 1.2, y - 1.2, y + 9);
   // The mouth: a black back wall deep inside, and lights along the tube's walls fading into it.
   put(0x050506, 0.2, 1.2, -h, h, y - 1.2, y + 6.5);
-  for (let a = -12; a < 0; a += 3) {
+  for (let a = 2 - tube; a < 0; a += 3) {
     mb.kind = KIND.emit;
     mb.style = [EMIT.always, 0, 0, 0];
     for (const s of [-1, 1]) {

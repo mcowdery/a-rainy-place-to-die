@@ -76,6 +76,12 @@ export interface ExpresswayDef {
   readonly plazas?: readonly { readonly id: string; readonly name: string; readonly at: readonly [number, number]; readonly dir: readonly [number, number]; readonly from: number; readonly length: number; readonly width: number }[];
   /** At a route's point `at` (a loop's corner, or an open route's last point), straight on into a tunnel. */
   readonly exits: readonly { readonly id: string; readonly venue: string; readonly route: string; readonly at: number; readonly length: number; readonly name: string; readonly hill?: number }[];
+  /**
+   * The way out of a tunnel: at an open route's first point (untrimmed), a road comes out of a mouth `length` metres
+   * behind the point, down a roofed tube `tube` metres deep (the start of the game: you roll out of it), and runs on
+   * as the route. Where it comes out (`length`, set against the exit spur's mouth) is measured back from the point.
+   */
+  readonly entries?: readonly { readonly id: string; readonly route: string; readonly length: number; readonly tube: number; readonly name: string }[];
 }
 
 export function parseExpressway(file: string, text: string, errors: string[]): ExpresswayDef | null {
@@ -165,6 +171,16 @@ export function parseExpressway(file: string, text: string, errors: string[]): E
       if ((x.at as number) < 0 || (x.at as number) >= n || (!R.loop && x.at !== n - 1)) err(`exits[${i}]: at must be a corner of the loop, or an open route's last point`);
       else if (R.trim[1] > 0) err(`exits[${i}]: route ${x.route}'s end is trimmed off`);
     });
+  if (d.entries !== undefined && !Array.isArray(d.entries)) err('entries: a list');
+  else
+    ((d.entries ?? []) as Record<string, unknown>[]).forEach((x, i) => {
+      if (typeof x?.id !== 'string' || typeof x.route !== 'string' || !num(x.length) || !num(x.tube) || typeof x.name !== 'string') return err(`entries[${i}]: { id, route, length, tube, name }`);
+      const R = routes.get(x.route);
+      if (!R) return err(`entries[${i}]: no route ${x.route}`);
+      if (R.loop) err(`entries[${i}]: route ${x.route} is a loop: an entry comes out at an open route's start`);
+      else if (R.trim[0] > 0) err(`entries[${i}]: route ${x.route}'s start is trimmed off`);
+      if ((x.length as number) < 20 || (x.tube as number) < 20) err(`entries[${i}]: length and tube are at least 20 m`);
+    });
   if (errors.length > before) return null;
   return d as unknown as ExpresswayDef;
 }
@@ -190,6 +206,13 @@ export interface Road {
   readonly rampKind?: 'on' | 'off';
   /** Spurs: the height of the hill its tunnel bores into (drawn round the portal), if any. */
   readonly hill?: number;
+  /**
+   * A spur that comes out of its tunnel (an entry) instead of going in: it starts deep in the tube (sample 0, a black
+   * wall), is roofed for its first `tube` metres, comes out at the mouth there and runs on into its route. It is no way
+   * to a venue, and the portal drawn is at its start.
+   */
+  readonly out?: boolean;
+  readonly tube?: number;
   /** Metres left of its grid line (a two-way route's decks): its piers stand back on the line. */
   readonly offset?: number;
   /**
@@ -550,6 +573,23 @@ export class Expressway {
       }
       this.roads.push(makeRoad(e.id, 'spur', xs, zs, () => D, def.half, false, { venue: e.venue, sign: e.name, ...(e.hill ? { hill: e.hill } : {}) }));
     }
+    // Entries: the same, the other way. The road starts `length + tube` m behind the route's first point, deep in a
+    // tube, and runs on over the route's first R + 10 m (as an exit spur starts over its route's last), so the two
+    // are one surface there.
+    for (const e of def.entries ?? []) {
+      const route = def.routes.find((q) => q.id === e.route)!;
+      const dir = legsOf(route)[0].dir;
+      const o = route.offset ?? 0;
+      const w = world(route.pts[0]);
+      const c: [number, number] = [w[0] + dir[1] * o, w[1] - dir[0] * o];
+      const xs: number[] = [];
+      const zs: number[] = [];
+      for (let d = -e.length - e.tube; d <= R + 10; d++) {
+        xs.push(c[0] + dir[0] * d);
+        zs.push(c[1] + dir[1] * d);
+      }
+      this.roads.push(makeRoad(e.id, 'spur', xs, zs, () => D, def.half, false, { sign: e.name, out: true, tube: e.tube }));
+    }
     for (const road of this.roads) this.index(road);
   }
 
@@ -714,12 +754,14 @@ export class Expressway {
     const out: { x: number; z: number; top: number }[] = [];
     for (const road of this.roads) {
       if (road.kind === 'ramp' || road.kind === 'deck') continue;
-      const start = road.kind === 'spur' ? 40 : 0;
+      // (A spur's first 40 m lie over its route, which has its own piers there; an entry's last.)
+      const start = road.kind === 'spur' && !road.out ? 40 : 0;
+      const stop = road.out ? road.x.length - 40 : road.x.length;
       // An offset deck's piers stand back on its grid line (the median), under both of a two-way route's decks.
       const o = road.offset ?? 0;
       // (Every 32 m of the route as written, so a trimmed deck's piers still stand with the other deck's.)
       const lead = road.trim?.[0] ?? 0;
-      for (let i = start + ((32 - (lead % 32)) % 32); i < road.x.length; i += 32) {
+      for (let i = start + ((32 - (lead % 32)) % 32); i < stop; i += 32) {
         // (A gradual corner cuts across the junction: no pier stands in the street there, the deck spans it.)
         // (A junction's connector stands on no pier over a street at all: its ends lie beside the decks it joins, which
         // have their own in the median, and its own would stand in a lane.)
@@ -747,7 +789,7 @@ export class Expressway {
   /** A spur's tunnel you're in (its last 14 m), or null. */
   portal(x: number, z: number, y: number): Road | null {
     const o = this.at(x, z, y);
-    return o && o.road.kind === 'spur' && o.i > o.road.x.length - 14 ? o.road : null;
+    return o && o.road.kind === 'spur' && !o.road.out && o.i > o.road.x.length - 14 ? o.road : null;
   }
 }
 

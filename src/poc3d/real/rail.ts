@@ -1,3 +1,4 @@
+import { filipino } from '../district/cityConfig';
 import * as THREE from 'three';
 import { splitByTile } from './tiles';
 import { passengerMesh, type PassengerSpot } from './people';
@@ -583,12 +584,12 @@ export class TrainSystem {
           : st.next
             ? `next: ${st.next.jp} ${st.next.en}`
             : '';
-      return `${this.line.name} ${this.line.nameEn} · ${last.jp} 行き  ·  ${where}`;
+      return `${this.line.name} ${this.line.nameEn} · ${filipino() ? `for ${last.jp}` : `${last.jp} 行き`}  ·  ${where}`;
     }
     if (!this.ride) return null;
     const { to, t } = this.ride;
     const state = t < 0 ? 'doors closing' : t < this.ride.T ? 'next' : 'arriving at';
-    return `${this.line.name} ${this.line.nameEn} · ${to.names.jp} 行き  ·  ${state}: ${to.names.jp} ${to.names.en}  ·  [E] skip`;
+    return `${this.line.name} ${this.line.nameEn} · ${filipino() ? `for ${to.names.jp}` : `${to.names.jp} 行き`}  ·  ${state}: ${to.names.jp} ${to.names.en}  ·  [E] skip`;
   }
 
   /** Ride from one station to another with the camera in the middle car; resolves on arrival. */

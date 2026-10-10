@@ -11,6 +11,8 @@ import { landmarkColliders, landmarkHoles } from './landmarks';
 import { roadUnder } from './rail';
 import { stationKerb } from '../real/station';
 import { vehicleTexts } from '../models/vehicles';
+import { filipino } from './cityConfig';
+import { manilaTexts } from '../real/manilaStreet';
 
 /**
  * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings, signs) and
@@ -255,5 +257,7 @@ export function signTexts(words: readonly string[], placed: readonly Placed3[]):
     ...placed.flatMap((p) => p.signs.map((s) => ({ text: s.text, vertical: s.vertical }))),
     // The vehicles' lettering and taxi ads' copy.
     ...vehicleTexts(),
+    // Manila's tarpaulins, banners and stop signs.
+    ...(filipino() ? manilaTexts() : []),
   ];
 }

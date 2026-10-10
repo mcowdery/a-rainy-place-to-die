@@ -56,14 +56,15 @@ export const TOTO_TREES: TreeSet = {
 };
 
 export const MANILA_TREES: TreeSet = {
-  boulevard: { cuts: [['royalPalm', 42, false], ['coconut', 72, true]], rest: 'raintree' },
-  street: { cuts: [['mango', 28, true], ['raintree', 46, true], ['coconut', 72, true]], rest: 'banana' },
+  // Palms dominate (the user's brief): royal and coconut palms on the boulevards with flame trees, rain trees the few.
+  boulevard: { cuts: [['royalPalm', 44, false], ['coconut', 80, true], ['flametree', 92, true]], rest: 'raintree' },
+  street: { cuts: [['coconut', 40, true], ['banana', 52, true], ['mango', 64, true], ['flametree', 72, true], ['royalPalm', 82, true]], rest: 'raintree' },
   bay: ['coconut', 'coconut', 'royalPalm'],
-  riverWalk: ['coconut', 'raintree'],
+  riverWalk: ['coconut', 'coconut', 'flametree'],
   verge: 'mango',
   grove: 'mango',
-  plaza: { raintree: 35, coconut: 30, royalPalm: 15, mango: 20 },
-  park: { coconut: 30, raintree: 24, mango: 20, banana: 16, bougainvillea: 10 },
+  plaza: { coconut: 32, royalPalm: 20, banyan: 14, raintree: 14, flametree: 12, mango: 8 },
+  park: { coconut: 32, royalPalm: 10, banana: 12, banyan: 8, raintree: 10, flametree: 8, mango: 10, bougainvillea: 10 },
   parkPond: 'coconut',
   parkPath: 'royalPalm',
   playground: ['mango', 'banana', 'bougainvillea'],

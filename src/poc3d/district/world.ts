@@ -24,6 +24,7 @@ import type { Rect } from '../../core/coords';
 import type { Interior } from '../real/interiors';
 import { cityFromUrl } from './cityConfig';
 import { floorLevel, groundSurface, indoorSurface, type Surface } from './footing';
+import { footbridgeFloor, footbridgeGround, footbridgeRaised, footbridgeShelter, footbridges, footbridgesNear } from './footbridges';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
 /** The largest radius `District.obstacleNear` is asked with (m). */
@@ -166,6 +167,11 @@ export class District {
     this.basementColliders = placed.map((p) => landmarkColliders(p, -5) ?? []);
     this.deepColliders = placed.map((p) => landmarkColliders(p, -11) ?? []);
     this.shelters.push(...placed.flatMap(landmarkShelters));
+    // Manila's footbridges (footbridges.ts): their towers and columns on the ground, their decks roofed against the rain.
+    for (const b of footbridges()) {
+      this.extraColliders.push(...footbridgeGround(b));
+      this.shelters.push(footbridgeShelter(b));
+    }
   }
 
   private readonly stampColliders: (readonly Rect[])[];
@@ -223,7 +229,12 @@ export class District {
       const y = landmarkFloor(p, x, z, current - base);
       if (y !== null) return y + base;
     }
-    return this.terrain.height(x, z);
+    const ground = this.terrain.height(x, z);
+    for (const b of footbridgesNear(x, z)) {
+      const y = footbridgeFloor(b, x, z, current - ground);
+      if (y !== null) return y + ground;
+    }
+    return ground;
   };
 
   /** Each cell's pavement corners (real/ground.ts), for what's past their rounded kerbs. */
@@ -477,7 +488,7 @@ export class District {
       return false;
     };
     if (floor < -1) return (floor > -8 ? this.basementColliders : this.deepColliders).some(inRects) || inside();
-    if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? [])) || inside();
+    if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? [])) || inside() || footbridgesNear(x, z, 1).some((b) => inRects(footbridgeRaised(b)));
     if (!this.inDistrict(x, z)) return true;
     if (!onFoot && this.onBridgeMedian(x, z, r)) return true;
     const mx = Math.floor(x / CELL);

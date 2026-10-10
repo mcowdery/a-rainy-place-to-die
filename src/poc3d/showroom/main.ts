@@ -478,19 +478,19 @@ cityU.uLightRect.value = showLightmap.uniformRect;
 const TREE_NAMES: Record<TreeSpecies, string> = {
   zelkova: 'zelkova 欅', ginkgo: 'ginkgo 銀杏', ginkgoGold: 'ginkgo (autumn)', sakura: 'sakura 桜', sakuraBloom: 'sakura (in bloom)',
   pine: 'black pine 黒松', camphor: 'camphor 楠', dogwood: 'dogwood 花水木', dogwoodBloom: 'dogwood (in flower)', azalea: 'azalea 躑躅', box: 'clipped box',
-  coconut: 'coconut palm', royalPalm: 'royal palm', banana: 'banana', raintree: 'rain tree', mango: 'mango', bougainvillea: 'bougainvillea',
+  coconut: 'coconut palm', royalPalm: 'royal palm', banana: 'banana', raintree: 'rain tree', mango: 'mango', bougainvillea: 'bougainvillea', banyan: 'banyan (balete)', flametree: 'flame tree',
 };
 const TREE_ROWS: [number, TreeSpecies[], number][] = [
   [70, ['zelkova', 'ginkgo', 'ginkgoGold', 'sakura', 'sakuraBloom', 'camphor'], 11],
   [86, ['pine', 'dogwood', 'dogwoodBloom', 'azalea', 'box'], 8],
-  [56, ['coconut', 'royalPalm', 'banana', 'raintree', 'mango', 'bougainvillea'], 11],
+  [56, ['coconut', 'royalPalm', 'banana', 'raintree', 'mango', 'bougainvillea', 'banyan', 'flametree'], 11],
 ];
 const GARDEN_X = -8;
 {
   const pad = new MeshBuilder();
   pad.kind = KIND.grass;
   pad.color = lin(0x3e5a30);
-  pad.box(GARDEN_X + 30, 72, -0.2, 0.1, 76, 46, KIND.grass);
+  pad.box(GARDEN_X + 40, 72, -0.2, 0.1, 100, 46, KIND.grass);
   pad.kind = KIND.plain;
   pad.color = lin(0x8a867e);
   pad.box(GARDEN_X + 30, 102, -0.2, 0.15, 76, 14, KIND.sidewalk);

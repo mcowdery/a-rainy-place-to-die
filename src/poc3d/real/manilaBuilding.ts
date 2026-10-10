@@ -24,6 +24,14 @@ function two(mb: MeshBuilder, c: C3, a: C3, b: C3): void {
   mb.quad(c, b, a);
 }
 
+/**
+ * A flat bar on a facade (a grille's or a cage's), one front-facing quad (2 triangles) where a box was 10-12: they are
+ * 1-5 cm across and seen from the street (the frame-rate pass of 2026-10-09; the sides are never in sight).
+ */
+function bar(mb: MeshBuilder, p: C3, r: C3, n: C3, u0: number, u1: number, y0: number, y1: number, out: number): void {
+  mb.quad([p[0] + r[0] * u0 + n[0] * out, y0, p[2] + r[2] * u0 + n[2] * out], [r[0] * (u1 - u0), 0, r[2] * (u1 - u0)], [0, y1 - y0, 0]);
+}
+
 /** Laundry hung on a line from a to b (both at the same height): a few shirts and sheets, coloured. */
 function laundry(mb: MeshBuilder, a: C3, b: C3, rnd: Rng, drop = 0.7): void {
   mb.kind = KIND.plain;
@@ -95,7 +103,7 @@ export function ironRoofRibs(mb: MeshBuilder, b: Building3, y0: number, y1: numb
     const e0 = P(-len, side * half, y0 - over * 0.4);
     const e1 = P(len, side * half, y0 - over * 0.4);
     const r0 = P(-len, 0, y1);
-    ribs(mb, e0, e1, r0, 0.8, 0.012);
+    ribs(mb, e0, e1, r0, 1.2, 0.012);
   }
   // The ridge cap.
   mb.color = lin(0x6a6a68);
@@ -143,10 +151,13 @@ export function unfinishedTop(mb: MeshBuilder, b: Building3, top: number, w: num
     if (!near) continue;
     mb.color = lin(rnd.chance(0.5) ? IRON_RUST : 0x5a3a2a);
     const lean = (rnd.float() - 0.5) * 0.25;
-    for (const [dx, dz] of [[-0.07, -0.07], [0.07, -0.07], [-0.07, 0.07], [0.07, 0.07]]) {
+    // (Two bars of the four are drawn, thicker; every random draw is still made so the roof's other gear is as it was.)
+    [[-0.07, -0.07], [0.07, -0.07], [-0.07, 0.07], [0.07, 0.07]].forEach(([dx, dz], bi) => {
       const hh = 0.9 + rnd.float() * 0.7;
-      mb.beam([cx + dx, top + 0.5, cz + dz], [cx + dx + lean * (rnd.float() - 0.3), top + 0.5 + hh, cz + dz + lean * (rnd.float() - 0.3)], 0.012);
-    }
+      const ex = cx + dx + lean * (rnd.float() - 0.3);
+      const ez = cz + dz + lean * (rnd.float() - 0.3);
+      if (bi === 0 || bi === 3) mb.beam([cx + dx, top + 0.5, cz + dz], [ex, top + 0.5 + hh, ez], 0.017);
+    });
   }
   if (!near) return;
   const room = (w - 1.2) * (d - 1.2);
@@ -161,7 +172,7 @@ export function unfinishedTop(mb: MeshBuilder, b: Building3, top: number, w: num
     mb.color = lin(rnd.pick([0x8c8e8c, 0x8a5a3c, 0x7a7c7c, 0x6a3a28]));
     two(mb, [cx - sw / 2 - 0.1, top + 2.3, cz - sd / 2 - 0.1], [sw + 0.2, 0, 0], [0, -0.4, sd + 0.2]);
     mb.color = lin(0x5a5a58);
-    ribs(mb, [cx - sw / 2 - 0.1, top + 2.31, cz - sd / 2 - 0.1], [cx + sw / 2 + 0.1, top + 2.31, cz - sd / 2 - 0.1], [cx - sw / 2 - 0.1, top + 1.91, cz + sd / 2 + 0.1], 0.5, 0.012);
+    ribs(mb, [cx - sw / 2 - 0.1, top + 2.31, cz - sd / 2 - 0.1], [cx + sw / 2 + 0.1, top + 2.31, cz - sd / 2 - 0.1], [cx - sw / 2 - 0.1, top + 1.91, cz + sd / 2 + 0.1], 0.8, 0.012);
     mb.color = lin(0x1a1a1c);
     for (let i = 0; i < 3; i++) mb.cylinder(cx - sw / 2 + (sw * (i + 0.5)) / 3, cz - sd / 2 + sd * 0.35, top + 2.2, top + 2.36, 0.28, 8);
   }
@@ -226,12 +237,12 @@ export function front(mb: MeshBuilder, b: Building3, f: Face, s0: number, s1: nu
         mb.color = metal;
         const u0 = uc - ww / 2 - 0.04;
         const u1 = uc + ww / 2 + 0.04;
-        mb.frameBox(p, r, n, u0, u1, y0 - 0.04, y0 + 0.02, 0.1, 0.16);
-        mb.frameBox(p, r, n, u0, u1, y1 - 0.02, y1 + 0.04, 0.1, 0.16);
-        mb.frameBox(p, r, n, u0, u0 + 0.05, y0, y1, 0.1, 0.16);
-        mb.frameBox(p, r, n, u1 - 0.05, u1, y0, y1, 0.1, 0.16);
-        mb.frameBox(p, r, n, uc - 0.02, uc + 0.02, y0, y1, 0.1, 0.16);
-        mb.frameBox(p, r, n, u0, u1, (y0 + y1) / 2 - 0.02, (y0 + y1) / 2 + 0.02, 0.1, 0.16);
+        bar(mb, p, r, n, u0, u1, y0 - 0.04, y0 + 0.02, 0.16);
+        bar(mb, p, r, n, u0, u1, y1 - 0.02, y1 + 0.04, 0.16);
+        bar(mb, p, r, n, u0, u0 + 0.05, y0, y1, 0.16);
+        bar(mb, p, r, n, u1 - 0.05, u1, y0, y1, 0.16);
+        bar(mb, p, r, n, uc - 0.02, uc + 0.02, y0, y1, 0.16);
+        bar(mb, p, r, n, u0, u1, (y0 + y1) / 2 - 0.02, (y0 + y1) / 2 + 0.02, 0.16);
         // Washing hung from the grille or an AC unit beside it.
         if (rnd.chance(0.12)) {
           mb.color = lin(rnd.pick(LAUNDRY));
@@ -247,11 +258,11 @@ export function front(mb: MeshBuilder, b: Building3, f: Face, s0: number, s1: nu
       const y = gf + fl * FH;
       mb.color = metal;
       if (rnd.chance(0.65)) {
-        mb.frameBox(p, r, n, s0 + 0.15, s1 - 0.15, y + 2.15, y + 2.22, 1.08, 1.15);
-        const k = Math.max(2, Math.round(sw / 0.35));
+        bar(mb, p, r, n, s0 + 0.15, s1 - 0.15, y + 2.15, y + 2.22, 1.15);
+        const k = Math.max(2, Math.round(sw / 0.5));
         for (let i = 0; i <= k; i++) {
           const u = s0 + 0.15 + ((sw - 0.3) * i) / k;
-          mb.frameBox(p, r, n, u - 0.012, u + 0.012, y + 1.05, y + 2.2, 1.1, 1.13);
+          bar(mb, p, r, n, u - 0.012, u + 0.012, y + 1.05, y + 2.2, 1.13);
         }
       }
       if (rnd.chance(0.5)) laundry(mb, at(s0 + 0.5, y + 1.95, 0.9), at(s1 - 0.5, y + 1.95, 0.9), rnd, 0.9);
@@ -265,7 +276,7 @@ export function front(mb: MeshBuilder, b: Building3, f: Face, s0: number, s1: nu
     const slope: C3 = [n[0] * 1.5, -0.35, n[2] * 1.5];
     two(mb, c, slope, a);
     mb.color = lin(0x5a5a58);
-    ribs(mb, c, [c[0] + a[0], c[1], c[2] + a[2]], [c[0] + slope[0], c[1] + slope[1], c[2] + slope[2]], 0.5, 0.012);
+    ribs(mb, c, [c[0] + a[0], c[1], c[2] + a[2]], [c[0] + slope[0], c[1] + slope[1], c[2] + slope[2]], 0.8, 0.012);
     for (const u of [s0 + 0.3, s1 - 0.3]) mb.beam(at(u, 3.1, 0.05), at(u, 2.75, 1.45), 0.015);
   }
 }

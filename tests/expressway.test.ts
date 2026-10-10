@@ -96,7 +96,7 @@ describe('the expressway', () => {
     const r1s = ex.roads.find((r) => r.id === 'r1_s')!;
     const r1n = ex.roads.find((r) => r.id === 'r1_n')!;
     expect(Math.abs(r1s.x[100] - r1n.x[r1n.x.length - 101])).toBeCloseTo(10.4, 0);
-    expect(ex.roads.filter((r) => r.kind === 'spur').map((r) => r.venue)).toEqual(['kurokami', 'yunagi']);
+    expect(ex.roads.filter((r) => r.kind === 'spur' && !r.out).map((r) => r.venue)).toEqual(['kurokami', 'yunagi']);
   });
 
   it('ramps meet the street and the deck, on a drivable grade', () => {
@@ -170,6 +170,21 @@ describe('the expressway', () => {
     // The piers stand clear of the junctions.
     const rects = ex.streetColliders();
     expect(rects.length).toBeGreaterThan(50);
+  });
+
+  it('the Yūnagi tunnel has a way out, onto the westbound Wangan', () => {
+    const out = ex.roads.find((r) => r.id === 'yunagi_out')!;
+    const ww = ex.roads.find((r) => r.id === 'wangan_w')!;
+    expect(out.out).toBe(true);
+    // It starts deep in the hill (east of the Wangan's end), heads west along the westbound deck's line, and ends over it.
+    expect(out.x[0]).toBeGreaterThan(ww.x[0] + 100);
+    expect(out.tx[0]).toBeCloseTo(-1, 3);
+    expect(out.z[0]).toBeCloseTo(ww.z[0], 0);
+    const n = out.x.length;
+    expect(ex.at(out.x[n - 1], out.z[n - 1], def.deck)).not.toBe(null);
+    // Its tube is no way to the pass: driving along it takes you nowhere.
+    expect(ex.portal(out.x[20], out.z[20], def.deck)).toBe(null);
+    expect(ex.portal(out.x[n - 3], out.z[n - 3], def.deck)).toBe(null);
   });
 
   it('spurs end at their portals', () => {

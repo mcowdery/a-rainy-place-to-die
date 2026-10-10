@@ -9,13 +9,14 @@ import { hash } from '../../core/hash';
  * can't wear (a man in a maid's dress, a child in a suit) falls back to its everyday clothes. Pure, and
  * deterministic by seed (the chunk workers dress the crowds with it).
  */
-// (The later ones are the sculpted generation's, real/mobShape.ts; the classic templates draw each as the nearest of
+// (The Filipino ones, for Manila, are UNDER REVIEW in the mob showroom (mob.html) and in no mix yet: content/manila/PEOPLE-REVIEW.md
+// says how to turn them on once approved. The later ones are the sculpted generation's, real/mobShape.ts; the classic templates draw each as the nearest of
 // the first ten, people.ts CLASSIC_OUTFIT. Shorts and the down jacket keep to their seasons (district/peopleHours.ts);
 // nurses and doctors are in no mix yet: they want a place. `nude` is a woman's or a man's body with nothing over it,
 // barefoot, and `nude_heels` a woman's in high heels (a cabaret's dancer behind its door), for the rooms of adult
 // scenes (real/windowScenes.ts): never in a mix, and pickOutfit never gives either, so nobody in the street's crowd
 // can wear them.)
-export const OUTFITS = ['plain', 'long', 'suit', 'maid', 'school', 'kimono', 'yukata', 'work', 'police', 'otaku', 'dress', 'mini', 'gown', 'shorts', 'hoodie', 'office', 'track', 'nurse', 'doctor', 'apron', 'puffer', 'gym', 'yakuza', 'chinpira', 'bosozoku', 'boss', 'hood', 'yankee', 'drunk', 'irezumi', 'nude', 'nude_heels'] as const;
+export const OUTFITS = ['plain', 'long', 'suit', 'maid', 'school', 'kimono', 'yukata', 'work', 'police', 'otaku', 'dress', 'mini', 'gown', 'shorts', 'hoodie', 'office', 'track', 'nurse', 'doctor', 'apron', 'puffer', 'gym', 'yakuza', 'chinpira', 'bosozoku', 'boss', 'hood', 'yankee', 'drunk', 'irezumi', 'pinoy_school', 'baller', 'barong', 'vendor', 'jeep_crew', 'trike_driver', 'guard', 'nude', 'nude_heels'] as const;
 export type Outfit = (typeof OUTFITS)[number];
 /** Nothing on (barefoot, or a woman in heels): only ever in a room of an adult scene. */
 export const isBare = (o: unknown): boolean => o === 'nude' || o === 'nude_heels';
@@ -65,7 +66,7 @@ export const SMOKES = ['cigarette', 'cigar'] as const;
 export type Smoke = (typeof SMOKES)[number];
 
 /** Who never smokes in the street: the young, and those at work in a uniform that forbids it. */
-const NO_SMOKE: ReadonlySet<Outfit> = new Set<Outfit>(['school', 'track', 'gym', 'yankee', 'nurse', 'doctor', 'police', 'maid', 'apron', 'otaku', 'nude', 'nude_heels']);
+const NO_SMOKE: ReadonlySet<Outfit> = new Set<Outfit>(['school', 'track', 'gym', 'yankee', 'nurse', 'doctor', 'police', 'maid', 'apron', 'otaku', 'pinoy_school', 'nude', 'nude_heels']);
 /** The share of each kind of person with one lit, standing about and walking along: [standing, walking]. */
 const SMOKE_SHARE: Readonly<Partial<Record<Outfit, readonly [number, number]>>> = {
   suit: [0.46, 0.17],

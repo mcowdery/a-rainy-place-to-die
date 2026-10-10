@@ -3,6 +3,7 @@ import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
 import type { Prop } from './props';
 import { treeSet } from '../district/cityConfig';
 import { addManilaProp } from './manilaStreet';
+import type { VehicleSigns } from '../models/vehicles';
 import { FOLIAGE_TAG, foliageVariant, shrubMass, TREE_SPECIES } from '../models/trees';
 
 /**
@@ -18,7 +19,7 @@ const SHRUB = [0x2e4a26, 0x3e5a2e, 0x4a6a34, 0x36522a, 0x2a4a2e];
 const POTS = [0xa0522d, 0xb8663a, 0x2a4a6a, 0xd8d4c8, 0x3a3a3a, 0x8a6a3a];
 const PLAY = [0xc83a2a, 0x2a6ac8, 0xe0b020, 0x2a9a5a];
 
-export function addDressing(mb: MeshBuilder, p: Prop): void {
+export function addDressing(mb: MeshBuilder, p: Prop, signs?: VehicleSigns): void {
   const r: C3 = [p.nz, 0, -p.nx];
   const n: C3 = [p.nx, 0, p.nz];
   const o: C3 = [p.x, 0, p.z];
@@ -359,7 +360,7 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
       break;
     }
     default:
-      addManilaProp(mb, p);
+      addManilaProp(mb, p, signs);
       break;
   }
   mb.kind = KIND.plain;

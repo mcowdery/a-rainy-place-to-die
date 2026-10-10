@@ -346,6 +346,7 @@ const wears = (b: Body, o: Outfit): boolean => {
     case 'nude_heels':
       return b === 'woman';
     case 'school':
+    case 'pinoy_school':
     case 'otaku':
     case 'shorts':
     case 'hoodie':
@@ -355,6 +356,8 @@ const wears = (b: Body, o: Outfit): boolean => {
       return b !== 'elder';
     case 'work':
     case 'police':
+    case 'baller':
+    case 'guard':
     case 'office':
     case 'nurse':
     case 'doctor':
@@ -364,10 +367,13 @@ const wears = (b: Body, o: Outfit): boolean => {
       return b === 'man' || b === 'woman';
     case 'yakuza':
     case 'boss':
+    case 'barong':
       return b === 'man' || b === 'elder';
     case 'chinpira':
     case 'irezumi':
     case 'drunk':
+    case 'jeep_crew':
+    case 'trike_driver':
       return b === 'man';
     default:
       return b !== 'child';
@@ -398,7 +404,7 @@ export const getMobShape = (): MobShape => mobShape;
 const CLASSIC_HAIR: Partial<Record<Hair, Hair>> = { bob: 'short', ponytail: 'long', twin: 'long' };
 
 /** The outfits only the shaped generation has, as the classic one draws them. */
-const CLASSIC_OUTFIT: Partial<Record<Outfit, Outfit>> = { dress: 'long', mini: 'plain', gown: 'long', shorts: 'plain', hoodie: 'plain', office: 'suit', track: 'plain', nurse: 'plain', doctor: 'long', apron: 'plain', puffer: 'plain', gym: 'plain', yakuza: 'suit', boss: 'suit', drunk: 'suit', bosozoku: 'long', yankee: 'school', chinpira: 'plain', hood: 'plain', irezumi: 'plain', nude: 'plain', nude_heels: 'plain' };
+const CLASSIC_OUTFIT: Partial<Record<Outfit, Outfit>> = { dress: 'long', mini: 'plain', gown: 'long', shorts: 'plain', hoodie: 'plain', office: 'suit', track: 'plain', nurse: 'plain', doctor: 'long', apron: 'plain', puffer: 'plain', gym: 'plain', yakuza: 'suit', boss: 'suit', drunk: 'suit', bosozoku: 'long', yankee: 'school', chinpira: 'plain', hood: 'plain', irezumi: 'plain', pinoy_school: 'school', baller: 'shorts', barong: 'suit', vendor: 'apron', jeep_crew: 'plain', trike_driver: 'plain', guard: 'police', nude: 'plain', nude_heels: 'plain' };
 
 const templates = new Map<string, Template>();
 
@@ -2614,7 +2620,7 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
   // What they wear, by the place's mix.
   const outfit = pickOutfit(mix, rnd.int(0, 1 << 30), (o) => wears(b, o));
   let hair: Hair = woman ? rnd.pick(['long', 'long', 'bob', 'ponytail', 'bun', 'short', 'hat'] as const) : b === 'elder' ? rnd.pick(['none', 'hat', 'cap'] as const) : rnd.pick(['short', 'short', 'short', 'none', 'cap', 'hat'] as const);
-  if (outfit === 'maid' || ((outfit === 'school' || outfit === 'track' || outfit === 'gym') && woman)) hair = rnd.pick(['long', 'ponytail', 'bob', 'twin', 'short', 'bun'] as const);
+  if (outfit === 'maid' || ((outfit === 'school' || outfit === 'pinoy_school' || outfit === 'track' || outfit === 'gym') && woman)) hair = rnd.pick(['long', 'ponytail', 'bob', 'twin', 'short', 'bun'] as const);
   if (outfit === 'gown' || outfit === 'office') hair = woman ? rnd.pick(['long', 'bun', 'bob'] as const) : hair;
   if (outfit === 'kimono' || outfit === 'yukata') hair = woman ? 'bun' : rnd.pick(['short', 'none'] as const);
   if (outfit === 'work' || outfit === 'police') hair = woman ? 'short' : rnd.pick(['short', 'none'] as const);
@@ -2627,6 +2633,10 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
   if (outfit === 'hood' && !woman) hair = rnd.pick(['short', 'short', 'none', 'cap'] as const);
   if (outfit === 'yankee') hair = woman ? rnd.pick(['long', 'long', 'ponytail', 'bob'] as const) : rnd.pick(['short', 'none'] as const);
   if (outfit === 'drunk' || outfit === 'irezumi') hair = rnd.pick(['short', 'short', 'none'] as const);
+  // The Filipino ones (under review): a vendor in a salakot or bareheaded, a tricycle driver in a cap, a guard bareheaded (his cap is his uniform's; none: a shotgun).
+  if (outfit === 'vendor') hair = rnd.pick(woman ? ['hat', 'hat', 'bun', 'long', 'ponytail'] as const : ['hat', 'hat', 'short', 'none'] as const);
+  if (outfit === 'trike_driver') hair = 'cap';
+  if (outfit === 'guard') hair = woman ? rnd.pick(['short', 'bun', 'ponytail'] as const) : rnd.pick(['short', 'short', 'none'] as const);
   // A bag in the left hand: they gesture with the right.
   const carries = (outfit === 'suit' && !woman) || (outfit === 'school' && b !== 'child') || outfit === 'drunk' || (outfit === 'yankee' && woman);
   return {

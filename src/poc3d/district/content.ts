@@ -12,6 +12,7 @@ import { parseExpressway, rampEdges } from './expressway';
 import { parseTerrain, Terrain } from './terrain';
 import { CITIES, type CityId } from './cityConfig';
 import { parseStreetRaces, type StreetRaceDef } from './streetRace';
+import { parseFootbridges, setFootbridges, type Footbridge } from './footbridges';
 
 /** Every city's content files as raw text, by folder under content/ then path in it (`l0.txt`, `stamps/x.yaml`). */
 const RAW = import.meta.glob(['../../../content/world3d/**/*.{yaml,txt}', '../../../content/manila/**/*.{yaml,txt}'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
@@ -43,6 +44,8 @@ export interface DistrictContent {
   readonly streetRaces: readonly StreetRaceDef[];
   /** The expressway's file (expressway.yaml) as text, parsed by the page; empty when the city has none. */
   readonly expresswayText: string;
+  /** Pedestrian footbridges over the avenues (footbridges.yaml; none in Tōto). */
+  readonly footbridges: readonly Footbridge[];
   readonly city: CityId;
 }
 
@@ -96,6 +99,8 @@ export function loadDistrictContent(city: CityId = 'toto'): DistrictContent {
   const terrain = macro ? parseTerrain(`${at}/terrain.yaml`, text('terrain.yaml'), macro, errors) : Terrain.FLAT;
   const ids = zones.zones.map((z) => z.id);
   if (new Set(ids).size !== ids.length) errors.push(`${at}/zones: zone ids must be unique across districts`);
+  const footbridges = parseFootbridges(`${at}/footbridges.yaml`, files.get('footbridges.yaml') ?? '', avenues, errors);
   if (errors.length > 0 || !macro || !atmosphere) throw new ContentError(errors);
-  return { macro, placed, atmosphere, zones, rails, traffic, subway, avenues, bridges, terrain, races, streetRaces, expresswayText: files.get('expressway.yaml') ?? '', city };
+  setFootbridges(footbridges);
+  return { macro, placed, atmosphere, zones, rails, traffic, subway, avenues, bridges, terrain, races, streetRaces, expresswayText: files.get('expressway.yaml') ?? '', footbridges, city };
 }

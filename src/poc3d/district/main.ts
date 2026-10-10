@@ -15,6 +15,7 @@ import type { SeasonKey, TaskGo } from './playtestTasks';
 import { SHARE } from '../../share';
 import { WaitPanel } from './waitPanel';
 import { airWith, coldBreath, isMonsoon, outlookAt } from './forecast';
+import { Brownout, brownoutWords, outageChance } from './brownout';
 import { WeatherApp } from './weatherApp';
 import { puddleAt, weatherGrip, wading, wheelsOf as carWheels, type RoadWeather } from './roadGrip';
 import { buildFlood, FLOOD_MIN } from '../real/flood';
@@ -42,7 +43,7 @@ import { WallpaperApp } from '../../phone/wallpaperApp';
 import { FirstPerson } from '../controls';
 import { frontFrame } from '../real/buildings';
 import { cityDepthMaterial, cityMaterial, cityUniforms, windowHours } from '../real/city';
-import { windowSceneIndex } from '../real/windowScenes';
+import { setSceneCity, windowSceneIndex } from '../real/windowScenes';
 import { Lightmap } from '../real/lightmap';
 import { buildMegaSign } from '../real/megaSign';
 import { buildKonbini } from '../real/konbini';
@@ -103,7 +104,7 @@ import { TrackMap, type Wheel } from '../real/tracks';
 import { setTreeSink, TREE_REACH, type TreeSpecies } from '../models/trees';
 import { LITTER, WIPERS } from '../real/city';
 import { MOOD_DEFAULTS, moodFromUrl, MoodPanel, QUALITY, SKY_COLOR_MODE } from './moodPanel';
-import { carLoops, routeFor, scrambleKeys, Signals } from './traffic';
+import { along, carLoops, routeFor, scrambleKeys, Signals } from './traffic';
 import { carMixFor, CITY_CARS } from './carMix';
 import { CAR } from './cabin';
 import { BUS } from './busCabin';
@@ -197,6 +198,7 @@ const HEAT_GROUND = new THREE.Color(0x9a7a52);
 const CITY = cityFromUrl();
 configureSky(CITY.daylight, CITY.sunYaw);
 setTreeSet(CITY.id);
+setSceneCity(CITY.filipino);
 setWorkLiveries(CITY.tropical);
 setCurrency(CITY.currency);
 const START_SPAWN = CITY.startSpawn;
@@ -322,6 +324,7 @@ async function run(): Promise<void> {
   const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 1200);
 
   const cityU = cityUniforms();
+  cityU.uFil.value = CITY.filipino ? 1 : 0;
   const city = cityMaterial(cityU);
   const district = new District(content.macro, DISTRICTS3, content.placed, SEED, content.zones, content.avenues, content.bridges, content.terrain, [...railReserved(content.rails), ...expresswayReservedFrom('expressway.yaml', content.expresswayText)], expresswayCoveredFrom('expressway.yaml', content.expresswayText));
   // The ground's height (terrain.ts): 0 but on the hills.
@@ -540,6 +543,9 @@ async function run(): Promise<void> {
   // Every grid-corner junction has signals; scramble crossings add a pedestrian phase.
   const scrambles = scrambleKeys(content.placed, CELL);
   const signals = new Signals(scrambles);
+  // Manila's brownouts: the cells without power now (set once a second below); a junction in one has dead signals.
+  const brown = new Brownout();
+  signals.dead = (gx, gy) => brown.junctionDead(gx, gy);
   setTrafficGround(groundAt);
   const traffic = new TrafficSystem(
     carLoops(content.macro, content.traffic, plan, expressway.rampColliders()).map((c) => ({ route: routeFor(c.rect, true, plan, piers), spacing: c.spacing })),
@@ -553,6 +559,77 @@ async function run(): Promise<void> {
     },
     busMats,
   );
+  if (debug) {
+    // Checks (Manila's jeepney lines): `arrive(line, edge)` sets that line's first jeepney 40 m short of the edge's stop and
+    // stands you at the stop's pole; `behind()` stands you at the back step of a jeepney that's standing with its back open
+    // (true if there is one); `board()` climbs on it (as E); `hail()` waves one down (as Shift+H).
+    type JV = { obj: THREE.Object3D; dx: number; dz: number; s: number; v: number; jeep?: boolean; dwell: number; line?: { id: string }; route: { edges: { mid: number }[] }; x: number; z: number };
+    let target: JV | null = null;
+    const jeeps = (): JV[] => (traffic as unknown as { vehicles: JV[] }).vehicles.filter((v) => v.jeep);
+    (window as unknown as { __jeep: unknown }).__jeep = {
+      lines: () => [...new Set(jeeps().map((v) => v.line?.id))],
+      arrive: (line: string, edge = 0): boolean => {
+        const v = jeeps().find((q) => q.line?.id === line);
+        if (!v) return false;
+        target = v;
+        const e = v.route.edges[edge];
+        v.s = e.mid - 40;
+        v.v = 6;
+        const p = along(v.route as never, e.mid);
+        camera.position.set(p.x + p.dz * 3.4 - p.dx * 4, groundAt(p.x, p.z) + 1.7, p.z - p.dx * 3.4 - p.dz * 4);
+        controls.setView((Math.atan2(p.dx, p.dz) * 180) / Math.PI, 0);
+        return true;
+      },
+      // Stand `back` m behind the stop's centre and `side` m to the kerb side of the lane, looking along the road.
+      stopAt: (line: string, edge: number, back: number, side: number, yaw = 0): void => {
+        const v = jeeps().find((q) => q.line?.id === line);
+        if (!v) return;
+        const p = along(v.route as never, v.route.edges[edge].mid - back);
+        const x = p.x + p.dz * side;
+        const z = p.z - p.dx * side;
+        camera.position.set(x, groundAt(x, z) + 1.7, z);
+        controls.setLevel(groundAt(x, z));
+        controls.setView((Math.atan2(p.dx, p.dz) * 180) / Math.PI + 180 + yaw, 0);
+      },
+      ready: (): boolean => !!target && traffic.busDoors(target as never) > 0.85,
+      // A hail from the kerb 170 m on from where the line's first jeepney leaves its stop (it comes on at speed).
+      hailTest: (line: string, edge = 0): boolean => {
+        const v = jeeps().find((q) => q.line?.id === line);
+        if (!v) return false;
+        target = v;
+        const e = v.route.edges[edge];
+        v.s = e.mid + 30;
+        v.v = 9;
+        v.dwell = 0;
+        const p = along(v.route as never, e.mid + 200);
+        camera.position.set(p.x + p.dz * 3.4, groundAt(p.x, p.z) + 1.7, p.z - p.dx * 3.4);
+        controls.setView((Math.atan2(p.dx, p.dz) * 180) / Math.PI, 0);
+        return true;
+      },
+      behind: (): boolean => {
+        const v = target;
+        if (!v || traffic.busDoors(v as never) < 0.85) return false;
+        const x = v.obj.position.x - v.dx * 6.2;
+        const z = v.obj.position.z - v.dz * 6.2;
+        camera.position.set(x, groundAt(x, z) + 1.7, z);
+        controls.setLevel(groundAt(x, z));
+        controls.setView((Math.atan2(v.dx, v.dz) * 180) / Math.PI + 180, 0);
+        return true;
+      },
+      board: (): boolean => {
+        const v = traffic.jeepToBoard(camera.position);
+        if (v) boardJeepney(v);
+        return !!v;
+      },
+      hail: (): boolean => !!traffic.hailJeepney(camera.position),
+      view: (yaw: number, pitch = 0): void => controls.setView(yaw, pitch),
+      at: (x: number, z: number): void => {
+        camera.position.set(x, groundAt(x, z) + 1.7, z);
+        controls.setLevel(groundAt(x, z));
+      },
+      info: () => jeeps().map((v) => ({ line: v.line?.id, x: Math.round(v.x), z: Math.round(v.z), s: Math.round(v.s), v: +v.v.toFixed(1), dwell: +v.dwell.toFixed(1), at: [Math.round(v.obj.position.x), Math.round(v.obj.position.z)] })),
+    };
+  }
   if (debug && busesNew) {
     // Checks: stand at the front door of a bus that's standing at a stop with its doors open (true if there is one).
     (window as unknown as { __gotoBus: () => boolean }).__gotoBus = () => {
@@ -998,6 +1075,10 @@ async function run(): Promise<void> {
     status(): string;
     /** The bus you're on, if it's a bus. */
     readonly bus?: Parameters<TrafficSystem['busRide']>[0];
+    /** A line jeepney (Manila): E by a bench sits even with its back open, P is 'Para po!', and you get off at its back. */
+    readonly jeep?: boolean;
+    /** Where the walker is put on getting off (the kerb beside the back step), in the world; null: where they walked out. */
+    landing?(): THREE.Vector3 | null;
     done(key: string | null): void;
   }
   /** On a train or a subway: walking about in one, or (the district's cars) standing in one. */
@@ -1122,6 +1203,25 @@ async function run(): Promise<void> {
   if (spawnParam && !spawnNode) toast(`?spawn=${spawnParam}: no such node`);
   if (spawnNode && spawnNode.kind !== 'spawn') standBy(spawnNode);
   else teleport(spawnNode ? spawnNode.id : START_SPAWN);
+  // A new game starts in your car, rolling out of the Yūnagi tunnel onto the Wangan (the entry road in expressway.yaml).
+  // Anything that says where to start (?spawn, ?cam, ?from, ?load, ?vn, ?ride, a bench) keeps its place, and ?start=street
+  // is the old start on foot at Kaburo Crossing.
+  const startRoad =
+    CITY.id === 'toto' && !bench && !loaded && !spawnParam && !params.has('cam') && !params.has('from') && !params.has('vn') && !params.has('ride') && params.get('start') !== 'street'
+      ? expressway.roads.find((r) => r.out)
+      : undefined;
+  /** The start: this far in from the mouth, at this speed (m/s). */
+  const START_IN = 25;
+  const startAt = (r: NonNullable<typeof startRoad>): { i: number; yaw: number } => {
+    const i = (r.tube ?? START_IN + 10) - START_IN;
+    return { i, yaw: (Math.atan2(-r.tx[i], -r.tz[i]) * 180) / Math.PI };
+  };
+  if (startRoad) {
+    const { i, yaw } = startAt(startRoad);
+    camera.position.set(startRoad.x[i], startRoad.y[i] + 1.7, startRoad.z[i]);
+    controls.setLevel(startRoad.y[i]);
+    controls.setView(yaw, 0);
+  }
   const cam = params.get('cam')?.split(',').map(Number);
   if (cam && cam.length === 5 && cam.every(Number.isFinite)) {
     camera.position.set(cam[0], cam[1], cam[2]);
@@ -1566,6 +1666,8 @@ async function run(): Promise<void> {
     if (taxiHere()) return getInTaxi();
     const bus = busesNew && !rider.active ? traffic.busToBoard(camera.position) : null;
     if (bus) return boardBus(bus);
+    const jeep = !rider.active ? traffic.jeepToBoard(camera.position) : null;
+    if (jeep) return boardJeepney(jeep);
     const n = target();
     if (n) return use(n);
     const car = takeableCar();
@@ -1649,6 +1751,16 @@ async function run(): Promise<void> {
   let floodNow = 0;
   let floodTarget = 0;
   let floodTimer = 0;
+  // Brownouts (district/brownout.ts), Manila: by the forecast and the story clock; `?brownout=1` or the debug menu's Weather tab forces
+  // one over the feeders round where you stand (`here`), `?brownout=0` or `none` has none.
+  let brownMode: 'auto' | 'here' | 'none' = params.get('brownout') === '1' ? 'here' : params.get('brownout') === '0' ? 'none' : 'auto';
+  let brownAt: [number, number] | null = null;
+  let brownTimer = 0;
+  const setBrown = (m: 'auto' | 'here' | 'none'): void => {
+    brownMode = m;
+    brownAt = null;
+    brownTimer = 0;
+  };
   /** How much a wheel at (x, z) is wading in flood water, 0-1. */
   const wadingAt = (x: number, z: number): number => (flood && floodNow >= FLOOD_MIN ? wading(flood.field.depthAt(x, z, floodNow)) : 0);
   // Hanejima's airfield and its traffic (real/airport.ts).
@@ -2051,6 +2163,12 @@ async function run(): Promise<void> {
     ownCar.place(L.x[i] + L.tz[i] * 1.8, L.z[i] - L.tx[i] * 1.8, Math.atan2(L.tx[i], L.tz[i]), L.y[i]);
     ownCar.sim.u = 16;
   }
+  if (startRoad) {
+    const L = startRoad;
+    const { i } = startAt(L);
+    ownCar.place(L.x[i] + L.tz[i] * 1.8, L.z[i] - L.tx[i] * 1.8, Math.atan2(L.tx[i], L.tz[i]), L.y[i]);
+    ownCar.sim.u = 14;
+  }
   let leavingFor: string | null = null;
   // Taxis (taxi.ts): H at the kerb waves one down; it pulls in beside you; E gets in and you say where to.
   const taxiPicker = new TaxiPicker();
@@ -2127,9 +2245,16 @@ async function run(): Promise<void> {
   const releaseCalled = (): void => {
     if (called) called.released = true;
   };
-  const hailTaxi = (): void => {
+  const hailTaxi = (jeepFirst = false): void => {
     if (driving.car || taxiRide || inVn || Math.abs(camAbove() - 1.7) > 1.2) return;
+    const jeep = (): boolean => {
+      const v = traffic.hailJeepney(camera.position);
+      if (v) toast(`Para po! A jeepney (${v.line?.en ?? ''}) is pulling in: E at its back step to climb on.`, 4);
+      return !!v;
+    };
+    if (jeepFirst && jeep()) return;
     if (traffic.hailTaxi(camera.position)) return toast('タクシー! A taxi is pulling in for you: E to get in when it stops.', 4);
+    if (CITY.tropical && jeep()) return;
     if (called && !called.released) return toast('Your taxi is on its way.', 3);
     const sent = sendTaxi();
     toast(sent === 'sent' ? '配車 A taxi is on its way to you: wait at the kerb, E to get in when it stops.' : sent === 'no road' ? 'No road a taxi can reach here: walk out to a street and try again.' : 'No taxi free right now. Try again in a moment.', 5);
@@ -2492,8 +2617,8 @@ async function run(): Promise<void> {
       return bk.own.name;
     };
   if (debug) (window as unknown as { __bike: unknown }).__bike = { bikes: cityBikes, riding: ridingNow, driving };
-  if (exitRoad) enterCar(ownCar.vehicle);
-  if (me?.driving && !exitRoad) enterCar(ownCar.vehicle);
+  if (exitRoad || startRoad) enterCar(ownCar.vehicle);
+  if (me?.driving && !exitRoad && !startRoad) enterCar(ownCar.vehicle);
   if (debug) (window as unknown as { __own: OwnCar; __ex: Expressway }).__own = ownCar;
   // ?debug=1: window.__turn(deg) turns the view on foot by so much (third person: the camera comes round him).
   if (debug) (window as unknown as { __turn: (deg: number) => void }).__turn = (deg) => controls.setView(lookYaw() + deg, 0);
@@ -2901,6 +3026,11 @@ async function run(): Promise<void> {
         flags.set(FLAG_WEATHER_HOLD, true);
         flags.set(FLAG_WEATHER, w);
       } })),
+      ...(CITY.tropical ? [
+        { label: 'brownout auto', on: () => brownMode === 'auto', run: () => setBrown('auto') },
+        { label: 'brownout here', on: () => brownMode === 'here', run: () => setBrown('here') },
+        { label: 'brownout none', on: () => brownMode === 'none', run: () => setBrown('none') },
+      ] : []),
       ...(flood ? [
         { label: 'flood auto', on: () => floodForce === null, run: () => (floodForce = null) },
         { label: 'flood 0', on: () => floodForce === 0, run: () => (floodForce = 0) },
@@ -3301,6 +3431,7 @@ async function run(): Promise<void> {
     if (!c || c.doors() < 0.85) return;
     const key = c.atKey();
     cabin = null;
+    door = c.landing?.() ?? door;
     if (door) {
       const level = door.y - 1.7;
       const f = district.floorAt(door.x, door.z, level);
@@ -3375,6 +3506,49 @@ async function run(): Promise<void> {
       status: () => {
         const st = traffic.busStops(v);
         return st ? `${st.line.name} ${st.line.en} · ${st.at ? `${st.at} · doors open` : `next: ${st.next}`}` : '';
+      },
+      done: () => undefined,
+    };
+  }
+
+  /**
+   * Board a line jeepney at its open back: pass the fare forward ('Bayad po!'), stoop in past the step and sit on a
+   * bench (E by a seat); P is 'Para po!' (it stops where it can), and you get off at the back onto the kerb.
+   */
+  const JEEP_FARE = 13;
+  function boardJeepney(v: Parameters<TrafficSystem['jeepRide']>[0]): void {
+    const profile = loadProfile();
+    if (!spend(profile, JEEP_FARE)) return toast(`Kulang po: the fare is ${money(JEEP_FARE)}.`);
+    saveProfile(profile);
+    rider.board(traffic.jeepRide(v), 0, 0, -3.65, Math.PI);
+    toast(`Bayad po! ${money(JEEP_FARE)} passed forward, hand to hand · E by a bench sits · P: Para po! · off at the back`, 6);
+    const landing = (): THREE.Vector3 => {
+      // The kerb beside the back step (the jeepney's left).
+      v.obj.updateWorldMatrix(true, false);
+      const p = new THREE.Vector3(2.3, 0, -4.2).applyMatrix4(v.obj.matrixWorld);
+      return new THREE.Vector3(p.x, groundAt(p.x, p.z) + 1.7, p.z);
+    };
+    cabin = {
+      bus: v,
+      jeep: true,
+      doors: () => traffic.busDoors(v),
+      canLeave: () => true,
+      atKey: () => null,
+      alight: () => undefined,
+      landing,
+      fallback: () => {
+        const p = landing();
+        const f = district.floorAt(p.x, p.z, groundAt(p.x, p.z));
+        controls.setLevel(f);
+        camera.position.set(p.x, f + 1.7, p.z);
+      },
+      press: () => {
+        traffic.requestStop(v);
+        toast('Para po! The driver taps the roof: it will stop at the next safe place.', 3);
+      },
+      status: () => {
+        const st = traffic.busStops(v);
+        return `${v.line?.en ?? 'Jeepney'} · ${st ? (st.at ? `${st.at} · stopped` : `next: ${st.next}`) : ''}${v.requested && v.dwell === 0 ? ' · Para po! asked' : ''}`;
       },
       done: () => undefined,
     };
@@ -3472,9 +3646,13 @@ async function run(): Promise<void> {
     if (rider.active && cabin) {
       // Aboard: E sits down (or gets up) by a seat; at a stop with the doors open it gets you off; else it skips
       // to your stop.
+      if (cabin.jeep && e.code === 'KeyP') return cabin.press();
       if (e.code !== 'KeyE') return;
       if (rider.seated) rider.stand();
-      else if (cabin.doors() > 0.85 && cabin.canLeave()) getOff(null);
+      else if (cabin.jeep && rider.seatNear()) {
+        rider.sit();
+        toast('Sitting · E to get up · P: Para po!', 2);
+      } else if (cabin.doors() > 0.85 && cabin.canLeave()) getOff(null);
       else if (rider.sit()) toast('Sitting · E to get up', 2);
       else cabin.press();
       return;
@@ -3500,7 +3678,7 @@ async function run(): Promise<void> {
       if (e.code === 'Escape') taxiPicker.hide();
       return;
     }
-    if (e.code === 'KeyH') hailTaxi();
+    if (e.code === 'KeyH') hailTaxi(e.shiftKey);
     if (e.code === 'KeyL') {
       void waitFor(untilMinute(Math.floor(clockTotal), late() ? 5 * 60 + 30 : TIMES_OF_DAY.late));
       return;
@@ -3983,6 +4161,22 @@ async function run(): Promise<void> {
       rainAmount = Math.abs(rainTarget - rainAmount) <= step ? rainTarget : rainAmount + Math.sign(rainTarget - rainAmount) * step;
       applyMood();
     }
+    if (CITY.tropical) {
+      // The power: which cells are dark now, by the story clock and the forecast (once a second; the lights follow in the shaders).
+      brownTimer -= dt;
+      if (brownTimer <= 0) {
+        brownTimer = 1;
+        const cols = content.macro.cols;
+        const rows = content.macro.rows;
+        if (brownMode === 'here' && !brownAt) brownAt = [Math.floor(camera.position.x / CELL), Math.floor(camera.position.z / CELL)];
+        const force = brownMode === 'here' && brownAt ? { cx: brownAt[0], cy: brownAt[1], reach: 1 } : null;
+        const words = brownMode === 'none' ? new Float32Array(Math.ceil((cols * rows) / 24)) : brownoutWords(cols, rows, Math.floor(clockTotal), outageChance(outlookNow()), force);
+        brown.set(cols, rows, CELL, words);
+        cityU.uOut.value.fill(0);
+        cityU.uOut.value.set(words.subarray(0, 64));
+        cityU.uOutMap.value.set(brown.on ? cols : 0, rows, CELL);
+      }
+    }
     if (flood) {
       // The flood rises and falls smoothly toward the forecast's (a forced one comes quickly).
       floodTimer -= dt;
@@ -4327,7 +4521,7 @@ async function run(): Promise<void> {
       const t = target();
       const s = district.stats;
       $('hud').textContent = hudMode === 'fps' ? `${fps} fps${perfLog.active ? ` · ${perfLog.label()}` : ''}` : [
-        (rider.active && cabin ? `${cabin.status()}  ·  [E] ${rider.seated ? 'stand up' : cabin.doors() > 0.85 && cabin.canLeave() ? 'get off' : rider.seatNear() ? 'sit' : cabin.bus ? 'stop button' : 'skip to your stop'}` : null) ??
+        (rider.active && cabin ? `${cabin.status()}  ·  [E] ${rider.seated ? 'stand up' : cabin.doors() > 0.85 && cabin.canLeave() ? 'get off' : rider.seatNear() ? 'sit' : cabin.jeep ? 'Para po!' : cabin.bus ? 'stop button' : 'skip to your stop'}${cabin.jeep ? '  ·  [P] Para po!' : ''}` : null) ??
         trainRiding()?.status ??
         subway.status ??
         `${late() ? '終電 ·  ' : ''}${(district.districtAt(p.x, p.z) ?? (content.bridges.find((b) => p.x >= b.road.rect.x && p.x <= b.road.rect.x + b.road.rect.w && p.z >= b.road.rect.y && p.z <= b.road.rect.y + b.road.rect.h)?.name ?? (content.macro.kindAt(Math.floor(p.x / CELL), Math.floor(p.z / CELL)) === 'water' ? (CITY.tropical ? 'Manilaya Bay' : '東都湾 Tōto Bay') : CITY.tropical ? 'Manilaya' : 'Tōto'))).toUpperCase()}${district.zoneAt(p.x, p.z) ? ` · ${district.zoneAt(p.x, p.z)}` : ''}${district.placeAt(p.x, p.z) ? ` · ${district.placeAt(p.x, p.z)}` : ''}  ·  ${clockNow()} (${time()}) · ${CITY.tropical ? (isMonsoon(clockTotal) ? 'monsoon' : 'dry season') : SEASON_NAMES[season()]}${flags.get(FLAG_TSUYU) === true ? (CITY.tropical ? ' habagat' : ' 梅雨') : ''}${flags.get(FLAG_HEAT) === true ? (CITY.tropical ? ' hot' : ' 猛暑') : ''}${flags.get(FLAG_TYPHOON) === true ? (CITY.tropical ? ' typhoon' : ' 台風') : ''} / ${weather()}${controls.fly ? '  ·  FLY' : ''}  ·  ascii: ${overlay.preset}  ·  grade: ${grade.grade}${rainAmount > 0 ? `  ·  rain ${rainAmount.toFixed(2)}` : ''}${mood.wind > 0 ? `  ·  wind ${mood.wind.toFixed(2)}` : ''}${mood.darkness > 0 ? `  ·  dark ${mood.darkness.toFixed(2)}` : ''}${mood.shadows ? `  ·  lamp shadows ${mood.shadows}` : ''}${wetness > 0.01 ? `  ·  wet ${wetness.toFixed(2)}` : ''}${mood.dof ? `  ·  dof ${mood.dof.toFixed(2)} @ ${mood.focus === null ? 'auto' : `${mood.focus.toFixed(1)} m`}` : ''}`,
@@ -4338,7 +4532,7 @@ async function run(): Promise<void> {
         `warm start ${warmChunks} chunks in ${warmMs.toFixed(0)} ms`,
         `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)} · cell ${Math.floor(p.x / CELL)}, ${Math.floor(p.z / CELL)} · GPU ${gpu}`,
         t && !driving.car ? `[E] ${t.kind === 'door' ? (t.through && inInterior() && interiors.some((i) => i.id === t.placementId) && !interiors.find((i) => i.id === t.placementId)?.layout.contains(nodeById.get(t.returnSpawn ?? '')?.x ?? 0, nodeById.get(t.returnSpawn ?? '')?.z ?? 0, (nodeById.get(t.returnSpawn ?? '')?.floor ?? 0) + 1.7) ? 'Leave for' : 'Enter') : t.kind === 'station' ? (isRailStation(t.placementId) ? (railStations.find((r) => r.id === t.placementId)?.line === 'monorail' ? 'Take the monorail' : 'Take the train') : content.subway.stops.has(t.placementId) ? 'Take the subway' : 'Take the elevator') : t.kind === 'hotspot' ? (t.sleep ? 'Sleep until morning' : 'Look') : 'Talk'}: ${t.name ?? t.id}` : driving.car ? `[E] Get out · W/S drive · A/D steer · Space handbrake · Q camera${seated ? ' · right button aims the pistol, left fires · R reload' : ''}` : taxiHere() ? '[E] Get in the taxi' : busesNew && !rider.active && traffic.busToBoard(camera.position) ? `[E] Board the bus · ¥${BUS_FARE}` : taxiRide ? '[E] Skip the ride' : takeableCar() ? `[E] Take the wheel: ${takeableCar()!.label}` : ' ',
-        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${debug ? ' · M map / fast travel' : ''} · T time · Q third person (wheel zooms) · J smoke · C squat · F fly · I invert mouse Y${debugTools ? ' · ` debug menu' : ' · ` settings'}${SHARE ? ' · F1 things to try' : ''}`,
+        `click to look · WASD · Shift run · Space jump (fly: Space up, Ctrl down) · E interact · H hail a taxi${CITY.tropical ? ' (Shift: a jeepney)' : ''}${debug ? ' · M map / fast travel' : ''} · T time · Q third person (wheel zooms) · J smoke · C squat · F fly · I invert mouse Y${debugTools ? ' · ` debug menu' : ' · ` settings'}${SHARE ? ' · F1 things to try' : ''}`,
       ].join('\n');
       builtThisWindow = 0;
     }

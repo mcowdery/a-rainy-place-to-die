@@ -1,3 +1,4 @@
+import { filipino } from '../district/cityConfig';
 import * as THREE from 'three';
 import type { Rect } from '../../core/coords';
 import type { Building3 } from '../district/plan';
@@ -359,7 +360,7 @@ export function buildStation(b: Building3, city: THREE.Material, names: StationN
     g.fillStyle = lineHex;
     g.fillRect(0, 220, 1600, 40);
     logo(g, 130, 110, 80);
-    fit(g, `${names.jp}駅`, 540, 110, 150, "900 {px} 'Yu Gothic', 'Meiryo', sans-serif", '#1a1a1a', 560);
+    fit(g, `${names.jp}${filipino() ? '' : '駅'}`, 540, 110, 150, "900 {px} 'Yu Gothic', 'Meiryo', sans-serif", '#1a1a1a', 560);
     fit(g, `${names.en} STATION`, 1210, 115, 86, "bold {px} 'Arial', sans-serif", '#2a2a2a', 700);
   }), 20, 3.25, 30, -0.02, 14.4, 'out');
   // The entrance, under the tracks.
@@ -367,7 +368,7 @@ export function buildStation(b: Building3, city: THREE.Material, names: StationN
     g.fillStyle = '#1a1a1c';
     g.fillRect(0, 0, 1000, 160);
     logo(g, 80, 80, 56);
-    fit(g, `${names.jp}駅`, 160, 80, 90, "900 {px} 'Yu Gothic', 'Meiryo', sans-serif", '#ffffff', 360, 'left');
+    fit(g, `${names.jp}${filipino() ? '' : '駅'}`, 160, 80, 90, "900 {px} 'Yu Gothic', 'Meiryo', sans-serif", '#ffffff', 360, 'left');
     fit(g, `${line.nameEn} · ${line.name}`, 960, 80, 50, "bold {px} 'Arial', 'Yu Gothic', sans-serif", '#ffffff', 400, 'right');
   }), 10, 1.6, 23, -0.02, 4.4, 'out', 1.3);
   // Station name boards (駅名標) on both platforms, facing the tracks.
