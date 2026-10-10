@@ -1,3 +1,4 @@
+import './nav';
 import { edition } from '@edition';
 import { addKey, adjustHold, castChoices, clone, cm, copyHoldEverywhere, copyPose, deg, emptyScene, HANDLE_PART, holdCorners, holdTurnAt, holdTurnLead, itemAtDepth, itemBox, itemParams, itemWith, moveKey, nudgeItem, onHold, outfitsFor, PART_BONES, PART_LABEL, poseAt, ringAngle, ringPoints, ringSlide, setFigDepth, turned, type RingPoint, removeHoldEverywhere, removeKey, resetHold, sceneKeys, setSceneKeys, undress, undressed, withHeels, type KeyPose, type SceneDoc } from '../real/sceneEdit';
 import { adultOnly, isBuiltIn, placeFor, SCENE_ID, sceneFileFor, sceneText, type ScenePlace } from '../real/sceneFiles';
