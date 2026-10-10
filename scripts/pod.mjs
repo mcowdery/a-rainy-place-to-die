@@ -9,7 +9,8 @@
 //       --no-sync      skip the sync (nothing changed since the last run)      --full   resend every file, not just the changed ones
 //       --no-pull      leave the new files on the pod                          --out <dir>   also pull new files under <dir> (assets/humans, ...)
 //   node scripts/pod.mjs sync [--full]      the sync alone
-//   node scripts/pod.mjs play [stop]        the game in a GPU browser on the pod, streamed to a tab here (see podPlay.sh)
+//   node scripts/pod.mjs play [stop] [--kasm]   the game in a GPU browser on the pod, streamed to a tab here as H.264 from the GPU's
+//                                           video encoder (scripts/podStream.sh); --kasm is the older KasmVNC one (podPlay.sh)
 //   node scripts/pod.mjs ssh [cmd]          a shell on the pod, or one command
 //   node scripts/pod.mjs pull <remote-path> [local-dir]
 //   node scripts/pod.mjs stop
@@ -328,19 +329,31 @@ async function dashboardStatus() {
  */
 async function playCommand(args) {
   const p = await upPod({ wait: true });
-  const script = readFileSync(join(root, 'scripts', 'podPlay.sh'), 'utf8').replace(/\r\n/g, '\n');
+  const kasm = args.includes('--kasm');
+  const repo = '/workspace/a-rainy-place-to-die';
   if (args[0] === 'stop') {
-    spawnSync('ssh', [...sshArgs(p), 'bash -s -- stop'], { input: script, stdio: ['pipe', 'inherit', 'inherit'] });
+    spawnSync('ssh', [...sshArgs(p), `bash ${repo}/scripts/podStream.sh stop; bash ${repo}/scripts/podPlay.sh stop`], { stdio: 'inherit' });
     return 0;
   }
   if (!args.includes('--no-sync')) await syncTree(p);
-  console.log('Starting the desktop on the pod...');
-  const started = spawnSync('ssh', [...sshArgs(p), 'bash -s'], { input: script, stdio: ['pipe', 'inherit', 'inherit'] });
-  if (started.status !== 0) return started.status ?? 1;
-  const port = process.env.PLAY_PORT ?? '8444';
+  // The default is the H.264 stream (scripts/podStream.sh: the GPU's video encoder); --kasm is the older KasmVNC one (podPlay.sh).
+  const script = kasm ? 'podPlay.sh' : 'podStream.sh';
+  const port = kasm ? (process.env.PLAY_PORT ?? '8444') : (process.env.STREAM_PORT ?? '8450');
+  const geometry = process.env.PLAY_GEOMETRY ?? (kasm ? '' : '2160x904');
+  console.log(`Starting the ${kasm ? 'KasmVNC' : 'H.264'} desktop on the pod${geometry ? ` at ${geometry}` : ''}...`);
+  // Detached, with its output in a file: the desktop's background processes would otherwise hold this SSH session open for good.
+  const start = `cd ${repo} && sed -i 's/\\r$//' scripts/*.sh scripts/stream/input.py; ${geometry ? `PLAY_GEOMETRY=${geometry} ` : ''}setsid nohup bash scripts/${script} > /tmp/podstream.log 2>&1 < /dev/null &`;
+  if (spawnSync('ssh', [...sshArgs(p), start], { stdio: 'inherit' }).status !== 0) return 1;
+  let ready = false;
+  for (let i = 0; i < 60 && !ready; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    ready = spawnSync('ssh', [...sshArgs(p), "grep -q '^Ready:' /tmp/podstream.log"], { stdio: 'ignore' }).status === 0;
+  }
+  if (!ready) { spawnSync('ssh', [...sshArgs(p), 'tail -15 /tmp/podstream.log'], { stdio: 'inherit' }); console.error('The desktop did not report ready.'); return 1; }
   const url = `http://localhost:${port}/`;
-  console.log(`\nThe game is at ${url}  (a tunnel to the pod, so only this machine can reach it).`);
-  console.log('In the page: toolbar -> "Game Cursor Mode" for mouse-look, Fullscreen for the whole screen.\nCtrl+C here closes the tunnel; "node scripts/pod.mjs play stop" stops the desktop.\n');
+  console.log(`\nThe game is at ${url}  (a tunnel to the pod, so only this machine can reach it). The game takes about a minute to load.`);
+  console.log(kasm ? 'In the page: toolbar -> "Game Cursor Mode" for mouse-look, Fullscreen for the whole screen.' : 'In the page: click to capture the mouse (Esc gives it back), F for fullscreen.');
+  console.log('Ctrl+C here closes the tunnel; "node scripts/pod.mjs play stop" stops the desktop (it also stops itself after 10 minutes with no viewer or 30 with no input).\n');
   if (!args.includes('--no-open')) spawn(process.platform === 'win32' ? 'cmd' : 'xdg-open', process.platform === 'win32' ? ['/c', 'start', '', url] : [url], { stdio: 'ignore', detached: true }).unref();
   const tunnel = spawnSync('ssh', ['-N', '-o', 'ExitOnForwardFailure=yes', '-o', 'ServerAliveInterval=15', '-i', KEY, '-p', String(p.portMappings['22']), '-L', `${port}:127.0.0.1:${port}`, `root@${p.publicIp}`], { stdio: 'inherit' });
   return tunnel.status ?? 0;

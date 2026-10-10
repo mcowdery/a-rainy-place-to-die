@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pod stream</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font: 13px/1.4 Consolas, "Cascadia Mono", monospace; color: #cfd; }
+  canvas { display: block; width: 100vw; height: 100vh; object-fit: contain; cursor: none; background: #000; }
+  #hud { position: fixed; left: 8px; top: 6px; padding: 3px 7px; background: rgba(0, 0, 0, .55); pointer-events: none; white-space: pre; }
+  #msg { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; background: rgba(0, 0, 0, .55); font: 18px/1.6 system-ui, sans-serif; cursor: pointer; }
+  #msg small { display: block; color: #9ab; font-size: 13px; margin-top: 6px; }
+  #msg.hide { display: none; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<div id="hud">connecting...</div>
+<div id="msg">Connecting...</div>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const canvas = $('c'), ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+  const hud = $('hud'), msg = $('msg');
+  let ws = null, decoder = null, configured = false, hello = null;
+  let latest = null;                       // the newest decoded frame, drawn on the next animation frame
+  const m = { frames: 0, drawn: 0, bytes: 0, dropped: 0, rtt: 0, decodeMs: 0, last: performance.now() };
+  const pending = new Map();               // chunk timestamp -> time it was queued, to time the decode
+
+  const say = (html) => { msg.innerHTML = html; msg.classList.remove('hide'); };
+
+  // ---- video ----
+  function profileOf(au) {                 // the codec string from the first SPS (NAL type 7)
+    for (let i = 0; i + 8 < au.length; i++) {
+      if (au[i] === 0 && au[i + 1] === 0 && au[i + 2] === 1 && (au[i + 3] & 0x1f) === 7) {
+        const h = (n) => n.toString(16).padStart(2, '0');
+        return 'avc1.' + h(au[i + 4]) + h(au[i + 5]) + h(au[i + 6]);
+      }
+    }
+    return null;
+  }
+
+  function onVideo(buf) {
+    const key = buf[0] & 1, au = buf.subarray(1);
+    m.bytes += au.length;
+    if (!configured) {
+      if (!key) return;
+      const codec = profileOf(au);
+      if (!codec) return;
+      decoder = new VideoDecoder({
+        output: (frame) => {
+          const t0 = pending.get(frame.timestamp);
+          if (t0 !== undefined) { m.decodeMs = m.decodeMs * 0.9 + (performance.now() - t0) * 0.1; pending.delete(frame.timestamp); }
+          if (latest) latest.close();
+          latest = frame;
+        },
+        error: (e) => say('Video decoder error: ' + e.message + '<small>Reload to retry.</small>'),
+      });
+      decoder.configure({ codec, optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware', avc: { format: 'annexb' } });
+      configured = true;
+    }
+    if (decoder.decodeQueueSize > 6 && !key) { m.dropped++; return; }   // the decoder is behind: skip until a keyframe
+    const ts = Math.round(performance.now() * 1000);
+    pending.set(ts, performance.now());
+    if (pending.size > 100) pending.clear();
+    decoder.decode(new EncodedVideoChunk({ type: key ? 'key' : 'delta', timestamp: ts, data: au }));
+    m.frames++;
+  }
+
+  function draw() {
+    if (latest) {
+      if (canvas.width !== latest.displayWidth) { canvas.width = latest.displayWidth; canvas.height = latest.displayHeight; }
+      ctx.drawImage(latest, 0, 0);
+      latest.close();
+      latest = null;
+      m.drawn++;
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  // ---- connection ----
+  function connect() {
+    ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => { configured = false; say('Starting the stream...'); };
+    ws.onmessage = (e) => {
+      if (typeof e.data === 'string') {
+        const j = JSON.parse(e.data);
+        if (j.type === 'hello') { hello = j; canvas.width = j.w; canvas.height = j.h; say('Click to play<small>Esc releases the mouse. Fullscreen: F</small>'); }
+        else if (j.type === 'pong') m.rtt = performance.now() - j.ts;
+      } else onVideo(new Uint8Array(e.data));
+    };
+    ws.onclose = () => { say('Disconnected<small>The desktop may have stopped. Run node scripts/pod.mjs play again, then reload.</small>'); setTimeout(connect, 2000); };
+  }
+  if (!('VideoDecoder' in window)) say('This browser has no WebCodecs video decoder (it needs a recent Chrome, Edge or Brave).');
+  else connect();
+
+  setInterval(() => { if (ws?.readyState === 1) ws.send(JSON.stringify({ t: 'ping', ts: performance.now() })); }, 1000);
+  setInterval(() => {
+    const dt = (performance.now() - m.last) / 1000;
+    hud.textContent = `${(m.drawn / dt).toFixed(0)} fps drawn, ${(m.frames / dt).toFixed(0)} received\n${(m.bytes * 8 / dt / 1e6).toFixed(1)} Mbit/s, round trip ${m.rtt.toFixed(0)} ms, decode ${m.decodeMs.toFixed(1)} ms${m.dropped ? `, dropped ${m.dropped}` : ''}`;
+    m.frames = m.drawn = m.bytes = 0; m.last = performance.now();
+  }, 1000);
+
+  // ---- input ----
+  const send = (o) => { if (ws?.readyState === 1) ws.send(JSON.stringify(o)); };
+  const locked = () => document.pointerLockElement === canvas;
+  const KEYSYM = {
+    Space: 'space', Enter: 'Return', NumpadEnter: 'KP_Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'BackSpace', Delete: 'Delete', Insert: 'Insert',
+    Home: 'Home', End: 'End', PageUp: 'Prior', PageDown: 'Next', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+    ShiftLeft: 'Shift_L', ShiftRight: 'Shift_R', ControlLeft: 'Control_L', ControlRight: 'Control_R', AltLeft: 'Alt_L', AltRight: 'Alt_R',
+    MetaLeft: 'Super_L', MetaRight: 'Super_R', CapsLock: 'Caps_Lock', Backquote: 'grave', Minus: 'minus', Equal: 'equal',
+    BracketLeft: 'bracketleft', BracketRight: 'bracketright', Backslash: 'backslash', Semicolon: 'semicolon', Quote: 'apostrophe',
+    Comma: 'comma', Period: 'period', Slash: 'slash',
+  };
+  function keysym(code) {
+    if (KEYSYM[code]) return KEYSYM[code];
+    let r;
+    if ((r = /^Key([A-Z])$/.exec(code))) return r[1].toLowerCase();
+    if ((r = /^Digit(\d)$/.exec(code))) return r[1];
+    if ((r = /^F(\d{1,2})$/.exec(code))) return code;
+    if ((r = /^Numpad(\d)$/.exec(code))) return 'KP_' + r[1];
+    return null;
+  }
+
+  // the remote position under a click, for a click that lands before the pointer is captured
+  function remotePoint(e) {
+    const r = canvas.getBoundingClientRect(), vw = canvas.width, vh = canvas.height;
+    const s = Math.min(r.width / vw, r.height / vh);
+    const ox = (r.width - vw * s) / 2, oy = (r.height - vh * s) / 2;
+    return { x: Math.max(0, Math.min(vw - 1, Math.round((e.clientX - r.left - ox) / s))), y: Math.max(0, Math.min(vh - 1, Math.round((e.clientY - r.top - oy) / s))) };
+  }
+
+  let dx = 0, dy = 0;
+  setInterval(() => { if (dx || dy) { send({ t: 'mr', dx, dy }); dx = dy = 0; } }, 6);   // about 160 Hz, merged
+  canvas.addEventListener('mousemove', (e) => { if (locked()) { dx += e.movementX; dy += e.movementY; } else send({ t: 'ma', ...remotePoint(e) }); });
+  const button = (e) => [1, 2, 3][e.button] ?? 1;
+  canvas.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (!locked()) {
+      send({ t: 'ma', ...remotePoint(e) });
+      msg.classList.add('hide');
+      canvas.requestPointerLock?.({ unadjustedMovement: true })?.catch?.(() => canvas.requestPointerLock());
+      document.documentElement.requestFullscreen?.().then(() => navigator.keyboard?.lock?.()).catch(() => {});
+    }
+    send({ t: 'b', b: button(e), d: true });
+  });
+  window.addEventListener('mouseup', (e) => send({ t: 'b', b: button(e), d: false }));
+  canvas.addEventListener('wheel', (e) => { e.preventDefault(); send({ t: 'w', dy: e.deltaY }); }, { passive: false });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  document.addEventListener('pointerlockchange', () => {
+    if (!locked()) { send({ t: 'k', k: 'Escape', d: true }); send({ t: 'k', k: 'Escape', d: false }); say('Click to play<small>Esc releases the mouse. Fullscreen: F</small>'); }
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyF' && !locked() && e.ctrlKey === false) { document.documentElement.requestFullscreen?.(); return; }
+    const k = keysym(e.code);
+    if (!k || e.repeat) { if (k) e.preventDefault(); return; }
+    e.preventDefault();
+    send({ t: 'k', k, d: true });
+  });
+  window.addEventListener('keyup', (e) => { const k = keysym(e.code); if (k) { e.preventDefault(); send({ t: 'k', k, d: false }); } });
+  window.addEventListener('blur', () => { for (const k of ['Shift_L', 'Control_L', 'Alt_L', 'w', 'a', 's', 'd', 'space']) send({ t: 'k', k, d: false }); });
+})();
+</script>
+</body>
+</html>
