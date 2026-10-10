@@ -493,7 +493,8 @@ function pitchedRoof(mb: MeshBuilder, b: Building3, s: RealStyle, near: boolean)
   const half = (ns ? b.d : b.w) / 2 + over;
   const len = (ns ? b.w : b.d) / 2 + over;
   // A shack's roof is nearly flat: a scrap sheet at a slight pitch, not a gable.
-  const rise = s.informal ? Math.min(0.7, half * 0.26) : Math.min(2.4, half * 0.55);
+  // (A Filipino house's corrugated roof is low-pitched, about 12 degrees, not a Japanese gable.)
+  const rise = s.informal ? Math.min(0.7, half * 0.26) : filipino() ? Math.min(1.0, half * 0.21) : Math.min(2.4, half * 0.55);
   const y0 = b.h;
   const y1 = b.h + rise;
   // P(a, c, y): a along the ridge, c across it (from the ridge), in world.

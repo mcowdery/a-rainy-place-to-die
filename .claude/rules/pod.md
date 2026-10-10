@@ -1,10 +1,10 @@
 ---
 paths:
-  - scripts/pod.mjs
-  - scripts/podSetup.sh
-  - scripts/podIdleStop.sh
-  - scripts/gpuCheck.mjs
-  - scripts/launchBrowser.mjs
+  - "scripts/pod.mjs"
+  - "scripts/podSetup.sh"
+  - "scripts/podIdleStop.sh"
+  - "scripts/gpuCheck.mjs"
+  - "scripts/launchBrowser.mjs"
 ---
 
 # The RunPod dev pod
