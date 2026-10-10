@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Head, loadView, lookInto, nextView, outside, placeInCar, saveView, turnedEye, type DriveViewId } from '../../race/driveCam';
+import { CITY_VIEWS, DRIVE_VIEWS, Head, loadView, lookInto, nextView, outside, placeInCar, saveView, turnedEye, within, type DriveViewId } from '../../race/driveCam';
 import type { Controls } from '../../race/vehicle';
 import type { CarInterior } from '../models/carInterior';
 import type { DrivenVehicle } from '../real/traffic';
@@ -40,7 +40,18 @@ export class Driving {
   /** Held at the line (a race's countdown): the car kept still, the throttle ignored. */
   hold = false;
   /** The camera (race/driveCam.ts). On a bike, 'cockpit' is his eyes and the chase views behind it. */
-  view: DriveViewId = loadView();
+  view: DriveViewId = within(loadView(), this.views);
+  /** The debug menu's switch: every camera (chase, bonnet, bumper too), not just the far chase and the cockpit. */
+  allViews = false;
+  /** The views Q cycles through in a car. */
+  get views(): readonly DriveViewId[] {
+    return this.allViews ? DRIVE_VIEWS : CITY_VIEWS;
+  }
+  /** Turn every camera on or off; a view no longer offered gives way to the far chase. */
+  setAllViews(on: boolean): void {
+    this.allViews = on;
+    if (!this.bike) this.view = within(this.view, this.views);
+  }
   /** On a bike: Q switches between his eyes and behind it. */
   bike = false;
   /** The cabin of the car you're driving (shown in the cockpit view), when it has one. */
@@ -92,7 +103,7 @@ export class Driving {
       if (e.code === 'Space') e.preventDefault();
       if (this.pilot && DRIVE_KEYS.has(e.code)) this.onOverride?.();
       if (e.code === 'KeyQ') {
-        this.view = nextView(this.view, this.bike);
+        this.view = nextView(this.view, this.bike, this.views);
         if (!this.bike) saveView(this.view);
         this.head.reset();
         this.onView?.(this.view);
@@ -124,7 +135,7 @@ export class Driving {
     this.car = car;
     this.own = own;
     this.bike = bike;
-    this.view = bike ? 'cockpit' : loadView();
+    this.view = bike ? 'cockpit' : within(loadView(), this.views);
     this.head.reset();
     this.baseFov = this.camera.fov;
     if (own) {

@@ -39,7 +39,9 @@ Covers your car and garage, driving, crashing and damage, races in the city, the
 
 **The cars after you are marked in the mirrors** (the markers over the view are the HUD's, which a mirror can't show): each chase car carries a red diamond over its roof (`ChaseCar.tag`, a sprite on `MIRROR_LAYER`, which only the mirrors' cameras draw; no depth test, so it shows through what's between; sized by its distance from you, so it's a few pixels of red however far; gone when the car's out).
 
-**V** at the wheel turns the mirror over the outside views on and off (the cab keeps its own).
+**V** at the wheel turns the mirror over the outside views on and off (the cab keeps its own). The mirror over the view is never drawn in the far chase (`driving.view !== 'far'`).
+
+**In the city Q cycles only far chase and cockpit** (`CITY_VIEWS` in race/driveCam.ts; `Driving.views`): the debug menu's Player tab, 'all camera views' (`Driving.setAllViews`, localStorage `rainyplace.allCameraViews`), brings back chase, bonnet and bumper. A remembered view no longer offered falls to the far chase (`within`). The race page keeps all five.
 
 **The mirrors themselves** (models/vehicles.ts `mirrorPlan`, in `addVehicle`, so every car has them: the traffic's, parked ones, yours; they were two boxes with a pane on the back, which the user called bad once he saw them from the cab): each is a head that tapers forward from its rim to a blunt nose, swept in toward the car and toed in 17 degrees, eight-sided on cars built fine (`detail` to 0.13: yours, the chase cars, the traffic) and four-sided on parked ones, in the body's paint on an arm out of the door at the foot of the screen pillar, or (`Design.fenderMirrors`, the classic taxi) a smaller head on a stalk out on the front wing, chrome on the 70s saloon; in the rim a dark bezel, a well behind it and the glass at its bottom.
 

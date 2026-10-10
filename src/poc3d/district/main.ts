@@ -1578,6 +1578,7 @@ async function run(): Promise<void> {
   performance.mark('boot:compile-start', { detail: { programs: renderer.info.programs?.length ?? 0 } });
   loadStep('compiling shaders...', 0.4);
   await renderer.compileAsync(scene, camera);
+  occlusion.warm(camera);
   performance.mark('boot:compile-end', { detail: { programs: renderer.info.programs?.length ?? 0, names: bootDiag ? renderer.info.programs?.map((p) => `${p.name || String(p.cacheKey)}#${p.id}`) : undefined } });
   loadStep('uploading textures and geometry...', 0.8);
   renderer.setRenderTarget(null);
@@ -1680,6 +1681,11 @@ async function run(): Promise<void> {
   // Driving: your own car (ownCar.ts), which lives in its bay at your garage (夜鷹ガレージ, by the Toto Line)
   // or wherever you left it. E by it takes the wheel; E again gets out. Cars in traffic aren't yours to take.
   const driving = new Driving(camera, (x, z, r) => district.blocked(x, z, r, 0) || traffic.blocked(x, z, r, driving.car) || npcBlocked(x, z, r));
+  try {
+    driving.setAllViews(localStorage.getItem('rainyplace.allCameraViews') === '1');
+  } catch {
+    // (No storage: the default two views.)
+  }
   driving.onView = (v) => toast(driving.bike ? (outside(v) ? 'Third person' : 'First person') : `Camera: ${VIEW_NAMES[v]}`, 1.2);
   // Mack at the wheel of your car (race/carDriver.ts): seated, his hands on the wheel, seen in the cockpit view.
   let seated: CarDriver | null = null;
@@ -2065,12 +2071,6 @@ async function run(): Promise<void> {
   scene.add(exView.group, exTraffic.group);
   freeze(exView.group);
   const sodium = exView.group.getObjectByName('sodium') as THREE.Mesh | undefined;
-  const bay = nodeById.get('city_garage.bay');
-  if (me?.profile) saveProfile(me.profile);
-  if (me?.car) {
-    try {
-      localStorage.setItem('rainyplace.city.car', JSON.stringify(me.car));
-    } catch {
   // The park between the river and the Yūnagi headland, which a new game looks out over (real/park.ts).
   const yunagiHill = expressway.roads.find((r) => r.hill);
   const park = yunagiHill
@@ -2102,6 +2102,12 @@ async function run(): Promise<void> {
     if (hill) district.landBlocked = (x, z) => (hill.at(x, z) ?? -1e9) > groundAt(x, z) + 1.2;
   }
   const parkPools = park?.getObjectByName('parkpools') as THREE.Mesh | undefined;
+  const bay = nodeById.get('city_garage.bay');
+  if (me?.profile) saveProfile(me.profile);
+  if (me?.car) {
+    try {
+      localStorage.setItem('rainyplace.city.car', JSON.stringify(me.car));
+    } catch {
       /* this session only */
     }
   }
@@ -2216,12 +2222,6 @@ async function run(): Promise<void> {
     ownCar.place(L.x[i] + L.tz[i] * 1.8, L.z[i] - L.tx[i] * 1.8, Math.atan2(L.tx[i], L.tz[i]), L.y[i]);
     ownCar.sim.u = 14;
   }
-  let leavingFor: string | null = null;
-  // Taxis (taxi.ts): H at the kerb waves one down; it pulls in beside you; E gets in and you say where to.
-  const taxiPicker = new TaxiPicker();
-  const places = allPlaces();
-  /** The ride under way: from, to, the fare, and the seconds it lasts (sped up) and has run. */
-  let taxiRide: { dest: Destination; fare: number; t: number; T: number; x0: number; z0: number; path: [number, number][]; cum: number[]; heading?: number } | null = null;
   if (startRoad) {
     // The headlights on auto (they come on with the dark), and the city-pop station on the radio (below, where it's made).
     carLights = 'auto';
@@ -2231,6 +2231,12 @@ async function run(): Promise<void> {
       /* no storage */
     }
   }
+  let leavingFor: string | null = null;
+  // Taxis (taxi.ts): H at the kerb waves one down; it pulls in beside you; E gets in and you say where to.
+  const taxiPicker = new TaxiPicker();
+  const places = allPlaces();
+  /** The ride under way: from, to, the fare, and the seconds it lasts (sped up) and has run. */
+  let taxiRide: { dest: Destination; fare: number; t: number; T: number; x0: number; z0: number; path: [number, number][]; cum: number[]; heading?: number } | null = null;
   /**
    * A taxi sent for you (taxiDispatch.ts) when none is cruising your way: one from out of sight, taken off its
    * loop and driven here along the streets; `released` once you've ridden or walked off (it goes back to its
@@ -3145,6 +3151,20 @@ async function run(): Promise<void> {
           toast(`${ownCar.name}${driven ? '' : ': it stands where your car did'}`, 3);
         },
       })),
+      // Q in a car cycles far chase and cockpit; this brings back the chase, bonnet and bumper cameras too.
+      {
+        label: 'all camera views',
+        on: () => driving.allViews,
+        run: () => {
+          driving.setAllViews(!driving.allViews);
+          try {
+            localStorage.setItem('rainyplace.allCameraViews', driving.allViews ? '1' : '0');
+          } catch {
+            // (No storage: not remembered.)
+          }
+          toast(driving.allViews ? 'Cameras: all (Q cycles chase, far chase, cockpit, bonnet, bumper)' : 'Cameras: far chase and cockpit', 2);
+        },
+      },
       { label: 'tune driving…', on: () => tuningPanel.open, run: () => (tuningPanel.open ? tuningPanel.hide() : tuningPanel.show(ownCar.sim, ownCar.baseSpec, CITY_ASSISTS)) },
     ],
   };
@@ -3366,6 +3386,8 @@ async function run(): Promise<void> {
   const radio = new Radio(loadStations(CITY.id));
   const radioHud = new RadioHud();
   radio.onReadout = (r) => radioHud.show(r);
+  // A new game starts with the city-pop station playing (it is heard once the first click has started the audio).
+  if (startRoad) radio.tune('city_pop_radio');
   if (debug) (window as unknown as { __radio: Radio }).__radio = radio;
   // NAMI, the phone's music app (district/musicApp.ts): the same music on demand, anywhere, through his
   // noise-cancelling headphones (real/musicPlayer.ts) or the phone's speaker.
@@ -3386,8 +3408,6 @@ async function run(): Promise<void> {
           vehicle: driving.car.label,
           kmh: Math.round(driving.kmh),
           own: !!driving.own,
-  // A new game starts with the city-pop station playing (it is heard once the first click has started the audio).
-  if (startRoad) radio.tune('city_pop_radio');
           ...(driving.own
             ? { at: [ownCar.sim.x, ownCar.sim.y, ownCar.sim.z].map((v) => Math.round(v * 10) / 10), heading: Math.round((ownCar.sim.h * 180) / Math.PI), onExpressway: ownCar.onExpressway(), condition: Math.round(ownCar.condition * 10) / 10, parts: Object.fromEntries(Object.entries(ownCar.parts).map(([k, v]) => [k, Math.round(v * 10) / 10])) }
             : {}),
@@ -4049,6 +4069,10 @@ async function run(): Promise<void> {
       (sodium.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
       sodium.visible = cityU.uLamps.value > 0.05;
     }
+    if (parkPools) {
+      (parkPools.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
+      parkPools.visible = cityU.uLamps.value > 0.05;
+    }
     sea.setLamps(cityU.uLamps.value);
     edges.update(camera.position, cityU.uLamps.value);
     const tunnel = driving.own ? expressway.portal(ownNow().sim.x, ownNow().sim.z, ownNow().sim.y) : null;
@@ -4069,10 +4093,6 @@ async function run(): Promise<void> {
     if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}${auto && autoMode ? `  ·  AUTO ${AUTO_NAMES[autoMode]}${auto.pilot.status === 'driving' ? '' : ` · ${auto.pilot.status}`}` : ''}`;
     damageHud.update(inVn ? 0 : dt, driving.own === ownCar ? ownCar : null);
     const onFoot = !driving.car && !controls.fly && !inVn && !rider.active && Math.abs(camAbove() - 1.7) < 1.2;
-    if (parkPools) {
-      (parkPools.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
-      parkPools.visible = cityU.uLamps.value > 0.05;
-    }
     let wvx = dt > 0 ? (cp0.x - lastWalker.x) / dt : 0;
     let wvz = dt > 0 ? (cp0.z - lastWalker.z) / dt : 0;
     // Faster than anyone runs: a teleport or a ride, not a step.
@@ -4493,7 +4513,7 @@ async function run(): Promise<void> {
     // The rear-view mirror's picture, in the cockpit (without Mack; the sun's shadows as they are).
     const atWheel = driving.own === ownCar && !ownCar.bike && driving.interior === ownCar.interior;
     const inCabin = atWheel && !!driving.interior?.group.visible;
-    hudMirror.visible = atWheel && !inCabin && !driving.aim && mood.mirror === 'all' && !inVn && driving.lookingBack < 0.3;
+    hudMirror.visible = atWheel && !inCabin && driving.view !== 'far' && !driving.aim && mood.mirror === 'all' && !inVn && driving.lookingBack < 0.3;
     if (atWheel) driving.interior!.showMirror(mood.mirror === 'off' ? null : rearMirror.material);
     if (atWheel && mood.mirror !== 'off' && (inCabin || hudMirror.visible)) {
       const autoSun = sun.shadow.autoUpdate;

@@ -149,6 +149,21 @@ export class Occlusion {
     r.autoClear = autoClear;
   }
 
+  /**
+   * Compiles the boxes' program for the test target now. Left alone it compiles the first time a box comes into
+   * view, a stall of a few hundred ms mid-drive (found by the frame recorder; `debug-shots/progstart.mjs`).
+   */
+  warm(camera: THREE.Camera): void {
+    const r = this.renderer;
+    const prev = r.getRenderTarget();
+    const mesh = new THREE.Mesh(this.geo, this.mat);
+    this.proxies.add(mesh);
+    r.setRenderTarget(this.target);
+    r.compile(this.proxies, camera);
+    r.setRenderTarget(prev);
+    this.proxies.remove(mesh);
+  }
+
   /** Reads back finished queries: any sample visible clears a box; two hidden results in a row hide it. */
   private collect(gl: WebGL2RenderingContext): void {
     for (const [key, s] of this.state) {

@@ -38,3 +38,5 @@ __pycache__/
 
 # claude-model-guard decision log (contains prompt text)
 .claude/model-guard.log.jsonl*
+.play-profile/
+release/

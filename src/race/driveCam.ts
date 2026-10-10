@@ -21,10 +21,19 @@ export const VIEW_NAMES: Record<DriveViewId, string> = {
 
 const KEY = 'rainyplace.driveView';
 
-/** The next view. On a bike only two: behind it, and his eyes (`cockpit`). */
-export function nextView(v: DriveViewId, bike = false): DriveViewId {
+/** The views the city offers by default; the debug menu's Player tab brings the rest back. */
+export const CITY_VIEWS: readonly DriveViewId[] = ['far', 'cockpit'];
+
+/** The next view, among `views` (all of them unless given). On a bike only two: behind it, and his eyes (`cockpit`). */
+export function nextView(v: DriveViewId, bike = false, views: readonly DriveViewId[] = DRIVE_VIEWS): DriveViewId {
   if (bike) return v === 'chase' || v === 'far' ? 'cockpit' : 'chase';
-  return DRIVE_VIEWS[(DRIVE_VIEWS.indexOf(v) + 1) % DRIVE_VIEWS.length];
+  const at = views.indexOf(v);
+  return views[(at + 1) % views.length];
+}
+
+/** `v` if the list offers it, else the first view that's outside (far chase). */
+export function within(v: DriveViewId, views: readonly DriveViewId[]): DriveViewId {
+  return views.includes(v) ? v : views[0];
 }
 
 export function parseView(s: string | null | undefined): DriveViewId | null {
