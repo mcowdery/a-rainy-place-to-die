@@ -19,6 +19,7 @@ import type { ZoneMap } from './zones';
 import type { Avenues, Bridge3 } from './roads';
 import { landmarkColliders, landmarkFloor, landmarkRaisedColliders, landmarkShelters, type Shelter } from './landmarks';
 import { roadUnder } from './rail';
+import { inPark, inPond } from './parkLand';
 import { stationKerb } from '../real/station';
 import type { Rect } from '../../core/coords';
 import type { Interior } from '../real/interiors';
@@ -260,7 +261,7 @@ export class District {
     const mx = Math.floor(x / CELL);
     const my = Math.floor(z / CELL);
     const p = this.model.plan(mx, my);
-    if (!p) return { top: 0, surface: 'paving' };
+    if (!p) return { top: 0, surface: inPark(x, z) ? 'grass' : 'paving' };
     const inR = (q: Rect): boolean => x >= q.x && x <= q.x + q.w && z >= q.y && z <= q.y + q.h;
     if (p.medians.some(inR)) return { top: 0.18, surface: 'grass' };
     // Inside a carriageway (a road less its pavements): the road.
@@ -465,8 +466,13 @@ export class District {
     return this.workers.length;
   }
 
+  /** More land nothing walks or drives onto (the park's headland: main.ts sets it); the park's ponds are always closed. */
+  landBlocked: ((x: number, z: number, r: number) => boolean) | null = null;
+
   inDistrict(x: number, z: number): boolean {
     if (this.model.has(Math.floor(x / CELL), Math.floor(z / CELL))) return true;
+    // Yūnagi Riverside Park: open land, walked and driven like the streets (its ponds and headland are closed: below).
+    if (inPark(x, z)) return true;
     return this.bridges.some((b) => x >= b.road.rect.x && x <= b.road.rect.x + b.road.rect.w && z >= b.road.rect.y && z <= b.road.rect.y + b.road.rect.h);
   }
 
@@ -490,6 +496,7 @@ export class District {
     if (floor < -1) return (floor > -8 ? this.basementColliders : this.deepColliders).some(inRects) || inside();
     if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? [])) || inside() || footbridgesNear(x, z, 1).some((b) => inRects(footbridgeRaised(b)));
     if (!this.inDistrict(x, z)) return true;
+    if (inPark(x, z) && (inPond(x, z, r) || (this.landBlocked?.(x, z, r) ?? false))) return true;
     if (!onFoot && this.onBridgeMedian(x, z, r)) return true;
     const mx = Math.floor(x / CELL);
     const my = Math.floor(z / CELL);
@@ -517,6 +524,7 @@ export class District {
     const inRects = (rs: readonly Rect[]): boolean => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
     for (const it of this.interiors.values()) if (inRects(it.colliders(0))) return 'wall';
     if (!this.inDistrict(x, z)) return 'wall';
+    if (inPark(x, z) && (inPond(x, z, r) || (this.landBlocked?.(x, z, r) ?? false))) return 'wall';
     if (this.stampColliders.some(inRects) || inRects(this.extraColliders)) return 'wall';
     if (this.onBridgeMedian(x, z, r)) return 'soft';
     const mx = Math.floor(x / CELL);
@@ -597,6 +605,7 @@ export class District {
     return (x, z, r) => {
       if (inRects(interior, x, z, r)) return 'wall';
       if (!this.inDistrict(x, z)) return 'wall';
+      if (inPark(x, z) && (inPond(x, z, r) || (this.landBlocked?.(x, z, r) ?? false))) return 'wall';
       if (inRects(fixed, x, z, r)) return 'wall';
       if (this.onBridgeMedian(x, z, r)) return 'soft';
       for (const b of buildings) if (Math.abs(x - b.x) < b.w / 2 + r && Math.abs(z - b.z) < b.d / 2 + r) return 'wall';

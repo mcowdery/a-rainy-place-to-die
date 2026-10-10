@@ -73,10 +73,12 @@ ramps:
   - { id: port_n_on, kind: on, route: r1_n, leg: 0, block: 2, name: 東都港 TŌTO PORT }
   - { id: terminal_e_on, kind: on, route: wangan_e, leg: 0, block: 1, name: 東都港 TERMINAL }
   - { id: terminal_w_off, kind: off, route: wangan_w, leg: 0, block: 32, name: 東都港 TERMINAL }
+  - { id: fishmarket_w_off, kind: off, route: wangan_w, leg: 0, block: 5, name: 東都市場 FISH MARKET }
   - { id: fishmarket_w_on, kind: on, route: wangan_w, leg: 0, block: 6, name: 東都市場 FISH MARKET }
   - { id: fishmarket_e_off, kind: off, route: wangan_e, leg: 0, block: 27, name: 東都市場 FISH MARKET }
 # Ebisu-jima (the parking area and the car meets), off the Wangan; Shiomi-jima, at the end of its branch.
   - { id: ebisu_e_off, kind: off, route: wangan_e, leg: 0, block: 8, name: 恵比寿島PA EBISU-JIMA PA }
+  - { id: ebisu_w_off, kind: off, route: wangan_w, leg: 0, block: 23, name: 恵比寿島PA EBISU-JIMA PA }
   - { id: ebisu_w_on, kind: on, route: wangan_w, leg: 0, block: 24, name: 恵比寿島 EBISU-JIMA }
   - { id: shiomi_off, kind: off, route: shiomi_s, leg: 0, block: 2, name: 汐見島 SHIOMI-JIMA }
   - { id: shiomi_on, kind: on, route: shiomi_n, leg: 0, block: 0, name: 汐見島 SHIOMI-JIMA }
@@ -91,9 +93,9 @@ plazas:
 exits:
   - { id: kurokami, venue: kurokami, route: c1, at: 0, length: 110, name: 黒神峠 KUROKAMI }
 # Yūnagi: at the Wangan's east end, past the river mouth, into the headland (hill: its height in metres).
-  - { id: yunagi, venue: yunagi, route: wangan_e, at: 1, length: 110, name: 夕凪峠 YŪNAGI, hill: 70 }
-# The way out of the Yūnagi tunnel, the other carriageway: it comes out of the hill beside the exit spur's mouth (the
-# spur's mouth is 14 m short of its end wall, 96 m past the Wangan's end) down a 60 m tube, and runs on as the westbound
-# Wangan: where the game starts.
+  - { id: yunagi, venue: yunagi, route: wangan_e, at: 1, length: 156, tube: 60, name: 夕凪峠 YŪNAGI, hill: 70 }
+# The way out of the Yūnagi tunnel, the other carriageway: it comes out of the hill at the exit spur's mouth (96 m past
+# the Wangan's end) down a 60 m tube whose wall is the exit spur's, so the two are one tunnel, and runs on as the
+# westbound Wangan: where the game starts.
 entries:
-  - { id: yunagi_out, route: wangan_w, length: 96, tube: 60, name: 夕凪峠 YŪNAGI }
+  - { id: yunagi_out, venue: yunagi, route: wangan_w, length: 96, tube: 60, name: 夕凪峠 YŪNAGI }

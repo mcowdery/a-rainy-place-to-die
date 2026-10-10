@@ -2,6 +2,7 @@ import { intersect, overlaps, type Rect } from '../../core/coords';
 import { isRiverWalk, isVerge, junctionSpans, throughMouths, type CellPlan3, type Road3, type Span } from '../district/plan';
 import { KIND, lin, type MeshBuilder } from './meshBuilder';
 import type { OpenLayout } from './openLots';
+import { inPark } from '../district/parkLand';
 
 /**
  * Ground for one cell: lot concrete, asphalt for its share of each road, raised pavements with kerbs (cut
@@ -37,7 +38,8 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rec
     const q = r.rect;
     const out = r.vertical ? q.x + q.w / 2 > cell.x + cell.w / 2 : q.y + q.h / 2 > cell.y + cell.h / 2;
     const rail = r.vertical ? { x: out ? q.x + q.w - 0.25 : q.x, y: q.y, w: 0.25, h: q.h } : { x: q.x, y: out ? q.y + q.h - 0.25 : q.y, w: q.w, h: 0.25 };
-    slab(rail, 0.14, 0.85, KIND.plain, KIND.plain, 0xa8acb0);
+    // (No rail where the edge meets Yūnagi Riverside Park: its lawn is open to walk and drive onto.)
+    if (!inPark(rail.x + rail.w / 2, rail.y + rail.h / 2, 2)) slab(rail, 0.14, 0.85, KIND.plain, KIND.plain, 0xa8acb0);
   }
   // Along the water, the flood wall (a knee-high concrete parapet, as on the Sumida).
   for (const r of plan.roads) {

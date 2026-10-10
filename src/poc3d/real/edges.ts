@@ -140,6 +140,11 @@ export function buildEdges(
   tropical = false,
   /** Whether a footprint of this radius at (x, z) would stand on a road the woods must keep off (a tunnel's). */
   blocked: (x: number, z: number, r: number) => boolean = () => false,
+  /**
+   * A view to keep pretty (the way out of the Yūnagi tunnel, where the game starts): within `radius` of (x, z) no house
+   * stands among the trees. (The park there, real/park.ts, is built on top.)
+   */
+  scenic?: { readonly x: number; readonly z: number; readonly radius: number },
 ): Edges {
   const group = new THREE.Group();
   group.name = 'edges';
@@ -239,6 +244,7 @@ export function buildEdges(
       keep(trees, (t) => t.r + 3);
       keep(plants, () => 5);
       keep(houses, (h) => Math.max(h.w, h.d) / 2 + 4);
+      if (scenic) houses.splice(0, houses.length, ...houses.filter((h) => Math.hypot(h.x - scenic.x, h.z - scenic.z) > scenic.radius));
       if (!trees.length && !houses.length) continue;
       const g = new THREE.Group();
       let windows: THREE.InstancedMesh | null = null;

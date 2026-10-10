@@ -85,9 +85,10 @@ describe('the expressway', () => {
   it('loads', () => {
     expect(errors).toEqual([]);
     expect(ex.loop.x.length).toBeGreaterThan(3000);
-    // The loop's four pairs, route 1's pair into the port, the Wangan's at each end and at Ebisu-jima, the islands'.
+    // The loop's four pairs, route 1's pair into the port, the Wangan's at each end, and a way off for each way you can get on at the
+    // fish market and Ebisu-jima (the westbound lane had a way on and no way off), the islands'.
     expect(ex.roads.filter((r) => r.rampKind === 'on')).toHaveLength(10);
-    expect(ex.roads.filter((r) => r.rampKind === 'off')).toHaveLength(10);
+    expect(ex.roads.filter((r) => r.rampKind === 'off')).toHaveLength(12);
     // The Yūnagi tunnel is at the Wangan's east end now, in the headland.
     const yunagi = ex.roads.find((r) => r.id === 'yunagi')!;
     expect(yunagi.x[0]).toBeGreaterThan(41 * 128 - 80);
@@ -185,6 +186,15 @@ describe('the expressway', () => {
     // Its tube is no way to the pass: driving along it takes you nowhere.
     expect(ex.portal(out.x[20], out.z[20], def.deck)).toBe(null);
     expect(ex.portal(out.x[n - 3], out.z[n - 3], def.deck)).toBe(null);
+  });
+
+  it('the woods keep off the tunnel roads', () => {
+    const out = ex.roads.find((r) => r.id === 'yunagi_out')!;
+    const mid = Math.floor(out.x.length / 2);
+    expect(ex.nearTunnel(out.x[mid], out.z[mid], 3), 'on the road').toBe(true);
+    expect(ex.nearTunnel(out.x[mid] + out.tz[mid] * 30, out.z[mid] - out.tx[mid] * 30, 3), '30 m to its left').toBe(false);
+    // (Nowhere near a tunnel, on the loop.)
+    expect(ex.nearTunnel(ex.loop.x[0] + 400, ex.loop.z[0] + 400, 3), 'away from any').toBe(false);
   });
 
   it('spurs end at their portals', () => {

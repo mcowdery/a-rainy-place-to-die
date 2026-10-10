@@ -138,7 +138,11 @@ export function buildExpressway(ex: Expressway, city: THREE.Material): Expresswa
         }
       }
     }
-    if (road.kind === 'spur') portal(mb, road);
+    if (road.kind === 'spur') {
+      // A tunnel with a way in and a way out is one portal over both carriageways, drawn with the way in's.
+      const mate = road.venue ? ex.roads.find((q) => q !== road && q.kind === 'spur' && q.venue === road.venue && !!q.out !== !!road.out) : undefined;
+      if (!(road.out && mate)) portal(mb, road, mate);
+    }
     if (road.kind === 'ramp') ramp(mb, road, (road.foot ?? 0) > 8);
   }
   // Piers with crossbeams under the deck (the street's colliders are the same piers, less those in junctions).
@@ -808,25 +812,53 @@ function noEntry(road: Road, slip: boolean): THREE.Group {
 }
 
 /**
+ * The headland a spur's tunnel bores into: a mound round a centre 203 m back of the tunnel's end wall (where its slope
+ * comes down to the deck's height, so the tube is all in front of the hill), as lathe rings (height, radius) and the
+ * height of its surface at a point (null beyond its foot). Only a spur with a `hill`.
+ */
+export function hillOf(road: Road): { cx: number; cz: number; rings: [number, number][]; at: (x: number, z: number) => number | null } | null {
+  if (!road.hill) return null;
+  const i = road.out ? 0 : road.x.length - 1;
+  const s = road.out ? -1 : 1;
+  const cx = road.x[i] + road.tx[i] * s * 203;
+  const cz = road.z[i] + road.tz[i] * s * 203;
+  const H = road.hill;
+  const rings: [number, number][] = [[-3, 230], [H * 0.35, 190], [H * 0.7, 120], [H, 50], [H + 6, 8]];
+  return {
+    cx,
+    cz,
+    rings,
+    at: (x, z) => {
+      const r = Math.hypot(x - cx, z - cz);
+      if (r > rings[0][1]) return null;
+      for (let k = 0; k + 1 < rings.length; k++) {
+        const [y0, r0] = rings[k];
+        const [y1, r1] = rings[k + 1];
+        if (r <= r0 && r >= r1) return y0 + ((y1 - y0) * (r0 - r)) / (r0 - r1);
+      }
+      return rings[rings.length - 1][0];
+    },
+  };
+}
+
+/**
  * A tunnel portal at a spur's end: a concrete headwall round a dark mouth, lamps inside, the name over it. An entry
  * (`Road.out`) has it at its start, the same seen from the other way: the tube is its first `tube` metres, closed at
  * sample 0 by the black wall, and it comes out at the mouth.
  */
-function portal(mb: MeshBuilder, road: Road): void {
+function portal(mb: MeshBuilder, road: Road, mate?: Road): void {
   const n = road.x.length;
   const out = !!road.out;
   const i = out ? 0 : n - 1;
   // Which way the hill is from the road's end: ahead of an exit spur, behind an entry.
   const s = out ? -1 : 1;
-  const tube = out ? road.tube ?? 14 : 14;
-  // The headland it bores into: a wooded mound over the far end of the tunnel.
-  if (road.hill) {
-    mb.kind = KIND.plain;
-    mb.color = lin(0x26301e);
-    const cx = road.x[i] + road.tx[i] * s * 150;
-    const cz = road.z[i] + road.tz[i] * s * 150;
-    const H = road.hill;
-    mb.lathe(cx, cz, [[-3, 230], [H * 0.35, 190], [H * 0.7, 120], [H, 50], [H + 6, 8]], 24);
+  const tube = road.tube ?? 14;
+  // The headland it bores into: a grassy mound over the far end of the tunnel (`hillOf`).
+  const mound = hillOf(road);
+  if (mound) {
+    mb.kind = KIND.grass;
+    mb.color = lin(0x4a6e36);
+    mb.lathe(mound.cx, mound.cz, mound.rings, 48);
   }
   const fx = road.tx[i] * s;
   const fz = road.tz[i] * s;
@@ -842,17 +874,64 @@ function portal(mb: MeshBuilder, road: Road): void {
     mb.box((x0 + x1) / 2, (z0 + z1) / 2, y0, y1, Math.abs(x1 - x0), Math.abs(z1 - z0), kind, true);
   };
   const h = road.half + 1.5;
+  // With a mate (the way out beside the way in) the one hall spans both carriageways: lat is measured from this road's
+  // line, and the mate's end is where its own anchor lies in this frame.
+  let lm = 0;
+  if (mate) {
+    const j = mate.out ? 0 : mate.x.length - 1;
+    lm = (mate.x[j] - road.x[i]) * lx + (mate.z[j] - road.z[i]) * lz;
+  }
+  const lo = Math.min(0, lm) - h;
+  const hi = Math.max(0, lm) + h;
   // The headwall and the tube behind (a long box: the mountain it bores into is far away).
-  put(0x6a6a66, -tube, 0, -h, h, y + 6.5, y + 9);
-  put(0x6a6a66, -tube, 0, -h - 1.2, -h, y - 1.2, y + 9);
-  put(0x6a6a66, -tube, 0, h, h + 1.2, y - 1.2, y + 9);
+  put(0x6a6a66, -tube, 0, lo, hi, y + 6.5, y + 9);
+  put(0x6a6a66, -tube, 0, lo - 1.2, lo, y - 1.2, y + 9);
+  put(0x6a6a66, -tube, 0, hi, hi + 1.2, y - 1.2, y + 9);
+  // An earth bank over the tube's roof, the hill's colour: a flat top just over the slab, sloping down at 1:1.5 to the land on
+  // both sides and running back into the hill, so the tunnel reads as bored into it. Its front is a vertical face just behind the
+  // headwall's lintel, wings of earth at each side of it. (Each face is turned to the side its normal is on.)
+  {
+    mb.kind = KIND.grass;
+    mb.color = lin(0x4a6e36);
+    const yTop = y + 9.6;
+    const yG = y - 1.4;
+    const H = yTop - yG;
+    const run = H * 1.5;
+    const a0 = 0.4 - tube;
+    const a1 = 14;
+    const P = (along: number, lat: number, yy: number): V3 => {
+      const [x, z] = at(along, lat);
+      return [x, yy, z];
+    };
+    const face = (a: V3, b: V3, c: V3, d: V3, n: V3): void => {
+      const u: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const v: V3 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      const dot = (u[1] * v[2] - u[2] * v[1]) * n[0] + (u[2] * v[0] - u[0] * v[2]) * n[1] + (u[0] * v[1] - u[1] * v[0]) * n[2];
+      if (dot >= 0) mb.quadN(a, b, c, d, n, n, n, n);
+      else mb.quadN(a, d, c, b, n, n, n, n);
+    };
+    const tl = lo - 1.2;
+    const th = hi + 1.2;
+    face(P(a0, tl, yTop), P(a1, tl, yTop), P(a1, th, yTop), P(a0, th, yTop), [0, 1, 0]);
+    const nl = Math.hypot(H, run);
+    for (const side of [-1, 1]) {
+      const edge = side < 0 ? tl : th;
+      const foot = edge + side * run;
+      const n: V3 = [(side * lx * H) / nl, run / nl, (side * lz * H) / nl];
+      face(P(a0, edge, yTop), P(a1, edge, yTop), P(a1, foot, yG), P(a0, foot, yG), n);
+      // The wing: the slope's profile standing at the front, facing the road.
+      const nf: V3 = [-fx, 0, -fz];
+      face(P(a0, edge, yG), P(a0, foot, yG), P(a0, edge, yTop), P(a0, edge, yTop), nf);
+    }
+    face(P(a0, tl, y + 9), P(a0, th, y + 9), P(a0, th, yTop), P(a0, tl, yTop), [-fx, 0, -fz]);
+  }
   // The mouth: a black back wall deep inside, and lights along the tube's walls fading into it.
-  put(0x050506, 0.2, 1.2, -h, h, y - 1.2, y + 6.5);
+  put(0x050506, 0.2, 1.2, lo, hi, y - 1.2, y + 6.5);
   for (let a = 2 - tube; a < 0; a += 3) {
     mb.kind = KIND.emit;
     mb.style = [EMIT.always, 0, 0, 0];
-    for (const s of [-1, 1]) {
-      const [x, z] = at(a, s * (h - 0.1));
+    for (const lat of mate ? [lo + 0.1, (lo + hi) / 2, hi - 0.1] : [lo + 0.1, hi - 0.1]) {
+      const [x, z] = at(a, lat);
       mb.color = [1.6, 1.2, 0.5];
       mb.box(x, z, y + 4.6, y + 4.8, 0.6, 0.6, KIND.emit, true);
     }

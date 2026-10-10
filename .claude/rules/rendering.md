@@ -2,6 +2,7 @@
 paths:
   - "src/poc3d/real/meshBuilder.ts"
   - "src/poc3d/real/city.ts"
+  - "src/poc3d/real/park.ts"
   - "src/poc3d/real/buildings.ts"
   - "src/poc3d/real/props.ts"
   - "src/poc3d/real/cars.ts"
@@ -34,3 +35,5 @@ Covers the mesh builder, the one city material, buildings, props, ground, the li
 - The pipeline is an HDR MSAA target with depth, then screen-space reflections (`real/ssr.ts`: wet ground and roofs, and open water whatever the weather; only faces that really face up, so a deck's underside reflects nothing; half-res ray march through the depth buffer, rippled in puddles, added in place so the scene target keeps its depth), then the overlay, then `UnrealBloomPass`, then `OutputPass` (ACES), then the colour grade (`real/grade.ts`, on the display image): presets `neutral` (default), `nocturne`, `noir`, `citypop` (the debug menu's Grade, `?grade=`) for saturation that spares bright neon, split toning, a coloured black lift, contrast, vignette, grain, lens fringing, halation, and drops on the lens in rain. Sun shadows are on only in clear weather with the sun high enough.
 
 **Screen light** (`real/screenLight.ts`): big screens (the mega-sign's four screens and corner sign, Stella Production's and Hakkodo's) are rectangular area lights whose colour follows the image showing (a chroma-weighted, saturated average of each ad, measured when it loads, crossfading with the screen). The 8 nearest go to the city shader (`screenLight()`), and rain in front of them catches their colour. `ScreenLights.gain` sets the strength. `ScreenGlows` adds a soft halo round each screen in its current colour (dimmer by day, thicker in rain and fog), so screens glow without the whole ad needing to cross the bloom threshold.
+
+**Yūnagi Riverside Park** (`real/park.ts`): the land between the river and the Yūnagi headland, built from the city's lawns, paths, water, lamps and tree species; see roads-traffic.md (The park below the Wangan).

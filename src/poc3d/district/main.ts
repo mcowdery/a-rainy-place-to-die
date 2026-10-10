@@ -80,7 +80,10 @@ import { Approach, sideOf, trimToUnseen } from './taxiDispatch';
 import { MODELS, SALOONS } from '../../race/catalog';
 import { earn, loadProfile, newCar, saveProfile, spend } from '../../race/profile';
 import { Expressway, expresswayCoveredFrom, expresswayReservedFrom, parseExpressway, type Road } from './expressway';
-import { buildExpressway, ExpresswayTraffic } from '../real/expressway';
+import { buildExpressway, ExpresswayTraffic, hillOf } from '../real/expressway';
+import { buildPark } from '../real/park';
+import { inPark, PARK } from './parkLand';
+import type { Rect } from '../../core/coords';
 import { buildSea } from '../real/sea';
 import { buildAirport, onAirfield } from '../real/airport';
 import { Occlusion } from '../real/occlusion';
@@ -339,7 +342,7 @@ async function run(): Promise<void> {
   const expressway = new Expressway(exDef, (key) => {
     const a = content.avenues.get(key);
     return a ? { width: a.width, slip: a.slip ?? 0 } : undefined;
-  });
+  }, groundAt);
   /** Every place to go: the named spawns and zones, and the expressway's entrances (the street before each). */
   const allPlaces = (): Destination[] => [
     ...destinations(district, nodes, content.zones),
@@ -1740,7 +1743,8 @@ async function run(): Promise<void> {
   // Set pieces you drive up (real/denko.ts: the car park's floors and ramps) join the network as decks.
   for (const p of content.placed) if (p.stamp.landmark === 'car_park') expressway.addDecks(carParkDecks(p.building, p.id));
   // The bay and the river (real/sea.ts): water over the map's water cells, seawalls where built land meets it.
-  const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), cityU, content.bridges, content.terrain);
+  // (Yūnagi Riverside Park's cells count as built for the sea: no dark plate of unbuilt land under its lawn.)
+  const sea = buildSea(content.macro, CELL, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my) || inPark((mx + 0.5) * CELL, (my + 0.5) * CELL), cityU, content.bridges, content.terrain);
   // What stands by the water reflected in it, wet or dry (real/ssr.ts).
   ssr.setWater(cityU);
   // Manila's monsoon floods (real/flood.ts): water standing in the low streets, as deep as the forecast says (or
@@ -1774,7 +1778,16 @@ async function run(): Promise<void> {
   freeze(sea.group);
   // The city's edges (real/edges.ts): forest over the hills, a fringe of houses at their foot; the mountains beyond
   // are in the sky.
-  const edges = buildEdges(content.macro, CELL, content.terrain, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), CITY.tropical);
+  // The headland the Yūnagi tunnel goes into (the park's mound; its woods are the park's trees).
+  const parkHill = (() => {
+    const r = expressway.roads.find((q) => q.hill);
+    return r ? hillOf(r) : null;
+  })();
+  const edges = buildEdges(content.macro, CELL, content.terrain, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), CITY.tropical, (x, z, r) => expressway.nearTunnel(x, z, r) || inPark(x, z, 40) || Math.hypot(x - (parkHill?.cx ?? -1e9), z - (parkHill?.cz ?? -1e9)) < 250 + r, (() => {
+    // The view from the tunnel's mouth (where a new game starts) is kept pretty: no fringe houses, a blossom grove.
+    const way = expressway.roads.find((r) => r.out);
+    return way?.tube ? { x: way.x[way.tube], z: way.z[way.tube], radius: 380 } : undefined;
+  })());
   scene.add(edges.group);
   freeze(edges.group);
   surface.push(edges.group);
@@ -2058,6 +2071,37 @@ async function run(): Promise<void> {
     try {
       localStorage.setItem('rainyplace.city.car', JSON.stringify(me.car));
     } catch {
+  // The park between the river and the Yūnagi headland, which a new game looks out over (real/park.ts).
+  const yunagiHill = expressway.roads.find((r) => r.hill);
+  const park = yunagiHill
+    ? buildPark(
+        {
+          terrain: content.terrain,
+          what: (x, z) => {
+            const mx = Math.floor(x / CELL);
+            const my = Math.floor(z / CELL);
+            const k = content.macro.kindAt(Math.max(0, Math.min(content.macro.cols - 1, mx)), Math.max(0, Math.min(content.macro.rows - 1, my)));
+            if (mx >= content.macro.cols || my >= content.macro.rows || mx < 0 || my < 0) return 'hills';
+            return k === 'water' ? 'water' : district.model.has(mx, my) ? 'built' : 'land';
+          },
+          clear: (x, z, r) => expressway.nearTunnel(x, z, r + 16),
+          viaduct: { z: 21 * 128, x0: 4864, x1: 5248 },
+          hill: hillOf(yunagiHill),
+          area: { x0: PARK.x0, x1: PARK.x1, z0: PARK.z0, z1: PARK.z1 },
+        },
+        city,
+      )
+    : null;
+  if (park) {
+    scene.add(park);
+    freeze(park);
+    // Its trees' trunks and lamp posts are solid; its headland is a hill you can't walk through (the lawn's ground is the
+    // terrain's, not the mound's), as its ponds are water.
+    district.extraColliders.push(...(park.userData.colliders as Rect[]));
+    const hill = yunagiHill ? hillOf(yunagiHill) : null;
+    if (hill) district.landBlocked = (x, z) => (hill.at(x, z) ?? -1e9) > groundAt(x, z) + 1.2;
+  }
+  const parkPools = park?.getObjectByName('parkpools') as THREE.Mesh | undefined;
       /* this session only */
     }
   }
@@ -2164,8 +2208,10 @@ async function run(): Promise<void> {
     ownCar.place(L.x[i] + L.tz[i] * 1.8, L.z[i] - L.tx[i] * 1.8, Math.atan2(L.tx[i], L.tz[i]), L.y[i]);
     ownCar.sim.u = 16;
   }
-  if (startRoad) {
-    const L = startRoad;
+  // Back from a pass whose tunnel has a way out: out of that tunnel, as the game starts.
+  const arrival = startRoad ?? (exitRoad ? expressway.roads.find((r) => r.out && r.venue === exitRoad.venue) : undefined);
+  if (arrival) {
+    const L = arrival;
     const { i } = startAt(L);
     ownCar.place(L.x[i] + L.tz[i] * 1.8, L.z[i] - L.tx[i] * 1.8, Math.atan2(L.tx[i], L.tz[i]), L.y[i]);
     ownCar.sim.u = 14;
@@ -2176,6 +2222,15 @@ async function run(): Promise<void> {
   const places = allPlaces();
   /** The ride under way: from, to, the fare, and the seconds it lasts (sped up) and has run. */
   let taxiRide: { dest: Destination; fare: number; t: number; T: number; x0: number; z0: number; path: [number, number][]; cum: number[]; heading?: number } | null = null;
+  if (startRoad) {
+    // The headlights on auto (they come on with the dark), and the city-pop station on the radio (below, where it's made).
+    carLights = 'auto';
+    try {
+      localStorage.setItem('rainyplace.carLights', carLights);
+    } catch {
+      /* no storage */
+    }
+  }
   /**
    * A taxi sent for you (taxiDispatch.ts) when none is cruising your way: one from out of sight, taken off its
    * loop and driven here along the streets; `released` once you've ridden or walked off (it goes back to its
@@ -3331,6 +3386,8 @@ async function run(): Promise<void> {
           vehicle: driving.car.label,
           kmh: Math.round(driving.kmh),
           own: !!driving.own,
+  // A new game starts with the city-pop station playing (it is heard once the first click has started the audio).
+  if (startRoad) radio.tune('city_pop_radio');
           ...(driving.own
             ? { at: [ownCar.sim.x, ownCar.sim.y, ownCar.sim.z].map((v) => Math.round(v * 10) / 10), heading: Math.round((ownCar.sim.h * 180) / Math.PI), onExpressway: ownCar.onExpressway(), condition: Math.round(ownCar.condition * 10) / 10, parts: Object.fromEntries(Object.entries(ownCar.parts).map(([k, v]) => [k, Math.round(v * 10) / 10])) }
             : {}),
@@ -4012,6 +4069,10 @@ async function run(): Promise<void> {
     if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}${auto && autoMode ? `  ·  AUTO ${AUTO_NAMES[autoMode]}${auto.pilot.status === 'driving' ? '' : ` · ${auto.pilot.status}`}` : ''}`;
     damageHud.update(inVn ? 0 : dt, driving.own === ownCar ? ownCar : null);
     const onFoot = !driving.car && !controls.fly && !inVn && !rider.active && Math.abs(camAbove() - 1.7) < 1.2;
+    if (parkPools) {
+      (parkPools.material as THREE.MeshBasicMaterial).opacity = cityU.uLamps.value;
+      parkPools.visible = cityU.uLamps.value > 0.05;
+    }
     let wvx = dt > 0 ? (cp0.x - lastWalker.x) / dt : 0;
     let wvz = dt > 0 ? (cp0.z - lastWalker.z) / dt : 0;
     // Faster than anyone runs: a teleport or a ride, not a step.

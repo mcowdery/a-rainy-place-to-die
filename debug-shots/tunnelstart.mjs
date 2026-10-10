@@ -5,12 +5,14 @@ import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/tunnelstart';
 const query = process.argv[3] ?? 'clock=22:00';
+const view = process.argv[4] ?? 'chase';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
 const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 800 } });
+  await page.addInitScript((v) => { try { localStorage.setItem('rainyplace.driveView', v); } catch {} }, view);
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('console', m.type(), m.text().slice(0, 300)); });
   await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&res=100&${query}`, { timeout: 240000 });
