@@ -1,6 +1,6 @@
 // めいどかふぇ ♡ぴゅあ♡: the front (night and day), the stair hall, the café upstairs; and a shot at a wall.
 //   node debug-shots/maidcafe.mjs <out dir> [query]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 import { writeGallery } from './gallery.mjs';
@@ -12,7 +12,7 @@ const only = process.env.ONLY?.split(',');
 const want = (g) => !only || only.includes(g);
 const server = await shotServer({ server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300)); });

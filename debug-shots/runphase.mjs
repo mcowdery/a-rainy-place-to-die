@@ -1,9 +1,9 @@
 // Through a run: each frame, how far forward (along his heading) each foot and hand is, from the pelvis.
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11'] });
 const page = await browser.newPage({ viewport: { width: 320, height: 200 } });
 await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`);
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 60000, polling: 250 });

@@ -2,7 +2,7 @@
 // swing and photographed in third person (the game's camera behind him, from his front quarter, from his side)
 // and in first person, one sheet a move; and each stance at rest. For judging a swing as a whole body's.
 //   node debug-shots/movesheet.mjs <out dir> <fists|katana|bat> [move ids, comma separated | stances] [phases, comma separated]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2];
 const weapon = process.argv[3] ?? 'katana';
@@ -12,7 +12,7 @@ const W = 380;
 const H = 340;
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: W, height: H } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); });

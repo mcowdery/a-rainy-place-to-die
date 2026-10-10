@@ -1,7 +1,7 @@
 // Mack's grip on the steering wheel, each hand from four sides, well lit (and with the wheel wound either way).
 // node debug-shots/wheelgrip.mjs <out dir> [car type] [outfit]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/wheelgrip';
 const type = process.argv[3] ?? 'hatch';
@@ -9,7 +9,7 @@ const outfit = process.argv[4] ?? 'suit_cream';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.addInitScript((outfit) => localStorage.setItem('citypop.wardrobe', JSON.stringify({ outfit, glasses: null, face: 'shadow', helmet: null })), outfit);

@@ -1,6 +1,6 @@
 // Mack smoking (models/smoking.ts, real/smoke.ts MackSmoke) in the showroom's first person: lighting up, a drag, the
 // cigarette in his lips with a gun out, flicking it away. node debug-shots/macksmoke.mjs <outdir> [cigar]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 import { writeGallery } from './gallery.mjs';
@@ -10,7 +10,7 @@ mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' || (m.type() === 'warning' && /GL_|WebGL|X\d{4}|Shader/.test(m.text()))) console.log('CONSOLE', m.text().slice(0, 900)); });

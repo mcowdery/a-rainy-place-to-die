@@ -2,7 +2,7 @@
 // kind, each with its two frames, its cell number, id and what it is; and how long the whole atlas takes to paint.
 //   node debug-shots/windowsheet.mjs [out dir] [kinds: home,office,... or all] [vite mode: demo | uncensored]
 // (No city: the scenes are painted on their own in a blank page, so it takes seconds.)
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync, writeFileSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/windowpeople/sheets';
@@ -11,7 +11,7 @@ const want = process.argv[3] && process.argv[3] !== 'all' ? process.argv[3].spli
 const mode = process.argv[4];
 const server = await shotServer({ mode, server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404|favicon/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); });

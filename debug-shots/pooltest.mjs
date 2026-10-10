@@ -1,12 +1,12 @@
 // Pooled chase cars (district/cityChase.ts): runs the long run, shoots every car that comes near so cars are put down
 // and reused, then checks that each live car on the road is whole (not out, full health in the state, mended glass,
 // its hit volumes carry its own id, it's driving and not standing). node debug-shots/pooltest.mjs [seconds]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const secs = Number(process.argv[2] ?? 60);
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 640 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=city_garage.front&car=home&clock=22:30&weather=clear`, { timeout: 180000 });

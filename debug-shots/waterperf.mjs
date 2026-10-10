@@ -1,12 +1,12 @@
 // What the reflection pass costs dry, now that it runs for open water: GPU ms (the mean of 180 frames) with the
 // pass on and off, at the crossing (no water in view), by the river, the pond and the bay.
 // node debug-shots/waterperf.mjs [query]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const extra = process.argv[2] ? `&${process.argv[2]}` : '';
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' }, { gpu: 'exclusive' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&weather=clear&clock=13:00&res=100&spawn=kaburo_crossing.view${extra}`, { timeout: 240000 });

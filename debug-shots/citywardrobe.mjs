@@ -1,5 +1,5 @@
 // Mack's wardrobe in the district, third person: node debug-shots/citywardrobe.mjs <outdir> [outfit] [glasses]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 import { writeGallery } from './gallery.mjs';
@@ -9,7 +9,7 @@ const glasses = process.argv[4] ?? 'wrap';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.addInitScript(([o, g]) => { try { localStorage.setItem('citypop.thirdPerson', '1'); localStorage.setItem('citypop.wardrobe', JSON.stringify({ outfit: o, glasses: g === 'none' ? null : g })); } catch {} }, [outfit, glasses]);

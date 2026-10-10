@@ -1,11 +1,11 @@
 // What the expressway costs: triangles, draws and GPU time at a few viewpoints, with it shown and hidden.
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({
+const browser = await launchBrowser({
   channel: 'msedge',
   headless: false,
   args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-frame-rate-limit', '--disable-gpu-vsync'],

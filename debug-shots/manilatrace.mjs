@@ -1,12 +1,12 @@
 // Samples rival 0's speed through a Manila street race: node debug-shots/manilatrace.mjs [race id] [seconds] [car index]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const id = process.argv[2] ?? 'baywalk_sprint';
 const seconds = Number(process.argv[3] ?? 60);
 const k = Number(process.argv[4] ?? 0);
 const server = await shotServer({ server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.goto(`${server.resolvedUrls.local[0]}?city=manila&debug=1&diag=1&clock=14:00&weather=clear&season=summer`, { timeout: 300000 });

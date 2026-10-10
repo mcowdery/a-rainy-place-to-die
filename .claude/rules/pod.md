@@ -1,0 +1,26 @@
+---
+paths:
+  - scripts/pod.mjs
+  - scripts/podSetup.sh
+  - scripts/podIdleStop.sh
+  - scripts/gpuCheck.mjs
+  - scripts/launchBrowser.mjs
+---
+
+# The RunPod dev pod
+
+A GPU pod on RunPod for the work that crawls this machine when several agents run at once: shot scripts, benchmarks, Blender builds. Optional; everything still runs locally. The pod is a Linux box with an RTX-class GPU, reached over SSH (VS Code Remote-SSH works), with the repo, Node, the browser and Blender on a network volume.
+
+**Where it lives.** Pod `rainy-place-gpucheck` (the `rainy-place` prefix finds it), US-IL-1, on the network volume `rainy-place-dev-il1` (60 GB) mounted at `/workspace`. Billing is per hour while it runs (about $0.27 an A5000); stopped, only the volume costs (about $0.07 per GB a month). Volumes can't shrink and a pod can only mount a volume in its own datacenter; the GPU you get on a restart is whatever is free there. The old 250 GB volume was dropped when the Krea 2 checkpoint moved to Hugging Face.
+
+**Driving it** (`scripts/pod.mjs`; the RunPod key is read from `RUNPOD_API_KEY` or the Trame studio's `.env`, the SSH key is `~/.ssh/runpod_ed25519`):
+- `node scripts/pod.mjs start` starts the pod, waits for SSH, runs `podSetup.sh --boot` and writes `Host rainy-pod` into `~/.ssh/config` (the address changes at each start, so run this before connecting from VS Code).
+- `sync` copies this checkout to `/workspace/a-rainy-place-to-die`: tracked and untracked files, not ignored ones, uncommitted work included, nothing committed or pushed. Deleted files aren't deleted there; run `npm install` there after a `package.json` change.
+- `ssh [cmd]`, `pull <remote> [dir]`, `status`, `stop`.
+- On the pod, run scripts from `/workspace/a-rainy-place-to-die` with `CITYPOP_GPU=off` (nothing else shares its GPU). `PLAYWRIGHT_BROWSERS_PATH=/workspace/.playwright` is set in login shells; a bare `ssh host cmd` needs it exported. Shots come back with `pull`.
+
+**A pod's container disk is wiped at every stop**; only `/workspace` survives. So the apt packages (the GL and Vulkan libraries, Chromium's system libraries, the Japanese and Liberation fonts and their fontconfig aliases for the Windows names the code asks for: Consolas, MS Gothic, Yu Gothic, Meiryo) are reinstalled at each boot by `podSetup.sh --boot` (about a minute). Blender's per-user folder is `/workspace/blender-user`, linked as `~/.config/blender/5.2`: its config, the MPFB extension and MPFB's 1.8 GB of MakeHuman asset packs were copied once from this machine's `%APPDATA%\Blender Foundation\Blender\5.2`. `BLENDER=/workspace/blender/blender` runs the cast scripts (`human_figures.py` rebuilds a figure in about 11 s there).
+
+**The browser is launched in one place**, `scripts/launchBrowser.mjs`, which every shot script and benchmark calls instead of `chromium.launch`: Edge with ANGLE on Direct3D 11 on Windows (unchanged), Playwright's Chromium with ANGLE on Vulkan on Linux (`--use-angle=d3d11` is swapped for the Vulkan flags, `--no-sandbox` added, a headed run with no display runs headless). `BROWSER_PATH`, `BROWSER_CHANNEL` and `BROWSER_ARGS` override it (Brave works through `BROWSER_PATH`). New scripts use it, never `chromium.launch`. `node scripts/gpuCheck.mjs` says which flag set reaches the real GPU; Chromium's default and ANGLE-GL fall back to SwiftShader on the pod, only Vulkan and EGL get the card. Frame times from the pod aren't comparable with this machine's GTX 1070 Ti: compare a change against a pod run, not against a local one. The district benchmark ran at about 64 fps on the A5000.
+
+**It stops itself.** `scripts/podIdleStop.sh` (started by `podSetup.sh`) stops the pod through RunPod's API, with the pod's own id and key (in PID 1's environment), after 45 minutes with the GPU under 5 %, the load under 1 and no Blender, browser or ffmpeg running, and in any case 12 hours after the boot. An open editor window doesn't count as busy. `touch /workspace/.keep-awake` pauses it for a long job; `/workspace/podIdleStop.log` says why the last stop happened. Tune with `IDLE_MIN`, `MAX_HOURS`.

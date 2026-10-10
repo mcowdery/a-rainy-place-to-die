@@ -2,7 +2,7 @@
 // the gun pulled back, the flash, and the engine's smoke from the cockpit.
 // node debug-shots/_lean.mjs <out dir> [parts: aim,hip,smoke]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/lean';
 const parts = (process.argv[3] ?? 'aim,hip,smoke').split(',');
@@ -12,7 +12,7 @@ const view = process.argv[6] ?? 'chase';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const big = parts.includes("holes") || parts.includes("hip") || parts.includes("flashout") || parts.includes("side");
 const page = await browser.newPage({ viewport: big ? { width: 1900, height: 1060 } : { width: 1100, height: 640 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));

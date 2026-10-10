@@ -6,7 +6,7 @@
 // Uses the installed Edge (like the benchmarks). The camera holds still; the city (rain, traffic, neon) moves.
 import fs from 'node:fs';
 import path from 'node:path';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../launchBrowser.mjs';
 import { shotServer } from '../shotServer.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', '..');
@@ -17,7 +17,7 @@ if (!out || !query) {
 }
 const server = await shotServer({ root: ROOT, configFile: path.join(ROOT, 'vite.config.ts'), server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 try {
   const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
   await page.goto(`${server.resolvedUrls.local[0]}?${query}`);

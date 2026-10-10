@@ -1,6 +1,6 @@
 // The mob's emotes (real/emotes.ts): the showroom's row, the atlas, and the city with them held up, then what they cost.
 //   node debug-shots/emotes.mjs [out dir] [parts: show,city,perf] [city query] [spawn]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync, writeFileSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/emotes';
@@ -11,7 +11,7 @@ const spawn = process.argv[5] ?? 'kaburo_crossing.view';
 // (No hot reload: others' edits mustn't reload the page mid-shot.)
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const warned = new Map();
 const watch = (page) => {
   page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));

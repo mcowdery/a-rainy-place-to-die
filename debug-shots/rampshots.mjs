@@ -1,12 +1,12 @@
 // Street-level shots of the expressway's ramps and piers: node debug-shots/rampshots.mjs [tag]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 
 const tag = process.argv[2] ?? 'before';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ channel: 'msedge', headless: false, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: false, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const shots = process.argv[3] ? JSON.parse(process.argv[3]) : {
   // In the avenue's inner lane, before the Kaburo north on-ramp (heading east).
   on_lane: '3530,2.2,1275,-90,-2',

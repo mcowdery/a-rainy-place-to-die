@@ -5,7 +5,7 @@
 //   node scripts/shopShots.mjs --out debug-shots/x   another folder
 //   node scripts/shopShots.mjs --headed
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from './launchBrowser.mjs';
 import { shotServer } from './shotServer.mjs';
 
 const arg = (k) => {
@@ -21,7 +21,7 @@ mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ channel: 'msedge', headless: !headed, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: !headed, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const errors = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });

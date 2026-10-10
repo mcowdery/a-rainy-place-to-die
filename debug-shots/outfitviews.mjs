@@ -1,6 +1,6 @@
 // Close views of the Filipino outfits in the mob showroom, from the side and from low down (for the feet), with the figures going about
 // their walk (T). node debug-shots/outfitviews.mjs [out dir] [query]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/outfits';
@@ -8,7 +8,7 @@ mkdirSync(out, { recursive: true });
 const extra = process.argv[3] ? `&${process.argv[3]}` : '';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.goto(`${server.resolvedUrls.local[0]}mob.html?labels=0${extra}&t=3`);

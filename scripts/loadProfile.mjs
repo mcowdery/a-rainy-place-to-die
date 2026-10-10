@@ -5,7 +5,7 @@
 //   node scripts/loadProfile.mjs --url http://localhost:4173/   an already-running server, e.g. `vite preview` of a build
 //   node scripts/loadProfile.mjs --query "quality=low"          extra URL settings
 // Run 1 on a dev server is a cold start; the browser profile is fresh each run, so HTTP caching isn't what differs.
-import { chromium } from 'playwright-core';
+import { launchBrowser } from './launchBrowser.mjs';
 import { shotServer } from './shotServer.mjs';
 
 const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : null; };
@@ -19,7 +19,7 @@ if (!base) {
   await server.listen();
   base = server.resolvedUrls.local[0];
 }
-const browser = await chromium.launch({
+const browser = await launchBrowser({
   channel: 'msedge',
   headless: true,
   args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'],

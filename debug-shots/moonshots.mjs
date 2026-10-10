@@ -1,5 +1,5 @@
 // The moon's shapes: node debug-shots/moonshots.mjs  (a wide view from the crossing, and a zoomed one on the moon)
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const shapes = process.argv[2]?.split(',') ?? ['full', 'gibbous', 'half', 'crescent', 'hazy', 'classic'];
 const extra = process.argv[3] ?? 'clock=23:00';
@@ -7,7 +7,7 @@ const tag = process.argv[4] ?? '';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const ready = async (page) => {
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 180_000, polling: 500 });
   await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });

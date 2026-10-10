@@ -3,7 +3,7 @@
 // next (a pop is a step that changes far more than its neighbours).
 //   node debug-shots/windowmotion.mjs <out dir> [query] [spawn] [yaw:pitch] [seconds] [step ms]
 // Writes f000.png... and prints the share of pixels that changed by more than a tenth at each step.
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync, writeFileSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/windowpeople/motion';
@@ -15,7 +15,7 @@ const seconds = Number(process.argv[6] ?? 10);
 const stepMs = Number(process.argv[7] ?? 250);
 const server = await shotServer({ server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 600)); });

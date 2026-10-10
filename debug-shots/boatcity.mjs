@@ -1,7 +1,7 @@
 // Looks at Manila (?city=manila): boots the city and takes shots from views given on the command line.
 //   node debug-shots/manila.mjs <out dir> [query] [view ...]      a view is x,y,z,yaw,pitch (world metres, degrees)
 // With no views, the shots are the start spawn and one from high over the middle of the map.
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/manila';
@@ -10,7 +10,7 @@ const extra = process.argv[3] ? `&${process.argv[3]}` : '';
 const views = process.argv.slice(4).map((v) => v.split(',').map(Number));
 const server = await shotServer({ server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e.stack ?? e).slice(0, 600)));
 page.on('console', (m) => { console.log('CON', m.type(), m.text().slice(0, 200)); });

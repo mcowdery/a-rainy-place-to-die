@@ -2,7 +2,7 @@
 // trades that can be one, in the zones with vice enough, near a spawn, and photographs each from across the
 // pavement, a little to one side so the door's glimpse shows. With windowVice=4 every such shop is a shady one.
 //   node debug-shots/shadyshops.mjs <out dir> [query] [spawn] [how many] [trades: bar,snack,lounge,...] [vite mode]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/windowpeople/shady';
@@ -14,7 +14,7 @@ const trades = process.argv[6] ? process.argv[6].split(',') : null;
 const mode = process.argv[7];
 const server = await shotServer({ mode, server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const open = async (query) => {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));

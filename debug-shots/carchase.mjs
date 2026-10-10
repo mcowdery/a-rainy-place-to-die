@@ -4,7 +4,7 @@
 //   off down the road while they come after you), 'stunts' (no job: a burnout, a donut, a handbrake 180 and a J-turn
 //   in a car park), 'gun' (no job: the views with the pistol out of each window).
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/carchase';
 const job = process.argv[3] ?? 'runner';
@@ -14,7 +14,7 @@ const extra = process.argv[6] ? `&${process.argv[6]}` : '';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 640 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('framenavigated', (f) => f === page.mainFrame() && console.log('NAVIGATED', f.url().slice(0, 160)));

@@ -1,7 +1,7 @@
 // The water: the park's pond (the user's F9 spot), the river from its west bank, the bay from the port's
 // seawall; by day and at night. node debug-shots/water.mjs <out dir> [name] [query]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/water';
 const name = process.argv[3] ?? 'shot';
@@ -9,7 +9,7 @@ const extra = process.argv[4] ? `&${process.argv[4]}` : '';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 // [label, x, y, z, yaw, pitch]
 const SPOTS = [
   ['pond', 2654.9, 1.7, 1459.7, 46, -8],

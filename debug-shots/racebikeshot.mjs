@@ -1,8 +1,8 @@
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu'] });
 const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
 await page.goto(`${server.resolvedUrls.local[0]}race.html?venue=kurokami&mode=free&ride=cruiser`);
 await page.waitForFunction(() => window.__race && window.__race.ride()?.rig, null, { timeout: 60000, polling: 250 });

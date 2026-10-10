@@ -5,7 +5,7 @@
 // The looks are turns from the spawn's own view (degrees; left and up positive). Useful in the query: clock=21:00,
 // weather=rain, season=winter, windowFolk=3 (more people), windowVice=4, vignette=<scene id or cell> (that scene in
 // every furnished room: ids are on the contact sheets, debug-shots/windowsheet.mjs).
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/windowpeople';
@@ -16,7 +16,7 @@ const looks = (process.argv[5] ?? '0:18').split(',').map((l) => l.split(':').map
 // (No file watching: other edits to the tree would reload the page mid-shot.)
 const server = await shotServer({ server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 for (const spawn of spawns) {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));

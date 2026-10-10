@@ -1,5 +1,5 @@
 // Finds tarpaulins, parol strings and stop signs near a point in Manila and looks at each. node debug-shots/manilatarp.mjs <out> [x,z] [kinds]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/manila_more/tarp';
@@ -8,7 +8,7 @@ const [cx, cz] = (process.argv[3] ?? '800,1300').split(',').map(Number);
 const kinds = (process.argv[4] ?? 'tarp,parolline,jeepstop').split(',');
 const server = await shotServer({ server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e.stack ?? e).slice(0, 600)));
 await page.goto(`${server.resolvedUrls.local[0]}?city=manila&debug=1&diag=1&clock=${process.env.CLOCK ?? '15:00'}&weather=clear&season=summer&cam=${cx},1.7,${cz},0,0`, { timeout: 300000 });

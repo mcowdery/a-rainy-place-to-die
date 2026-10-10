@@ -1,7 +1,7 @@
 // Smoke test of the shared build (npm run build:share): serves dist-share/ as a plain static site, loads the city in
 // a fresh browser profile, and checks the console, the things-to-try panel and "Take me there".
 //   node debug-shots/playtest_smoke.mjs [out dir]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { createServer } from 'node:http';
 import { createReadStream, existsSync, statSync, mkdirSync } from 'node:fs';
 import { join, extname } from 'node:path';
@@ -20,7 +20,7 @@ const server = createServer((req, res) => {
   createReadStream(f).pipe(res);
 }).listen(0);
 const base = `http://localhost:${server.address().port}`;
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 const problems = [];
 page.on('pageerror', (e) => problems.push('PAGEERROR ' + e));

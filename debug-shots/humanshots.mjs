@@ -1,14 +1,14 @@
 // The MakeHuman test page (humans.html): the street and each line-up as built (textured), the same converted for the
 // mob's material in its colours and all black, then first person on the street against a group drawn from the crowd.
 //   node debug-shots/humanshots.mjs <out dir> [query, e.g. "light=night&crowd=30"] [only the views matching this, e.g. "made by hand|: face"]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2];
 const extra = process.argv[3] ? `&${process.argv[3]}` : '';
 const only = process.argv[4] ? new RegExp(process.argv[4]) : null;
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); });

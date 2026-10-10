@@ -2,13 +2,13 @@
 // hitches over 33 ms, draw calls, triangles and the number of shader programs, every few seconds: first on the street
 // with no job (the baseline), then through the run under the auto drive. exclusive: it measures frame times.
 // node debug-shots/longrunperf.mjs [seconds] [query]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const secs = Number(process.argv[2] ?? 60);
 const extra = process.argv[3] ? `&${process.argv[3]}` : '';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' }, { gpu: 'exclusive' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.addInitScript(() => localStorage.setItem('citypop.driveView', 'chase'));

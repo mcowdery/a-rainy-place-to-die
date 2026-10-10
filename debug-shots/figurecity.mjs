@@ -2,7 +2,7 @@
 // and pictures of it crossing in front of where you stand, a few moments apart.
 //   node debug-shots/figurecity.mjs <out dir> <the figure's .glb, from the repository's root> [time: day|dusk|night] [shots: 4]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2];
 const file = process.argv[3];
@@ -15,7 +15,7 @@ if (!out || !file) {
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e).slice(0, 300)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404|GPU stall|WebGL/.test(m.text())) console.log('ERROR', m.text().slice(0, 300)); });

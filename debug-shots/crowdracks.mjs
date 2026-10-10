@@ -1,7 +1,7 @@
 // The crowd at Yasuichi's racks (the F9 snapshot 2026-10-03_00-16-20: two people standing inside a rack).
 // node debug-shots/crowdracks.mjs <out dir> <name> [before]   ('before': the crowd built without the set pieces' fixtures)
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/crowdracks';
 const name = process.argv[3] ?? 'after';
@@ -10,7 +10,7 @@ mkdirSync(out, { recursive: true });
 const plugins = before ? [{ name: 'crowd-before', enforce: 'pre', transform: (code, id) => (id.includes('district/chunkBuild.ts') ? code.replace('solid.stamps, solid.fixtures', 'solid.stamps, []') : null) }] : [];
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent', plugins });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const views = [['snap', '3823.8,1.7,1518.7,-131,-4'], ['front', '3819,1.7,1525.5,-50,-6'], ['west', '3806.5,1.7,1522,-80,-6']];
 for (const [view, cam] of views) {
   const page = await browser.newPage({ viewport: { width: 1155, height: 896 } });

@@ -1,10 +1,10 @@
 // Does figures.html show a different figure for each one picked? Opens it, picks three and photographs each.
 //   node debug-shots/figures_switch.mjs <out prefix>
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e).slice(0, 300)));
 await page.goto(`${server.resolvedUrls.local[0]}figures.html?light=studio&dist=3`);

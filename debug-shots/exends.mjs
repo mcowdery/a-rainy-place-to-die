@@ -1,7 +1,7 @@
 // The expressway's trimmed ends (expressway.yaml `trim`): the airport branch at Hanejima, the Shiomi branch, the
 // Wangan's west end. node debug-shots/exends.mjs [out dir] ['{"name":"x,y,z,yaw,pitch"}'] [query]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/exends';
 const shots = JSON.parse(
@@ -12,7 +12,7 @@ const query = process.argv[4] ?? 'clock=09:00&weather=clear';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 800 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));

@@ -3,7 +3,7 @@
 // frame dearer than walking in the same place). Runs exclusive (it times frames).
 //   node debug-shots/drivecpu.mjs [seconds] [mode] [node id] [query]
 //   node debug-shots/drivecpu.mjs 30 traffic asagiri_station.platform "weather=clear"
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const secs = Number(process.argv[2] ?? 30);
 const mode = process.argv[3] ?? 'traffic';
@@ -11,7 +11,7 @@ const dest = process.argv[4] ?? 'asagiri_station.platform';
 const extra = process.argv[5] ? `&${process.argv[5]}` : '';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' }, { gpu: 'exclusive' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=city_garage.front&car=home&clock=22:30&res=100&perflog=0${extra}`, { timeout: 180000 });

@@ -2,7 +2,7 @@
 //   node debug-shots/part_view.mjs <the .glb> <out prefix> "<name>:<x>,<y>,<z>:<yaw>:<pitch>:<distance>" ...
 // The target is in the file's own (glTF, +y up) frame; yaw is the camera's turn round it from +z (0: from the picture's side,
 // 1.5708: from +x), pitch up from level, distance in the file's units. SIZE env: the still's side (700); CLIPY env: hide everything above that height (the file's y). Writes <out>_<name>.png.
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, shotServer } from '../scripts/shotServer.mjs';
@@ -40,7 +40,7 @@ window.__shot = (x, y, z, yaw, pitch, dist) => {
 </script></body>`);
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: size, height: size } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.goto(`${server.resolvedUrls.local[0]}debug-shots/${page_name}`);

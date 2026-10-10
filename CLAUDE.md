@@ -50,6 +50,7 @@ Everything else about the city, racing, the cast, art, sound and story is writte
 - [story.md](.claude/rules/story.md): playing VN exports, the node mapping, the phone and its messenger, wallpapers, saves, writing a scene, the story guide.
 - [editions.md](.claude/rules/editions.md): the three builds, what each may contain, overlays from adult/, the demo's hidden art.
 - [licences.md](.claude/rules/licences.md): which licences an outside asset may have, what each asks, the credits list (`CREDITS.md`), what's in it so far.
+- [pod.md](.claude/rules/pod.md): the RunPod GPU dev pod for shots, benchmarks and Blender: starting, syncing and stopping it, its volume, the shared browser launcher (`scripts/launchBrowser.mjs`, which every script uses), the idle stop.
 
 Keeping them:
 

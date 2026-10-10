@@ -2,7 +2,7 @@
 // the auto-pilot and logs every change in the renderer's program list, with when, where and what the program is.
 // Runs exclusive. node debug-shots/driveprograms.mjs [seconds] [mode] [node id] [query]
 //   node debug-shots/driveprograms.mjs 60 fast kaburo_crossing.view "cam=2681,1.7,1739,3,0"
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const secs = Number(process.argv[2] ?? 60);
 const mode = process.argv[3] ?? 'fast';
@@ -10,7 +10,7 @@ const dest = process.argv[4] ?? 'kaburo_crossing.view';
 const extra = process.argv[5] ? `&${process.argv[5]}` : '';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' }, { gpu: 'exclusive' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=city_garage.front&car=home&clock=22:30&res=100&perflog=0${extra}`, { timeout: 180000 });

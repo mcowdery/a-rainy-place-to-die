@@ -1,5 +1,5 @@
 // A day's light from the observatory, facing the sun's side: node debug-shots/dayshots.mjs [times] [extra query] [tag]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const times = (process.argv[2] ?? '06:00,07:30,12:00,17:20,18:10,18:40,19:20,22:00').split(',');
 const extra = process.argv[3] ?? '';
@@ -7,7 +7,7 @@ const tag = process.argv[4] ?? '';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   page.on('pageerror', (e) => console.log('pageerror', String(e)));

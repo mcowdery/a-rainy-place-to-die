@@ -5,7 +5,7 @@
 //   (Paths from the repository's root, no leading slash.)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { ROOT, shotServer } from '../scripts/shotServer.mjs';
 const [glb, cameraFile, out] = process.argv.slice(2);
 if (!glb || !cameraFile || !out) {
@@ -42,7 +42,7 @@ window.__ready = (async () => {
 );
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: camera.width, height: camera.height } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.goto(`${server.resolvedUrls.local[0]}debug-shots/_camerarender.html`);

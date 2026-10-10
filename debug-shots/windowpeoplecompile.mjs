@@ -5,13 +5,13 @@
 // what: `block` (the default: the whole block against none of it) or `table` (the block as it is against the block
 // with its per-scene table read replaced by a constant: what the table costs), or `shady` (the storefronts' shady
 // rooms against none).
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const rounds = Number(process.argv[2] ?? 3);
 const what = process.argv[3] ?? 'block';
 const server = await shotServer({ server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' }, { gpu: 'exclusive' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 const t0 = Date.now();

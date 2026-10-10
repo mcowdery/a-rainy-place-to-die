@@ -7,7 +7,7 @@
 // (barefoot and heeled side by side, standing, kneeling and lying), `ankles` (a foot pointed, flexed, turned and
 // tipped, on a kneeling and a lying figure, close up), `wrists` (a hand bent forward, back, to each side and
 // turned, facing and in profile, on a man, a woman and a long-sleeved suit, close up).
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync, writeFileSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/bodysheet';
@@ -120,7 +120,7 @@ for (const who of ['nude_man', 'nude']) {
 
 const server = await shotServer({ mode, server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404|favicon/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); });

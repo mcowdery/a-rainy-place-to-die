@@ -2,7 +2,7 @@
 // His eyes swing round his neck (race/driveCam.ts turnedEye), so the view never looks into his own collar.
 // node debug-shots/lookback.mjs <out dir> [name] [outfit]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/lookback';
 const name = process.argv[3] ?? 'shot';
@@ -10,7 +10,7 @@ const outfit = process.argv[4] ?? 'suit_cream';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 2027, height: 774 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.addInitScript((outfit) => {
