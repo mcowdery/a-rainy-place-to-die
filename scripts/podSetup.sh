@@ -11,6 +11,7 @@
 # Env: REPO_URL (default: the origin on GitHub), BRANCH, WORKDIR (default /workspace), BLENDER_VERSION,
 #      IDLE_MIN / MAX_HOURS (the watchdog, see podIdleStop.sh), NO_WATCHDOG=1.
 set -euo pipefail
+rm -f /tmp/pod-boot-done   # `pod.mjs run` waits for this: the boot step below has finished
 
 BOOT=0; [ "${1:-}" = "--boot" ] && BOOT=1
 REPO_URL="${REPO_URL:-https://github.com/mcowdery/a-rainy-place-to-die.git}"
@@ -104,4 +105,5 @@ if [ -z "${NO_WATCHDOG:-}" ] && [ -f "$REPO_DIR/scripts/podIdleStop.sh" ]; then
 fi
 
 echo
+touch /tmp/pod-boot-done
 echo "Done. Next: cd $REPO_DIR && node scripts/gpuCheck.mjs"

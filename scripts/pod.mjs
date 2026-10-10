@@ -19,11 +19,11 @@
 // The pod stops itself when idle (scripts/podIdleStop.sh); `stop` is for when you know you're done.
 // The RunPod key comes from RUNPOD_API_KEY or the Trame studio's .env (where scripts/props/mesh_endpoint.mjs reads it).
 // POD_NAME (default `rainy-place`, the pod's name starts with it), POD_KEY (default ~/.ssh/runpod_ed25519).
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync, unlinkSync, openSync, readdirSync } from 'node:fs';
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { homedir, tmpdir } from 'node:os';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -86,13 +86,82 @@ async function createPod() {
   return pod;
 }
 const sshArgs = (p) => ['-i', KEY, '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=15', '-p', String(p.portMappings?.['22']), `root@${p.publicIp}`];
+const ready = (p) => sshOk(p) && spawnSync('ssh', [...sshArgs(p), 'test -f /tmp/pod-boot-done'], { stdio: 'ignore' }).status === 0; // the boot step ran
 const sshOk = (p) => p.desiredStatus === 'RUNNING' && p.publicIp && p.portMappings?.['22'] && spawnSync('ssh', [...sshArgs(p), 'true'], { stdio: 'ignore' }).status === 0;
 const ssh = (p, cmd) => spawnSync('ssh', [...sshArgs(p), ...(cmd ? [cmd] : [])], { stdio: 'inherit' }).status;
-/** The pod, only if it is up and answering; otherwise says so and exits (the user starts it, never an agent). */
-async function upPod() {
-  const p = await findPod();
-  if (!sshOk(p)) fail(`The pod is ${p.desiredStatus === 'RUNNING' ? 'starting, not answering SSH yet' : p.desiredStatus}. It bills while up, so the user starts it (node scripts/pod.mjs start); run this locally instead.`, 3);
-  return p;
+// ---- starting it -------------------------------------------------------------------------------------------------
+// One start at a time, whoever asks: the user, or an agent whose `run` found the pod stopped. A lock file holds it.
+const SYNC_DIR = join(homedir(), '.pod-sync');
+const LOCK = join(SYNC_DIR, 'start.lock');
+const lockAge = () => (existsSync(LOCK) ? Date.now() - statSync(LOCK).mtimeMs : Infinity);
+/** Starts (or makes) the pod, boots it, returns it. Throws if another start is already under way. */
+async function startPod() {
+  mkdirSync(SYNC_DIR, { recursive: true });
+  if (lockAge() < 15 * 60_000) throw new Error('A start is already under way (started less than 15 minutes ago).');
+  writeFileSync(LOCK, String(process.pid));
+  try {
+
+    const p0 = await findPod().catch(() => null);
+    let replaced = false;
+    if (!p0) { await createPod(); replaced = true; }
+    else if (p0.desiredStatus !== 'RUNNING') {
+      try { await api(`pods/${p0.id}/start`, 'POST'); }
+      catch (e) {
+        if (!/not enough free GPUs|no longer any|not available/i.test(e.message)) throw e;
+        console.log("The stopped pod can't restart (its machine has no free GPU): making a new one on the same volume.");
+        await createPod(); replaced = true;
+      }
+    }
+    const p = await waitReady();
+    if (replaced) { // the old stopped pod only holds a wiped container disk and would keep billing for it
+      for (const old of (await api('pods')).filter((x) => x.name?.startsWith(NAME) && x.id !== p.id && x.desiredStatus !== 'RUNNING')) {
+        await api(`pods/${old.id}`, 'DELETE'); console.log(`Deleted the stopped pod ${old.name} (${old.id}).`);
+      }
+    }
+    writeSshConfig(p);
+    console.log(`Up: ${p.machine?.gpuTypeId ?? ''} at ${p.publicIp}:${p.portMappings['22']} (${p.costPerHr}/hr). Setting up...`);
+    const src = readFileSync(join(root, 'scripts', 'podSetup.sh'), 'utf8').replace(/\r\n/g, '\n');
+    let r; // a fresh pod's sshd sometimes drops the first long session (ssh exits 255): try again
+  for (let attempt = 0; attempt < 3; attempt++) {
+    r = spawnSync('ssh', [...sshArgs(p), 'bash -s -- --boot'], { input: src, stdio: ['pipe', 'inherit', 'inherit'] });
+    if (r.status !== 255) break;
+    console.log('SSH dropped during the boot step: retrying...');
+    await new Promise((res) => setTimeout(res, 15_000));
+  }
+    console.log(r.status === 0 ? '\nReady. Run things on it with: node scripts/pod.mjs run -- <command>   (VS Code: Remote-SSH -> rainy-pod)' : `\npodSetup --boot exited ${r.status}`);
+  } finally { try { unlinkSync(LOCK); } catch {} }
+}
+// Each `run` writes a small file here while it works, so `status --json` (and the dashboard) can say what is on the pod.
+const RUNS = join(SYNC_DIR, 'runs');
+function listRuns() {
+  if (!existsSync(RUNS)) return [];
+  const out = [];
+  for (const f of readdirSync(RUNS)) {
+    let r; try { r = JSON.parse(readFileSync(join(RUNS, f), 'utf8')); } catch { continue; }
+    let alive = true; try { process.kill(r.pid, 0); } catch { alive = false; }
+    if (alive) out.push(r); else { try { unlinkSync(join(RUNS, f)); } catch {} }
+  }
+  return out;
+}
+/** Does an agent's `run` start a stopped pod by itself? Yes unless POD_AUTOSTART=0 or the file ~/.pod-sync/autostart-off exists. */
+const autostart = () => process.env.POD_AUTOSTART !== '0' && !existsSync(join(SYNC_DIR, 'autostart-off'));
+/** The pod, once it is up, booted and answering. Stopped: it is started (autostart) and the caller waits if it asked to (`wait`), else gets exit code 3 and runs locally meanwhile. */
+async function upPod({ wait = false } = {}) {
+  let p = await findPod();
+  if (ready(p)) return p;
+  const starting = lockAge() < 15 * 60_000 || p.desiredStatus === 'RUNNING';
+  if (!starting && !autostart()) fail('The pod is stopped and autostart is off (it bills while up): the user starts it with node scripts/pod.mjs start. Run this locally instead.', 3);
+  if (wait) { // block until it is up: start it here, or wait for the start someone else began
+    if (!starting) { console.log('The pod is stopped: starting it (about 2-4 minutes)...'); return await startPod(); }
+    for (let i = 0; i < 90; i++) { await new Promise((r) => setTimeout(r, 10_000)); p = await findPod(); if (ready(p)) return p; }
+    fail('The pod did not become ready in 15 minutes.', 3);
+  }
+  if (!starting) { // start it in the background and let this run go local; the next one finds it up
+    const out = join(SYNC_DIR, 'start.log');
+    mkdirSync(SYNC_DIR, { recursive: true });
+    spawn(process.execPath, [fileURLToPath(import.meta.url), 'start'], { detached: true, stdio: ['ignore', openSync(out, 'a'), openSync(out, 'a')], windowsHide: true }).unref();
+  }
+  fail(`The pod is ${starting ? 'starting' : 'stopped: starting it now'} (about 2-4 minutes, log: ~/.pod-sync/start.log). Run this locally meanwhile, or retry with run --wait.`, 3);
 }
 
 /** Where this checkout lives on the pod: the main one, or a folder of its own for a worktree. */
@@ -163,27 +232,33 @@ async function syncTree(p, { full = false } = {}) {
 
 /** Runs a command on the pod from this checkout's folder there, then pulls back the files it wrote. */
 async function runOnPod(argv) {
-  const flags = { sync: true, pull: true, full: false, out: [] };
+  const flags = { sync: true, pull: true, full: false, wait: false, out: [] };
   let i = 0;
   for (; i < argv.length && argv[i] !== '--'; i++) {
     const a = argv[i];
     if (a === '--no-sync') flags.sync = false;
     else if (a === '--no-pull') flags.pull = false;
     else if (a === '--full') flags.full = true;
+    else if (a === '--wait') flags.wait = true;
     else if (a === '--out') flags.out.push(argv[++i]);
     else fail(`unknown flag ${a}`);
   }
   const command = argv.slice(i + 1);
-  if (!command.length) fail('usage: node scripts/pod.mjs run [--no-sync] [--no-pull] [--full] [--out <dir>] -- <command...>');
+  if (!command.length) fail('usage: node scripts/pod.mjs run [--wait] [--no-sync] [--no-pull] [--full] [--out <dir>] -- <command...>');
   for (const o of flags.out) if (!o || o.startsWith('/') || o.includes('..') || /^[a-z]:/i.test(o)) fail(`--out takes a folder inside the repo, got ${o}`);
 
-  const p = await upPod();
+  const p = await upPod({ wait: flags.wait });
   if (flags.sync) await syncTree(p, { full: flags.full });
   const dir = remoteDir();
   const marker = `/workspace/.podrun-${process.pid}-${Date.now()}`;
   const env = 'export PLAYWRIGHT_BROWSERS_PATH=/workspace/.playwright BLENDER=/workspace/blender/blender';
   const script = `cd ${q(dir)} && ${env} && touch -d '2 seconds ago' ${marker}; ${command.map(q).join(' ')}`;
-  const status = spawnSync('ssh', [...sshArgs(p), `bash -c ${q(script)}`], { stdio: 'inherit' }).status ?? 1;
+  mkdirSync(RUNS, { recursive: true });
+  const runFile = join(RUNS, `${process.pid}.json`);
+  writeFileSync(runFile, JSON.stringify({ pid: process.pid, checkout: root, command: command.join(' ').slice(0, 160), started: Date.now() }));
+  let status;
+  try { status = spawnSync('ssh', [...sshArgs(p), `bash -c ${q(script)}`], { stdio: 'inherit' }).status ?? 1; }
+  finally { try { unlinkSync(runFile); } catch {} }
 
   if (flags.pull) {
     const roots = [...PULL_ROOTS, ...flags.out];
@@ -202,38 +277,57 @@ async function runOnPod(argv) {
   return status;
 }
 
+const money = (n) => '$' + (Math.round(n * 100) / 100).toFixed(2);
+const span = (ms) => { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+/**
+ * What `status --json` prints, the shape agent-notify's Resources tab reads: { state, title, fields: [{label, value}],
+ * actions: [ids that make sense now], note? }. Only the RunPod API is asked (about a second), plus one short SSH
+ * check that the boot step finished when the pod is up.
+ */
+async function dashboardStatus() {
+  const title = 'GPU pod';
+  const auto = autostart();
+  const autoAction = auto ? 'autostart-off' : 'autostart-on';
+  const runs = listRuns();
+  const lock = lockAge() < 15 * 60_000;
+  let p = null;
+  try { p = await findPod(); } catch (e) { if (!/No pod named/.test(e.message)) return { state: 'error', title, fields: [], actions: ['start'], note: e.message.slice(0, 200) }; }
+  const fields = [];
+  if (p?.machine?.gpuTypeId) fields.push({ label: 'GPU', value: p.machine.gpuTypeId.replace('NVIDIA ', '') });
+  fields.push({ label: 'Agents start it', value: auto ? 'yes: a heavy run starts a stopped pod' : 'no: only you start it' });
+  if (!p) return { state: lock ? 'starting' : 'stopped', title, fields, actions: lock ? [] : ['start', autoAction], note: 'No pod yet: Start makes one on the volume.' };
+  if (p.desiredStatus === 'RUNNING') {
+    const since = Date.parse(String(p.lastStartedAt ?? '').replace(' ', 'T').replace(' +0000 UTC', 'Z'));
+    const up = Number.isFinite(since) ? Date.now() - since : null;
+    fields.unshift({ label: 'Cost', value: `${money(p.costPerHr)}/hr${up !== null ? `, about ${money((up / 3600000) * p.costPerHr)} this run` : ''}` });
+    if (up !== null) fields.push({ label: 'Up for', value: span(up) });
+    const onIt = runs.map((r) => `${r.command} (${span(Date.now() - r.started)}, ${basename(r.checkout)})`).join('\n');
+    fields.push({ label: 'On it now', value: onIt || 'nothing from agents' });
+    const ready = spawnSync('ssh', [...sshArgs(p), 'test -f /tmp/pod-boot-done'], { stdio: 'ignore', timeout: 12000 }).status === 0;
+    return { state: ready ? 'running' : 'starting', title, fields, actions: ready ? ['stop', autoAction] : [], note: ready ? 'Stops itself after 45 idle minutes.' : 'Booting: installing its libraries (about a minute).' };
+  }
+  fields.unshift({ label: 'Cost', value: lock ? 'starting' : 'nothing while stopped (only the 60 GB volume)' });
+  return { state: lock ? 'starting' : 'stopped', title, fields, actions: lock ? [] : ['start', autoAction], note: lock ? 'Starting (2-4 minutes, up to 11 if its host must be replaced).' : undefined };
+}
+
 const [cmd, ...rest] = process.argv.slice(2);
 // Exit by setting exitCode, never process.exit: on Windows that asserts in libuv while fetch is still closing.
 async function main() {
-if (cmd === 'status') {
+if (cmd === 'status' && rest.includes('--json')) {
+  console.log(JSON.stringify(await dashboardStatus()));
+} else if (cmd === 'autostart') {
+  mkdirSync(SYNC_DIR, { recursive: true });
+  const off = join(SYNC_DIR, 'autostart-off');
+  if (rest[0] === 'on') { try { unlinkSync(off); } catch {} } else if (rest[0] === 'off') writeFileSync(off, 'agents do not start the pod while this file exists');
+  console.log(`autostart for agents: ${autostart() ? 'on' : 'off'}`);
+} else if (cmd === 'status') {
   const p = await findPod();
   console.log(JSON.stringify({ id: p.id, name: p.name, status: p.desiredStatus, gpu: p.machine?.gpuTypeId, cost: p.costPerHr, ip: p.publicIp, ssh: p.portMappings?.['22'], folder: remoteDir() }));
 } else if (cmd === 'running') {
   const p = await findPod().catch(() => null);
-  return p && sshOk(p) ? 0 : 1;
+  return p && ready(p) ? 0 : 1;
 } else if (cmd === 'start') {
-  const p0 = await findPod().catch(() => null);
-  let replaced = false;
-  if (!p0) { await createPod(); replaced = true; }
-  else if (p0.desiredStatus !== 'RUNNING') {
-    try { await api(`pods/${p0.id}/start`, 'POST'); }
-    catch (e) {
-      if (!/not enough free GPUs|no longer any|not available/i.test(e.message)) throw e;
-      console.log("The stopped pod can't restart (its machine has no free GPU): making a new one on the same volume.");
-      await createPod(); replaced = true;
-    }
-  }
-  const p = await waitReady();
-  if (replaced) { // the old stopped pod only holds a wiped container disk and would keep billing for it
-    for (const old of (await api('pods')).filter((x) => x.name?.startsWith(NAME) && x.id !== p.id && x.desiredStatus !== 'RUNNING')) {
-      await api(`pods/${old.id}`, 'DELETE'); console.log(`Deleted the stopped pod ${old.name} (${old.id}).`);
-    }
-  }
-  writeSshConfig(p);
-  console.log(`Up: ${p.machine?.gpuTypeId ?? ''} at ${p.publicIp}:${p.portMappings['22']} ($${p.costPerHr}/hr). Setting up...`);
-  const src = readFileSync(join(root, 'scripts', 'podSetup.sh'), 'utf8').replace(/\r\n/g, '\n');
-  const r = spawnSync('ssh', [...sshArgs(p), 'bash -s -- --boot'], { input: src, stdio: ['pipe', 'inherit', 'inherit'] });
-  console.log(r.status === 0 ? '\nReady. Run things on it with: node scripts/pod.mjs run -- <command>   (VS Code: Remote-SSH -> rainy-pod)' : `\npodSetup --boot exited ${r.status}`);
+  await startPod();
 } else if (cmd === 'stop') {
   const p = await findPod();
   await api(`pods/${p.id}/stop`, 'POST');
