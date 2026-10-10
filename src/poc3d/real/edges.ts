@@ -12,6 +12,8 @@ import type { Terrain } from '../district/terrain';
 
 const BLOCK = 6;
 const SHOW = 1700;
+/** A tropical city's jungle blobs are 20-face beyond this distance from a block (80 within): its 40 a cell is ~1.1M triangles in view. */
+const BLOB_LOD = 450;
 
 /** A deterministic hash in [0, 1). */
 function rnd(a: number, b: number, c: number): number {
@@ -130,7 +132,15 @@ function snowy(m: THREE.MeshStandardMaterial, snow: { value: number }): void {
   };
 }
 
-export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, built: (mx: number, my: number) => boolean, tropical = false): Edges {
+export function buildEdges(
+  macro: MacroMap,
+  cell: number,
+  terrain: Terrain,
+  built: (mx: number, my: number) => boolean,
+  tropical = false,
+  /** Whether a footprint of this radius at (x, z) would stand on a road the woods must keep off (a tunnel's). */
+  blocked: (x: number, z: number, r: number) => boolean = () => false,
+): Edges {
   const group = new THREE.Group();
   group.name = 'edges';
   const hills = terrain.hills;
@@ -146,7 +156,8 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
   snowy(houseMat, snow);
   const windowGeo = new THREE.PlaneGeometry(1.3, 0.9);
   const windowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.15, 0.65), fog: true });
-  const blocks: { g: THREE.Group; x: number; z: number; windows: THREE.InstancedMesh | null }[] = [];
+  const blocks: { g: THREE.Group; x: number; z: number; windows: THREE.InstancedMesh | null; lod: { hi: THREE.InstancedMesh; lo: THREE.InstancedMesh; x0: number; z0: number; x1: number; z1: number } | null }[] = [];
+  const treeLo = tropical ? new THREE.IcosahedronGeometry(1, 0) : null;
   const forests: { im: THREE.InstancedMesh; base: number[]; x: number[] }[] = [];
   // (A tropical city's hills are jungle: bright mixed greens, palms and banana clumps among the canopy.)
   const TREES = tropical ? [0x2f6a22, 0x3e8a2c, 0x4a9a34, 0x357a28, 0x5aa83a, 0x2a5a1e] : [0x28361f, 0x2f4024, 0x243020, 0x34452a, 0x2c3a1e];
@@ -223,9 +234,15 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
           }
         }
       }
+      // (Nothing stands in a tunnel road's way: a tree in the middle of the carriageway, a house against its wall.)
+      const keep = <T extends { x: number; z: number }>(list: T[], r: (t: T) => number): void => void list.splice(0, list.length, ...list.filter((t) => !blocked(t.x, t.z, r(t))));
+      keep(trees, (t) => t.r + 3);
+      keep(plants, () => 5);
+      keep(houses, (h) => Math.max(h.w, h.d) / 2 + 4);
       if (!trees.length && !houses.length) continue;
       const g = new THREE.Group();
       let windows: THREE.InstancedMesh | null = null;
+      let lod: (typeof blocks)[number]['lod'] = null;
       if (trees.length) {
         const im = new THREE.InstancedMesh(treeGeo, treeMat, trees.length);
         trees.forEach((t, i) => {
@@ -239,6 +256,17 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
         im.receiveShadow = true;
         g.add(im);
         forests.push({ im, base: trees.map((t) => t.col), x: trees.map((t) => t.x * 31 + t.z) });
+        if (treeLo) {
+          // The far version shares the matrices and colours (so the seasons colour both).
+          const lo = new THREE.InstancedMesh(treeLo, treeMat, trees.length);
+          lo.instanceMatrix = im.instanceMatrix;
+          lo.instanceColor = im.instanceColor;
+          lo.boundingSphere = im.boundingSphere;
+          lo.receiveShadow = true;
+          lo.visible = false;
+          g.add(lo);
+          lod = { hi: im, lo, x0: bx * cell, z0: by * cell, x1: (bx + BLOCK) * cell, z1: (by + BLOCK) * cell };
+        }
       }
       for (const palm of [true, false]) {
         const list = plants.filter((p) => p.palm === palm);
@@ -289,7 +317,7 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
         }
       }
       group.add(g);
-      blocks.push({ g, x: (bx + BLOCK / 2) * cell, z: (by + BLOCK / 2) * cell, windows });
+      blocks.push({ g, x: (bx + BLOCK / 2) * cell, z: (by + BLOCK / 2) * cell, windows, lod });
     }
   }
   const reach = SHOW + (BLOCK * cell) / 2;
@@ -318,6 +346,13 @@ export function buildEdges(macro: MacroMap, cell: number, terrain: Terrain, buil
       for (const b of blocks) {
         b.g.visible = Math.hypot(b.x - camera.x, b.z - camera.z) < far;
         if (b.windows) b.windows.visible = lamps > 0.3;
+        if (b.lod && b.g.visible) {
+          const dx = Math.max(b.lod.x0 - camera.x, 0, camera.x - b.lod.x1);
+          const dz = Math.max(b.lod.z0 - camera.z, 0, camera.z - b.lod.z1);
+          const near = Math.hypot(dx, dz) < BLOB_LOD;
+          b.lod.hi.visible = near;
+          b.lod.lo.visible = !near;
+        }
       }
     },
   };

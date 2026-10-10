@@ -660,6 +660,8 @@ function wakeGeometry(): THREE.BufferGeometry {
 }
 
 const NEAR = 700;
+/** Craft farther than this from the camera aren't drawn (the fog is full by ~1 km; they were all drawn, ~170k triangles, wherever you stood). */
+const DRAW = 1700;
 const FAR_EVERY = 20;
 
 export function buildBoats(city: THREE.Material): Boats {
@@ -694,6 +696,9 @@ export function buildBoats(city: THREE.Material): Boats {
   wakes.renderOrder = 1;
   group.add(wakes);
 
+  // Each craft's last matrix; the meshes get the ones in range, packed, each frame (`pack`).
+  const mats = new Float32Array(crafts.length * 16);
+  const wakeMats = new Float32Array(Math.max(1, movers.length) * 16);
   const pose = { x: 0, z: 0, yaw: 0 };
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
@@ -719,7 +724,7 @@ export function buildBoats(city: THREE.Material): Boats {
     q.setFromEuler(e);
     p.set(pose.x, SEA_LEVEL + 0.02 + heave, pose.z);
     m4.compose(p, q, one);
-    meshes.get(c.model)!.setMatrixAt(slot[ci], m4);
+    m4.toArray(mats, ci * 16);
     if (c.wake > 0 && k >= 0) {
       const len = c.wake;
       const stern = len / 2;
@@ -729,7 +734,7 @@ export function buildBoats(city: THREE.Material): Boats {
       const sp = Math.min(1, c.speed / 4);
       ws.set(len * (0.5 + 0.4 * sp), 1, len * (0.6 + 0.8 * sp));
       m4.compose(p, q, ws);
-      wakes.setMatrixAt(k, m4);
+      m4.toArray(wakeMats, k * 16);
     }
   };
 
@@ -745,9 +750,34 @@ export function buildBoats(city: THREE.Material): Boats {
     lastZ[ci] = pose.z;
   };
   for (let ci = 0; ci < crafts.length; ci++) placeCraft(ci);
-  for (const im of meshes.values()) im.instanceMatrix.needsUpdate = true;
-  wakes.count = movers.length;
-  wakes.instanceMatrix.needsUpdate = true;
+  // The craft in range of the camera, packed to the front of their mesh's instances (the wakes follow their craft).
+  const modelOf = crafts.map((c) => meshes.get(c.model)!);
+  const used = new Map<THREE.InstancedMesh, number>();
+  const pack = (camera: THREE.Vector3): void => {
+    for (const im of meshes.values()) used.set(im, 0);
+    let nwk = 0;
+    for (let ci = 0; ci < crafts.length; ci++) {
+      if (Math.hypot(lastX[ci] - camera.x, lastZ[ci] - camera.z) > DRAW) continue;
+      const im = modelOf[ci];
+      const n = used.get(im)!;
+      (im.instanceMatrix.array as Float32Array).set(mats.subarray(ci * 16, ci * 16 + 16), n * 16);
+      used.set(im, n + 1);
+    }
+    for (const [im, n] of used) {
+      im.count = n;
+      im.instanceMatrix.needsUpdate = n > 0;
+    }
+    for (let ci = 0; ci < crafts.length; ci++) {
+      const k = wakeOf[ci];
+      if (k < 0 || Math.hypot(lastX[ci] - camera.x, lastZ[ci] - camera.z) > DRAW) continue;
+      wakes.instanceMatrix.array.set(wakeMats.subarray(k * 16, k * 16 + 16), nwk * 16);
+      nwk++;
+    }
+    wakes.count = nwk;
+    wakes.instanceMatrix.needsUpdate = nwk > 0;
+  };
+
+  pack(new THREE.Vector3(1e9, 0, 1e9));
 
   // The region the fleet lives in: nothing to do while the camera is far from all of it.
   const BOX = { x0: 300, x1: 5300, z0: 1100, z1: 4600 };
@@ -765,8 +795,7 @@ export function buildBoats(city: THREE.Material): Boats {
         const near = Math.hypot(lastX[ci] - camera.x, lastZ[ci] - camera.z) < NEAR;
         if (near || (frame + ci) % FAR_EVERY === 0) placeCraft(ci);
       }
-      for (const im of meshes.values()) im.instanceMatrix.needsUpdate = true;
-      wakes.instanceMatrix.needsUpdate = true;
+      pack(camera);
     },
   };
 }
