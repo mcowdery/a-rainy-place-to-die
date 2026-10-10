@@ -9,6 +9,7 @@
 //       --no-sync      skip the sync (nothing changed since the last run)      --full   resend every file, not just the changed ones
 //       --no-pull      leave the new files on the pod                          --out <dir>   also pull new files under <dir> (assets/humans, ...)
 //   node scripts/pod.mjs sync [--full]      the sync alone
+//   node scripts/pod.mjs play [stop]        the game in a GPU browser on the pod, streamed to a tab here (see podPlay.sh)
 //   node scripts/pod.mjs ssh [cmd]          a shell on the pod, or one command
 //   node scripts/pod.mjs pull <remote-path> [local-dir]
 //   node scripts/pod.mjs stop
@@ -320,6 +321,31 @@ async function dashboardStatus() {
   return { state: lock ? 'starting' : 'stopped', title, fields, actions: lock ? [] : ['start', autoAction], note: lock ? 'Starting (2-4 minutes, up to 11 if its host must be replaced).' : undefined };
 }
 
+/**
+ * `play`: the game in a GPU browser on the pod, streamed to a tab on this machine (scripts/podPlay.sh sets up the
+ * desktop). Starts the pod if it's stopped, syncs this checkout so the pod serves what you have here, then holds an
+ * SSH tunnel open (Ctrl+C closes it; the desktop keeps running on the pod until `play stop` or the idle stop).
+ */
+async function playCommand(args) {
+  const p = await upPod({ wait: true });
+  const script = readFileSync(join(root, 'scripts', 'podPlay.sh'), 'utf8').replace(/\r\n/g, '\n');
+  if (args[0] === 'stop') {
+    spawnSync('ssh', [...sshArgs(p), 'bash -s -- stop'], { input: script, stdio: ['pipe', 'inherit', 'inherit'] });
+    return 0;
+  }
+  if (!args.includes('--no-sync')) await syncTree(p);
+  console.log('Starting the desktop on the pod...');
+  const started = spawnSync('ssh', [...sshArgs(p), 'bash -s'], { input: script, stdio: ['pipe', 'inherit', 'inherit'] });
+  if (started.status !== 0) return started.status ?? 1;
+  const port = process.env.PLAY_PORT ?? '8444';
+  const url = `http://localhost:${port}/`;
+  console.log(`\nThe game is at ${url}  (a tunnel to the pod, so only this machine can reach it).`);
+  console.log('In the page: toolbar -> "Game Cursor Mode" for mouse-look, Fullscreen for the whole screen.\nCtrl+C here closes the tunnel; "node scripts/pod.mjs play stop" stops the desktop.\n');
+  if (!args.includes('--no-open')) spawn(process.platform === 'win32' ? 'cmd' : 'xdg-open', process.platform === 'win32' ? ['/c', 'start', '', url] : [url], { stdio: 'ignore', detached: true }).unref();
+  const tunnel = spawnSync('ssh', ['-N', '-o', 'ExitOnForwardFailure=yes', '-o', 'ServerAliveInterval=15', '-i', KEY, '-p', String(p.portMappings['22']), '-L', `${port}:127.0.0.1:${port}`, `root@${p.publicIp}`], { stdio: 'inherit' });
+  return tunnel.status ?? 0;
+}
+
 const [cmd, ...rest] = process.argv.slice(2);
 // Exit by setting exitCode, never process.exit: on Windows that asserts in libuv while fetch is still closing.
 async function main() {
@@ -338,6 +364,8 @@ if (cmd === 'status' && rest.includes('--json')) {
   return p && ready(p) ? 0 : 1;
 } else if (cmd === 'start') {
   await startPod();
+} else if (cmd === 'play') {
+  return await playCommand(rest);
 } else if (cmd === 'stop') {
   const p = await findPod();
   await api(`pods/${p.id}/stop`, 'POST');
