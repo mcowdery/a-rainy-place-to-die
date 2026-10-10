@@ -9,10 +9,17 @@
 #
 #   bash scripts/podPlay.sh            start (or restart) the desktop
 #   bash scripts/podPlay.sh stop       stop it
-# Env: PLAY_GEOMETRY (default 1920x1080), PLAY_URL (default http://127.0.0.1:5173/), PLAY_PORT (default 8444).
+# Env: PLAY_GEOMETRY (default 1920x800), PLAY_URL (default http://127.0.0.1:5173/), PLAY_PORT (default 8444).
 set -euo pipefail
 
-GEOMETRY="${PLAY_GEOMETRY:-1920x1080}"
+# The desktop is a fixed size and the page scales it to the window (it does not follow the window: its default,
+# "remote resizing", renders at the browser's CSS pixels, which on a 150%-scaled monitor is a third of the real
+# pixels, and the game came out soft). The size is a trade: KasmVNC encodes on the CPU, so more pixels, fewer frames.
+# Measured with one viewer on an A5000 pod, the game's own frame rate: 1280x720 60, 1600x900 50-55, 1920x1080 about 37.
+# The default, 1920x800 (1.5 M pixels, the shape of a 21:9 monitor), sits between the last two; PLAY_GEOMETRY=1600x900
+# for a 16:9 screen, 1280x720 for the smoothest, 1920x1080 when sharpness matters more than motion.
+GEOMETRY="${PLAY_GEOMETRY:-1920x800}"
+QMIN="${PLAY_QMIN:-7}"; QMAX="${PLAY_QMAX:-8}"; LOSSLESS="${PLAY_LOSSLESS:-10}"; VQ="${PLAY_VIDEO_Q:--1}"
 PORT="${PLAY_PORT:-8444}"
 URL="${PLAY_URL:-http://127.0.0.1:5173/}"
 REPO=/workspace/a-rainy-place-to-die
@@ -43,6 +50,7 @@ CHROME="$(ls "$PLAYWRIGHT_BROWSERS_PATH"/chromium-*/chrome-linux*/chrome 2>/dev/
 [ -x "$CHROME" ] || { echo "no Playwright Chromium under $PLAYWRIGHT_BROWSERS_PATH: run podSetup.sh first"; exit 1; }
 
 stop
+rm -rf /tmp/play-profile
 mkdir -p "$HOME/.vnc"
 cat > "$HOME/.vnc/kasmvnc.yaml" <<EOF
 network:
@@ -53,17 +61,22 @@ network:
 # The stream is tuned for slow links by default (the web client's own default caps video mode at 960x540 and its
 # quality sliders sit in the middle). This path is a tunnel to a pod a few milliseconds away, so ask for the best:
 # the server's values rule, and the client's settings can't pull the picture back down to a quarter of 1080p.
+desktop:
+  resolution:
+    width: ${GEOMETRY%x*}
+    height: ${GEOMETRY#*x}
+  allow_resize: false
 runtime_configuration:
   allow_client_to_override_kasm_server_settings: false
 encoding:
   max_frame_rate: 60
   rect_encoding_mode:
-    min_quality: 9
-    max_quality: 9
-    consider_lossless_quality: 9
+    min_quality: $QMIN
+    max_quality: $QMAX
+    consider_lossless_quality: $LOSSLESS
   video_encoding_mode:
-    jpeg_quality: 9
-    webp_quality: 9
+    jpeg_quality: $VQ
+    webp_quality: $VQ
     max_resolution:
       width: ${GEOMETRY%x*}
       height: ${GEOMETRY#*x}
@@ -77,7 +90,8 @@ cd $REPO
 (npx vite --port 5173 --host 127.0.0.1 > /tmp/vite-play.log 2>&1 &)
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do curl -fs -o /dev/null http://127.0.0.1:5173/ && break; sleep 1; done
 exec "$CHROME" --no-sandbox --user-data-dir=/tmp/play-profile --no-first-run --disable-infobars \\
-  --use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface --ignore-gpu-blocklist --enable-gpu-rasterization \\
+  --use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface --ignore-gpu-blocklist --enable-gpu-rasterization \
+  --remote-debugging-port=9222 --remote-allow-origins=* --window-position=0,0 --window-size=${GEOMETRY%x*},${GEOMETRY#*x} \\
   --kiosk $URL
 EOF
 chmod +x "$HOME/.vnc/xstartup"
