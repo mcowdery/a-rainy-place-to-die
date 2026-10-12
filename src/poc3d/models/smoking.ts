@@ -91,6 +91,8 @@ const TWO_FINGERS = [[0.2, 0.34, 0.16], [0.26, 0.4, 0.2], [0.5, 0.72, 0.36], [0.
 const AUTO = { first: 6, again: [35, 110] } as const;
 /** The mouth from the eyes (m at the model's size): down, and out of the face. */
 const MOUTH = { down: 0.068, out: 0.026 } as const;
+/** The same from the face's frame (the head shown): its `eye` is the camera's, up in the forehead and ahead of the face, so the mouth is further down and back (the user's shot: the cigar a few cm above his lips and in front of them). */
+const MOUTH_HEAD = { down: 0.105, out: -0.004 } as const;
 
 const ease = (a: number, b: number, v: number): number => {
   const k = THREE.MathUtils.clamp((v - a) / (b - a), 0, 1);
@@ -220,7 +222,7 @@ export class Smoking {
 
   /** His mouth (world): from the face when the head is shown, else from the camera, which is his eyes. */
   private mouthOf(c: SmokeCtx, out: THREE.Vector3): THREE.Vector3 {
-    if (c.face) return out.copy(c.face.eye).addScaledVector(c.face.up, -MOUTH.down * c.sc).addScaledVector(c.face.fwd, MOUTH.out * c.sc);
+    if (c.face) return out.copy(c.face.eye).addScaledVector(c.face.up, -MOUTH_HEAD.down * c.sc).addScaledVector(c.face.fwd, MOUTH_HEAD.out * c.sc);
     return out.set(0, -MOUTH.down * c.sc, -MOUTH.out * c.sc).applyQuaternion(c.viewQ).add(c.eye);
   }
 
