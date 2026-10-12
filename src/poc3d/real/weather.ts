@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
 import type { CityUniforms } from './city';
 import { screenLightGlsl } from './screenLight';
 
@@ -246,9 +247,10 @@ export class RainSystem {
  * Rain's depth layers round the main streaks (RainSystem, a few to 23 m):
  * - near: a few long, soft, thick streaks within ~3.5 m (camera-facing ribbons), the drops you'd see
  *   whip past your face;
- * - far: rain curtains, open cylinders round the camera at 30, 70 and 140 m with streaks drawn on them,
- *   slanted by the wind and swaying in bands, lit by the street below (the lightmap), fading with distance
- *   and height. Buildings in front hide them; distant streets look veiled;
+ * - far: rain curtains, open cylinders round the camera at 30, 70 and 140 m carrying a veil of falling grain
+ *   (streaky noise, no lines: far rain isn't drops), denser and thinner in patches, slanted by the wind and
+ *   swaying in bands, lit by the street below (the lightmap), fading with distance and height. Buildings in
+ *   front hide them; distant streets look veiled;
  * - spray: water thrown up behind the moving cars' wheels (the city shader's headlight list, uCars).
  */
 export class RainLayers {
@@ -363,25 +365,26 @@ export class RainLayers {
         varying vec3 vWorld;
         varying float vAng;
         float hh(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(hh(i), hh(i + vec2(1.0, 0.0)), f.x), mix(hh(i + vec2(0.0, 1.0)), hh(i + vec2(1.0, 1.0)), f.x), f.y); }
         void main() {
-          // Streak coordinates on the cylinder: u round it (metres), v up; slanted by the wind across it.
+          // Coordinates on the cylinder: u round it (metres), v up; slanted by the wind across it.
           float u = vAng * uRadius;
           float v = vWorld.y;
           vec2 tang = vec2(-sin(vAng), cos(vAng));
           u -= dot(uSlant, tang) * v;
-          float cols = 1.6;
-          float c = floor(u * cols);
-          float r = hh(vec2(c, uRadius));
-          float line = 1.0 - smoothstep(0.0, 0.45, abs(fract(u * cols) - 0.5));
-          float seg = smoothstep(0.3, 1.0, fract(v * (0.3 + 0.1 * r) + uTime * (1.1 + 0.6 * r) + r * 7.0));
+          // Far rain isn't drops but a veil: falling grain, fine across and long down, denser and thinner in
+          // patches, scrolling down at the rain's speed. Its scale follows the radius so it's a few pixels
+          // wide on every curtain, never a line.
+          float fall = uTime * (9.0 + 3.0 * uAmount);
+          vec2 q = vec2(u * (40.0 / uRadius) + uRadius, (v + fall) * 0.12);
+          float n = vn(q) * 0.5 + vn(q * 2.3 + 7.1) * 0.3 + vn(vec2(q.x * 5.0, q.y * 2.0) + 3.7) * 0.2;
+          float grain = vn(vec2(u * (200.0 / uRadius), (v + fall * 1.4) * 0.5) + 11.0);
+          float veil = smoothstep(0.3, 0.75, n) * (0.55 + 0.45 * grain);
           // Heavier bands sweeping along the curtain.
           float band = 0.55 + 0.45 * sin(u * 0.04 + v * 0.03 - uTime * 0.7 + uRadius);
-          float live = step(r, uAmount * 1.1);
           float fade = (1.0 - smoothstep(0.35, 1.0, uRadius / uFogFar)) * (1.0 - smoothstep(18.0, 60.0, v)) * smoothstep(0.0, 1.5, v);
           vec3 L = lightAt(vWorld.xz) * mix(1.0, 0.3, clamp(v / 25.0, 0.0, 1.0));
-          vec3 col = (L * 0.22 + uHorizon * 0.18 + vec3(0.03) * (1.0 - uLamps)) * line * seg * band * live * fade * 0.5;
-          // A faint lit veil between the streaks.
-          col += (L * 0.08 + uHorizon * 0.07) * uAmount * band * fade;
+          vec3 col = (L * 0.3 + uHorizon * 0.22 + vec3(0.03) * (1.0 - uLamps)) * (veil * 0.7 + 0.12) * band * fade * smoothstep(0.0, 0.6, uAmount);
           gl_FragColor = vec4(col * 0.55, 1.0);
         }`,
     });
@@ -465,6 +468,28 @@ export class RainLayers {
     this.u.uShelters.value = n;
     // The curtains and near streaks need rain; the spray only needs a wet road.
     for (const c of this.group.children) c.visible = c instanceof THREE.Points ? wet > 0.05 : amount > 0;
+  }
+}
+
+/**
+ * Draws the rain (RainSystem, RainLayers and StreetWater, in a scene of their own) into the scene image after
+ * the reflection pass, so the reflections never see a drop: mirrored in the wet road, the falling streaks
+ * glittered as bright dots all over it. Depth-tested against the scene, so buildings still hide the rain;
+ * the overlay, bloom and the grade still see it.
+ */
+export class RainPass extends Pass {
+  constructor(private readonly rainScene: THREE.Scene, private readonly camera: THREE.Camera) {
+    super();
+    this.needsSwap = false;
+  }
+
+  render(renderer: THREE.WebGLRenderer, _writeBuffer: THREE.WebGLRenderTarget, readBuffer: THREE.WebGLRenderTarget): void {
+    if (!this.rainScene.visible) return;
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.setRenderTarget(readBuffer);
+    renderer.render(this.rainScene, this.camera);
+    renderer.autoClear = autoClear;
   }
 }
 

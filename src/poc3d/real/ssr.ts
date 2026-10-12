@@ -68,23 +68,8 @@ const fragment = /* glsl */ `
     float d = texture2D(tDepth, uv).x;
     return -perspectiveDepthToViewZ(d, uNear, uFar);
   }
-  // Rain rings in the puddles: each cell drops a ring now and then; returns the slope it adds.
-  vec2 ripples(vec2 p) {
-    vec2 acc = vec2(0.0);
-    for (int layer = 0; layer < 2; layer++) {
-      float s = layer == 0 ? 2.3 : 3.7;
-      vec2 q = p * s + float(layer) * 13.1;
-      vec2 cell = floor(q);
-      float h = h2(cell);
-      vec2 local = fract(q) - 0.5 - (vec2(h, h2(cell + 5.3)) - 0.5) * 0.5;
-      float phase = fract(uTime * (0.7 + 0.6 * h) + h * 9.0);
-      float r = length(local);
-      float R = phase * 0.5;
-      float ring = (r - R) * exp(-(r - R) * (r - R) * 900.0) * (1.0 - phase) * step(h, uRain);
-      acc += local / max(r, 1e-3) * ring * 6.0;
-    }
-    return acc;
-  }
+  // The rain's rings (waterGlsl.ts: the ground shader tilts its sheen by the same ones).
+  vec2 ripples(vec2 p) { return rainRings(p, uTime, uRain); }
 
   // Water's rays: long (the far bank, across the bay) and after small bright things (a sign, a row of lit
   // windows), which steps that grow with distance stride over. So the ray is walked evenly across the screen
@@ -176,8 +161,9 @@ const fragment = /* glsl */ `
       s += toCam * wavelet * (0.018 + 0.04 * smoothstep(0.05, 0.6, foot)) * (0.6 + 0.4 * min(uWaterWind.z, 1.4));
       if (uRain > 0.0) s += ripples(wp.xz) * 0.6;
       n = waterNormal(s);
-    } else if (uRain > 0.0 && puddle > 0.0) {
-      vec2 s = ripples(wp.xz) * puddle;
+    } else if (uRain > 0.0) {
+      // Rings on the puddles, and fainter on the film over ground that's wet through.
+      vec2 s = ripples(wp.xz) * mix(0.35, 1.0, puddle) * smoothstep(0.35, 0.9, uWet);
       n = normalize(vec3(-s.x, 1.0, -s.y));
     }
     vec3 vd = normalize(wp - cam);
@@ -222,13 +208,6 @@ const fragment = /* glsl */ `
     // (Water carries a reflection much further than a wet street: the far bank's lights, a tower across the bay.)
     float fade = e.x * e.y * (1.0 - (water ? smoothstep(320.0, 640.0, t) : smoothstep(60.0, 160.0, t)));
     vec3 col = min(texture2D(tColor, hitUv).rgb, vec3(12.0));
-    if (!water && uRain > 0.0) {
-      // A falling drop is a thin bright line in the scene; mirrored, it glitters as sparse dots on the road. A line a
-      // few pixels wide stands well above its surroundings, so keep a reflected pixel to a little over their average.
-      vec2 o = uTexel * 3.0;
-      vec3 ring = (texture2D(tColor, hitUv + vec2(o.x, 0.0)).rgb + texture2D(tColor, hitUv - vec2(o.x, 0.0)).rgb + texture2D(tColor, hitUv + vec2(0.0, o.y)).rgb + texture2D(tColor, hitUv - vec2(0.0, o.y)).rgb) * 0.25;
-      col = min(col, ring * 1.5 + 0.05);
-    }
     // Water already shows the sky along this ray: what the ray hit takes its place.
     if (water) gl_FragColor = vec4((col - waterSky(rW, uHorizon, uZenith)) * F * fade, 1.0);
     else gl_FragColor = vec4(col * F * wet * fade * 1.4, 1.0);
@@ -239,6 +218,8 @@ export class SsrPass extends Pass {
   /** Ground wetness 0-1 and rain 0-1 (ripples). */
   wet = 0;
   rain = 0;
+  /** The city shader's clock (its uTime), so the rings here and the ground's own are the same rings; its own time otherwise. */
+  clock: { value: number } | null = null;
   private readonly mat: THREE.ShaderMaterial;
   private readonly add: THREE.ShaderMaterial;
   private readonly quad = new FullScreenQuad();
@@ -334,7 +315,7 @@ export class SsrPass extends Pass {
     (u.uTexel.value as THREE.Vector2).set(1 / readBuffer.width, 1 / readBuffer.height);
     u.uWet.value = this.wet;
     u.uRain.value = this.rain;
-    u.uTime.value = this.time;
+    u.uTime.value = this.clock ? this.clock.value : this.time;
     this.quad.material = this.mat;
     renderer.setRenderTarget(this.target);
     this.quad.render(renderer);
