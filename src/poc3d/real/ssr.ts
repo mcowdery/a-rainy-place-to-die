@@ -147,17 +147,17 @@ const fragment = /* glsl */ `
     // behind, so anything a little short of fully opaque is skipped too.)
     if (sceneA > 0.5 && sceneA < 0.99) { gl_FragColor = vec4(0.0); return; }
     // What shows through a crown's gaps (a wall, a lit shopfront behind the tree) is opaque, but its neighbours are
-    // leaves metres nearer: the normal worked out from them is noise, some of it "facing up", and those pixels
-    // reflected the shopfront as bright dots all over the leaves, in its colours. A surface's depth-buffer value
-    // runs straight across the screen (it's linear there for a plane), so where it bends by more than its own slope
-    // either side the pixel is at a jump in depth, not on a surface. (Depth, not normals: comparing normals threw
-    // out the ground too, whose depth steps are near the buffer's precision at a low view.)
+    // leaves metres nearer: the normal worked out from them below is noise, some of it "facing up", and those pixels
+    // reflected the shopfront as bright dots all over the leaves, in its colours. So a pixel with a leaf beside it
+    // is skipped as well. (By the leaves' mark, never by the depth: two tests of the depth's own smoothness, one of
+    // normals and one of its bend, each cleared the dots on the pod and dried the whole street on the user's
+    // GTX 1070 Ti at 80% resolution, for a reason not found. Everything else opaque writes exactly 1, so this can
+    // only ever skip a pixel that touches a crown or the water's edge.)
     if (!water) {
-      float dxp = texture2D(tDepth, vUv + vec2(uTexel.x, 0.0)).x, dxm = texture2D(tDepth, vUv - vec2(uTexel.x, 0.0)).x;
-      float dyp = texture2D(tDepth, vUv + vec2(0.0, uTexel.y)).x, dym = texture2D(tDepth, vUv - vec2(0.0, uTexel.y)).x;
-      float bendX = abs(dxp + dxm - 2.0 * d) - 1.5 * min(abs(dxp - d), abs(d - dxm));
-      float bendY = abs(dyp + dym - 2.0 * d) - 1.5 * min(abs(dyp - d), abs(d - dym));
-      if (max(bendX, bendY) > 6e-7) { gl_FragColor = vec4(0.0); return; }
+      float nearA = min(min(texture2D(tColor, vUv + vec2(uTexel.x, 0.0)).a, texture2D(tColor, vUv - vec2(uTexel.x, 0.0)).a),
+                        min(texture2D(tColor, vUv + vec2(0.0, uTexel.y)).a, texture2D(tColor, vUv - vec2(0.0, uTexel.y)).a));
+      nearA = min(nearA, min(texture2D(tColor, vUv + uTexel).a, texture2D(tColor, vUv - uTexel).a));
+      if (nearA < 0.997) { gl_FragColor = vec4(0.0); return; }
     }
     vec3 p = viewPos(vUv);
     vec3 px = viewPos(vUv + vec2(uTexel.x, 0.0)) - p;
