@@ -220,7 +220,17 @@ const fragment = /* glsl */ `
       prevT = t;
       t = t * 1.13 + 0.35;
     }
-    if (hitUv.x < 0.0) { gl_FragColor = vec4(0.0); return; }
+    if (hitUv.x < 0.0) {
+      // Missed. A ray thrown steeply up (looking down at the street, or a ring tilting it) leaves the top of the
+      // picture: what it would have shown isn't on screen, and without this the ground there looked dry. Show the
+      // sky and the city's glow in it instead, at least a little reflective, so the sheen and the rings' tilting of
+      // it read; the low rays that missed far away stay empty.
+      if (!water && rW.y > 0.25) {
+        vec3 sky = mix(uHorizon * 1.3, uZenith * 0.5, smoothstep(0.2, 0.9, rW.y));
+        gl_FragColor = vec4(sky * max(F, 0.1) * wet * smoothstep(0.25, 0.5, rW.y), 1.0);
+      } else gl_FragColor = vec4(0.0);
+      return;
+    }
     // Fade toward the screen edges and with distance travelled.
     vec2 e = smoothstep(0.0, 0.08, hitUv) * smoothstep(0.0, 0.08, 1.0 - hitUv);
     // (Water carries a reflection much further than a wet street: the far bank's lights, a tower across the bay.)
