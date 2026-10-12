@@ -146,6 +146,19 @@ const fragment = /* glsl */ `
     // (The scene is multisampled: at a crown's ragged edge and through its gaps a pixel averages leaf and what's
     // behind, so anything a little short of fully opaque is skipped too.)
     if (sceneA > 0.5 && sceneA < 0.99) { gl_FragColor = vec4(0.0); return; }
+    // What shows through a crown's gaps (a wall, a lit shopfront behind the tree) is opaque, but its neighbours are
+    // leaves metres nearer: the normal worked out from them is noise, some of it "facing up", and those pixels
+    // reflected the shopfront as bright dots all over the leaves, in its colours. A surface's depth-buffer value
+    // runs straight across the screen (it's linear there for a plane), so where it bends by more than its own slope
+    // either side the pixel is at a jump in depth, not on a surface. (Depth, not normals: comparing normals threw
+    // out the ground too, whose depth steps are near the buffer's precision at a low view.)
+    if (!water) {
+      float dxp = texture2D(tDepth, vUv + vec2(uTexel.x, 0.0)).x, dxm = texture2D(tDepth, vUv - vec2(uTexel.x, 0.0)).x;
+      float dyp = texture2D(tDepth, vUv + vec2(0.0, uTexel.y)).x, dym = texture2D(tDepth, vUv - vec2(0.0, uTexel.y)).x;
+      float bendX = abs(dxp + dxm - 2.0 * d) - 1.5 * min(abs(dxp - d), abs(d - dxm));
+      float bendY = abs(dyp + dym - 2.0 * d) - 1.5 * min(abs(dyp - d), abs(d - dym));
+      if (max(bendX, bendY) > 6e-7) { gl_FragColor = vec4(0.0); return; }
+    }
     vec3 p = viewPos(vUv);
     vec3 px = viewPos(vUv + vec2(uTexel.x, 0.0)) - p;
     vec3 py = viewPos(vUv + vec2(0.0, uTexel.y)) - p;

@@ -9,7 +9,8 @@ const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const [vw, vh] = (process.argv[9] ?? "1280x720").split("x").map(Number); // the page size, e.g. 2413x922
+  const page = await browser.newPage({ viewport: { width: vw, height: vh } });
   page.on('pageerror', (e) => console.log('pageerror', String(e)));
   await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&${spawn.startsWith("cam=") ? spawn : "spawn=" + spawn}&weather=${extra.includes("clear") ? "clear" : "rain"}&rain=${amt}${extra.includes("natural") ? "" : "&wet=1"}&clock=22:30${extra}`, { timeout: 240000 });
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
