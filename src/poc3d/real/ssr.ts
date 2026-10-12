@@ -143,7 +143,9 @@ const fragment = /* glsl */ `
     // A tree's crown (the city shader writes 0.7 into its alpha): leaves cut out of cards, no surface to reflect in.
     // (Their depth jumps from pixel to pixel, which made the "ground" under a leaf flicker in and out and the
     // reflection speckle it with bright dots.)
-    if (sceneA > 0.5 && sceneA < 0.9) { gl_FragColor = vec4(0.0); return; }
+    // (The scene is multisampled: at a crown's ragged edge and through its gaps a pixel averages leaf and what's
+    // behind, so anything a little short of fully opaque is skipped too.)
+    if (sceneA > 0.5 && sceneA < 0.99) { gl_FragColor = vec4(0.0); return; }
     vec3 p = viewPos(vUv);
     vec3 px = viewPos(vUv + vec2(uTexel.x, 0.0)) - p;
     vec3 py = viewPos(vUv + vec2(0.0, uTexel.y)) - p;
@@ -151,6 +153,13 @@ const fragment = /* glsl */ `
     // Turned toward the camera, so only faces that really face up pass: a ceiling seen from below (an
     // expressway deck's or a viaduct's underside) faces down and reflects nothing.
     if (dot(nV, p) > 0.0) nV = -nV;
+    // A real surface has the same normal worked out forward and backward from the pixel; where the depth jumps from
+    // pixel to pixel (foliage, thin railings, the edges of things) they disagree, and there's nothing to reflect in.
+    if (!water) {
+      vec3 pxm = viewPos(vUv - vec2(uTexel.x, 0.0)) - p;
+      vec3 pym = viewPos(vUv - vec2(0.0, uTexel.y)) - p;
+      if (dot(normalize(cross(px, py)), normalize(cross(pxm, pym))) < 0.98) { gl_FragColor = vec4(0.0); return; }
+    }
     vec3 nW = normalize(mat3(uInvView) * nV);
     if (nW.y < 0.9) { gl_FragColor = vec4(0.0); return; }
     vec3 wp = (uInvView * vec4(p, 1.0)).xyz;
