@@ -135,9 +135,9 @@ export class RainSystem {
             float dist = length(head - uCam);
             vec3 side = normalize(cross(dir, normalize(uCam - head)));
             // As wide as a few pixels at any distance, never thinner than a drop's smear.
-            float wid = max(0.007, dist * 0.0026);
+            float wid = max(0.012, dist * 0.0032);
             vec3 wp = head - dir * position.y * len + side * position.x * wid;
-            vA = live * smoothstep(1.2, 3.0, dist) * (1.0 - smoothstep(12.0, 23.0, dist)) * step(0.0, head.y);
+            vA = live * smoothstep(2.5, 5.5, dist) * (1.0 - smoothstep(12.0, 23.0, dist)) * smoothstep(0.3, 2.5, head.y);
             if (sheltered(head) || sheltered(head - dir * len)) vA = 0.0;
             vec3 L = lightAt(head.xz) * mix(1.0, 0.35, clamp(head.y / 14.0, 0.0, 1.0));
             // Drops in front of a screen glitter in its colour.
@@ -193,7 +193,7 @@ export class RainSystem {
             vec2 o = fract(aSeed.xy + vec2(k * 0.618, k * 0.382)) * 30.0 - 15.0;
             vec3 p = vec3(uCam.x + o.x, 0.17, uCam.z + o.y);
             float live = step(aSeed.w, uAmount) * (sheltered(p) ? 0.0 : 1.0);
-            vCol = (vec3(0.05, 0.055, 0.065) * (1.0 - uLamps * 0.7) + lightAt(p.xz) * 0.3) * live * (1.0 - vPhase);
+            vCol = min((vec3(0.05, 0.055, 0.065) * (1.0 - uLamps * 0.7) + lightAt(p.xz) * 0.15) * live * (1.0 - vPhase), vec3(0.1));
             vec4 mv = viewMatrix * vec4(p, 1.0);
             gl_Position = projectionMatrix * mv;
             // A fleck of spray about 6 cm across, gone in a fraction of its cycle.

@@ -222,6 +222,13 @@ const fragment = /* glsl */ `
     // (Water carries a reflection much further than a wet street: the far bank's lights, a tower across the bay.)
     float fade = e.x * e.y * (1.0 - (water ? smoothstep(320.0, 640.0, t) : smoothstep(60.0, 160.0, t)));
     vec3 col = min(texture2D(tColor, hitUv).rgb, vec3(12.0));
+    if (!water && uRain > 0.0) {
+      // A falling drop is a thin bright line in the scene; mirrored, it glitters as sparse dots on the road. A line a
+      // few pixels wide stands well above its surroundings, so keep a reflected pixel to a little over their average.
+      vec2 o = uTexel * 3.0;
+      vec3 ring = (texture2D(tColor, hitUv + vec2(o.x, 0.0)).rgb + texture2D(tColor, hitUv - vec2(o.x, 0.0)).rgb + texture2D(tColor, hitUv + vec2(0.0, o.y)).rgb + texture2D(tColor, hitUv - vec2(0.0, o.y)).rgb) * 0.25;
+      col = min(col, ring * 1.5 + 0.05);
+    }
     // Water already shows the sky along this ray: what the ray hit takes its place.
     if (water) gl_FragColor = vec4((col - waterSky(rW, uHorizon, uZenith)) * F * fade, 1.0);
     else gl_FragColor = vec4(col * F * wet * fade * 1.4, 1.0);
