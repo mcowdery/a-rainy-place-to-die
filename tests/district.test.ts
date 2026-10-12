@@ -20,6 +20,8 @@ import { tiers } from '../src/poc3d/real/buildings';
 import { SignBuilder } from '../src/poc3d/real/signs';
 import { INTERIORS, interiorFor } from '../src/poc3d/real/interiors';
 import { CAFE } from '../src/poc3d/real/maidCafe';
+import { doorOpen, toggleDoor } from '../src/poc3d/real/swingDoors';
+import { ROOMS } from '../src/poc3d/real/rougePlan';
 import { ZAKKYO } from '../src/poc3d/real/cashOne';
 import { HOSP } from '../src/poc3d/real/kasumi';
 import { REIEN, SITE } from '../src/poc3d/real/kasumiGrounds';
@@ -1271,36 +1273,102 @@ describe('Interiors: Hotel Rouge', () => {
   };
 
   it('lets you walk in past the screen wall, to the room panel and into the back hall', () => {
-    expect(walk([[12, -2], [16, -1], [16, 2.6], [12, 2.6], [12, 6.5], [14.5, 8.5], [14.5, 10.6], [14.5, 12], [6, 12], [5, 12.2]], 0)).toBe(0);
+    expect(walk([[17, -2], [21, -1], [21, 2.6], [17, 2.6], [17, 6.5], [22.5, 9], [22.5, 14], [12, 14], [8.5, 14.6]], 0)).toBe(0);
   });
 
-  it('climbs the switchback to both floors and into a themed room on each', () => {
-    const up2 = walk([[12, 6.5], [14.5, 8.5], [14.5, 10.6], [14.4, 17], [19, 17], [20.1, 17], [20.1, 15.5], [19, 15.55], [15, 15.55], [14.4, 13], [14.4, 11.3], [6.15, 11.3], [6.15, 9.6], [6.15, 7.6]], 0);
-    expect(up2).toBe(5);
-    const up3 = walk([[6.15, 7.6], [6.15, 11.3], [14.4, 11.3], [14.4, 17], [19, 17], [20.1, 17], [20.1, 15.5], [19, 15.55], [15, 15.55], [14.4, 13], [14.4, 11.3], [11.9, 11.3], [11.9, 7.6]], 5);
-    expect(up3).toBe(10);
+  it('lets you walk in at the side doorway once its door is open, and through the couple in the court', () => {
+    // (The user, 2026-10-12: "won't let me walk in": the street's pocket there was shallower than the walker is wide.)
+    toggleDoor('hotel_rouge.side_door');
+    try {
+      expect(walk([[0.5, 13.5], [2.5, 13.5], [4.5, 13.5], [8, 14.2]], 0)).toBe(0);
+      expect(walk([[8, 14.2], [4.5, 13.5], [2.5, 13.5], [0.5, 13.5]], 0)).toBe(0);
+    } finally {
+      toggleDoor('hotel_rouge.side_door');
+    }
+    // Figures are scenery: the couple slipping in behind the screen wall doesn't block.
+    expect(district.blocked(...toWorld(f, 13.1, 2.5), 0.3, 0)).toBe(false);
   });
 
-  it('fences the well on the top floor, and keeps the taken rooms shut', () => {
+  it("opens each bath by its glass door: shut it's a wall, open you walk in to the shower", () => {
     district.setInterior('hotel_rouge', layout);
     try {
-      expect(district.blocked(...toWorld(f, 16.5, 17), 0.4, 10)).toBe(true);
-      expect(district.blocked(...toWorld(f, 17.75, 9.6), 0.4, 10)).toBe(true);
-      expect(district.blocked(...toWorld(f, 11.9, 9.6), 0.4, 5)).toBe(true);
+      for (const r of ROOMS.filter((q) => q.bathDoor)) {
+        const b = r.bathDoor!;
+        const node = district.nodes.find((n) => n.id === b.key);
+        expect(node?.swing, r.no).toBe(b.key);
+        const mid = toWorld(f, (b.gap[0] + b.gap[1]) / 2, (b.gap[2] + b.gap[3]) / 2);
+        expect(district.blocked(...mid, 0.3, r.floor), `${r.no} shut`).toBe(true);
+        toggleDoor(b.key);
+        expect(district.blocked(...mid, 0.3, r.floor), `${r.no} open`).toBe(false);
+        // Just inside the glass, in the shower end of the bath.
+        expect(district.blocked(...toWorld(f, b.gap[1] + 0.6, (b.gap[2] + b.gap[3]) / 2), 0.35, r.floor), `${r.no} inside`).toBe(false);
+        toggleDoor(b.key);
+      }
     } finally {
       district.setInterior('hotel_rouge', null);
     }
+  });
+
+  it('walls each door shut until it is opened, from the street and the corridor alike', () => {
+    // (Doorways are stamp rects: a shut one walls whoever is at it; open ones leave the interior's own walls.)
+    district.setInterior('hotel_rouge', layout);
+    try {
+      for (const [id, u, t, y] of [
+        ['hotel_rouge.door_201', 7.8, 12.35, 5], ['hotel_rouge.door_203', 26.1, 12.35, 5], ['hotel_rouge.door_205', 7.8, 14.95, 5], ['hotel_rouge.door_206', 16.9, 14.95, 5],
+        ['hotel_rouge.door_301', 7.8, 12.35, 10], ['hotel_rouge.door_302', 16.9, 12.35, 10], ['hotel_rouge.door_303', 26.1, 12.35, 10], ['hotel_rouge.door_306', 16.9, 14.95, 10],
+        ['hotel_rouge.door_housekeeping', 23.1, 17.85, 5], ['hotel_rouge.door_office', 23.1, 17.85, 10], ['hotel_rouge.door_laundry', 23.1, 17.85, 0],
+        ['hotel_rouge.door_101', 8.3, 16.95, 0], ['hotel_rouge.door_staff', 6.65, 12.35, 0], ['hotel_rouge.garage_door', 23.6, 7.6, 0], ['hotel_rouge.side_door', 3.15, 13.5, 0],
+      ] as const) {
+        expect(doorOpen(id), `${id} starts shut`).toBe(false);
+        expect(district.blocked(...toWorld(f, u, t), 0.3, y), `${id} shut`).toBe(true);
+        toggleDoor(id);
+        expect(district.blocked(...toWorld(f, u, t), 0.3, y), `${id} open`).toBe(false);
+        toggleDoor(id);
+      }
+    } finally {
+      district.setInterior('hotel_rouge', null);
+    }
+    // The side door has a node each side that work the one door.
+    const out = district.nodes.find((n) => n.id === 'hotel_rouge.side_door_out')!;
+    expect(out.swing).toBe('hotel_rouge.side_door');
+    // Every room has its door node, and a room's gap is the plan's.
+    for (const r of ROOMS) expect(district.nodes.find((n) => n.id === r.key)?.swing, r.no).toBe(r.key);
+  });
+
+  it('climbs the switchback to both floors and into rooms on each', () => {
+    const doors = ['hotel_rouge.door_201', 'hotel_rouge.door_302', 'hotel_rouge.door_305'];
+    for (const id of doors) if (!doorOpen(id)) toggleDoor(id);
+    const up = [[22.5, 17.1], [25.5, 17.1], [28, 17.1], [29.6, 17.1], [29.6, 15.6], [28, 15.65], [25.5, 15.65], [24, 15.65], [24, 13.65]] as [number, number][];
+    // (In a room, clear of the bath's glass corner east of the door's line.)
+    const up2 = walk([[17, 6.5], [22.5, 9], [22.5, 14], [22.5, 17.1], ...up.slice(1), [7.8, 13.65], [7.8, 11.5], [7.55, 9.8], [7.55, 8.0]], 0);
+    expect(up2).toBe(5);
+    const up3 = walk([[7.55, 8.0], [7.55, 9.8], [7.8, 11.5], [7.8, 13.65], [22.5, 13.65], [22.5, 17.1], ...up.slice(1), [16.9, 13.65], [16.9, 11.5], [16.65, 9.8], [16.65, 8.0]], 5);
+    expect(up3).toBe(10);
+    // And into a back room by its own door.
+    expect(walk([[16.65, 8.0], [16.65, 9.8], [16.9, 11.5], [16.9, 13.65], [7.8, 13.65], [7.8, 16.5], [7.8, 20.0]], 10)).toBe(10);
+    for (const id of doors) if (doorOpen(id)) toggleDoor(id);
+  });
+
+  it('fences the well on the top floor, and shuts every door at the start', () => {
+    district.setInterior('hotel_rouge', layout);
+    try {
+      expect(district.blocked(...toWorld(f, 29.0, 17.0), 0.4, 10)).toBe(true);
+      expect(district.blocked(...toWorld(f, 29.5, 15.6), 0.4, 10)).toBe(true);
+    } finally {
+      district.setInterior('hotel_rouge', null);
+    }
+    for (const r of ROOMS) expect(doorOpen(r.key), r.no).toBe(false);
     const suite = district.nodes.find((n) => n.id === 'hotel_rouge.room_303')!;
     expect(suite.through).toBe(false);
     expect(district.nodes.find((n) => n.id === 'hotel_rouge.entrance')!.through).toBe(true);
   });
 
   it('keeps the rain out on every storey and up the stair, and lets it fall in the front court', () => {
-    for (const [u, t, y] of [[12, 7, 1.7], [6, 12, 1.7], [14.4, 11.3, 6.7], [11.9, 7.6, 11.7], [18, 17, 4], [20.1, 16.5, 9.2], [17, 15.5, 11.7], [20.5, 17.5, 14]] as const) {
+    for (const [u, t, y] of [[17, 7, 1.7], [8.5, 14.6, 1.7], [23, 13.65, 6.7], [16.9, 8, 11.7], [27, 16.5, 4], [29, 16.5, 9.2], [23, 16.4, 11.7], [30.4, 17.4, 14]] as const) {
       expect(district.shelterAt(...toWorld(f, u, t), y)?.enclosed, `${u}, ${t} at ${y}`).toBe(true);
     }
-    expect(district.sheltered(...toWorld(f, 16, 2.6), 1.7)).toBe(false);
-    expect(district.sheltered(...toWorld(f, 12, 10), 16)).toBe(false);
+    expect(district.sheltered(...toWorld(f, 21, 2.6), 1.7)).toBe(false);
+    expect(district.sheltered(...toWorld(f, 17, 14), 16)).toBe(false);
   });
 });
 

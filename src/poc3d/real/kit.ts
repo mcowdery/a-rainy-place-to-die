@@ -15,6 +15,12 @@ export type Facing = 'out' | 'in' | '+u' | '-u';
  * y up): boxes of any surface kind, glass, canvas signs (neon ones follow the city's neon level), people.
  * finish() turns it all into one group: one city-material mesh, one glass mesh, the sign planes, the ghosts.
  */
+/**
+ * The figures that dress landmarks and interiors (a couple at a door, people at tables): their meshes, so the People
+ * setting hides them with the crowd (main.ts). They are scenery: nothing of them blocks walking.
+ */
+export const DECOR_PEOPLE: THREE.Object3D[] = [];
+
 export class Kit {
   readonly f: LocalFrame;
   readonly mb = new MeshBuilder();
@@ -188,6 +194,7 @@ export class Kit {
       const m = new THREE.Mesh(this.people.build(0, 0)!, ghost);
       m.renderOrder = 2;
       this.group.add(m);
+      DECOR_PEOPLE.push(m);
     }
     return this.group;
   }

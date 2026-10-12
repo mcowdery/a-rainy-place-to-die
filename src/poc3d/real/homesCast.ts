@@ -50,6 +50,38 @@ export const KOPO_201: HomePlan = {
   door: { side: 't0', a: 1.5, b: 2.4 },
 };
 
+/** The case board's art: photos, a map of Kawabata, cards and the red string between them. */
+function caseBoardArt(g: CanvasRenderingContext2D, W: number, H: number): void {
+  g.fillStyle = '#a8845a';
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = '#d8d0b8';
+  g.fillRect(W * 0.34, H * 0.12, W * 0.32, H * 0.5);
+  g.strokeStyle = '#8a8a7a';
+  for (let i = 0; i < 6; i++) {
+    g.beginPath();
+    g.moveTo(W * 0.34, H * (0.15 + i * 0.08));
+    g.lineTo(W * 0.66, H * (0.2 + i * 0.07));
+    g.stroke();
+  }
+  const pins: [number, number][] = [[0.12, 0.2], [0.2, 0.62], [0.5, 0.78], [0.82, 0.25], [0.86, 0.66], [0.5, 0.36]];
+  g.strokeStyle = '#c81a1a';
+  g.lineWidth = 3;
+  g.beginPath();
+  for (const [x, y] of [pins[0], pins[5], pins[3], pins[4], pins[2], pins[5], pins[1]]) g.lineTo(W * x, H * y);
+  g.stroke();
+  for (const [x, y] of pins.slice(0, 5)) {
+    g.fillStyle = '#f0ece4';
+    g.fillRect(W * x - 34, H * y - 26, 68, 52);
+    g.fillStyle = '#3a3a3a';
+    g.fillRect(W * x - 28, H * y - 20, 56, 38);
+    g.fillStyle = '#e8c020';
+    g.beginPath();
+    g.arc(W * x, H * y - 24, 5, 0, Math.PI * 2);
+    g.fill();
+  }
+  text(g, '竜胆組?', W * 0.5, H * 0.9, `bold ${Math.round(H * 0.08)}px 'Yu Gothic', sans-serif`, '#1a1a1a');
+}
+
 function detective(h: Home): void {
   const [u0, u1] = [0.25, 4.25];
   // Genkan (concrete, a step down), the kitchen's cushion-floor, the six mats, boards by the window.
@@ -93,36 +125,7 @@ function detective(h: Home): void {
   h.box(0x8a7a5a, 3.72, 4.1, 10.02, 10.38, 0.5, 1.6); // the coat
   h.box(0x3a3028, 3.75, 4.07, 10.05, 10.33, 1.72, 1.82); // the hat
   // The case board: photos, a map of Kawabata, cards and the red string between them.
-  h.picture('u1', 7.6, 1.45, 2.0, 1.1, (g, W, H) => {
-    g.fillStyle = '#a8845a';
-    g.fillRect(0, 0, W, H);
-    g.fillStyle = '#d8d0b8';
-    g.fillRect(W * 0.34, H * 0.12, W * 0.32, H * 0.5);
-    g.strokeStyle = '#8a8a7a';
-    for (let i = 0; i < 6; i++) {
-      g.beginPath();
-      g.moveTo(W * 0.34, H * (0.15 + i * 0.08));
-      g.lineTo(W * 0.66, H * (0.2 + i * 0.07));
-      g.stroke();
-    }
-    const pins: [number, number][] = [[0.12, 0.2], [0.2, 0.62], [0.5, 0.78], [0.82, 0.25], [0.86, 0.66], [0.5, 0.36]];
-    g.strokeStyle = '#c81a1a';
-    g.lineWidth = 3;
-    g.beginPath();
-    for (const [x, y] of [pins[0], pins[5], pins[3], pins[4], pins[2], pins[5], pins[1]]) g.lineTo(W * x, H * y);
-    g.stroke();
-    for (const [x, y] of pins.slice(0, 5)) {
-      g.fillStyle = '#f0ece4';
-      g.fillRect(W * x - 34, H * y - 26, 68, 52);
-      g.fillStyle = '#3a3a3a';
-      g.fillRect(W * x - 28, H * y - 20, 56, 38);
-      g.fillStyle = '#e8c020';
-      g.beginPath();
-      g.arc(W * x, H * y - 24, 5, 0, Math.PI * 2);
-      g.fill();
-    }
-    text(g, '竜胆組?', W * 0.5, H * 0.9, `bold ${Math.round(H * 0.08)}px 'Yu Gothic', sans-serif`, '#1a1a1a');
-  });
+  h.picture('u1', 7.6, 1.45, 2.0, 1.1, caseBoardArt);
   // A calendar by the door, a clock.
   h.picture('t0', 0.9, 1.55, 0.35, 0.5, (g, W, H) => printed(g, W, H, '#f4f0e8', [['1989', '#c81a1a', 0.18], ['3月', '#1a1a1a', 0.45], ['川端酒店', '#3a3a3a', 0.85]]));
   h.picture('u0', 7.4, 2.0, 0.3, 0.3, (g, W, H) => {
@@ -566,6 +569,42 @@ function netCafe(h: Home): void {
   h.d.person(8.5, 12.5, 0, 1, { body: 'man', pose: 'walk', color: [0.8, 0.8, 0.85], y: 0.05 });
 }
 
+// ---- 霧島探偵事務所 (Kaburo): the detective's office, a baked Blender room (scripts/blender/office_kopo201.py) ----
+// The model's footprint is KOPO_201's (its numbers are the room's), up the stair of the back-alley tenement
+// (residences.ts, kind detective): the same 4 m on the alley, 9.9 m deep, a floor up.
+export const KIRISHIMA_OFFICE: HomePlan = {
+  box: [0.25, 4.25, 1.95, 11.85],
+  y: 3.0,
+  h: 2.4,
+  walls: [],
+  solids: [
+    [2.6, 4.25, 1.95, 2.55], // the tea corner's counter
+    [0.25, 0.85, 1.95, 2.6], // the fridge
+    [0.25, 1.1, 3.2, 4.3], // the water closet
+    [0.4, 0.7, 2.2, 2.5], // the coat stand
+    [3.7, 4.25, 3.45, 5.2], // the filing cabinets
+    [0.3, 0.98, 5.2, 6.95], // the client sofa
+    [1.35, 2.15, 5.45, 6.65], // the low table
+    [0.25, 0.6, 8.9, 10.6], // the file shelf
+    [3.75, 4.25, 9.0, 10.5], // the credenza
+    [1.08, 1.52, 9.0, 9.45], // the client chairs
+    [2.38, 2.82, 9.0, 9.45],
+    [0.95, 3.05, 9.9, 10.9], // the desk
+    [1.75, 2.25, 11.05, 11.55], // the swivel chair
+    [3.55, 4.2, 11.15, 11.8], // the safe
+  ],
+  windows: [
+    { side: 't0', a: 2.8, b: 3.6, y0: 1.0, y1: 1.7 },
+    { side: 't1', a: 0.6, b: 3.9, y0: 0.8, y1: 2.05 },
+  ],
+  door: { side: 't0', a: 1.5, b: 2.4 },
+};
+
+/** The room's finishes and furniture are the model's; the case board is a canvas, for it carries the story's hotspot. */
+function kirishima(h: Home): void {
+  h.picture('u1', 7.6, 1.45, 2.0, 1.1, caseBoardArt, 0.04);
+}
+
 /**
  * The homes by placement: the building's flats (plan, look, furnishing) and the street's own collision under
  * them (the building's exterior colliders).
@@ -582,6 +621,7 @@ export const HOMES: Readonly<Record<string, { flats: readonly Flat[]; ground: (b
     ],
     ground: (b) => kawabataColliders('apato', b),
   },
+  kirishima: { flats: [{ plan: KIRISHIMA_OFFICE, look: { wall: 0xc8bca4, ceiling: 0xb8ae98 }, furnish: kirishima, model: 'office_kirishima' }], ground: (b) => residenceColliders('detective', b) },
   tsukiyo: { flats: [{ plan: NET_CAFE, look: { wall: 0x3a3440, ceiling: 0x2a2630, floor: 0x2a2830 }, furnish: netCafe }], ground: (b) => residenceColliders('net_cafe', b) },
 };
 

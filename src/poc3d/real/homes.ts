@@ -1,10 +1,11 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Rect } from '../../core/coords';
 import type { Building3 } from '../district/plan';
 import { Draw, type C3 } from './interiorDraw';
 import type { Interior } from './interiors';
 import { Kit, text } from './kit';
-import { localFrame, localRect, toLocal, type LocalFrame } from './localFrame';
+import { localFrame, localRect, toLocal, toWorld, type LocalFrame } from './localFrame';
 import { EMIT } from './meshBuilder';
 
 /**
@@ -121,6 +122,46 @@ export interface Flat {
   readonly plan: HomePlan;
   readonly look: { readonly wall: number; readonly ceiling: number; readonly floor?: number };
   readonly furnish: (h: Home) => void;
+  /**
+   * A room modelled and baked in Blender (assets/interiors/<name>.glb, scripts/blender/<name>.py), shown unlit in the
+   * flat's frame in place of the box finishes: its floor, walls and ceiling lie 5 mm inside the shell's, so the
+   * shell's floor and ceiling step out of its way. The plan's collision is still what stops you.
+   */
+  readonly model?: string;
+}
+
+const MODELS = import.meta.glob('/assets/interiors/*.glb', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const modelUrl = new Map(Object.entries(MODELS).map(([path, url]) => [/([^/]+)\.glb$/.exec(path)![1], url]));
+const modelLoader = new GLTFLoader();
+
+/** Whether a baked interior model of that name is there (assets/interiors/<name>.glb; a running dev server lists the folder when it first reads this file, so re-save it after adding one: the hotel's three floors are rouge_xl_ground, _f2 and _f3). */
+export const hasInteriorModel = (name: string): boolean => modelUrl.has(name);
+
+/**
+ * A baked room placed in the building's frame: the model's +x runs along the street face (u), its +z out of it
+ * (-t), y up, its origin at the frame's (0, 0) on the flat's floor, so it turns about y by the face's normal.
+ * Every material is its baked picture, drawn unlit like the rest of the interior.
+ */
+export function placeModel(group: THREE.Group, b: Building3, y: number, name: string): void {
+  const url = modelUrl.get(name);
+  if (!url) {
+    console.warn(`no interior model '${name}' in assets/interiors/`);
+    return;
+  }
+  const f = localFrame(b);
+  modelLoader.loadAsync(url).then((g) => {
+    g.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const map = (m.material as THREE.MeshStandardMaterial).map;
+      m.material = new THREE.MeshBasicMaterial({ map, side: THREE.FrontSide });
+      m.castShadow = m.receiveShadow = false;
+    });
+    const [x, z] = toWorld(f, 0, 0);
+    g.scene.position.set(x, y, z);
+    g.scene.rotation.y = Math.atan2(f.n[0], f.n[2]);
+    group.add(g.scene);
+  }, (e) => console.warn(`interior model '${name}' failed`, e));
 }
 
 /** Furniture over a Kit, in the flat's frame (u, t local; y above the flat's floor). */
@@ -249,13 +290,12 @@ export class Home {
     if (doorSide === 'u0') this.box(0xc8c0b0, u0 - m, u0, a, b, 0, 1.9);
     if (doorSide === 'u1') this.box(0xc8c0b0, u1, u1 + m, a, b, 0, 1.9);
   }
-  /** A flat picture on a wall: side is the wall it hangs on, a along it, y its centre. */
-  picture(side: Side, a: number, y: number, w: number, h: number, draw: (g: CanvasRenderingContext2D, W: number, H: number) => void): void {
+  /** A flat picture on a wall: side is the wall it hangs on, a along it, y its centre, `e` how far off the shell's wall (a baked room's wall stands 2.5 cm out). */
+  picture(side: Side, a: number, y: number, w: number, h: number, draw: (g: CanvasRenderingContext2D, W: number, H: number) => void, e = 0.02): void {
     const [u0, u1, t0, t1] = this.p.box;
     const W = Math.round(w * 160);
     const H = Math.round(h * 160);
     const tex = this.k.canvas(W, H, (g) => draw(g, W, H));
-    const e = 0.02;
     if (side === 't0') this.k.plane(tex, w, h, a, t0 + e, this.p.y + y, 'in', 1.0);
     if (side === 't1') this.k.plane(tex, w, h, a, t1 - e, this.p.y + y, 'out', 1.0);
     if (side === 'u0') this.k.plane(tex, w, h, u0 + e, a, this.p.y + y, '+u', 1.0);
@@ -318,20 +358,23 @@ export class Home {
 /** Builds a building's flats (each: its shell, then its furniture) as one interior. */
 export function homeInterior(b: Building3, flats: readonly Flat[], city: THREE.Material, ghost: THREE.Material, ground: readonly Rect[]): Interior {
   const k = new Kit(b);
-  for (const fl of flats) buildFlat(k, fl.plan, fl.look, fl.furnish);
+  for (const fl of flats) buildFlat(k, fl.plan, fl.look, fl.furnish, !!fl.model);
   const group = k.finish(city, ghost);
+  for (const fl of flats) if (fl.model) placeModel(group, b, fl.plan.y, fl.model);
   group.visible = false;
   return { group, ...homeLayout(b, flats.map((fl) => fl.plan), ground) };
 }
 
 /** A flat's shell (floor, ceiling, outer walls with windows, door and balcony), then its furniture. */
-function buildFlat(k: Kit, p: HomePlan, look: Flat['look'], furnish: (h: Home) => void): void {
+function buildFlat(k: Kit, p: HomePlan, look: Flat['look'], furnish: (h: Home) => void, modelled = false): void {
   const h = new Home(k, p);
   const [u0, u1, t0, t1] = p.box;
   const H = p.h;
   // Floor under everything (the rooms lay their own finishes over it), the ceiling.
-  h.box(look.floor ?? 0x8a7a64, u0, u1, t0, t1, -0.02, 0);
-  h.d.W(look.ceiling, u0, u1, t0, t1, p.y + H, p.y + H + 0.04, true);
+  // (A baked room has its own floor and ceiling at the same heights: the shell's steps out of the way.)
+  const sink = modelled ? 0.03 : 0;
+  h.box(look.floor ?? 0x8a7a64, u0, u1, t0, t1, -0.02 - sink, -sink);
+  h.d.W(look.ceiling, u0, u1, t0, t1, p.y + H + sink, p.y + H + 0.04 + sink, true);
   // The outer walls, their openings (windows, the balcony door) cut out and glazed.
   const openings = (side: Side): { a: number; b: number; y0: number; y1: number }[] => [
     ...p.windows.filter((w) => w.side === side),

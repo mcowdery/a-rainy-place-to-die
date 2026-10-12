@@ -23,8 +23,11 @@ After Kabukichō. The crossing and the mega-sign, Host Street, the Love District
 the station edge. Where the story starts: the MC's bed is a manga café booth here.
 
 - Bar Kanpai: a small snack bar.
-- Hotel Rouge: the castle love hotel, the Love District's flagship. Walk-in: lobby, room panel, themed rooms;
-  the Rouge Suite (303) is a story door.
+- Hotel Rouge: the castle love hotel, the Love District's flagship (the user may rename it: the name is one constant, `HOTEL` in
+  `rougePlan.ts`). Walk-in on three floors, **every room real and openable**: the lobby and room panel, a front office, a
+  garage, the back hall, 101 Dungeon (stone, iron and torchlight: a cross at the foot of the bed, a barred cell with the shower in it, stocks), a laundry; 201 Castle, 202 Marine, 203 Space, 205 Resort, 206 Mirror, housekeeping;
+  301 Onsen, 302 Karaoke, 303 the Rouge Suite, 305 Retro, 306 Sakura, the manager's office. The user means it for a
+  murder scene (investigate every room, interview people): the Rouge Suite (303) is the story's.
 - Hoshikuzu Yokocho: forty tiny bars along narrow alleys; BAR 黒猫 Kuroneko and its mama.
 - Ryujin Kogyo: the yakuza front company whose dragon crowns the mega-sign.
 - LIVE HOUSE 地下室: the basement venue where the underground idols play.
@@ -43,7 +46,7 @@ the station edge. Where the story starts: the MC's bed is a manga café booth he
 |---|---|---|---|
 | `bar_kanpai.mama` | npc | Mama-san (the bar's mama) | s90, a VN prototype kept as an example (not canon) |
 | `bar_kanpai.door` | door | Bar Kanpai | — |
-| `hotel_rouge.room_303` | door | Room 303 · Rouge Suite | — |
+| `hotel_rouge.room_303` | door | Room 303 · Rouge Suite (the desk) | — |
 | `yokocho.kuroneko` | door | BAR 黒猫 | — |
 | `yokocho.mama` | npc | Kuroneko's mama | — |
 | `ryujin_kogyo.door` | door | Ryujin Kogyo | — |
@@ -165,7 +168,7 @@ fence.
 Wooden houses and apāto on narrow lanes, the temple quarter, Tōto Tower, the riverside. Old money and old
 loyalties.
 
-- Kōpo Kawabata: the detective's room 201, with the case board.
+- Kōpo Kawabata: the detective's room 201, with the case board (the office itself is now in Kaburo, `kirishima`; this flat is kept, for a home later).
 - **To build: a church**, with an interior you can walk into. **Proposed:** a small Catholic church in the old
   town, near Tōkō-ji and Mack's office: pews, candles, a stained-glass window, a confessional (noir needs a
   confessional). Japan's Catholics go back to the hidden Christians. How it's used in the story stays subtle.
@@ -174,6 +177,8 @@ loyalties.
 | Node | Kind | Name | Scene |
 |---|---|---|---|
 | `kopo.case_board` | hotspot | The case board (the detective's) | — |
+| `kirishima.case_board` | hotspot | The case board (霧島探偵事務所, Kaburo) | — |
+| `kirishima.mailbox` | hotspot | The tenement's mailboxes | — |
 | `kopo.mailbox` | hotspot | The mailboxes | — |
 | `rindo.gate` | door | The Rindō-gumi's gate | — |
 | `rindo.guard` | npc | Young man at the gate | — |

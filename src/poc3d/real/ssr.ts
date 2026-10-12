@@ -12,11 +12,18 @@ import { WATER_GLSL } from './waterGlsl';
  * added onto the scene image in place, so the scene target (and its depth) stays where later passes
  * expect it. Puddles use the same noise as the ground shader in city.ts, so they line up.
  *
+ * Ground under cover stays dry: the covered volumes near the camera (the same the rain and the street's puddles
+ * use, district.sheltersNear) are handed in, and a floor pixel inside one gets no wet look, whether you stand in it
+ * or look into it from the street; the open street outside it stays wet.
+ *
  * Open water (a pond, the river, the bay) reflects whatever the weather: its shaders mark their pixels in the
  * scene's alpha and already show the sky in their ripples (waterGlsl.ts); here the same ripple's ray is marched,
  * and where it hits, what's there takes the sky's place (so a hit adds the difference, which may darken: a tree
  * in the water is darker than the sky it hides). Rain rings break the reflections up.
  */
+/** How many covered volumes the pass takes (the nearest to the camera). */
+const SHELTERS = 24;
+
 const vertex = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 
 const fragment = /* glsl */ `
@@ -38,6 +45,9 @@ const fragment = /* glsl */ `
   uniform vec3 uWaterWind;
   uniform vec3 uHorizon;
   uniform vec3 uZenith;
+  uniform vec4 uShelter[${SHELTERS}];
+  uniform vec2 uShelterY[${SHELTERS}];
+  uniform int uShelters;
   varying vec2 vUv;
   ${WATER_GLSL}
 
@@ -136,6 +146,14 @@ const fragment = /* glsl */ `
     vec3 nW = normalize(mat3(uInvView) * nV);
     if (nW.y < 0.9) { gl_FragColor = vec4(0.0); return; }
     vec3 wp = (uInvView * vec4(p, 1.0)).xyz;
+    // Under cover the floor is dry: indoors, or in a canopy's shade (open water isn't covered).
+    if (!water) {
+      for (int i = 0; i < ${SHELTERS}; i++) {
+        if (i >= uShelters) break;
+        vec4 r = uShelter[i];
+        if (wp.x > r.x && wp.x < r.z && wp.z > r.y && wp.z < r.w && wp.y > uShelterY[i].x && wp.y < uShelterY[i].y) { gl_FragColor = vec4(0.0); return; }
+      }
+    }
     // Same puddles as the ground shader.
     float pn = vnoise(wp.xz * 0.22) + 0.12 * vnoise(wp.xz * 1.9);
     float puddle = smoothstep(0.62, 0.68, pn) * smoothstep(0.35, 0.9, uWet);
@@ -242,6 +260,9 @@ export class SsrPass extends Pass {
         uWaterWind: { value: new THREE.Vector3(1, 0, 0) },
         uHorizon: { value: new THREE.Color() },
         uZenith: { value: new THREE.Color() },
+        uShelter: { value: Array.from({ length: SHELTERS }, () => new THREE.Vector4()) },
+        uShelterY: { value: Array.from({ length: SHELTERS }, () => new THREE.Vector2()) },
+        uShelters: { value: 0 },
       },
       vertexShader: vertex,
       fragmentShader: fragment,
@@ -271,6 +292,18 @@ export class SsrPass extends Pass {
     u.uHorizon = sky.uHorizon;
     u.uZenith = sky.uZenith;
     this.water = true;
+  }
+
+  /** The covered volumes near the camera (rects in world x, z with y0..y1 above the ground): dry floors. */
+  setShelters(list: readonly { rect: { x: number; y: number; w: number; h: number }; y0: number; y1: number }[]): void {
+    const u = this.mat.uniforms;
+    const n = Math.min(SHELTERS, list.length);
+    for (let i = 0; i < n; i++) {
+      const s = list[i];
+      (u.uShelter.value as THREE.Vector4[])[i].set(s.rect.x, s.rect.y, s.rect.x + s.rect.w, s.rect.y + s.rect.h);
+      (u.uShelterY.value as THREE.Vector2[])[i].set(s.y0, s.y1);
+    }
+    u.uShelters.value = n;
   }
 
   render(renderer: THREE.WebGLRenderer, _writeBuffer: THREE.WebGLRenderTarget, readBuffer: THREE.WebGLRenderTarget): void {

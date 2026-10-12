@@ -21,7 +21,7 @@
 - id: hotel_rouge
   stamp: hotel_rouge
   cell: [30, 10]
-  offset: [44, 97]
+  offset: [39, 88]
 - id: live_house
   stamp: live_house
   cell: [27, 11]
@@ -391,3 +391,8 @@
   stamp: construction
   cell: [32, 15]
   offset: [14, 38]
+# 霧島探偵事務所, the detective's office: a narrow tenement in Kaburo's back alleys, near Cash One.
+- id: kirishima
+  stamp: kirishima
+  cell: [26, 10]
+  offset: [96, 52]

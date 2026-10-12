@@ -2,144 +2,94 @@ import * as THREE from 'three';
 import type { Rect } from '../../core/coords';
 import type { Building3 } from '../district/plan';
 import { addCar } from './cars';
-import { Draw, type C3 } from './interiorDraw';
+import { placeModel } from './homes';
+import { doorOpen } from './swingDoors';
+import { Draw } from './interiorDraw';
 import type { Interior } from './interiors';
 import { Kit, text } from './kit';
 import { localFrame, localRect, toLocal, toWorld } from './localFrame';
-import { EMIT } from './meshBuilder';
+import { CORRIDOR, DOOR_HALF, FLOORS, FRONT_DOOR, GROUND, HOTEL, IN, ROOM_CEIL, ROOMS, roomsOn, SIDE_DOOR, STAIR, TUB, type PlanRoom, type R4 } from './rougePlan';
 
 /**
- * Hotel Rouge (ホテル ルージュ), inside: the castle's keep (18 x 14 m, three floors). You walk in through the
- * front doors (or E at them, or at the hidden side door, which lets you into the back hall).
+ * Hotel Rouge (ホテル ルージュ), inside: the castle's keep, 27 x 23 m on three floors. You walk in through the front doors
+ * (they slide open as you come) or the side doorway; every room has a door you open with E.
  *
- *   1F  the lobby: the lit room panel (pick a room: lit = free, dark = taken), the front desk's little window
- *       with a lace curtain (you never see a face), a bench; behind it the back hall with the free amenity
- *       bar, the costume rack and a vending machine; the garage (a car behind the strip curtain).
- *   2F  201 Castle (a canopy bed, a chandelier) and 203 Space (a round bed under the stars); 202, 205, 206
- *       are taken. A housekeeping cart in the corridor.
- *   3F  301 Onsen (tatami, a hinoki bath) and 302 Karaoke (the screen, a mirror ball, a heart headboard);
- *       303, the Rouge Suite, is the story's door (taken: it hands off to the VN).
+ *   1F  the lobby with its room-select panel, the front office behind its little window, the garage (a car), the back
+ *       hall (amenities, costumes, a vending machine), room 101, the laundry; the stair at the east end.
+ *   2F  the corridor, 201 Castle, 202 Marine, 203 Space, 205 Resort, 206 Mirror, and the housekeeping room.
+ *   3F  the corridor, 301 Onsen, 302 Karaoke, 303 the Rouge Suite, 305 Retro, 306 Sakura, and the manager's office.
  *
- * No room 4, as in many Japanese hotels. A switchback stair joins the floors. The local frame is the love
- * hotel's (u along the 24 m front, t inward); the keep's inside is u 3.3-20.7, t 4.3-17.7.
+ * Where everything is lives in content/world3d/rouge_plan.json (rougePlan.ts); the rooms are baked Blender models
+ * (scripts/blender/rouge_xl.py, one GLB a floor in assets/interiors/). This file keeps the layout (collision, floors,
+ * the stair) and what moves or is a picture: the signs and the room panel, the doors that swing, the entrance's sliding
+ * doors, the baths' glass and water, the people, the car.
+ *
+ * No room 4, as in many Japanese hotels. A switchback stair joins the floors. The local frame is the love hotel's (u along
+ * the 34 m front, t inward).
  */
 
-const IN = { u0: 3.3, u1: 20.7, t0: 4.3, t1: 17.7 } as const;
-export const ROUGE_FLOORS = [0, 5, 10] as const;
-const CEIL = 4.1;
+export const ROUGE_FLOORS = FLOORS;
 /** The front doors (a gap in the front wall; the exterior keeps a pocket there, loveHotel.ts). */
-export const ROUGE_DOOR = { u0: 10.5, u1: 13.5 } as const;
-/** The switchback stair: flights along two lanes, a landing at the east end, 2.5 m per flight. */
-const ST = { u0: 15.8, u1: 19.3, land: IN.u1, lane1: [16.3, IN.t1] as const, lane2: [14.9, 16.2] as const, rise: 2.5 } as const;
-const WELL = [ST.u0, IN.u1, ST.lane2[0], IN.t1] as const;
-const DIVIDER = [ST.u0, ST.u1, ST.lane2[1], ST.lane1[0]] as const;
-const WELL_WALL = [ST.u0, IN.u1, 14.7, ST.lane2[0]] as const;
+export const ROUGE_DOOR = { u0: FRONT_DOOR[0], u1: FRONT_DOOR[1] } as const;
+export { SIDE_DOOR };
+const ST = STAIR;
+const WELL: R4 = [ST.u0, IN.u1, ST.lane2[0], ST.lane1[1]];
+const DIVIDER: R4 = [ST.u0, ST.u1, ST.lane2[1], ST.lane1[0]];
+const WELL_WALL: R4 = [ST.u0, IN.u1, CORRIDOR.t1, ST.lane2[0]];
+const SHAFT_NORTH: R4 = [ST.u0, IN.u1, ST.lane1[1], ST.lane1[1] + 0.1];
+const CX = (FRONT_DOOR[0] + FRONT_DOOR[1]) / 2;
 
-type R4 = readonly [number, number, number, number];
+/** A moving part's step (seconds since the last frame, the camera), run by the interior's `tick`. */
+type Anim = (dt: number, cam: THREE.Vector3) => void;
 
-/** Upper floors: three rooms along the front, the corridor, two rooms behind, the stair stub and a closet. */
-const FRONT_ROOMS: readonly R4[] = [[IN.u0, 8.95, IN.t0, 10.2], [9.05, 14.75, IN.t0, 10.2], [14.85, IN.u1, IN.t0, 10.2]];
-const BACK_ROOMS: readonly R4[] = [[IN.u0, 8.1, 12.4, IN.t1], [8.1, 13, 12.4, IN.t1]];
-const CLOSET = [ST.u0, IN.u1, 12.4, 14.7] as const;
-const DOOR_HALF = 0.65;
-const mid = (r: R4): number => (r[0] + r[1]) / 2;
-
-type Theme = 'castle' | 'space' | 'onsen' | 'karaoke';
-interface Room {
-  readonly no: string;
-  readonly floor: number;
-  readonly r: R4;
-  /** A theme: you can go in. Null: taken (the door is shut, its lamp red). */
-  readonly theme: Theme | null;
-  readonly back?: boolean;
-}
-const ROOMS: readonly Room[] = [
-  { no: '201', floor: 5, r: FRONT_ROOMS[0], theme: 'castle' },
-  { no: '202', floor: 5, r: FRONT_ROOMS[1], theme: null },
-  { no: '203', floor: 5, r: FRONT_ROOMS[2], theme: 'space' },
-  { no: '205', floor: 5, r: BACK_ROOMS[0], theme: null, back: true },
-  { no: '206', floor: 5, r: BACK_ROOMS[1], theme: null, back: true },
-  { no: '301', floor: 10, r: FRONT_ROOMS[0], theme: 'onsen' },
-  { no: '302', floor: 10, r: FRONT_ROOMS[1], theme: 'karaoke' },
-  { no: '303', floor: 10, r: FRONT_ROOMS[2], theme: null },
-  { no: '305', floor: 10, r: BACK_ROOMS[0], theme: null, back: true },
-  { no: '306', floor: 10, r: BACK_ROOMS[1], theme: null, back: true },
-];
-
-/** An open room's furniture: the bed (with nightstands) at the front wall, the sofa and table, the bath. */
-const roomFurniture = (r: R4): { bed: R4; sofa: R4; table: R4; bath: R4 } => {
-  const m = mid(r);
-  return {
-    bed: [m - 1.15, m + 1.15, IN.t0, 6.8],
-    sofa: [r[0] + 0.2, r[0] + 0.9, 7.1, 9.4],
-    table: [r[0] + 1.15, r[0] + 1.8, 7.6, 8.8],
-    bath: [r[1] - 2.0, r[1], 6.9, 10.1],
-  };
-};
-
-// 1F
-const LOBBY = [8.4, 15.3, IN.t0, 9.6] as const;
-const PANEL_WALL = [8.4, 13.8, 9.6, 9.8] as const;
-const STAFF = [IN.u0, 8.4, IN.t0, 11.3] as const;
-const GARAGE = [15.5, IN.u1, IN.t0, 11.2] as const;
-const GARAGE_DOOR = [7, 8.2] as const;
-const LINEN = [15.5, IN.u1, 11.3, 14.9] as const;
-const ROOM_101 = [IN.u0, 10.1, 13.9, IN.t1] as const;
-const AMENITY = [8.6, 13.4, 9.8, 10.3] as const;
-const COSTUMES = [IN.u0, 4.0, 12.9, 13.8] as const;
-const VENDING = [10.2, 11.0, 14.2, 15.0] as const;
-const BENCH = [8.8, 10.2, 4.6, 5.1] as const;
-const SIDE_DOOR = [11.5, 12.5] as const;
+const G = GROUND;
 
 function ring(front: boolean): R4[] {
   return [
-    [IN.u0 - 0.3, IN.u0, IN.t0, IN.t1],
+    // The west wall, with the side doorway you walk through on the ground floor (the front ring).
+    ...(front
+      ? ([[IN.u0 - 0.3, IN.u0, IN.t0, SIDE_DOOR[0]], [IN.u0 - 0.3, IN.u0, SIDE_DOOR[1], IN.t1]] as R4[])
+      : ([[IN.u0 - 0.3, IN.u0, IN.t0, IN.t1]] as R4[])),
     [IN.u1, IN.u1 + 0.3, IN.t0, IN.t1],
     [IN.u0 - 0.3, IN.u1 + 0.3, IN.t1, IN.t1 + 0.3],
-    ...(front ? ([[IN.u0 - 0.3, ROUGE_DOOR.u0, IN.t0 - 0.3, IN.t0], [ROUGE_DOOR.u1, IN.u1 + 0.3, IN.t0 - 0.3, IN.t0]] as R4[]) : ([[IN.u0 - 0.3, IN.u1 + 0.3, IN.t0 - 0.3, IN.t0]] as R4[])),
+    ...(front
+      ? ([[IN.u0 - 0.3, FRONT_DOOR[0], IN.t0 - 0.3, IN.t0], [FRONT_DOOR[1], IN.u1 + 0.3, IN.t0 - 0.3, IN.t0]] as R4[])
+      : ([[IN.u0 - 0.3, IN.u1 + 0.3, IN.t0 - 0.3, IN.t0]] as R4[])),
   ];
 }
 
+const roomRects = (floor: number): R4[] => roomsOn(floor).flatMap((r) => [...r.walls, ...r.solids]);
+
 function upperRects(floor: number): R4[] {
-  const out: R4[] = [...ring(false), WELL_WALL, DIVIDER, CLOSET, [IN.u0, 13.05, 12.3, IN.t1]];
-  // The front rooms' corridor wall, with doors; the walls between them.
-  const rooms = ROOMS.filter((r) => r.floor === floor && !r.back);
-  let u = IN.u0;
-  for (const room of rooms) {
-    const m = mid(room.r);
-    if (room.theme) {
-      out.push([u, m - DOOR_HALF, 10.1, 10.3]);
-      u = m + DOOR_HALF;
-      const f = roomFurniture(room.r);
-      out.push(f.bed, f.sofa, f.table, f.bath);
-    } else out.push([room.r[0], room.r[1], IN.t0, 10.3]);
-  }
-  out.push([u, IN.u1, 10.1, 10.3], [8.95, 9.05, IN.t0, 10.2], [14.75, 14.85, IN.t0, 10.2]);
-  if (floor === ROUGE_FLOORS[1]) out.push([9.8, 10.8, 11.8, 12.3]);
+  const out: R4[] = [...ring(false), WELL_WALL, DIVIDER, ...roomRects(floor)];
   // The top floor has no flight up: the well over the last flight and the landing is fenced off.
-  if (floor === ROUGE_FLOORS[2]) out.push([ST.u0, IN.u1, ST.lane2[1], IN.t1], [ST.u1, IN.u1, ST.lane2[0], IN.t1]);
+  if (floor === FLOORS[2]) out.push([ST.u0, IN.u1, ST.lane2[1], ST.lane1[1]], [ST.u1, IN.u1, ST.lane2[0], ST.lane2[1]]);
   return out;
 }
 
 function groundRects(): R4[] {
+  const l1 = G.lobby[1];
   return [
     ...ring(true),
-    STAFF,
-    PANEL_WALL,
-    [15.3, 15.5, IN.t0, GARAGE_DOOR[0]],
-    [15.3, 15.5, GARAGE_DOOR[1], 11.3],
-    [15.3, IN.u1, 11.1, 11.3],
-    [16.6, 18.4, 5.2, 9.8],
-    LINEN,
+    [G.staffWall[0], G.staffWall[1], IN.t0, 12.4],
+    // The garage's west wall, with the door through to the lobby; its back wall; the car.
+    [l1, G.garage[0], IN.t0, G.garageDoor[0]],
+    [l1, G.garage[0], G.garageDoor[1], 12.5],
+    [G.garage[0], G.garage[1], 12.3, 12.5],
+    [G.car[0] - 1.1, G.car[0] + 1.1, G.car[1] - 2.3, G.car[1] + 2.3],
+    G.panelWall,
     WELL_WALL,
     DIVIDER,
     [ST.u0, ST.u1, ST.lane2[0], ST.lane2[1]],
-    ROOM_101,
-    AMENITY,
-    COSTUMES,
-    VENDING,
-    BENCH,
-    [14.5, 15.2, 4.5, 5.2],
+    ...roomRects(0),
+    G.amenity,
+    G.costumes,
+    G.vending,
+    G.bench,
+    [G.plant[0] - 0.3, G.plant[0] + 0.3, G.plant[1] - 0.3, G.plant[1] + 0.3],
+    [l1 - 0.45, l1, 5.6, 6.7],
+    ...G.hallBenches,
+    G.payphone,
   ];
 }
 
@@ -150,7 +100,7 @@ function stairAt(u: number, t: number): number[] {
   for (const base of [0, 5]) {
     if (u > ST.u0 && u < ST.u1 && onLane(ST.lane1)) ys.push(base + ((u - ST.u0) / (ST.u1 - ST.u0)) * ST.rise);
     if (u > ST.u0 && u < ST.u1 && onLane(ST.lane2)) ys.push(base + ST.rise + ((ST.u1 - u) / (ST.u1 - ST.u0)) * ST.rise);
-    if (u >= ST.u1 && u < IN.u1 && t > ST.lane2[0] && t < IN.t1) ys.push(base + ST.rise);
+    if (u >= ST.u1 && u < IN.u1 && t > ST.lane2[0] && t < ST.lane1[1]) ys.push(base + ST.rise);
   }
   return ys;
 }
@@ -160,9 +110,9 @@ export function rougeLayout(b: Building3): Omit<Interior, 'group'> {
   const f = localFrame(b);
   const W = (rs: readonly R4[]): Rect[] => rs.map((r) => localRect(f, r[0], r[1], r[2], r[3]));
   const g = W(groundRects());
-  const f2 = W(upperRects(ROUGE_FLOORS[1]));
-  const f3 = W(upperRects(ROUGE_FLOORS[2]));
-  const stairs = W([...ring(false), WELL_WALL, DIVIDER]);
+  const f2 = W(upperRects(FLOORS[1]));
+  const f3 = W(upperRects(FLOORS[2]));
+  const stairs = W([...ring(false), WELL_WALL, DIVIDER, SHAFT_NORTH]);
   const inKeep = (u: number, t: number): boolean => u > IN.u0 && u < IN.u1 && t > IN.t0 && t < IN.t1;
   const inWell = (u: number, t: number): boolean => u > WELL[0] && u < WELL[1] && t > WELL[2] && t < WELL[3];
   return {
@@ -172,7 +122,7 @@ export function rougeLayout(b: Building3): Omit<Interior, 'group'> {
       const [u, t] = toLocal(f, x, z);
       if (!inKeep(u, t)) return null;
       // In the stairwell only the stair counts (the ground floor under it is walled off); elsewhere the storeys.
-      const cands: number[] = inWell(u, t) ? stairAt(u, t).filter((y) => Math.abs(y - current) < 1.5) : [...ROUGE_FLOORS];
+      const cands: number[] = inWell(u, t) ? stairAt(u, t).filter((y) => Math.abs(y - current) < 1.5) : [...FLOORS];
       if (cands.length === 0) cands.push(0);
       let best = cands[0];
       for (const y of cands) if (Math.abs(y - current) < Math.abs(best - current)) best = y;
@@ -193,69 +143,35 @@ export function rougeShelters(b: Building3): { rect: Rect; y0: number; y1: numbe
   return [{ rect: localRect(localFrame(b), IN.u0 - 0.3, IN.u1 + 0.3, IN.t0 - 0.3, IN.t1 + 0.3), y0: -1, y1: 15, enclosed: true }];
 }
 
-// ---- Geometry ----
+// ---- What the game draws over the baked rooms ----
 
-const CARPET = 0x4a1424;
-const WALL = 0x6a3048;
-const DAMASK = 0x5a2440;
 const GOLD = 0xc8a050;
-const PINK: C3 = [1.2, 0.3, 0.7];
-const WARM: C3 = [0.9, 0.6, 0.4];
 
-/** Walls round a room's inside (its door in the corridor wall), from y0 to y1. */
-function roomShell(d: Draw, r: R4, y: number, hex: number, doorOnT1: boolean): void {
-  const [u0, u1, t0, t1] = r;
-  const m = mid(r);
-  d.W(hex, u0, u0 + 0.05, t0, t1, y, y + CEIL);
-  d.W(hex, u1 - 0.05, u1, t0, t1, y, y + CEIL);
-  d.W(hex, u0, u1, t0, t0 + 0.05, y, y + CEIL);
-  if (doorOnT1) {
-    d.W(hex, u0, m - DOOR_HALF, t1 - 0.05, t1, y, y + CEIL);
-    d.W(hex, m + DOOR_HALF, u1, t1 - 0.05, t1, y, y + CEIL);
-    d.W(hex, m - DOOR_HALF, m + DOOR_HALF, t1 - 0.05, t1, y + 2.2, y + CEIL);
-  }
+/** A door's number plate beside it, on the corridor side (the door itself is the model's frame and the game's leaf). */
+function doorPlate(d: Draw, r: PlanRoom): void {
+  const corridorSide: 1 | -1 = r.wall === 't1' ? 1 : -1;
+  const t = r.wall === 't1' ? r.slab[3] + 0.02 : r.slab[2] - 0.02;
+  const u = r.doorU + DOOR_HALF + 0.4;
+  const label: Record<string, [string, string]> = { staff: ['事務室', 'OFFICE'], laundry: ['ランドリー', 'LAUNDRY'], housekeeping: ['清掃用具', 'HOUSEKEEPING'], office: ['支配人室', 'MANAGER'] };
+  if (r.kind === 'service') {
+    const [jp, en] = label[r.no];
+    d.k.plane(d.sign(jp, en, '#2a2a2e', '#ffffff', 256, 96, false), 0.6, 0.22, u - 0.1, t, r.floor + 1.55, corridorSide > 0 ? 'in' : 'out', 1.0);
+  } else d.k.plane(d.sign(r.no, '', '#1a0a12', '#e8c878', 256, 128), 0.4, 0.2, u, t, r.floor + 1.55, corridorSide > 0 ? 'in' : 'out', 1.0);
 }
 
-/** A corridor door: frame, number plate, the lamp over it (red: taken; green: free), the leaf if shut. */
-function corridorDoor(d: Draw, u: number, t: number, y: number, face: 1 | -1, no: string, open: boolean): void {
-  const tf = t + face * 0.02;
-  d.W(GOLD, u - DOOR_HALF - 0.06, u - DOOR_HALF, t - 0.08, t + 0.08, y, y + 2.26);
-  d.W(GOLD, u + DOOR_HALF, u + DOOR_HALF + 0.06, t - 0.08, t + 0.08, y, y + 2.26);
-  d.W(GOLD, u - DOOR_HALF - 0.06, u + DOOR_HALF + 0.06, t - 0.08, t + 0.08, y + 2.2, y + 2.26);
-  if (!open) d.W(0x3a1020, u - DOOR_HALF, u + DOOR_HALF, t - 0.04, t + 0.04, y, y + 2.2);
-  d.glow(open ? [0.2, 1.4, 0.5] : [1.6, 0.12, 0.12], u - 0.08, u + 0.08, tf - 0.03, tf + 0.03, y + 2.4, y + 2.5);
-  d.k.plane(d.sign(no, '', '#1a0a12', '#e8c878', 256, 128), 0.4, 0.2, u + DOOR_HALF + 0.35, tf + face * 0.02, y + 1.55, face > 0 ? 'in' : 'out', 1.0);
-}
-
-function* groundFloor(d: Draw, k: Kit): Generator<void> {
-  const y = 0;
-  d.level = y;
-  d.W(CARPET, IN.u0, IN.u1, IN.t0, IN.t1, y - 0.05, y + 0.02);
-  for (const [a, b, c, e] of [[IN.u0, IN.u1, IN.t0, WELL[2]], [IN.u0, WELL[0], WELL[2], IN.t1]] as const) d.W(0x2a1420, a, b, c, e, CEIL, 5, true);
-  d.W(0x3a3a3c, GARAGE[0], GARAGE[1], GARAGE[2], GARAGE[3], y + 0.02, y + 0.03);
-  d.W(0x5a5a5c, GARAGE[0], IN.u1, IN.t0, IN.t0 + 0.02, y, CEIL);
-  // The lobby: a chandelier, the name over the doors, a bench, a plant, a mirror.
-  d.lathe(0, 11.9, 7, [[CEIL - 1.1, 0.02], [CEIL - 1.0, 0.5], [CEIL - 0.75, 0.7], [CEIL - 0.5, 0.45], [CEIL - 0.35, 0.1]], 12, EMIT.always, [1.2, 0.8, 0.9]);
-  d.W(GOLD, 11.88, 11.92, 6.98, 7.02, CEIL - 0.35, CEIL);
-  for (const [a, b] of [[8.6, 9.2], [14.6, 15.2]] as const) d.glow(PINK, a, b, IN.t0 + 0.05, IN.t0 + 0.12, CEIL - 0.3, CEIL - 0.25);
+function* groundFloor(d: Draw, k: Kit, anims: Anim[]): Generator<void> {
+  d.level = 0;
+  frontDoors(d, anims);
+  for (const door of DOORS.filter((dr) => dr.floor === 0)) swingDoor(d, door, anims);
+  // The name over the doors.
   d.k.plane(d.k.canvas(640, 160, (g) => {
     g.fillStyle = '#2a0c1a';
     g.fillRect(0, 0, 640, 160);
-    text(g, 'Hotel Rouge', 320, 70, "italic bold 76px 'Georgia', serif", '#f0c8d8');
+    text(g, HOTEL.en, 320, 70, "italic bold 76px 'Georgia', serif", '#f0c8d8');
     text(g, 'ようこそ  WELCOME', 320, 130, "28px 'Yu Gothic', sans-serif", '#d8a8b8');
-  }), 3.0, 0.75, 12, IN.t0 + 0.02, 3.45, 'in', 1.0);
-  d.W(0x8a3a5a, BENCH[0], BENCH[1], BENCH[2], BENCH[3], y, y + 0.45);
-  d.W(0x8a3a5a, BENCH[0], BENCH[1], BENCH[2], BENCH[2] + 0.15, y + 0.45, y + 0.9);
-  d.lathe(0x8a6a4a, 14.85, 4.85, [[y, 0.25], [y + 0.5, 0.3]], 10);
-  d.lathe(0x2e5a34, 14.85, 4.85, [[y + 0.5, 0.1], [y + 1.0, 0.45], [y + 1.6, 0.35], [y + 1.9, 0.05]], 8);
-  d.glow([0.5, 0.45, 0.5], LOBBY[1] - 0.03, LOBBY[1] - 0.01, 5.5, 6.8, 0.4, 2.3);
-  // The staff room's wall, its little window (a lit slot under a lace curtain, a bell on the ledge).
-  d.W(WALL, STAFF[1] - 0.1, STAFF[1], IN.t0, STAFF[3], y, CEIL);
-  d.W(WALL, IN.u0, STAFF[1], STAFF[3] - 0.1, STAFF[3], y, CEIL);
-  d.W(0x1a0a12, STAFF[1], STAFF[1] + 0.02, 6.1, 7.5, 0.95, 1.35);
-  d.glow([0.9, 0.7, 0.5], STAFF[1] + 0.02, STAFF[1] + 0.03, 6.2, 7.4, 1.0, 1.28);
-  d.W(0x3a1a28, STAFF[1], STAFF[1] + 0.3, 6.0, 7.6, 0.9, 0.95);
-  d.lathe(GOLD, STAFF[1] + 0.15, 6.4, [[0.95, 0.05], [1.0, 0.05], [1.02, 0.02]], 8);
+  }), 3.0, 0.75, CX, IN.t0 + 0.02, 3.45, 'in', 1.0);
+  // The front office's lace curtain (you never see a face) and its FRONT plate, on the lobby side of its little window.
+  const wy = (G.staffWindow[0] + G.staffWindow[1]) / 2;
   d.k.plane(d.k.canvas(256, 64, (g) => {
     g.clearRect(0, 0, 256, 64);
     g.fillStyle = 'rgba(250,240,245,0.92)';
@@ -265,247 +181,420 @@ function* groundFloor(d: Draw, k: Kit): Generator<void> {
       g.fill();
     }
     g.fillRect(0, 0, 256, 56);
-  }), 1.4, 0.35, STAFF[1] + 0.035, 6.8, 1.45, '+u', 1.0);
+  }), 1.4, 0.35, G.staffWall[1] + 0.035, wy, 1.45, '+u', 1.0);
   const lace = d.k.group.children[d.k.group.children.length - 1] as THREE.Mesh;
   (lace.material as THREE.MeshBasicMaterial).transparent = true;
-  d.k.plane(d.sign('フロント', 'FRONT', '#1a0a12', '#e8c878', 256, 96, false), 0.8, 0.3, STAFF[1] + 0.03, 6.8, 2.0, '+u', 1.0);
+  d.k.plane(d.sign('フロント', 'FRONT', '#1a0a12', '#e8c878', 256, 96, false), 0.8, 0.3, G.staffWall[1] + 0.03, wy, 2.0, '+u', 1.0);
   yield;
 
-  // The room panel: every room's photo, lit when it's free; press the button under one to take it.
+  // The room panel: every room's photo, lit when it's free (they all are, as far as the hotel says).
   const panel = d.k.canvas(1024, 480, (g) => {
     g.fillStyle = '#12060c';
     g.fillRect(0, 0, 1024, 480);
     text(g, 'ROOM SELECT  お部屋をお選びください', 512, 30, "bold 26px 'Yu Gothic', sans-serif", '#f0c8d8');
-    const tiles: [string, string, string, boolean][] = [
-      ['101', 'Classic', '#a05060', false], ['201', 'Castle', '#e890b0', true], ['202', 'Marine', '#4a90c0', false], ['203', 'Space', '#3a3a8a', true],
-      ['205', 'Resort', '#60a870', false], ['206', 'Mirror', '#a0a0b8', false], ['301', 'Onsen', '#b08a50', true], ['302', 'Karaoke', '#9a50c8', true],
-      ['303', 'Rouge Suite', '#c02040', false], ['305', 'Retro', '#c89040', false], ['306', 'Sakura', '#f0a0c0', false], ['', '', '#000', false],
-    ];
-    tiles.forEach(([no, name, col, free], i) => {
-      if (!no) return;
+    const col: Record<string, string> = { dungeon: '#7a2020', castle: '#e890b0', marine: '#4a90c0', space: '#3a3a8a', resort: '#60a870', mirror: '#a0a0b8', onsen: '#b08a50', karaoke: '#9a50c8', suite: '#c02040', retro: '#c89040', sakura: '#f0a0c0' };
+    const free = new Set(['201', '203', '301', '302']);
+    ROOMS.filter((r) => r.kind === 'guest').forEach((r, i) => {
       const x = 16 + (i % 4) * 252;
       const yy = 56 + Math.floor(i / 4) * 140;
-      g.fillStyle = free ? col : '#2a2226';
+      const on = free.has(r.no);
+      g.fillStyle = on ? col[r.theme] : '#2a2226';
       g.fillRect(x, yy, 240, 104);
-      g.fillStyle = free ? 'rgba(255,255,255,0.85)' : 'rgba(120,110,115,0.6)';
+      g.fillStyle = on ? 'rgba(255,255,255,0.85)' : 'rgba(120,110,115,0.6)';
       g.fillRect(x + 60, yy + 44, 120, 44);
-      g.fillStyle = free ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.2)';
+      g.fillStyle = on ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.2)';
       g.fillRect(x + 60, yy + 36, 120, 12);
-      text(g, `${no}  ${name}`, x + 120, yy + 20, "bold 22px 'Segoe UI', sans-serif", free ? '#ffffff' : '#6a6064');
-      text(g, free ? '休憩 ¥4,800' : '使用中', x + 120, yy + 124, `bold 20px 'Yu Gothic', sans-serif`, free ? '#80f0a0' : '#c05060');
+      text(g, `${r.no}  ${r.name}`, x + 120, yy + 20, "bold 22px 'Segoe UI', sans-serif", on ? '#ffffff' : '#6a6064');
+      text(g, on ? '休憩 ¥4,800' : '使用中', x + 120, yy + 124, "bold 20px 'Yu Gothic', sans-serif", on ? '#80f0a0' : '#c05060');
     });
   });
-  d.W(0x1a0a12, PANEL_WALL[0], PANEL_WALL[1], PANEL_WALL[2], PANEL_WALL[3], y, CEIL);
-  d.W(GOLD, 8.9, 13.3, PANEL_WALL[2] - 0.05, PANEL_WALL[2], 0.55, 2.95);
-  d.k.plane(panel, 4.3, 2.0, 11.1, PANEL_WALL[2] - 0.06, 1.75, 'out', 1.1);
-  d.glow([0.4, 1.2, 0.5], 12.9, 13.1, PANEL_WALL[2] - 0.08, PANEL_WALL[2] - 0.05, 0.55, 0.65);
-  d.person(11.3, 8.2, 0, 1, { body: 'man', pose: 'hold', color: [0.68, 0.52, 1.0], side: 1 });
-  d.person(11.95, 8.1, -0.2, 1, { body: 'woman', pose: 'hold', color: [1.0, 0.42, 0.72], side: -1, hair: 'long', long: true });
+  const p = G.panelWall;
+  d.k.plane(panel, 4.3, 2.0, CX, p[2] - 0.06, 1.75, 'out', 1.1);
+  d.person(CX - 0.6, 10.7, 0, 1, { body: 'man', pose: 'hold', color: [0.68, 0.52, 1.0], side: 1 });
+  d.person(CX + 0.05, 10.6, -0.2, 1, { body: 'woman', pose: 'hold', color: [1.0, 0.42, 0.72], side: -1, hair: 'long', long: true });
   yield;
 
-  // The garage: concrete, a car with its nose to the wall, the strip curtain, a light.
-  d.W(WALL, GARAGE[0] - 0.2, GARAGE[0], IN.t0, GARAGE_DOOR[0], y, CEIL);
-  d.W(WALL, GARAGE[0] - 0.2, GARAGE[0], GARAGE_DOOR[1], GARAGE[3], y, CEIL);
-  d.W(WALL, GARAGE[0] - 0.2, GARAGE[0], GARAGE_DOOR[0], GARAGE_DOOR[1], 2.3, CEIL);
-  d.W(0x8a8a8c, GARAGE[0], IN.u1, GARAGE[3] - 0.1, GARAGE[3] + 0.1, y, CEIL);
-  for (let s = 16.4; s < 18.7; s += 0.2) d.W(0xe06090, s, s + 0.14, IN.t0 + 0.02, IN.t0 + 0.05, 0.35, 2.7);
-  d.glow([1.1, 1.1, 1.0], 17, 18.2, 7, 7.3, CEIL - 0.03, CEIL);
-  const [cx, cz] = toWorld(k.f, 17.5, 7.5);
+  // The garage: a car with its nose to the wall, its parking sign.
+  const [cx, cz] = toWorld(k.f, G.car[0], G.car[1]);
   addCar(k.mb, { x: cx, z: cz, fx: -k.f.n[0], fz: -k.f.n[2], variant: 31, type: 'sedan', paint: 0x14141a });
-  d.k.plane(d.sign('P', 'ROUGE PARKING', '#1a3a8a', '#ffffff', 256, 160, false), 0.8, 0.5, 19, 11.05, 2.6, 'out', 1.0);
+  d.k.plane(d.sign('P', 'ROUGE PARKING', '#1a3a8a', '#ffffff', 256, 160, false), 0.8, 0.5, G.garage[1] - 1.7, 12.28, 2.6, 'out', 1.0);
   yield;
 
-  // The back hall: the amenity bar, the costume rack, the vending machine, room 101 (taken), the linen
-  // room, the side door, and the stairs up.
-  d.W(0x3a1a28, AMENITY[0], AMENITY[1], AMENITY[2], AMENITY[3], y, y + 0.9);
-  d.W(0xe8d8c8, AMENITY[0], AMENITY[1], AMENITY[2], AMENITY[3], y + 0.9, y + 0.94);
-  for (let u = AMENITY[0] + 0.2; u < AMENITY[1] - 0.4; u += 0.6) {
-    d.W(0xc8a878, u, u + 0.45, AMENITY[2] + 0.08, AMENITY[3] - 0.08, y + 0.94, y + 1.08);
-    for (let i = 0; i < 4; i++) d.W(d.pick([0xf4c8d8, 0xffffff, 0xa8d8f0, 0xf0e0a0, 0xc8f0c8]), u + 0.05 + i * 0.1, u + 0.12 + i * 0.1, AMENITY[2] + 0.15, AMENITY[3] - 0.15, y + 1.08, y + 1.2);
-  }
-  d.k.plane(d.sign('アメニティ ご自由にどうぞ', 'FREE AMENITIES', '#3a1a28', '#f0c8d8', 640, 128, false), 2.4, 0.48, 11, AMENITY[2] + 0.02, 1.9, 'in', 1.0);
-  d.W(0x8a8e92, COSTUMES[0], COSTUMES[1], COSTUMES[2], COSTUMES[2] + 0.04, y, y + 1.8);
-  d.W(0x8a8e92, COSTUMES[0], COSTUMES[1], COSTUMES[3] - 0.04, COSTUMES[3], y, y + 1.8);
-  d.W(0x8a8e92, IN.u0 + 0.3, IN.u0 + 0.34, COSTUMES[2], COSTUMES[3], y + 1.76, y + 1.8);
-  for (let t = COSTUMES[2] + 0.08; t < COSTUMES[3] - 0.08; t += 0.12) d.W(d.pick([0xf4f4f8, 0x1a1a2a, 0xe83a5a, 0x3a5ae8, 0xf4a0c0]), IN.u0 + 0.05, IN.u0 + 0.6, t, t + 0.06, y + 0.7, y + 1.72);
-  d.k.plane(d.sign('コスプレ無料貸出', 'COSTUMES TO BORROW', '#1a0a12', '#f0c8d8', 512, 128, false), 1.4, 0.35, IN.u0 + 0.02, 13.35, 2.2, '+u', 1.0);
-  d.W(0xe83a6a, VENDING[0], VENDING[1], VENDING[2], VENDING[3], y, y + 1.85);
-  d.glow([0.95, 0.9, 1.0], VENDING[1], VENDING[1] + 0.02, VENDING[2] + 0.08, VENDING[3] - 0.08, y + 0.8, y + 1.7);
-  d.W(WALL, ROOM_101[0], ROOM_101[1], ROOM_101[2], ROOM_101[2] + 0.1, y, CEIL);
-  d.W(WALL, ROOM_101[1] - 0.1, ROOM_101[1], ROOM_101[2], ROOM_101[3], y, CEIL);
-  corridorDoor(d, 8.5, ROOM_101[2], y, -1, '101', false);
-  d.W(WALL, LINEN[0], LINEN[0] + 0.2, LINEN[2], LINEN[3], y, CEIL);
-  d.W(0x5a5a5c, LINEN[0] - 0.02, LINEN[0], 12.2, 13.2, y, 2.1);
-  d.k.plane(d.sign('STAFF ONLY', '関係者以外立入禁止', '#2a2a2e', '#ffffff', 384, 128, false), 0.8, 0.27, LINEN[0] - 0.03, 12.7, 1.6, '-u', 1.0);
-  d.W(0x5a4a3a, IN.u0, IN.u0 + 0.05, SIDE_DOOR[0], SIDE_DOOR[1], y, 2.2);
-  d.glow([0.2, 1.3, 0.4], IN.u0 + 0.05, IN.u0 + 0.08, 11.75, 12.25, 2.35, 2.55);
-  for (let t = 11.5; t < IN.t1 - 0.5; t += 2) d.glow(WARM, IN.u0 + 0.05, IN.u0 + 0.12, t, t + 0.2, 2.3, 2.6);
-  d.person(7.6, 13.0, 1, 0.3, { body: 'woman', pose: 'phone', color: [0.95, 0.7, 0.85], hair: 'long', long: true });
+  // The back hall's signs: the amenity bar's (and each basket's label), the costume rack's, the vending machine's front.
+  const a = G.amenity;
+  d.k.plane(d.sign('アメニティ ご自由にどうぞ', 'FREE AMENITIES', '#3a1a28', '#f0c8d8', 640, 128, false), 2.4, 0.48, (a[0] + a[1]) / 2, a[2] + 0.02, 1.9, 'in', 1.0);
+  const AMEN: [string, string][] = [['歯ブラシ', 'TOOTHBRUSH'], ['カミソリ', 'RAZOR'], ['シャワーキャップ', 'SHOWER CAP'], ['ヘアゴム', 'HAIR TIES'], ['綿棒', 'COTTON SWABS'], ['シートマスク', 'FACE MASKS'], ['ローション', 'LOTION']];
+  AMEN.forEach(([jp, en], j) => d.k.plane(d.sign(jp, en, '#3a1a28', '#f0c8d8', 256, 96, false), 0.52, 0.2, a[0] + 0.2 + j * 0.6 + 0.225, a[3] + 0.016, 0.62, 'in', 1.0));
+  const c = G.costumes;
+  d.k.plane(d.sign('コスプレ無料貸出', 'COSTUMES TO BORROW', '#1a0a12', '#f0c8d8', 512, 128, false), 1.4, 0.35, IN.u0 + 0.02, (c[2] + c[3]) / 2, 2.2, '+u', 1.0);
+  const v = G.vending;
+  d.k.plane(d.k.canvas(256, 360, (g) => {
+    g.fillStyle = '#f4f0f4';
+    g.fillRect(0, 0, 256, 360);
+    g.fillStyle = '#e83a6a';
+    g.fillRect(0, 0, 256, 42);
+    text(g, '自動販売機 VENDING', 128, 22, "bold 20px 'Yu Gothic', sans-serif", '#ffffff');
+    const rows: [string, string, string, number][][] = [
+      [['お茶', '#4a9a4a', 'bottle', 120], ['ピンクソーダ', '#e8689a', 'bottle', 130], ['コーヒー', '#6a4a2a', 'can', 130]],
+      [['ミネラル', '#6ab0e8', 'bottle', 110], ['ビール', '#d8a838', 'can', 300], ['エナジー', '#e8e050', 'can', 250]],
+      [['おつまみ', '#c87a3a', 'box', 400], ['ミント', '#8ad8c8', 'box', 200], ['ナイトセット', '#8a4aa8', 'box', 1200]],
+    ];
+    rows.forEach((row, r) => row.forEach(([name, colr, kind, price], cc) => {
+      const x = 12 + cc * 80;
+      const y = 54 + r * 100;
+      g.fillStyle = '#d8d4d8';
+      g.fillRect(x, y, 72, 76);
+      g.fillStyle = colr;
+      if (kind === 'bottle') {
+        g.fillRect(x + 26, y + 6, 20, 14);
+        g.beginPath();
+        g.roundRect(x + 20, y + 18, 32, 54, 8);
+        g.fill();
+      } else if (kind === 'can') g.fillRect(x + 20, y + 14, 32, 56);
+      else g.fillRect(x + 12, y + 20, 48, 44);
+      text(g, name, x + 36, y + 90, "bold 11px 'Yu Gothic', sans-serif", '#2a2a2e');
+      text(g, `¥${price}`, x + 60, y + 12, "bold 11px 'Segoe UI', sans-serif", '#c81a4a');
+    }));
+  }), 0.62, 0.87, (v[0] + v[1]) / 2, v[3] + 0.035, 1.22, 'in', 1.0);
+  for (const r of roomsOn(0)) doorPlate(d, r);
+  d.person(15.4, 26.3, 1, 0.3, { body: 'woman', pose: 'phone', color: [0.95, 0.7, 0.85], hair: 'long', long: true });
 }
 
-function* upperFloor(d: Draw, y: number): Generator<void> {
+function* upperFloor(d: Draw, y: number, anims: Anim[]): Generator<void> {
   d.level = y;
-  const n = y === ROUGE_FLOORS[1] ? 2 : 3;
-  for (const [a, b, c, e] of [[IN.u0, IN.u1, IN.t0, WELL[2]], [IN.u0, WELL[0], WELL[2], IN.t1]] as const) {
-    d.W(CARPET, a, b, c, e, y - 0.05, y + 0.02);
-    d.W(0x2a1420, a, b, c, e, y + CEIL, y + 5, true);
-  }
-  // Corridor: damask walls, sconces, downlights, the floor sign by the stairs.
-  d.W(DAMASK, IN.u0, 13.05, 12.35, 12.45, y, y + CEIL);
-  d.W(DAMASK, 12.95, 13.05, 12.4, IN.t1, y, y + CEIL);
-  d.W(DAMASK, CLOSET[0], CLOSET[1], CLOSET[2], CLOSET[2] + 0.1, y, y + CEIL);
-  d.W(DAMASK, IN.u0, IN.u0 + 0.1, 10.2, 12.4, y, y + CEIL);
-  d.W(DAMASK, IN.u1 - 0.1, IN.u1, 10.2, 12.4, y, y + CEIL);
-  for (let u = 5; u < 20; u += 3) d.glow([0.8, 0.55, 0.5], u, u + 0.2, 11.2, 11.4, y + CEIL - 0.02, y + CEIL);
-  for (let u = 4.5; u < 20; u += 4) d.glow(WARM, u, u + 0.2, 12.33, 12.36, y + 1.9, y + 2.2);
-  d.k.plane(d.sign(`${n}F`, n === 2 ? '201 - 206' : '301 - 306', '#1a0a12', '#e8c878', 256, 160), 0.8, 0.5, 14.4, 12.47, y + 2.4, 'in', 1.0);
-  d.glow([0.2, 1.3, 0.4], 14, 14.8, IN.t1 - 0.06, IN.t1 - 0.02, y + 2.6, y + 2.85);
-  // Doors: the front rooms' (from the corridor, facing +t), the back rooms' (facing -t), the linen room's.
-  for (const room of ROOMS.filter((r) => r.floor === y)) {
-    if (room.back) corridorDoor(d, mid(room.r) + 0.6, 12.4, y, -1, room.no, false);
-    else {
-      corridorDoor(d, mid(room.r), 10.2, y, 1, room.no, room.theme !== null);
-      if (!room.theme) {
-        d.W(WALL, room.r[0], room.r[1], 10.1, 10.2, y, y + CEIL);
-      }
-    }
-  }
-  d.W(0x5a5a5c, 17.2, 18.2, CLOSET[2] - 0.02, CLOSET[2], y, y + 2.1);
-  if (n === 2) {
-    // A housekeeping cart and the maid.
-    d.W(0xe8e8ec, 9.8, 10.8, 11.8, 12.3, y, y + 1.0);
-    for (const h of [0.35, 0.7]) d.W(d.pick([0xffffff, 0xf4d8e0]), 9.85, 10.75, 11.85, 12.25, y + h, y + h + 0.12);
-    d.person(11.3, 11.9, -1, 0, { body: 'woman', color: [0.9, 0.9, 1.0], hair: 'bun', long: true });
-  } else {
-    d.person(12.5, 11.2, 1, 0, { body: 'man', pose: 'walk', color: [0.8, 0.6, 1.0], phase: 0.3 });
-    d.person(12.0, 11.5, 1, 0, { body: 'woman', pose: 'walk', color: [1.0, 0.5, 0.75], phase: 0.8, hair: 'long', long: true });
+  const n = y === FLOORS[1] ? 2 : 3;
+  // The floor sign on the corridor's east end wall.
+  d.k.plane(d.sign(`${n}F`, n === 2 ? '201 - 206' : '301 - 306', '#1a0a12', '#e8c878', 256, 160), 0.8, 0.5, IN.u1 - 0.02, (CORRIDOR.t0 + CORRIDOR.t1) / 2, y + 2.2, '-u', 1.0);
+  for (const door of DOORS.filter((dr) => dr.floor === y)) swingDoor(d, door, anims);
+  for (const r of roomsOn(y)) doorPlate(d, r);
+  if (n === 2) d.person(14.0, 13.6, -1, 0, { body: 'woman', color: [0.9, 0.9, 1.0], hair: 'bun', long: true });
+  else {
+    d.person(20.0, 13.4, 1, 0, { body: 'man', pose: 'walk', color: [0.8, 0.6, 1.0], phase: 0.3 });
+    d.person(19.4, 13.8, 1, 0, { body: 'woman', pose: 'walk', color: [1.0, 0.5, 0.75], phase: 0.8, hair: 'long', long: true });
   }
   yield;
-  for (const room of ROOMS.filter((r) => r.floor === y && r.theme)) {
-    themedRoom(d, room);
+  for (const room of roomsOn(y).filter((r) => r.kind === 'guest')) {
+    themedRoom(d, room, anims);
     yield;
   }
 }
 
-/** A room you can go into: the shell, the bed, the sofa and table, the glass bath, the lights, the theme. */
-function themedRoom(d: Draw, room: Room): void {
-  const y = room.floor;
-  const r = room.r;
-  const [u0, u1] = r;
-  const m = mid(r);
-  const fz = roomFurniture(r);
-  const look: Record<Theme, { wall: number; floor: number; bed: number; head: number; sofa: number; light: C3 }> = {
-    castle: { wall: 0xf4d0dc, floor: 0xe8c8d0, bed: 0xfaf0f4, head: 0xd8b060, sofa: 0xb02848, light: [1.3, 0.6, 0.8] },
-    space: { wall: 0x14163a, floor: 0x1a1c30, bed: 0x2a3a7a, head: 0x0a0c20, sofa: 0x3a3a6a, light: [0.3, 0.5, 1.5] },
-    onsen: { wall: 0xc8a878, floor: 0xc8b87a, bed: 0xf4f0e6, head: 0x6a4a2a, sofa: 0x8a6a4a, light: [1.2, 0.8, 0.45] },
-    karaoke: { wall: 0x3a1a4a, floor: 0x2a1030, bed: 0xe8203a, head: 0xe8203a, sofa: 0x6a2a8a, light: [1.1, 0.2, 1.3] },
-  };
-  const L = look[room.theme!];
-  roomShell(d, r, y, L.wall, true);
-  d.W(L.floor, u0, u1, IN.t0, 10.2, y + 0.02, y + 0.035);
-  d.W(L.wall, u0, u1, IN.t0, 10.2, y + CEIL - 0.05, y + CEIL, true);
-  // Mood light: a glowing cove round the ceiling.
-  for (const [a, b, c, e] of [[u0 + 0.1, u1 - 0.1, IN.t0 + 0.1, IN.t0 + 0.16], [u0 + 0.1, u0 + 0.16, IN.t0 + 0.1, 10.1], [u1 - 0.16, u1 - 0.1, IN.t0 + 0.1, 10.1]] as const) d.glow(L.light, a, b, c, e, y + CEIL - 0.1, y + CEIL - 0.06);
-  // The bed with its headboard (a control panel of dials), nightstands and lamps.
-  const [b0, b1, b2, b3] = fz.bed;
-  d.W(L.head, m - 1.0, m + 1.0, b2 + 0.05, b2 + 0.35, y, y + 1.15);
-  d.glow([0.6, 0.5, 0.4], m - 0.4, m + 0.4, b2 + 0.36, b2 + 0.37, y + 0.75, y + 0.9);
-  if (room.theme === 'onsen') {
-    d.W(0x8a6a4a, m - 1.0, m + 1.0, b2 + 0.4, b3, y, y + 0.25);
-    d.W(L.bed, m - 0.9, m + 0.9, b2 + 0.45, b3 - 0.1, y + 0.25, y + 0.38);
-  } else if (room.theme === 'space') {
-    d.lathe(L.bed, m, (b2 + b3) / 2 + 0.2, [[y, 1.05], [y + 0.45, 1.05], [y + 0.55, 0.95], [y + 0.56, 0.01]], 24);
-    d.lathe(0, m, (b2 + b3) / 2 + 0.2, [[y + 0.02, 1.07], [y + 0.08, 1.07]], 24, EMIT.always, [0.2, 0.5, 1.6]);
-  } else {
-    d.W(0x3a2a2a, m - 0.9, m + 0.9, b2 + 0.4, b3, y, y + 0.35);
-    d.W(L.bed, m - 0.9, m + 0.9, b2 + 0.4, b3, y + 0.35, y + 0.6);
-    for (const du of [-0.45, 0.45]) d.W(0xffffff, m + du - 0.3, m + du + 0.3, b2 + 0.45, b2 + 0.85, y + 0.6, y + 0.72);
-  }
-  if (room.theme === 'karaoke') {
-    const heart = d.k.plane(d.k.canvas(256, 256, (g) => {
-      g.clearRect(0, 0, 256, 256);
-      g.fillStyle = '#ff3a6a';
+/**
+ * A door you open and close (hotspot nodes with `swing`, hotel_rouge.yaml): a shut leaf in its doorway that swings
+ * about 100 degrees when its node is used (real/swingDoors.ts). While it's shut the doorway is a wall (the node's
+ * `gap`, the district's `blocked`). Directions are the building's local (u along the front, t inward).
+ */
+interface DoorDef {
+  readonly key: string;
+  readonly floor: number;
+  /** The hinge (local u, t); the leaf's closed direction and the side it swings to (local unit vectors). */
+  readonly hinge: readonly [number, number];
+  readonly closed: readonly [number, number];
+  readonly open: readonly [number, number];
+  readonly width: number;
+  readonly style: 'wine' | 'steel' | 'wood' | 'glass';
+}
+const SERVICE_STYLE: Record<string, DoorDef['style']> = { staff: 'wood', laundry: 'steel', housekeeping: 'steel', office: 'wood' };
+const DOORS: readonly DoorDef[] = [
+  ...ROOMS.map((r): DoorDef => {
+    const tm = (r.slab[2] + r.slab[3]) / 2;
+    return { key: r.key, floor: r.floor, hinge: [r.doorU - DOOR_HALF + 0.01, tm], closed: [1, 0], open: [0, r.wall === 't1' ? -1 : 1], width: 2 * DOOR_HALF - 0.02, style: r.kind === 'guest' ? 'wine' : SERVICE_STYLE[r.no] };
+  }),
+  // The baths' glass doors, hinged at the end nearer the bed wall, opening out into the room.
+  ...ROOMS.filter((r) => r.bathDoor).map((r): DoorDef => {
+    const b = r.bathDoor!;
+    return { key: b.key, floor: r.floor, hinge: [b.hinge[0], b.hinge[1] + b.closed[1] * 0.02], closed: b.closed, open: [-1, 0], width: b.width - 0.04, style: 'glass' };
+  }),
+  { key: 'hotel_rouge.garage_door', floor: 0, hinge: [G.lobby[1] + 0.1, G.garageDoor[0] + 0.03], closed: [0, 1], open: [-1, 0], width: 1.14, style: 'steel' },
+  { key: 'hotel_rouge.side_door', floor: 0, hinge: [IN.u0 - 0.15, SIDE_DOOR[0] + 0.03], closed: [0, 1], open: [1, 0], width: 0.94, style: 'wood' },
+];
+
+/** A door's face, by style (wine the guest rooms'; steel the garage's and the laundry's; wood the side door's and the offices'). */
+function doorTexture(d: Draw, style: Exclude<DoorDef['style'], 'glass'>): THREE.Texture {
+  return d.k.canvas(256, 512, (g) => {
+    if (style === 'wine') {
+      g.fillStyle = '#4a1830';
+      g.fillRect(0, 0, 256, 512);
+      g.strokeStyle = '#c8a050';
+      g.lineWidth = 6;
+      g.strokeRect(18, 18, 220, 476);
+      g.lineWidth = 4;
+      g.strokeRect(46, 50, 164, 190);
+      g.strokeRect(46, 270, 164, 190);
+      g.fillStyle = '#c8a050';
       g.beginPath();
-      g.moveTo(128, 236);
-      g.bezierCurveTo(-60, 110, 40, -40, 128, 60);
-      g.bezierCurveTo(216, -40, 316, 110, 128, 236);
+      g.arc(222, 262, 9, 0, Math.PI * 2);
       g.fill();
-    }), 2.0, 2.0, m, b2 + 0.37, y + 1.6, 'in', 1.2);
-    (heart.material as THREE.MeshBasicMaterial).transparent = true;
+    } else if (style === 'steel') {
+      g.fillStyle = '#6a6e72';
+      g.fillRect(0, 0, 256, 512);
+      g.fillStyle = '#4a4e52';
+      g.fillRect(0, 440, 256, 72);
+      g.fillStyle = 'rgba(170,200,210,0.8)';
+      g.fillRect(70, 70, 116, 150);
+      g.strokeStyle = '#2a2e32';
+      g.lineWidth = 6;
+      g.strokeRect(70, 70, 116, 150);
+      g.fillStyle = '#b8b8b8';
+      g.fillRect(200, 250, 30, 12);
+    } else {
+      g.fillStyle = '#5a4a3a';
+      g.fillRect(0, 0, 256, 512);
+      g.strokeStyle = '#3a2a1a';
+      g.lineWidth = 5;
+      g.strokeRect(24, 40, 208, 200);
+      g.strokeRect(24, 270, 208, 200);
+      g.fillStyle = '#c8a050';
+      g.beginPath();
+      g.arc(222, 262, 9, 0, Math.PI * 2);
+      g.fill();
+    }
+  });
+}
+
+function swingDoor(d: Draw, door: DoorDef, anims: Anim[]): void {
+  const f = d.k.f;
+  const world = (v: readonly [number, number]): [number, number] => [f.r[0] * v[0] - f.n[0] * v[1], f.r[2] * v[0] - f.n[2] * v[1]];
+  const [hx, hz] = toWorld(f, door.hinge[0], door.hinge[1]);
+  const [cx, cz] = world(door.closed);
+  const [ox, oz] = world(door.open);
+  // Three's rotation about y turns +x to (cos a, -sin a) in (x, z): the angle of a world direction is atan2(-z, x).
+  const shut = Math.atan2(-cz, cx);
+  let delta = Math.atan2(-oz, ox) - shut;
+  while (delta > Math.PI) delta -= 2 * Math.PI;
+  while (delta < -Math.PI) delta += 2 * Math.PI;
+  const swing = delta * (100 / 90);
+  const hinge = new THREE.Group();
+  hinge.position.set(hx, door.floor, hz);
+  hinge.rotation.y = shut;
+  const h = door.style === 'steel' ? 2.1 : 2.2;
+  if (door.style === 'glass') {
+    // A frameless glass door: the pane, a steel rail top and bottom, a bar handle either side.
+    const steel = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.16, 0.17, 0.18) });
+    const pane = new THREE.Mesh(new THREE.BoxGeometry(door.width, h, 0.012), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 0.27, 0.3), transparent: true, opacity: 0.16, depthWrite: false }));
+    pane.position.set(door.width / 2, h / 2, 0);
+    pane.renderOrder = 3;
+    hinge.add(pane);
+    for (const [bx, by, bw, bh, bd] of [[door.width / 2, 0.04, door.width, 0.08, 0.03], [door.width / 2, h - 0.03, door.width, 0.06, 0.03], [door.width - 0.12, 1.1, 0.03, 0.5, 0.09]] as const) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), steel);
+      bar.position.set(bx, by, 0);
+      hinge.add(bar);
+    }
+  } else {
+    const tint = door.style === 'wine' ? new THREE.Color(0.62, 0.55, 0.58) : new THREE.Color(0.7, 0.68, 0.66);
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(door.width, h, 0.04), new THREE.MeshBasicMaterial({ map: doorTexture(d, door.style), color: tint }));
+    leaf.position.set(door.width / 2, h / 2, 0);
+    hinge.add(leaf);
   }
-  for (const u of [b0 + 0.05, b1 - 0.45]) {
-    d.W(L.head, u, u + 0.4, b2 + 0.1, b2 + 0.5, y, y + 0.55);
-    d.lathe(0, u + 0.2, b2 + 0.3, [[y + 0.7, 0.13], [y + 0.9, 0.09]], 10, EMIT.always, L.light);
+  let angle = 0;
+  anims.push((dt) => {
+    angle += Math.max(-dt * 2.4, Math.min(dt * 2.4, (doorOpen(door.key) ? 1 : 0) - angle));
+    hinge.rotation.y = shut + swing * angle * angle * (3 - 2 * angle);
+  });
+  d.k.group.add(hinge);
+}
+
+/**
+ * The entrance's automatic glass doors (the gap in the front wall, FRONT_DOOR): two gold-framed tinted leaves on the
+ * wall's inside that slide apart into the wall as you come within a few metres, from either side, and close again.
+ * (From the street the building's own tinted doors show: this is the inside of them.)
+ */
+function frontDoors(d: Draw, anims: Anim[]): void {
+  const f = d.k.f;
+  const [x, z] = toWorld(f, CX, IN.t0 + 0.04);
+  const root = new THREE.Group();
+  root.position.set(x, 0, z);
+  root.rotation.y = Math.atan2(f.n[0], f.n[2]);
+  const glass = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.28, 0.36, 0.4), transparent: true, opacity: 0.3, depthWrite: false });
+  const gold = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 0.46, 0.2) });
+  const half = (FRONT_DOOR[1] - FRONT_DOOR[0]) / 2;
+  const leaves = [-1, 1].map((side) => {
+    const g = new THREE.Group();
+    const w = half;
+    const pane = new THREE.Mesh(new THREE.BoxGeometry(w - 0.04, 2.9, 0.02), glass);
+    pane.renderOrder = 3;
+    g.add(pane);
+    for (const [bx, by, bw, bh] of [[-w / 2 + 0.03, 0, 0.06, 2.9], [w / 2 - 0.03, 0, 0.06, 2.9], [0, 1.43, w, 0.06], [0, -1.43, w, 0.06], [0, -0.7, w, 0.04]] as const) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.035), gold);
+      bar.position.set(bx, by, 0);
+      g.add(bar);
+    }
+    g.position.set(side * (w / 2), 1.45, 0);
+    root.add(g);
+    return { g, side, base: side * (w / 2) };
+  });
+  let slide = 0;
+  anims.push((dt, cam) => {
+    const [u, t] = toLocal(f, cam.x, cam.z);
+    const near = Math.abs(u - CX) < 3.4 && t > 0.5 && t < 8 && cam.y < 3.2;
+    slide += Math.max(-dt * 1.8, Math.min(dt * 1.8, (near ? 1 : 0) - slide));
+    const e = slide * slide * (3 - 2 * slide);
+    for (const l of leaves) l.g.position.x = l.base + l.side * (half - 0.05) * e;
+  });
+  d.k.group.add(root);
+}
+
+/**
+ * Each guest room's tub water. The tub is the baked model (its sizes are the plan's `tub`, its centre the plan's layout
+ * `tub`); the water is a surface with a shader of its own (the user, 2026-10-12: "make the hot tub water look like real
+ * water"; it had been a tinted disc with ripple light drifting over it). A small swell and the chop a tub's jets make
+ * tilt the surface's normal; looking down you see into the water (its colour, and a net of caustic light moving over
+ * the basin), and at a shallow angle it mirrors the room instead (Fresnel): a dark ceiling, and the glint of the lamps.
+ * The room it mirrors is made up (the bake is all there is of it): the theme's light colour stands for its lamps.
+ */
+const WATER_Y = TUB.water;
+const TUB_R = TUB.rIn;
+const ONSEN_TUB = TUB.onsen;
+const WATER: Record<string, { tint: [number, number, number]; light: [number, number, number] }> = {
+  castle: { tint: [0.2, 0.42, 0.5], light: [1.0, 0.75, 0.85] },
+  space: { tint: [0.05, 0.12, 0.4], light: [0.45, 0.6, 1.0] },
+  karaoke: { tint: [0.3, 0.08, 0.36], light: [1.0, 0.45, 0.95] },
+  onsen: { tint: [0.3, 0.36, 0.3], light: [1.0, 0.8, 0.55] },
+  marine: { tint: [0.05, 0.3, 0.42], light: [0.5, 0.9, 1.0] },
+  resort: { tint: [0.1, 0.4, 0.36], light: [1.0, 0.9, 0.6] },
+  mirror: { tint: [0.16, 0.17, 0.28], light: [0.85, 0.85, 1.0] },
+  suite: { tint: [0.3, 0.1, 0.1], light: [1.0, 0.65, 0.5] },
+  retro: { tint: [0.34, 0.14, 0.3], light: [1.0, 0.55, 0.85] },
+  sakura: { tint: [0.36, 0.24, 0.28], light: [1.0, 0.8, 0.85] },
+};
+
+const WATER_VERT = /* glsl */ `
+  varying vec3 vWorld;
+  void main() {
+    vec4 w = modelMatrix * vec4(position, 1.0);
+    vWorld = w.xyz;
+    gl_Position = projectionMatrix * viewMatrix * w;
   }
-  // The sofa and the low table; a TV on the side wall.
-  const [s0, s1, s2, s3] = fz.sofa;
-  d.W(L.sofa, s0, s1, s2, s3, y, y + 0.42);
-  d.W(L.sofa, s0, s0 + 0.2, s2, s3, y + 0.42, y + 0.85);
-  const [t0, t1, t2, t3] = fz.table;
-  d.W(room.theme === 'onsen' ? 0x6a4a2a : 0x1a1a1c, t0, t1, t2, t3, y, y + 0.4);
-  d.W(0x0a0a0c, u0 + 0.4, u0 + 1.9, 10.06, 10.12, y + 1.2, y + 2.05);
-  if (room.theme !== 'karaoke') d.glow([0.25, 0.3, 0.45], u0 + 0.45, u0 + 1.85, 10.05, 10.06, y + 1.25, y + 2.0);
-  // The bath behind glass, lit from below.
-  const [w0, w1, w2, w3] = fz.bath;
-  d.k.paneT(w0, w2, w3 - 0.1, y, y + 2.4);
-  d.k.pane(w0, w1, y, y + 2.4, w2);
-  d.W(room.theme === 'onsen' ? 0xc8a070 : 0xf4f2ee, w0 + 0.2, w1 - 0.1, w2 + 0.2, w2 + 2.0, y, y + 0.6);
-  d.glow(room.theme === 'onsen' ? [0.12, 0.1, 0.07] : [0.03, 0.09, 0.12], w0 + 0.3, w1 - 0.2, w2 + 0.3, w2 + 1.9, y + 0.6, y + 0.61);
-  d.W(0xd8d8dc, w0, w1, w2, w3, y + 0.02, y + 0.04);
-  // The theme's own pieces.
+`;
+const WATER_FRAG = /* glsl */ `
+  uniform float uTime;
+  uniform vec3 uTint;
+  uniform vec3 uLight;
+  uniform vec2 uCentre;
+  uniform float uSize;
+  varying vec3 vWorld;
+  // The surface's height: four crossing swells and the rings the jets push out from the middle.
+  float height(vec2 p) {
+    float t = uTime;
+    float h = 0.011 * sin(dot(p, vec2(6.2, 3.4)) + t * 1.7);
+    h += 0.008 * sin(dot(p, vec2(-6.0, 7.5)) - t * 2.1);
+    h += 0.005 * sin(dot(p, vec2(4.4, -13.9)) + t * 2.9);
+    h += 0.003 * sin(dot(p, vec2(22.0, 13.8)) - t * 3.7);
+    float d = length(p - uCentre);
+    h += 0.004 * sin(d * 16.0 - t * 5.0) * smoothstep(uSize, 0.0, d);
+    return h;
+  }
+  // Caustics: bright lines where two warped wave fields cross zero, drifting.
+  float caustic(vec2 p) {
+    float t = uTime;
+    vec2 q = p + 0.3 * vec2(sin(p.y * 1.9 + t * 0.9), cos(p.x * 1.7 - t * 0.8));
+    q += 0.17 * vec2(sin(q.y * 3.7 - t * 1.3), cos(q.x * 3.3 + t * 1.1));
+    float a = 1.0 - abs(0.5 * (sin(q.x * 4.0) + sin(q.y * 4.0)));
+    float b = 1.0 - abs(0.5 * (sin((q.x + q.y) * 2.9 + t * 0.5) + sin((q.x - q.y) * 3.4 - t * 0.4)));
+    return pow(a, 7.0) * 0.65 + pow(b, 9.0) * 0.5;
+  }
+  void main() {
+    vec2 p = vWorld.xz;
+    float e = 0.012;
+    float h0 = height(p);
+    vec3 n = normalize(vec3(-(height(p + vec2(e, 0.0)) - h0) / e, 1.0, -(height(p + vec2(0.0, e)) - h0) / e));
+    vec3 v = normalize(cameraPosition - vWorld);
+    float nv = clamp(dot(n, v), 0.0, 1.0);
+    float fresnel = 0.03 + 0.97 * pow(1.0 - nv, 5.0);
+    vec3 r = reflect(-v, n);
+    // The room in the water: dark, brighter overhead, and two lamps' glints.
+    vec3 room = uLight * (0.035 + 0.16 * smoothstep(0.55, 1.0, r.y));
+    float glint = pow(max(dot(r, normalize(vec3(0.35, 0.9, 0.25))), 0.0), 220.0) + 0.6 * pow(max(dot(r, normalize(vec3(-0.45, 0.85, -0.3))), 0.0), 140.0);
+    // Into the water: its colour, lit by the caustic net (seen bent by the surface).
+    vec3 deep = uTint * (0.5 + 1.5 * caustic(p * 2.2 + n.xz * 0.9)) * (0.6 + 0.4 * uLight);
+    vec3 col = mix(deep, room, fresnel) + uLight * glint * 2.2;
+    gl_FragColor = vec4(col, mix(0.72, 0.97, fresnel));
+  }
+`;
+
+function bathWater(d: Draw, room: PlanRoom, anims: Anim[]): void {
+  if (!room.tub) return;
+  const spec = WATER[room.theme] ?? WATER.castle;
+  const f = d.k.f;
+  const [x, z] = toWorld(f, room.tub.u, room.tub.t);
+  const rect = room.theme === 'onsen';
+  const geo = (rect ? new THREE.PlaneGeometry(ONSEN_TUB[0], ONSEN_TUB[1], 1, 1) : new THREE.CircleGeometry(TUB_R, 48)).rotateX(-Math.PI / 2);
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: WATER_VERT,
+    fragmentShader: WATER_FRAG,
+    uniforms: {
+      uTime: { value: 0 },
+      uTint: { value: new THREE.Color(...spec.tint) },
+      uLight: { value: new THREE.Color(...spec.light) },
+      uCentre: { value: new THREE.Vector2(x, z) },
+      uSize: { value: rect ? Math.max(...ONSEN_TUB) / 2 : TUB_R },
+    },
+    transparent: true,
+    depthWrite: false,
+  });
+  const water = new THREE.Mesh(geo, mat);
+  water.position.set(x, room.floor + WATER_Y, z);
+  water.rotation.y = Math.atan2(f.n[0], f.n[2]);
+  water.renderOrder = 2;
+  // (each tub keeps its own time, so no two tubs move alike)
+  let t = (room.rect[0] * 7.3 + room.floor) % 50;
+  anims.push((dt) => {
+    t += dt;
+    mat.uniforms.uTime.value = t;
+  });
+  d.k.group.add(water);
+}
+
+/** A guest room's glass and pictures (the room and its furniture are the baked model): the bath's panes, its water, the theme's canvases. */
+function themedRoom(d: Draw, room: PlanRoom, anims: Anim[]): void {
+  const y = room.floor;
+  const fwd = room.wall === 't1';
+  const bath = room.bath;
+  if (bath) {
+    // The glass on the bath's two open sides: along its west edge (but for its door, a leaf of its own, with a fixed
+    // light over it), and along the edge away from the bed wall.
+    const g = room.bathDoor?.gap;
+    if (g) {
+      d.k.paneT(bath[0], bath[2], g[2], y, y + 2.4);
+      d.k.paneT(bath[0], g[3], bath[3], y, y + 2.4);
+      d.k.paneT(bath[0], g[2], g[3], y + 2.2, y + 2.4);
+    } else d.k.paneT(bath[0], bath[2], bath[3], y, y + 2.4);
+    d.k.pane(bath[0], bath[1], y, y + 2.4, fwd ? bath[3] : bath[2]);
+  }
+  bathWater(d, room, anims);
+  const [u0, u1] = [room.rect[0], room.rect[1]];
+  const facing: 'in' | 'out' = fwd ? 'in' : 'out'; // looking from the far wall toward the door
   switch (room.theme) {
-    case 'castle':
-      for (const [a, b] of [[m - 1.05, b2 + 0.1], [m + 0.95, b2 + 0.1], [m - 1.05, b3 - 0.1], [m + 0.95, b3 - 0.1]] as const) d.W(L.head, a, a + 0.1, b, b + 0.1, y, y + 2.6);
-      d.W(0xf8e0ea, m - 1.1, m + 1.1, b2 + 0.05, b3, y + 2.6, y + 2.7);
-      d.quad(0xf8e0ea, d.P(m - 1.1, b3, y + 2.6), d.P(m + 1.1, b3, y + 2.6), d.P(m + 1.1, b3 + 0.05, y + 1.6), d.P(m - 1.1, b3 + 0.05, y + 1.6));
-      d.lathe(0, m, 8.3, [[y + CEIL - 1.0, 0.02], [y + CEIL - 0.9, 0.45], [y + CEIL - 0.65, 0.55], [y + CEIL - 0.45, 0.3]], 12, EMIT.always, [1.3, 1.0, 0.8]);
-      d.W(GOLD, u1 - 0.06, u1 - 0.04, 4.8, 6.0, y + 0.9, y + 2.4);
-      d.glow([0.55, 0.52, 0.55], u1 - 0.07, u1 - 0.06, 4.9, 5.9, y + 1.0, y + 2.3);
-      break;
-    case 'space': {
+    case 'space':
       d.k.plane(d.k.canvas(512, 512, (g) => {
         g.fillStyle = '#05061a';
         g.fillRect(0, 0, 512, 512);
-        for (let i = 0; i < 260; i++) {
+        for (let i = 0; i < 360; i++) {
           const a = (i * 2654435761) >>> 0;
           g.fillStyle = `rgba(255,255,255,${0.4 + (a % 60) / 100})`;
           g.fillRect(a % 512, (a >>> 9) % 512, 1 + (a % 3 === 0 ? 1 : 0), 1 + (a % 3 === 0 ? 1 : 0));
         }
-        const neb = g.createRadialGradient(330, 200, 10, 330, 200, 200);
+        const neb = g.createRadialGradient(330, 200, 10, 330, 200, 220);
         neb.addColorStop(0, 'rgba(160,80,220,0.5)');
         neb.addColorStop(1, 'rgba(160,80,220,0)');
         g.fillStyle = neb;
         g.fillRect(0, 0, 512, 512);
-      }), u1 - u0 - 0.2, 5.6, m, 7.25, y + CEIL - 0.07, 'out', 1.0).rotation.set(Math.PI / 2, 0, 0);
-      d.lathe(0, u0 + 0.6, 5.0, [[y + 1.8, 0.001], [y + 1.89, 0.22], [y + 2.1, 0.3], [y + 2.31, 0.22], [y + 2.4, 0.001]], 12, EMIT.always, [1.3, 0.6, 0.3]);
-      d.lathe(0, u0 + 0.6, 5.0, [[y + 2.08, 0.5], [y + 2.12, 0.5]], 16, EMIT.always, [0.9, 0.8, 0.6]);
-      break;
-    }
-    case 'onsen':
-      d.k.plane(d.k.canvas(256, 384, (g) => {
-        g.fillStyle = '#f4ecd8';
-        g.fillRect(0, 0, 256, 384);
-        g.strokeStyle = '#6a4a2a';
-        g.lineWidth = 6;
-        for (let x = 0; x <= 256; x += 64) {
-          g.beginPath();
-          g.moveTo(x, 0);
-          g.lineTo(x, 384);
-          g.stroke();
-        }
-        for (let yy = 0; yy <= 384; yy += 64) {
-          g.beginPath();
-          g.moveTo(0, yy);
-          g.lineTo(256, yy);
-          g.stroke();
-        }
-      }), 1.6, 2.4, m + 1.8, IN.t0 + 0.06, y + 1.4, 'in', 1.1);
-      d.W(0x6a4a2a, u0 + 0.1, u0 + 1.2, IN.t0 + 0.1, IN.t0 + 0.5, y, y + 0.3);
-      d.W(0xf4ecd8, u0 + 0.5, u0 + 0.8, IN.t0 + 0.2, IN.t0 + 0.4, y + 0.3, y + 0.9);
-      d.glow([1.2, 0.8, 0.45], u0 + 0.55, u0 + 0.75, IN.t0 + 0.24, IN.t0 + 0.36, y + 0.4, y + 0.8);
-      for (let t = IN.t0 + 0.3; t < 10; t += 0.9) d.W(0x5a4020, u0, u1, t, t + 0.02, y + 0.035, y + 0.04);
+      }), u1 - u0 - 0.4, room.D - 0.6, (u0 + u1) / 2, (room.rect[2] + room.rect[3]) / 2, y + ROOM_CEIL - 0.02, 'out', 1.0).rotation.set(Math.PI / 2, 0, 0);
       break;
     case 'karaoke': {
+      const [hu, ht] = room.pt(2.55, 0.37);
+      const heart = d.k.plane(d.k.canvas(256, 256, (g) => {
+        g.clearRect(0, 0, 256, 256);
+        g.fillStyle = '#ff3a6a';
+        g.beginPath();
+        g.moveTo(128, 236);
+        g.bezierCurveTo(-60, 110, 40, -40, 128, 60);
+        g.bezierCurveTo(216, -40, 316, 110, 128, 236);
+        g.fill();
+      }), 1.7, 1.7, hu, ht, y + 2.35, facing, 1.2);
+      (heart.material as THREE.MeshBasicMaterial).transparent = true;
+      // The karaoke screen: the TV on the west wall (the plan's layout `tv`), facing the sofa.
+      const [su, st] = room.pt(0.165, 5.5);
       d.k.plane(d.k.canvas(512, 288, (g) => {
         const gr = g.createLinearGradient(0, 0, 512, 288);
         gr.addColorStop(0, '#3a0a5a');
@@ -516,76 +605,36 @@ function themedRoom(d: Draw, room: Room): void {
         text(g, 'CITY LIGHTS / ROUGE', 256, 250, "20px 'Segoe UI', sans-serif", '#ffe0f0');
         g.fillStyle = '#60e0ff';
         g.fillRect(96, 206, 150, 4);
-      }), 1.4, 0.79, u0 + 1.15, 10.04, y + 1.62, 'out', 1.2);
-      d.ball(0xd8d8e0, m, 8.3, y + CEIL - 0.9, 0.25, 10);
-      d.W(0xd8d8e0, m - 0.01, m + 0.01, 8.29, 8.31, y + CEIL - 0.4, y + CEIL);
-      for (let i = 0; i < 12; i++) {
-        const a = i * 2.39996;
-        const cu = m + Math.cos(a) * (1.2 + (i % 3) * 0.6);
-        const ct = 7.4 + Math.sin(a) * 1.4;
-        d.glow(i % 2 ? [1.2, 0.3, 1.2] : [0.3, 0.8, 1.4], cu - 0.05, cu + 0.05, ct - 0.05, ct + 0.05, y + CEIL - 0.04, y + CEIL - 0.03);
-      }
-      d.W(0x1a1a1c, u0 + 1.5, u0 + 1.54, 9.0, 9.04, y, y + 1.4);
-      d.ball(0x2a2a2e, u0 + 1.52, 9.02, y + 1.4, 0.05, 8);
+      }), 2.0, 1.12, su, st, y + 1.575, '+u', 1.2);
       break;
     }
   }
 }
 
-/** The stair: treads on both lanes for both storeys, the landings, the divider, rails. */
+/**
+ * The stair itself is the baked model. The top floor has no flight up, so where the next one would start (the hall's edge
+ * over the flight below) there is a balustrade: glass, and its gold top. (It had been a rail the whole length of the
+ * shaft at the top floor's height, which from the stair below was a bar hanging across the well: the user, 2026-10-12.)
+ */
 function* stairs(d: Draw): Generator<void> {
   d.level = 0;
-  for (const base of [0, 5]) {
-    const run = ST.u1 - ST.u0;
-    for (let i = 0; i < 12; i++) {
-      const a = ST.u0 + (i * run) / 12;
-      const b = ST.u0 + ((i + 1) * run) / 12;
-      const y1 = base + ((i + 1) / 12) * ST.rise;
-      const y2 = base + ST.rise + ((12 - i) / 12) * ST.rise;
-      d.W(CARPET, a, b, ST.lane1[0], ST.lane1[1], y1 - 0.2, y1);
-      d.W(CARPET, a, b, ST.lane2[0], ST.lane2[1], y2 - 0.2, y2);
-      d.W(GOLD, a, a + 0.04, ST.lane1[0], ST.lane1[1], y1 - 0.005, y1 + 0.005);
-      d.W(GOLD, b - 0.04, b, ST.lane2[0], ST.lane2[1], y2 - 0.005, y2 + 0.005);
-    }
-    d.W(CARPET, ST.u1, IN.u1, ST.lane2[0], IN.t1, base + ST.rise - 0.25, base + ST.rise);
-    d.quad(0x2a1420, d.P(ST.u0, ST.lane1[0], base - 0.2), d.P(ST.u0, ST.lane1[1], base - 0.2), d.P(ST.u1, ST.lane1[1], base + ST.rise - 0.25), d.P(ST.u1, ST.lane1[0], base + ST.rise - 0.25));
-    d.quad(0x2a1420, d.P(ST.u1, ST.lane2[0], base + ST.rise - 0.25), d.P(ST.u1, ST.lane2[1], base + ST.rise - 0.25), d.P(ST.u0, ST.lane2[1], base + 2 * ST.rise - 0.25), d.P(ST.u0, ST.lane2[0], base + 2 * ST.rise - 0.25));
-  }
-  d.W(DAMASK, DIVIDER[0], DIVIDER[1], DIVIDER[2], DIVIDER[3], 0, 14.1);
-  d.W(DAMASK, WELL_WALL[0], WELL_WALL[1], WELL_WALL[2], WELL_WALL[3], 0, 14.1);
-  // The well's own ceiling over the top floor (the storeys' ceilings leave the well open).
-  d.W(0x2a1420, WELL[0], WELL[1], WELL[2], WELL[3], ROUGE_FLOORS[2] + CEIL, 15, true);
-  // The rail round the well on the top floor.
-  d.k.pane(ST.u0, IN.u1, 10, 11.0, ST.lane2[1] + 0.02);
-  d.k.paneT(ST.u1, ST.lane2[0], ST.lane2[1], 10, 11.0);
-  d.W(GOLD, ST.u0, IN.u1, ST.lane2[1] - 0.02, ST.lane2[1] + 0.06, 11.0, 11.05, true);
-  for (let y = 1.8; y < 14; y += 5) d.glow(WARM, IN.u1 - 0.12, IN.u1 - 0.05, 16.8, 17.0, y + 0.6, y + 0.9);
+  const y = FLOORS[2];
+  d.k.paneT(ST.u0 + 0.03, ST.lane1[0], ST.lane1[1], y, y + 1.05);
+  d.W(GOLD, ST.u0, ST.u0 + 0.06, ST.lane1[0], ST.lane1[1], y + 1.05, y + 1.1, true);
   yield;
-}
-
-/** The keep's walls inside, full height, the front doors' gap on the ground floor. */
-function walls(d: Draw): void {
-  const top = 15;
-  d.W(WALL, IN.u0 - 0.1, IN.u0, IN.t0, IN.t1, 0, top);
-  d.W(WALL, IN.u1, IN.u1 + 0.1, IN.t0, IN.t1, 0, top);
-  d.W(WALL, IN.u0, IN.u1, IN.t1, IN.t1 + 0.1, 0, top);
-  d.W(WALL, IN.u0, ROUGE_DOOR.u0, IN.t0 - 0.1, IN.t0, 0, top);
-  d.W(WALL, ROUGE_DOOR.u1, IN.u1, IN.t0 - 0.1, IN.t0, 0, top);
-  d.W(WALL, ROUGE_DOOR.u0, ROUGE_DOOR.u1, IN.t0 - 0.1, IN.t0, 2.95, top);
-  d.W(0x1a0a12, ROUGE_DOOR.u0 - 0.1, ROUGE_DOOR.u0, IN.t0 - 0.1, IN.t0 + 0.1, 0, 2.95);
-  d.W(0x1a0a12, ROUGE_DOOR.u1, ROUGE_DOOR.u1 + 0.1, IN.t0 - 0.1, IN.t0 + 0.1, 0, 2.95);
 }
 
 /** The hotel's interior (hidden until you're inside), built a slice at a time. */
 export function* rougeInterior(b: Building3, city: THREE.Material, ghost: THREE.Material): Generator<void, Interior> {
   const k = new Kit(b);
   const d = new Draw(k);
-  walls(d);
-  yield* groundFloor(d, k);
-  yield* upperFloor(d, ROUGE_FLOORS[1]);
-  yield* upperFloor(d, ROUGE_FLOORS[2]);
+  const anims: Anim[] = [];
+  yield* groundFloor(d, k, anims);
+  yield* upperFloor(d, FLOORS[1], anims);
+  yield* upperFloor(d, FLOORS[2], anims);
   yield* stairs(d);
   const group = k.finish(city, ghost);
+  for (const m of ['rouge_xl_ground', 'rouge_xl_f2', 'rouge_xl_f3']) placeModel(group, b, 0, m);
   group.visible = false;
-  return { group, ...rougeLayout(b) };
+  return { group, ...rougeLayout(b), tick: (dt, cam) => { for (const a of anims) a(dt, cam); } };
 }

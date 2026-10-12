@@ -17,12 +17,14 @@ import { CELL, cellKey, DISTRICTS3, isRiverWalk, isVerge, STYLES3, throughMouths
 import type { Node3, Placed3 } from './stamps';
 import type { ZoneMap } from './zones';
 import type { Avenues, Bridge3 } from './roads';
+import type { BusLine } from './traffic';
 import { landmarkColliders, landmarkFloor, landmarkRaisedColliders, landmarkShelters, type Shelter } from './landmarks';
 import { roadUnder } from './rail';
 import { inPark, inPond } from './parkLand';
 import { stationKerb } from '../real/station';
 import type { Rect } from '../../core/coords';
 import type { Interior } from '../real/interiors';
+import { doorOpen } from '../real/swingDoors';
 import { cityFromUrl } from './cityConfig';
 import { floorLevel, groundSurface, indoorSurface, type Surface } from './footing';
 import { footbridgeFloor, footbridgeGround, footbridgeRaised, footbridgeShelter, footbridges, footbridgesNear } from './footbridges';
@@ -156,9 +158,12 @@ export class District {
     reserved: readonly Rect[] = [],
     /** Ground under something built over it: no trees or planting (expressway.ts `expresswayCovered`). */
     covered: readonly Rect[] = [],
+    /** The bus lines (traffic.yaml): the model places their stops (DistrictModel.busStops). */
+    buses: readonly BusLine[] = [],
   ) {
-    this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues, terrain, reserved, covered);
+    this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues, terrain, reserved, covered, buses);
     this.nodes = placed.flatMap((p) => p.nodes);
+    this.doorGaps = this.nodes.filter((n) => n.swing !== null && n.gap !== null).map((n) => ({ key: n.swing!, rect: n.gap!, floor: n.floor }));
     // Stamps collide as their footprint, or (landmarks you can walk into) as their walls and fixtures.
     const solid = (p: Placed3): Rect[] => [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }];
     // (A station's piers: in the road's median, or as portal frames over its carriageway.)
@@ -175,6 +180,8 @@ export class District {
     }
   }
 
+  /** The doorways of doors you open and close (stamp nodes with `swing` and `gap`): walls while their door is shut, from either side. */
+  private readonly doorGaps: readonly { key: string; rect: Rect; floor: number }[];
   private readonly stampColliders: (readonly Rect[])[];
   private readonly stampOutside = new Map<number, readonly Rect[]>();
 
@@ -207,6 +214,13 @@ export class District {
     }
   }
 
+  /**
+   * The expressway's deck as a floor to walk on (set by the page): the deck's height under (x, z) for someone
+   * already up on it (`current` well over the ground), else null. Off its edge `deckOpen` is false: a wall.
+   */
+  deckFloor: ((x: number, z: number, current: number) => number | null) | null = null;
+  deckOpen: ((x: number, z: number, floorAbs: number) => boolean) | null = null;
+
   /** More street-level colliders (the viaduct's piers). */
   addColliders(rects: readonly Rect[]): void {
     this.stampColliders.push(rects);
@@ -220,6 +234,8 @@ export class District {
    * Where levels overlap (a platform over the pavement), the one nearest the walker's current floor wins.
    */
   floorAt = (x: number, z: number, current = 0): number => {
+    const deck = this.deckFloor?.(x, z, current);
+    if (deck !== null && deck !== undefined) return deck;
     for (const it of this.interiors.values()) {
       const y = it.floorAt(x, z, current);
       if (y !== null) return y;
@@ -489,11 +505,15 @@ export class District {
     // (Levels are relative to the ground: street level on a hill is still 0.)
     const floor = floorAbs - this.terrain.height(x, z);
     const inRects = (rs: readonly Rect[]): boolean => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
+    for (const g of this.doorGaps) {
+      if (Math.abs(floor - g.floor) < 1.6 && !doorOpen(g.key) && x > g.rect.x - r && x < g.rect.x + g.rect.w + r && z > g.rect.y - r && z < g.rect.y + g.rect.h + r) return true;
+    }
     const inside = (): boolean => {
       for (const it of this.interiors.values()) if (inRects(it.colliders(floor))) return true;
       return false;
     };
     if (floor < -1) return (floor > -8 ? this.basementColliders : this.deepColliders).some(inRects) || inside();
+    if (floor > 0.6 && this.deckOpen && !this.deckOpen(x, z, floorAbs)) return true;
     if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? [])) || inside() || footbridgesNear(x, z, 1).some((b) => inRects(footbridgeRaised(b)));
     if (!this.inDistrict(x, z)) return true;
     if (inPark(x, z) && (inPond(x, z, r) || (this.landBlocked?.(x, z, r) ?? false))) return true;

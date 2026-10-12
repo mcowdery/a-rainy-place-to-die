@@ -1,11 +1,14 @@
 # Hotel Rouge (ホテル ルージュ): the Love District's flagship, a castle love hotel. A landmark built by
-# real/loveHotel.ts (24 m front, 21 m deep): pastel keep, corner towers with red cones, a donjon, pink neon,
-# and a discreet entrance behind a screen wall. Inside (real/rougeInterior.ts): the lobby with its room panel,
-# two floors of themed rooms up a switchback stair; you walk in through the front doors (or E there, or at the
-# hidden side door into the back hall). Room 303, the Rouge Suite, is taken: its door hands off to the VN.
+# real/loveHotel.ts (34 m front, 30 m deep): pastel keep, corner towers with red cones, a donjon, pink neon,
+# and a discreet entrance behind a screen wall. Inside (real/rougeInterior.ts; its floor plan is
+# content/world3d/rouge_plan.json; the rooms are baked Blender models, assets/interiors/rouge_xl_*.glb): the lobby with
+# its room panel, the front office, the garage, the back hall, and up a switchback stair two floors of themed rooms
+# (every one real and openable), the laundry, housekeeping and the manager's office. You walk in through the front doors
+# (they slide open) or the doorway in the west wall into the back hall. Room 303, the Rouge Suite, is the story's: its
+# desk is a handoff node (the VN).
 id: hotel_rouge
 name: Hotel Rouge ルージュ
-footprint: [24, 21]
+footprint: [34, 30]
 height: 30
 front: south
 landmark: love_hotel
@@ -13,66 +16,86 @@ nodes:
   front:
     kind: spawn
     name: Hotel Rouge
-    at: [16, 11.5]
+    at: [21, 11.5]
     facing: north
     view: [14, 20]
   entrance:
     kind: door
     name: Hotel Rouge
-    at: [12, -3.2]
+    at: [17, -3.2]
     returnSpawn: lobby
     through: true
   exit:
     kind: door
     name: the street
-    at: [12, -4.9]
+    at: [17, -4.9]
     returnSpawn: front
-    through: true
-  side_door:
-    kind: door
-    name: Side entrance
-    at: [2.6, -12]
-    returnSpawn: back_hall
-    through: true
-  side_out:
-    kind: door
-    name: the side street
-    at: [3.8, -12]
-    returnSpawn: side
     through: true
   lobby:
     kind: spawn
     name: Hotel Rouge lobby
-    at: [12, -5.4]
+    at: [17, -5.4]
     facing: north
     view: [0, 2]
   back_hall:
     kind: spawn
     name: Hotel Rouge (back hall)
-    at: [4.6, -12]
+    at: [8.5, -14.6]
     facing: east
   floor2:
     kind: spawn
     name: Hotel Rouge 2F
-    at: [11, -11.3]
+    at: [23, -13.65]
     floor: 5
-    facing: east
+    facing: west
   floor3:
     kind: spawn
     name: Hotel Rouge 3F
-    at: [11, -11.3]
+    at: [23, -13.65]
     floor: 10
-    facing: east
+    facing: west
   room_303:
     kind: door
-    name: Room 303 · Rouge Suite
-    at: [17.75, -10.9]
+    name: Room 303 · Rouge Suite (the desk)
+    at: [27.2, -10.6]
     floor: 10
     returnSpawn: floor3
     handoff: {}
   side:
     kind: spawn
     name: Hotel Rouge (side entrance)
-    at: [-1.2, -7.5]
+    at: [-1.2, -13.5]
     facing: north
     view: [-50, 6]
+  # Doors you open and close (swing: E flips the door's state, real/swingDoors.ts; gap: its doorway's rect [u0, u1, t0, t1],
+  # a wall while the door is shut, from either side). Every room's door (printed by scripts/rougePlanNodes.mjs from the
+  # plan), then the garage's and the side doorway's.
+  door_101: { kind: hotspot, name: Room 101 · Dungeon, at: [8.3, -16.35], floor: 0, swing: true, gap: [7.65, 8.95, 16.8, 17.1] }
+  door_staff: { kind: hotspot, name: Front office, at: [6.65, -12.95], floor: 0, swing: true, gap: [6, 7.3, 12.2, 12.5] }
+  door_laundry: { kind: hotspot, name: Laundry, at: [23.1, -17.25], floor: 0, swing: true, gap: [22.45, 23.75, 17.7, 18] }
+  door_201: { kind: hotspot, name: Room 201 · Castle, at: [7.8, -12.95], floor: 5, swing: true, gap: [7.15, 8.45, 12.2, 12.5] }
+  door_202: { kind: hotspot, name: Room 202 · Marine, at: [16.9, -12.95], floor: 5, swing: true, gap: [16.25, 17.55, 12.2, 12.5] }
+  door_203: { kind: hotspot, name: Room 203 · Space, at: [26.1, -12.95], floor: 5, swing: true, gap: [25.45, 26.75, 12.2, 12.5] }
+  door_205: { kind: hotspot, name: Room 205 · Resort, at: [7.8, -14.35], floor: 5, swing: true, gap: [7.15, 8.45, 14.8, 15.1] }
+  door_206: { kind: hotspot, name: Room 206 · Mirror, at: [16.9, -14.35], floor: 5, swing: true, gap: [16.25, 17.55, 14.8, 15.1] }
+  door_housekeeping: { kind: hotspot, name: Housekeeping, at: [23.1, -17.25], floor: 5, swing: true, gap: [22.45, 23.75, 17.7, 18] }
+  door_301: { kind: hotspot, name: Room 301 · Onsen, at: [7.8, -12.95], floor: 10, swing: true, gap: [7.15, 8.45, 12.2, 12.5] }
+  door_302: { kind: hotspot, name: Room 302 · Karaoke, at: [16.9, -12.95], floor: 10, swing: true, gap: [16.25, 17.55, 12.2, 12.5] }
+  door_303: { kind: hotspot, name: Room 303 · Rouge Suite, at: [26.1, -12.95], floor: 10, swing: true, gap: [25.45, 26.75, 12.2, 12.5] }
+  door_305: { kind: hotspot, name: Room 305 · Retro, at: [7.8, -14.35], floor: 10, swing: true, gap: [7.15, 8.45, 14.8, 15.1] }
+  door_306: { kind: hotspot, name: Room 306 · Sakura, at: [16.9, -14.35], floor: 10, swing: true, gap: [16.25, 17.55, 14.8, 15.1] }
+  door_office: { kind: hotspot, name: Manager's office, at: [23.1, -17.25], floor: 10, swing: true, gap: [22.45, 23.75, 17.7, 18] }
+  # The baths' glass doors (the same script prints them).
+  bath_201: { kind: hotspot, name: Room 201 · bath, at: [7.7, -8.3], floor: 5, swing: true, gap: [8.2, 8.4, 7.8, 8.8] }
+  bath_202: { kind: hotspot, name: Room 202 · bath, at: [16.8, -8.3], floor: 5, swing: true, gap: [17.3, 17.5, 7.8, 8.8] }
+  bath_203: { kind: hotspot, name: Room 203 · bath, at: [26.1, -8.3], floor: 5, swing: true, gap: [26.6, 26.8, 7.8, 8.8] }
+  bath_205: { kind: hotspot, name: Room 205 · bath, at: [7.7, -23.7], floor: 5, swing: true, gap: [8.2, 8.4, 23.2, 24.2] }
+  bath_206: { kind: hotspot, name: Room 206 · bath, at: [16.8, -23.7], floor: 5, swing: true, gap: [17.3, 17.5, 23.2, 24.2] }
+  bath_301: { kind: hotspot, name: Room 301 · bath, at: [7.7, -8.3], floor: 10, swing: true, gap: [8.2, 8.4, 7.8, 8.8] }
+  bath_302: { kind: hotspot, name: Room 302 · bath, at: [16.8, -8.3], floor: 10, swing: true, gap: [17.3, 17.5, 7.8, 8.8] }
+  bath_303: { kind: hotspot, name: Room 303 · bath, at: [26.1, -8.3], floor: 10, swing: true, gap: [26.6, 26.8, 7.8, 8.8] }
+  bath_305: { kind: hotspot, name: Room 305 · bath, at: [7.7, -23.7], floor: 10, swing: true, gap: [8.2, 8.4, 23.2, 24.2] }
+  bath_306: { kind: hotspot, name: Room 306 · bath, at: [16.8, -23.7], floor: 10, swing: true, gap: [17.3, 17.5, 23.2, 24.2] }
+  garage_door: { kind: hotspot, name: The garage door, at: [22.6, -7.6], floor: 0, swing: true, gap: [23.5, 23.7, 7.0, 8.2] }
+  side_door: { kind: hotspot, name: The side door, at: [4.3, -13.5], floor: 0, swing: true, gap: [3.0, 3.3, 13.0, 14.0] }
+  side_door_out: { kind: hotspot, name: The side door, at: [2.0, -13.5], floor: 0, swing: side_door }

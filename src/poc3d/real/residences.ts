@@ -14,14 +14,19 @@ import { EMIT } from './meshBuilder';
  * - dorm: a plain white four-storey block with frosted windows behind a low wall and gate, a row of bicycles, and a
  *   discreet plate (Stella Production's idols live here; nothing says so).
  * - net_cafe: a two-storey 24-hour manga café, its vertical sign, lit fascia, posters of the night pack.
+ * - detective: a narrow two-storey back-alley tenement, 霧島探偵事務所 up its stair (the office is a baked Blender room,
+ *   real/homesCast.ts), a vertical sign over the door.
  * Nothing of the exterior stands inside a flat's box (the flats keep the exterior, whose faces are one-sided).
  */
-export const RESIDENCE_KINDS = ['mansion', 'dorm', 'net_cafe'] as const;
+export const RESIDENCE_KINDS = ['mansion', 'dorm', 'net_cafe', 'detective'] as const;
 export type ResidenceKind = (typeof RESIDENCE_KINDS)[number];
 
 /** The mansion's storeys: ground floor 3.5 m, then 3 m. */
 export const MANSION = { w: 20, d: 16, gf: 3.5, floor: 3, floors: 7 } as const;
 export const mansionFloorY = (n: number): number => (n <= 1 ? 0 : MANSION.gf + (n - 2) * MANSION.floor);
+
+/** The detective's tenement: 6 m on the alley, 14 m deep, two storeys; the office floor is 3 m up. */
+export const DETECTIVE = { w: 6, d: 14, h: 6.4 } as const;
 
 /** Names by placement id. */
 const MANSIONS: Readonly<Record<string, readonly [string, string]>> = {
@@ -38,6 +43,8 @@ export function residenceColliders(kind: ResidenceKind, b: Building3): Rect[] {
       return [R(0, 24, 0, 16), R(0, 9.4, -2.6, -2.3), R(11.6, 24, -2.6, -2.3)];
     case 'net_cafe':
       return [R(0, 16, 0, 20)];
+    case 'detective':
+      return [R(0, DETECTIVE.w, 0, DETECTIVE.d)];
   }
 }
 
@@ -54,6 +61,8 @@ export function residenceLights(kind: ResidenceKind, b: Building3): Light[] {
       return [L(10.5, -1.5, 6, [1.0, 0.92, 0.8], 0.5)];
     case 'net_cafe':
       return [L(8, -1.5, 9, [1.0, 0.85, 0.5], 0.9), L(14.5, -1, 8, [0.6, 0.8, 1.0], 0.6)];
+    case 'detective':
+      return [L(2.4, -1.2, 6, [1.0, 0.85, 0.55], 0.6), L(5.5, -0.8, 5, [0.5, 0.9, 0.7], 0.5)];
   }
 }
 
@@ -164,5 +173,36 @@ export const RESIDENCE_BUILDERS: Record<ResidenceKind, (k: Kit, id: string) => (
     });
     k.box(0x3a3a3e, 5.5, 10.5, -1.6, 0, 2.9, 3.05);
     k.glow([1.4, 1.1, 0.7], 6.5, 9.5, -1.4, -1.2, 2.88, 2.9, EMIT.lamp);
+  },
+
+  detective(k) {
+    const { w, d, h } = DETECTIVE;
+    k.facade(0x6e665a, [3.0, 0.3, 1.1, 4], 128, 0, w, 0, d, 0, h, true);
+    k.box(0x4a443c, -0.2, w + 0.2, -0.2, d + 0.2, h, h + 0.4);
+    // The street door, recessed under a little lamp, a mailbox panel beside it; the stair behind is the game's teleport.
+    k.box(0x2a2622, 1.6, 2.9, -0.08, 0, 0, 2.2);
+    k.box(0x8a7a5a, 1.7, 2.8, -0.1, -0.08, 0.1, 2.1);
+    k.box(0x3a3a3e, 1.4, 3.1, -0.7, 0, 2.3, 2.4);
+    k.glow([1.3, 1.1, 0.8], 1.9, 2.6, -0.5, -0.3, 2.28, 2.3, EMIT.lamp);
+    k.box(0x5a5e62, 3.5, 4.4, -0.14, -0.04, 0.9, 1.5);
+    plate(k, 0.8, 0.5, 3.95, -0.15, 1.2, (g, W, H) => {
+      g.fillStyle = '#c8c0a8';
+      g.fillRect(0, 0, W, H);
+      text(g, '霧島 2F', W / 2, H * 0.58, `bold ${Math.round(H * 0.4)}px 'Yu Gothic', sans-serif`, '#2a2a2a');
+    });
+    // The window sign of the second floor, gilt on glass, lit from inside, and the vertical sign over the alley.
+    k.lit(0xf0d8a0, 1.2, 4.8, -0.03, 0, 3.7, 5.2, false);
+    plate(k, 2.8, 0.5, 3.0, -0.06, 4.4, (g, W, H) => {
+      g.clearRect(0, 0, W, H);
+      text(g, '霧島探偵事務所', W / 2, H * 0.55, `bold ${Math.round(H * 0.7)}px 'Yu Mincho', serif`, '#6a4a10');
+    });
+    k.box(0x2a2a2e, w - 0.3, w - 0.1, -0.6, 0, 3.0, 5.9);
+    for (let i = 0; i < 7; i++) {
+      plate(k, 0.7, 0.4, w - 0.2, -0.65, 5.7 - i * 0.4, (g, W, H) => {
+        g.fillStyle = '#1a1a22';
+        g.fillRect(0, 0, W, H);
+        text(g, '霧島探偵事務所'[i], W / 2, H * 0.55, `bold ${Math.round(H * 0.8)}px 'Yu Gothic', sans-serif`, '#ff5a6a');
+      }, true);
+    }
   },
 };

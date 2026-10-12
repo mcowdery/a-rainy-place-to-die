@@ -1,0 +1,17 @@
+# 霧島探偵事務所 Kirishima Investigations, up the stair of a narrow back-alley tenement in Kaburo (real/residences.ts,
+# kind detective; the office itself is a baked Blender room, assets/interiors/office_kirishima.glb, real/homesCast.ts).
+# The detective's office: E at the street door takes you up, E at the door inside back out. The case board is the
+# story's way in. (The old flat 201 at コーポ川端 stays, for a home.)
+id: kirishima
+name: 霧島探偵事務所 Kirishima Investigations
+footprint: [6, 14]
+height: 6.4
+front: south
+landmark: detective
+nodes:
+  front: { kind: spawn, name: 霧島探偵事務所 (Kaburo back alleys), at: [2.2, 6], facing: north, view: [0, 8] }
+  office: { kind: door, name: 霧島探偵事務所 2F, at: [2.2, 0.5], returnSpawn: home, through: true }
+  home: { kind: spawn, name: 霧島探偵事務所 (the office), at: [2.0, -3.2], floor: 3, facing: north, view: [0, -4] }
+  leave: { kind: door, name: the street, at: [1.95, -2.3], floor: 3, returnSpawn: front, through: true }
+  case_board: { kind: hotspot, name: The case board, at: [4.0, -7.6], floor: 3 }
+  mailbox: { kind: hotspot, name: The mailboxes, at: [3.95, 0.6] }

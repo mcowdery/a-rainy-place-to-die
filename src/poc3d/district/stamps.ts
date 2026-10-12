@@ -21,7 +21,10 @@ import { OUTFITS, type Outfit } from './peopleMix';
  *   nodes:
  *     door: { kind: door, name: Bar Kanpai, at: [6, 0], returnSpawn: out }    # at: [u along front, metres out]
  *     (a door with `through: true` is a plain doorway: E fades you to its returnSpawn instead of the VN;
- *     a hotspot with `sleep: true` is a bed: E sleeps until morning)
+ *     a hotspot with `sleep: true` is a bed: E sleeps until morning; one with `swing: true` is a door that E opens
+ *     and closes, drawn and walled by its interior, real/swingDoors.ts: `swing: <name>` shares one door's state
+ *     between nodes, `gap: [u0, u1, t0, t1]` is the doorway's rect (u along the front, t inward) that blocks
+ *     while it's shut; one with `locked: true` is a door that won't open: E says so)
  *     out:  { kind: spawn, at: [6, 3], facing: south }
  *
  * A landmark stamp (landmark: mega_sign) keeps its footprint, collision and forecourt, but its mass is not
@@ -83,6 +86,12 @@ export interface StampNode {
   readonly through: boolean;
   /** A bed (hotspot nodes, `sleep: true`): E sleeps until morning (district/clock.ts). */
   readonly sleep: boolean;
+  /** A door you open and close (hotspot nodes, `swing: true` or a name; real/swingDoors.ts): its name, or true for this node's own. */
+  readonly swing: string | true | null;
+  /** The doorway's rect while the door is shut: [u0, u1, t0, t1] (u along the front, t inward), or null. */
+  readonly gap: readonly [number, number, number, number] | null;
+  /** A door that won't open (hotspot nodes, `locked: true`): E tells you it's occupied. */
+  readonly locked: boolean;
   readonly handoff: unknown;
 }
 
@@ -132,6 +141,12 @@ export interface Node3 {
   readonly through: boolean;
   /** A bed: E sleeps until morning. */
   readonly sleep: boolean;
+  /** A door E opens and closes: the state's key (`<placement>.<name>`), or null. */
+  readonly swing: string | null;
+  /** The doorway's rect (world) that blocks while that door is shut. */
+  readonly gap: Rect | null;
+  /** A door that won't open: E says it's occupied. */
+  readonly locked: boolean;
   readonly handoff: unknown;
   readonly placementId: string;
 }
@@ -222,6 +237,9 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
     if ((kind === 'door' || kind === 'station') && returnSpawn === null) err(`node '${nid}': ${kind} needs returnSpawn`);
     if (raw.through !== undefined && (kind !== 'door' || typeof raw.through !== 'boolean')) err(`node '${nid}': through is true/false, on doors`);
     if (raw.sleep !== undefined && (kind !== 'hotspot' || typeof raw.sleep !== 'boolean')) err(`node '${nid}': sleep is true/false, on hotspots`);
+    if (raw.swing !== undefined && (kind !== 'hotspot' || (typeof raw.swing !== 'boolean' && typeof raw.swing !== 'string'))) err(`node '${nid}': swing is true or a door's name, on hotspots`);
+    if (raw.gap !== undefined && (!Array.isArray(raw.gap) || raw.gap.length !== 4 || raw.gap.some((v) => typeof v !== 'number'))) err(`node '${nid}': gap is [u0, u1, t0, t1]`);
+    if (raw.locked !== undefined && (kind !== 'hotspot' || typeof raw.locked !== 'boolean')) err(`node '${nid}': locked is true/false, on hotspots`);
     if (raw.view !== undefined && !isPair(raw.view)) err(`node '${nid}': view must be [yaw, pitch] in degrees`);
     let figure: NodeFigure | null = null;
     if (raw.figure !== undefined) {
@@ -261,6 +279,9 @@ export function parseStamp3(file: string, text: string, errors: string[]): Stamp
       out,
       through: raw.through === true,
       sleep: raw.sleep === true,
+      swing: typeof raw.swing === 'string' ? raw.swing : raw.swing === true ? true : null,
+      gap: Array.isArray(raw.gap) ? (raw.gap as [number, number, number, number]) : null,
+      locked: raw.locked === true,
       handoff: raw.handoff ?? {},
     });
   }
@@ -293,6 +314,13 @@ const CELL_MARGIN = 10;
  * placements.yaml: - { id, stamp, cell: [mx, my], offset: [ox, oz] }  (offset: metres from the cell's NW
  * corner to the footprint's NW corner). Validates ids, bounds, overlaps and node references.
  */
+/** A doorway's rect in the world, from its local [u0, u1, t0, t1] (u along the front, t inward from it). */
+function doorGap(b: Building3, g: readonly [number, number, number, number]): Rect {
+  const a = frontPoint(b, g[0], -g[2]);
+  const c = frontPoint(b, g[1], -g[3]);
+  return { x: Math.min(a.x, c.x), y: Math.min(a.z, c.z), w: Math.abs(c.x - a.x), h: Math.abs(c.z - a.z) };
+}
+
 export function placeStamps3(file: string, text: string, macro: MacroMap, stamps: ReadonlyMap<string, Stamp3>, errors: string[]): Placed3[] {
   const err = (m: string): void => void errors.push(`${file}: ${m}`);
   let doc: unknown;
@@ -354,6 +382,9 @@ export function placeStamps3(file: string, text: string, macro: MacroMap, stamps
         z: q.z,
         through: n.through,
         sleep: n.sleep,
+        swing: n.swing === null ? null : `${id}.${n.swing === true ? n.id : n.swing}`,
+        gap: n.gap === null ? null : doorGap(building, n.gap),
+        locked: n.locked,
         handoff: n.handoff,
         placementId: id,
       };
