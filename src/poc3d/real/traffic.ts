@@ -755,7 +755,7 @@ export class TrafficSystem {
   /** A new bus standing at a stop with its doors open, its front door within r of p: to board. */
   busToBoard(p: THREE.Vector3, r = 3.5): Vehicle | null {
     for (const v of this.vehicles) {
-      if (!v.bus2 || this.busDoors(v) < 0.85) continue;
+      if (!v.bus2 || v.off || this.busDoors(v) < 0.85) continue;
       // The front door's middle, outside the kerb side (+x is the bus's left).
       const zf = (BUS.FRONT_DOOR[0] + BUS.FRONT_DOOR[1]) / 2;
       const lx = v.dz;
@@ -818,7 +818,7 @@ export class TrafficSystem {
   /** A line jeepney standing at a stop with its back open, the step within r of p: to board. */
   jeepToBoard(p: THREE.Vector3, r = 3.2): Vehicle | null {
     for (const v of this.vehicles) {
-      if (!v.jeep || this.busDoors(v) < 0.85) continue;
+      if (!v.jeep || v.off || this.busDoors(v) < 0.85) continue;
       // Just behind the step (the model's frame: z along the body, the step's back at -3.95).
       const x = v.obj.position.x - v.dx * 4.4;
       const z = v.obj.position.z - v.dz * 4.4;
@@ -840,7 +840,7 @@ export class TrafficSystem {
   hailJeepney(p: THREE.Vector3): Vehicle | null {
     let best: { v: Vehicle; at: number; d: number } | null = null;
     for (const v of this.vehicles) {
-      if (!v.jeep || v.mode !== 'traffic' || (v.hailAt !== undefined && v.hailAt >= 0) || v.dwell > 0) continue;
+      if (!v.jeep || v.off || v.mode !== 'traffic' || (v.hailAt !== undefined && v.hailAt >= 0) || v.dwell > 0) continue;
       const L = v.route.length;
       let at = 0;
       let bd = Infinity;
@@ -1282,9 +1282,9 @@ export class TrafficSystem {
 
   /** The n vehicles nearest a point: position, velocity, acceleration, and whether it's a bus. */
   nearest(p: THREE.Vector3, n: number): { x: number; z: number; vx: number; vz: number; speed: number; acc: number; bus: boolean; type?: string }[] {
-    // (Your own car has its own engine sound.)
+    // (Your own car has its own engine sound; a vehicle off the road for the dead hours makes none, wherever it stood.)
     return this.vehicles
-      .filter((v) => !v.own)
+      .filter((v) => !v.own && !v.off)
       .map((v) => ({ v, d: (v.x - p.x) ** 2 + (v.z - p.z) ** 2 }))
       .sort((a, b) => a.d - b.d)
       .slice(0, n)
@@ -1294,7 +1294,7 @@ export class TrafficSystem {
   /** Whether a walker (or a driven car's piece) at (x, z) of radius r touches a vehicle (other than `except`). */
   blocked(x: number, z: number, r: number, except: DrivenVehicle | null = null): boolean {
     for (const v of this.vehicles) {
-      if (v === except || v.aloft) continue;
+      if (v === except || v.aloft || v.off) continue;
       const ox = x - v.x;
       const oz = z - v.z;
       if (Math.abs(ox) > 7 || Math.abs(oz) > 7) continue;
@@ -1308,7 +1308,7 @@ export class TrafficSystem {
   /** The vehicle over (x, z), if any: its object (for what's to ride on it: a bullet's mark). */
   objectAt(x: number, z: number, except: DrivenVehicle | null = null): THREE.Object3D | null {
     for (const v of this.vehicles) {
-      if (v === except || v.aloft) continue;
+      if (v === except || v.aloft || v.off) continue;
       const ox = x - v.x;
       const oz = z - v.z;
       if (Math.abs(ox) > 7 || Math.abs(oz) > 7) continue;
@@ -1325,7 +1325,7 @@ export class TrafficSystem {
     let best: Vehicle | null = null;
     let bestD = reach;
     for (const v of this.vehicles) {
-      if (v.mode === 'driven' || (!any && Math.abs(v.v) > 1.2) || (ownOnly && !v.own)) continue;
+      if (v.mode === 'driven' || v.off || (!any && Math.abs(v.v) > 1.2) || (ownOnly && !v.own)) continue;
       const ox = p.x - v.x;
       const oz = p.z - v.z;
       if (ox * ox + oz * oz > (v.half + reach + 1) ** 2) continue;

@@ -31,7 +31,7 @@ try {
       const hour = window.__ghost.uniforms.uHour.value;
       const standing = window.__district.crowd?.standingNear(c.x, c.z, 120, hour).length ?? -1;
       const cars = window.__traffic.movingNear(c, 320).length;
-      return { hour: +hour.toFixed(2), standing, cars, quiet: +window.__traffic.quiet.toFixed(2) };
+      return { hour: +hour.toFixed(2), standing, cars, sounding: window.__traffic.nearest(c, 3).length, quiet: +window.__traffic.quiet.toFixed(2) };
     });
     console.log(t, JSON.stringify(seen));
     await page.screenshot({ path: `${out}/crossing-${t.replace(':', '')}.png` });
