@@ -188,9 +188,45 @@ export class FirstPerson {
     return this.vy;
   }
 
+  /** A gun's recoil on the view: lifts it by `up` radians and turns it by `side`, then the view settles back to
+   * where it was aimed (a spring, `recoilLeft`), so it's a kick you see, not a drift you have to pull down. */
+  kick(up: number, side: number, settles = true): void {
+    this.nudge(up, side);
+    // (Not settling: the shot leaves the view where it threw it, and you pull it back down yourself.)
+    if (settles) {
+      this.recoilUp += up;
+      this.recoilSide += side;
+    }
+  }
+
+  private recoilUp = 0;
+  private recoilSide = 0;
+
+  private nudge(up: number, side: number): void {
+    const eu = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
+    eu.y += side;
+    if (this.shearOn) {
+      const t = this.tanHalfFov();
+      const pitch = THREE.MathUtils.clamp(Math.atan(this.shear * t) + up, -1.4, 1.4);
+      this.shear = THREE.MathUtils.clamp(Math.tan(pitch) / t, -MAX_SHEAR, MAX_SHEAR);
+    } else eu.x = THREE.MathUtils.clamp(eu.x + up, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
+    this.camera.quaternion.setFromEuler(eu);
+  }
+
+  private recoilLeft(dt: number): void {
+    if (Math.abs(this.recoilUp) < 1e-5 && Math.abs(this.recoilSide) < 1e-5) return;
+    const f = 1 - Math.exp(-dt * 14);
+    const up = this.recoilUp * f;
+    const side = this.recoilSide * f;
+    this.recoilUp -= up;
+    this.recoilSide -= side;
+    this.nudge(-up, -side);
+  }
+
   update(dt: number): void {
     this.applyProjection();
     dt = Math.min(dt, MAX_DT);
+    this.recoilLeft(dt);
     const k = this.keys;
     const f = Number(k.has('KeyW') || k.has('ArrowUp')) - Number(k.has('KeyS') || k.has('ArrowDown'));
     const r = Number(k.has('KeyD') || k.has('ArrowRight')) - Number(k.has('KeyA') || k.has('ArrowLeft'));
