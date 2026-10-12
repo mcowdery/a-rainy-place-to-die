@@ -140,7 +140,8 @@ export class Driving {
     this.baseFov = this.camera.fov;
     if (own) {
       own.sound.start();
-      own.sound.setVolume(1);
+      // Getting in turns the key (a running engine just carries on); an empty tank won't start.
+      own.setEngine(true);
     }
     this.yaw = Math.atan2(car.dx, car.dz);
     this.steer = 0;
@@ -243,6 +244,11 @@ export class Driving {
       const c = auto ?? (this.hold ? { throttle: 0, brake: 0, steer: -turn, handbrake: false } : { throttle: gas ? 1 : 0, brake: brake ? 1 : 0, steer: -turn, handbrake: hand });
       Object.assign(this.pedals, { throttle: c.throttle, brake: c.brake, handbrake: c.handbrake });
       this.own.drive(dt, c);
+      // His hand on the ignition key, and the key's turn (the cabin shows the key, the driver's hand goes to it).
+      if (this.interior) {
+        this.interior.motion.key = this.own.keyHand;
+        this.interior.motion.keyTurn = this.own.keyTurn;
+      }
       // Held at the line: still (the brake at a standstill would engage reverse).
       if (this.hold) this.own.sim.u = this.own.sim.w = this.own.sim.r = 0;
       const knock = this.own.knock;
@@ -390,7 +396,7 @@ export class Driving {
         }
         if (this.interior) {
           const gear = sim ? sim.gear : c.v < -0.1 ? 0 : 1;
-          const rpm = sim ? 900 + sim.rev * (this.interior.redline - 900) : 800 + Math.min(1, Math.abs(c.v) / 20) * 2600;
+          const rpm = sim ? (this.own ? this.own.engineRpm(900 + sim.rev * (this.interior.redline - 900)) : 900 + sim.rev * (this.interior.redline - 900)) : 800 + Math.min(1, Math.abs(c.v) / 20) * 2600;
           this.interior.update(
             {
               steer: sim ? sim.steer : this.steer,

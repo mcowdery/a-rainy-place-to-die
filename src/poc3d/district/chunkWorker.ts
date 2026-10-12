@@ -30,7 +30,7 @@ self.onmessage = (e: MessageEvent<WorkerIn>) => {
     setTreeSet(m.city);
     setWorkLiveries(CITIES[m.city].tropical);
     const content = loadDistrictContent(m.city);
-    const model = new DistrictModel(content.macro, m.kinds, content.placed, m.seed, content.zones, content.avenues, content.terrain, [...railReserved(content.rails), ...expresswayReservedFrom('expressway.yaml', content.expresswayText)], expresswayCoveredFrom('expressway.yaml', content.expresswayText));
+    const model = new DistrictModel(content.macro, m.kinds, content.placed, m.seed, content.zones, content.avenues, content.terrain, [...railReserved(content.rails), ...expresswayReservedFrom('expressway.yaml', content.expresswayText)], expresswayCoveredFrom('expressway.yaml', content.expresswayText), content.traffic.buses);
     setRooftopSigns(CITIES[m.city].rooftopSigns);
     builder = new ChunkBuilder(model, new SignLayout(signTexts(m.words, content.placed)), CITIES[m.city].ads);
     self.postMessage({ type: 'ready' });

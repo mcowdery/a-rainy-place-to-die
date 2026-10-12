@@ -1,4 +1,5 @@
 import './nav';
+import { installSnap } from '../../debug/snap';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -106,6 +107,8 @@ export const FRONT_VIEW = new THREE.Vector3(0, 0.55, 0.85).normalize();
 
 export function startRoom(cfg: RoomConfig): RoomCtx {
   const renderer = new THREE.WebGLRenderer({ antialias: false });
+  // F9: a snapshot and a note for reporting an issue (debug/snap.ts, saved to debug-shots/).
+  const snap = installSnap(renderer.domElement, `showroom-${cfg.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -444,6 +447,7 @@ export function startRoom(cfg: RoomConfig): RoomCtx {
     for (const fn of frameFns) fn(dt);
     censor.track(fp ? fp.body : null, camera);
     composer.render(dt);
+    snap.afterRender();
     labels.render(scene, camera);
     $('hud').textContent = fp && fp.active ? fp.hud() : [
       `MODEL SHOWROOM · ${cfg.title}${cfg.previous ? ` · ${gen === 'new' ? 'NEW models (under review)' : 'previous models (district)'}` : ''} · ${mode} lighting · built in ${tBuilt.toFixed(0)} ms`,

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { BLUSH_LOOKS, CRIMSON, DARK, EMOTE_GLSL, EMOTE_LOOKS, EMOTE_RATE, EMOTE_REACH, HEART_LOOKS, IVORY, MARKS, mk, STAR_LOOKS, type EmoteLooks, type Mark } from './emoteGlsl';
-import { HEAD, SPINE, THIGH_L } from './mobRig';
+import { HEAD, oldGlsl, SPINE, THIGH_L } from './mobRig';
 import { FIGURE_ATTRS, FIGURE_STRIDE, figureSize, getMobShape, MOB_PLACE_GLSL } from './people';
 
 export { BLUSH_LOOKS, EMOTE_LOOKS, EMOTE_MARKS, EMOTE_RATE, HEART_LOOKS, STAR_LOOKS, type EmoteLooks, type Mark } from './emoteGlsl';
@@ -491,7 +491,7 @@ const headGlsl = (cols: number, rows: number): string => /* glsl */ `
         vec3 p1 = pv(${SPINE});
         vec3 p2 = pv(${HEAD});
         float hip = pv(${THIGH_L}).y;
-        float lean = body == 3 ? 0.2 : 0.02;
+        float lean = ${oldGlsl('body')} ? 0.2 : 0.02;
         float drop = 0.0;
         float yaw = aPose.w;
         float pitch = 0.0;

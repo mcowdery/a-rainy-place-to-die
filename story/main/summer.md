@@ -6,7 +6,7 @@
 
 A woman inside the triad's accounts has been feeding Public Security for years, and her handler has gone quiet.
 Through the port, the car meets and the festival, Mack follows the money she's been tracing until every rival in
-Tōto turns out to be paid from the same accounts. Then he has to get her, and the proof, across the bay alive.
+Tokyo turns out to be paid from the same accounts. Then he has to get her, and the proof, across the bay alive.
 
 | # | Chapter | Point of view | Where | Fight |
 |---|---|---|---|---|

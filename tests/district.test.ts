@@ -1363,6 +1363,18 @@ describe('Interiors: Hotel Rouge', () => {
     expect(district.nodes.find((n) => n.id === 'hotel_rouge.entrance')!.through).toBe(true);
   });
 
+  it('hands the reflections only enclosed volumes to dry: the keep, not the porch or a viaduct', () => {
+    const [x, z] = toWorld(f, 17, -2);
+    const all = district.sheltersNear(x, z, 70, 24);
+    const dry = district.sheltersNear(x, z, 70, 24, true);
+    expect(all.some((s) => !s.enclosed)).toBe(true);
+    expect(dry.length).toBeGreaterThan(0);
+    expect(dry.every((s) => s.enclosed)).toBe(true);
+    // The court in front of the doors (under the porch's canopy) is in no enclosed volume: its ground stays wet.
+    const [cx, cz] = toWorld(f, 17, 2.5);
+    expect(dry.some((s) => cx > s.rect.x && cx < s.rect.x + s.rect.w && cz > s.rect.y && cz < s.rect.y + s.rect.h && 0.1 > s.y0 && 0.1 < s.y1)).toBe(false);
+  });
+
   it('keeps the rain out on every storey and up the stair, and lets it fall in the front court', () => {
     for (const [u, t, y] of [[17, 7, 1.7], [8.5, 14.6, 1.7], [23, 13.65, 6.7], [16.9, 8, 11.7], [27, 16.5, 4], [29, 16.5, 9.2], [23, 16.4, 11.7], [30.4, 17.4, 14]] as const) {
       expect(district.shelterAt(...toWorld(f, u, t), y)?.enclosed, `${u}, ${t} at ${y}`).toBe(true);

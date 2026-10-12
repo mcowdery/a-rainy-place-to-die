@@ -30,7 +30,7 @@ type C3 = [number, number, number];
 
 export interface Prop {
   readonly kind:
-    | 'lamp' | 'pole' | 'vending' | 'tree' | 'car' | 'signal'
+    | 'lamp' | 'pole' | 'vending' | 'payphone' | 'tree' | 'car' | 'signal'
     // Greenery and the furniture of open ground (openLots.ts).
     | 'hedge' | 'pots' | 'planter' | 'bench' | 'postlamp' | 'fence' | 'paymachine' | 'psign' | 'wheelstop'
     | 'swing' | 'slide' | 'sandbox' | 'toilet' | 'weeds' | 'board' | 'cones' | 'bike' | 'hoop'
@@ -101,8 +101,16 @@ function freeSpans(r: Road3, roads: readonly Road3[], margin: number, side = 0):
   return spans;
 }
 
-export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[], plazas: readonly Rect[] = [], covered: readonly Rect[] = []): CellDetail {
+export function cellDetail(
+  plan: CellPlan3,
+  extraBuildings: readonly Building3[],
+  plazas: readonly Rect[] = [],
+  covered: readonly Rect[] = [],
+  /** Ground something else of the street's stands on (a bus stop and where people wait at it: DistrictModel.claimed): nothing here goes in it. */
+  claimed: readonly Rect[] = [],
+): CellDetail {
   const props: Prop[] = [];
+  const taken = (x: number, z: number, m = 0): boolean => claimed.some((q) => x > q.x - m && x < q.x + q.w + m && z > q.y - m && z < q.y + q.h + m);
   const wires: C3[][] = [];
   const lights: Light[] = [];
   const cell = plan.rect;
@@ -269,7 +277,6 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       const width = r.vertical ? q.w : q.h;
       const boulevard = width >= 14;
       const edgeRoad = q.x < cell.x || q.y < cell.y || q.x + q.w > cell.x + cell.w || q.y + q.h > cell.y + cell.h;
-      // Keep the kerb clear where bus stops can stand (the middle of each cell edge) and of blade signs.
       // One species along a stretch of street (keyed by its line and a two-cell stretch of it, so both cells of an
       // edge road agree), as Tokyo plants them: ginkgo and zelkova avenues, ginkgo and dogwood on narrower
       // pavements, and here and there a sakura namiki, a street lined with cherries (more of them in the
@@ -280,7 +287,6 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       const homey = !edgeRoad && plan.buildings.some((b) => (b.zone?.look.homes ?? 0) > 0.3) ? 12 : 0;
       const cuts = boulevard ? treeSet().boulevard : treeSet().street;
       const streetSpecies: TreeSpecies = cuts.cuts.find(([, upTo, shifts]) => line < upTo - (shifts ? homey : 0))?.[0] ?? cuts.rest;
-      const stopClear = (t: number): boolean => !edgeRoad || Math.abs((((t % CELL3) + CELL3) % CELL3) - CELL3 / 2) > 7;
       const bladeClear = (x: number, z: number, m: number): boolean => !plan.signs.some((g) => g.vertical && Math.hypot(g.x - x, g.z - z) < m);
       for (const side of [-1, 1]) {
         for (const [s, e] of freeSpans(r, reach, 2, side)) {
@@ -289,9 +295,13 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
           // the kerb between lamp and tree.
           const phase = side > 0 ? LAMP_SPACING / 2 : 0;
           for (let t = s + 4 + phase; t < e - 3; t += LAMP_SPACING) {
-            // (A lamp where a bus stop can stand steps aside, just out of its way.)
-            const mid = t - (((t % CELL3) + CELL3) % CELL3) + CELL3 / 2;
-            const tl = stopClear(t) ? t : t < mid ? mid - 7.5 : mid + 7.5;
+            // (A lamp where a bus stop stands steps aside, just out of its way.)
+            let tl = t;
+            for (let k = 1; k <= 16; k++) {
+              const [lx, lz] = along(tl, side, r.sidewalk - 0.45);
+              if (!taken(lx, lz, 0.5)) break;
+              tl = t + (k % 2 ? 1 : -1) * Math.ceil(k / 2);
+            }
             const [x, z, nx, nz] = along(tl, side, r.sidewalk - 0.45);
             if (mine(x, z) && !underFootbridge(x, z, 1.2)) {
               props.push({ kind: 'lamp', x, z, nx, nz, radius: 0.2, variant: 0 });
@@ -304,7 +314,7 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
             const inset = boulevard ? r.sidewalk - 0.9 : r.sidewalk - 0.6;
             const [x2, z2, nx2, nz2] = along(tt, side, inset);
             const roll = u01(hash(Math.round(x2 * 4), Math.round(z2 * 4), 0x7ee));
-            if (tt < e - 3 && (boulevard || roll < style.streetTrees) && mine(x2, z2) && stopClear(tt) && bladeClear(x2, z2, 3.2) && !beforeStamp(x2, z2) && !under(x2, z2) && !underFootbridge(x2, z2, 2.5)) {
+            if (tt < e - 3 && (boulevard || roll < style.streetTrees) && mine(x2, z2) && !taken(x2, z2, 1.2) && bladeClear(x2, z2, 3.2) && !beforeStamp(x2, z2) && !under(x2, z2) && !underFootbridge(x2, z2, 2.5)) {
               // Sized to the pavement: the crown reaches no closer than 0.25 m to the building line. A species
               // too big for its pavement even at half size isn't planted (a cherry on a 1.6 m pavement: its
               // crown stood 2 m out, the trunk in the carriageway on a stem leaning further than it rose).
@@ -318,8 +328,9 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
             }
             if (r.sidewalk >= 2.4) {
               for (const [c, h] of [[t + 5.5, 3.6], [t + 16.5, 3.6]] as const) {
-                if (c + h > e - 3 || !stopClear(c) || !stopClear(c - h) || !stopClear(c + h)) continue;
+                if (c + h > e - 3) continue;
                 const [hx, hz, hnx, hnz] = along(c, side, r.sidewalk - 0.55);
+                if (taken(hx, hz, 0.4) || taken(hx - (r.vertical ? 0 : h), hz - (r.vertical ? h : 0), 0.4) || taken(hx + (r.vertical ? 0 : h), hz + (r.vertical ? h : 0), 0.4)) continue;
                 if (!mine(hx, hz) || under(hx, hz) || underFootbridge(hx, hz, 2) || u01(hash(Math.round(hx * 4), Math.round(hz * 4), 0x4ed9e)) >= style.hedges) continue;
                 if (beforeStamp(hx - (r.vertical ? 0 : h), hz - (r.vertical ? h : 0)) || beforeStamp(hx + (r.vertical ? 0 : h), hz + (r.vertical ? h : 0)) || beforeStamp(hx, hz)) continue;
                 props.push({ kind: 'hedge', x: hx, z: hz, nx: hnx, nz: hnz, radius: 0.35, half: h, variant: 0 });
@@ -330,9 +341,9 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
           if (cellStreet > 0 && e - s > 30) {
             const hs = hash(Math.round(s * 4), Math.round(q.x * 4), Math.round(q.y * 4), side + 9);
             const ts = s + 10 + ((hs >>> 8) % Math.max(1, Math.round(e - s - 20)));
-            if (hs % 100 < 60 * cellStreet && stopClear(ts) && stopClear(ts - 4) && stopClear(ts + 4)) {
+            if (hs % 100 < 60 * cellStreet) {
               const [x, z, nx, nz] = along(ts, side, r.sidewalk - 0.4);
-              manilaStreet.stopSign(x, z, nx, nz, hs >>> 4, rc);
+              if (!taken(x, z, 4)) manilaStreet.stopSign(x, z, nx, nz, hs >>> 4, rc);
             }
             if (side === 1 && width < 20 && (hs >>> 12) % 100 < 24 * cellStreet) {
               const tt = s + 8 + ((hs >>> 16) % Math.max(1, Math.round(e - s - 16)));
@@ -399,17 +410,12 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
       });
     }
     const rnd = rng(hash(b.id, 0x7e4d));
-    // (Nothing against a wall in the middle of a cell edge's pavement, where a bus stop can stand: on a narrow
-    // pavement its shelter reaches the wall.)
-    const atStop = (u: number): boolean => {
-      const x = f.p[0] + f.r[0] * u;
-      const z = f.p[2] + f.r[2] * u;
-      const near = (a: number, b: number): boolean => Math.abs(a - Math.round(a / CELL3) * CELL3) < 14 && Math.abs(b - (Math.floor(b / CELL3) + 0.5) * CELL3) < 9;
-      return near(x, z) || near(z, x);
-    };
+    // (Nothing against a wall where a bus stop stands: people wait there, and on a narrow pavement they reach the wall.)
+    const atStop = (u: number): boolean => taken(f.p[0] + f.r[0] * u + f.n[0] * 0.45, f.p[2] + f.r[2] * u + f.n[2] * 0.45, 0.3);
     const used: [number, number][] = [];
     let vendAt: number | null = null;
-    if (sw > 6 && b.hue === undefined && rnd.chance(b.zone?.look.vending ?? 0.14)) {
+    if (sw > 6 && b.hue === undefined && rnd.chance(b.zone?.look.vending ?? 0.14) && !s.shopOpen) {
+      // (Not against an open shopfront: they stood across its door.)
       const count = rnd.int(1, 3);
       const start = rnd.chance(0.5) ? s0 + 0.4 : s1 - 0.4 - count * 1.05;
       vendAt = start + (count * 1.05) / 2;
@@ -509,6 +515,186 @@ export function cellDetail(plan: CellPlan3, extraBuildings: readonly Building3[]
 }
 
 const VENDING = [0xd8d8d4, 0xb8242a, 0x2a4a8a, 0x2a2a2e];
+/** The lit header band over each body colour (linear-ish emissive). */
+const VENDING_HEAD: C3[] = [[0.9, 0.9, 0.85], [1.0, 0.3, 0.25], [0.3, 0.55, 1.0], [0.95, 0.75, 0.3]];
+/** Can colours on the display's shelves: tea green, coffee brown, cola red, water blue, soda white, juice orange. */
+const VENDING_CANS: C3[] = [[0.25, 0.6, 0.3], [0.45, 0.28, 0.15], [0.85, 0.15, 0.15], [0.3, 0.6, 0.9], [0.85, 0.88, 0.9], [0.9, 0.55, 0.15]];
+
+/**
+ * Vending machine (自動販売機): a plinth, a coloured body with a lit header band, a backlit window with three
+ * shelves of cans and their price tags, a button panel with a coin slot and a note-and-IC-card reader, and a dark
+ * pickup flap. About thirty quads, one merged mesh.
+ */
+function vendingMachine(mb: MeshBuilder, p: Prop, o: C3, r: C3, n: C3): void {
+  const v = p.variant;
+  const at = (x: number, y: number, d: number): C3 => [o[0] + r[0] * x + n[0] * d, y, o[2] + r[2] * x + n[2] * d];
+  const panel = (x0: number, x1: number, y0: number, y1: number, d: number): void =>
+    mb.quad(at(x0, y0, d), [r[0] * (x1 - x0), 0, r[2] * (x1 - x0)], [0, y1 - y0, 0]);
+  mb.kind = KIND.plain;
+  mb.style = [0, 0, 0, 0];
+  mb.color = lin(0x26282c);
+  mb.frameBox(o, r, n, -0.5, 0.5, 0, 0.1, -0.4, 0.4);
+  mb.color = lin(VENDING[v % VENDING.length]);
+  mb.frameBox(o, r, n, -0.5, 0.5, 0.1, 1.83, -0.4, 0.4);
+  // Dark frame round the window and the pickup flap.
+  mb.color = lin(0x17181a);
+  panel(-0.48, 0.17, 0.56, 1.56, 0.403);
+  panel(-0.4, 0.4, 0.14, 0.4, 0.403);
+  panel(0.22, 0.47, 0.56, 1.56, 0.403);
+  mb.kind = KIND.emit;
+  mb.style = [EMIT.always, 0, 0, 0];
+  // Header band.
+  const h = VENDING_HEAD[v % VENDING_HEAD.length];
+  mb.color = [h[0] * 0.8, h[1] * 0.8, h[2] * 0.8];
+  panel(-0.46, 0.46, 1.6, 1.79, 0.405);
+  // Backlit window, then three shelves of cans with a price tag under each.
+  mb.color = [0.62, 0.66, 0.7];
+  panel(-0.46, 0.15, 0.58, 1.54, 0.405);
+  for (let row = 0; row < 3; row++) {
+    const y = 0.7 + row * 0.29;
+    for (let i = 0; i < 5; i++) {
+      const c = VENDING_CANS[(v * 3 + row * 2 + i * 5 + (i >> 1)) % VENDING_CANS.length];
+      mb.color = c;
+      const x = -0.43 + i * 0.12;
+      panel(x, x + 0.085, y, y + 0.19, 0.41);
+    }
+    mb.color = [0.95, 0.95, 0.9];
+    panel(-0.44, 0.13, y - 0.045, y - 0.015, 0.41);
+  }
+  // Buttons, each under its can; a few sold out in red.
+  for (let i = 0; i < 6; i++) {
+    mb.color = (v + i) % 5 === 0 ? [1.0, 0.15, 0.1] : [0.85, 0.9, 0.95];
+    const x = 0.26 + (i % 2) * 0.11;
+    const y = 1.4 - (i >> 1) * 0.1;
+    panel(x, x + 0.08, y, y + 0.06, 0.41);
+  }
+  // Card reader glow and the amber change display.
+  mb.color = [0.3, 0.8, 0.9];
+  panel(0.27, 0.42, 0.9, 0.97, 0.41);
+  mb.color = [1.0, 0.6, 0.15];
+  panel(0.27, 0.42, 1.02, 1.08, 0.41);
+  // Coin slot and the pickup flap's edge.
+  mb.kind = KIND.plain;
+  mb.style = [0, 0, 0, 0];
+  mb.color = lin(0x0a0a0b);
+  panel(0.3, 0.38, 0.78, 0.84, 0.41);
+  panel(-0.36, 0.36, 0.17, 0.36, 0.41);
+}
+
+/**
+ * Public telephone (公衆電話), three designs by `variant`: 0 the green card-and-coin phone under a small hood on a
+ * post (the street's common one, from the early 80s); 1 a telephone booth (電話ボックス: green aluminium frame,
+ * glass, a lit roof sign, the phone and a shelf inside); 2 the older red coin phone on a post by a shop front
+ * (with its dial). The lit parts are always on, so a phone reads in the dark street. Reviewed in
+ * `models-buildings.html` before it's placed anywhere.
+ */
+function payphone(mb: MeshBuilder, p: Prop, o: C3, r: C3, n: C3): void {
+  const v = p.variant % 3;
+  const at = (x: number, y: number, d: number): C3 => [o[0] + r[0] * x + n[0] * d, y, o[2] + r[2] * x + n[2] * d];
+  const panel = (x0: number, x1: number, y0: number, y1: number, d: number): void =>
+    mb.quad(at(x0, y0, d), [r[0] * (x1 - x0), 0, r[2] * (x1 - x0)], [0, y1 - y0, 0]);
+  const plain = (hex: number): void => {
+    mb.kind = KIND.plain;
+    mb.style = [0, 0, 0, 0];
+    mb.color = lin(hex);
+  };
+  const glow = (c: C3): void => {
+    mb.kind = KIND.emit;
+    mb.style = [EMIT.always, 0, 0, 0];
+    mb.color = c;
+  };
+  /** The telephone itself, facing +n at depth `d`, its body `hex`: handset on the right, display, keypad, slots. */
+  const set = (x: number, y: number, d: number, hex: number, dial: boolean): void => {
+    plain(hex);
+    mb.frameBox(o, r, n, x - 0.17, x + 0.17, y, y + 0.42, d - 0.12, d + 0.02);
+    const f = d + 0.025;
+    plain(0x1c1d20);
+    mb.frameBox(o, r, n, x + 0.1, x + 0.19, y + 0.02, y + 0.4, f - 0.01, f + 0.05);
+    glow([1.0, 0.62, 0.15]);
+    if (!dial) panel(x - 0.12, x + 0.06, y + 0.3, y + 0.37, f);
+    plain(0x111214);
+    if (dial) {
+      panel(x - 0.12, x + 0.07, y + 0.08, y + 0.33, f);
+      glow([0.9, 0.88, 0.8]);
+      for (let i = 0; i < 10; i++) {
+        const a = 0.9 + (i / 10) * 4.6;
+        const cx = x - 0.025 + Math.cos(a) * 0.065;
+        const cy = y + 0.205 + Math.sin(a) * 0.065;
+        panel(cx - 0.012, cx + 0.012, cy - 0.012, cy + 0.012, f + 0.005);
+      }
+    } else {
+      panel(x - 0.12, x + 0.06, y + 0.08, y + 0.27, f);
+      glow([0.8, 0.82, 0.8]);
+      for (let k = 0; k < 12; k++) {
+        const kx = x - 0.1 + (k % 3) * 0.055;
+        const ky = y + 0.1 + (k >> 2) * 0.042;
+        panel(kx, kx + 0.04, ky, ky + 0.028, f + 0.005);
+      }
+      plain(0x0a0a0b);
+      panel(x - 0.12, x - 0.03, y + 0.02, y + 0.045, f);
+      panel(x - 0.01, x + 0.06, y + 0.02, y + 0.045, f);
+    }
+  };
+  if (v === 0) {
+    // A post, the green set, and a hood over it with a lit strip under its lip.
+    plain(0x55585c);
+    mb.cylinder(p.x, p.z, 0, 0.98, 0.05, 6);
+    set(0, 1.0, 0.06, 0x2e7a52, false);
+    plain(0x3a3d41);
+    mb.frameBox(o, r, n, -0.3, 0.3, 0.92, 1.76, -0.16, -0.1);
+    mb.frameBox(o, r, n, -0.32, 0.32, 1.72, 1.78, -0.16, 0.34);
+    mb.frameBox(o, r, n, -0.32, -0.29, 0.92, 1.76, -0.16, 0.3);
+    mb.frameBox(o, r, n, 0.29, 0.32, 0.92, 1.76, -0.16, 0.3);
+    glow([0.55, 1.0, 0.7]);
+    panel(-0.26, 0.26, 1.69, 1.72, 0.3);
+    // The green "公衆電話" plate on the hood's front edge, as a lit green bar.
+    glow([0.2, 0.75, 0.4]);
+    panel(-0.3, 0.3, 1.78, 1.9, 0.34);
+  } else if (v === 1) {
+    // The booth: a slab, four posts, glass round three sides and a doorway in front, a roof and a lit sign.
+    const hw = 0.43;
+    const d0 = -0.45;
+    const d1 = 0.45;
+    plain(0x6a6c70);
+    mb.frameBox(o, r, n, -hw - 0.04, hw + 0.04, 0, 0.06, d0 - 0.04, d1 + 0.04);
+    plain(0x2a6a48);
+    for (const x of [-hw, hw]) for (const d of [d0, d1]) mb.frameBox(o, r, n, x - 0.025, x + 0.025, 0.06, 2.22, d - 0.025, d + 0.025);
+    mb.frameBox(o, r, n, -hw - 0.03, hw + 0.03, 2.22, 2.32, d0 - 0.03, d1 + 0.03);
+    mb.frameBox(o, r, n, -hw, hw, 1.05, 1.1, d0, d0 + 0.02);
+    mb.frameBox(o, r, n, -hw, -hw + 0.02, 1.05, 1.1, d0, d1);
+    mb.frameBox(o, r, n, hw - 0.02, hw, 1.05, 1.1, d0, d1);
+    // The phone on the back wall with a shelf under it, and the book on the shelf.
+    set(0, 1.12, d0 + 0.14, 0x2e7a52, false);
+    plain(0x2a6a48);
+    mb.frameBox(o, r, n, -0.38, 0.38, 0.98, 1.02, d0, d0 + 0.3);
+    plain(0xc8a020);
+    mb.frameBox(o, r, n, -0.2, 0.0, 1.02, 1.08, d0 + 0.05, d0 + 0.25);
+    // Glass: back, left and right (the doorway stays open).
+    mb.kind = KIND.glass;
+    mb.style = [0, 0, 0, 0];
+    mb.color = lin(0x16181c);
+    mb.quad(at(hw, 0.06, d0 + 0.005), [-r[0] * 2 * hw, 0, -r[2] * 2 * hw], [0, 2.16, 0]);
+    mb.quad(at(-hw, 0.06, d0), [n[0] * (d1 - d0), 0, n[2] * (d1 - d0)], [0, 2.16, 0]);
+    mb.quad(at(hw, 0.06, d1), [-n[0] * (d1 - d0), 0, -n[2] * (d1 - d0)], [0, 2.16, 0]);
+    // The ceiling light, and the sign on the roof.
+    glow([1.0, 0.9, 0.7]);
+    panel(-0.3, 0.3, 2.2, 2.21, d1 - 0.1);
+    mb.frameBox(o, r, n, -0.2, 0.2, 2.22, 2.24, -0.2, 0.2);
+    glow([0.2, 0.8, 0.45]);
+    mb.frameBox(o, r, n, -0.26, 0.26, 2.32, 2.52, d1 - 0.1, d1 - 0.07);
+    plain(0x2a6a48);
+    mb.frameBox(o, r, n, -0.28, 0.28, 2.32, 2.54, d1 - 0.07, d1 - 0.03);
+  } else {
+    // The older red set on a post, with a small shelf and a coin box under it.
+    plain(0x55585c);
+    mb.cylinder(p.x, p.z, 0, 1.0, 0.05, 6);
+    plain(0x3a3d41);
+    mb.frameBox(o, r, n, -0.2, 0.2, 0.96, 1.0, -0.08, 0.2);
+    set(0, 1.0, 0.06, 0xb8242a, true);
+    plain(0x8a1a20);
+    mb.frameBox(o, r, n, -0.15, 0.15, 1.42, 1.5, -0.12, 0.04);
+  }
+}
 
 /** Geometry for a cell's props and wires; with `signs`, the parked cars' lettering and ads. */
 /**
@@ -600,21 +786,12 @@ export function addProps(mb: MeshBuilder, d: CellDetail, signs?: VehicleSigns, p
       addCar(mb, { x: p.x, z: p.z, fx: p.nz * dir, fz: -p.nx * dir, variant: p.variant, type: p.car, paint: p.paint }, signs);
     } else if (p.kind === 'signal') {
       signal(mb, p);
+    } else if (p.kind === 'payphone') {
+      payphone(mb, p, o, r, n);
     } else if (p.kind !== 'vending') {
       addDressing(mb, p, signs);
     } else {
-      // Vending machine: body, a glowing display front, and a dark slot strip.
-      mb.kind = KIND.plain;
-      mb.style = [0, 0, 0, 0];
-      mb.color = lin(VENDING[p.variant % VENDING.length]);
-      mb.frameBox(o, r, n, -0.5, 0.5, 0, 1.83, -0.4, 0.4);
-      mb.kind = KIND.emit;
-      mb.style = [EMIT.always, 0, 0, 0];
-      mb.color = [0.75, 0.8, 0.85];
-      mb.quad([o[0] - r[0] * 0.44 + n[0] * 0.405, 0.95, o[2] - r[2] * 0.44 + n[2] * 0.405], [r[0] * 0.88, 0, r[2] * 0.88], [0, 0.78, 0]);
-      mb.color = [0.9, 0.35, 0.3];
-      mb.quad([o[0] - r[0] * 0.44 + n[0] * 0.405, 0.78, o[2] - r[2] * 0.44 + n[2] * 0.405], [r[0] * 0.88, 0, r[2] * 0.88], [0, 0.06, 0]);
-      mb.style = [0, 0, 0, 0];
+      vendingMachine(mb, p, o, r, n);
     }
   }
   if (mid) setFoliageVariant(variant);

@@ -27,6 +27,7 @@ const RESTART = 3;
 interface Kept {
   headphones?: boolean;
   nc?: boolean;
+  volume?: number;
   liked?: string[];
   shuffle?: boolean;
   repeat?: Repeat;
@@ -48,6 +49,7 @@ export class MusicPlayer {
   playing = false;
   headphones = true;
   nc = true;
+  volume = 0.8;
   /** Liked songs' ids, in the order they were liked. */
   liked: string[] = [];
   /** Called when anything the app shows has changed. */
@@ -73,6 +75,7 @@ export class MusicPlayer {
     }
     this.headphones = kept.headphones ?? true;
     this.nc = kept.nc ?? true;
+    this.volume = typeof kept.volume === 'number' ? Math.min(1, Math.max(0, kept.volume)) : 0.8;
     const known = new Set(this.playlists.flatMap((p) => p.songs.map((s) => s.id)));
     this.liked = (Array.isArray(kept.liked) ? kept.liked : []).filter((id) => known.has(id));
     this.queue.shuffle = kept.shuffle ?? false;
@@ -218,6 +221,12 @@ export class MusicPlayer {
     this.changed();
   }
 
+  /** The phone's own volume (0-1, squared so the slider feels even), under the debug menu's music level. */
+  setVolume(v: number): void {
+    this.volume = Math.min(1, Math.max(0, v));
+    this.save();
+  }
+
   setNc(on: boolean): void {
     if (on === this.nc) return;
     this.nc = on;
@@ -234,8 +243,9 @@ export class MusicPlayer {
     this.level = f.level;
     const t = ctx.currentTime;
     const sounding = this.playing && f.on;
-    this.phones.gain.setTargetAtTime(sounding && this.headphones ? f.level : 0, t, EARS_FADE);
-    this.speaker.gain.setTargetAtTime(sounding && !this.headphones ? f.level * SPEAKER_LEVEL : 0, t, EARS_FADE);
+    const level = f.level * this.volume * this.volume;
+    this.phones.gain.setTargetAtTime(sounding && this.headphones ? level : 0, t, EARS_FADE);
+    this.speaker.gain.setTargetAtTime(sounding && !this.headphones ? level * SPEAKER_LEVEL : 0, t, EARS_FADE);
     // A scene holds the music, and lets it go on after.
     if (this.held !== !f.on) {
       this.held = !f.on;
@@ -294,13 +304,17 @@ export class MusicPlayer {
     });
   }
 
-  private changed(): void {
-    const kept: Kept = { headphones: this.headphones, nc: this.nc, liked: this.liked, shuffle: this.queue.shuffle, repeat: this.queue.repeat, playlist: this.queue.playlist, song: this.current?.id };
+  private save(): void {
+    const kept: Kept = { headphones: this.headphones, nc: this.nc, volume: this.volume, liked: this.liked, shuffle: this.queue.shuffle, repeat: this.queue.repeat, playlist: this.queue.playlist, song: this.current?.id };
     try {
       localStorage.setItem(KEY, JSON.stringify(kept));
     } catch {
       /* no storage */
     }
+  }
+
+  private changed(): void {
+    this.save();
     this.onChange?.();
   }
 }

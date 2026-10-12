@@ -1,0 +1,20 @@
+// Loads the city, starts its audio and reports page errors. node scripts/trafficEngineCheck.mjs
+import { launchBrowser } from './launchBrowser.mjs';
+import { shotServer } from './shotServer.mjs';
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' }, { gpu: 'off' });
+await server.listen();
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--use-angle=d3d11'] });
+const page = await browser.newPage();
+const errs = [];
+page.on('pageerror', (e) => errs.push(String(e)));
+page.on('console', (m) => m.type() === 'error' && !/404/.test(m.text()) && errs.push(m.text()));
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&start=0&spawn=kirishima.front`, { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(25000);
+await page.mouse.click(400, 300);
+await page.keyboard.down('w');
+await page.waitForTimeout(8000);
+await page.keyboard.up('w');
+console.log('errors:', errs.length ? errs.slice(0, 5) : 'none');
+await browser.close();
+await server.close();
+process.exit(0);

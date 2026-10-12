@@ -2,7 +2,7 @@
 
 **Lead:** the oyabun's wife. **Districts:** Suidō-chō (the Dome), Kasumi-chō (the hospital, the cemetery avenue,
 the redevelopment site), plus everything open before; the Rindō-gumi's house in Kawabata has stood since spring.
-**Reveal:** the order is worldwide; the programme that built Mack; the Beast and its worshippers. **Machine:** one
+**Reveal:** the order is worldwide; the programme and what it makes; the Beast and its worshippers. **Machine:** one
 that wears faces.
 
 In the spirit of *Fading Afternoon*: the last autumn of an old yakuza family. The Rindō-gumi's oyabun is dying,
@@ -17,7 +17,7 @@ everything else is going.
   the plastered wall she has become the family's real mind while he dies. She's the lead: the player lives her
   days in the house.
 - **The oyabun.** **Proposed:** 竜胆 鉄心 **Rindō Tesshin** (*tesshin*, "iron heart"). In his seventies, dying in the
-  hospital in Kasumi-chō. The last man in Tōto who still keeps the old code: no drugs, no women sold, the
+  hospital in Kasumi-chō. The last man in Tokyo who still keeps the old code: no drugs, no women sold, the
   festival stalls and the old town protected.
 - **The wakagashira**, his second, who has been selling the family to Ryujin Kogyo, or so it seems.
 
@@ -27,7 +27,7 @@ everything else is going.
 |---|---|---|---|---|
 | 1 | **Higan.** The autumn equinox, families visiting graves along the cemetery avenue. Sayo finds Mack there and hires him: someone in the family is selling it, and the oyabun mustn't know before he dies. | Sayo, Mack | Kasumi-chō's cemetery avenue, the hospital, the house in Kawabata | None |
 | 2 | **The family.** Mack inside the Rindō-gumi: the old men and their code, the oyabun in his hospital bed, the festival stalls. Ryujin Kogyo wants the family's land under the redevelopment site, and promotes the Dome's big autumn show; the deal is struck in a VIP box over fifty thousand fans. Mack and Sayo, because he would, and because she wants to. | Sayo, Mack | The redevelopment site, Tōto Dome, the house | On foot: Ryujin Kogyo's men at the site, and backstage at the Dome |
-| 3 | **The basement.** The hospital's sealed floor. Mack's memory comes back in pieces: he was rebuilt here. The programme's files: other units, other cities, shipments abroad, the order everywhere. And in a sealed room, men he recognises (from Ryujin Kogyo, from the summer's ledgers) on their knees, praying to *something* he can't see or understand. | Mack | The hospital, Kasumi-chō | On foot, the floor's guards; horror |
+| 3 | **The basement.** The hospital's sealed floor. (Before 2026-10-12: his memory came back here, where he was rebuilt. He's a man now; **Proposed:** this is where Cash One's bodies go, and Megumi's trail leads into it.) The programme's files: other units, other cities, shipments abroad, the order everywhere. And in a sealed room, men he recognises (from Ryujin Kogyo, from the summer's ledgers) on their knees, praying to *something* he can't see or understand. | Mack | The hospital, Kasumi-chō | On foot, the floor's guards; horror |
 | 4 | **Gentian.** The oyabun knows about Mack and Sayo. He doesn't rage: he asks Mack to keep her safe when he's gone (the grace nobody earned). **Proposed:** that makes him one of the faceless man's cuckolded men, and he's taken; but he has already forgiven them, and there's nothing left in him to humiliate. He refuses, and the killer's game fails on the one man who forgave. Ryujin Kogyo comes for the house in Kawabata. The wakagashira was never the traitor: he died weeks ago, and the thing wearing his face is the order's third machine. The oyabun dies the old way, at his gate. | Sayo, the oyabun, Mack | The house in Kawabata | The machine |
 
 ## Carried through
@@ -46,5 +46,5 @@ queen (what Ryujin Kogyo's men want in private), the dock worker (the family's o
 
 ## The reveal
 
-The order is worldwide: Tōto is one city of many. It built Mack, in a basement under a hospital, as one of a
-series. And some of the men who serve it worship something, the Beast, that Mack can't see or understand.
+The order is worldwide: Tokyo is one city of many. It builds its machines in a basement under a hospital, from the
+bodies Cash One collects. And some of the men who serve it worship something, the Beast, that Mack can't see or understand.

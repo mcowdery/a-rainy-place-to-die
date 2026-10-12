@@ -42,6 +42,10 @@ export class PhoneUI {
   private readonly apps: PhoneApp[] = [];
   private bannerTimer = 0;
   private lastMinute = -1;
+  /** The period handset skin (amber LCD, soft keys, a keypad) in place of the smartphone one. */
+  private retro = initialRetro();
+  /** The highlighted row in the retro skin (moved with the up / down keys). */
+  private sel = 0;
 
   constructor(
     private readonly phone: Phone,
@@ -53,12 +57,17 @@ export class PhoneUI {
     this.device = el('div', 'ph-device');
     const bar = el('div', 'ph-status');
     this.clock = el('span', 'ph-clock');
-    bar.append(this.clock, span('ph-icons', '▂▄▆ 4G ▮'));
+    const skin = el('button', 'ph-skinbtn');
+    skin.textContent = '◐';
+    skin.title = 'Switch phone style';
+    skin.addEventListener('click', () => this.setRetro(!this.retro));
+    bar.append(this.clock, span('ph-icons', '▂▄▆ 4G ▮'), skin);
     this.screen = el('div', 'ph-screen');
     const home = el('div', 'ph-home');
     home.title = 'Home';
     home.addEventListener('click', () => this.showHome());
-    this.device.append(bar, this.screen, home);
+    this.device.append(bar, this.screen, home, this.buildKeys());
+    this.root.classList.toggle('ph-retro', this.retro);
     this.root.append(this.device);
     this.root.hidden = true;
     this.chip = el('div', 'ph-chip');
@@ -84,21 +93,111 @@ export class PhoneUI {
           return;
         }
         if (!this.open) return;
-        if (e.code === 'Escape') {
-          if (!this.lightbox.hidden) this.closeLightbox();
-          else if (this.mode === 'kaiwa' && this.thread) this.showList();
-          else if (this.mode === 'kaiwa') this.showHome();
-          else if (this.mode !== 'home') {
-            if (!this.app()?.back?.()) this.showHome();
-          } else this.toggle();
-        } else if (/^Digit[1-4]$/.test(e.code) && this.mode === 'kaiwa' && this.thread) {
-          this.pick(Number(e.code.slice(5)) - 1);
+        if (e.code === 'Escape') this.back();
+        else if (this.retro && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) this.nav(e.code === 'ArrowUp' ? -1 : 1);
+        else if (this.retro && e.code === 'Enter') this.press();
+        else if (/^Digit[1-9]$/.test(e.code) && (this.retro || (this.mode === 'kaiwa' && this.thread))) {
+          if (!this.digit(Number(e.code.slice(5)))) return;
         } else return;
         e.preventDefault();
         e.stopPropagation();
       },
       true,
     );
+  }
+
+  /** Esc, or the left soft key: one step back (out of a picture, a thread, an app, the phone). */
+  private back(): void {
+    if (!this.lightbox.hidden) this.closeLightbox();
+    else if (this.mode === 'kaiwa' && this.thread) this.showList();
+    else if (this.mode === 'kaiwa') this.showHome();
+    else if (this.mode !== 'home') {
+      if (!this.app()?.back?.()) this.showHome();
+    } else this.toggle();
+  }
+
+  /** Switch between the smartphone and the period handset; remembered. */
+  private setRetro(on: boolean): void {
+    this.retro = on;
+    this.root.classList.toggle('ph-retro', on);
+    try {
+      localStorage.setItem('rainyplace.phone.skin', on ? 'retro' : 'modern');
+    } catch {
+      /* private window: it just won't be remembered */
+    }
+    this.sel = 0;
+    if (this.open) this.go(this.mode);
+  }
+
+  /** The handset's keys under the screen (shown in the retro skin only): soft keys, the rocker and a keypad. */
+  private buildKeys(): HTMLElement {
+    const keys = el('div', 'ph-keys');
+    const key = (cls: string, label: string, title: string, fn: () => void): HTMLButtonElement => {
+      const b = el('button', `ph-key ${cls}`);
+      b.textContent = label;
+      b.title = title;
+      b.addEventListener('click', fn);
+      return b;
+    };
+    const row = el('div', 'ph-keyrow');
+    row.append(
+      key('ph-key-soft', '戻る', 'Back (Esc)', () => this.back()),
+      key('ph-key-nav', '▲', 'Up', () => this.nav(-1)),
+      key('ph-key-nav', '▼', 'Down', () => this.nav(1)),
+      key('ph-key-soft', '決定', 'Select (Enter)', () => this.press()),
+    );
+    const pad = el('div', 'ph-pad');
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9]) pad.append(key('', String(n), `Item ${n}`, () => this.digit(n)));
+    pad.append(
+      key('', '＊', 'Home', () => this.showHome()),
+      key('', '0', '', () => {}),
+      key('', '＃', 'Switch phone style', () => this.setRetro(!this.retro)),
+    );
+    keys.append(row, pad);
+    return keys;
+  }
+
+  /** The rows you can pick on the screen (home apps, chats, replies). */
+  private items(): HTMLElement[] {
+    return [...this.screen.querySelectorAll<HTMLElement>('.ph-app, .ph-row, .ph-reply')];
+  }
+
+  /** Highlight the selected row (retro skin). */
+  private applySel(): void {
+    if (!this.retro) return;
+    const items = this.items();
+    items.forEach((e) => e.classList.remove('ph-sel'));
+    if (!items.length) return;
+    this.sel = Math.min(Math.max(this.sel, 0), items.length - 1);
+    items[this.sel].classList.add('ph-sel');
+    items[this.sel].scrollIntoView({ block: 'nearest' });
+  }
+
+  /** The rocker: move the highlight, or scroll a thread that has nothing to pick. */
+  private nav(dir: number): void {
+    const items = this.items();
+    if (items.length === 0) {
+      const msgs = this.screen.querySelector('.ph-msgs');
+      if (msgs) msgs.scrollTop += dir * 48;
+      return;
+    }
+    this.sel += dir;
+    this.applySel();
+  }
+
+  private press(): void {
+    this.items()[this.sel]?.click();
+  }
+
+  /** A number key: the nth reply in a thread, or the nth app / chat on a list. False if it isn't ours. */
+  private digit(n: number): boolean {
+    if (this.mode === 'kaiwa' && this.thread) {
+      this.pick(n - 1);
+      return true;
+    }
+    if (!this.retro || (this.mode !== 'home' && this.mode !== 'kaiwa')) return false;
+    this.items()[n - 1]?.click();
+    return true;
   }
 
   get isOpen(): boolean {
@@ -122,8 +221,12 @@ export class PhoneUI {
 
   /** Switch what's on the screen, letting the app that was showing go. */
   private go(mode: string): void {
-    if (mode !== this.mode) this.app()?.hide?.();
+    if (mode !== this.mode) {
+      this.app()?.hide?.();
+      this.sel = 0;
+    }
     this.mode = mode;
+    this.root.classList.toggle('ph-mode-app', mode !== 'home' && mode !== 'kaiwa');
     if (mode === 'home') this.renderHome();
     else if (mode === 'kaiwa') {
       if (this.thread) this.showThread(this.thread);
@@ -149,7 +252,7 @@ export class PhoneUI {
     this.screen.innerHTML = '';
     const home = el('div', 'ph-homescreen');
     const wall = wallpaper();
-    if (wall) {
+    if (wall && !this.retro) {
       home.classList.add('ph-wall');
       home.style.backgroundImage = `linear-gradient(rgba(8,8,14,0.5), transparent 24%, transparent 62%, rgba(8,8,14,0.72)), url("${wall.url}")`;
     }
@@ -171,6 +274,7 @@ export class PhoneUI {
     }
     home.append(grid);
     this.screen.append(home);
+    this.applySel();
   }
 
   toggle(): void {
@@ -268,6 +372,7 @@ export class PhoneUI {
       list.append(row);
     }
     this.screen.append(head, list);
+    this.applySel();
   }
 
   private showThread(id: string): void {
@@ -321,6 +426,7 @@ export class PhoneUI {
       });
     } else foot.append(span('ph-input', this.phone.typing(id) ? '' : 'Aa'));
     this.screen.append(head, box, foot);
+    this.applySel();
     if (fresh || atBottom) box.scrollTop = box.scrollHeight;
     else if (old) box.scrollTop = old.scrollTop;
     // Media loads late: keep the view on the newest message.
@@ -442,6 +548,17 @@ function wrap(tag: 'div', cls: string, kids: Node[]): HTMLDivElement {
   return d;
 }
 
+/** Which skin to start in: `?phone=retro|modern`, else what was chosen last, else the smartphone. */
+function initialRetro(): boolean {
+  try {
+    const q = new URLSearchParams(location.search).get('phone');
+    if (q) return q === 'retro';
+    return localStorage.getItem('rainyplace.phone.skin') === 'retro';
+  } catch {
+    return false;
+  }
+}
+
 let styled = false;
 function injectStyle(): void {
   if (styled) return;
@@ -520,6 +637,65 @@ function injectStyle(): void {
   .ph-input { display: block; background: #22242e; color: #6a6878; border-radius: 16px; padding: 7px 14px; font-size: 13px; }
   .ph-reply { font: inherit; font-size: 13px; text-align: left; padding: 8px 12px; border-radius: 16px; border: 1px solid #7ef0b0; background: rgba(126,240,176,0.08); color: #dff8ea; cursor: pointer; }
   .ph-reply:hover { background: rgba(126,240,176,0.22); }
+  .ph-skinbtn { background: none; border: 0; color: inherit; opacity: 0.55; font-size: 13px; cursor: pointer; padding: 0 0 0 8px; }
+  .ph-skinbtn:hover { opacity: 1; }
+  .ph-keys { display: none; }
+  /* The period handset: a chunky grey body, an amber LCD with scanlines, soft keys, a rocker and a keypad. */
+  .ph-retro { --a: #ffb52e; --a2: #b87a10; --lcd: #1a1002; }
+  .ph-retro .ph-device { position: relative; margin-top: 26px; width: min(300px, 40vh); height: min(640px, 86vh); padding: 12px 14px 14px; border-radius: 26px 26px 48px 48px;
+    background: linear-gradient(#44464b, #2a2b2f 45%, #1b1c1f); box-shadow: 0 0 0 2px #09090a, inset 0 2px 0 #5d5f65, 0 18px 60px rgba(0,0,0,0.7); }
+  .ph-retro .ph-device::before { content: ''; position: absolute; top: -24px; right: 36px; width: 9px; height: 28px; border-radius: 4px 4px 0 0; background: linear-gradient(90deg, #4a4c52, #17181a); }
+  .ph-retro .ph-status { background: var(--lcd); color: var(--a); font: 11px 'Consolas', 'MS Gothic', monospace; padding: 3px 8px; border: 3px solid #0a0a0b; border-bottom: 0; border-radius: 6px 6px 0 0; text-shadow: 0 0 5px rgba(255,170,30,0.6); }
+  .ph-retro .ph-screen { position: relative; border-radius: 0 0 6px 6px; background: var(--lcd); border: 3px solid #0a0a0b; border-top: 0; box-shadow: inset 0 0 28px rgba(0,0,0,0.8); font-family: 'Consolas', 'MS Gothic', 'Courier New', monospace; color: var(--a); }
+  .ph-retro .ph-screen::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 5; background: repeating-linear-gradient(rgba(0,0,0,0) 0 2px, rgba(0,0,0,0.2) 2px 3px); }
+  .ph-retro .ph-home { display: none; }
+  .ph-retro .ph-keys { display: block; padding-top: 10px; }
+  .ph-keyrow { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1.3fr; gap: 6px; }
+  .ph-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; padding: 10px 12px 0; }
+  .ph-key { font: 600 12px 'Consolas', 'MS Gothic', monospace; color: #d4d4d8; background: linear-gradient(#585a60, #33353a); border: 0; border-radius: 9px; padding: 7px 0; cursor: pointer; box-shadow: 0 2px 0 #0a0a0b, inset 0 1px 0 #7a7c82; }
+  .ph-key:hover { color: #fff; }
+  .ph-key:active { transform: translateY(2px); box-shadow: inset 0 1px 0 #7a7c82; }
+  .ph-key-soft { border-radius: 14px 14px 5px 5px; color: #ffcf7a; }
+  .ph-key-nav { border-radius: 50%; }
+  .ph-retro .ph-bigtime { font-weight: 700; font-size: 46px; letter-spacing: 3px; text-shadow: 0 0 8px rgba(255,170,30,0.7); }
+  .ph-retro .ph-bigdate { color: var(--a2); }
+  .ph-retro .ph-homescreen { background: var(--lcd); padding: 14px 10px; gap: 14px; }
+  .ph-retro .ph-bigclock { color: var(--a); }
+  .ph-retro .ph-apps { display: flex; flex-direction: column; gap: 0; counter-reset: ph-menu; border-top: 1px solid var(--a2); }
+  .ph-retro .ph-app { flex-direction: row; justify-content: flex-start; gap: 8px; padding: 6px 8px; border-bottom: 1px solid #3a2808; color: var(--a); }
+  .ph-retro .ph-app::before { counter-increment: ph-menu; content: counter(ph-menu) '.'; color: var(--a2); }
+  .ph-retro .ph-app-icon { display: none; }
+  .ph-retro .ph-app-name { color: inherit; font-size: 14px; letter-spacing: 0.1em; }
+  .ph-retro .ph-app-badge { position: static; margin-left: auto; }
+  .ph-retro .ph-sel { background: var(--a); color: var(--lcd); }
+  .ph-retro .ph-sel .ph-app-name, .ph-retro .ph-sel .ph-row-name, .ph-retro .ph-sel .ph-row-last, .ph-retro .ph-sel .ph-row-time, .ph-retro .ph-sel::before { color: var(--lcd); }
+  .ph-retro .ph-head { background: var(--lcd); color: var(--a); border-bottom: 1px solid var(--a2); padding: 8px 10px; }
+  .ph-retro .ph-title, .ph-retro .ph-title-s, .ph-retro .ph-back { color: var(--a); font-size: 14px; }
+  .ph-retro .ph-sub { color: var(--a2); }
+  .ph-retro .ph-row { border-bottom: 1px solid #3a2808; padding: 6px 8px; gap: 8px; }
+  .ph-retro .ph-row:hover { background: none; }
+  .ph-retro .ph-row.ph-sel:hover { background: var(--a); }
+  .ph-retro .ph-row-name { color: var(--a); font-size: 13px; }
+  .ph-retro .ph-row-last, .ph-retro .ph-row-time, .ph-retro .ph-empty { color: var(--a2); }
+  .ph-retro .ph-avatar, .ph-retro .ph-av-gap { display: none; }
+  .ph-retro .ph-badge { border-radius: 0; background: var(--a); color: var(--lcd); }
+  .ph-retro .ph-dot { border-radius: 0; background: var(--a); }
+  .ph-retro .ph-msgs { background: var(--lcd); gap: 6px; padding: 8px 8px 10px; }
+  .ph-retro .ph-day { background: none; color: var(--a2); border-radius: 0; }
+  .ph-retro .ph-bubble { border-radius: 0; background: none; color: var(--a); border: 1px solid var(--a2); font-size: 12.5px; max-width: 190px; padding: 4px 7px; }
+  .ph-retro .ph-them .ph-bubble:not(.ph-caption) { border-top-left-radius: 0; }
+  .ph-retro .ph-bubble-me { background: var(--a); color: var(--lcd); border-color: var(--a); border-top-right-radius: 0; }
+  .ph-retro .ph-meta { color: var(--a2); }
+  .ph-retro .ph-sticker { filter: grayscale(1) sepia(1) saturate(4) hue-rotate(-18deg); font-size: 40px; }
+  .ph-retro .ph-photo { border-radius: 0; width: 190px; image-rendering: pixelated; filter: grayscale(1) contrast(1.5) sepia(1) saturate(3.5) hue-rotate(-18deg) brightness(0.9); border: 1px solid var(--a2); }
+  .ph-retro .ph-play { border-radius: 0; }
+  .ph-retro .ph-typing span { border-radius: 0; background: var(--a); }
+  .ph-retro .ph-foot { background: var(--lcd); border-top: 1px solid var(--a2); padding: 6px 8px 8px; }
+  .ph-retro .ph-input { background: none; border: 1px solid var(--a2); border-radius: 0; color: var(--a2); padding: 4px 8px; }
+  .ph-retro .ph-reply { border-radius: 0; background: none; border: 1px solid var(--a2); color: var(--a); padding: 5px 8px; font-size: 12px; }
+  .ph-retro .ph-reply:hover { background: none; }
+  .ph-retro .ph-reply.ph-sel, .ph-retro .ph-reply.ph-sel:hover { background: var(--a); color: var(--lcd); }
+  .ph-retro.ph-mode-app .ph-screen > * { filter: grayscale(1) sepia(1) saturate(3.5) hue-rotate(-18deg) contrast(1.1); }
   .ph-chip { position: fixed; right: 18px; bottom: 16px; z-index: 24; display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 16px;
     background: rgba(8,8,14,0.72); border: 1px solid #3a3850; color: #cfcde0; font: 12px 'Consolas', monospace; pointer-events: none; }
   .ph-chip.ph-hidden { display: none; }

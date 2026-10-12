@@ -14,6 +14,13 @@ One year, one chapter a season, starting in spring. The story turns the season w
   `time_late` (01:30), or the season's sunrise or sunset: `time_dawn`, `time_dusk` (for a scene that needs the sun
   going down whatever the season; `time_evening` is light in summer and dark in winter). The clock runs on to it.
 - Sleeping (booth 17, the futon) runs to 07:00 and autosaves.
+- **The dead hours, 02:00 to 06:00** (the user's, 2026-10-12; [mythos.md](mythos.md)): the streets and roads
+  empty, and Mack and Dom hunt. **In the game** (2026-10-12): the street crowd and the
+  traffic thin from 01:00, are gone from 02:00 to 06:00 and are back by 06:45 (`deadAt` in
+  `district/peopleHours.ts`), and no taxi comes in those hours. **Not yet:** anything to fight; the people of set
+  pieces, shops, platforms and trains, who are still there; the trains, which still run. `world.late` (00:40 to
+  05:00) is the nearest flag; the dead hours would want one of their own. **Open:** whether "the sun comes up" means 06:00 all year or the season's
+  sunrise (04:35 in summer, 06:50 in winter).
 
 ## What each season brings to the city
 
@@ -63,11 +70,16 @@ Every chapter ends with **one big reveal about the order** and **one big battle 
 
 | Season | The reveal | The machine |
 |---|---|---|
-| Spring | The 200 are real: a circle that buys people's ruin and watches it | The first hunter sent to take him back: a man-shaped machine in a crowd that doesn't stop (the first *Terminator*) |
+| Spring | The 200 are real: a circle that buys people's ruin and watches it | The first hunter: a man-shaped machine in a crowd that doesn't stop (the first *Terminator*) |
 | Summer | The yakuza, the triad and the bought police are all paid by one hand, the Amakudari-kai | A machine at the wheel on the Wangan: a car fight at 250 km/h |
-| Autumn | The order is worldwide; the programme that built Mack; the Beast, worshipped by the tangled | One that wears faces: it could be anyone he trusts |
+| Autumn | The order is worldwide; the programme and what it makes; the Beast, worshipped by the tangled | One that wears faces: it could be anyone he trusts |
 | Winter | The Two Hundred, the man behind it all, and what's under the city | The last: closer to the Nephilim than to a machine |
 
+
+Since 2026-10-12 Mack is a man, so the machines aren't his "siblings" and aren't sent to take the order's
+property back. **Open:** what brings each one. **Proposed:** they come for Dom, once the order learns what he is
+([cast/dom.md](cast/dom.md)), and for whoever is hunting in the dead hours. **Open** too: where Dom enters this
+ladder, and how these four stand beside the nightly hunts ([mythos.md](mythos.md), The dead hours).
 
 ### Chapter 1: Spring
 

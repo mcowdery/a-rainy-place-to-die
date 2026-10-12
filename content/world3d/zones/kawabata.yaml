@@ -55,7 +55,7 @@ zones:
     id: kawabata_riverside
     name: Kawabata riverside
     night: 0.5
-    people: { plain: 5, long: 2, kimono: 1, yukata: 1.5 }
+    people: { plain: 5, long: 2, kimono: 1, yukata: 1.5, jinbei: 1, hanten: 0.6, kappogi: 0.6, matsuri: 0.4 }
     plan:
       floors: [[2, 3, 60], [4, 6, 40]]
       lotW: [6, 12]
@@ -79,7 +79,7 @@ zones:
   T:
     id: kawabata_temple
     name: Tōkō-ji (the temple quarter)
-    people: { kimono: 3, plain: 4, long: 2, yukata: 1 }
+    people: { kimono: 3, plain: 4, long: 2, yukata: 1, kappogi: 0.5, hanten: 0.5, jinbei: 0.4 }
     plan:
       floors: [[2, 2, 50], [3, 4, 50]]
       lotW: [5, 9]
@@ -104,7 +104,7 @@ zones:
     id: kawabata_nakamise
     name: Kawabata shopping streets
     night: 0.3
-    people: { plain: 5, kimono: 1.5, long: 2 }
+    people: { plain: 5, kimono: 1.5, long: 2, cardigan: 0.6, knit: 0.5, hanten: 0.4 }
     plan:
       floors: [[2, 3, 60], [4, 5, 40]]
       lotW: [4, 8]

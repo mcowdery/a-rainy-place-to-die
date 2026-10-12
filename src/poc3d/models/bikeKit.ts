@@ -64,6 +64,8 @@ export interface Bike {
       turn?: number;
       readonly fwd?: THREE.Vector3;
       readonly rod?: THREE.Vector3;
+      /** How far the hand is reaching for the radio's knob, fingers at it (0-1). */
+      dial?: number;
     };
     /** How far the rider leans forward (rad: a sports bike's tuck), and whether he wears a helmet on it. */
     readonly tuck?: number;

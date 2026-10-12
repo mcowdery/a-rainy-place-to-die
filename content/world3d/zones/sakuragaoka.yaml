@@ -16,7 +16,7 @@ zones:
   H:
     id: sakuragaoka_houses
     name: Sakuragaoka (houses)
-    people: { plain: 6, long: 2, school: 2, suit: 1 }
+    people: { plain: 6, long: 2, school: 2, suit: 1, cardigan: 1, knit: 0.8, blouson: 1, leggings: 0.7, runner: 0.5, trench: 0.4 }
     plan:
       floors: [[2, 2, 70], [3, 3, 22], [4, 5, 8]]
       lotW: [7, 11]
@@ -72,7 +72,7 @@ zones:
     id: sakuragaoka_ginza
     name: Sakuragaoka Ginza (shopping street)
     night: 0.3
-    people: { plain: 6, long: 3, school: 1.5, suit: 1 }
+    people: { plain: 6, long: 3, school: 1.5, suit: 1, cardigan: 1, knit: 0.8, blouson: 1, leggings: 0.7, runner: 0.5, trench: 0.4 }
     plan:
       floors: [[2, 3, 60], [4, 5, 40]]
       lotW: [5, 9]

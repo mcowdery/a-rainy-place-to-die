@@ -333,30 +333,32 @@ export function addDressing(mb: MeshBuilder, p: Prop, signs?: VehicleSigns): voi
       // at the front, a seat and handlebars; a pastel or silver frame.
       const frame = lin(rnd.pick([0xc8ccd0, 0xe8c8d0, 0xa8c8e0, 0xd8d8c0, 0x2a2a2e, 0x8a2a2a]));
       const R = 0.33;
+      // Parked on the pavement, which stands 0.15 m above the road.
+      const L = 0.15;
       const wheel = (out: number): void => {
         mb.color = lin(0x1a1a1a);
-        const c = at(0, out, R);
+        const c = at(0, out, L + R);
         const k = 10;
         for (let i = 0; i < k; i++) {
           const a0 = (i / k) * Math.PI * 2;
           const a1 = ((i + 1) / k) * Math.PI * 2;
-          mb.beam([c[0] + n[0] * Math.cos(a0) * R, R + Math.sin(a0) * R, c[2] + n[2] * Math.cos(a0) * R], [c[0] + n[0] * Math.cos(a1) * R, R + Math.sin(a1) * R, c[2] + n[2] * Math.cos(a1) * R], 0.035);
+          mb.beam([c[0] + n[0] * Math.cos(a0) * R, L + R + Math.sin(a0) * R, c[2] + n[2] * Math.cos(a0) * R], [c[0] + n[0] * Math.cos(a1) * R, L + R + Math.sin(a1) * R, c[2] + n[2] * Math.cos(a1) * R], 0.035);
         }
       };
       wheel(-0.55);
       wheel(0.55);
       mb.color = frame;
-      const P = (out: number, y: number): C3 => at(0, out, y);
+      const P = (out: number, y: number): C3 => at(0, out, L + y);
       mb.beam(P(0.55, R), P(0.05, 0.42), 0.03);
       mb.beam(P(0.05, 0.42), P(-0.4, 0.95), 0.03);
       mb.beam(P(0.25, 0.85), P(0.05, 0.42), 0.03);
       mb.beam(P(0.25, 0.85), P(0.55, R), 0.025);
       mb.beam(P(-0.4, 0.95), P(-0.55, R), 0.03);
       mb.color = lin(0x2a2a2a);
-      mb.beam(at(-0.22, -0.42, 1.02), at(0.22, -0.42, 1.02), 0.02);
-      mb.frameBox(o, r, n, -0.09, 0.09, 0.9, 0.95, 0.15, 0.4);
+      mb.beam(at(-0.22, -0.42, L + 1.02), at(0.22, -0.42, L + 1.02), 0.02);
+      mb.frameBox(o, r, n, -0.09, 0.09, L + 0.9, L + 0.95, 0.15, 0.4);
       mb.color = lin(0x9aa0a6);
-      mb.frameBox(o, r, n, -0.18, 0.18, 0.72, 0.98, -0.85, -0.55);
+      mb.frameBox(o, r, n, -0.18, 0.18, L + 0.72, L + 0.98, -0.85, -0.55);
       break;
     }
     default:

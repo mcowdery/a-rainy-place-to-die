@@ -1,8 +1,11 @@
+import { engineTune, layersFor, loadLayers, mix, type EngineVoice, type Voice } from './engineSamples';
+
 /**
  * The car's sound, synthesised (WebAudio; starts on the first key or click): the engine (a four-cylinder's
  * firing note from the revs, two detuned saws through a filter that opens with the throttle, a dip on each
  * gear change), the tyres (band-passed noise, a squeal with the slide and a hiss with wheelspin), wind with
- * speed, and a thump for a knock.
+ * speed, and a thump for a knock. The engine is recorded loops played at the revs' pace (engineSamples.ts) with the
+ * synthesised note quiet underneath, and alone until the recordings have decoded (or with `?engine=synth`).
  */
 export class CarSound {
   private ctx: AudioContext | null = null;
@@ -21,6 +24,11 @@ export class CarSound {
   private whistleGain: GainNode | null = null;
   private lastBoost = 0;
   private lp!: BiquadFilterNode;
+  /** The recorded engine: a looping source and gain a layer, through a filter that opens with the throttle. */
+  private voiceDef: Voice | null = null;
+  private samples: { src: AudioBufferSourceNode; gain: GainNode }[] = [];
+  private sampleFilter: BiquadFilterNode | null = null;
+  private sampleGain: GainNode | null = null;
   /** Slow motion (0-1): the engine drops in pitch and everything goes muffled. */
   slow = 0;
   private dip = 0;
@@ -84,6 +92,56 @@ export class CarSound {
     this.whistle.connect(this.whistleGain).connect(this.master);
     this.whistle.start();
     this.configure(this.profile);
+    void this.loadSamples(ctx);
+  }
+
+  /** The voice the sampled engine is built from (engineTune.voice may move on: it's rebuilt when it does). */
+  private voice: EngineVoice | null = null;
+  /** The sampled engine's revs with inertia: the sim's rev jumps at a gear change, an engine's doesn't. */
+  private smoothRpm = 900;
+
+  private async loadSamples(ctx: AudioContext): Promise<void> {
+    const voice = engineTune.voice;
+    this.voice = voice;
+    for (const s of this.samples) {
+      s.src.stop();
+      s.src.disconnect();
+    }
+    this.samples = [];
+    this.voiceDef = null;
+    this.sampleGain?.disconnect();
+    this.sampleFilter?.disconnect();
+    const def = layersFor(voice);
+    const layers = def.layers;
+    if (!layers.length) return;
+    try {
+      const buffers = await loadLayers(ctx, layers);
+      if (this.voice !== voice) return;
+      this.sampleFilter = ctx.createBiquadFilter();
+      this.sampleFilter.type = 'lowpass';
+      this.sampleFilter.frequency.value = 1500;
+      this.sampleGain = ctx.createGain();
+      this.sampleGain.gain.value = 0;
+      this.sampleFilter.connect(this.sampleGain).connect(this.master);
+      this.samples = buffers.map((buffer) => {
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.loop = true;
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        src.connect(gain).connect(this.sampleFilter!);
+        src.start();
+        return { src, gain };
+      });
+      this.voiceDef = def;
+    } catch {
+      /* files that won't load or decode: the synthesised engine stands */
+    }
+  }
+
+  /** The engine's redline (rpm). */
+  get redline(): number {
+    return this.profile.maxRpm;
   }
 
   /** Overall volume (0 silences it: the engine off). */
@@ -117,22 +175,43 @@ export class CarSound {
     this.lastGear = s.gear;
     this.dip = Math.max(0, this.dip - dt);
     const P = this.profile;
-    const rpm = 900 + s.rev * (P.maxRpm - 900) - this.dip * 9000;
+    const T = engineTune;
+    if (T.voice !== this.voice) void this.loadSamples(ctx);
+    this.master.gain.setTargetAtTime(0.7 * this.volume * this.duck * T.level, t, 0.1);
+    const sampled = this.samples.length > 0 && !!this.voiceDef && !!this.sampleGain && !!this.sampleFilter;
+    // (The oscillators keep their own shift dip: its swoop at a gear change is what the user liked of the old engine.)
+    const want = 900 + s.rev * (P.maxRpm - 900);
+    const step = (want > this.smoothRpm ? 9000 : 4500) * dt; // rpm a second: it picks up quicker than it falls
+    this.smoothRpm += Math.max(-step, Math.min(step, want - this.smoothRpm));
+    const rpm = want - this.dip * 9000;
     const f = Math.max(28, (rpm / 60) * P.fire) * (1 - this.slow * 0.35);
     // Turbo: the whistle with the boost, and a blow-off puff when you lift off boost.
     const boost = s.turbo ? (s.boost ?? 0) : 0;
     this.whistle?.frequency.setTargetAtTime(2600 + boost * 3800, t, 0.05);
-    this.whistleGain?.gain.setTargetAtTime(boost * s.throttle * 0.018, t, 0.05);
+    this.whistleGain?.gain.setTargetAtTime(boost * s.throttle * 0.018 * T.whistle, t, 0.05);
     if (s.turbo && this.lastBoost > 0.6 && s.throttle === 0) this.blowOff();
     this.lastBoost = s.throttle === 0 ? 0 : boost;
     this.lp.frequency.setTargetAtTime(20000 * Math.pow(0.045, this.slow), t, 0.05);
     for (const o of this.engine) o.frequency.setTargetAtTime(f, t, 0.03);
     this.engineFilter.frequency.setTargetAtTime(500 + s.throttle * 2200 + s.rev * 900, t, 0.05);
-    this.engineGain.gain.setTargetAtTime(0.07 + s.throttle * 0.1, t, 0.05);
+    if (sampled && this.voiceDef && this.sampleGain && this.sampleFilter) {
+      // The recording carries the engine; the oscillators sit under it at a quarter, rising with the revs.
+      this.engineGain.gain.setTargetAtTime((0.07 + s.throttle * 0.1) * 0.25 * s.rev * T.synth * T.engine, t, 0.05);
+      const slowRate = 1 - this.slow * 0.35;
+      const lift = Math.max(0.35, 1 - 2.4 * this.dip); // the throttle's off for a shift
+      mix(this.smoothRpm, this.voiceDef, T.curve, T.pitch).forEach((m, i) => {
+        this.samples[i].src.playbackRate.setTargetAtTime(m.rate * slowRate, t, 0.04);
+        this.samples[i].gain.gain.setTargetAtTime(m.weight, t, 0.05);
+      });
+      this.sampleFilter.frequency.setTargetAtTime((700 + s.throttle * 2600 + s.rev * 1400) * T.tone, t, 0.05);
+      this.sampleGain.gain.setTargetAtTime((0.1 + s.throttle * 0.12) * T.engine * lift, t, 0.04);
+    } else {
+      this.engineGain.gain.setTargetAtTime((0.07 + s.throttle * 0.1) * T.engine, t, 0.05);
+    }
     const slip = Math.min(1, Math.max(0, (Math.abs(s.slide) - 0.08) * 3) * Math.min(1, s.speed / 6) + s.spin * 0.8);
-    this.squealGain.gain.setTargetAtTime(slip * 0.16, t, 0.04);
+    this.squealGain.gain.setTargetAtTime(slip * 0.16 * T.tyres, t, 0.04);
     this.squealFilter.frequency.setTargetAtTime(1100 + slip * 900, t, 0.1);
-    this.windGain.gain.setTargetAtTime(Math.min(0.25, (s.speed / 60) ** 2 * 0.3), t, 0.2);
+    this.windGain.gain.setTargetAtTime(Math.min(0.25, (s.speed / 60) ** 2 * 0.3) * T.wind, t, 0.2);
     if (s.bump > 2) this.thump(Math.min(1, s.bump / 10));
   }
 

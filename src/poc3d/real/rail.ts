@@ -457,7 +457,7 @@ function obox(mb: MeshBuilder, x: number, z: number, hx: number, hz: number, a0:
   if (bottom) mb.quad(P(a0, b0, y0), L(b1 - b0), T(a1 - a0));
 }
 
-type Train = { cars: THREE.Group; set: TrainSet2 | null; dir: number; legs: Leg[]; period: number; offset: number };
+type Train = { cars: THREE.Group; set: TrainSet2 | null; dir: number; legs: Leg[]; period: number; offset: number; lastS?: number; moving?: boolean };
 
 /** A ride in the new cars (?transit=new): you walk about inside while it runs (real/cabinRider.ts). */
 interface Ride2 {
@@ -617,6 +617,22 @@ export class TrainSystem {
     return (Math.atan2(-dx, -dz) * 180) / Math.PI;
   }
 
+  /**
+   * How loud the nearest train running on this line is from (x, y, z), 0-1 (0 beyond ~70 m, falling off with the cube, none standing at a
+   * station): the pass-by the audio plays when one goes over a street. A ride's own train isn't counted.
+   */
+  passLevel(x: number, y: number, z: number): number {
+    let best = 0;
+    for (const tr of this.trains) {
+      if (!tr.cars.visible || !tr.moving) continue;
+      for (const car of tr.cars.children) {
+        const d = Math.hypot(car.position.x - x, (car.position.y - y) * 1.5, car.position.z - z);
+        best = Math.max(best, 1 - Math.min(1, d / 70));
+      }
+    }
+    return best * best * best;
+  }
+
   update(dt: number, camera: THREE.Camera): void {
     this.time += dt;
     const rideDir = this.ride ? Math.sign(this.ride.to.s - this.ride.from.s) : this.ride2 ? this.ride2.timeline.dir : 0;
@@ -627,6 +643,8 @@ export class TrainSystem {
         tr.dir = p.dir;
         tr.set?.setScreens(null, p.dir > 0 ? this.dests.up : this.dests.down);
       }
+      tr.moving = tr.lastS !== undefined && Math.abs(p.s - tr.lastS) > 1e-4;
+      tr.lastS = p.s;
       tr.cars.visible = this.running && !(rideDir !== 0 && tr.dir === rideDir);
       if (tr.cars.visible) {
         this.pose(tr.cars, p.s, tr.dir, true);

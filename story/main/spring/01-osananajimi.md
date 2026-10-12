@@ -196,10 +196,9 @@ What's playable is what makes the week his:
 Spoken conversations (Koharu in person, Tanaka, Misaki, the oden keeper) are VN scenes over the paused city, mostly
 without stills; stills for the moments that need a face: the hanami, the apology, the message.
 
-**Language in a reconstruction.** **Proposed:** the reconstruction is the order's tool, built to harvest people's
-lives, and it understands Japanese even though Mack doesn't. Inside it, the week is in English (or translated as
-it's spoken); outside it, Mack's own ears get only what he's learned. The enemy's machine understands what he
-can't.
+**Language in a reconstruction.** Mack is Japanese since 2026-10-12, and the reconstructions are his, so the week
+reads plainly. (The proposal here was for an American Mack: the order's tool understood the Japanese he couldn't.)
+The reconstruction itself is now a detective's, not a machine's ([cast/mc.md](../../cast/mc.md), What he can do).
 
 **To build for it:** reconstructions (entering one, its edges, the city set to a past moment, playing someone
 else, a moment that glitches and rebuilds when evidence proves it wrong); Minato's and Koharu's flats, the record

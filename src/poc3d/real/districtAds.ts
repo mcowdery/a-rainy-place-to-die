@@ -193,7 +193,8 @@ export function addDistrictAds(
 
     if (street && poster && s1 - s0 > 3.5 && !styleFor(b).home) {
       // Just inside one of the storefront's pillars, on the side away from any vending machines or pots.
-      const pw = 0.92;
+      // A B1 lightbox poster: about 0.6 x 0.9 m, its middle at eye level.
+      const pw = 0.6;
       const at = (u: number): [number, number] => [f.p[0] + f.r[0] * u, f.p[2] + f.r[2] * u];
       const blocked = (u: number): boolean => props.some((q) => (q.kind === 'vending' || q.kind === 'pots') && propDist(q, at(u)[0], at(u)[1]) < 1.3);
       const options = rnd.chance(0.5) ? [s1 - 0.4 - pw / 2, s0 + 0.4 + pw / 2] : [s0 + 0.4 + pw / 2, s1 - 0.4 - pw / 2];
@@ -203,12 +204,12 @@ export function addDistrictAds(
         mb.kind = KIND.plain;
         mb.color = lin(0xb8b8b8);
         mb.style = [0, 0, 0, 0];
-        mb.frameBox(centre, f.r, f.n, -pw / 2 - 0.04, pw / 2 + 0.04, 0.46, 1.84 + 0.04, 0.01, 0.08);
+        mb.frameBox(centre, f.r, f.n, -pw / 2 - 0.04, pw / 2 + 0.04, 0.91, 0.95 + pw * 1.5 + 0.04, 0.01, 0.08);
         sb.ink = [1, 1, 1];
         sb.plate = [0, 0, 0];
         sb.sign = [b.id % 100000, 1];
-        signBox(sb, centre, f.r, f.n, -pw / 2, pw / 2, 0.5, 0.5 + pw * 1.5, 0.08, 0.1, DISTRICT_BLANK, { n: districtAdUv(poster.i) });
-        out?.push({ kind: 'poster', ad: poster.i, x: centre[0], y: 1.2, z: centre[2], nx: f.n[0], nz: f.n[2] });
+        signBox(sb, centre, f.r, f.n, -pw / 2, pw / 2, 0.95, 0.95 + pw * 1.5, 0.08, 0.1, DISTRICT_BLANK, { n: districtAdUv(poster.i) });
+        out?.push({ kind: 'poster', ad: poster.i, x: centre[0], y: 1.4, z: centre[2], nx: f.n[0], nz: f.n[2] });
       }
     }
   }
@@ -227,7 +228,10 @@ function sideWallAds(sb: SignBuilder, mb: MeshBuilder, buildings: readonly Build
     if (o.kind === 'plaza' || o.kind === 'park') continue;
     const q = o.rect;
     const ns = o.front === 'north' || o.front === 'south';
+    let placed = false;
     for (const side of (ns ? ['west', 'east'] : ['north', 'south']) as Side[]) {
+      // One to a lot: two billboards face to face across it, each lighting the other, read as a mistake.
+      if (placed) break;
       // The neighbour whose face on this side of the lot looks into it (across a service alley at most).
       const b = buildings.find((c) => {
         if (c.hue !== undefined || c.h < 12 || used.has(c.id)) return false;
@@ -246,6 +250,7 @@ function sideWallAds(sb: SignBuilder, mb: MeshBuilder, buildings: readonly Build
       const mainTop = tiers(b)[0][3];
       if (W < 4 || y0 + H > mainTop - 1) continue;
       used.add(b.id);
+      placed = true;
       // Centred on the lot's middle, kept on the wall.
       const [lx, lz] = [q.x + q.w / 2, q.y + q.h / 2];
       const u = Math.max(W / 2 + 0.3, Math.min(f.fw - W / 2 - 0.3, (lx - f.p[0]) * f.r[0] + (lz - f.p[2]) * f.r[2]));

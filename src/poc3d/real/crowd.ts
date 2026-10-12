@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Emotes, type EmoteLooks } from './emotes';
 import { BODY_LIST, FIGURE_ATTRS, FIGURE_STRIDE, POSE_LIST, mobDepthMaterial, TEMPLATE_COUNT, templateGeometry } from './people';
 import { CrowdSmoke } from './smoke';
-import { HOURS, MANNERS, outAt } from '../district/peopleHours';
+import { HOURS, MANNERS, streetAt } from '../district/peopleHours';
 import type { Body } from './mobRig';
 import type { Pose } from './people';
 
@@ -117,7 +117,7 @@ export class Crowd {
         // (Walking, crossing, running; riding or at a strap is elsewhere.)
         if (f[k + 11] !== 0 || !pose || pose === 'walk' || pose === 'gait' || pose === 'ride' || pose === 'strap' || pose === 'sit') continue;
         const hours = f[k + 20] < 0 ? null : HOURS[f[k + 20]];
-        if (hours && outAt(hours, hour) <= f[k + 22]) continue;
+        if (hours && streetAt(hours, hour) <= f[k + 22]) continue;
         const body = BODY_LIST[f[k + 5]] ?? 'man';
         out.push({ id: `${key}:${k}`, x: fx, z: fz, y: f[k + 13], yaw: f[k + 3], body, pose, manner: MANNERS[f[k + 21]] ?? 'plain', seed: f[k + 4] });
       }

@@ -26,3 +26,4 @@ Things decided or noticed that aren't done yet. Newest first within a section; s
 ## Game
 
 - [ ] **A menu screen and a story**: the game has neither yet (it blocks the credits screen above).
+- [ ] **Boot time** (2026-10-10, pod, warm cache: first frame ~18 s). Manila is **not** the cost (network done by 0.4 s). The time is the ~9.5 s synchronous setup before `boot:warm-start` (many one-time builds for Tōto: SignAtlas 1.0 s, texture uploads 1.1 s, people 0.85, windowAtlas 0.77, tiles 0.6, vehicles 0.57, props 0.55, expressway 0.5, GC 0.5), then 2 s workers, 1.7 s first compile/render, 3.8 s late warm (needed against mid-drive stalls, see debug-shots/driveprograms.mjs). Next step if wanted: defer setup items the first frame doesn't need, one at a time, measured with `node scripts/loadProfile.mjs --runs 2 --cpu`. `pod.mjs run` crashed on `portMappings` right after autostarting the pod (worked on retry).

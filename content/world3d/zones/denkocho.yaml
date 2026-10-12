@@ -18,7 +18,7 @@ zones:
     id: denko_main
     name: Denkō-dōri
     night: 0.5
-    people: { plain: 6, maid: 1, suit: 1, school: 1, otaku: 3 }
+    people: { plain: 6, maid: 1, suit: 1, school: 1, otaku: 3, blouson: 1, knit: 0.8, coverall: 0.3, leggings: 0.4 }
     plan:
       floors: [[6, 9, 40], [10, 14, 45], [15, 20, 15]]
       lotW: [6, 12]
@@ -65,7 +65,7 @@ zones:
     id: denko_culture
     name: Maid café lanes
     night: 0.45
-    people: { maid: 4, plain: 5, school: 1, otaku: 1.5 }
+    people: { maid: 4, plain: 5, school: 1, otaku: 1.5, blouson: 0.8, knit: 0.6, leggings: 0.3, crop: 0.2 }
     plan:
       floors: [[4, 7, 60], [8, 11, 40]]
       lotW: [5, 9]

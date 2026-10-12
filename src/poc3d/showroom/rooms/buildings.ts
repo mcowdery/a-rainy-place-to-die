@@ -4,6 +4,7 @@ import { adMaterial, DistrictAdAtlas } from '../../real/adAtlas';
 import { buildMegaSign } from '../../real/megaSign';
 import { addProps, type Prop } from '../../real/props';
 import { loadStatue } from '../../models/statues';
+import { loadPayphone, PAYPHONE_KEYS, PayphoneRig, type PayphoneKind } from '../../models/payphone';
 import { SignBuilder, signBox } from '../../real/signs';
 import { BILLBOARDS, DISTRICT_BLANK, districtAdUv, POSTERS } from '../../real/districtAds';
 import { startRoom } from '../shell';
@@ -30,7 +31,7 @@ startRoom({
       floor.box(30, 28, -0.3, -0.05, 140, 124, KIND.lot);
       floor.kind = KIND.plain;
       floor.color = lin(0x8a867e);
-      floor.box(GARDEN_X + 30, FURN_Z, -0.2, 0.15, 76, 14, KIND.sidewalk);
+      floor.box(GARDEN_X + 44, FURN_Z, -0.2, 0.15, 104, 14, KIND.sidewalk);
     });
     // Kaburo district ads: a wall of every approved billboard (on stands) with the posters below, facing +x.
     {
@@ -140,6 +141,9 @@ startRoom({
       ['weeds', P('weeds', GARDEN_X + 62, { size: 1.2, variant: 4 })],
       ['for-sale board', P('board', GARDEN_X + 64.5, { half: 0.6 })],
       ['cones', P('cones', GARDEN_X + 67, { variant: 2 })],
+      ['payphone: green card phone', P('payphone', GARDEN_X + 70.5, { variant: 0, radius: 0.35 })],
+      ['payphone: booth', P('payphone', GARDEN_X + 74, { variant: 1, radius: 0.55 })],
+      ['payphone: red coin phone', P('payphone', GARDEN_X + 77.5, { variant: 2, radius: 0.35 })],
     ];
     addProps(furn, { props: sample.map(([, p]) => p), wires: [], lights: [], open: [], solids: [] });
     for (const [name, p] of sample) {
@@ -149,6 +153,56 @@ startRoom({
     const furnMesh = new THREE.Mesh(furn.build()!, city);
     furnMesh.castShadow = furnMesh.receiveShadow = true;
     genRoot.new.add(furnMesh);
+    }
+    // The Blender-modelled payphones (scripts/blender/payphone.py), with their parts moving: the handset comes off its
+    // hooks, the keys go in one after another, the flap and the booth's door swing, then it all goes back. A candidate,
+    // for the phone you walk up to; the code-built ones above are the street furniture.
+    {
+      const env = ctx.env();
+      const rigs: { rig: PayphoneRig; at: number; booth: boolean }[] = [];
+      const spots: [PayphoneKind, number, string][] = [
+        ['payphone', GARDEN_X + 82, 'payphone (Blender): green card phone'],
+        ['payphone_booth', GARDEN_X + 86.5, 'payphone (Blender): booth'],
+        ['payphone_red', GARDEN_X + 90, 'payphone (Blender): red coin phone'],
+        ['payphone_pink', GARDEN_X + 92.5, 'payphone (Blender): pink phone (bars)'],
+      ];
+      for (const [kind, x, name] of spots) {
+        void loadPayphone(kind, env)
+          .then((obj) => {
+            obj.position.set(x, 0, FURN_Z);
+            genRoot.new.add(obj);
+            rigs.push({ rig: new PayphoneRig(obj), at: x, booth: kind === 'payphone_booth' });
+          })
+          .catch((e: unknown) => console.warn('payphone:', e));
+        // The same phone as the middle distance draws it (30 m and beyond), a row in front.
+        void loadPayphone(kind, env, true)
+          .then((obj) => {
+            obj.position.set(x, 0, FURN_Z + 4);
+            genRoot.new.add(obj);
+          })
+          .catch((e: unknown) => console.warn('payphone (low):', e));
+        label('new', name, x, 3.2, FURN_Z);
+        genItems.new.push({ name, group: 'Street & park', at: new THREE.Vector3(x, 1.2, FURN_Z), size: kind === 'payphone' ? 2.4 : 3.2, view: new THREE.Vector3(0.3, 0.2, 1).normalize() });
+        genItems.new.push({ name: `${name} (close)`, group: 'Street & park', at: new THREE.Vector3(x, 1.25, FURN_Z + (kind === 'payphone' ? 0 : -0.35)), size: 0.9, view: new THREE.Vector3(0.2, 0.1, 1).normalize() });
+      }
+      let t = 0;
+      const ease = (k: number): number => {
+        const x = THREE.MathUtils.clamp(k, 0, 1);
+        return x * x * (3 - 2 * x);
+      };
+      ctx.onFrame((dt) => {
+        t += dt;
+        const c = t % 9;
+        for (const { rig, booth } of rigs) {
+          if (booth) rig.setDoor(ease(c / 1) * (1 - ease((c - 8) / 1)));
+          rig.setHandset(ease((c - 1) / 1) * (1 - ease((c - 7) / 1)));
+          PAYPHONE_KEYS.forEach((key, i) => rig.setKey(key, Math.max(0, 1 - Math.abs(c - (2.2 + i * 0.35)) / 0.18)));
+          // (A dial: wound round to the stop and let run back, twice.)
+          const wind = (t0: number): number => ease((c - t0) / 0.9) * (1 - ease((c - t0 - 0.9) / 1.1));
+          rig.setDial(Math.max(wind(2.2) * 0.7, wind(4.3)));
+          rig.setFlap(ease((c - 6.4) / 0.3) * (1 - ease((c - 7) / 0.3)));
+        }
+      });
     }
   },
 });

@@ -1,7 +1,12 @@
 # Traffic on the roads along the L0 cell edges. A loop is a rectangle of grid lines [col0, row0, col1, row1];
 # every edge must have generated cells on both sides (both halves of the road exist). Cars drive the loops
 # clockwise and keep left; loops that share an edge use its two lanes in opposite directions. Buses drive
-# their loops anticlockwise (the other lane of the outer edges) and stop mid-block on each edge.
+# their loops anticlockwise (the other lane of the outer edges), on the kerb of the loop's inside.
+# A bus line's stops: the places it serves, in the order it reaches them (anticlockwise: down the west side, east
+# along the south, up the east, west along the north). Each is the cell beside the loop on its inside, and the side
+# of the loop: { name, cell: [col, row], side } (or { name, at: <a placement's id> } for the block nearest a set
+# piece). The game picks the spot in that block and what kind of stop fits the pavement (district/stops.ts,
+# docs/street-furniture-plan.md). Four plain names, north, east, south, west, is the old form: one stop a side.
 # auto: generated car loops over the rest of the city (district/traffic.ts carLoops): squares of `size` cells on a
 # fixed lattice wherever no loop is, every edge a proper street (raised pavements) with generated cells both sides.
 auto: { size: 2, spacing: 52 }
@@ -18,13 +23,22 @@ buses:
     en: KABURO LOOP
     rect: [26, 10, 31, 12]
     buses: 2
-    stops: [歌舞路北, 歌舞路東口, 歌舞路二丁目, 歌舞路西口]
+    stops:
+      - { name: 歌舞路西口, cell: [26, 10], side: west }
+      - { name: 歌舞路横丁前, cell: [26, 11], side: south }
+      - { name: 歌舞路一丁目, cell: [28, 11], side: south }
+      - { name: 歌舞路交差点, cell: [30, 11], side: south }
+      - { name: 歌舞路東, cell: [30, 10], side: east }
   - id: asagiri
     name: 朝霧循環
     en: ASAGIRI LOOP
     rect: [21, 10, 25, 13]
     buses: 2
-    stops: [朝霧北, 朝霧駅西口, 都庁通り, 朝霧西]
+    stops:
+      - { name: 朝霧公園, cell: [21, 11], side: west }
+      - { name: 朝霧西, cell: [21, 12], side: south }
+      - { name: 東都中央駅西口, cell: [24, 11], side: east }
+      - { name: 都庁前, cell: [21, 10], side: north }
 # Feeder lines out of the core (a bus from a station round the neighbourhoods the trains don't reach), each
 # on proper streets (raised pavements) all round. Stops: north, east, south, west edge.
   - id: suido
@@ -32,40 +46,81 @@ buses:
     en: GAKUENZAKA–SUIDŌ-CHŌ LOOP
     rect: [25, 5, 31, 9]
     buses: 1
-    stops: [水道町北, 水道町, 学園坂下東, 学園坂下]
+    stops:
+      - { name: 学園坂駅前, cell: [25, 6], side: west }
+      - { name: 学園坂下, cell: [25, 8], side: south }
+      - { name: 歌舞路北, cell: [28, 8], side: south }
+      - { name: 水道町南, cell: [30, 8], side: east }
+      - { name: 水道町, cell: [30, 6], side: east }
+      - { name: 水道町北, cell: [30, 5], side: north }
+      - { name: 東都大学前, cell: [27, 5], side: north }
   - id: dome
     name: ドーム線
     en: DOME LINE
     rect: [32, 6, 33, 10]
     buses: 1
-    stops: [ドーム北, 東都ドーム前, 電光町北, 水道町東]
+    stops:
+      - { name: 水道町東, cell: [32, 7], side: west }
+      - { name: 電光町北, cell: [32, 9], side: south }
+      - { name: 水道町二丁目, cell: [32, 7], side: east }
+      - { name: ドーム南, cell: [32, 6], side: north }
   - id: port
     name: 港循環
     en: PORT LOOP
     rect: [28, 18, 35, 21]
     buses: 1
-    stops: [海岸通り, 中央卸売市場前, 湾岸道路, 海岸駅前]
+    stops:
+      - { name: 海岸駅前, cell: [28, 19], side: west }
+      - { name: 港湾倉庫前, cell: [29, 20], side: south }
+      - { name: 湾岸道路, cell: [32, 20], side: south }
+      - { name: 中央卸売市場前, cell: [34, 19], side: east }
+      - { name: 市場北, cell: [33, 18], side: north }
+      - { name: 海岸通り, cell: [30, 18], side: north }
   - id: kasumi
     name: 霞町循環
     en: KASUMI-CHŌ LOOP
     rect: [21, 14, 26, 21]
     buses: 1
-    stops: [霞町西, 霞町駅前, 港南, 朝霧南]
+    stops:
+      - { name: 港南西, cell: [21, 18], side: west }
+      - { name: フェリーターミナル入口, cell: [21, 20], side: south }
+      - { name: 港南, cell: [24, 20], side: south }
+      - { name: 港南倉庫街, cell: [25, 19], side: east }
+      - { name: 霞町駅前, cell: [25, 16], side: east }
+      - { name: 霞町一丁目, cell: [25, 14], side: north }
+      - { name: 霞町西, cell: [22, 14], side: north }
   - id: takanodai
     name: 鷹ノ台循環
     en: TAKANODAI LOOP
     rect: [17, 4, 22, 6]
     buses: 1
-    stops: [鷹ノ台上, 鷹ノ台東, 鷹ノ台下, 鷹ノ台西]
+    stops:
+      - { name: 鷹ノ台西, cell: [17, 4], side: west }
+      - { name: 鷹ノ台下, cell: [18, 5], side: south }
+      - { name: 鷹ノ台東, cell: [21, 5], side: east }
+      - { name: 鷹ノ台上, cell: [20, 4], side: north }
+      - { name: 鷹ノ台北, cell: [18, 4], side: north }
   - id: kawabata
     name: 川端循環
     en: KAWABATA LOOP
     rect: [40, 9, 42, 13]
     buses: 1
-    stops: [竜胆町, 川端東, 東都タワー前, 川端駅前]
+    stops:
+      - { name: 川端駅前, cell: [40, 10], side: west }
+      - { name: 東都タワー前, cell: [40, 12], side: south }
+      - { name: 川端東, cell: [41, 11], side: east }
+      - { name: 竜胆町, cell: [41, 9], side: north }
   - id: nishihara
     name: 西原・桜ヶ丘循環
     en: NISHIHARA–SAKURAGAOKA LOOP
     rect: [11, 9, 20, 11]
     buses: 1
-    stops: [桜ヶ丘北, 朝霧西口, 西原団地, 西原駅前]
+    stops:
+      - { name: 西原団地前, cell: [11, 9], side: west }
+      - { name: 西原駅前, cell: [13, 10], side: south }
+      - { name: 桜ヶ丘西, cell: [15, 10], side: south }
+      - { name: 桜ヶ丘駅前, cell: [17, 10], side: south }
+      - { name: 桜ヶ丘東, cell: [19, 10], side: south }
+      - { name: 桜ヶ丘北, cell: [18, 9], side: north }
+      - { name: 桜ヶ丘二丁目, cell: [15, 9], side: north }
+      - { name: 西原北, cell: [12, 9], side: north }

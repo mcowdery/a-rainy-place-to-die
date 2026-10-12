@@ -13,6 +13,8 @@ import { stationKerb } from '../real/station';
 import { vehicleTexts } from '../models/vehicles';
 import { filipino } from './cityConfig';
 import { manilaTexts } from '../real/manilaStreet';
+import type { BusLine } from './traffic';
+import { lineStops, stopClaim, type LineStops, type StopSite } from './stops';
 
 /**
  * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings, signs) and
@@ -46,6 +48,8 @@ export class DistrictModel {
     private readonly extraReserved: readonly Rect[] = [],
     /** Ground under something built over it (the expressway's parking area): no trees or planting there. */
     private readonly covered: readonly Rect[] = [],
+    /** The bus lines (traffic.yaml): their stops stand on the pavements, and the street furniture keeps off them. */
+    private readonly buses: readonly BusLine[] = [],
   ) {
     for (const [k, v] of avenues) this.edges.set(k, v);
     const cells: [number, number][] = [];
@@ -110,6 +114,35 @@ export class DistrictModel {
     return p;
   }
 
+  private readonly lineSites = new Map<string, LineStops>();
+  private stopsOf(line: BusLine): LineStops {
+    let s = this.lineSites.get(line.id);
+    if (!s) {
+      s = lineStops(line, { plan: (mx, my) => this.plan(mx, my), buildings: (mx, my) => this.buildings(mx, my), placed: this.placed });
+      this.lineSites.set(line.id, s);
+    }
+    return s;
+  }
+
+  /** A bus line's stops (stops.ts): where each stands and what kind it is. The traffic's routes take them (routeFor). */
+  busStops(lineId: string): readonly StopSite[] {
+    const line = this.buses.find((b) => b.id === lineId);
+    return line ? this.stopsOf(line).sites : [];
+  }
+
+  /** What the bus lines asked for and couldn't have (a place with no good spot near it): for the tests. */
+  stopProblems(): string[] {
+    return this.buses.flatMap((b) => this.stopsOf(b).problems);
+  }
+
+  private stopClaims: { rect: Rect }[] | null = null;
+  /** The ground taken by bus stops in or beside a cell: the street furniture keeps out of it (cellDetail's `claimed`). */
+  claimed(mx: number, my: number): Rect[] {
+    this.stopClaims ??= this.buses.flatMap((b) => this.stopsOf(b).sites.map((s) => ({ rect: stopClaim(s) })));
+    const cell: Rect = pad({ x: mx * CELL, y: my * CELL, w: CELL, h: CELL }, 12);
+    return this.stopClaims.filter((c) => overlaps(c.rect, cell)).map((c) => c.rect);
+  }
+
   /** Street furniture and lights of a cell (null outside the district). */
   detail(mx: number, my: number): CellDetail | null {
     const k = cellKey(mx, my);
@@ -117,7 +150,7 @@ export class DistrictModel {
     if (!d) {
       const p = this.plan(mx, my);
       if (!p) return null;
-      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my), this.coveredIn(mx, my));
+      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my), this.coveredIn(mx, my), this.claimed(mx, my));
       this.details.set(k, d);
     }
     return d;

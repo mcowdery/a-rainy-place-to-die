@@ -8,7 +8,7 @@ import { JEEPNEY_LIVERIES } from '../src/poc3d/models/vehicles';
 
 const content = loadDistrictContent('manila');
 const lines = content.traffic.buses.filter((b) => b.jeepney !== undefined);
-const district = new District(content.macro, DISTRICTS3, content.placed, 0x4d4e4c31, content.zones, content.avenues);
+const district = new District(content.macro, DISTRICTS3, content.placed, 0x4d4e4c31, content.zones, content.avenues, [], undefined, [], [], content.traffic.buses);
 
 describe('Manila jeepney lines', () => {
   it('has several, each in one of the liveries, whose route board is the line', () => {
@@ -53,11 +53,11 @@ describe('Manila jeepney lines', () => {
       return false;
     };
     for (const l of lines) {
-      const route = routeFor(l.rect, false, (mx, my) => district.plan(mx, my), content.rails.flatMap((s) => s.segments));
+      const route = routeFor(l.rect, false, (mx, my) => district.plan(mx, my), content.rails.flatMap((s) => s.segments), district.model.busStops(l.id));
       expect(route.length, l.id).toBeGreaterThan(1500);
-      expect(route.edges).toHaveLength(4);
-      for (const e of route.edges) {
-        const p = along(route, e.mid);
+      expect(route.stops).toHaveLength(4);
+      for (const e of route.stops) {
+        const p = along(route, e.s);
         const kl = Math.hypot(e.kerb[0], e.kerb[1]);
         const o = [e.kerb[0] / kl, e.kerb[1] / kl];
         // The pole 4.2 m behind the stop's centre, the bench 1.3 m on from it (busStops in real/traffic.ts).
@@ -70,7 +70,7 @@ describe('Manila jeepney lines', () => {
           expect(content.placed.some((q) => x > q.rect.x && x < q.rect.x + q.rect.w && z > q.rect.y && z < q.rect.y + q.rect.h), at).toBe(false);
         }
         // And no junction within the jeepney's own length of its stop.
-        for (const j of route.junctions) expect(Math.abs(j.s - e.mid), `${l.id} ${e.side}`).toBeGreaterThan(j.cross / 2 + 4.5);
+        for (const j of route.junctions) expect(Math.abs(j.s - e.s), `${l.id} ${e.side}`).toBeGreaterThan(j.cross / 2 + 4.5);
       }
     }
   });

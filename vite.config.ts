@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
         // race.html: the racing venue (Kurokami Pass), the handling test.
         // scenes.html: the editor for the rooms behind the windows (it saves through the dev server; built, it downloads).
         // fight.html: the fight test, a yard for trying the melee as Mack in first person.
-        input: { city: 'index.html', poc3d: 'poc3d.html', models: 'models.html', modelsCars: 'models-cars.html', modelsMack: 'models-mack.html', modelsPlants: 'models-plants.html', modelsBuildings: 'models-buildings.html', modelsTransit: 'models-transit.html', modelsCarsPh: 'models-cars-ph.html', modelsPlantsPh: 'models-plants-ph.html', modelsBoatsPh: 'models-boats-ph.html', modelsBuildingsPh: 'models-buildings-ph.html', mob: 'mob.html', mobPh: 'mob-ph.html', characters: 'characters.html', scenes: 'scenes.html', race: 'race.html', garage: 'garage.html', fight: 'fight.html' },
+        input: { city: 'index.html', poc3d: 'poc3d.html', models: 'models.html', modelsCars: 'models-cars.html', modelsMack: 'models-mack.html', modelsPlants: 'models-plants.html', modelsBuildings: 'models-buildings.html', modelsTransit: 'models-transit.html', modelsCarsPh: 'models-cars-ph.html', modelsPlantsPh: 'models-plants-ph.html', modelsBoatsPh: 'models-boats-ph.html', modelsFauna: 'models-fauna.html', modelsFaunaPh: 'models-fauna-ph.html', modelsBuildingsPh: 'models-buildings-ph.html', mob: 'mob.html', mobPh: 'mob-ph.html', characters: 'characters.html', scenes: 'scenes.html', race: 'race.html', garage: 'garage.html', fight: 'fight.html' },
       },
     },
     test: {

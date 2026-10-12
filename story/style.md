@@ -18,7 +18,7 @@ How the writing reads, and what each way of telling a scene can hold.
 
 ## Grounded
 
-Everything leans grounded in reality. The exceptions come from two places only: **technology** (Mack's body, the
+Everything leans grounded in reality. The exceptions come from two places only: **technology** (the order's
 machines, the Beast) and the **Christian supernatural** (demons, angels, the Nephilim, fallen ones). Anything
 supernatural has to work by the Christian framework: the occult (fortune telling, a séance, a curse) can be real
 if what's really behind it is demonic, but the story prefers the grounded explanation: a fortune teller is
@@ -26,6 +26,11 @@ usually a fraud, a strange coincidence usually has a human cause.
 
 The Christian themes stay subtle: hinted at, never explicit, left for the reader to interpret that way. They
 become more explicit only where the order is involved, and at the very end.
+
+**The dead hours** (2 to 6 in the morning; [mythos.md](mythos.md)) are the standing exception since 2026-10-12:
+monsters and robots in empty streets, every night, and the whole city knows to stay in. By day the rule above
+holds as before. **Proposed:** they still come from the same two places (the machines are technology, the
+monsters and the "aliens" are the fallen), so nothing new is let in.
 
 ## The ways a scene can play
 

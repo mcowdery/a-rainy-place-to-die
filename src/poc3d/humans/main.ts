@@ -1,4 +1,5 @@
 import '../showroom/nav';
+import { installSnap } from '../../debug/snap';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -42,6 +43,8 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const query = new URLSearchParams(location.search);
 
 const renderer = new THREE.WebGLRenderer({ antialias: false });
+// F9: a snapshot and a note for reporting an issue (debug/snap.ts, saved to debug-shots/).
+const snap = installSnap(renderer.domElement, 'humans');
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -742,6 +745,7 @@ renderer.setAnimationLoop(() => {
   censor.track(fp.body, camera);
   renderer.info.reset();
   composer.render(dt);
+  snap.afterRender();
   drawn = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
   labels.render(scene, camera);
   if (panelState() !== panelShown) {

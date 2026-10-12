@@ -32,7 +32,7 @@ export interface Hands {
   reset(side: 'l' | 'r'): void;
   reach(side: 'l' | 'r', wrist: THREE.Vector3, pole: THREE.Vector3): void;
   orient(side: 'l' | 'r', fwd: THREE.Vector3, palm: THREE.Vector3): void;
-  relax(side: 'l' | 'r', amount: number, table?: readonly (readonly number[])[]): void;
+  relax(side: 'l' | 'r', amount: number, table?: readonly (readonly number[])[], thumb?: readonly [number, number]): void;
   /** The hand's frame now (world): wrist to knuckles, and the way its palm faces. */
   frame(side: 'l' | 'r'): { fwd: THREE.Vector3; palm: THREE.Vector3 };
 }

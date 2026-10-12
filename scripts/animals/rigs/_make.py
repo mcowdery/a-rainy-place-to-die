@@ -1,0 +1,58 @@
+"""Writes one-line rig specs for the models rigged by autorig.py: python scripts/animals/rigs/_make.py (rewrites auto_*.py)."""
+import os
+HERE = os.path.dirname(__file__)
+# name: (candidate id, kind, forward, opts)
+RIGS = {
+    "shiba": ("1sr1MDt9db5", "quad", "-y", {"sit": False}),
+    "fox": ("10u8FYPC5Br", "quad", "-y", {"sit": False}),
+    "raccoon": ("2iYORwFng3_", "quad", "-y", {"sit": False}),
+    "squirrel": ("caxos24uWC9", "quad", "-y", {"sit": False}),
+    "kitten": ("dBJgGEu5bHW", "quad", "-y", {"sit": False}),
+    "cat2": ("YvVobPlTlQ", "quad", "-y", {"sit": False}),
+    "dog5": ("5ttSZIlA0t6", "quad", "-y", {}),
+    "goat1": ("d7dImmjtF8E", "quad", "-y", {"sit": False}),
+    "goat2": ("bNYS7ETDNCt", "quad", "-y", {"sit": False}),
+    "sparrow": ("3rTjKefT184", "bird", "-y", {}),
+    "dove": ("1cF8DTp2sAi", "bird", "-y", {}),
+    "crow": ("1MIvWQ5Q3R9", "bird", "-y", {}),
+    "seagull": ("0WRzrtCIIRp", "bird", "-y", {}),
+    "gull2": ("7sQHkW0ylJy", "bird", "+x", {}),
+    "gull3": ("dUFuQoM-k3s", "bird", "+x", {}),
+    "duck1": ("frSLi6b6Vid", "bird", "-y", {}),
+    "duck2": ("6HpauUCfIAb", "bird", "-y", {}),
+    "heron": ("74guNhJR5Ij", "bird", "-y", {}),
+    "blueheron": ("dMR6NWzjlYT", "bird", "-y", {}),
+    "egret": ("4GacWAa1lit", "bird", "-y", {}),
+    "snowyegret": ("8VTUh9niy9k", "bird", "-y", {}),
+    "rooster": ("6NTegstc5Jy", "bird", "-y", {}),
+    "hen": ("8Unya0rw9tR", "bird", "-y", {}),
+    "chick": ("fozJTmMX5yv", "bird", "-y", {}),
+    "gullfly2": ("eMNhHDZakYp", "flyer", "+x", {}),
+    "dragonfly1": ("0myA_BOcZrD", "flyer", "+y", {"flap": 0.4}),
+    "dragonfly2": ("de6jep5Fq5", "flyer", "+y", {"flap": 0.4}),
+    "dragonfly3": ("UIxtFAD1ve", "flyer", "+y", {"flap": 0.4}),
+    "moth": ("8ojwMQpu6DK", "flyer", "+y", {"flap": 0.4}),
+    "koi1": ("3GPUntjwqCa", "fish", "-y", {}),
+    "gecko1": ("3FxwLOrGiNL", "crawler", "+x", {"legs": 2, "lat": 0.4}),
+    "gecko2": ("65Yj7059c2K", "crawler", "-y", {"legs": 2, "lat": 0.4}),
+    "lizard": ("0z3NJc5zAE", "crawler", "-y", {"legs": 2, "lat": 0.4}),
+    "turtle1": ("2LCcq8vhqJ3", "crawler", "-y", {"legs": 2, "lat": 0.7, "amp": 18, "wiggle": 3}),
+    "turtle2": ("c6n73UnGEP4", "crawler", "-y", {"legs": 2, "lat": 0.7, "amp": 18, "wiggle": 3}),
+    "beetle": ("4yufxgZ1QQ2", "crawler", "-y", {"legs": 3, "lat": 0.5, "amp": 22, "wiggle": 2}),
+    "cockroach": ("eSCFQN_47V4", "crawler", "+y", {"legs": 3, "lat": 0.5, "amp": 22, "wiggle": 2}),
+    "crab1": ("2DgM36qZW2u", "crawler", "-y", {"legs": 4, "lat": 0.4, "amp": 14, "wiggle": 0}),
+    "crab2": ("bmZ6-LnPmp0", "crawler", "+x", {"legs": 4, "lat": 0.4, "amp": 14, "wiggle": 0}),
+    "dog_a": ("baWJfMjFFC2", "quad", "-x", {"sit": False}),
+    "dog_b": ("83Ha6EKTaOv", "quad", "+x", {"sit": False}),
+    "dog_c": ("eDmSVe4TKwF", "quad", "-y", {"sit": False}),
+    "rat": ("6hsesZHvcPI", "quad", "-y", {"sit": False}),
+    "frog": ("cwyNyIba6WE", "chain", "-y", {"bones": 3, "hop": 0.8, "zfrac": 0.35}),
+    "snail": ("aZ_cT-AIu2y", "chain", "-y", {"bones": 4, "wave": 5, "zfrac": 0.3}),
+    "parrot": ("3zS1cxISN0E", "bird", "+x", {}),
+    "monkey": ("29hG1_J1Uiq", "quad", "-y", {"sit": False, "tilt": 40}),
+    "butterfly1": ("814CINpG3H1", "flyer", "+y", {"flap": 0.5}),
+}
+for name, (cid, kind, fwd, opts) in RIGS.items():
+    open(os.path.join(HERE, f"auto_{name}.py"), "w", encoding="utf-8").write(
+        f'"""Fitted by autorig.py ({kind}, facing {fwd}) to candidates/{cid}.glb."""\nKIND = "{kind}"\nSRC = "assets/animals/candidates/{cid}.glb"\nFORWARD = "{fwd}"\nOPTS = {opts!r}\n')
+print(len(RIGS), "specs")

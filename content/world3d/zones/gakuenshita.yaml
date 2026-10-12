@@ -12,7 +12,7 @@ zones:
     id: student_town
     name: Student town
     night: 0.3
-    people: { school: 4, plain: 5, long: 1, otaku: 2 }
+    people: { school: 4, plain: 5, long: 1, otaku: 2, runner: 0.8, leggings: 0.8, blouson: 1, knit: 0.6, cardigan: 0.5 }
     plan:
       floors: [[3, 5, 55], [6, 9, 45]]
       lotW: [5, 11]

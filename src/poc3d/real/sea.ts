@@ -3,6 +3,7 @@ import type { MacroMap } from '../../gen/macro';
 import type { Bridge3 } from '../district/roads';
 import type { Terrain } from '../district/terrain';
 import { poolTexture } from './expressway';
+import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 import { WATER_ALPHA, WATER_GLSL } from './waterGlsl';
 
 /**
@@ -76,7 +77,7 @@ export function waterSurface(m: THREE.Material, sky: WaterSky, from = 700, to = 
   m.customProgramCacheKey = () => `water-${from}-${to}`;
 }
 
-export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: number) => boolean, sky: WaterSky, bridges: readonly Bridge3[] = [], terrain?: Terrain): Sea {
+export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: number) => boolean, sky: WaterSky, bridges: readonly Bridge3[] = [], terrain: Terrain | undefined, deck: THREE.Material): Sea {
   const group = new THREE.Group();
   // (Rough enough that the sun's glitter on a ripple doesn't overflow the scene's half floats.)
   const material = new THREE.MeshStandardMaterial({ color: 0x0c1c26, roughness: 0.24, metalness: 0.35 });
@@ -213,12 +214,12 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
   ground.receiveShadow = true;
   ground.frustumCulled = false;
   group.add(ground);
-  // The bridges' decks take snow on what faces up, as the city's streets do. They're outside the lightmap, so
-  // their lamps light the deck with pools of light (additive decals, as the expressway's), on with the lamps.
-  const deckSnow = { value: 0 };
-  const heads = new THREE.MeshStandardMaterial({ color: 0xffe2b0, roughness: 0.85, emissive: 0xffe2b0, emissiveIntensity: 1.4 });
+  // The bridges' decks are the city's own surfaces on the city's material (one mesh each: asphalt, pavements, paint,
+  // parapets, lamp heads), so they get everything the streets do: the lightmap, the headlights and your own car's
+  // lights, the beacon, wet roads, snow, the seasons. They're outside the lightmap, so their lamps light the deck
+  // with pools of light (additive decals, as the expressway's), on with the lamps.
   const pools: [number, number][] = [];
-  for (const b of bridges) group.add(bridgeDeck(b, deckSnow, heads, pools));
+  for (const b of bridges) group.add(bridgeDeck(b, deck, pools));
   const poolMat = new THREE.MeshBasicMaterial({ map: poolTexture(), color: new THREE.Color(0.24, 0.19, 0.12), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
   const lit = new THREE.InstancedMesh(new THREE.PlaneGeometry(13, 13).rotateX(-Math.PI / 2), poolMat, pools.length);
   const m4 = new THREE.Matrix4();
@@ -236,12 +237,10 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
       if (Math.abs(amount - snow) < 0.01) return;
       snow = amount;
       landMat.color.copy(bare).lerp(white, amount);
-      deckSnow.value = amount;
     },
     setLamps(on) {
       if (Math.abs(on - lamps) < 0.01) return;
       lamps = on;
-      heads.emissiveIntensity = 0.05 + 1.35 * on;
       poolMat.opacity = on;
       lit.visible = pools.length > 0 && on > 0.05;
     },
@@ -252,67 +251,59 @@ export function buildSea(macro: MacroMap, cell: number, built: (mx: number, my: 
  * A street bridge's deck (roads.ts Bridge3): the carriageway at street level on a deep girder, raised pavements
  * either side, a planted median if it has one, lane paint, parapets with a rail, and lamps along the pavements.
  */
-/** Snow on what faces up (a deck's carriageway, pavements, parapet tops), the amount shared. */
-function snowy(m: THREE.MeshStandardMaterial, snow: { value: number }, keep: number): void {
-  m.onBeforeCompile = (shader) => {
-    shader.uniforms.uSnow = snow;
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uSnow;')
-      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-        if (uSnow > 0.0) {
-          float upF = dot(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz));
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.64, 0.68), smoothstep(0.55, 0.9, upF) * uSnow * ${keep.toFixed(2)});
-        }`);
-  };
-}
-
-function bridgeDeck(b: Bridge3, snow: { value: number }, heads: THREE.MeshStandardMaterial, pools: [number, number][]): THREE.Group {
-  const g = new THREE.Group();
+/**
+ * A street bridge's deck (roads.ts Bridge3), built as the city builds its streets (ground.ts) so it looks and is lit
+ * as they are: the carriageway at street level on a deep girder, raised pavements either side, a planted median if
+ * it has one, lane paint, parapets with a rail, and lamps along the pavements.
+ */
+function bridgeDeck(b: Bridge3, deck: THREE.Material, pools: [number, number][]): THREE.Mesh {
+  const mb = new MeshBuilder(1 << 14);
   const r = b.road;
   const q = r.rect;
   const v = r.vertical;
   const W = v ? q.w : q.h;
   const L = v ? q.h : q.w;
   const world = (a: number, c: number): [number, number] => (v ? [q.x + W / 2 + c, q.y + a] : [q.x + a, q.y + W / 2 + c]);
-  // Local frame: along (a, 0..L) and across (c, -W/2..W/2) to world boxes. A lamp head takes the shared material.
-  const box = (a0: number, a1: number, c0: number, c1: number, y0: number, y1: number, color: number, head = false): void => {
+  mb.id = 0;
+  mb.flags = 0;
+  mb.frontNormal = null;
+  // Local frame: along (a, 0..L) and across (c, -W/2..W/2) to world boxes; `top` is the kind of the top face.
+  const box = (a0: number, a1: number, c0: number, c1: number, y0: number, y1: number, kind: number, top: number, hex: number, emit = -1): void => {
     const [cx, cz] = world((a0 + a1) / 2, (c0 + c1) / 2);
-    const sx = v ? c1 - c0 : a1 - a0;
-    const sz = v ? a1 - a0 : c1 - c0;
-    const mat = head ? heads : new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
-    // (The carriageway keeps a little less, as the streets do: city.ts.)
-    if (!head) snowy(mat, snow, color === 0x26262a ? 0.8 : 1);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, y1 - y0, sz), mat);
-    m.position.set(cx, (y0 + y1) / 2, cz);
-    m.receiveShadow = true;
-    g.add(m);
+    mb.kind = kind;
+    mb.color = lin(hex);
+    mb.style = emit >= 0 ? [emit, 0, 0, 0] : [0, 0, 0, 0];
+    mb.box(cx, cz, y0, y1, v ? c1 - c0 : a1 - a0, v ? a1 - a0 : c1 - c0, top);
   };
   const sw = r.sidewalk;
-  box(0, L, -W / 2, W / 2, -2.4, -0.02, 0x2a2c2e);
-  box(0, L, -W / 2 + sw, W / 2 - sw, -0.1, 0.0, 0x26262a);
-  box(0, L, -W / 2, -W / 2 + sw, -0.1, 0.15, 0x8a8a86);
-  box(0, L, W / 2 - sw, W / 2, -0.1, 0.15, 0x8a8a86);
-  if (r.median) box(0, L, -r.median / 2, r.median / 2, -0.1, 0.2, 0x4a5a3a);
+  // The girder and the carriageway (the streets' asphalt, at their height), the pavements a step up (the streets' paving).
+  box(0, L, -W / 2, W / 2, -2.4, -0.02, KIND.plain, KIND.plain, 0x2a2c2e);
+  box(0, L, -W / 2 + sw, W / 2 - sw, -0.1, 0.02, KIND.asphalt, KIND.asphalt, 0x2a2a2e);
+  box(0, L, -W / 2, -W / 2 + sw, -0.1, 0.15, KIND.plain, KIND.sidewalk, 0x8a867e);
+  box(0, L, W / 2 - sw, W / 2, -0.1, 0.15, KIND.plain, KIND.sidewalk, 0x8a867e);
+  if (r.median) box(0, L, -r.median / 2, r.median / 2, -0.1, 0.2, KIND.plain, KIND.grass, 0x4a5a3a);
   // Lane paint: a dashed line down each carriageway, the edge lines.
   const half = r.median ? r.median / 2 : 0;
   const lane = half + (W / 2 - sw - half) / 2;
-  for (let a = 2; a < L - 2; a += 10) for (const c of r.median ? [-lane, lane] : [0]) box(a, a + 5, c - 0.08, c + 0.08, 0.0, 0.012, 0xd8d8d0);
-  for (const c of [-W / 2 + sw + 0.5, W / 2 - sw - 0.5]) box(0, L, c - 0.08, c + 0.08, 0.0, 0.012, 0xd8d8d0);
+  for (let a = 2; a < L - 2; a += 10) for (const c of r.median ? [-lane, lane] : [0]) box(a, a + 5, c - 0.08, c + 0.08, 0.02, 0.032, KIND.paint, KIND.paint, 0xd8d8d0);
+  for (const c of [-W / 2 + sw + 0.5, W / 2 - sw - 0.5]) box(0, L, c - 0.08, c + 0.08, 0.02, 0.032, KIND.paint, KIND.paint, 0xd8d8d0);
   // Parapets and their rail.
   for (const s of [-1, 1]) {
     const c = s * (W / 2 - 0.2);
-    box(0, L, c - 0.2, c + 0.2, 0.15, 0.95, 0x9a9a96);
-    box(0, L, c - 0.06, c + 0.06, 0.95, 1.25, 0x6a6e72);
+    box(0, L, c - 0.2, c + 0.2, 0.15, 0.95, KIND.plain, KIND.plain, 0x9a9a96);
+    box(0, L, c - 0.06, c + 0.06, 0.95, 1.25, KIND.plain, KIND.plain, 0x6a6e72);
   }
-  // Lamps along the pavements, their heads glowing at night.
+  // Lamps along the pavements, their heads glowing with the street lamps.
   for (let a = 8; a < L - 4; a += 24) {
     for (const s of [-1, 1]) {
       const c = s * (W / 2 - sw + 0.5);
-      box(a - 0.1, a + 0.1, c - 0.1, c + 0.1, 0.15, 8, 0x5a5e62);
-      box(a - 0.4, a + 0.4, c - 0.25, c + 0.25, 7.8, 8.05, 0xffe2b0, true);
+      box(a - 0.1, a + 0.1, c - 0.1, c + 0.1, 0.15, 8, KIND.plain, KIND.plain, 0x5a5e62);
+      box(a - 0.4, a + 0.4, c - 0.25, c + 0.25, 7.8, 8.05, KIND.emit, KIND.emit, 0xffe2b0, EMIT.lamp);
       // The pool centred a little out over the carriageway, under the head's reach.
       pools.push(world(a, s * (W / 2 - sw - 2.5)));
     }
   }
-  return g;
+  const mesh = new THREE.Mesh(mb.build()!, deck);
+  mesh.receiveShadow = true;
+  return mesh;
 }

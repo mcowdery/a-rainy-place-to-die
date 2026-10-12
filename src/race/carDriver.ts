@@ -85,6 +85,19 @@ export interface DriveView {
   readonly view?: THREE.Camera | null;
 }
 
+/**
+ * What his hands do for the police beacon (district/siren.ts), in the car's frame: the left hand's blend (0 on the
+ * wheel or lever, 1 at `leftAt`, as it holds a gear knob), the right's (0 on the rim, 1 at `rightAt`, closed round
+ * the beacon from outside, as it holds the key) and whether the driver's window has to be down for the arm.
+ */
+export interface BeaconHands {
+  left: number;
+  leftAt: THREE.Vector3;
+  right: number;
+  rightAt: THREE.Vector3;
+  window: boolean;
+}
+
 const smooth = (k: number): number => k * k * (3 - 2 * k);
 /** How far round the rim's section from its near face the palm lies (rad): on its near, outer quarter. */
 const GRIP = 0.85;
@@ -121,6 +134,8 @@ export class CarDriver {
   private readonly rest: THREE.Vector3;
   private readonly knob = new THREE.Vector3();
   private readonly lever = new THREE.Vector3();
+  private readonly dial = new THREE.Vector3();
+  private readonly keyV = new THREE.Vector3();
   /** The right hand's grip for where it is up the rim (the steering's frame): set by `rightGrip`. */
   private readonly rim: { c: THREE.Vector3; r: number; up: THREE.Vector3; across: THREE.Vector3; away: THREE.Vector3 };
   /**
@@ -135,6 +150,8 @@ export class CarDriver {
   private gunAway = 99;
   private leanOut = 0;
   readonly eyeShift = new THREE.Vector3();
+  /** His hands busy with the police beacon (set each frame by the page: district/siren.ts), or null. */
+  hands: BeaconHands | null = null;
 
   private constructor(private readonly view: CarView) {
     const L = (this.layout = cockpitLayout(view.type));
@@ -245,6 +262,15 @@ export class CarDriver {
   release(): void {
     if (this.rig && this.rig.mounted === this.mount) this.rig.mounted = null;
     this.view.obj.remove(this.seat);
+    // (Getting out with a window still down: nobody's left to wind it up, so it's up.)
+    this.winL = this.winR = 0;
+    this.sinceL = this.sinceR = 99;
+    rollWindows(this.view, 0, 0);
+  }
+
+  /** A side window is down or still winding (it needs `update` to go back up, from whatever camera). */
+  get windowsDown(): boolean {
+    return this.winL > 0.001 || this.winR > 0.001;
   }
 
   /** Shots his gun fired since the last call. */
@@ -253,6 +279,11 @@ export class CarDriver {
     const n = this.rig.shotsFired - this.shots;
     this.shots = this.rig.shotsFired;
     return n;
+  }
+
+  /** A station, the volume or the tape's been worked: his left hand goes to the radio. */
+  touchRadio(): void {
+    (this.cabin?.motion ?? this.own).touchRadio();
   }
 
   /** The trigger: fires if the gun's up and ready (it's raised at once when you fire from the hip). */
@@ -289,7 +320,76 @@ export class CarDriver {
     if (knob && lever) R.shift!.at.copy(toSeat(knob.lerp(lever, hand < 0.02 ? 1 : pull)));
     else if (knob) R.shift!.at.copy(toSeat(knob));
     else if (lever) R.shift!.at.copy(toSeat(lever));
+    // The radio: the same hand on from wherever it is (the lever, or the wheel), across the way the handbrake's is held.
+    if (this.cabin && M.reach > 0.001) {
+      const dial = toSeat(this.cabin.radioKnob(this.dial));
+      const to = smooth(M.reach);
+      if (R.shift!.k > 0.04) R.shift!.at.lerp(dial, to);
+      else R.shift!.at.copy(dial);
+      R.shift!.k = Math.max(R.shift!.k, M.reach);
+      R.shift!.dial = to;
+    } else R.shift!.dial = 0;
     this.rightGrip(M.high * M.spot);
+    // The ignition key, on the column's right: his right hand comes off the rim to it, takes its head from the
+    // outside (palm toward the column, fingers ahead) and turns with it.
+    if (this.cabin && M.key > 0.001) this.keyGrip(smooth(M.key), M.keyTurn * 0.95, M.wheel);
+    // The police beacon (district/siren.ts): the left hand to the glovebox and the middle, the right out of the window.
+    const B = this.hands;
+    if (B && B.left > 0.001) {
+      // (A knob's hold, on from wherever the hand is: the wheel or the lever.)
+      const at = toSeat(B.leftAt.clone());
+      if (R.shift!.k > 0.04) R.shift!.at.lerp(at, smooth(B.left));
+      else R.shift!.at.copy(at);
+      R.shift!.k = Math.max(R.shift!.k, B.left);
+      R.shift!.turn = 0;
+      R.shift!.dial = 0;
+    }
+    if (B && B.right > 0.001) {
+      this.holdGrip(toSeat(B.rightAt.clone()), v(0, 1, 0), smooth(B.right), M.wheel);
+    }
+  }
+
+  /**
+   * The right hand closed round something upright (the beacon, held from outside) at `at` (the seat's frame), `s` of
+   * the way from where it is (0-1): the palm toward the car's middle, the fingers ahead, the thumb let go of the rim.
+   */
+  private holdGrip(at: THREE.Vector3, axis: THREE.Vector3, s: number, wheel: number): void {
+    const R = this.mount.rider;
+    // The steering's frame turns with the wheel; this doesn't, so the target is turned back against it.
+    const still = (p: THREE.Vector3, point: boolean): THREE.Vector3 => {
+      if (point) p.sub(this.rim.c).applyAxisAngle(this.wheelAxis, wheel).add(this.rim.c);
+      else p.applyAxisAngle(this.wheelAxis, wheel);
+      return p;
+    };
+    const palm = still(toSeat(new THREE.Vector3(1, 0, 0)), false);
+    const fwd = still(toSeat(new THREE.Vector3(0, -0.2, 1).normalize()), false);
+    R.gripR.lerp(still(at, true), s);
+    R.gripAxisR.lerp(still(toSeat(axis.clone()), false), s).normalize();
+    R.palmR!.lerp(palm, s).normalize();
+    R.fwdR!.lerp(fwd, s).normalize();
+    R.thumbR!.multiplyScalar(1 - s);
+  }
+
+  /** The right hand on the ignition key, `s` of the way from where it is (0-1), the key turned `turn` rad, the wheel turned `wheel`. */
+  private keyGrip(s: number, turn: number, wheel: number): void {
+    const R = this.mount.rider;
+    // The steering's frame turns with the wheel; the key doesn't, so the target is turned back against it.
+    const still = (p: THREE.Vector3, point: boolean): THREE.Vector3 => {
+      if (point) p.sub(this.rim.c).applyAxisAngle(this.wheelAxis, wheel).add(this.rim.c);
+      else p.applyAxisAngle(this.wheelAxis, wheel);
+      return p;
+    };
+    const at = still(toSeat(this.cabin!.keyHead(this.keyV)), true);
+    // (The head's long side turns with the key: up when off, over toward the front when started.)
+    const axis = still(toSeat(new THREE.Vector3(0, Math.cos(turn), Math.sin(turn))), false);
+    const palm = still(toSeat(new THREE.Vector3(1, 0, 0)), false);
+    const fwd = still(toSeat(new THREE.Vector3(0, -0.2, 1).normalize()), false);
+    at.addScaledVector(new THREE.Vector3(0, 1, 0), 0.04 * Math.sin(Math.PI * s));
+    R.gripR.lerp(at, s);
+    R.gripAxisR.lerp(axis, s).normalize();
+    R.palmR!.lerp(palm, s).normalize();
+    R.fwdR!.lerp(fwd, s).normalize();
+    R.thumbR!.multiplyScalar(1 - s);
   }
 
   /**
@@ -311,7 +411,7 @@ export class CarDriver {
   update(car: Steered, dv: DriveView, dt: number, realDt: number): void {
     // The windows: down while a weapon is out of one, wound up a moment after.
     this.sinceL = dv.window === 'across' ? 0 : this.sinceL + realDt;
-    this.sinceR = dv.window === 'driver' ? 0 : this.sinceR + realDt;
+    this.sinceR = dv.window === 'driver' || this.hands?.window ? 0 : this.sinceR + realDt;
     const wind = (cur: number, since: number): number => {
       const want = since < WIND_UP_AFTER ? 1 : 0;
       return cur + Math.max(-WIND * realDt, Math.min(WIND * realDt, want - cur));

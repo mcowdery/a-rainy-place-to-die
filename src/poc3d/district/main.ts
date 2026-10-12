@@ -134,6 +134,7 @@ import { SKY_AZ, SKY_EL, SkyModel, type SkyStats } from '../real/skyModel';
 import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
 import { cityFromUrl, setTreeSet } from './cityConfig';
+import { deadAt } from './peopleHours';
 import { setWorkLiveries } from '../models/vehicles';
 import { money, setCurrency } from '../../money';
 import { signTexts } from './model';
@@ -4623,6 +4624,8 @@ async function run(): Promise<void> {
     // (The traffic brakes for the cars in a chase as it does for anyone in the road.)
     if (chase.active) walkers.push(...chase.walkers());
     if (streetRace.active) walkers.push(...streetRace.walkers());
+    // (The dead hours: the traffic goes home, the street's and the expressway's.)
+    traffic.quiet = exTraffic.quiet = deadAt((((clockTotal % DAY) + DAY) % DAY) / 60);
     traffic.update(dt, camera.position, walkers);
     trial?.update(inVn ? 0 : dt, camera);
     if (cabin?.bus) {
@@ -4722,8 +4725,9 @@ async function run(): Promise<void> {
     drift.update(dt, camera.position, 0.12 + 0.5 * (1 - cityU.uLamps.value), windVec, groundAt(camera.position.x, camera.position.z), cabinKeep);
     ssr.wet = wetness;
     ssr.rain = rainAmount;
-    // (Floors under cover stay dry in the reflections: the same covered volumes the rain keeps out of.)
-    ssr.setShelters(district.sheltersNear(camera.position.x, camera.position.z, 70, 24));
+    // (Indoor floors stay dry in the reflections: the enclosed volumes only. A street under a canopy, a station or
+    // the viaduct keeps its wet look: it is open to the wet street round it, and dry it looked like a fault.)
+    ssr.setShelters(district.sheltersNear(camera.position.x, camera.position.z, 70, 24, true));
     cityU.uCarCount.value = traffic.fillLights(camera.position, cityU.uCars.value);
     // Headlights come on with the street lamps (dusk, dawn, night, dark storms).
     cityU.uHeadlights.value = Math.max(atm.lamps, mood.darkness, rainAmount > 0.5 ? 0.6 : 0);

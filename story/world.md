@@ -1,21 +1,27 @@
 # The world
 
-Tōto as the story sees it. For how the city is built, see [docs/city-plan.md](../docs/city-plan.md) and
+Tokyo as the story sees it. For how the city is built, see [docs/city-plan.md](../docs/city-plan.md) and
 CLAUDE.md; this file is about what each place means to the story.
 
 The **story nodes** under each district are every npc, story door and hotspot in the city today: the places
 a scene can start. `npm run vn:keys` prints the live list (and each node's scene, if it has one).
 Walk-through doors and spawns aren't listed; spawns are where a scene can send you (`exit:`).
 
-## 東都 Tōto
+## 東京 Tokyo
 
-A coastal capital on a bay, about 4.7 × 3.3 km of city: two cores (Kaburo's neon and Asagiri's towers) ringed by
+The city was 東都 Tōto until 2026-10-12; the names below that still carry it (the lines, the expressway, the
+port, the terminal, the university and the companies) are the ones the game shows today, and wait on the naming
+rule's table in [names.md](names.md). Between 2 and 6 in the morning the streets are empty
+([mythos.md](mythos.md), The dead hours).
+
+The capital on its bay, about 4.7 × 3.3 km of city in the game: two cores (Kaburo's neon and Asagiri's towers) ringed by
 newer districts, then homes and the old town, then hills to the north and west and the bay to the south.
 The river 隅川 Sumikawa runs down from the northern hills to the bay, with the old town across it. The Toto
 Line, the Kawabata Line, the monorail, two subway lines and the Seikō Line join it up; the Tōto Expressway
 loops over the core and runs out along the port. The last train leaves at 00:40.
 
-**Open:** what's wrong with the city (who really runs it, what everyone knows and nobody says).
+**Open:** what's wrong with the city (who really runs it, what everyone knows and nobody says). Part of it is
+answered since 2026-10-12: everyone knows the small hours aren't safe, and nobody goes out in them.
 
 ## 歌舞路 Kaburo: the neon core
 

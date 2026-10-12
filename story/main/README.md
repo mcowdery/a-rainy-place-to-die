@@ -15,7 +15,11 @@ one of the order's machines. Everything else is optional ([side/](../side/README
 |---|---|---|---|---|
 | Spring | [The 200](spring.md) | Koharu (and Minato, in the opening) | The 200 are real: a circle that buys people's ruin and watches it | The first hunter, in the crowd at the crossing |
 | Summer | [One hand](summer.md) | The informant | The Amakudari-kai: one hand pays the yakuza, the triad and the police | A car that drives itself, on the Wangan |
-| Autumn | [Gentian](autumn.md) | The oyabun's wife, Sayo | The order is worldwide; the programme that built Mack; the Beast | One that wears faces |
+| Autumn | [Gentian](autumn.md) | The oyabun's wife, Sayo | The order is worldwide; the programme and what it makes; the Beast | One that wears faces |
 | Winter | [The first dawn](winter.md) | Mack himself | The Two Hundred, the man behind it all, what's under the city | The last: closer to the Nephilim than a machine |
 
 All of it is **Proposed** until the user locks it, except the opening (spring, chapter 1).
+
+**Written before 2026-10-12**, for one MC who was a machine. Since then Mack is a man and there's a second lead,
+Dom ([cast/dom.md](../cast/dom.md)), and the dead hours ([mythos.md](../mythos.md)). None of the seasons has Dom
+in it yet, and the machines' reason for coming (to take Mack back) is gone: both are **Open**, season by season.

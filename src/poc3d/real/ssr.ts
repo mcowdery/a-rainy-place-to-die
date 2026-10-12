@@ -12,9 +12,11 @@ import { WATER_GLSL } from './waterGlsl';
  * added onto the scene image in place, so the scene target (and its depth) stays where later passes
  * expect it. Puddles use the same noise as the ground shader in city.ts, so they line up.
  *
- * Ground under cover stays dry: the covered volumes near the camera (the same the rain and the street's puddles
- * use, district.sheltersNear) are handed in, and a floor pixel inside one gets no wet look, whether you stand in it
- * or look into it from the street; the open street outside it stays wet.
+ * Indoor floors stay dry: the enclosed volumes near the camera (interiors, district.sheltersNear with enclosedOnly)
+ * are handed in, and a floor pixel inside one gets no wet look, whether you stand in it or look into it from the
+ * street. Only the enclosed ones: at first every covered volume was handed in, the rain's own list, and the road under
+ * the rail viaduct, a station's canopy and every porch lost their sheen while their puddles kept theirs (the user,
+ * 2026-10-12: "the ground that isn't puddles is no longer wet").
  *
  * Open water (a pond, the river, the bay) reflects whatever the weather: its shaders mark their pixels in the
  * scene's alpha and already show the sky in their ripples (waterGlsl.ts); here the same ripple's ray is marched,
@@ -146,7 +148,7 @@ const fragment = /* glsl */ `
     vec3 nW = normalize(mat3(uInvView) * nV);
     if (nW.y < 0.9) { gl_FragColor = vec4(0.0); return; }
     vec3 wp = (uInvView * vec4(p, 1.0)).xyz;
-    // Under cover the floor is dry: indoors, or in a canopy's shade (open water isn't covered).
+    // Indoors the floor is dry (open water is never indoors).
     if (!water) {
       for (int i = 0; i < ${SHELTERS}; i++) {
         if (i >= uShelters) break;
@@ -294,7 +296,7 @@ export class SsrPass extends Pass {
     this.water = true;
   }
 
-  /** The covered volumes near the camera (rects in world x, z with y0..y1 above the ground): dry floors. */
+  /** The enclosed volumes near the camera (rects in world x, z with y0..y1 above the ground): dry floors. */
   setShelters(list: readonly { rect: { x: number; y: number; w: number; h: number }; y0: number; y1: number }[]): void {
     const u = this.mat.uniforms;
     const n = Math.min(SHELTERS, list.length);

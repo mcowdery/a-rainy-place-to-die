@@ -17,6 +17,7 @@
     "typecheck": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "audit:streets": "vitest run --config tests/audit/vitest.config.ts",
     "krea:login": "node scripts/krea/ads.mjs login",
     "ads:status": "node scripts/krea/ads.mjs status",
     "ads:generate": "node scripts/krea/ads.mjs generate",

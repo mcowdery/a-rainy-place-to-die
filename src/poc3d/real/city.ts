@@ -70,6 +70,12 @@ export interface CityUniforms extends ScreenUniforms {
   uMyDir: { value: THREE.Vector4 };
   uMyLamps: { value: THREE.Vector4 };
   uCarSkip: { value: number };
+  /** The police beacon on your car's roof (district/siren.ts): its place (x, y, z) and how bright its red is now
+   * (0 off); a red wash on whatever's near it, a pulse as it flashes. */
+  uBeacon: { value: THREE.Vector4 };
+  /** Mack's flashlight (district/main.ts): where it is (x, y, z) and how bright (w, 0 off), and the way it points. */
+  uTorch: { value: THREE.Vector4 };
+  uTorchDir: { value: THREE.Vector3 };
   /** Moving cars whose wipers are going: (x, z, heading, ground y), and how many (rain and snow off their
    * windscreens); each one's glass and pivots (models/wipers.ts `wiperUniforms`), and the beat (in sweeps). */
   uWipers: { value: THREE.Vector4[] };
@@ -189,6 +195,9 @@ export function cityUniforms(): CityUniforms {
     uMyDir: { value: new THREE.Vector4(0, 1, 0, 0.62) },
     uMyLamps: { value: new THREE.Vector4() },
     uCarSkip: { value: -1 },
+    uBeacon: { value: new THREE.Vector4() },
+    uTorch: { value: new THREE.Vector4() },
+    uTorchDir: { value: new THREE.Vector3(0, 0, -1) },
     uWipers: { value: Array.from({ length: WIPERS }, () => new THREE.Vector4()) },
     uWiperGlass: { value: Array.from({ length: WIPERS }, () => new THREE.Vector4()) },
     uWiperPivots: { value: Array.from({ length: WIPERS }, () => new THREE.Vector4()) },
@@ -302,6 +311,9 @@ const common = /* glsl */ `
   uniform vec4 uMyDir;
   uniform vec4 uMyLamps;
   uniform int uCarSkip;
+  uniform vec4 uBeacon;
+  uniform vec4 uTorch;
+  uniform vec3 uTorchDir;
   uniform vec4 uWipers[${WIPERS}];
   uniform vec4 uWiperGlass[${WIPERS}];
   uniform vec4 uWiperPivots[${WIPERS}];
@@ -388,6 +400,27 @@ const common = /* glsl */ `
       acc += vec3(0.95, 0.95, 1.0) * exp(-side * side / 6.0) * exp(-back * 0.28) * low * 2.5 * uMyLamps.w;
     }
     return acc * above;
+  }
+  // The police beacon on the roof: a red wash on what's within ~26 m of it, brighter the nearer, on the ground and on
+  // the faces that look toward it (the lit half flashes; uBeacon.w is how bright now).
+  vec3 beaconLight(vec3 wp, vec3 n, bool ground) {
+    vec3 rel = wp - uBeacon.xyz;
+    float d2 = dot(rel, rel);
+    if (d2 > 700.0) return vec3(0.0);
+    float face = ground ? 1.0 : clamp(dot(n, -normalize(rel)), 0.0, 1.0);
+    return vec3(1.0, 0.04, 0.03) * uBeacon.w * face * 5.0 / (3.0 + d2 * 0.12) * smoothstep(700.0, 250.0, d2);
+  }
+  // Mack's flashlight: a warm cone (a bright core, a soft edge) out to ~28 m, on the ground and on the faces turned
+  // toward it; no light volume, as the headlights have none.
+  vec3 torchLight(vec3 wp, vec3 n) {
+    vec3 rel = wp - uTorch.xyz;
+    float d = length(rel);
+    if (d > 28.0 || d < 0.05) return vec3(0.0);
+    vec3 dir = rel / d;
+    float cone = smoothstep(0.90, 0.985, dot(dir, uTorchDir));
+    float face = clamp(dot(n, -dir) * 0.8 + 0.2, 0.0, 1.0);
+    float fall = smoothstep(28.0, 8.0, d) / (1.0 + d * d * 0.04);
+    return vec3(1.0, 0.93, 0.78) * uTorch.w * cone * face * fall * 6.0;
   }
   uniform vec3 uZenith;
   uniform vec3 uHorizon;
@@ -1075,7 +1108,8 @@ const surface = /* glsl */ `
     } else if (type < 4.5 && faceW > 1.5) {
       float margin = 0.5;
       float span = faceW - 2.0 * margin;
-      float nb = max(1.0, floor(span / bay));
+      // (+0.001: a span of exactly so many bays, 13 m of 2.6, came out 4 or 5 from one pixel to the next, from rounding in the interpolated bay: stripes.)
+      float nb = max(1.0, floor(span / bay + 0.001));
       float b = span / nb;
       float ux = u - margin;
       float col = floor(ux / b);
@@ -1499,8 +1533,17 @@ const surface = /* glsl */ `
   // Street light from the lightmap, sampled in front of the surface and fading with height.
   vec3 Lm = lightAt(vWPos.xz + Nw.xz * 0.6);
   float hf = groundKind ? 1.0 : exp(-max(vWPos.y - 0.2, 0.0) / 4.5) * 0.8;
-  // (A car's cabin is in the shade of its roof: a little of the street's light, through the windows.)
-  if (indoor) hf *= 0.35;
+  // (A car's cabin is in the shade of its roof: a little of the street's light, through the windows. It takes
+  // that light as one value for the whole cabin, from the lightmap under the car's centre and the road's height
+  // there: sampled per fragment, a lamp beside a pitched car (down a ramp) lit the floor and the seat sides in
+  // patches, and the height falloff followed each fragment's own height as the nose tipped.)
+  if (indoor) {
+    if (uMyLamps.x + uMyLamps.y + uMyLamps.z + uMyLamps.w > 0.0) {
+      Lm = lightAt(uMyCar.xz);
+      hf = exp(-max(uMyCar.y + 1.0 - 0.2, 0.0) / 4.5) * 0.8;
+    }
+    hf *= 0.35;
+  }
   sEmit += albedo * Lm * hf;
   // Big screens light what's in front of them in the colour of what they're showing (screenLight.ts).
   if (uScreenCount > 0) sEmit += albedo * screenLight(vWPos + Nw * 0.05, Nw, 1.0) * 0.3183;
@@ -1515,6 +1558,18 @@ const surface = /* glsl */ `
     vec3 ml = myLights(vWPos, Nw, groundKind);
     sEmit += albedo * ml;
     if (groundKind && uWet > 0.0) sEmit += ml * 0.1 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * uWet;
+  }
+  // The police beacon's red, on what's round it.
+  if (uBeacon.w > 0.0 && !indoor) {
+    vec3 bl = beaconLight(vWPos, Nw, groundKind);
+    sEmit += albedo * bl;
+    if (groundKind && uWet > 0.0) sEmit += bl * 0.1 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * uWet;
+  }
+  // Mack's flashlight.
+  if (uTorch.w > 0.0 && !indoor) {
+    vec3 tl = torchLight(vWPos, Nw);
+    sEmit += albedo * tl;
+    if (groundKind && uWet > 0.0) sEmit += tl * 0.1 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * uWet;
   }
   // Fallen leaves (autumn) and petals (spring) on whatever lies flat (the ground, paving, the tops of things), not on
   // glass, paint, lights, water or the crowns themselves; piled along the ground slabs' edges.

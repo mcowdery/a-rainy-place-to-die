@@ -32,6 +32,8 @@ export const OUTFITS: readonly Outfit[] = [
   { id: 'suit_charcoal', model: 'mack_suit_charcoal', label: 'Charcoal suit', about: "Charcoal, white shirt, a dark wine tie: the everyday detective, lost in Asagiri's office crowds.", feet: 'shoes' },
   { id: 'suit_navy', model: 'mack_suit_navy', label: 'Navy suit', about: 'Navy, pale blue shirt, a mustard tie: the city-pop businessman.', feet: 'shoes' },
   { id: 'suit_cream', model: 'mack_suit_cream', label: 'Cream suit', about: 'Cream, black shirt, a red tie: bubble-era money, for Host Street and Club Shirasagi.', feet: 'shoes' },
+  { id: 'detective', model: 'mack_detective', label: 'Detective', about: 'A double-breasted tan trench coat, belted, over a charcoal suit and wine tie, a cocked fedora: the noir private eye.', feet: 'shoes' },
+  { id: 'detective_open', model: 'mack_detective_open', label: 'Detective · coat open', about: 'The same, the coat worn open and the belt unbuckled, its ends hanging.', feet: 'shoes' },
   { id: 'nude', model: 'mack_nude', label: 'Nothing', about: 'The arrival (The Terminator): naked in the rain at a konbini car park.', story: true, feet: 'bare' },
 ];
 

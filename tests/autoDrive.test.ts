@@ -193,6 +193,9 @@ function trip(a: string, b: string, mode: AutoMode, turned = false): { car: OwnC
   const start = { x: from[0] + Math.cos(h) * 1.5 * (turned ? -1 : 1), z: from[1] - Math.sin(h) * 1.5 * (turned ? -1 : 1), h };
   const car = new OwnCar(new THREE.MeshBasicMaterial(), traffic, start, (x, z, r) => district.obstacle(x, z, r), null, () => [], true);
   Object.assign(car.parts, newParts());
+  // The key turned and the engine caught, as it is once you've got in (it gives no drive before).
+  car.setEngine(true);
+  for (let t = 0; t < 3; t += 0.5) car.idle(0.5, start.x, start.z);
   const route = nav.route(start.x, start.z, B.x, B.z, [Math.sin(h), Math.cos(h)])!;
   let clock = 0;
   const world: AutoWorld = { light: (gx, gy, ns) => signals.state(gx, gy, ns, clock), vehicles: () => [], solid: (x, z, r) => district.obstacle(x, z, r) };

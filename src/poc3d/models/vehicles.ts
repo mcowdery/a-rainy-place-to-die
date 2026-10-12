@@ -2124,7 +2124,7 @@ function mirrorPlan(d: Design, type: CarType, S: { top: (x: number) => number; h
   const mx = d.windscreen[0] + 0.02;
   const my = S.section(mx)[5][0] + 0.02;
   const skin = S.halfW(mx);
-  return { wing, b, a, u, c: [mx - 0.035, my + 0.07, sd * (skin + 0.115)], hw: 0.085, hh: 0.054, depth: 0.1, foot: [mx - 0.01, my + 0.03, sd * (skin - 0.03)] };
+  return { wing, b, a, u, c: [mx - 0.035, my + 0.07, sd * (skin + 0.115)], hw: 0.085, hh: 0.054, depth: 0.1, foot: [mx - 0.01, my - 0.03, sd * (skin - 0.05)] };
 }
 
 export function wheelLayout(type: CarType): { r: number; tw: number; rims: 'alloy' | 'steel'; spots: WheelSpot[] } {

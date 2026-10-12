@@ -346,9 +346,9 @@ export class District {
   readonly shelters: Shelter[] = [];
 
   /** The covered volumes within r metres of (x, z), nearest first (for the rain shader). */
-  sheltersNear(x: number, z: number, r: number, max: number): Shelter[] {
+  sheltersNear(x: number, z: number, r: number, max: number, enclosedOnly = false): Shelter[] {
     const d = (s: Shelter): number => Math.hypot(Math.max(s.rect.x - x, 0, x - s.rect.x - s.rect.w), Math.max(s.rect.y - z, 0, z - s.rect.y - s.rect.h));
-    return this.shelters.filter((s) => d(s) < r).sort((a, b) => d(a) - d(b)).slice(0, max);
+    return this.shelters.filter((s) => (!enclosedOnly || !!s.enclosed) && d(s) < r).sort((a, b) => d(a) - d(b)).slice(0, max);
   }
 
   /** Every prop (street furniture, greenery, an open lot's furnishings) within r metres of (x, z), for looking at. */

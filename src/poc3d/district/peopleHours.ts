@@ -1,3 +1,4 @@
+import { NIGHT_TRADE_HOURS } from './peopleDemographics';
 import type { Outfit } from './peopleMix';
 
 /**
@@ -11,7 +12,7 @@ import type { Outfit } from './peopleMix';
  * jacket in winter). `manner` is how someone stands about and walks (the material's routine: `shady` people squat,
  * smoke and watch; a `drunk` staggers).
  */
-export const HOURS = ['always', 'day', 'commute', 'school', 'evening', 'late'] as const;
+export const HOURS = ['always', 'day', 'commute', 'school', 'evening', 'late', 'deep'] as const;
 export type Hours = (typeof HOURS)[number];
 export const MANNERS = ['plain', 'shady', 'drunk', 'formal', 'young'] as const;
 export type Manner = (typeof MANNERS)[number];
@@ -42,14 +43,33 @@ export function outAt(hours: Hours, h: number): number {
       return Math.max(0.25 * span(h, 9, 18, 2), span(h, 17, 5, 2), 0.12);
     case 'late':
       return 0.12 + 0.88 * span(h, 20.5, 4.5, 1.5);
+    // The night's trade: nobody by day, most from midnight to four (peopleDemographics.ts NIGHT_TRADE_HOURS, by the hour, between them straight).
+    case 'deep': {
+      const x = ((h % 24) + 24) % 24;
+      const i = Math.floor(x);
+      return NIGHT_TRADE_HOURS[i] + (NIGHT_TRADE_HOURS[(i + 1) % 24] - NIGHT_TRADE_HOURS[i]) * (x - i);
+    }
   }
 }
 
 /** How much of each kind stays in when it rains hard (the share lost at full rain). */
-export const RAIN: Readonly<Record<Hours, number>> = { always: 0.55, day: 0.7, commute: 0.3, school: 0.45, evening: 0.3, late: 0.2 };
+export const RAIN: Readonly<Record<Hours, number>> = { always: 0.55, day: 0.7, commute: 0.3, school: 0.45, evening: 0.3, late: 0.2, deep: 0.15 };
+
+/**
+ * The dead hours (story/mythos.md): from `from` to `to` o'clock nobody is out, whatever hours they keep, and no traffic
+ * either (TrafficSystem.quiet). The streets empty over the `lead` hours before and fill over the `tail` hours after.
+ */
+export const DEAD_HOURS = { from: 2, to: 6, lead: 1, tail: 0.75 } as const;
+/** How dead the streets are at hour h: 0 by day, 1 through the dead hours. */
+export function deadAt(h: number): number {
+  const x = ((h % 24) + 24) % 24;
+  return smooth(DEAD_HOURS.from - DEAD_HOURS.lead, DEAD_HOURS.from, x) * (1 - smooth(DEAD_HOURS.to, DEAD_HOURS.to + DEAD_HOURS.tail, x));
+}
+/** The share of people keeping `hours` who are on the street at hour h: `outAt`, less the dead hours. */
+export const streetAt = (hours: Hours, h: number): number => outAt(hours, h) * (1 - deadAt(h));
 
 /** Whether a figure with threshold `out` keeping `hours` is on the street at hour h in rain (0-1). */
-export const isOut = (hours: Hours, out: number, h: number, rain: number): boolean => outAt(hours, h) * (1 - RAIN[hours] * rain) > out;
+export const isOut = (hours: Hours, out: number, h: number, rain: number): boolean => streetAt(hours, h) * (1 - RAIN[hours] * rain) > out;
 
 /** How alive a district's streets are at night (0 asleep, 1 sleepless), unless its zone says (`night:`). */
 export const NIGHT_LIFE: Readonly<Record<string, number>> = { neon: 0.85, electric: 0.35, tower: 0.1, residential: 0.08, oldtown: 0.2, campus: 0.1, harbor: 0.15 };
@@ -62,6 +82,11 @@ export function seasonsOf(outfit: Outfit): number {
   if (outfit === 'chinpira') return 1 | 2 | 4;
   if (outfit === 'puffer') return 8 | 4;
   if (outfit === 'gym') return 1 | 2 | 4;
+  // (The period's clothes by the weather: a summer jinbei, bare chests and trunks; a hanten, a knit, a cardigan and a trench for the cold; a festival's happi from summer into autumn.)
+  if (outfit === 'jinbei' || outfit === 'shirtless' || outfit === 'trunks' || outfit === 'bikini') return 2;
+  if (outfit === 'hanten') return 8 | 4;
+  if (outfit === 'knit' || outfit === 'cardigan' || outfit === 'trench') return 1 | 4 | 8;
+  if (outfit === 'matsuri') return 2 | 4;
   return 15;
 }
 
@@ -76,8 +101,19 @@ export function whenOf(outfit: Outfit, body: 'man' | 'woman' | 'child' | 'elder'
   if (outfit === 'school' || outfit === 'pinoy_school' || outfit === 'track' || outfit === 'gym') return { hours: 'school', manner: 'young' };
   if (body === 'elder' || outfit === 'kimono') return { hours: 'day', manner: 'plain' };
   if (outfit === 'gown' || outfit === 'mini' || outfit === 'maid') return { hours: 'evening', manner: 'plain' };
+  // The night's trade and the night's dress: those who work the streets keep the small hours and watch from a doorway; the cabaret's and the club's come out in the evening; a hotel's doorman stands his evening.
+  if (outfit === 'streetwalker' || outfit === 'lingerie') return { hours: 'deep', manner: 'shady' };
+  if (outfit === 'catsuit') return { hours: 'deep', manner: 'plain' };
+  if (outfit === 'bunny' || outfit === 'bodycon' || outfit === 'qipao' || outfit === 'crop') return { hours: 'evening', manner: 'plain' };
+  if (outfit === 'doorman') return { hours: 'evening', manner: 'formal' };
+  // Exercise: the morning and the evening (the commute's hours), the young's way of standing about.
+  if (outfit === 'runner' || outfit === 'leotard') return { hours: 'commute', manner: 'young' };
+  if (outfit === 'bikini' || outfit === 'trunks' || outfit === 'shirtless') return { hours: 'day', manner: 'plain' };
+  // Uniforms and trades: by day, but a driver's round the clock.
+  if (outfit === 'driver') return { hours: 'always', manner: 'plain' };
+  if (outfit === 'chef' || outfit === 'kappogi' || outfit === 'coverall') return { hours: 'day', manner: 'plain' };
   // (A fat cat: at the office by day where there are offices, at dinners and clubs where the night is alive.)
-  if (outfit === 'boss' || outfit === 'suit' || outfit === 'office' || outfit === 'barong') return { hours: r < night ? 'evening' : 'commute', manner: 'formal' };
+  if (outfit === 'boss' || outfit === 'suit' || outfit === 'office' || outfit === 'barong' || outfit === 'powersuit') return { hours: r < night ? 'evening' : 'commute', manner: 'formal' };
   if (outfit === 'work' || outfit === 'apron' || outfit === 'vendor' || outfit === 'nurse' || outfit === 'doctor') return { hours: 'day', manner: 'plain' };
   if (outfit === 'police') return { hours: 'always', manner: 'formal' };
   // Everyone else: where the night is alive they're out in the evening, else by day and thinner after dark.
@@ -87,9 +123,10 @@ export function whenOf(outfit: Outfit, body: 'man' | 'woman' | 'child' | 'elder'
 const f = (v: number): string => v.toFixed(3);
 /**
  * GLSL: `mobOut(hours, hour, rain)`, the share of people keeping `hours` (its index in HOURS) who are out, as
- * `outAt` and `RAIN` give it.
+ * `outAt`, `RAIN` and `deadAt` give it.
  */
 export const HOURS_GLSL = /* glsl */ `
+      const float DEEP[24] = float[24](${NIGHT_TRADE_HOURS.map(f).join(', ')});
       float hourSpan(float h, float a, float b, float e) {
         float d = mod(h - a + 48.0, 24.0);
         float len = mod(b - a + 48.0, 24.0);
@@ -103,7 +140,16 @@ export const HOURS_GLSL = /* glsl */ `
         else if (hours < 2.5) { o = max(max(0.06, 0.4 * hourSpan(h, 7.0, 22.0, 1.5)), max(max(hourSpan(h, 6.5, 10.0, 1.2), 0.7 * hourSpan(h, 11.5, 13.5, 0.5)), hourSpan(h, 16.5, 21.5, 1.5))); wet = ${f(RAIN.commute)}; }
         else if (hours < 3.5) { o = max(max(hourSpan(h, 6.8, 9.0, 0.6), 0.3 * hourSpan(h, 11.5, 13.5, 0.5)), hourSpan(h, 15.0, 18.8, 0.8)); wet = ${f(RAIN.school)}; }
         else if (hours < 4.5) { o = max(max(0.25 * hourSpan(h, 9.0, 18.0, 2.0), hourSpan(h, 17.0, 5.0, 2.0)), 0.12); wet = ${f(RAIN.evening)}; }
-        else { o = 0.12 + 0.88 * hourSpan(h, 20.5, 4.5, 1.5); wet = ${f(RAIN.late)}; }
-        return o * (1.0 - wet * rain);
+        else if (hours < 5.5) { o = 0.12 + 0.88 * hourSpan(h, 20.5, 4.5, 1.5); wet = ${f(RAIN.late)}; }
+        else {
+          float x = mod(h, 24.0);
+          int i0 = int(floor(x));
+          o = mix(DEEP[i0], DEEP[(i0 + 1) % 24], x - floor(x));
+          wet = ${f(RAIN.deep)};
+        }
+        // (The dead hours: deadAt.)
+        float x24 = mod(h, 24.0);
+        float dead = smoothstep(${f(DEAD_HOURS.from - DEAD_HOURS.lead)}, ${f(DEAD_HOURS.from)}, x24) * (1.0 - smoothstep(${f(DEAD_HOURS.to)}, ${f(DEAD_HOURS.to + DEAD_HOURS.tail)}, x24));
+        return o * (1.0 - wet * rain) * (1.0 - dead);
       }
 `;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Rect } from '../../core/coords';
 import { hash } from '../../core/hash';
-import { along, SIDES, Signals, TURN, type BusLine, type Junction, type Route } from '../district/traffic';
+import { along, Signals, TURN, type BusLine, type Junction, type Route } from '../district/traffic';
 import type { Prop } from './props';
 import { addVehicle, addVehicleLow, addWheel, marksKey, PAINTS, wheelLayout, SPORT_TYPES, WORK_TYPES, type CarType } from '../models/vehicles';
 import { SignBuilder, type SignLayout } from './signs';
@@ -10,6 +10,7 @@ import { buildBus2, type Bus2 } from './busModel';
 import { BUS } from '../district/busCabin';
 import { jeepLayout, jeepSeats } from '../district/jeepCabin';
 import { addManilaProp } from './manilaStreet';
+import { addDressing } from './dressing';
 import { dwellDoors } from '../district/rideTimeline';
 import type { CarMaterials } from './trainCar';
 import type { Ridable } from './cabinRider';
@@ -47,6 +48,13 @@ const BUCKET = 40;
 const FAR_DECIDE = 380;
 /** The sideways pull drivers take a turn at (m/s^2): turning speed = sqrt(pull * radius). */
 const TURN_PULL = 2.6;
+/** A car with a beacon (lights only, or with its siren) is given way from this far behind (m); a car moves over this far (m). */
+const BEACON_REACH = 60;
+const BEACON_REACH_SIREN = 110;
+const BEACON_PULL = 1.3;
+/** A bus eases over to the kerb over this far coming in to a stop, and back to its lane over this far leaving (m). */
+const STOP_EASE_IN = 35;
+const STOP_EASE_OUT = 25;
 
 /** Someone who might step into the road: where they are and how they're moving (m/s). */
 export interface Walker {
@@ -265,11 +273,14 @@ function busStops(lines: readonly { line: BusLine; route: Route }[], city: THREE
   const group = new THREE.Group();
   const colliders: Rect[] = [];
   for (const { line, route } of lines) {
-    route.edges.forEach((e) => {
-      const name = line.stops[SIDES.indexOf(e.side)];
-      const p = along(route, e.mid);
+    route.stops.forEach((e) => {
+      const name = e.name;
+      const p = along(route, e.s);
       const cx = p.x + e.kerb[0];
       const cz = p.z + e.kerb[1];
+      // The land's height there (the stops stood at sea level, and so were buried on the heights and the slopes).
+      const gy = groundY(cx, cz);
+      const from = mb.vertexCount;
       // Stop frame: a runs along the kerb, o points away from the road (toward the buildings).
       const a = e.dir;
       const kl = Math.hypot(e.kerb[0], e.kerb[1]) || 1;
@@ -308,10 +319,11 @@ function busStops(lines: readonly { line: BusLine; route: Route }[], city: THREE
         tex.colorSpace = THREE.SRGBColorSpace;
         for (const flip of [0, Math.PI]) {
           const sign = new THREE.Mesh(new THREE.CircleGeometry(0.4, 32), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(1.05, 1.05, 1.05) }));
-          sign.position.set(px, 1.5, pz);
+          sign.position.set(px, gy + 1.5, pz);
           sign.rotation.y = Math.atan2(a[0], a[1]) + flip;
           group.add(sign);
         }
+        mb.lift(from, gy);
         return;
       }
       const put = (hex: number | null, rgb: [number, number, number] | null, along0: number, along1: number, out0: number, out1: number, y0: number, y1: number, solid = false): void => {
@@ -335,18 +347,39 @@ function busStops(lines: readonly { line: BusLine; route: Route }[], city: THREE
         mb.style = [0, 0, 0, 0];
         if (solid) colliders.push({ x: x - w / 2, y: z - d / 2, w, h: d });
       };
-      put(0x9aa0a6, null, -2, 2, 0.5, 0.62, 0, 2.4, true);
-      put(0x9aa0a6, null, -2, -1.9, -0.6, 0.62, 0, 2.4, true);
-      put(0x3a3c40, null, -2.1, 2.1, -0.8, 0.7, 2.4, 2.5);
-      put(0x5a6a7a, null, -1.4, 1.4, 0.1, 0.5, 0.42, 0.5, true);
-      put(null, [0.8, 0.82, 0.85], 0.8, 1.9, 0.44, 0.5, 0.7, 2.1);
-      // The pole and its sign, just past the shelter's front end, at the kerb edge.
-      const px = cx + a[0] * 3.0 - o[0] * 0.6;
-      const pz = cz + a[1] * 3.0 - o[1] * 0.6;
+      // (cx, cz) is the middle of the pavement: the kerb's edge is half its width toward the road.
+      const kerbEdge = -e.pavement / 2;
+      if (e.kind === 'shelter') {
+        // The shelter against the kerb, its roof's edge just in from it, so the pavement behind it stays clear to
+        // walk (a shelter stands only where the kerb has 3 m clear behind it: stops.ts).
+        const sh = kerbEdge + 0.95;
+        put(0x9aa0a6, null, -2, 2, sh + 0.5, sh + 0.62, 0, 2.4, true);
+        put(0x9aa0a6, null, -2, -1.9, sh - 0.6, sh + 0.62, 0, 2.4, true);
+        put(0x3a3c40, null, -2.1, 2.1, sh - 0.8, sh + 0.7, 2.4, 2.5);
+        put(0x5a6a7a, null, -1.4, 1.4, sh + 0.1, sh + 0.5, 0.42, 0.5, true);
+        put(null, [0.8, 0.82, 0.85], 0.8, 1.9, sh + 0.44, sh + 0.5, 0.7, 2.1);
+      } else if (e.kind === 'bench') {
+        // A narrower pavement: no shelter, a bench against the wall behind where the bus's middle stands.
+        const bo = kerbEdge + e.depth - 0.4;
+        const bx = cx + o[0] * bo;
+        const bz = cz + o[1] * bo;
+        addDressing(mb, { kind: 'bench', x: bx, z: bz, nx: -o[0], nz: -o[1], radius: 0.35, variant: 0, half: 0.8 });
+        colliders.push({ x: bx - Math.abs(a[0]) * 0.8 - Math.abs(o[0]) * 0.25, y: bz - Math.abs(a[1]) * 0.8 - Math.abs(o[1]) * 0.25, w: Math.abs(a[0]) * 1.6 + Math.abs(o[0]) * 0.5, h: Math.abs(a[1]) * 1.6 + Math.abs(o[1]) * 0.5 });
+      }
+      // The pole and its sign at the kerb, where the bus's front door opens (every kind of stop has it; on the
+      // narrowest pavements it is the whole stop): a concrete foot, the timetable at eye height, the round sign.
+      const po = kerbEdge + 0.45;
+      const px = cx + a[0] * 3.0 + o[0] * po;
+      const pz = cz + a[1] * 3.0 + o[1] * po;
       mb.kind = KIND.plain;
+      mb.style = [0, 0, 0, 0];
+      mb.color = lin(0x8c8e90);
+      mb.cylinder(px, pz, 0, 0.14, 0.22, 10);
       mb.color = lin(0xb0b4b8);
       mb.cylinder(px, pz, 0, 2.6, 0.05, 8);
-      colliders.push({ x: px - 0.15, y: pz - 0.15, w: 0.3, h: 0.3 });
+      mb.color = lin(0xe6e4dc);
+      mb.box(px + o[0] * 0.07, pz + o[1] * 0.07, 1.12, 1.62, Math.abs(a[0]) * 0.34 + Math.abs(o[0]) * 0.03, Math.abs(a[1]) * 0.34 + Math.abs(o[1]) * 0.03, KIND.plain, true);
+      colliders.push({ x: px - 0.2, y: pz - 0.2, w: 0.4, h: 0.4 });
       const c = document.createElement('canvas');
       c.width = c.height = 256;
       const g = c.getContext('2d')!;
@@ -371,10 +404,11 @@ function busStops(lines: readonly { line: BusLine; route: Route }[], city: THREE
       tex.colorSpace = THREE.SRGBColorSpace;
       for (const flip of [0, Math.PI]) {
         const sign = new THREE.Mesh(new THREE.CircleGeometry(0.42, 32), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(1.05, 1.05, 1.05) }));
-        sign.position.set(px, 2.35, pz);
+        sign.position.set(px, gy + 2.35, pz);
         sign.rotation.y = Math.atan2(a[0], a[1]) + flip;
         group.add(sign);
       }
+      mb.lift(from, gy);
     });
   }
   const geo = mb.build();
@@ -470,6 +504,11 @@ interface Vehicle extends DrivenVehicle {
   /** A line jeepney (Manila): you board it at the open back; `hailAt` is a stop it has been asked to make (route s). */
   jeep?: boolean;
   hailAt?: number;
+  /** How far it has moved over to its kerb (m, to its left): to let a car with a beacon by, or a bus at its stop; eased in and out. */
+  pull?: number;
+  /** The dead hours: its place in the order the traffic goes home (0-1: off the road while `TrafficSystem.quiet` is above it), and whether it's off the road now. */
+  readonly rest: number;
+  off: boolean;
 }
 
 /**
@@ -557,6 +596,12 @@ export class TrafficSystem {
   private readonly vehicles: Vehicle[] = [];
   /** The taxi pulling in for you (hail), if any. */
   hail: Hail | null = null;
+  /**
+   * How much of the traffic has gone home (0 none, 1 all of it): main.ts sets it from the dead hours (`deadAt` in
+   * district/peopleHours.ts). A vehicle leaves the road, and comes back to it, only where it isn't drawn, so the streets
+   * drain as the traffic drives out of sight; no taxi can be hailed or sent for while it's off the road.
+   */
+  quiet = 0;
   private readonly wheels: Wheels;
   private time = 0;
   private frame = 0;
@@ -592,7 +637,7 @@ export class TrafficSystem {
       this.group.add(obj);
       // The rear axle sits about a fifth of the length in from the back (a car's overhang; a bus's longer).
       const axle = axleOver ?? (bus ? half - 2.6 : half - 0.95);
-      this.vehicles.push({ obj, brake, route, half, width, bus, driver, label, mode: 'traffic', s, v: driver.v0 * 0.6, acc: 0, curv: 0, hideBody: false, stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle, waited: 0, hornIn: 0, x: 0, z: 0, dx: 0, dz: 1, wheels, turned: 0, live: true });
+      this.vehicles.push({ obj, brake, route, half, width, bus, driver, label, mode: 'traffic', s, v: driver.v0 * 0.6, acc: 0, curv: 0, hideBody: false, stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle, waited: 0, hornIn: 0, x: 0, z: 0, dx: 0, dz: 1, wheels, turned: 0, live: true, rest: ((this.vehicles.length * 0.618034) % 1) * 0.98 + 0.01, off: false });
     };
     for (const { route, spacing } of cars) {
       const n = Math.max(2, Math.floor(route.length / spacing));
@@ -732,19 +777,18 @@ export class TrafficSystem {
     if (!v.line) return null;
     const L = v.route.length;
     const ahead = (a: number, b: number): number => (((b - a) % L) + L) % L;
-    const order: readonly string[] = SIDES;
     let next = 0;
     let best = Infinity;
-    v.route.edges.forEach((e, i) => {
+    v.route.stops.forEach((e, i) => {
       if (i === v.stopDone && v.dwell === 0) return;
-      const d = ahead(v.s, e.mid);
+      const d = ahead(v.s, e.s);
       const dd = d > L - 2 ? 0 : d;
       if (dd < best) {
         best = dd;
         next = i;
       }
     });
-    const name = (i: number): string => v.line!.stops[order.indexOf(v.route.edges[i].side)] ?? v.line!.stops[i] ?? '';
+    const name = (i: number): string => v.route.stops[i]?.name ?? '';
     return { line: v.line, at: v.dwell > 0 ? name(next) : null, next: name(next) };
   }
 
@@ -879,14 +923,23 @@ export class TrafficSystem {
    */
   private pose(v: Vehicle): { x: number; z: number; dx: number; dz: number; k: number } {
     const r = along(v.route, v.s - v.axle);
-    return { x: r.x + r.dx * v.axle, z: r.z + r.dz * v.axle, dx: r.dx, dz: r.dz, k: r.k };
+    // (Its left is (dz, -dx); `pull` is how far over to the kerb it's let a beacon by.)
+    const off = v.pull ?? 0;
+    return { x: r.x + r.dx * v.axle + r.dz * off, z: r.z + r.dz * v.axle - r.dx * off, dx: r.dx, dz: r.dz, k: r.k };
   }
 
   /** people: whoever might step into the road (the walker; later, pedestrians), with their velocity. */
   update(dt: number, camera: THREE.Vector3, people: readonly Walker[] = []): void {
     this.time += dt;
     const V = this.vehicles;
-    for (const v of V) v.live = v.mode !== 'traffic' || v === this.hail?.taxi || Math.hypot(v.x - camera.x, v.z - camera.z) < SIM;
+    for (const v of V) {
+      const d = Math.hypot(v.x - camera.x, v.z - camera.z);
+      const kept = v.mode !== 'traffic' || v === this.hail?.taxi;
+      // (The dead hours: it goes home, and comes back, out of sight; on the first frame, wherever it is.)
+      if (kept) v.off = false;
+      else if (d > this.drawDistance || this.frame === 0) v.off = v.rest < this.quiet;
+      v.live = kept || (d < SIM && !v.off);
+    }
     for (const v of V) {
       if (v.mode !== 'traffic' || !v.live) continue;
       const p = this.pose(v);
@@ -1024,6 +1077,21 @@ export class TrafficSystem {
       if (gap < leadGap) [lead, leadGap] = [o, gap];
     }
     if (lead) obstacle(leadGap, lead.v * (lead.dx * v.dx + lead.dz * v.dz));
+    // A beacon coming up behind, in this lane or beside it: ease over to the kerb and slow so it can go by (a siren
+    // is heard further off, and the car right in front of it all but stops). Only on a straight with no junction
+    // close ahead, where a sidestep would cut a corner or foul the crossing.
+    let sidestep = 0;
+    const bc = this.beacon;
+    if (bc && bc.car !== v && (bc.car as Vehicle).mode === 'driven') {
+      const rx = v.x - bc.car.x;
+      const rz = v.z - bc.car.z;
+      const fwd = rx * bc.car.dx + rz * bc.car.dz;
+      if (fwd > 3 && fwd < (bc.mode === 2 ? BEACON_REACH_SIREN : BEACON_REACH) && v.dx * bc.car.dx + v.dz * bc.car.dz > 0.6 && Math.abs(rx * bc.car.dz - rz * bc.car.dx) < 5) {
+        a = Math.min(a, idm(d, v.v, Math.min(v0, bc.mode === 2 && fwd < 45 ? 1.5 : 5), Infinity, 0));
+        const nearJunction = v.route.junctions.some((j) => ahead(v.s, j.stop, v.route.length) < 25);
+        if (!nearJunction && Math.abs(along(v.route, v.s).k) < 0.004) sidestep = BEACON_PULL;
+      }
+    }
     // Signals.
     const js = v.route.junctions;
     let next = -1;
@@ -1075,12 +1143,18 @@ export class TrafficSystem {
       } else if (dist < L / 2) obstacle(dist + d.s0 - 0.5, 0);
       else v.hailAt = -1;
     }
-    // Buses pull in at each edge's stop and wait there.
+    // Buses pull in at each stop and wait there: easing over to the kerb as they come in (so the doors open by the
+    // pavement, wherever the lane is), and back out to the lane over the first stretch after.
     if (v.bus) {
-      v.route.edges.forEach((e, i) => {
-        if (i === v.stopDone) return;
-        const dist = ahead(v.s, e.mid, L);
+      v.route.stops.forEach((e, i) => {
+        if (i === v.stopDone) {
+          const gone = ahead(e.s, v.s, L);
+          if (gone < STOP_EASE_OUT) sidestep = Math.max(sidestep, e.pull * (1 - gone / STOP_EASE_OUT));
+          return;
+        }
+        const dist = ahead(v.s, e.s, L);
         if (dist > 80) return;
+        sidestep = Math.max(sidestep, e.pull * THREE.MathUtils.smoothstep(1 - dist / STOP_EASE_IN, 0, 1));
         // The stop is a point to halt at, not a car to keep a gap from: add back the standstill gap.
         if (dist < 1.5 && v.v < 0.5) {
           v.dwell += dt;
@@ -1092,6 +1166,7 @@ export class TrafficSystem {
         } else obstacle(dist + d.s0 - 0.5, 0);
       });
     }
+    if (sidestep || v.pull) v.pull = (v.pull ?? 0) + (sidestep - (v.pull ?? 0)) * Math.min(1, dt * 1.2);
     return THREE.MathUtils.clamp(a, -9, d.a * 1.2);
   }
 
@@ -1137,6 +1212,9 @@ export class TrafficSystem {
 
   /** Your own vehicle's slot in the list `fillLights` last wrote (its beams are its owner's: uMyLamps), or -1. */
   ownLight = -1;
+  /** A police beacon going on the car you drive (district/siren.ts), set by the page each frame: 1 flashing lights,
+   * 2 lights and siren. The traffic ahead of it pulls over and slows. */
+  beacon: { mode: 1 | 2; car: DrivenVehicle } | null = null;
 
   /**
    * Writes the vehicles nearest the camera into the city shader's headlight list: (x, z, dx, dz), front
@@ -1242,7 +1320,7 @@ export class TrafficSystem {
     if (this.hail) return this.hail;
     let best: { v: Vehicle; at: number; d: number } | null = null;
     for (const v of this.vehicles) {
-      if (v.mode !== 'traffic' || v.label !== 'Taxi') continue;
+      if (v.mode !== 'traffic' || v.off || v.label !== 'Taxi') continue;
       // The point on its route nearest you (a coarse search, then fine).
       const L = v.route.length;
       let at = 0;
@@ -1281,7 +1359,7 @@ export class TrafficSystem {
     let best: Vehicle | null = null;
     let bd = Infinity;
     for (const v of this.vehicles) {
-      if (v.mode !== 'traffic' || v.label !== 'Taxi') continue;
+      if (v.mode !== 'traffic' || v.off || v.label !== 'Taxi') continue;
       const d = Math.hypot(v.x - camera.x, v.z - camera.z);
       if (d >= far && d < bd) [best, bd] = [v, d];
     }
@@ -1336,7 +1414,7 @@ export class TrafficSystem {
     const brake = new THREE.Object3D();
     const v: Vehicle = {
       obj, brake, route: t.route, half, width, bus: false, driver: t.driver, label, mode: 'parked', s: 0, v: 0, acc: 0, curv: 0, hideBody: false,
-      stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle: half - 0.95, waited: 0, hornIn: 0, x, z, dx, dz, wheels: t.wheels, turned: 0, own: true, live: true,
+      stopDone: -1, dwell: 0, committed: -1, pitch: 0, roll: 0, axle: half - 0.95, waited: 0, hornIn: 0, x, z, dx, dz, wheels: t.wheels, turned: 0, own: true, live: true, rest: 1, off: false,
     };
     this.group.add(obj);
     this.vehicles.push(v);

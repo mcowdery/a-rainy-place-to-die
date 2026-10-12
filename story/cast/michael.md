@@ -1,6 +1,7 @@
 # Michael
 
-**Role:** the mysterious, knightly figure who freed Mack, and shows up now and then.
+**Role:** a mysterious, knightly figure who shows up now and then. (He was the one who freed Mack from the order,
+when Mack was its machine; Mack is a man since 2026-10-12, so **Open:** what Michael is to him, and to Dom.)
 **Story character:** no.
 **Name:** people call him **Michael** (ミカエル). Whether it's his name, a baptismal name, or something else, nobody
 asks him twice.
@@ -10,7 +11,7 @@ asks him twice.
 
 Read one way, a man. Read another, an angel: the archangel Michael, who in Revelation leads the fight against the
 dragon. **It's never stated**, not by him, not by the story. Everything else about him stays mysterious too: where
-he comes from, how he freed Mack, why he helps, what he wants.
+he comes from, why he helps, what he wants.
 
 The hints, for the player to notice or not:
 - He never seems to age.
@@ -37,6 +38,8 @@ So he's used sparingly, or he'd take the fear out of the order:
 
 ## Open
 
-- **Open:** how he freed Mack, and what Mack remembers of it.
+- **Open:** how he and Mack first met, now that there was no escape.
+- **Open:** Dom. Michael was the only one who never breaks a sweat; now there are two. What each makes of the
+  other, and whether Michael knows what Dom is.
 - **Open:** what he and the man behind it all are to each other.
 - **Open:** whether he brings the small hope at the end.

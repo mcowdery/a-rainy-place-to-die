@@ -627,7 +627,7 @@ export class ChaseCar {
     const muzzle = this.arm.localToWorld(new THREE.Vector3(0, 0.04, 0.2));
     const c = this.sim;
     const vel = new THREE.Vector3(Math.sin(c.h) * c.u + Math.cos(c.h) * c.w, 0, Math.cos(c.h) * c.u - Math.sin(c.h) * c.w);
-    this.world.gunfire.shot({ muzzle, dir: aim.clone().sub(muzzle), spread: 0.006, sound: 'pistol', listener, bodies, skipOwn: true, by: this.id, vel });
+    this.world.gunfire.shot({ muzzle, dir: aim.clone().sub(muzzle), spread: 0.006, sound: 'pistol', listener, bodies, skipOwn: true, by: this.id, vel, mount: { node: this.arm, local: new THREE.Vector3(0, 0.04, 0.2) } });
   }
 
   /** Off the street: its model and its sound gone. */

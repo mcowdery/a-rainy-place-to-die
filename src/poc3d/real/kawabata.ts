@@ -427,11 +427,11 @@ export const KAWABATA_BUILDERS: Record<KawabataKind, (k: Kit, id: string, part: 
       k.box(0x6a4a32, u0 + 1.5, u1 - 1.5, t0 + 0.5, t1 - 0.5, -0.9, 1.3);
       // Shoji panes, softly lit (lamp emitters are x6 at night: one strip down the cabin bloomed into a bar).
       for (let uu = u0 + 2; uu + 1.2 <= u1 - 2; uu += 1.5) {
-        k.glow([0.2, 0.15, 0.08], uu, uu + 1.2, t1 - 0.52, t1 - 0.48, -0.4, 0.8, EMIT.lamp);
-        k.glow([0.2, 0.15, 0.08], uu, uu + 1.2, t0 + 0.48, t0 + 0.52, -0.4, 0.8, EMIT.lamp);
+        k.glow([0.08, 0.06, 0.03], uu, uu + 1.2, t1 - 0.52, t1 - 0.48, -0.4, 0.8, EMIT.lamp);
+        k.glow([0.08, 0.06, 0.03], uu, uu + 1.2, t0 + 0.48, t0 + 0.52, -0.4, 0.8, EMIT.lamp);
       }
       roof(k, u0 + 1.2, u1 - 1.2, t0 + 0.3, t1 - 0.3, 1.3, 0.8, 0.5, 0x2a2a2e);
-      for (let uu = u0 + 2; uu < u1 - 1.5; uu += 1.6) k.glow([2.2, 0.35, 0.2], uu - 0.2, uu + 0.2, t1 - 0.35, t1 - 0.05, 0.6, 1.1, EMIT.lamp);
+      for (let uu = u0 + 2; uu < u1 - 1.5; uu += 1.6) k.glow([0.5, 0.1, 0.06], uu - 0.2, uu + 0.2, t1 - 0.35, t1 - 0.05, 0.6, 1.1, EMIT.lamp);
       plate(k, 5, 0.9, (u0 + u1) / 2, t1 - 0.2, 1.8, (g, W, H) => {
         g.fillStyle = '#f4ecd8';
         g.fillRect(0, 0, W, H);

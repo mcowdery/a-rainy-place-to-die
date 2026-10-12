@@ -3,6 +3,7 @@ import type { MacroMap } from '../../gen/macro';
 import { roadClass } from './gps';
 import type { Rect } from '../../core/coords';
 import { CELL, STYLES3, type CellPlan3 } from './plan';
+import type { StopKind, StopSite } from './stops';
 
 /**
  * Traffic routes (content/world3d/traffic.yaml): loops round rectangles of L0 grid lines, driven in the
@@ -14,13 +15,28 @@ export interface TrafficLoop {
   readonly spacing: number;
 }
 
+/**
+ * A place a bus line serves: a set piece (`at`, a placement's id: the stop stands in the block of the loop nearest
+ * it, as near it as a good spot is) or a cell beside the loop (`cell`: [col, row] of the cell on the kerb's side, the
+ * loop's inside; `side` picks the loop's side for a corner cell).
+ */
+export interface StopSpec {
+  readonly name: string;
+  readonly at?: string;
+  readonly cell?: readonly [number, number];
+  readonly side?: Side;
+}
+
 export interface BusLine {
   readonly id: string;
   readonly name: string;
   readonly en: string;
   readonly rect: readonly [number, number, number, number];
   readonly buses: number;
+  /** Its stops' names (four, by the loop's north, east, south and west side, on a line that serves no named places). */
   readonly stops: readonly string[];
+  /** The places it serves, each a stop (stops.ts); null: one stop a side, named by `stops`. */
+  readonly serves: readonly StopSpec[] | null;
   /** A jeepney line (Manila): the livery its jeepneys wear (index into JEEPNEY_LIVERIES, whose route board is the line's). */
   readonly jeepney?: number;
 }
@@ -63,8 +79,25 @@ export function parseTraffic3(file: string, text: string, macro: MacroMap, error
     const r = raw as Record<string, unknown>;
     if (!isRect(r.rect)) err(`buses ${i}: rect must be [col0, row0, col1, row1]`);
     else if (!loopValid(macro, r.rect)) err(`buses ${i}: every edge of [${r.rect.join(', ')}] needs generated cells on both sides`);
-    else if (!Array.isArray(r.stops) || r.stops.length !== 4) err(`buses ${i}: stops must name the 4 stops (north, east, south, west edge)`);
-    else buses.push({ id: String(r.id), name: String(r.name), en: String(r.en), rect: r.rect, buses: typeof r.buses === 'number' ? r.buses : 1, stops: r.stops.map(String), ...(Number.isInteger(r.jeepney) ? { jeepney: r.jeepney as number } : {}) });
+    else if (!Array.isArray(r.stops) || r.stops.length === 0) err(`buses ${i}: stops must name the 4 stops (north, east, south, west edge) or list the places served`);
+    else {
+      // Four names: one stop a side. A list of places ({ name, at } or { name, cell, side? }): a stop at each.
+      const named = r.stops.every((q) => typeof q === 'string');
+      const serves: StopSpec[] = [];
+      if (named && r.stops.length !== 4) err(`buses ${i}: stops by name must be 4 (north, east, south, west edge)`);
+      if (!named) {
+        for (const [j, q] of (r.stops as unknown[]).entries()) {
+          const o = (typeof q === 'object' && q !== null ? q : {}) as Record<string, unknown>;
+          const cell = Array.isArray(o.cell) && o.cell.length === 2 && o.cell.every((n) => Number.isInteger(n)) ? (o.cell as [number, number]) : null;
+          const side = SIDES.includes(o.side as Side) ? (o.side as Side) : null;
+          if (typeof o.name !== 'string' || !o.name.trim()) err(`buses ${i} stop ${j}: needs a name`);
+          else if ((typeof o.at === 'string') === !!cell) err(`buses ${i} stop ${o.name}: needs one of at (a placement's id) or cell ([col, row])`);
+          else if (o.side !== undefined && !side) err(`buses ${i} stop ${o.name}: side is north, east, south or west`);
+          else serves.push({ name: o.name.trim(), ...(typeof o.at === 'string' ? { at: o.at } : {}), ...(cell ? { cell } : {}), ...(side ? { side } : {}) });
+        }
+      }
+      buses.push({ id: String(r.id), name: String(r.name), en: String(r.en), rect: r.rect, buses: typeof r.buses === 'number' ? r.buses : 1, stops: named ? r.stops.map(String) : serves.map((q) => q.name), serves: named ? null : serves, ...(Number.isInteger(r.jeepney) ? { jeepney: r.jeepney as number } : {}) });
+    }
   }
   let auto: TrafficContent['auto'] = null;
   if (doc.auto !== undefined) {
@@ -138,12 +171,79 @@ export interface Route {
   /** The driven path: straights joined by turns, sampled (see `along`). */
   readonly path: Path;
   readonly length: number;
-  /** Per edge: the left kerb offset from the lane (for bus shelters) and where its stop is (`mid`, a distance
-   * along the path: mid-block near the edge's middle, on a stretch of kerb clear of crossing streets). */
-  readonly edges: readonly { readonly mid: number; readonly kerb: readonly [number, number]; readonly dir: readonly [number, number]; readonly side: Side }[];
+  /** Per edge: from the lane to the left kerb's pavement (its middle), the way along it, and which side of the loop it is. */
+  readonly edges: readonly { readonly kerb: readonly [number, number]; readonly dir: readonly [number, number]; readonly side: Side }[];
+  /** A bus line's stops in the order it was given them (stops.ts chose the spots); none on a car loop. */
+  readonly stops: readonly RouteStop[];
   /** The signal-controlled junctions along the route (every grid corner it passes), in route order. */
   readonly junctions: readonly Junction[];
 }
+
+/** A stop on a bus line's route. */
+export interface RouteStop {
+  /** Where along the path the bus's middle stands. */
+  readonly s: number;
+  /** From the lane there to the middle of the pavement, the way the bus travels, and the loop's side. */
+  readonly kerb: readonly [number, number];
+  readonly dir: readonly [number, number];
+  readonly side: Side;
+  readonly name: string;
+  readonly kind: StopKind;
+  /** The pavement's width and the clear depth behind its kerb (m). */
+  readonly pavement: number;
+  readonly depth: number;
+  /** How far the bus eases over to its left as it comes in, to stand by the kerb (m). */
+  readonly pull: number;
+}
+
+/** The lane moves sideways no faster than this (m a metre along), stays this far inside a narrow block before and after it, and its corners are rounded over this many metres. */
+const LANE_SLOPE = 0.16;
+const LANE_PAD = 8;
+const LANE_ROUND = 6;
+
+/**
+ * A lane's offset from its road's centre line along an edge, given each block's own (`ob`, metres along from the
+ * edge's first grid corner): each block's where the road is that wide, easing from one to the next on the wider
+ * block's side of the junction between them (never further out than a narrow block allows, even beside it), smooth
+ * enough to drive without a swerve.
+ */
+function laneProfile(ob: readonly number[]): (t: number) => number {
+  if (ob.every((o) => o === ob[0])) return () => ob[0];
+  const len = ob.length * CELL;
+  const env = (t: number): number => {
+    const tt = Math.min(len, Math.max(0, t));
+    let v = Infinity;
+    for (let k = 0; k < ob.length; k++) v = Math.min(v, ob[k] + LANE_SLOPE * Math.max(0, k * CELL - LANE_PAD - tt, tt - (k + 1) * CELL - LANE_PAD));
+    return v;
+  };
+  let f = Float64Array.from({ length: len + 1 }, (_, m) => env(m));
+  for (let pass = 0; pass < 2; pass++) {
+    const g = new Float64Array(len + 1);
+    for (let m = 0; m <= len; m++) {
+      let sum = 0;
+      for (let j = m - LANE_ROUND; j <= m + LANE_ROUND; j++) sum += f[Math.min(len, Math.max(0, j))];
+      g[m] = sum / (2 * LANE_ROUND + 1);
+    }
+    f = g;
+  }
+  return (t) => {
+    const u = Math.min(len - 1e-6, Math.max(0, t));
+    const i = Math.floor(u);
+    return f[i] + (f[i + 1] - f[i]) * (u - i);
+  };
+}
+
+/** A bus's half width, the gap it leaves to the kerb at a stop, and the furthest it will ease over for one (m). */
+export const STOP_BUS_HALF = 1.25;
+export const STOP_KERB_GAP = 0.4;
+export const STOP_PULL_MAX = 4.5;
+
+/**
+ * The traffic's lane, from a road's centre line, for a carriageway half `c` (kerb to centre): on two lanes each way
+ * (an avenue) the kerb lane (keep left; the inner one is for overtaking and the expressway's ramps), on one lane
+ * its middle.
+ */
+export const laneOffset = (c: number): number => (c >= 9 ? c - 3 : Math.max(1.1, c / 2));
 
 /** A junction on a route: a grid corner where two cell-edge roads cross. */
 export interface Junction {
@@ -174,7 +274,8 @@ export class Signals {
   static readonly GREEN = 20;
   static readonly AMBER = 3;
   static readonly CLEAR = 3;
-  static readonly SCRAMBLE = 14;
+  // (Long enough to walk a scramble's diagonal at a stroll, corner to corner, with the cars all stopped.)
+  static readonly SCRAMBLE = 25;
 
   constructor(private readonly scrambles: ReadonlySet<string> = new Set()) {}
 
@@ -231,7 +332,14 @@ export function scrambleKeys(placed: readonly { readonly rect: { readonly x: num
  * half (the narrowest along the edge); at least 2.4 m out from the centre line where a viaduct's piers stand.
  */
 /** Piers: viaducts' straight runs along grid lines (x0, z0 to x1, z1): an edge under one keeps its lane clear of the piers. */
-export function routeFor(rect: readonly [number, number, number, number], clockwise: boolean, plan: (mx: number, my: number) => CellPlan3 | null, piers: readonly { readonly x0: number; readonly z0: number; readonly x1: number; readonly z1: number }[]): Route {
+export function routeFor(
+  rect: readonly [number, number, number, number],
+  clockwise: boolean,
+  plan: (mx: number, my: number) => CellPlan3 | null,
+  piers: readonly { readonly x0: number; readonly z0: number; readonly x1: number; readonly z1: number }[],
+  /** A bus line's stops (stops.ts lineStops: the model's `DistrictModel.busStops`); none for a car loop. */
+  sites: readonly StopSite[] = [],
+): Route {
   const [c0, r0, c1, r1] = rect;
   const X0 = c0 * CELL;
   const X1 = c1 * CELL;
@@ -259,7 +367,7 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
     }
     return Number.isFinite(best.c) ? best : { c: 2.4, w: 8, s: 1.6 };
   };
-  const lanes: { p: [number, number]; d: [number, number]; o: number; kerb: number }[] = [];
+  const lanes: { p: [number, number]; d: [number, number]; o: number; kerb: number; off: (t: number) => number; len: number; flat: boolean }[] = [];
   for (let i = 0; i < 4; i++) {
     const a = corners[i];
     const b = corners[(i + 1) % 4];
@@ -267,25 +375,35 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
     const vertical = d[0] === 0;
     const line = vertical ? a[0] : a[1];
     const h = half(vertical, line, vertical ? a[1] : a[0], vertical ? b[1] : b[0]);
-    // Two lanes each way (an avenue): the kerb lane (keep left; the inner one is for overtaking and the
-    // expressway's ramps). One lane: its middle.
-    let o = h.c >= 9 ? h.c - 3 : Math.max(1.1, h.c / 2);
     const [ea, eb] = vertical ? [Math.min(a[1], b[1]), Math.max(a[1], b[1])] : [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
     const under = piers.some((q) => (vertical ? q.x0 === q.x1 && Math.abs(q.x0 - line) < 1 && q.z0 < eb && q.z1 > ea : q.z0 === q.z1 && Math.abs(q.z0 - line) < 1 && q.x0 < eb && q.x1 > ea));
-    if (under) o = Math.max(o, 2.4);
+    // The lane block by block (a block: the 128 m between two grid junctions). Two lanes each way (an avenue): the
+    // kerb lane (keep left; the inner one is for overtaking and the expressway's ramps). One lane: its middle. An
+    // edge whose road widens along its length (into an avenue) has its lane follow the kerb lane out (`laneProfile`):
+    // it used to keep to the narrowest block's all along, so on the wide blocks the traffic drove by the median.
+    const blocks = Math.max(1, Math.round((eb - ea) / CELL));
+    const a0 = vertical ? a[1] : a[0];
+    const sg = vertical ? d[1] : d[0];
+    const ob = Array.from({ length: blocks }, (_, k) => {
+      const o = laneOffset(half(vertical, line, a0 + sg * k * CELL, a0 + sg * (k + 1) * CELL).c);
+      return under ? Math.max(o, 2.4) : o;
+    });
     // Left of travel: (dz, -dx).
-    lanes.push({ p: a, d, o, kerb: h.w / 2 - h.s * 0.5 });
+    lanes.push({ p: a, d, o: Math.min(...ob), kerb: h.w / 2 - h.s * 0.5, off: laneProfile(ob), len: blocks * CELL, flat: ob.every((o) => o === ob[0]) });
   }
-  // Lane line i: p + left * o; consecutive lane lines cross at the new corners.
+  // Lane line i: p + left * its offset; consecutive lane lines cross at the new corners (each at its offset there:
+  // the end of the edge coming in, the start of the one going out).
   const pts: [number, number][] = [];
   for (let i = 0; i < 4; i++) {
     const A = lanes[(i + 3) % 4];
     const B = lanes[i];
     const la: [number, number] = [A.d[1], -A.d[0]];
     const lb: [number, number] = [B.d[1], -B.d[0]];
+    const ao = A.off(A.len);
+    const bo = B.off(0);
     // One of the two is vertical: take x from the vertical lane line, z from the horizontal one.
-    const vx = A.d[0] === 0 ? A.p[0] + la[0] * A.o : B.p[0] + lb[0] * B.o;
-    const hz = A.d[0] !== 0 ? A.p[1] + la[1] * A.o : B.p[1] + lb[1] * B.o;
+    const vx = A.d[0] === 0 ? A.p[0] + la[0] * ao : B.p[0] + lb[0] * bo;
+    const hz = A.d[0] !== 0 ? A.p[1] + la[1] * ao : B.p[1] + lb[1] * bo;
     pts.push([vx, hz]);
   }
   // The driven path: each corner rounded by a turn (steering wound in, held, wound out: see TURN), tighter
@@ -296,7 +414,8 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
     const R = right ? TURN_R.right : TURN_R.left;
     return { right, R, leg: TURN.leg * R, len: TURN.len * R };
   });
-  const edgeLen = pts.map((p, i) => Math.hypot(pts[(i + 1) % 4][0] - p[0], pts[(i + 1) % 4][1] - p[1]));
+  // (Along the edge: its two corners needn't be the same distance out from its grid line.)
+  const edgeLen = pts.map((p, i) => (pts[(i + 1) % 4][0] - p[0]) * lanes[i].d[0] + (pts[(i + 1) % 4][1] - p[1]) * lanes[i].d[1]);
   const straight = edgeLen.map((len, i) => len - turnAt[i].leg - turnAt[(i + 1) % 4].leg);
   // s where each edge's straight starts: the path starts on edge 0's straight, then turn 1, straight 1...
   const start: number[] = [0];
@@ -312,50 +431,35 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
     else s = start[i] + proj - a.leg;
     return ((s % length) + length) % length;
   };
-  const path = buildPath(pts, lanes.map((l) => l.d), turnAt, straight, start, length);
-  // A crossing street (one running across this edge) at (x, z): a bus stop can't stand there.
-  const crossing = (x: number, z: number, vertical: boolean): boolean => {
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        for (const r of plan(Math.floor(x / CELL) + dx, Math.floor(z / CELL) + dy)?.roads ?? []) {
-          if (r.vertical === vertical || r.kind === 'coast') continue;
-          const q = r.rect;
-          if (x > q.x - 0.5 && x < q.x + q.w + 0.5 && z > q.y - 0.5 && z < q.y + q.h + 0.5) return true;
-        }
-      }
-    }
-    return false;
-  };
-  const edges = lanes.map((l, i) => {
+  // How far left of its corner's lane line the lane is, `tau` metres along edge i from that corner.
+  const origins = lanes.map((l, i) => (pts[i][0] - l.p[0]) * l.d[0] + (pts[i][1] - l.p[1]) * l.d[1]);
+  const lateral = (i: number, tau: number): number => lanes[i].off(origins[i] + tau) - lanes[i].off(0);
+  const path = buildPath(pts, lanes.map((l) => l.d), turnAt, straight, start, length, lanes.map((l) => !l.flat), lateral);
+  const edges = lanes.map((l) => {
     const left: [number, number] = [l.d[1], -l.d[0]];
     const side: Side = l.d[0] === 0 ? (l.p[0] === X0 ? 'west' : 'east') : l.p[1] === Z0 ? 'north' : 'south';
-    const kerb: [number, number] = [left[0] * (l.kerb - l.o), left[1] * (l.kerb - l.o)];
-    // The stop: mid-block (an edge's middle is often a junction), the block nearest the middle first, moved
-    // along until the shelter and its pole (3 m behind to 4 m ahead) stand clear of any crossing street.
-    const vertical = l.d[0] === 0;
-    const blocks = Math.max(1, Math.round(edgeLen[i] / CELL));
-    const origin = (pts[i][0] - l.p[0]) * l.d[0] + (pts[i][1] - l.p[1]) * l.d[1];
-    const at = (t: number): [number, number] => [l.p[0] + l.d[0] * t + left[0] * l.kerb, l.p[1] + l.d[1] * t + left[1] * l.kerb];
-    const clear = (t: number): boolean => [-3, -1, 1, 3, 4].every((k) => !crossing(...at(t + k), vertical));
-    const mids = Array.from({ length: blocks }, (_, k) => (k + 0.5) * CELL).sort((p, q) => Math.abs(p - (blocks * CELL) / 2) - Math.abs(q - (blocks * CELL) / 2));
-    let stop = mids[0];
-    search: for (const m of mids) {
-      for (let off = 0; off <= 48; off += 4) {
-        for (const t of off ? [m + off, m - off] : [m]) {
-          if (clear(t)) {
-            stop = t;
-            break search;
-          }
-        }
-      }
-    }
-    // The shelter at the kerb where the stop stands (an edge can widen along its length, into an avenue: the
-    // lane keeps to the narrowest stretch's, so there the kerb is further out than along the rest).
-    const pos = vertical ? l.p[1] + l.d[1] * stop : l.p[0] + l.d[0] * stop;
-    const here = half(vertical, vertical ? l.p[0] : l.p[1], pos - CELL / 2, pos + CELL / 2);
-    const kerbHere = Math.max(l.kerb, here.w / 2 - here.s * 0.5);
-    const stopKerb: [number, number] = kerbHere > l.kerb ? [left[0] * (kerbHere - l.o), left[1] * (kerbHere - l.o)] : kerb;
-    return { mid: onEdge(i, Math.max(0, Math.min(edgeLen[i], stop - origin))), kerb: stopKerb, dir: l.d, side };
+    return { kerb: [left[0] * (l.kerb - l.o), left[1] * (l.kerb - l.o)] as [number, number], dir: l.d, side };
+  });
+  // The stops (stops.ts chose where along each edge and on which kerb): where on the path the bus's middle stands,
+  // and how far its lane is from the kerb there (an edge can widen along its length, into an avenue: the lane keeps
+  // to the narrowest stretch's, so the bus eases over to the kerb as it comes in).
+  const stops: RouteStop[] = sites.map((st) => {
+    const l = lanes[st.edge];
+    const left: [number, number] = [l.d[1], -l.d[0]];
+    const origin = origins[st.edge];
+    // (From the lane as it is at this block to the pavement's middle.)
+    const out = st.kerb - l.off(st.t);
+    return {
+      s: onEdge(st.edge, Math.max(0, Math.min(edgeLen[st.edge], st.t - origin))),
+      kerb: [left[0] * out, left[1] * out] as [number, number],
+      dir: l.d,
+      side: st.side,
+      name: st.name,
+      kind: st.kind,
+      pavement: st.pavement,
+      depth: st.depth,
+      pull: Math.max(0, Math.min(STOP_PULL_MAX, out - st.pavement / 2 - STOP_BUS_HALF - STOP_KERB_GAP)),
+    };
   });
   // Junctions: every grid corner along each edge (including the corner it turns at, not the one it
   // started from), projected onto the lane; the stop line sits before the crossing road's zebra.
@@ -380,7 +484,7 @@ export function routeFor(rect: readonly [number, number, number, number], clockw
       junctions.push({ gx: Math.round(G[0] / CELL), gy: Math.round(G[1] / CELL), s: onEdge(i, proj), stop: onEdge(i, stopProj), ns: vertical, turn, radius: t?.R ?? 0, cross, x: G[0], z: G[1] });
     }
   }
-  return { pts, path, length, edges, junctions };
+  return { pts, path, length, edges, stops, junctions };
 }
 
 /** Tightest turn radius at a corner (m): left turns hug the near kerb, right turns sweep across the junction. */
@@ -432,6 +536,9 @@ function buildPath(
   straight: readonly number[],
   start: readonly number[],
   length: number,
+  /** Per edge, whether its lane shifts sideways along it, and how far left of its corner's lane line it is at `tau` m along. */
+  shifts: readonly boolean[] = [],
+  lateral: (i: number, tau: number) => number = () => 0,
 ): Path {
   const S: number[] = [];
   const X: number[] = [];
@@ -451,8 +558,18 @@ function buildPath(
     const d = dirs[i];
     const t0 = turns[i];
     const s0 = start[i];
-    // The straight along edge i.
+    // The straight along edge i (sampled every 2 m where its lane shifts with the road's width: the heading
+    // leans with the shift, so a vehicle still points the way it moves).
     push(s0, pts[i][0] + d[0] * t0.leg, pts[i][1] + d[1] * t0.leg, d[0], d[1], 0);
+    if (shifts[i]) {
+      const left = [d[1], -d[0]];
+      for (let tau = t0.leg + 2; tau < t0.leg + straight[i] - 1; tau += 2) {
+        const l = lateral(i, tau);
+        const slope = lateral(i, tau + 0.5) - lateral(i, tau - 0.5);
+        const n = Math.hypot(1, slope);
+        push(s0 + tau - t0.leg, pts[i][0] + d[0] * tau + left[0] * l, pts[i][1] + d[1] * tau + left[1] * l, (d[0] + left[0] * slope) / n, (d[1] + left[1] * slope) / n, 0);
+      }
+    }
     // The turn at corner i+1, from the unit shape: along the entry direction (x) and toward the exit (y).
     const j = (i + 1) % 4;
     const t = turns[j];

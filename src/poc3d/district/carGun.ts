@@ -258,8 +258,9 @@ export class CarGun {
     this.out = aiming || this.hipT > 0;
     this.sinceOut = this.out ? 0 : this.sinceOut + dt;
     if (!this.out) this.window = null;
-    // (From the cameras outside the car with the gun away he isn't drawn, nor posed.)
-    if (cockpit || this.shown) seated.update(H.own.sim, { raised: this.out, blocked: this.out && !this.side, window: this.window, aimPoint: this.aimAt, pov: cockpit ? 1 : 0, view: cockpit ? H.camera : null, throttle: pedals.throttle, brake: pedals.brake, calm: true }, gdt, dt);
+    // (From the cameras outside the car with the gun away he isn't drawn, nor posed; but he is for his hands at the
+    // police beacon, which you watch from outside as well, and to wind its window back up.)
+    if (cockpit || this.shown || H.own.siren.busy || seated.windowsDown) seated.update(H.own.sim, { raised: this.out, blocked: this.out && !this.side, window: this.window, aimPoint: this.aimAt, pov: cockpit ? 1 : 0, view: cockpit ? H.camera : null, throttle: pedals.throttle, brake: pedals.brake, calm: true }, gdt, dt);
     // His shots: from the muzzle at what's under the crosshair.
     for (let k = seated.newShots(); k > 0; k--) {
       const muzzle = rig.muzzle();
@@ -278,7 +279,7 @@ export class CarGun {
       const s = H.own.sim;
       const spread = (rig.gun.spread ?? 0.006) * (1 + Math.abs(s.slide) * 2.5 + s.speed / 30) * (!aiming ? HIP : this.window === 'across' ? ACROSS : 1);
       const vel = new THREE.Vector3(Math.sin(s.h) * s.u + Math.cos(s.h) * s.w, 0, Math.cos(s.h) * s.u - Math.sin(s.h) * s.w);
-      const met = H.gunfire.shot({ muzzle, dir, spread, sound: 'pistol', listener: H.camera.position, skipOwn: true, by: 'you', vel });
+      const met = H.gunfire.shot({ muzzle, dir, spread, sound: 'pistol', listener: H.camera.position, skipOwn: true, by: 'you', vel, mount: rig.muzzleMount() });
       this.last = met ? { what: met.what, dist: +met.distance.toFixed(1), part: (met.body?.object.userData.part as string | undefined) ?? null } : null;
       H.driving.kick(aiming ? 0.035 : 0);
       H.crosshair.fired();

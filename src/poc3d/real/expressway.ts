@@ -1018,7 +1018,9 @@ export function poolTexture(): THREE.CanvasTexture {
  */
 export class ExpresswayTraffic {
   readonly group = new THREE.Group();
-  private readonly cars: { mesh: THREE.Mesh; s: number; v: number; lane: number; v0: number }[] = [];
+  private readonly cars: { mesh: THREE.Mesh; s: number; v: number; lane: number; v0: number; rest: number; off: boolean }[] = [];
+  /** How much of the traffic has gone home (0 none, 1 all: the dead hours, as `TrafficSystem.quiet`). A car leaves the loop, and comes back, at least 320 m from you if you're on it. */
+  quiet = 0;
   private readonly L: number;
   /** Curvature (rad per m) of the loop at each sample, smoothed over 30 m ahead (for slowing down). */
   private readonly bend: Float32Array;
@@ -1065,14 +1067,14 @@ export class ExpresswayTraffic {
       if (signs && m.text) mesh.add(new THREE.Mesh(m.text, signs.signs));
       if (signs && m.photo) mesh.add(new THREE.Mesh(m.photo, signs.taxiAds));
       this.group.add(mesh);
-      this.cars.push({ mesh, s: (this.L * k) / count, v: 18, lane: k % 2 ? -1.8 : 1.8, v0: 17 + ((k * 37) % 10) });
+      this.cars.push({ mesh, s: (this.L * k) / count, v: 18, lane: k % 2 ? -1.8 : 1.8, v0: 17 + ((k * 37) % 10), rest: ((k * 0.618034) % 1) * 0.98 + 0.01, off: false });
     }
   }
 
   /** Where each car is (for your car's collisions): centre, heading, half length and width. */
   get obstacles(): { x: number; z: number; dx: number; dz: number; half: number; hw: number; vx: number; vz: number }[] {
     const loop = this.ex.loop;
-    return this.cars.map((c) => {
+    return this.cars.filter((c) => !c.off).map((c) => {
       const i = Math.floor(c.s) % this.L;
       return { x: c.mesh.position.x, z: c.mesh.position.z, dx: loop.tx[i], dz: loop.tz[i], half: 2.3, hw: 0.9, vx: loop.tx[i] * c.v, vz: loop.tz[i] * c.v };
     });
@@ -1093,11 +1095,14 @@ export class ExpresswayTraffic {
     const L = this.L;
     const ahead = (a: number, b: number): number => (((b - a) % L) + L) % L;
     for (const c of this.cars) {
+      if (!you || Math.min(ahead(c.s, you.i), ahead(you.i, c.s)) > 320) c.off = c.rest < this.quiet;
+      c.mesh.visible = !c.off;
+      if (c.off) continue;
       // The nearest thing ahead in this lane: another car, or you.
       let gap = Infinity;
       let lead = 0;
       for (const o of this.cars) {
-        if (o === c || o.lane !== c.lane) continue;
+        if (o === c || o.off || o.lane !== c.lane) continue;
         const d = ahead(c.s, o.s);
         if (d > 0 && d < gap) [gap, lead] = [d, o.v];
       }
