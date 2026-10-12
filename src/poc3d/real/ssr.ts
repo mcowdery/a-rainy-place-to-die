@@ -153,13 +153,6 @@ const fragment = /* glsl */ `
     // Turned toward the camera, so only faces that really face up pass: a ceiling seen from below (an
     // expressway deck's or a viaduct's underside) faces down and reflects nothing.
     if (dot(nV, p) > 0.0) nV = -nV;
-    // A real surface has the same normal worked out forward and backward from the pixel; where the depth jumps from
-    // pixel to pixel (foliage, thin railings, the edges of things) they disagree, and there's nothing to reflect in.
-    if (!water) {
-      vec3 pxm = viewPos(vUv - vec2(uTexel.x, 0.0)) - p;
-      vec3 pym = viewPos(vUv - vec2(0.0, uTexel.y)) - p;
-      if (dot(normalize(cross(px, py)), normalize(cross(pxm, pym))) < 0.98) { gl_FragColor = vec4(0.0); return; }
-    }
     vec3 nW = normalize(mat3(uInvView) * nV);
     if (nW.y < 0.9) { gl_FragColor = vec4(0.0); return; }
     vec3 wp = (uInvView * vec4(p, 1.0)).xyz;
