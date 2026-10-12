@@ -5,10 +5,10 @@
  */
 import { startScreen } from './startScreen';
 
-/** The loading screen's picture: one of the four loading pictures (assets/loading/), shuffled on each load. */
-const LOADING_ART = Object.values(import.meta.glob('../../../assets/loading/*.jpg', { eager: true, query: '?url', import: 'default' })) as string[];
+/** The loading screen's picture: for now the start screen's title picture (the shuffled assets/loading/ pictures are set aside). */
+const LOADING_ART = new URL('../../../assets/title/title.jpg', import.meta.url).href;
 const loadbg = document.getElementById('loadbg');
-if (loadbg && LOADING_ART.length) loadbg.style.setProperty('--art', `url("${LOADING_ART[Math.floor(Math.random() * LOADING_ART.length)]}")`);
+if (loadbg) loadbg.style.setProperty('--art', `url("${LOADING_ART}")`);
 
 if (__EDITION__ !== 'uncensored') startScreen();
 void import('./main');
