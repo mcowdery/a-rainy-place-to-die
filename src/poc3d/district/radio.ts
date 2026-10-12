@@ -10,8 +10,8 @@ import { hash } from '../../core/hash';
  *
  * stations:
  *   - id: jazz                 # [a-z0-9_]+, and its folder under assets/radio/
- *     name: TŌTO JAZZ
- *     jp: 東都ジャズ             # optional
+ *     name: TOKYO JAZZ
+ *     jp: 東京ジャズ             # optional
  *     freq: '79.5'
  *     blurb: Jazz through the night.
  *     tracks:

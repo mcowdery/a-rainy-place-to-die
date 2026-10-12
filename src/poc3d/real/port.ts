@@ -287,7 +287,7 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: s
       g.fillStyle = '#e8c020';
       g.fillRect(0, H * 0.82, W, H * 0.1);
       text(g, 'SPEED LAB', W * 0.36, H * 0.68, `italic 900 ${Math.round(H * 0.62)}px Arial, sans-serif`, '#ffffff');
-      text(g, 'チューニング 東都', W * 0.8, H * 0.62, `bold ${Math.round(H * 0.32)}px 'Yu Gothic', sans-serif`, '#e8c020');
+      text(g, 'チューニング 東京', W * 0.8, H * 0.62, `bold ${Math.round(H * 0.32)}px 'Yu Gothic', sans-serif`, '#e8c020');
     });
     // Out front: a customer's sports car and the mechanic.
     car(k, 18, -4, 1, 0, 'sedan', 0xc81a1a, 13);
@@ -345,7 +345,7 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: s
     plate(k, 18, 1.6, 20, T0 - 0.1, 4.2, (g, W, H) => {
       g.fillStyle = '#f0f0ec';
       g.fillRect(0, 0, W, H);
-      text(g, 'フェリーかもめ 東都', W / 2, H * 0.72, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#1a4aa0');
+      text(g, 'フェリーかもめ 東京', W / 2, H * 0.72, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#1a4aa0');
     }, false, 'in');
     k.person(12, -2, 0, 1, { body: 'woman', pose: 'stand', color: [0.9, 0.85, 1.0] });
     k.person(22, -3, -1, 0, { body: 'man', pose: 'phone', color: [0.8, 0.9, 1.0] });

@@ -17,7 +17,7 @@ All of the tracks below are by Kevin MacLeod (incompetech.com), licensed under C
 The credit, per track: "<Title>" Kevin MacLeod (incompetech.com). Licensed under Creative Commons: By
 Attribution 4.0. https://creativecommons.org/licenses/by/4.0/
 
-`jazz/` (TŌTO JAZZ): Bass Walker · Night on the Docks - Sax · Backed Vibes Clean · Cool Vibes · I Knew a Guy ·
+`jazz/` (TOKYO JAZZ): Bass Walker · Night on the Docks - Sax · Backed Vibes Clean · Cool Vibes · I Knew a Guy ·
 Just As Soon · Walking Along · Deadly Roulette · Hard Boiled · Covert Affair · Comfortable Mystery · Dances and
 Dames · Slow Burn · Shades of Spring · George Street Shuffle · Lobby Time
 
@@ -31,7 +31,7 @@ Made for this game on the developer's machine with ACE-Step 1.5 (MIT, https://gi
 prompts and original lyrics written for it; the artist names are invented. Each file's prompt, lyrics and seed
 are in the .json beside it.
 
-- `city_pop_radio/toto_bay_drive.ogg`: 東都ベイ・ドライブ · ルナ・パシフィカ
+- `city_pop_radio/toto_bay_drive.ogg`: 東京ベイ・ドライブ · ルナ・パシフィカ
 - `city_pop_radio/neon_no_ame.ogg`: ネオンの雨 · 真夜中シアター
 - `city_pop_radio/shuden_no_ato_de.ogg`: 終電のあとで · サンセット・パレード
 - `noir/rain_on_kaburo.ogg`: Rain on Kaburo · The Kasumi Quartet
@@ -39,14 +39,14 @@ are in the .json beside it.
 - `noir/kasumi_blue.ogg`: Kasumi Blue · Yotaka Trio
 - `noir/room_201.ogg`: Room 201 · The Kasumi Quartet
 - `noir/harbor_fog.ogg`: Harbor Fog · 深夜楽団
-- `noir/tail_lights.ogg`: Tail Lights · 東都ナイト・アンサンブル
+- `noir/tail_lights.ogg`: Tail Lights · 東京ナイト・アンサンブル
 - `noir/stakeout.ogg`: Stakeout · Harbor Lights Orchestra
 - `noir/cigarette_and_neon.ogg`: Cigarette and Neon · Harbor Lights Orchestra
 - `noir/dead_letter.ogg`: Dead Letter · 深夜楽団
 - `noir/blue_hour_kawabata.ogg`: Blue Hour, Kawabata · The Kasumi Quartet
 - `noir/rindo.ogg`: 竜胆 Rindō · 深夜楽団
-- `noir/the_informant.ogg`: The Informant · 東都ナイト・アンサンブル
-- `noir/three_am_expressway.ogg`: 3 A.M. Expressway · 東都ナイト・アンサンブル
+- `noir/the_informant.ogg`: The Informant · 東京ナイト・アンサンブル
+- `noir/three_am_expressway.ogg`: 3 A.M. Expressway · 東京ナイト・アンサンブル
 - `kissa/last_call_at_kanpai.ogg`: Last Call at Kanpai · Blue Door Five
 - `kissa/blue_door_bop.ogg`: Blue Door Bop · Blue Door Five
 - `kissa/shiomi_bossa.ogg`: Shiomi Bossa · Wangan Latin Jazz Club
@@ -55,7 +55,7 @@ are in the .json beside it.
 - `kissa/asagiri_morning.ogg`: Asagiri Morning · Asagiri Jazz Workshop
 - `kissa/wangan_mambo.ogg`: Wangan Mambo · Wangan Latin Jazz Club
 - `kissa/sakura_waltz.ogg`: Sakura Waltz · Kissa House Trio
-- `kissa/toto_express.ogg`: Tōto Express · Tōto Swing Orchestra
+- `kissa/toto_express.ogg`: Tokyo Express · Tokyo Swing Orchestra
 - `kissa/a_letter_from_yunagi.ogg`: A Letter from Yūnagi · Asagiri Jazz Workshop
 - `kissa/takanodai_stroll.ogg`: Takanodai Stroll · Kissa House Trio
 - `bay/kaburo_lights.ogg`: 歌舞路ライツ · 歌舞路ブギー・クラブ
@@ -66,10 +66,10 @@ are in the .json beside it.
 - `cypher/yoru_mart_3am.ogg`: ヨルマート午前三時 · MC 夜風
 - `cypher/neon_moyou.ogg`: ネオン模様 · 真夜中シアター feat. MC 夜風
 - `cypher/ebisujima_night.ogg`: 恵比寿島ナイト · 恵比寿島クルー
-- `cypher/toto_city_lights.ogg`: Tōto City Lights · Harbor Kid
+- `cypher/toto_city_lights.ogg`: Tokyo City Lights · Harbor Kid
 - `cypher/denko_breaks.ogg`: 電光ブレイクス · DJ デンコー
 - `cypher/ame_no_kosaten.ogg`: 雨の交差点 · レディ・カスミ
-- `cypher/asa_made_boogie.ogg`: 朝までブギー · 東都ブギー・エクスプレス
+- `cypher/asa_made_boogie.ogg`: 朝までブギー · 東京ブギー・エクスプレス
 - `cypher/b_men_no_yoru.ogg`: B面の夜 · DJ 終電
 - `harana/sayo_lang_titibok.ogg`: Sa'yo Lang Titibok · Lino Amihan
 - `harana/dahan_dahan_lang.ogg`: Dahan-Dahan Lang · Lino Amihan
