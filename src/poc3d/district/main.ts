@@ -68,6 +68,7 @@ import { interiorFor, type Interior } from '../real/interiors';
 import { DECOR_PEOPLE } from '../real/kit';
 import { hash } from '../../core/hash';
 import { SignalLamps, TrafficSystem, type DrivenVehicle, setTrafficGround, useNewBuses } from '../real/traffic';
+import { installAdDebug } from './adSitesDebug';
 import { Driving } from './driving';
 import { CITY_ASSISTS, OwnCar } from './ownCar';
 import { FOLLOWERS, followFlag } from './followers';
@@ -714,6 +715,8 @@ async function run(): Promise<void> {
   }
   const signalLamps = new SignalLamps(signals, (x, z, r) => district.signalsNear(x, z, r));
   scene.add(traffic.group, signalLamps.mesh);
+  // The billboards' and posters' siting, to look over (district/adSitesDebug.ts: `__ads`, `?adsites=1` marks them).
+  if (debug && CITY.ads) installAdDebug({ model: district.model, expresswayText: content.expresswayText, rails: content.rails, scene, camera, controls: { setLevel: (y) => controls.setLevel(y), setView: (yaw, pitch) => controls.setView(yaw, pitch) }, groundAt, marks: params.get('adsites') === '1' });
   // Weather near the camera: rain streaks and splashes lit by the street, light cones under the lamps.
   const rain = new RainSystem(cityU);
   const cones = new LampCones();
