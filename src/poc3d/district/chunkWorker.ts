@@ -1,7 +1,8 @@
 /// <reference lib="webworker" />
 import { railReserved } from './rail';
-import { expresswayCoveredFrom, expresswayReservedFrom } from './expressway';
+import { Expressway, expresswayCoveredFrom, expresswayReservedFrom, parseExpressway } from './expressway';
 import type { DistrictId } from '../../gen/macro';
+import { AdSites } from '../real/adSites';
 import { rawTransfer } from '../real/rawGeometry';
 import { SignLayout, setRooftopSigns } from '../real/signs';
 import { ChunkBuilder, type Stage } from './chunkBuild';
@@ -32,7 +33,11 @@ self.onmessage = (e: MessageEvent<WorkerIn>) => {
     const content = loadDistrictContent(m.city);
     const model = new DistrictModel(content.macro, m.kinds, content.placed, m.seed, content.zones, content.avenues, content.terrain, [...railReserved(content.rails), ...expresswayReservedFrom('expressway.yaml', content.expresswayText)], expresswayCoveredFrom('expressway.yaml', content.expresswayText), content.traffic.buses);
     setRooftopSigns(CITIES[m.city].rooftopSigns);
-    builder = new ChunkBuilder(model, new SignLayout(signTexts(m.words, content.placed)), CITIES[m.city].ads);
+    const ads = CITIES[m.city].ads;
+    // The billboards are sited by who sees them: from the expressway's decks, the elevated lines and the streets.
+    const exDef = ads && content.expresswayText.trim() ? parseExpressway('expressway.yaml', content.expresswayText, []) : null;
+    const adSites = ads ? new AdSites(model, { expressway: exDef ? new Expressway(exDef).roads : [], rails: content.rails }) : null;
+    builder = new ChunkBuilder(model, new SignLayout(signTexts(m.words, content.placed)), ads, adSites);
     self.postMessage({ type: 'ready' });
     return;
   }
