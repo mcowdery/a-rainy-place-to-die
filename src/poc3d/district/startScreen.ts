@@ -197,8 +197,46 @@ function wanted(): boolean {
   return [...new URLSearchParams(location.search).keys()].length === 0;
 }
 
-/** `done`: Start was chosen. `ready()`: the city is built (the game waits for both before it runs). `progress`: the loading phase's name. */
-type StartScreen = { shown: boolean; done: Promise<void>; ready: () => void; progress: (text: string) => void };
+/** The title music: 歌舞路ブルース (the Last Call station's track), from the title screen through the loading screen. */
+const TITLE_MUSIC = new URL('../../../assets/radio/last_call/kaburo_blues.ogg', import.meta.url).href;
+const TITLE_VOLUME = 0.6;
+
+/**
+ * Plays the title music at once if the browser allows it, else on the first click or key (Start is one). `fadeOut`
+ * takes it down over `seconds` and stops it.
+ */
+function titleMusic(): { fadeOut: (seconds: number) => void } {
+  const audio = new Audio(TITLE_MUSIC);
+  audio.loop = true;
+  audio.volume = TITLE_VOLUME;
+  let stopped = false;
+  const gestures = ['pointerdown', 'keydown'] as const;
+  const retry = (): void => {
+    if (stopped) return;
+    void audio.play().then(() => gestures.forEach((g) => window.removeEventListener(g, retry)), () => {});
+  };
+  audio.play().catch(() => gestures.forEach((g) => window.addEventListener(g, retry)));
+  return {
+    fadeOut: (seconds) => {
+      stopped = true;
+      gestures.forEach((g) => window.removeEventListener(g, retry));
+      const t0 = performance.now();
+      const step = (): void => {
+        const k = Math.min(1, (performance.now() - t0) / (seconds * 1000));
+        audio.volume = TITLE_VOLUME * (1 - k) * (1 - k);
+        if (k < 1) setTimeout(step, 50);
+        else audio.pause();
+      };
+      step();
+    },
+  };
+}
+
+/**
+ * `done`: Start was chosen. `ready()`: the city is built (the game waits for both before it runs). `progress`: the loading phase's name.
+ * `begin()`: the game runs now; the title music fades away.
+ */
+type StartScreen = { shown: boolean; done: Promise<void>; ready: () => void; progress: (text: string) => void; begin: () => void };
 let made: StartScreen | null = null;
 
 /**
@@ -210,8 +248,9 @@ export function startScreen(): StartScreen {
 }
 
 function makeStartScreen(): StartScreen {
-  if (!wanted()) return { shown: false, done: Promise.resolve(), ready: () => {}, progress: () => {} };
+  if (!wanted()) return { shown: false, done: Promise.resolve(), ready: () => {}, progress: () => {}, begin: () => {} };
   addStyle();
+  const music = titleMusic();
   const root = el('div', undefined, document.body, 'noir');
   let isReady = false;
   let phase = 'loading the city...';
@@ -264,6 +303,7 @@ function makeStartScreen(): StartScreen {
       phase = text;
       showStatus();
     },
+    begin: () => music.fadeOut(3),
   };
 }
 
