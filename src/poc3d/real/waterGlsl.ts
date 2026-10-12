@@ -16,26 +16,6 @@ export const WATER_GLSL = /* glsl */ `
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(wtrHash(i), wtrHash(i + vec2(1.0, 0.0)), f.x), mix(wtrHash(i + vec2(0.0, 1.0)), wtrHash(i + vec2(1.0, 1.0)), f.x), f.y);
   }
-  // The rain's rings on standing water (a puddle, the film on a wet street, a pond): each cell of two overlaid
-  // grids drops a ring now and then that spreads and fades over its cycle; returns the slope they add. rain (0-1)
-  // is how many cells drop. The reflection pass bends its reflections by them and the ground shader tilts its
-  // sheen and lamp pools by the same rings, so they agree.
-  vec2 rainRings(vec2 p, float t, float rain) {
-    vec2 acc = vec2(0.0);
-    for (int layer = 0; layer < 2; layer++) {
-      float s = layer == 0 ? 2.3 : 3.7;
-      vec2 q = p * s + float(layer) * 13.1;
-      vec2 cell = floor(q);
-      float h = wtrHash(cell);
-      vec2 local = fract(q) - 0.5 - (vec2(h, wtrHash(cell + 5.3)) - 0.5) * 0.5;
-      float phase = fract(t * (0.7 + 0.6 * h) + h * 9.0);
-      float r = length(local);
-      float R = phase * 0.5;
-      float ring = (r - R) * exp(-(r - R) * (r - R) * 900.0) * (1.0 - phase) * step(h, rain);
-      acc += local / max(r, 1e-3) * ring * 6.0;
-    }
-    return acc;
-  }
   // A pixel's size on the water (m) at wp seen from cam: what a ripple must be bigger than to show.
   float waterFoot(vec3 wp, vec3 cam) {
     vec3 v = wp - cam;

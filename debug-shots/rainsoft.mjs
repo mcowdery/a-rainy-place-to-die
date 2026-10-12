@@ -11,10 +11,10 @@ const browser = await launchBrowser({ channel: 'msedge', headless: true, args: [
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   page.on('pageerror', (e) => console.log('pageerror', String(e)));
-  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=${spawn}&weather=rain&rain=${amt}&wet=1&clock=22:30${extra}`, { timeout: 240000 });
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=${spawn}&weather=${extra.includes("clear") ? "clear" : "rain"}&rain=${amt}${extra.includes("natural") ? "" : "&wet=1"}&clock=22:30${extra}`, { timeout: 240000 });
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
   await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });
-  await page.waitForTimeout(4000);
+  await page.waitForTimeout(extra.includes("natural") ? 24000 : 4000);
   const hide = process.argv[6]; // comma list of Points indices to hide
   const info = await page.evaluate((h) => { const pts = []; window.__scene.traverse((o) => { if (o.isPoints) pts.push(o); }); const hs = (h ?? "").split(",").filter(Boolean).map(Number); pts.forEach((o, i) => { if (hs.includes(i)) o.onBeforeRender = () => {}, o.layers.disableAll(); }); return pts.map((o, i) => i + ":" + o.geometry.getAttribute("position").count + ":" + Object.keys(o.material.uniforms ?? {}).slice(0, 6).join("/")); }, hide);
   if (process.argv[7]) await page.evaluate((u) => window.__scene.traverse((o) => { if (o.isMesh && o.material?.uniforms?.[u]) o.visible = false; }), process.argv[7]);

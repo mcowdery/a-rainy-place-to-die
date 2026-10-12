@@ -41,6 +41,7 @@ const fragment = /* glsl */ `
   uniform float uFar;
   uniform float uWet;
   uniform float uRain;
+  uniform float uPuddle;
   uniform float uTime;
   uniform float uWater;
   uniform float uWaterTime;
@@ -68,8 +69,23 @@ const fragment = /* glsl */ `
     float d = texture2D(tDepth, uv).x;
     return -perspectiveDepthToViewZ(d, uNear, uFar);
   }
-  // The rain's rings (waterGlsl.ts: the ground shader tilts its sheen by the same ones).
-  vec2 ripples(vec2 p) { return rainRings(p, uTime, uRain); }
+  // Rain rings on the wet ground: each cell drops a ring now and then; returns the slope it adds.
+  vec2 ripples(vec2 p) {
+    vec2 acc = vec2(0.0);
+    for (int layer = 0; layer < 2; layer++) {
+      float s = layer == 0 ? 2.3 : 3.7;
+      vec2 q = p * s + float(layer) * 13.1;
+      vec2 cell = floor(q);
+      float h = h2(cell);
+      vec2 local = fract(q) - 0.5 - (vec2(h, h2(cell + 5.3)) - 0.5) * 0.5;
+      float phase = fract(uTime * (0.7 + 0.6 * h) + h * 9.0);
+      float r = length(local);
+      float R = phase * 0.5;
+      float ring = (r - R) * exp(-(r - R) * (r - R) * 900.0) * (1.0 - phase) * step(h, uRain);
+      acc += local / max(r, 1e-3) * ring * 6.0;
+    }
+    return acc;
+  }
 
   // Water's rays: long (the far bank, across the bay) and after small bright things (a sign, a row of lit
   // windows), which steps that grow with distance stride over. So the ray is walked evenly across the screen
@@ -141,10 +157,12 @@ const fragment = /* glsl */ `
         if (wp.x > r.x && wp.x < r.z && wp.z > r.y && wp.z < r.w && wp.y > uShelterY[i].x && wp.y < uShelterY[i].y) { gl_FragColor = vec4(0.0); return; }
       }
     }
-    // Same puddles as the ground shader.
+    // Same puddles as the ground shader: standing water gathers after the rain and shrinks as the ground dries
+    // (uPuddle); while it rains the whole street is one wet sheet.
     float pn = vnoise(wp.xz * 0.22) + 0.12 * vnoise(wp.xz * 1.9);
-    float puddle = smoothstep(0.62, 0.68, pn) * smoothstep(0.35, 0.9, uWet);
-    float wet = uWet * (0.22 + 0.78 * puddle);
+    float pedge = mix(0.8, 0.62, uPuddle);
+    float puddle = smoothstep(pedge, pedge + 0.06, pn) * smoothstep(0.0, 0.15, uPuddle);
+    float wet = uWet * (0.85 + 0.15 * puddle);
     // Flat water, rippled by the rain in the puddles.
     vec3 n = vec3(0.0, 1.0, 0.0);
     vec3 cam = uInvView[3].xyz;
@@ -162,8 +180,8 @@ const fragment = /* glsl */ `
       if (uRain > 0.0) s += ripples(wp.xz) * 0.6;
       n = waterNormal(s);
     } else if (uRain > 0.0) {
-      // Rings on the puddles, and fainter on the film over ground that's wet through.
-      vec2 s = ripples(wp.xz) * mix(0.35, 1.0, puddle) * smoothstep(0.35, 0.9, uWet);
+      // Rings over the whole wet street while it rains.
+      vec2 s = ripples(wp.xz) * smoothstep(0.35, 0.9, uWet);
       n = normalize(vec3(-s.x, 1.0, -s.y));
     }
     vec3 vd = normalize(wp - cam);
@@ -218,6 +236,8 @@ export class SsrPass extends Pass {
   /** Ground wetness 0-1 and rain 0-1 (ripples). */
   wet = 0;
   rain = 0;
+  /** How much standing water there is (0-1: the city's uPuddle). */
+  puddling = 0;
   /** The city shader's clock (its uTime), so the rings here and the ground's own are the same rings; its own time otherwise. */
   clock: { value: number } | null = null;
   private readonly mat: THREE.ShaderMaterial;
@@ -244,6 +264,7 @@ export class SsrPass extends Pass {
         uFar: { value: camera.far },
         uWet: { value: 0 },
         uRain: { value: 0 },
+        uPuddle: { value: 0 },
         uTime: { value: 0 },
         uWater: { value: 0 },
         uWaterTime: { value: 0 },
@@ -315,6 +336,7 @@ export class SsrPass extends Pass {
     (u.uTexel.value as THREE.Vector2).set(1 / readBuffer.width, 1 / readBuffer.height);
     u.uWet.value = this.wet;
     u.uRain.value = this.rain;
+    u.uPuddle.value = this.puddling;
     u.uTime.value = this.clock ? this.clock.value : this.time;
     this.quad.material = this.mat;
     renderer.setRenderTarget(this.target);

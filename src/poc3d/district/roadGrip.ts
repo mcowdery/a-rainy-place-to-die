@@ -47,12 +47,29 @@ const smooth = (e0: number, e1: number, v: number): number => {
   return t * t * (3 - 2 * t);
 };
 
-/** How deep in a puddle a point on the road is (0 dry ground, 1 the middle of one), with the ground wet 0-1. */
-export function puddleAt(x: number, z: number, wet: number): number {
-  if (wet <= 0.35) return 0;
+/**
+ * How deep in a puddle a point on the road is (0 dry ground, 1 the middle of one), with the ground wet 0-1 and
+ * the standing water (the city's uPuddle: gathers after the rain, shrinks as it dries; without it the old rule,
+ * puddles wherever the ground is wet through).
+ */
+export function puddleAt(x: number, z: number, wet: number, puddling?: number): number {
+  if (puddling === undefined) {
+    if (wet <= 0.35) return 0;
+    const pn = vnoise(f(x * f(0.22)), f(z * f(0.22))) + 0.12 * vnoise(f(x * f(1.9)), f(z * f(1.9)));
+    return smooth(0.62, 0.68, pn) * smooth(0.35, 0.9, wet);
+  }
+  if (puddling <= 0.001 || wet <= 0.02) return 0;
   const pn = vnoise(f(x * f(0.22)), f(z * f(0.22))) + 0.12 * vnoise(f(x * f(1.9)), f(z * f(1.9)));
-  return smooth(0.62, 0.68, pn) * smooth(0.35, 0.9, wet);
+  const edge = 0.8 - 0.18 * puddling;
+  return smooth(edge, edge + 0.06, pn) * smooth(0, 0.15, puddling);
 }
+
+/**
+ * The film of water over ground that's wet through, as a depth for spray and splashes (0-1): while it rains the
+ * whole street is wet and there are no puddles, but a tyre or a foot still throws it up. Too shallow to drag or
+ * skim: those stay with real puddles.
+ */
+export const filmAt = (wet: number): number => 0.3 * smooth(0.5, 0.95, wet);
 
 /** How much a wheel in this depth of flood water (m) is wading, 0-1: nothing at a puddle's depth, full at about 25 cm. */
 export const wading = (depth: number): number => smooth(0.04, 0.25, depth);
@@ -62,6 +79,8 @@ export interface RoadWeather {
   readonly floodAt?: (x: number, z: number) => number;
   /** The ground wet through (0-1, the city's uWet). */
   readonly wet: number;
+  /** Standing water (0-1, the city's uPuddle); absent, the old rule (puddles wherever it's wet through). */
+  readonly puddling?: number;
   /** Snow lying (0-1, the city's uSnow). */
   readonly snow: number;
   /** Fallen leaves on the road (autumn: 1). */
@@ -107,7 +126,7 @@ export interface WheelWater {
  */
 export function wheelWater(wheels: readonly (readonly [number, number])[], speed: number, w: RoadWeather): WheelWater {
   const fl = wheels.map(([x, z]) => (w.floodAt ? wading(w.floodAt(x, z)) : 0));
-  const d = wheels.map(([x, z], i) => Math.max(puddleAt(x, z, w.wet), fl[i]));
+  const d = wheels.map(([x, z], i) => Math.max(puddleAt(x, z, w.wet, w.puddling), fl[i]));
   const s = Math.abs(speed);
   // Skimming the water: nothing at a crawl, most by motorway speed.
   const skim = smooth(11, 30, s);
@@ -121,7 +140,7 @@ export function wheelWater(wheels: readonly (readonly [number, number])[], speed
   const left = d[0] + d[2];
   const right = d[1] + d[3];
   const yaw = (left - right) * 0.5 * Math.min(1, s / 15) * 0.09;
-  return { grip, drag, yaw: speed >= 0 ? yaw : -yaw, splash: Math.max(...d) };
+  return { grip, drag, yaw: speed >= 0 ? yaw : -yaw, splash: Math.max(...d, filmAt(w.wet)) };
 }
 
 /** A car on the racing model, as far as the weather touches it. */
