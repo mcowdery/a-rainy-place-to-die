@@ -124,7 +124,7 @@ import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { PauseMenu, startScreen } from './startScreen';
 import { breathe, breatheIfDue } from '../real/breathe';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
-import { addFigure, GhostBuilder, ghostMaterial, setMobEye, setMobLook, setMobSun, setPassengerMaterial, setSkinTone, type FigureSpec, type MobLook } from '../real/people';
+import { addFigure, GhostBuilder, ghostMaterial, PASSENGER_MESHES, setMobEye, setMobLook, setMobSun, setPassengerMaterial, setSkinTone, type FigureSpec, type MobLook } from '../real/people';
 import { streetLit } from '../real/streetLit';
 import { SignAtlas, signMaterial } from '../real/signs';
 import { AdAtlas, adMaterial, DistrictAdAtlas } from '../real/adAtlas';
@@ -4467,7 +4467,7 @@ async function run(): Promise<void> {
     // tunnels at the end of the exits (drive in: you're at that pass).
     const onLoop = ownNow().onExpressway() ? expressway.at(ownNow().sim.x, ownNow().sim.z, ownNow().sim.y) : null;
     const rivalOn = race ? expressway.at(race.rival.car.x, race.rival.car.z, race.rival.car.y) : null;
-    exTraffic.update(inVn ? 0 : dt, onLoop && onLoop.road === expressway.loop ? { i: onLoop.i, lateral: onLoop.lateral, v: ownCar.sim.u } : null, rivalOn && rivalOn.road === expressway.loop ? [{ i: rivalOn.i, lateral: rivalOn.lateral, v: race!.rival.car.u }] : []);
+    exTraffic.update(inVn ? 0 : dt, onLoop && onLoop.road === expressway.loop ? { i: onLoop.i, lateral: onLoop.lateral, v: ownCar.sim.u } : null, rivalOn && rivalOn.road === expressway.loop ? [{ i: rivalOn.i, lateral: rivalOn.lateral, v: race!.rival.car.u }] : [], camera.position);
     updateRace(dt);
     raceHud.update(dt, race?.st ?? null, race?.path.def.name ?? '');
     chase.update(inVn ? 0 : dt, realDt);
@@ -5042,6 +5042,7 @@ async function run(): Promise<void> {
       if (!gl2.getParameter(timer.GPU_DISJOINT_EXT)) {
         const ms = gl2.getQueryParameter(q, gl2.QUERY_RESULT) / 1e6;
         keep(perf.gpu, ms);
+    for (const m of PASSENGER_MESHES) m.visible = mood.showPeople;
         gpuSum += Math.min(ms, 60); // (a freeze of hundreds of ms isn't the frame rate)
         gpuN++;
       }
