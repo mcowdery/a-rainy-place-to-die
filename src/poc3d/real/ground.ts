@@ -92,12 +92,28 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rec
     }
   }
   // Avenues' medians: a kerbed strip down the middle, planted (the expressway's piers stand in it).
+  // The ends cut at a junction are rounded (a nose); an end that runs on into the next cell stays square.
+  const MEDIAN_NOSE = 2;
   for (const m of plan.medians) {
-    slab(m, 0, 0.18, KIND.plain, KIND.sidewalk, 0x9a968c);
+    const road = plan.roads.find((r) => r.median && contains(r.rect, m.x + m.w / 2, m.y + m.h / 2));
+    const vertical = road ? road.vertical : m.h > m.w;
+    const [a0, a1] = vertical ? [m.y, m.y + m.h] : [m.x, m.x + m.w];
+    const [r0, r1] = road ? (vertical ? [road.rect.y, road.rect.y + road.rect.h] : [road.rect.x, road.rect.x + road.rect.w]) : [a0, a1];
+    const round: [boolean, boolean] = [a0 - r0 > 0.01, r1 - a1 > 0.01];
+    const roundSlab = (r: Rect, inset: number, y0: number, y1: number, kind: number, top: number, hex: number): void => {
+      const q: Rect = { x: r.x + inset, y: r.y + inset, w: r.w - 2 * inset, h: r.h - 2 * inset };
+      const c = intersect(q, cell);
+      if (!c || c.w < 0.01 || c.h < 0.01) return;
+      mb.style = [0, m.x, m.y, m.w];
+      mb.flags = SLAB_FLAG + Math.round(m.h * 8) * 128;
+      const rad = Math.max(0, Math.min(MEDIAN_NOSE, Math.min(q.w, q.h) / 2) - inset);
+      prism(mb, nosedOutline(q, vertical, round, rad, cell), y0, y1, kind, top, hex);
+    };
+    roundSlab(m, 0, 0, 0.18, KIND.plain, KIND.sidewalk, 0x9a968c);
     const inset = 0.35;
     const g: Rect = { x: m.x + inset, y: m.y + inset, w: m.w - 2 * inset, h: m.h - 2 * inset };
     // (Nothing grows under a parking area's apron: the strip there is bare.)
-    if (g.w > 0.3 && g.h > 0.3 && !covered.some((q) => overlaps(q, g))) slab(g, 0.18, 0.22, KIND.grass, KIND.grass, 0x3a5a2e);
+    if (g.w > 0.3 && g.h > 0.3 && !covered.some((q) => overlaps(q, g))) roundSlab(m, inset, 0.18, 0.22, KIND.grass, KIND.grass, 0x3a5a2e);
   }
   // Stamp plazas: paving raised to pavement height, in a lighter stone.
   for (const q of plazas) slab(q, 0, 0.15, KIND.plain, KIND.sidewalk, 0xa09a90);
@@ -114,6 +130,63 @@ export function addGround(mb: MeshBuilder, plan: CellPlan3, plazas: readonly Rec
   mb.flags = 0;
   paint(mb, plan);
   for (const s of scrambles) scramble(mb, plan, s);
+}
+
+const contains = (r: Rect, x: number, y: number): boolean => x >= r.x - 0.01 && x <= r.x + r.w + 0.01 && y >= r.y - 0.01 && y <= r.y + r.h + 0.01;
+
+/**
+ * A median strip's outline (x, z points in order round it), the corners of the ends flagged in `round`
+ * (start, end along the strip) turned into arcs of radius `rad`; points are kept inside the cell.
+ */
+function nosedOutline(q: Rect, vertical: boolean, round: readonly [boolean, boolean], rad: number, cell: Rect): [number, number][] {
+  const [u0, u1, v0, v1] = vertical ? [q.y, q.y + q.h, q.x, q.x + q.w] : [q.x, q.x + q.w, q.y, q.y + q.h];
+  const corners: { u: number; v: number; su: number; sv: number; end: 0 | 1 }[] = [
+    { u: u0, v: v0, su: -1, sv: -1, end: 0 },
+    { u: u1, v: v0, su: 1, sv: -1, end: 1 },
+    { u: u1, v: v1, su: 1, sv: 1, end: 1 },
+    { u: u0, v: v1, su: -1, sv: 1, end: 0 },
+  ];
+  const out: [number, number][] = [];
+  const put = (u: number, v: number): void => {
+    const [x, z] = vertical ? [v, u] : [u, v];
+    out.push([Math.min(cell.x + cell.w, Math.max(cell.x, x)), Math.min(cell.y + cell.h, Math.max(cell.y, z))]);
+  };
+  corners.forEach((c, i) => {
+    if (!round[c.end] || rad < 0.05) return put(c.u, c.v);
+    const cu = c.u - c.su * rad;
+    const cv = c.v - c.sv * rad;
+    const steps = 6;
+    for (let k = 0; k <= steps; k++) {
+      const t = ((i % 2 === 0 ? k : steps - k) / steps) * (Math.PI / 2);
+      put(cu + c.su * rad * Math.cos(t), cv + c.sv * rad * Math.sin(t));
+    }
+  });
+  return out;
+}
+
+/** A convex outline raised from y0 to y1: a fan for the top (`top` kind) and a wall round it (`kind`). */
+function prism(mb: MeshBuilder, poly: readonly [number, number][], y0: number, y1: number, kind: number, top: number, hex: number): void {
+  const n = poly.length;
+  if (n < 3) return;
+  mb.color = lin(hex);
+  const cx = poly.reduce((s, p) => s + p[0], 0) / n;
+  const cz = poly.reduce((s, p) => s + p[1], 0) / n;
+  const up: [number, number, number] = [0, 1, 0];
+  for (let k = 0; k < n; k++) {
+    const [ax, az] = poly[k];
+    const [bx, bz] = poly[(k + 1) % n];
+    if (Math.hypot(bx - ax, bz - az) < 1e-4) continue;
+    const ccw = (ax - cx) * (bz - cz) - (az - cz) * (bx - cx) < 0;
+    const [p, q] = ccw ? [[ax, az], [bx, bz]] : [[bx, bz], [ax, az]];
+    mb.kind = top;
+    mb.quadN([cx, y1, cz], [p[0], y1, p[1]], [q[0], y1, q[1]], [q[0], y1, q[1]], up, up, up, up);
+    mb.kind = kind;
+    const mx = (ax + bx) / 2 - cx;
+    const mz = (az + bz) / 2 - cz;
+    const l = Math.hypot(mx, mz) || 1;
+    const nn: [number, number, number] = [mx / l, 0, mz / l];
+    mb.quadN([p[0], y0, p[1]], [p[0], y1, p[1]], [q[0], y1, q[1]], [q[0], y0, q[1]], nn, nn, nn, nn);
+  }
 }
 
 /** Marks a ground slab's flags (see addGround's slab). */
