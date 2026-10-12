@@ -92,7 +92,7 @@ const AUTO = { first: 6, again: [35, 110] } as const;
 /** The mouth from the eyes (m at the model's size): down, and out of the face. */
 const MOUTH = { down: 0.068, out: 0.026 } as const;
 /** The same from the face's frame (the head shown): its `eye` is the camera's, up in the forehead and ahead of the face, so the mouth is further down and back (the user's shot: the cigar a few cm above his lips and in front of them). */
-const MOUTH_HEAD = { down: 0.105, out: -0.004 } as const;
+const MOUTH_HEAD = { down: 0.087, out: -0.004 } as const;
 
 const ease = (a: number, b: number, v: number): number => {
   const k = THREE.MathUtils.clamp((v - a) / (b - a), 0, 1);
