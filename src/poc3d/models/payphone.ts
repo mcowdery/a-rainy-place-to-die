@@ -142,7 +142,8 @@ export class PayphoneRig {
   setDisplay(k: number): void {
     this.display?.traverse((o) => {
       const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-      if (m && 'emissiveIntensity' in m) {
+      // (In the city the parts are on the city's one material, which isn't this phone's to change: real/payphoneField.ts.)
+      if (m && 'emissiveIntensity' in m && !(o as THREE.Mesh).userData.cityMat) {
         // The material is shared by every copy: give this one its own the first time.
         if (!(o as THREE.Mesh).userData.ownMat) {
           (o as THREE.Mesh).material = m.clone();

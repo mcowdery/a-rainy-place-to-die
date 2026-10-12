@@ -141,9 +141,6 @@ startRoom({
       ['weeds', P('weeds', GARDEN_X + 62, { size: 1.2, variant: 4 })],
       ['for-sale board', P('board', GARDEN_X + 64.5, { half: 0.6 })],
       ['cones', P('cones', GARDEN_X + 67, { variant: 2 })],
-      ['payphone: green card phone', P('payphone', GARDEN_X + 70.5, { variant: 0, radius: 0.35 })],
-      ['payphone: booth', P('payphone', GARDEN_X + 74, { variant: 1, radius: 0.55 })],
-      ['payphone: red coin phone', P('payphone', GARDEN_X + 77.5, { variant: 2, radius: 0.35 })],
     ];
     addProps(furn, { props: sample.map(([, p]) => p), wires: [], lights: [], open: [], solids: [] });
     for (const [name, p] of sample) {

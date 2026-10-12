@@ -15,6 +15,7 @@ import { filipino } from './cityConfig';
 import { manilaTexts } from '../real/manilaStreet';
 import type { BusLine } from './traffic';
 import { lineStops, stopClaim, type LineStops, type StopSite } from './stops';
+import { placePhones, type PhonePlacement } from '../real/phoneSites';
 
 /**
  * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings, signs) and
@@ -143,6 +144,34 @@ export class DistrictModel {
     return this.stopClaims.filter((c) => overlaps(c.rect, cell)).map((c) => c.rect);
   }
 
+  private readonly phoneCache = new Map<number, PhonePlacement | null>();
+  /**
+   * A cell's payphones (real/phoneSites.ts): where each stands and which it is. On their own, without the rest of
+   * the cell's furniture, because the page draws them from much further off than it needs anything else of a cell's
+   * (real/payphoneField.ts). Manila has none yet.
+   */
+  phones(mx: number, my: number): PhonePlacement | null {
+    const k = cellKey(mx, my);
+    let ph = this.phoneCache.get(k);
+    if (ph === undefined) {
+      const p = this.plan(mx, my);
+      if (!p || filipino()) ph = null;
+      else {
+        const stamps = this.stamps(mx, my);
+        const claimed = this.claimed(mx, my);
+        // Not on a bus stop's ground, nor by a stairwell down from the pavement or a set piece's door, counter or
+        // people (its nodes at street level): a phone at the end of a front mustn't stand in the way in.
+        const holes = this.holes(mx, my);
+        const nodes = stamps.flatMap((q) => q.nodes).filter((n) => n.floor === 0);
+        const within = (q: Rect, x: number, z: number, m: number): boolean => x > q.x - m && x < q.x + q.w + m && z > q.y - m && z < q.y + q.h + m;
+        const taken = (x: number, z: number, m = 0): boolean => claimed.some((q) => within(q, x, z, m)) || holes.some((q) => within(q, x, z, m + 1.6)) || nodes.some((n) => Math.hypot(n.x - x, n.z - z) < m + 1.8);
+        ph = placePhones(p, [...p.buildings, ...stamps.map((q) => q.building)], new Map(stamps.map((q) => [q.building.id, q.stamp.landmark ?? ''])), taken);
+      }
+      this.phoneCache.set(k, ph);
+    }
+    return ph;
+  }
+
   /** Street furniture and lights of a cell (null outside the district). */
   detail(mx: number, my: number): CellDetail | null {
     const k = cellKey(mx, my);
@@ -150,7 +179,7 @@ export class DistrictModel {
     if (!d) {
       const p = this.plan(mx, my);
       if (!p) return null;
-      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my), this.coveredIn(mx, my), this.claimed(mx, my));
+      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my), this.coveredIn(mx, my), this.claimed(mx, my), this.phones(mx, my));
       this.details.set(k, d);
     }
     return d;

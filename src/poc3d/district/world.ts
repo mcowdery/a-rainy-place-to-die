@@ -364,6 +364,17 @@ export class District {
     return out;
   }
 
+  /** The payphones within r metres of (x, z) (real/payphoneField.ts draws them): props of kind 'payphone'. */
+  phonesNear(x: number, z: number, r: number): Prop[] {
+    const out: Prop[] = [];
+    for (let my = Math.floor((z - r) / CELL); my <= Math.floor((z + r) / CELL); my++) {
+      for (let mx = Math.floor((x - r) / CELL); mx <= Math.floor((x + r) / CELL); mx++) {
+        for (const p of this.model.phones(mx, my)?.props ?? []) if (Math.hypot(p.x - x, p.z - z) < r) out.push(p);
+      }
+    }
+    return out;
+  }
+
   /** Traffic signal poles within r metres of (x, z). */
   signalsNear(x: number, z: number, r: number): Prop[] {
     const out: Prop[] = [];

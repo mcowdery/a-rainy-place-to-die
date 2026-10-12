@@ -65,6 +65,19 @@ const PROPS: Record<string, PropWords> = {
     look: ['Wires everywhere. The city keeps its nerves on the outside.', 'A utility pole, a dozen cables going who knows where.', 'Every pole has a laminated notice about something stuck to it.'],
     use: { label: 'Touch', lines: ['Concrete, rough, still holding the day’s damp.', 'Somebody has stuck a flyer here and someone else tore it half off.'], range: 2.2 },
   },
+  // (Every one can be used: E at it picks up the handset, district/payphone.ts. These are for looking.)
+  payphone: {
+    label: 'payphone',
+    h: 1.25,
+    r: 0.8,
+    look: [
+      'A public phone. Ten yen buys three minutes of somebody.',
+      'A payphone. The cord’s been twisted by ten thousand hands.',
+      night('A phone with its light on, waiting for someone with a number to call.'),
+      rain('Rain running down it. Somebody’s card is still stuck in the slot of his memory.'),
+      'The numbers are worn off the keys he’d need most.',
+    ],
+  },
   vending: {
     label: 'vending machine',
     h: 1,

@@ -233,7 +233,7 @@ export function parseZones3(file: string, text: string, macro: MacroMap, errors:
       if (!(v >= 0 && v <= 1)) err(`${at}: look.${key} must be between 0 and 1`);
       return v;
     };
-    const look: ZoneLook = { windows, walls, tiled: lookRaw.tiled === true, shops, open, homes: share('homes'), roofs: share('roofs'), bikes: share('bikes'), vice: share('vice'), block: share('block'), arch: share('arch'), church: share('church'), informal: share('informal'), street: share('street'), vending: lookRaw.vending === undefined ? null : Math.min(1, Math.max(0, Number(lookRaw.vending))) };
+    const look: ZoneLook = { windows, walls, tiled: lookRaw.tiled === true, shops, open, homes: share('homes'), roofs: share('roofs'), bikes: share('bikes'), vice: share('vice'), block: share('block'), arch: share('arch'), church: share('church'), informal: share('informal'), street: share('street'), vending: lookRaw.vending === undefined ? null : Math.min(1, Math.max(0, Number(lookRaw.vending))), payphone: lookRaw.payphone === undefined ? null : Math.min(9, Math.max(0, Number(lookRaw.payphone))) };
     zones.set(key, { key, id, name: String(raw.name), style: style as unknown as DistrictStyle3, look, ads, area });
   }
   const ids = [...zones.values()].map((z) => z.id);
