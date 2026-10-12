@@ -1492,6 +1492,20 @@ const surface = /* glsl */ `
       } else {
         albedo = vColor.rgb * (0.7 + 0.45 * gn);
       }
+      // Lawn tone (aStyle.x; the plants showroom sets it to compare): the photograph read too bright and vivid, so
+      // every lawn takes some saturation off and a tone and darkness on. 0 is the chosen one ("deep", the default),
+      // 1-5 the other candidates, 9 the old ungraded photograph.
+      if (vStyle.x < 8.5) {
+        float gv = vStyle.x;
+        float sat = 0.7; vec3 tone = vec3(0.9, 1.0, 0.9); float dk = 0.62;
+        if (gv > 0.5 && gv < 1.5) { sat = 0.65; tone = vec3(1.0); dk = 0.85; }
+        else if (gv > 1.5 && gv < 2.5) { sat = 0.55; tone = vec3(1.0, 0.95, 0.72); dk = 0.85; }
+        else if (gv > 2.5 && gv < 3.5) { sat = 0.7; tone = vec3(0.9, 1.0, 0.9); dk = 0.62; }
+        else if (gv > 3.5 && gv < 4.5) { sat = 0.5; tone = vec3(1.1, 1.0, 0.75); dk = 0.78; }
+        else if (gv > 4.5) { sat = 0.45; tone = vec3(0.9, 1.0, 0.95); dk = 0.8; }
+        float lum = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+        albedo = mix(vec3(lum), albedo, sat) * tone * dk;
+      }
       // The season: fresh in spring, deep in summer, going gold in autumn, straw in winter.
       if (uSeason < 0.5) albedo *= vec3(1.08, 1.12, 0.9);
       else if (uSeason < 1.5) albedo *= vec3(0.88, 1.02, 0.78);

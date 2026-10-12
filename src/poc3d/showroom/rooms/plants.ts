@@ -55,6 +55,35 @@ startRoom({
       treeMesh.castShadow = treeMesh.receiveShadow = true;
       genRoot.new.add(treeMesh);
     }
+    // Lawn tones: the grass was too saturated and bright, so six side by side (aStyle.x on the grass slab, read by the city
+    // shader: 0 deep, the chosen default, 1-5 other candidates, 9 the old photograph), with a pavement and a
+    // shrub on each for scale. Behind the trees (z -40 to -12); the camera items "lawns" and "lawn 1-6" are in Foliage.
+    {
+      const LAWNS = ['deep (default)', '1 · muted', '2 · olive', '4 · dry green', '5 · grey-green', 'old photograph'];
+      const LAWN_STYLE = [0, 1, 2, 4, 5, 9];
+      const pad = new MeshBuilder();
+      const mb = new MeshBuilder(1 << 14);
+      LAWNS.forEach((name, v) => {
+        const x = GARDEN_X + v * 17;
+        pad.kind = KIND.grass;
+        pad.color = lin(0x3e5a30);
+        pad.style = [LAWN_STYLE[v], 0, 0, 0];
+        pad.box(x + 8, -26, -0.2, 0.1, 16, 28, KIND.grass);
+        pad.style = [0, 0, 0, 0];
+        pad.kind = KIND.plain;
+        pad.color = lin(0x8a867e);
+        pad.box(x + 8, -11, -0.2, 0.15, 16, 3, KIND.sidewalk);
+        addTree(mb, { x: x + 4, z: -22, species: 'azalea', seed: v });
+        addTree(mb, { x: x + 12, z: -22, species: 'box', seed: v + 7 });
+        label('new', name, x + 8, 2.5, -14);
+        genItems.new.push({ name: `lawn ${name}`, group: 'Foliage', at: new THREE.Vector3(x + 8, 0.5, -24), size: 12, view: new THREE.Vector3(0.1, 0.55, 1).normalize() });
+      });
+      genItems.new.push({ name: 'all lawns', group: 'Foliage', at: new THREE.Vector3(GARDEN_X + 50, 0.5, -24), size: 70, view: new THREE.Vector3(0.1, 0.45, 1).normalize() });
+      genRoot.new.add(new THREE.Mesh(pad.build()!, city));
+      const m = new THREE.Mesh(mb.build()!, city);
+      m.castShadow = m.receiveShadow = true;
+      genRoot.new.add(m);
+    }
     // Foliage variants (models/trees.ts FOLIAGE_VARIANTS), side by side for review: each row the same trees, shrubs and
     // hedges built and shaded one way. The season buttons (the panel's Foliage) turn them all.
     const VARIANT_Z = 60;
