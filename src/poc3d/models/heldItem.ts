@@ -8,7 +8,7 @@ import type { Hands, SmokeCtx } from './smoking';
  *
  * - **the flashlight**: the hand comes up from his side to the chest and holds it out along the view, its head
  *   forward of the fist, a lens that lights up as it comes on;
- * - **the umbrella**: carried furled like a cane (the hand in front of the hip, the tip forward and down) when it
+ * - **the umbrella**: carried furled by its crook, the arm relaxed at his side when it
  *   isn't raining, and in the rain the fist comes up in front of his chest, the umbrella snaps open and stands
  *   upright over him, its rim just clear of his head.
  *
@@ -51,8 +51,8 @@ const OPEN_GRIP = 0.18;
 const OPEN_SPLIT = 3.5;
 /** The open model's shaft (its units): above the hook, within this of the axis, and how much thinner it's made. */
 const OPEN_SHAFT = { from: 0.85, within: 0.25, thin: 0.45 } as const;
-/** The furled one is 0.73 m (the tip at the origin, the hook at the top): where the hand holds it. */
-const CLOSED_GRIP = 0.6;
+/** The furled one is 0.73 m (the tip at the origin, the shaft above its cloth, the crook at the top: its bar at y 0.70 from the shaft out to x 0.07, then down): where the fist closes on the crook. */
+const CROOK = { x: 0.035, y: 0.7 } as const;
 /** Where the fist closes, from the wrist (m): along the hand, and toward the palm for the torch's body and for a shaft. */
 const GRIP = { along: 0.07, torch: 0.02, shaft: 0.045 } as const;
 /** Fingers round a torch's body and a shaft (index to little finger: three joints each). */
@@ -263,9 +263,12 @@ export class HeldItem {
       pole = new THREE.Vector3().addScaledVector(viewU, -1).addScaledVector(viewR, 0.2).addScaledVector(behind, 0.5).normalize();
     } else {
       // Furled, carried like a cane: the hand in front of the hip, the tip forward and down.
-      const lowW = at(S, rightH, fwdH, UP, 0.2, 0.2, -0.38 + bob);
-      const lowF = { fwd: fwdH.clone().addScaledVector(UP, -0.25).normalize(), palm: rightH.clone().negate() };
-      const lowP = new THREE.Vector3().addScaledVector(UP, -1).addScaledVector(rightH, 0.5).addScaledVector(behind, 0.5).normalize();
+      // Furled, carried by its crook with his arm relaxed at his side (the user, 2026-10-12: "he holds umbrella
+      // awkwardly when it's not raining", then "his elbow shouldn't be bent at all. he should have it relaxed at his
+      // side"): the arm is the rig's own hanging, swinging arm, the umbrella hanging plumb from the fist.
+      const lowW = usual.clone();
+      const lowF = { fwd: usualF.fwd.clone(), palm: usualF.palm.clone() };
+      const lowP = new THREE.Vector3().addScaledVector(UP, -1).addScaledVector(rightH, 0.3).addScaledVector(behind, 0.6).normalize();
       // Open in the rain, as a man holds one (the user's reference, 2026-10-12): the fist in front of his chest, a
       // hand's length under his chin and a little to his right, the arm folded with the elbow at his side, the shaft
       // upright and leaning back a little: the canopy's rim is then just over his head and he is under its middle.
@@ -332,9 +335,20 @@ export class HeldItem {
     if (!model) return;
     model.visible = true;
     const s = openNow ? OPEN_SCALE * sc : sc;
-    const gripAt = openNow ? OPEN_GRIP : CLOSED_GRIP;
-    model.position.copy(grip).addScaledVector(up, -gripAt * sc);
+    const gripAt = OPEN_GRIP;
     model.scale.setScalar(s);
+    if (!openNow) {
+      // Hanging from his fist by its crook: the crook's bar (the model's +x, from the shaft out to the hook's end)
+      // lies along the fist's axis, its end forward, the shaft plumb.
+      const down = UP.clone().addScaledVector(new THREE.Vector3(c.fx, 0, c.fz), -0.08).normalize();
+      const bar = across.clone();
+      if (bar.dot(new THREE.Vector3(c.fx, 0, c.fz)) < 0) bar.negate();
+      bar.addScaledVector(down, -bar.dot(down)).normalize();
+      model.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(bar, down, new THREE.Vector3().crossVectors(bar, down)));
+      model.position.copy(grip).addScaledVector(bar, -CROOK.x * sc).addScaledVector(down, -CROOK.y * sc);
+      return;
+    }
+    model.position.copy(grip).addScaledVector(up, -gripAt * sc);
     if (openNow) {
       // (Its hook curls back toward him: the model's is toward -x, so its +x goes the way he faces.)
       const ahead = new THREE.Vector3(c.fx, 0, c.fz);
@@ -346,6 +360,6 @@ export class HeldItem {
       o.open = ease(this.openK);
       o.canopy.copy(model.position).addScaledVector(up, OPEN_CANOPY * sc);
       o.radius = (OPEN_DIAMETER / 2) * sc * w;
-    } else model.quaternion.setFromUnitVectors(UP, up);
+    }
   }
 }
