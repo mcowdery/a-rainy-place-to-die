@@ -496,8 +496,8 @@ export class TrainSystem {
     const first = byS0[0]?.names ?? { jp: '', en: '' };
     const last = byS0[byS0.length - 1]?.names ?? { jp: '', en: '' };
     const old = carSet(line.color, city, line.kind === 'monorail');
-    // The monorail keeps its own cars for now.
-    const makers = cars && line.kind !== 'monorail' ? { up: carSet2(line.color, cars, { dest: last }), down: carSet2(line.color, cars, { dest: first }) } : null;
+    const mono = line.kind === 'monorail';
+    const makers = cars ? { up: carSet2(line.color, cars, { dest: last, monorail: mono }), down: carSet2(line.color, cars, { dest: first, monorail: mono }) } : null;
     const setsByGroup = new Map<THREE.Group, TrainSet2>();
     const set = (dir = 1): THREE.Group => {
       if (!makers) return old();

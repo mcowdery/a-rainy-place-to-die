@@ -71,6 +71,25 @@ startRoom({
       sub.group.children.forEach((car, i) => (car.position.z = (i - 1) * (CAR.L + CAR.GAP)));
       sub.group.position.set(at.x - 9, 0.2, at.z);
       genRoot.new.add(sub.group);
+      // The Tōto Monorail's car (straddle type: skirts down either side of its beam, a faceted nose), on a beam 1.2 m up.
+      {
+        const mx = at.x - 18;
+        const beam = new MeshBuilder();
+        beam.kind = KIND.plain;
+        beam.color = lin(0x9a9ea2);
+        beam.box(mx, at.z, 0.05, 1.15, 1.1, 70, KIND.plain);
+        scene.add(new THREE.Mesh(beam.build()!, city));
+        const mono = carSet2(0x2a8ad8, mats, { monorail: true, dest: { jp: '東京空港', en: 'Tokyo Airport' } })();
+        mono.group.children.forEach((car, i) => (car.position.z = (i - 1) * (CAR.L + CAR.GAP)));
+        mono.group.position.set(mx, 1.2, at.z);
+        mono.setScreens({ jp: '東京港', en: 'Tokyo Port', code: 'M02' }, { jp: '東京空港', en: 'Tokyo Airport' });
+        mono.setDoors(-1, 1);
+        genRoot.new.add(mono.group);
+        label('new', 'Tōto Monorail car (new)', mx, 7, at.z);
+        genItems.new.push({ name: 'monorail', group: 'Transit', at: new THREE.Vector3(mx, 3, at.z), size: 60, view: new THREE.Vector3(1, 0.3, 0.6).normalize() });
+        genItems.new.push({ name: 'monorail (nose)', group: 'Transit', at: new THREE.Vector3(mx, 2.6, at.z + 28), size: 8, view: new THREE.Vector3(0.6, 0.1, 1).normalize() });
+        genItems.new.push({ name: 'monorail (inside)', group: 'Transit', at: new THREE.Vector3(mx, 3.6, at.z + 3), size: 3, view: new THREE.Vector3(0.01, 0.05, 1).normalize() });
+      }
       label('new', 'Toto Line commuter car (new)', at.x, 6, at.z);
       label('new', 'subway car (Yakō Line colours)', at.x - 9, 6, at.z);
       for (const g of ['new', 'previous'] as const) {
