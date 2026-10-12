@@ -34,7 +34,7 @@ describe('the elevated lines', () => {
     const codes = (id: string) => net.lines.find((l) => l.id === id)!.stops.map((s) => `${s.code} ${s.en}`);
     expect(codes('toto')).toEqual(['T01 GAKUENZAKA', 'T02 ASAGIRI', 'T03 TŌTO-CHŪŌ', 'T04 KABURO', 'T05 KASUMI-CHŌ']);
     expect(codes('kawabata')).toEqual(['K01 KABURO-HIGASHI', 'K02 DENKŌ-CHŌ', 'K03 KAWABATA']);
-    expect(codes('monorail')).toEqual(['M01 KASUMI-CHŌ', 'M02 TŌTO-KŌ', 'M03 TŌTO AIRPORT']);
+    expect(codes('monorail')).toEqual(['M01 KASUMI-CHŌ', 'M02 TOKYO PORT', 'M03 TOKYO AIRPORT']);
     for (const p of content.placed.filter((q) => q.stamp.landmark === 'station')) {
       const l = line(p.stamp.station?.line ?? 'toto');
       const st = railStation(l, p.id, p.stamp.station!, p.building.x, p.building.z);

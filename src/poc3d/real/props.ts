@@ -15,6 +15,7 @@ import { addTree, foliageVariant, setFoliageVariant, TREE_REACH, type TreeSpecie
 import { addDressing } from './dressing';
 import { footbridges, underFootbridge } from '../district/footbridges';
 import { openLayout, type OpenLayout } from './openLots';
+import type { PhonePlacement } from './phoneSites';
 
 /** Cell size (district/plan.ts CELL): signals stand where cell-edge roads cross. */
 const CELL3 = 128;
@@ -108,9 +109,13 @@ export function cellDetail(
   covered: readonly Rect[] = [],
   /** Ground something else of the street's stands on (a bus stop and where people wait at it: DistrictModel.claimed): nothing here goes in it. */
   claimed: readonly Rect[] = [],
+  /** The cell's payphones (phoneSites.ts placePhones: DistrictModel.phones), which stand before anything else here. */
+  phones: PhonePlacement | null = null,
 ): CellDetail {
   const props: Prop[] = [];
-  const taken = (x: number, z: number, m = 0): boolean => claimed.some((q) => x > q.x - m && x < q.x + q.w + m && z > q.y - m && z < q.y + q.h + m);
+  // (The payphones, placed below, add the ground they take.)
+  const claims: Rect[] = [...claimed];
+  const taken = (x: number, z: number, m = 0): boolean => claims.some((q) => x > q.x - m && x < q.x + q.w + m && z > q.y - m && z < q.y + q.h + m);
   const wires: C3[][] = [];
   const lights: Light[] = [];
   const cell = plan.rect;
@@ -132,8 +137,15 @@ export function cellDetail(
   const inBuilding = (x: number, z: number, m: number): boolean => buildings.some((b) => Math.abs(x - b.x) < b.w / 2 + m && Math.abs(z - b.z) < b.d / 2 + m);
 
   const style = plan.style;
-  // Manila: how much street clutter the cell's zones want (0 for Tōto), and the pole runs with their wire bundles.
+  // Manila: how much street clutter the cell's zones want (0 for Tokyo), and the pole runs with their wire bundles.
   const fil = filipino();
+  // The payphones first (after the bus stops, whose ground they kept off): the rest keeps off theirs. They are
+  // props, for what blocks and what is looked at, but the chunks don't draw them (real/payphoneField.ts does).
+  if (phones) {
+    props.push(...phones.props);
+    lights.push(...phones.lights);
+    claims.push(...phones.claims);
+  }
   const cellStreet = fil ? plan.buildings.reduce((m, b) => Math.max(m, b.zone?.look.street ?? 0), 0) : 0;
   const rc = { props, lights, mine };
   type Along = (t: number, side: number, inset: number) => [number, number, number, number];
@@ -463,7 +475,7 @@ export function cellDetail(
   }
   // Open ground: its props and lights, and solids for collision.
   const open = plan.open.map((o) => openLayout(o, buildings));
-  const solids: Rect[] = [];
+  const solids: Rect[] = [...(phones?.solids ?? [])];
   for (const o of open) {
     props.push(...o.props);
     lights.push(...o.lights);
@@ -581,121 +593,6 @@ function vendingMachine(mb: MeshBuilder, p: Prop, o: C3, r: C3, n: C3): void {
   panel(-0.36, 0.36, 0.17, 0.36, 0.41);
 }
 
-/**
- * Public telephone (公衆電話), three designs by `variant`: 0 the green card-and-coin phone under a small hood on a
- * post (the street's common one, from the early 80s); 1 a telephone booth (電話ボックス: green aluminium frame,
- * glass, a lit roof sign, the phone and a shelf inside); 2 the older red coin phone on a post by a shop front
- * (with its dial). The lit parts are always on, so a phone reads in the dark street. Reviewed in
- * `models-buildings.html` before it's placed anywhere.
- */
-function payphone(mb: MeshBuilder, p: Prop, o: C3, r: C3, n: C3): void {
-  const v = p.variant % 3;
-  const at = (x: number, y: number, d: number): C3 => [o[0] + r[0] * x + n[0] * d, y, o[2] + r[2] * x + n[2] * d];
-  const panel = (x0: number, x1: number, y0: number, y1: number, d: number): void =>
-    mb.quad(at(x0, y0, d), [r[0] * (x1 - x0), 0, r[2] * (x1 - x0)], [0, y1 - y0, 0]);
-  const plain = (hex: number): void => {
-    mb.kind = KIND.plain;
-    mb.style = [0, 0, 0, 0];
-    mb.color = lin(hex);
-  };
-  const glow = (c: C3): void => {
-    mb.kind = KIND.emit;
-    mb.style = [EMIT.always, 0, 0, 0];
-    mb.color = c;
-  };
-  /** The telephone itself, facing +n at depth `d`, its body `hex`: handset on the right, display, keypad, slots. */
-  const set = (x: number, y: number, d: number, hex: number, dial: boolean): void => {
-    plain(hex);
-    mb.frameBox(o, r, n, x - 0.17, x + 0.17, y, y + 0.42, d - 0.12, d + 0.02);
-    const f = d + 0.025;
-    plain(0x1c1d20);
-    mb.frameBox(o, r, n, x + 0.1, x + 0.19, y + 0.02, y + 0.4, f - 0.01, f + 0.05);
-    glow([1.0, 0.62, 0.15]);
-    if (!dial) panel(x - 0.12, x + 0.06, y + 0.3, y + 0.37, f);
-    plain(0x111214);
-    if (dial) {
-      panel(x - 0.12, x + 0.07, y + 0.08, y + 0.33, f);
-      glow([0.9, 0.88, 0.8]);
-      for (let i = 0; i < 10; i++) {
-        const a = 0.9 + (i / 10) * 4.6;
-        const cx = x - 0.025 + Math.cos(a) * 0.065;
-        const cy = y + 0.205 + Math.sin(a) * 0.065;
-        panel(cx - 0.012, cx + 0.012, cy - 0.012, cy + 0.012, f + 0.005);
-      }
-    } else {
-      panel(x - 0.12, x + 0.06, y + 0.08, y + 0.27, f);
-      glow([0.8, 0.82, 0.8]);
-      for (let k = 0; k < 12; k++) {
-        const kx = x - 0.1 + (k % 3) * 0.055;
-        const ky = y + 0.1 + (k >> 2) * 0.042;
-        panel(kx, kx + 0.04, ky, ky + 0.028, f + 0.005);
-      }
-      plain(0x0a0a0b);
-      panel(x - 0.12, x - 0.03, y + 0.02, y + 0.045, f);
-      panel(x - 0.01, x + 0.06, y + 0.02, y + 0.045, f);
-    }
-  };
-  if (v === 0) {
-    // A post, the green set, and a hood over it with a lit strip under its lip.
-    plain(0x55585c);
-    mb.cylinder(p.x, p.z, 0, 0.98, 0.05, 6);
-    set(0, 1.0, 0.06, 0x2e7a52, false);
-    plain(0x3a3d41);
-    mb.frameBox(o, r, n, -0.3, 0.3, 0.92, 1.76, -0.16, -0.1);
-    mb.frameBox(o, r, n, -0.32, 0.32, 1.72, 1.78, -0.16, 0.34);
-    mb.frameBox(o, r, n, -0.32, -0.29, 0.92, 1.76, -0.16, 0.3);
-    mb.frameBox(o, r, n, 0.29, 0.32, 0.92, 1.76, -0.16, 0.3);
-    glow([0.55, 1.0, 0.7]);
-    panel(-0.26, 0.26, 1.69, 1.72, 0.3);
-    // The green "公衆電話" plate on the hood's front edge, as a lit green bar.
-    glow([0.2, 0.75, 0.4]);
-    panel(-0.3, 0.3, 1.78, 1.9, 0.34);
-  } else if (v === 1) {
-    // The booth: a slab, four posts, glass round three sides and a doorway in front, a roof and a lit sign.
-    const hw = 0.43;
-    const d0 = -0.45;
-    const d1 = 0.45;
-    plain(0x6a6c70);
-    mb.frameBox(o, r, n, -hw - 0.04, hw + 0.04, 0, 0.06, d0 - 0.04, d1 + 0.04);
-    plain(0x2a6a48);
-    for (const x of [-hw, hw]) for (const d of [d0, d1]) mb.frameBox(o, r, n, x - 0.025, x + 0.025, 0.06, 2.22, d - 0.025, d + 0.025);
-    mb.frameBox(o, r, n, -hw - 0.03, hw + 0.03, 2.22, 2.32, d0 - 0.03, d1 + 0.03);
-    mb.frameBox(o, r, n, -hw, hw, 1.05, 1.1, d0, d0 + 0.02);
-    mb.frameBox(o, r, n, -hw, -hw + 0.02, 1.05, 1.1, d0, d1);
-    mb.frameBox(o, r, n, hw - 0.02, hw, 1.05, 1.1, d0, d1);
-    // The phone on the back wall with a shelf under it, and the book on the shelf.
-    set(0, 1.12, d0 + 0.14, 0x2e7a52, false);
-    plain(0x2a6a48);
-    mb.frameBox(o, r, n, -0.38, 0.38, 0.98, 1.02, d0, d0 + 0.3);
-    plain(0xc8a020);
-    mb.frameBox(o, r, n, -0.2, 0.0, 1.02, 1.08, d0 + 0.05, d0 + 0.25);
-    // Glass: back, left and right (the doorway stays open).
-    mb.kind = KIND.glass;
-    mb.style = [0, 0, 0, 0];
-    mb.color = lin(0x16181c);
-    mb.quad(at(hw, 0.06, d0 + 0.005), [-r[0] * 2 * hw, 0, -r[2] * 2 * hw], [0, 2.16, 0]);
-    mb.quad(at(-hw, 0.06, d0), [n[0] * (d1 - d0), 0, n[2] * (d1 - d0)], [0, 2.16, 0]);
-    mb.quad(at(hw, 0.06, d1), [-n[0] * (d1 - d0), 0, -n[2] * (d1 - d0)], [0, 2.16, 0]);
-    // The ceiling light, and the sign on the roof.
-    glow([1.0, 0.9, 0.7]);
-    panel(-0.3, 0.3, 2.2, 2.21, d1 - 0.1);
-    mb.frameBox(o, r, n, -0.2, 0.2, 2.22, 2.24, -0.2, 0.2);
-    glow([0.2, 0.8, 0.45]);
-    mb.frameBox(o, r, n, -0.26, 0.26, 2.32, 2.52, d1 - 0.1, d1 - 0.07);
-    plain(0x2a6a48);
-    mb.frameBox(o, r, n, -0.28, 0.28, 2.32, 2.54, d1 - 0.07, d1 - 0.03);
-  } else {
-    // The older red set on a post, with a small shelf and a coin box under it.
-    plain(0x55585c);
-    mb.cylinder(p.x, p.z, 0, 1.0, 0.05, 6);
-    plain(0x3a3d41);
-    mb.frameBox(o, r, n, -0.2, 0.2, 0.96, 1.0, -0.08, 0.2);
-    set(0, 1.0, 0.06, 0xb8242a, true);
-    plain(0x8a1a20);
-    mb.frameBox(o, r, n, -0.15, 0.15, 1.42, 1.5, -0.12, 0.04);
-  }
-}
-
 /** Geometry for a cell's props and wires; with `signs`, the parked cars' lettering and ads. */
 /**
  * Which props a build takes: all of them, only those with a middle-distance version (`swap`: parked cars,
@@ -787,7 +684,7 @@ export function addProps(mb: MeshBuilder, d: CellDetail, signs?: VehicleSigns, p
     } else if (p.kind === 'signal') {
       signal(mb, p);
     } else if (p.kind === 'payphone') {
-      payphone(mb, p, o, r, n);
+      // (Not the chunk's to draw: every one can be used, so real/payphoneField.ts draws them.)
     } else if (p.kind !== 'vending') {
       addDressing(mb, p, signs);
     } else {
@@ -796,7 +693,7 @@ export function addProps(mb: MeshBuilder, d: CellDetail, signs?: VehicleSigns, p
   }
   if (mid) setFoliageVariant(variant);
   // Manila's wire bundles (about 13 wires a span, ~10k triangles a cell) are a swap part too: full within the middle
-  // distance, beyond it every other wire in two segments (a third of the triangles). Tōto's stay in the fixed part.
+  // distance, beyond it every other wire in two segments (a third of the triangles). Tokyo's stay in the fixed part.
   const swapWires = filipino();
   if (part === 'swap' && !swapWires) return;
   if (part === 'fixed' && swapWires) return;

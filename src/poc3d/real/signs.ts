@@ -488,7 +488,7 @@ function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: 
  * Whether a building carries the channel-letter rooftop billboard (so photo billboards go elsewhere): only
  * where the letters can be seen from the street (see sightline.ts).
  */
-/** Whether some taller buildings carry the big neon channel letters on their roofs (cityConfig.ts `rooftopSigns`: Tōto's skyline, not Manila's). Set once at startup, in the workers too. */
+/** Whether some taller buildings carry the big neon channel letters on their roofs (cityConfig.ts `rooftopSigns`: Tokyo's skyline, not Manila's). Set once at startup, in the workers too. */
 let ROOFTOP_SIGNS = true;
 export const setRooftopSigns = (on: boolean): void => void (ROOFTOP_SIGNS = on);
 

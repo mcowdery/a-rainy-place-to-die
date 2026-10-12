@@ -289,7 +289,7 @@ export const KABURO_KIT_BUILDERS: Record<KaburoKitKind, (k: Kit, id: string, par
       text(g, '本年', 70, 210, "bold 30px 'Yu Gothic', sans-serif", '#1a1a1a');
       text(g, '死者 37人', 190, 195, "bold 28px 'Yu Gothic', sans-serif", '#c81818');
       text(g, '負傷者 9,812人', 190, 235, "bold 26px 'Yu Gothic', sans-serif", '#1a1a1a');
-      text(g, '東都警視庁', 150, 278, "bold 22px 'Yu Gothic', sans-serif", '#1a3a8a');
+      text(g, '警視庁', 150, 278, "bold 22px 'Yu Gothic', sans-serif", '#1a3a8a');
     }), 1.0, 1.0, w + 0.03, 5.6, 1.7, '+u', 1.0);
     for (const t of [0.95, 1.85]) {
       const [x, z] = toWorld(k.f, w + 0.55, t);
@@ -346,7 +346,7 @@ export const KABURO_KIT_BUILDERS: Record<KaburoKitKind, (k: Kit, id: string, par
       g.fill();
       text(g, 'STOP', 150, 212, "900 54px Arial, sans-serif", '#ffffff');
     }), 2.2);
-    posterAt(poster(k, 'トートくん', '東都の安全を守ります', '#d8ecff', '#1a3a8a', (g) => {
+    posterAt(poster(k, 'トートくん', '東京の安全を守ります', '#d8ecff', '#1a3a8a', (g) => {
       g.fillStyle = '#f8c040';
       g.beginPath();
       g.arc(150, 200, 80, 0, Math.PI * 2);

@@ -23,7 +23,7 @@ nodes:
     view: [180, 2]
   board:
     kind: station
-    name: Monorail to the Airport 東都空港
+    name: Monorail to the Airport 東京空港
     at: [44, 5.4]
     floor: 9.1
     returnSpawn: airport_station.platform

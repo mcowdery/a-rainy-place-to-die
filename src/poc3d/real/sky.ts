@@ -74,7 +74,7 @@ export class Sky {
     uMountains: { value: 0 },
     /** Winter: snow on the ranges' tops as well as the cone (0-1). */
     uWinter: { value: 0 },
-    /** The ranges' azimuth sector (fade in from/to, fade out from/to), the one cone (azimuth, width, height in radians, snow 0-1) and its plume (0-1): Fuji for Tōto, a volcano for Manila (cityConfig.ts `mountains`). */
+    /** The ranges' azimuth sector (fade in from/to, fade out from/to), the one cone (azimuth, width, height in radians, snow 0-1) and its plume (0-1): Fuji for Tokyo, a volcano for Manila (cityConfig.ts `mountains`). */
     uSector: { value: new THREE.Vector4(-2.6, -2.25, 0.85, 1.25) },
     uCone: { value: new THREE.Vector4(-1.95, 0.3, 0.092, 1) },
     uPlume: { value: 0 },

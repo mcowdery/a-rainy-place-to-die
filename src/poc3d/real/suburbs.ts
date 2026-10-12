@@ -313,7 +313,7 @@ export const SUBURB_BUILDERS: Record<SuburbKind, (k: Kit) => ((camera: THREE.Vec
       g.fillStyle = '#1a1a1a';
       for (let i = -H; i < W; i += 28) g.fillRect(i, 0, 12, H * 0.14);
       text(g, '立入禁止', W / 2, H * 0.48, `bold ${Math.round(H * 0.3)}px 'Yu Gothic', sans-serif`, '#1a1a1a');
-      text(g, '東都地下放水路 第3立坑', W / 2, H * 0.78, `bold ${Math.round(H * 0.14)}px 'Yu Gothic', sans-serif`, '#1a1a1a');
+      text(g, '東京地下放水路 第3立坑', W / 2, H * 0.78, `bold ${Math.round(H * 0.14)}px 'Yu Gothic', sans-serif`, '#1a1a1a');
     });
   },
 

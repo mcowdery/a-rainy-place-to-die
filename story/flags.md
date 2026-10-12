@@ -1,6 +1,6 @@
 # Flags
 
-Story flags live in one store (`FlagStore`, `src/core/flags.ts`), shared by VN scenes, KAIWA chats, node
+Story flags live in one store (`FlagStore`, `src/core/flags.ts`), shared by VN scenes, pager and phone beats (once KAIWA is replaced: [phone.md](phone.md)), node
 `condition`s and saves. Kept by hand for now; once scenes are written as scripts, a check will build or verify
 this list.
 

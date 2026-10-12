@@ -1527,7 +1527,7 @@ export const MANILA_SWAP: Readonly<Record<string, Scene>> = {
   },
 };
 
-/** The clothes of Tōto's people that Manila's wouldn't wear: the yukata, the kimono, the yakuza's, mapped to its own. */
+/** The clothes of Tokyo's people that Manila's wouldn't wear: the yukata, the kimono, the yakuza's, mapped to its own. */
 const MANILA_WHO: Partial<Record<CastName, CastName>> = {
   robe: 'man2', robe2: 'woman2', mama: 'dress', yakuza: 'hood', yakuza2: 'hood', oyabun: 'fatcat', chinpira: 'man2',
 };

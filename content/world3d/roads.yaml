@@ -5,12 +5,12 @@
 # width: kerb to kerb plus both pavements (m); median: a raised central strip (m, 0 for none), where the
 # expressway's piers stand. Later entries override earlier ones on the same edge.
 #
-# The four round the Tōto Expressway's inner loop (expressway.yaml), 32 m: two lanes each way either side of
+# The four round the Shuto Expressway's inner loop (expressway.yaml), 32 m: two lanes each way either side of
 # the median, 3 m pavements, the deck overhead. They run a block on past the loop's corners (so the corner
 # junctions are wide both ways). Yogiri-dōri, Kaburo Crossing's avenue a block inside the loop's south side
 # (Yasuhara-dōri, along Kaburo's southern edge), is as wide, without the deck.
 avenues:
-  - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 20, to: 32, width: 32, median: 2.4 }
+  - { name: 東京大通り TOKYO-ŌDŌRI, row: 10, from: 20, to: 32, width: 32, median: 2.4 }
   - { name: 夜霧通り YOGIRI-DŌRI, row: 12, from: 20, to: 32, width: 32, median: 2.4 }
   - { name: 靖原通り YASUHARA-DŌRI, row: 13, from: 20, to: 32, width: 32, median: 2.4 }
   - { name: 朝霧西通り ASAGIRI-NISHI-DŌRI, col: 21, from: 8, to: 18, width: 32, median: 2.4 }
@@ -36,8 +36,8 @@ avenues:
   - { name: 北大通り KITA-ŌDŌRI, row: 6, from: 22, to: 37, width: 24, median: 0 }
 # Over the river into Kawabata: the crosstown avenues run on east of their bridges (bridges below).
   - { name: 北大通り KITA-ŌDŌRI, row: 6, from: 38, to: 42, width: 20, median: 0 }
-  - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 32, to: 37, width: 24, median: 0 }
-  - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 38, to: 43, width: 24, median: 0 }
+  - { name: 東京大通り TOKYO-ŌDŌRI, row: 10, from: 32, to: 37, width: 24, median: 0 }
+  - { name: 東京大通り TOKYO-ŌDŌRI, row: 10, from: 38, to: 43, width: 24, median: 0 }
   - { name: 靖原通り YASUHARA-DŌRI, row: 13, from: 32, to: 37, width: 20, median: 0 }
   - { name: 靖原通り YASUHARA-DŌRI, row: 13, from: 38, to: 43, width: 20, median: 0 }
   - { name: 霞通り KASUMI-DŌRI, row: 16, from: 38, to: 43, width: 20, median: 0 }
@@ -47,9 +47,9 @@ avenues:
 
 # The Toto Line's viaduct runs on south through Kasumi-chō over its own street, as wide as it is between the districts.
   - { name: 高架下通り KŌKASHITA-DŌRI, col: 26, from: 14, to: 17, width: 16, median: 0 }
-  # Past the terminal, Tōto-ōdōri narrows over the Seikō Line's Tōto-Chūō station (subway stations stand
+  # Past the terminal, Tokyo-ōdōri narrows over the Seikō Line's Tōto-Chūō station (subway stations stand
   # 10 m from their road's centre, so a road with a line under it is 20 m at most).
-  - { name: 東都大通り TŌTO-ŌDŌRI, row: 10, from: 25, to: 26, width: 20, median: 2.4 }
+  - { name: 東京大通り TOKYO-ŌDŌRI, row: 10, from: 25, to: 26, width: 20, median: 2.4 }
   # The outer ring road (外環 GAIKAN) round the west and north-west: up the city's west side to the heights, along
   # under the summit, and down the valley to Asagiri-nishi-dōri; Kita-ōdōri across the heights.
   - { name: 外環通り GAIKAN-DŌRI, col: 10, from: 4, to: 18, width: 24, median: 0 }
@@ -87,6 +87,6 @@ bridges:
   - { name: 羽根島大橋 HANEJIMA-ŌHASHI, col: 8, from: 22, to: 23, width: 32, median: 2.4 }
 # Over the river (隅川 Sumikawa) to Kawabata.
   - { name: 北橋 KITA-BASHI, row: 6, from: 37, to: 38, width: 20, median: 0 }
-  - { name: 東都橋 TŌTO-BASHI, row: 10, from: 37, to: 38, width: 24, median: 0 }
+  - { name: 東京橋 TOKYO-BASHI, row: 10, from: 37, to: 38, width: 24, median: 0 }
   - { name: 靖原橋 YASUHARA-BASHI, row: 13, from: 37, to: 38, width: 20, median: 0 }
   - { name: 霞橋 KASUMI-BASHI, row: 16, from: 37, to: 38, width: 20, median: 0 }

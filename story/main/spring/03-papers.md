@@ -17,7 +17,7 @@ they were written.
   go, and remembers his face.
 - **The file.** She learns the Saeki case (the opening) was closed on an order from above, in a day. She asks
   why, and the station goes quiet. Her own senpai takes an envelope from Ryujin Kogyo's men every month.
-- **The face.** In an old file on a dead foreigner, a newspaper clipping: "American reporter drowned in Tōto
+- **The face.** In an old file on a dead foreigner, a newspaper clipping: "American reporter drowned in Tokyo
   Bay", the Tōto Shimbun's crime reporter, his photograph above it. The man she stopped. She knows who Mack was,
   before he does: she's the one who tells him his name.
 - **Her choice.** Report him, or keep his secret; stay quiet about the envelopes, or not.

@@ -1,6 +1,6 @@
 /**
  * Which animals are about, and how many (pure, tested in tests/faunaMix.test.ts): the street's birds, cats, dogs,
- * hens, bats and insects, by the city (Tōto's are Japan's, Manila's the tropics'), the hour, the season, the
+ * hens, bats and insects, by the city (Tokyo's are Japan's, Manila's the tropics'), the hour, the season, the
  * weather and the place (trees and water near). `real/fauna.ts` keeps that many of each in range of the viewer.
  */
 

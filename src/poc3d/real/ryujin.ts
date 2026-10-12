@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DECOR_PEOPLE } from './kit';
 import type { Rect } from '../../core/coords';
 import type { Building3 } from '../district/plan';
 import { WIN } from './buildings';
@@ -224,6 +225,7 @@ export function buildRyujin(b: Building3, city: THREE.Material, ghost: THREE.Mat
     const m = new THREE.Mesh(crowd, ghost);
     m.renderOrder = 2;
     group.add(m);
+    DECOR_PEOPLE.push(m);
   }
   return group;
 }

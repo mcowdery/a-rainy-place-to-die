@@ -30,7 +30,7 @@ far the city has got into him.
   - *People*: a name the first time someone introduces themselves; a title when he sees what it means. The day
     he uses someone's name is a beat ([cast/dom.md](cast/dom.md)).
   - *Koharu*, once she's at the agency in summer: she teaches him too, with less patience than Mack.
-- **A record.** The phone keeps what he's learned: the places, the people with a face and a line, the words.
+- **A record.** The notebook keeps what he's learned: the places, the people with a face and a line, the words.
   It's also the who's-who players need (see [names.md](names.md)).
 - **Never a wall.** What the story needs always gets through: Mack, someone who speaks English, a written note.
   Not understanding is a feeling, not a block.
@@ -75,4 +75,4 @@ people doing their best, never a joke at their expense. (Dom may take it as one,
 - Text display that glosses known words in parentheses, from a vocabulary of what Dom has learned (places,
   people, words), saved with him.
 - The HUD, map and signs reading from the same vocabulary, and plainly when the player is Mack.
-- The phone's record.
+- The notebook's record.

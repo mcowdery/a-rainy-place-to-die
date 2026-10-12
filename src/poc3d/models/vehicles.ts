@@ -494,7 +494,7 @@ export const WORK_LIVERIES: WorkLivery[] = [
   { name: '東都運輸', sub: 'TŌTO UNYU', ink: 0x1c3f8a, band: 0x1c3f8a, on: ['boxtruck', 'van'] },
   { name: 'つばめ急便', sub: 'TSUBAME EXPRESS', ink: 0x1e7a46, band: 0x1e7a46, on: ['boxtruck', 'keivan', 'van'] },
   { name: '若葉引越センター', sub: 'お引越しは若葉へ', ink: 0x2a8a3a, band: 0xe8a020, on: ['boxtruck'] },
-  { name: '丸三水産', sub: '東都中央卸売市場', ink: 0x18346e, on: ['boxtruck', 'keivan'] },
+  { name: '丸三水産', sub: '東京中央卸売市場', ink: 0x18346e, on: ['boxtruck', 'keivan'] },
   { name: '青葉電気工事', sub: '電気工事・空調', ink: 0xd0601a, band: 0xd0601a, on: ['van', 'keivan'] },
   { name: '鈴木工務店', sub: '住まいのリフォーム', ink: 0x2c2c30, on: ['van'] },
   { name: '酒の丸八', sub: '配達いたします', ink: 0xa01818, on: ['keivan'] },
@@ -502,7 +502,7 @@ export const WORK_LIVERIES: WorkLivery[] = [
   { name: '花のさくら屋', sub: 'FLOWER SAKURAYA', ink: 0xc8407a, on: ['keivan'] },
   { name: '東都ガス', sub: 'ガス・暮らしのサービス', ink: 0x1c4a9a, band: 0x1c4a9a, on: ['van'] },
 ];
-/** Manilaya's working vehicles' lettering (all invented firms), in place of Tōto's: English and Tagalog. */
+/** Manilaya's working vehicles' lettering (all invented firms), in place of Tokyo's: English and Tagalog. */
 const MANILA_WORK_LIVERIES: readonly WorkLivery[] = [
   { name: 'BAYANIHAN MOVERS', sub: 'LIPAT-BAHAY SERVICE', ink: 0x1c3f8a, band: 0x1c3f8a, on: ['boxtruck', 'van'] },
   { name: 'PERLAS CARGO', sub: 'MANILAYA - SEBU - DABAW', ink: 0x1e7a46, band: 0x1e7a46, on: ['boxtruck', 'keivan', 'van'] },

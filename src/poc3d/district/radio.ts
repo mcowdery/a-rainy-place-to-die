@@ -35,7 +35,7 @@ export interface Station {
   readonly freq: string;
   readonly blurb: string;
   readonly tracks: readonly Track[];
-  /** The cities whose dial has it (cityConfig.ts ids): Tōto's when the file doesn't say. */
+  /** The cities whose dial has it (cityConfig.ts ids): Tokyo's when the file doesn't say. */
   readonly cities?: readonly string[];
 }
 

@@ -37,12 +37,12 @@ the player something about him.
 - **Victims.** Men the circle has cuckolded: the men another man took a woman from, whom he counts as the bottom
   of the hierarchy. Never women; the women are his instrument, not his target. Never the men who did the taking.
 - **Method** (what he does to kill): the circle does the work first: the seduction, the recording. Then he comes
-  himself, by text, before the end: an unknown number posing as someone who knows the wrong being done to the man,
-  an ally. He feeds the man dread, then a false alarm and an apology, so relief comes and the end lands harder.
-  He delivers the ruin himself, without a word (the video sent to Minato). Then he keeps texting, mocking, sending
-  more, and finally lures the man out with a message forged in the woman's own name, from her own account, which
-  her phone shows she never sent.
-  The number doesn't exist.
+  himself, by voice, before the end: an unknown caller leaving messages on the man's machine, posing as someone who knows
+  the wrong being done to him, an ally. He feeds the man dread, then a false alarm and an apology, so relief comes and the end lands harder.
+  He delivers the ruin himself, without a word (the tape sent to Minato). Then he keeps calling, mocking, sending
+  more, and finally lures the man out with a message forged in the woman's own voice, cut together from her own
+  recordings, which her own line shows she never made.
+  The number he leaves rings in an empty phone box.
 - **Signature** (what he does because he needs to): humiliation, layer by layer: the woman, the pride, the body,
   the life. The mutilation degrades; it isn't needed to kill. And the 200, small, somewhere near.
 - **Staging.** Every scene is dressed as something ordinary (a suicide, a murder-suicide, an accident), and the

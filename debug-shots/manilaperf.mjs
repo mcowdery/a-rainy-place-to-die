@@ -1,4 +1,4 @@
-// Frame cost at the same kinds of places in Manila and Toto, standing still (CPU and GPU ms from ?diag=1's __perf,
+// Frame cost at the same kinds of places in Manila and Tokyo, standing still (CPU and GPU ms from ?diag=1's __perf,
 // draw calls and triangles from the renderer, triangles in view by top-level group from __tris).
 //   node debug-shots/manilaperf.mjs <out dir> [city=manila|toto] [spots=all|name,name] [extra query, e.g. "time=night&weather=rain&flood=1"]
 // Runs exclusive on the GPU (it times frames).
@@ -42,7 +42,7 @@ try {
   const q = city === 'manila' ? 'city=manila&' : '';
   for (const [name, x, z, yaw] of SPOTS) {
     if (only && !only.includes(name)) continue;
-    // One boot a spot, the camera placed by ?cam= (Toto's start otherwise drifts the player off the spot).
+    // One boot a spot, the camera placed by ?cam= (Tokyo's start otherwise drifts the player off the spot).
     const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
     page.on('pageerror', (e) => console.log('PAGEERROR', String(e.stack ?? e).slice(0, 500)));
     await page.goto(`${server.resolvedUrls.local[0]}?${q}debug=1&diag=1&res=100&perflog=0&cam=${x},1.7,${z},${yaw},0${/(^|&)time=/.test(extra) ? '' : '&time=day'}${/(^|&)weather=/.test(extra) ? '' : '&weather=clear'}${extra}`, { timeout: 300000 });

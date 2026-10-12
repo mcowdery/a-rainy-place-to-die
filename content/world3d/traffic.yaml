@@ -107,7 +107,7 @@ buses:
     buses: 1
     stops:
       - { name: 川端駅前, cell: [40, 10], side: west }
-      - { name: 東都タワー前, cell: [40, 12], side: south }
+      - { name: 東京タワー前, cell: [40, 12], side: south }
       - { name: 川端東, cell: [41, 11], side: east }
       - { name: 竜胆町, cell: [41, 9], side: north }
   - id: nishihara

@@ -1,4 +1,4 @@
-# The Tōto Expressway (東都高速): elevated routes over the cell-edge roads, Shuto-style (format and layout:
+# The Shuto Expressway (首都高): elevated routes over the cell-edge roads, Shuto-style (format and layout:
 # src/poc3d/district/expressway.ts), above the avenues of roads.yaml (32 m, the piers in their medians). So far
 # the inner loop (都心環状線) round Asagiri and Kaburo.
 # The network (docs/city-plan.md has where it's going: route 4 to Kurokami, route 1 and the Wangan to the port).
@@ -8,8 +8,8 @@
 # half: the deck's half-width (two lanes and a shoulder). trim: [start, end], metres of deck left off an open
 # route's ends: where nothing runs on past its last ramp or junction the deck stops there behind an end wall,
 # rather than running on to its point as a dead stub (its ramps are still placed from the points).
-name: 東都高速
-nameEn: TOTO EXPRESSWAY
+name: 首都高
+nameEn: SHUTO EXPRESSWAY
 deck: 15
 radius: 60
 half: 4.6
@@ -69,21 +69,21 @@ ramps:
   - { id: asagiri_s_on, kind: on, route: c1, leg: 2, block: 7, name: 朝霧 ASAGIRI }
 # The port: route 1's pair over Kōnan-dōri; the Wangan's at each end (the stubs run on to the airport branch in the
 # west and over the river to the old town in the east).
-  - { id: port_s_off, kind: off, route: r1_s, leg: 0, block: 5, name: 東都港 TŌTO PORT }
-  - { id: port_n_on, kind: on, route: r1_n, leg: 0, block: 2, name: 東都港 TŌTO PORT }
-  - { id: terminal_e_on, kind: on, route: wangan_e, leg: 0, block: 1, name: 東都港 TERMINAL }
-  - { id: terminal_w_off, kind: off, route: wangan_w, leg: 0, block: 32, name: 東都港 TERMINAL }
-  - { id: fishmarket_w_off, kind: off, route: wangan_w, leg: 0, block: 5, name: 東都市場 FISH MARKET }
-  - { id: fishmarket_w_on, kind: on, route: wangan_w, leg: 0, block: 6, name: 東都市場 FISH MARKET }
-  - { id: fishmarket_e_off, kind: off, route: wangan_e, leg: 0, block: 27, name: 東都市場 FISH MARKET }
+  - { id: port_s_off, kind: off, route: r1_s, leg: 0, block: 5, name: 東京港 TOKYO PORT }
+  - { id: port_n_on, kind: on, route: r1_n, leg: 0, block: 2, name: 東京港 TOKYO PORT }
+  - { id: terminal_e_on, kind: on, route: wangan_e, leg: 0, block: 1, name: 東京港 TERMINAL }
+  - { id: terminal_w_off, kind: off, route: wangan_w, leg: 0, block: 32, name: 東京港 TERMINAL }
+  - { id: fishmarket_w_off, kind: off, route: wangan_w, leg: 0, block: 5, name: 東京市場 FISH MARKET }
+  - { id: fishmarket_w_on, kind: on, route: wangan_w, leg: 0, block: 6, name: 東京市場 FISH MARKET }
+  - { id: fishmarket_e_off, kind: off, route: wangan_e, leg: 0, block: 27, name: 東京市場 FISH MARKET }
 # Ebisu-jima (the parking area and the car meets), off the Wangan; Shiomi-jima, at the end of its branch.
   - { id: ebisu_e_off, kind: off, route: wangan_e, leg: 0, block: 8, name: 恵比寿島PA EBISU-JIMA PA }
   - { id: ebisu_w_off, kind: off, route: wangan_w, leg: 0, block: 23, name: 恵比寿島PA EBISU-JIMA PA }
   - { id: ebisu_w_on, kind: on, route: wangan_w, leg: 0, block: 24, name: 恵比寿島 EBISU-JIMA }
   - { id: shiomi_off, kind: off, route: shiomi_s, leg: 0, block: 2, name: 汐見島 SHIOMI-JIMA }
   - { id: shiomi_on, kind: on, route: shiomi_n, leg: 0, block: 0, name: 汐見島 SHIOMI-JIMA }
-  - { id: airport_off, kind: off, route: airport_s, leg: 0, block: 2, name: 東都空港 AIRPORT }
-  - { id: airport_on, kind: on, route: airport_n, leg: 0, block: 0, name: 東都空港 AIRPORT }
+  - { id: airport_off, kind: off, route: airport_s, leg: 0, block: 2, name: 東京空港 AIRPORT }
+  - { id: airport_on, kind: on, route: airport_n, leg: 0, block: 0, name: 東京空港 AIRPORT }
 # Parking areas: the Shiomi branch's decks end on 汐見島PA, a raised apron over the island's blocks (Tatsumi PA-like), the
 # cars coming in down its east side and out up its west.
 plazas:

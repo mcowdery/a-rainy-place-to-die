@@ -1059,7 +1059,7 @@ export const ROOMS: Record<number, RoomDef> = {
       plant(p, r, 0.5);
       p.begin(tr, 'a', 4);
       p.fill('#ffffff', { hue: 1, glow: 0.8 }).ell(0.9, 2.55, 0.16, 0.16);
-      p.fill('#ffffff', { hue: 1, glow: 0.8 }).text('TŌTO  HOLDINGS', 2.2, 2.55, 0.2, { maxW: 2.2 });
+      p.fill('#ffffff', { hue: 1, glow: 0.8 }).text('TOKYO  HOLDINGS', 2.2, 2.55, 0.2, { maxW: 2.2 });
     },
   },
 

@@ -13,7 +13,7 @@ interface Page {
 
 const GROUPS: readonly { readonly title: string; readonly pages: readonly Page[] }[] = [
   {
-    title: 'Tōto (Japanese)',
+    title: 'Tokyo (Japanese)',
     pages: [
       { href: 'models-cars.html', name: 'Cars', note: 'cars, vans, trucks, scooters, taxis, work vehicles' },
       { href: 'models-mack.html', name: 'Mack', note: 'his outfits, guns, katana, bat, bikes, helmets, first person' },

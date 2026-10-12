@@ -14,7 +14,7 @@ import { EMIT, KIND, lin } from './meshBuilder';
  * with the kit landmarks (asagiri.ts), in the building's local frame (u along the street face, t inward):
  * - temple: 東光寺 Tōkō-ji (Sensō-ji-like): the thunder gate with its giant red lantern, the Nakamise street of
  *   little shops up to the second gate, the incense burner, the main hall under its sweeping roof, the pagoda.
- * - tv_tower: 東都タワー TŌTO TOWER (Tokyo Tower-like): a 250 m lattice tower in orange and white, two observation
+ * - tv_tower: 東京タワー TOKYO TOWER (Tokyo Tower-like): a 250 m lattice tower in orange and white, two observation
  *   decks, lit at night by lines that show through the haze (the city's compass).
  * - yakuza_house: 竜胆組 本家, the Rindō-gumi's family house: a plastered wall capped in black tile all round, the
  *   heavy gate with the crest's lanterns, black sedans and men in dark suits outside, a pine over the wall.
@@ -212,7 +212,7 @@ export const KAWABATA_BUILDERS: Record<KawabataKind, (k: Kit, id: string, part: 
     k.person(54, 76, -1, 0, { body: 'woman', pose: 'stand', color: [1.0, 0.85, 0.9], hair: 'bun' });
   },
 
-  // ---- 東都タワー TŌTO TOWER: four lattice legs rising from the corners of its base, tapering to a single mast;
+  // ---- 東京タワー TOKYO TOWER: four lattice legs rising from the corners of its base, tapering to a single mast;
   // braces across each face; the main deck at 110 m, the upper deck at 200 m, the antenna to 250 m; banded orange
   // and white. At night its outline glows (lines that show through the haze), the decks lit ----
   tv_tower(k, _id, _part, u) {
@@ -286,7 +286,7 @@ export const KAWABATA_BUILDERS: Record<KawabataKind, (k: Kit, id: string, part: 
     plate(k, 18, 2.4, 40, -0.1, 5, (g, W, H2) => {
       g.fillStyle = '#e04a1a';
       g.fillRect(0, 0, W, H2);
-      text(g, '東都タワー TŌTO TOWER', W / 2, H2 * 0.6, `bold ${Math.round(H2 * 0.5)}px 'Yu Gothic', sans-serif`, '#ffffff');
+      text(g, '東京タワー TOKYO TOWER', W / 2, H2 * 0.6, `bold ${Math.round(H2 * 0.5)}px 'Yu Gothic', sans-serif`, '#ffffff');
     });
     // The night outline: orange lines up the legs and round the decks, not fogged (they glow through the haze).
     for (const y of [110, 117, 200, 204]) {

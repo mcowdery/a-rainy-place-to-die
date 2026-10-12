@@ -3127,6 +3127,9 @@ export function setPassengerMaterial(m: THREE.Material | null): void {
  * along). Who's aboard is a pure function of `seed`; they never fade. Null when there's no material (the
  * showroom) or nobody aboard.
  */
+/** Every passengers' mesh built (trains, buses, platforms), so the debug menu's People can hide them with the street's. */
+export const PASSENGER_MESHES: THREE.Mesh[] = [];
+
 export function passengerMesh(seats: readonly PassengerSpot[], standing: readonly PassengerSpot[], seed: number, fill: { readonly seat: number; readonly stand: number }, mix: PeopleMix = CITY_PEOPLE, poses: readonly Pose[] = ['strap', 'strap', 'stand', 'phone']): THREE.Mesh | null {
   if (!passengerMaterial) return null;
   const rnd = rng(hash(seed, 0x9a55));
@@ -3152,5 +3155,6 @@ export function passengerMesh(seats: readonly PassengerSpot[], standing: readonl
   const mesh = new THREE.Mesh(geo, passengerMaterial);
   mesh.renderOrder = 2;
   mesh.name = 'passengers';
+  PASSENGER_MESHES.push(mesh);
   return mesh;
 }

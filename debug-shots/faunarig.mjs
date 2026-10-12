@@ -1,4 +1,4 @@
-// The rigged animals in the Tōto room, two shots a third of a second apart each: node debug-shots/faunarig.mjs <out dir>
+// The rigged animals in the Tokyo room, two shots a third of a second apart each: node debug-shots/faunarig.mjs <out dir>
 import { mkdirSync } from 'node:fs';
 import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';

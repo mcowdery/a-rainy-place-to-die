@@ -35,7 +35,7 @@ never printed on screen.
   in every pocket were twenty years early: they're to be replaced by what the period had, and the opening, which
   leans on them (the chats, the video sent to Minato, the message from Koharu's account), can be rewritten for
   it. **Tentative:** the order has some hidden technology of its own, but the story shouldn't lean on it.
-  **Not done yet:** the game's phone and the opening are still as they were; how they change is being planned.
+  The plan is in [phone.md](phone.md). The opening and the guide are rewritten for it; **not done yet:** the game's phone is still the old messenger.
 - **The alternative: the bubble's height, about 1988.** More glamour and less hangover. Dom's fall would hang
   on the Commission Trial (1986) instead of Gotti, and his backstory would be rewritten to fit.
 
@@ -148,7 +148,7 @@ close to him see him and treat him), not much else, and changes the ending only 
    have been bought.
 2. **Yakuza life.** The Rindō-gumi (the old family in Kawabata) and Ryujin Kogyo (the front company on Host
    Street), in the spirit of *Fading Afternoon*. See [factions.md](factions.md).
-3. **Street racing and chases.** Drift and street racing on the mountain passes and the Tōto Expressway, the
+3. **Street racing and chases.** Drift and street racing on the mountain passes and the Shuto Expressway, the
    Ebisu-jima PA car meets, the detective's car and garage; and the car chases an ex-cop detective gets into.
 4. **Idols.** Stella Production: a glamorous surface, darker underneath.
 5. **The hidden order.** Who really runs the city, and whom they serve. See [mythos.md](mythos.md).
@@ -198,4 +198,4 @@ their grey areas and, sometimes, their shock.
 
 ## Open
 
-- **Open:** how the story is told from outside the scenes (a narrator, chapter cards, the phone).
+- **Open:** how the story is told from outside the scenes (a narrator, chapter cards, the notebook).

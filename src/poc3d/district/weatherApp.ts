@@ -5,7 +5,7 @@ import { airWith, type Outlook } from './forecast';
 
 /**
  * 天気 Tenki, the phone's weather app (an invented one, no real brands): the forecast (district/forecast.ts) for
- * Tōto. Now (the weather as it is, the temperature, the rainy season or a heat wave with its heatstroke warning),
+ * Tokyo. Now (the weather as it is, the temperature, the rainy season or a heat wave with its heatstroke warning),
  * the next 24 hours by the hour (sky, temperature, rain), and the next five days (the sky through the day, high and
  * low, the chance of rain), and the sun and the moon (sunrise and sunset by the season, tonight's moon on the lunar
  * calendar: its phase and its old name, its age, when it rises and sets; at night the sky's icon is the moon's phase
@@ -26,7 +26,7 @@ export interface WeatherSource {
   daylight(): DayLight;
   /** A tropical city (cityConfig.ts): Tagalog and English wording, the monsoon and the floods, no kanji. */
   tropical?: boolean;
-  /** The city's name for the header (Tōto's when absent). */
+  /** The city's name for the header (Tokyo's when absent). */
   place?: string;
 }
 
@@ -197,7 +197,7 @@ export class WeatherApp implements PhoneApp {
     }
     root.innerHTML = `
       <div class="wx-now wx-${k}">
-        <div class="wx-place">${this.src.place ?? '東都市 TŌTO'} · ${this.src.season()} · ${hhmm(minute)}</div>
+        <div class="wx-place">${this.src.place ?? '東京市 TOKYO'} · ${this.src.season()} · ${hhmm(minute)}</div>
         <div class="wx-big"><span class="wx-icon">${icon}</span><span class="wx-temp">${Math.round(airWith(o, cur.weather))}°</span></div>
         <div class="wx-cond">${L[k][0]} <span>${L[k][1]}</span></div>
         <div class="wx-tags">${tags.join('')}</div>

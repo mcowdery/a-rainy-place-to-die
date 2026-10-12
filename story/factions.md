@@ -31,9 +31,9 @@ Bay Hall and Tōto Dome. The idol manager (a story character) works for it. Node
 
 - **Open:** what's underneath: whose money, what the girls are asked to do.
 
-## 東都警視庁 The police
+## 警視庁 The police
 
-The Toto Metropolitan Police HQ in Asagiri (stone, flags, patrol cars), and in Kaburo's plan a kōban with wanted
+The Tokyo Metropolitan Police HQ in Asagiri (stone, flags, patrol cars), and in Kaburo's plan a kōban with wanted
 notices. Nodes: `police_hq.entrance`, `police_hq.officer`.
 
 Corrupt: officers are bought, cases buried. There are honest ones too.
@@ -67,7 +67,7 @@ Corrupt: officers are bought, cases buried. There are honest ones too.
 
 ## The racing scene
 
-Street racers on the mountain passes (Kurokami, Yūnagi) and the Tōto Expressway, meeting at night at Ebisu-jima
+Street racers on the mountain passes (Kurokami, Yūnagi) and the Shuto Expressway, meeting at night at Ebisu-jima
 PA. SPEED LAB by the port tunes their cars. Races so far: the C1 lap and the Wangan sprint, offered by the racer
 at the PA (`ebisu_pa.racer`); rivals on the passes (the red coupe in battles).
 

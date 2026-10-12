@@ -9,7 +9,7 @@ import { carKit, NAMES, PAINT_A, PAINT_B } from './carKit';
 /**
  * Manila's vehicles (models-cars-ph.html): the jeepney in each of its paint jobs (front row facing you, the second row
  * facing away), the tricycle in its six paints parked and driving, both as the middle-distance models, and beside them a
- * regular sedan, a kei truck and a minivan to judge their size. In no traffic mix of Tōto's.
+ * regular sedan, a kei truck and a minivan to judge their size. In no traffic mix of Tokyo's.
  */
 startRoom({
   title: 'Vehicles (Manila)',

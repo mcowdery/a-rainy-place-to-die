@@ -53,7 +53,7 @@ people in them. **Proposed:**
 | Season | Opens | What it brings |
 |---|---|---|
 | Spring | **Kaburo**, **Kawabata** (the old town and the river), **Gakuenzaka** and Gakuenzaka-shita, **Asagiri**, and the C1 loop | The opening (the university, hanami on the river); Mack's booth, office and Michael's workshop; the night world; the police HQ and the terminal |
-| Summer | **Tōto Port**, **Ebisu-jima**, **Shiomi-jima**, **Denkō-chō**, **Sakuragaoka**, the Wangan | The triad and the container terminal; the PA meets and the Wangan; the conventions (Denkō-chō's otaku, the big summer convention on Shiomi-jima) and the bay hall; the idol theatre and the manager; the ladder's next rung |
+| Summer | **Tokyo Port**, **Ebisu-jima**, **Shiomi-jima**, **Denkō-chō**, **Sakuragaoka**, the Wangan | The triad and the container terminal; the PA meets and the Wangan; the conventions (Denkō-chō's otaku, the big summer convention on Shiomi-jima) and the bay hall; the idol theatre and the manager; the ladder's next rung |
 | Autumn | **Suidō-chō**, **Kasumi-chō** | The Dome and its big show; the hospital, the cemetery avenue and the redevelopment site (the bones) |
 | Winter | **Nishihara**, **Takanodai**, **Hanejima** | The danchi and the ruined park; the heights, the villa and the flood tunnel (what's under the city); the airport |
 
@@ -83,7 +83,7 @@ ladder, and how these four stand beside the nightly hunts ([mythos.md](mythos.md
 
 ### Chapter 1: Spring
 
-- **The cold open:** a young man at the river with lanterns, waiting; ten o'clock passes; his phone lights up.
+- **The cold open:** a young man at the river with lanterns, waiting; ten o'clock passes; his pager lights up.
   No context.
 - **Then the detective**, the same night: in bed with a married woman, while looking for his wife. Day 1 starts
   here, in the small hours after that Friday.

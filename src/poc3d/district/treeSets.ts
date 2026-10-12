@@ -1,6 +1,6 @@
 /**
  * Which trees a city plants where (CityConfig.trees; real/props.ts, real/openLots.ts and real/dressing.ts read it
- * through cityConfig.ts `treeSet()`). Tōto's is the Japanese set (zelkova, ginkgo, cherry, pine, camphor, dogwood,
+ * through cityConfig.ts `treeSet()`). Tokyo's is the Japanese set (zelkova, ginkgo, cherry, pine, camphor, dogwood,
  * azalea, box), Manila's the tropical one (royal and coconut palms, rain tree, mango, banana, bougainvillea).
  */
 import type { TreeSpecies } from '../models/trees';

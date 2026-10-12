@@ -176,7 +176,7 @@ export interface EngineVoice {
 
 /**
  * The engine voice of a vehicle type. Every type but the tricycle is the city's own car and bus engine, as it was
- * before (Tōto's sound is unchanged): revs from the speed and gear, a sawtooth over a square an octave down. A
+ * before (Tokyo's sound is unchanged): revs from the speed and gear, a sawtooth over a square an octave down. A
  * tricycle (a motorcycle with a sidecar, Manila's) is a small two-stroke: much higher revs, the square a fifth
  * above rather than an octave below, brighter, a thin buzz that rises and falls with every gear.
  */

@@ -1,7 +1,7 @@
-# 東都市庁舎 TOTO CITY HALL: twin towers on a civic podium. A landmark built by real/asagiri.ts (80 m front,
+# 東京市庁舎 TOKYO CITY HALL: twin towers on a civic podium. A landmark built by real/asagiri.ts (80 m front,
 # 60 m deep). The elevator at the front takes you to the observatory at the top of the east tower (172 m).
 id: city_hall
-name: 東都市庁舎 Toto City Hall
+name: 東京市庁舎 Tokyo City Hall
 footprint: [80, 60]
 height: 186
 front: south
@@ -9,7 +9,7 @@ landmark: city_hall
 nodes:
   plaza:
     kind: spawn
-    name: Toto City Hall
+    name: Tokyo City Hall
     at: [40, 10]
     facing: north
     view: [0, 28]

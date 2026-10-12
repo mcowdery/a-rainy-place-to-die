@@ -47,7 +47,7 @@ marked **Open** below.
 - **Blackmailed** by the debt collectors (the loan shark's people, fronting for the order), with his affairs:
   the sex he had with women other than his wife:
   - The loan shark is **キャッシュ・ワン Cash One** ("ブラックOK 即日", its posters already on Kaburo's walls).
-  - A couple of its collectors squeeze him as a side business of their own: photos and recordings of his
+  - A couple of its collectors squeeze him as a side business of their own: prints and recordings of his
     affairs, old ones and new (love hotels have cameras, and Cash One's people own some of them).
   - The threat is his wife. They say they know where she is, and that she'll get everything if he doesn't pay.
     He pays every Monday, most of what he earns: why he stays poor, and in booth 17.
@@ -126,7 +126,7 @@ timings **Proposed**, and the autumn row needs a new answer):
      message in Koharu's name plays as Koharu sending it, until Mack proves she didn't, and then that moment
      breaks and is rebuilt. The player has to doubt what they've played.
   3. **It shows behaviour, not minds.** What people did and said, not what they thought. Inner lives come through
-     what they left behind: texts, a tape, the people who knew them.
+     what they left behind: messages, a tape, the people who knew them.
   4. **It can't see the order.** Its people scrub the cameras, and nobody has seen the faceless man's face, so he
      is a blank in it: a blur, a void.
 

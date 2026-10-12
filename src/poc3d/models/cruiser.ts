@@ -67,7 +67,7 @@ function materials(env: THREE.Texture | null, look: CruiserLook) {
     head: std({ color: 0xf0eee6, emissive: new THREE.Color(1, 0.96, 0.86), emissiveIntensity: 0.2, roughness: 0.1 }),
     tail: std({ color: 0x5a0606, emissive: new THREE.Color(1, 0.05, 0.03), emissiveIntensity: 0.15, roughness: 0.2 }),
     amber: std({ color: 0xd07010, emissive: new THREE.Color(1, 0.45, 0.05), emissiveIntensity: 0.1, roughness: 0.2 }),
-    plate: std({ map: plateTexture('東都 1600', 'さ', '7-19'), roughness: 0.5 }),
+    plate: std({ map: plateTexture('東京 1600', 'さ', '7-19'), roughness: 0.5 }),
     badge: std({ map: badgeTexture(look), metalness: 0.5, roughness: 0.3 }),
   };
 }

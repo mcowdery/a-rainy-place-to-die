@@ -9,15 +9,15 @@ Walk-through doors and spawns aren't listed; spawns are where a scene can send y
 
 ## 東京 Tokyo
 
-The city was 東都 Tōto until 2026-10-12; the names below that still carry it (the lines, the expressway, the
-port, the terminal, the university and the companies) are the ones the game shows today, and wait on the naming
-rule's table in [names.md](names.md). Between 2 and 6 in the morning the streets are empty
+The city was 東都 Tōto until 2026-10-12; the names below that still carry it (the lines, the
+terminal, the university and the companies) are brands, and stay;
+the city, the bay, the port, the police and the expressway are Tokyo's own now ([names.md](names.md)). Between 2 and 6 in the morning the streets are empty
 ([mythos.md](mythos.md), The dead hours).
 
 The capital on its bay, about 4.7 × 3.3 km of city in the game: two cores (Kaburo's neon and Asagiri's towers) ringed by
 newer districts, then homes and the old town, then hills to the north and west and the bay to the south.
 The river 隅川 Sumikawa runs down from the northern hills to the bay, with the old town across it. The Toto
-Line, the Kawabata Line, the monorail, two subway lines and the Seikō Line join it up; the Tōto Expressway
+Line, the Kawabata Line, the monorail, two subway lines and the Seikō Line join it up; the Shuto Expressway
 loops over the core and runs out along the port. The last train leaves at 00:40.
 
 **Open:** what's wrong with the city (who really runs it, what everyone knows and nobody says). Part of it is
@@ -171,7 +171,7 @@ fence.
 
 ## 川端 Kawabata: the old town across the river
 
-Wooden houses and apāto on narrow lanes, the temple quarter, Tōto Tower, the riverside. Old money and old
+Wooden houses and apāto on narrow lanes, the temple quarter, Tokyo Tower, the riverside. Old money and old
 loyalties.
 
 - Kōpo Kawabata: the detective's room 201, with the case board (the office itself is now in Kaburo, `kirishima`; this flat is kept, for a home later).
@@ -195,7 +195,7 @@ loyalties.
 | `riverside.yatai` | npc | Oden stall keeper | — |
 | `riverside.boat` | hotspot | The houseboat | — |
 
-## 東都港 Tōto Port and the islands
+## 東京港 Tokyo Port and the islands
 
 Warehouses, the container terminal, the fish market, warehouse nightlife; over the bridges, Shiomi-jima's TV
 station, wheel and hall, Ebisu-jima's car meets, and the airport on Hanejima.

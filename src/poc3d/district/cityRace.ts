@@ -4,7 +4,7 @@ import type { CarType } from '../models/vehicles';
 import type { Expressway, Road } from './expressway';
 
 /**
- * Races in the city (content/world3d/races.yaml): battles on the Tōto Expressway against a rival, through the
+ * Races in the city (content/world3d/races.yaml): battles on the Shuto Expressway against a rival, through the
  * traffic, set up by a racer at a PA (a `host` npc). A race runs along one expressway road from a start (metres
  * along it) for a length, or laps of a loop; checkpoints along the way give splits; first to the line wins. Pure:
  * the path, progress along it, the state of a race. The rival's driving is district/raceRival.ts; the page wires

@@ -12,6 +12,8 @@ import { compileCondition, type Condition } from '../core/condition';
  *     - id: rain                      # [a-z0-9_], unique in the file, stable
  *       when: met_aya                 # a condition on story flags (node condition syntax); omitted = from the start
  *       after: 40                     # seconds after `when` first holds (default 0)
+ *       channel: call                 # how it reaches you (story/phone.md): chat (the messenger, the default for now),
+ *                                     #   pager, call, machine or paper. Parsed and kept; the phone's UI doesn't act on it yet
  *       messages:                     # from the contact, one at a time with typing; `from: me` for yours
  *         - text: It's coming down harder.
  *         - photo: media/bar.jpg      # or video: media/clip.webm (poster: optional still); caption: optional
@@ -43,8 +45,13 @@ export interface Reply {
   readonly then: readonly ScriptMsg[];
 }
 
+/** How a beat reaches you. `chat` is the messenger as it is; the rest are what replace it (story/phone.md). */
+export const CHANNELS = ['chat', 'pager', 'call', 'machine', 'paper'] as const;
+export type Channel = (typeof CHANNELS)[number];
+
 export interface Beat {
   readonly id: string;
+  readonly channel: Channel;
   readonly when: Condition | null;
   readonly after: number;
   readonly messages: readonly ScriptMsg[];
@@ -162,6 +169,8 @@ export function parseContact(file: string, text: string, errors: string[], hasMe
         err(`${at}: when: ${(e as Error).message}`);
       }
     }
+    const channel = rb.channel === undefined ? 'chat' : (CHANNELS as readonly string[]).includes(String(rb.channel)) ? (String(rb.channel) as Channel) : null;
+    if (!channel) err(`${at}: channel must be one of ${CHANNELS.join(', ')}`);
     const after = rb.after === undefined ? 0 : Number(rb.after);
     if (!Number.isFinite(after) || after < 0) err(`${at}: after must be seconds >= 0`);
     const replies: Reply[] = [];
@@ -178,7 +187,7 @@ export function parseContact(file: string, text: string, errors: string[], hasMe
     }
     const messages = msgs(`${at} messages`, rb.messages);
     if (messages.length === 0 && replies.length === 0) err(`${at}: needs messages or replies`);
-    beats.push({ id: bid, when, after: Number.isFinite(after) ? after : 0, messages, replies, set: flags(`${at}`, rb.set) });
+    beats.push({ id: bid, channel: channel ?? 'chat', when, after: Number.isFinite(after) ? after : 0, messages, replies, set: flags(`${at}`, rb.set) });
   }
   if (errors.length > before) return null;
   return {

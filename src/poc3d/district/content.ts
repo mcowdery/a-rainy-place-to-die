@@ -44,12 +44,12 @@ export interface DistrictContent {
   readonly streetRaces: readonly StreetRaceDef[];
   /** The expressway's file (expressway.yaml) as text, parsed by the page; empty when the city has none. */
   readonly expresswayText: string;
-  /** Pedestrian footbridges over the avenues (footbridges.yaml; none in Tōto). */
+  /** Pedestrian footbridges over the avenues (footbridges.yaml; none in Tokyo). */
   readonly footbridges: readonly Footbridge[];
   readonly city: CityId;
 }
 
-/** Loads and cross-validates a city's content (Tōto by default); throws ContentError listing every problem. */
+/** Loads and cross-validates a city's content (Tokyo by default); throws ContentError listing every problem. */
 export function loadDistrictContent(city: CityId = 'toto'): DistrictContent {
   const errors: string[] = [];
   const dir = CITIES[city].dir;

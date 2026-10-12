@@ -1,5 +1,5 @@
 /**
- * The currency the player's money is shown in: yen in Tōto, pesos in Manila (cityConfig.ts `currency`). It is one
+ * The currency the player's money is shown in: yen in Tokyo, pesos in Manila (cityConfig.ts `currency`). It is one
  * wallet (race/profile.ts) with a city's symbol on it; set once at startup by the city page.
  */
 let SYMBOL = '¥';

@@ -171,7 +171,7 @@
   stamp: city_garage
   cell: [26, 12]
   offset: [10, 91]
-# Tōto Port (docs/city-plan.md): the fish market by the river mouth, the disco on the warehouse strip, the tuning
+# Tokyo Port (docs/city-plan.md): the fish market by the river mouth, the disco on the warehouse strip, the tuning
 # shop by route 1's ramps, the ferry terminal and the quay cranes on the seawall.
 - id: fish_market
   stamp: fish_market

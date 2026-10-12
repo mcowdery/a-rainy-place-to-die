@@ -5,7 +5,7 @@ import { addTree, FOLIAGE_VARIANTS, setFoliageVariant, type TreeSpecies } from '
 import { startRoom } from '../shell';
 
 /**
- * Plants (models-plants.html): Tōto's tree species (models/trees.ts: zelkova, ginkgo, sakura, black pine, camphor, dogwood,
+ * Plants (models-plants.html): Tokyo's tree species (models/trees.ts: zelkova, ginkgo, sakura, black pine, camphor, dogwood,
  * azalea, clipped box) on a lawn, the foliage variants side by side (the panel's Foliage seasons turn them all), and, with
  * M, the district's old one street tree. Manila's tropical trees are in models-plants-ph.html.
  */

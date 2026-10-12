@@ -20,6 +20,7 @@ It's plain Markdown in git, next to the content it points at (node ids in `conte
 | [main/](main/README.md) | The main story: one per season, in chapters, with its lead, reveal and machine |
 | [side/](side/README.md) | Optional side content: side cases, side stories, and the pool of ideas not yet placed |
 | [threads/](threads/README.md) | Plot threads: what happens, the clues, the flags, the scenes |
+| [phone.md](phone.md) | What he carries: the pager, the notebook and the telephone that replace the messenger, map and camera |
 | [language.md](language.md) | Dom's lack of Japanese, and the mechanic: the English arriving in parentheses as he learns |
 | [dating.md](dating.md) | The open world's dating: one-night stands and short stories, how they play, the rules |
 | [timeline.md](timeline.md) | Chapters (one per season), the map by season, what each season brings |
@@ -43,7 +44,7 @@ story/            the story guide (this folder): decisions, in prose
 scripts           (not built yet) scenes and chats as text, compiled to the formats below
   ↓
 content/vn/       VN exports (schema 2/3 scene.json): scenes, with stills or without
-content/phone/    KAIWA chats (one YAML per contact)
+content/phone/    the messages by contact (KAIWA's chats now; pager, call, machine and paper beats to come: phone.md)
   ↑
 Studio (Trame)    stills for the scenes that need them, Cast looks and LoRAs, media-heavy chats
 ```

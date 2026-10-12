@@ -1,7 +1,7 @@
 /**
  * The words painted into the shop interiors (shopAtlas.ts): dish names on the menu strips, SALE cards, shelf
  * labels, posters, the front desk's sign. A city has its own table, passed to `new ShopAtlas(renderer, text)`
- * (main.ts picks it by `CityConfig.filipino`); Tōto's is the default. Keep the strings about as long as the ones
+ * (main.ts picks it by `CityConfig.filipino`); Tokyo's is the default. Keep the strings about as long as the ones
  * they replace: they're painted at a fixed size into fixed spaces. No real brands.
  */
 export interface ShopText {

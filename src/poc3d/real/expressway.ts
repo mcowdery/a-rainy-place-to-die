@@ -572,7 +572,7 @@ function ramp(mb: MeshBuilder, road: Road, slip: boolean): void {
 }
 
 /**
- * At street level before an entrance, on the avenue's median: 東都高速 入口 with the district and an arrow up
+ * At street level before an entrance, on the avenue's median: 首都高 入口 with the district and an arrow up
  * the ramp (the expressway's green, on a post), facing the traffic coming.
  */
 function entranceSign(road: Road, foot: number, slip: boolean): THREE.Group {
@@ -589,7 +589,7 @@ function entranceSign(road: Road, foot: number, slip: boolean): THREE.Group {
   cg.fillStyle = '#f4f4f0';
   cg.textAlign = 'center';
   cg.font = "bold 68px 'Yu Gothic', 'Meiryo', sans-serif";
-  cg.fillText('東都高速 入口', 256, 96);
+  cg.fillText('首都高 入口', 256, 96);
   cg.font = 'bold 40px Consolas, sans-serif';
   cg.fillText('EXPRESSWAY', 256, 150);
   cg.font = "bold 44px 'Yu Gothic', sans-serif";
@@ -642,7 +642,7 @@ function face(key: string, w: number, h: number, draw: (g: CanvasRenderingContex
 }
 
 /**
- * Over an entrance's foot, a green gantry: 東都高速 入口 ENTRANCE and an arrow up the ramp, facing the street
+ * Over an entrance's foot, a green gantry: 首都高 入口 ENTRANCE and an arrow up the ramp, facing the street
  * traffic turning in (so it reads as the way on from the whole block).
  */
 function entranceGantry(road: Road, slip: boolean): THREE.Group {
@@ -667,7 +667,7 @@ function entranceGantry(road: Road, slip: boolean): THREE.Group {
     cg.fillStyle = '#f4f4f0';
     cg.textAlign = 'center';
     cg.font = "bold 104px 'Yu Gothic', 'Meiryo', sans-serif";
-    cg.fillText('東都高速 入口', 450, 140);
+    cg.fillText('首都高 入口', 450, 140);
     cg.font = 'bold 60px Consolas, sans-serif';
     cg.fillText(`ENTRANCE · ${(road.sign ?? '').replace(/^[^ ]+ /, '')}`, 450, 250);
     // The arrow: straight on, up the ramp.
@@ -1016,10 +1016,13 @@ export function poolTexture(): THREE.CanvasTexture {
  * ahead in its lane with the Intelligent Driver Model, slowing for the corners ahead, and for your car when
  * it's on the deck in their lane.
  */
+/** How far from the eye an expressway car can't be seen (m): the dead hours' cars come and go beyond it. */
+const EX_SIGHT = 700;
+
 export class ExpresswayTraffic {
   readonly group = new THREE.Group();
   private readonly cars: { mesh: THREE.Mesh; s: number; v: number; lane: number; v0: number; rest: number; off: boolean }[] = [];
-  /** How much of the traffic has gone home (0 none, 1 all: the dead hours, as `TrafficSystem.quiet`). A car leaves the loop, and comes back, at least 320 m from you if you're on it. */
+  /** How much of the traffic has gone home (0 none, 1 all: the dead hours, as `TrafficSystem.quiet`). A car leaves the loop, and comes back, only out of sight (EX_SIGHT). */
   quiet = 0;
   private readonly L: number;
   /** Curvature (rad per m) of the loop at each sample, smoothed over 30 m ahead (for slowing down). */
@@ -1090,12 +1093,27 @@ export class ExpresswayTraffic {
   }
 
   /** You on the loop: your place along it (samples), your lane offset and speed; null off it. Others: more cars they must mind (a race's rival). */
-  update(dt: number, you: { i: number; lateral: number; v: number } | null, others: readonly { i: number; lateral: number; v: number }[] = []): void {
+  update(dt: number, you: { i: number; lateral: number; v: number } | null, others: readonly { i: number; lateral: number; v: number }[] = [], eye: { x: number; z: number } | null = null): void {
     const loop = this.ex.loop;
     const L = this.L;
     const ahead = (a: number, b: number): number => (((b - a) % L) + L) % L;
     for (const c of this.cars) {
-      if (!you || Math.min(ahead(c.s, you.i), ahead(you.i, c.s)) > 320) c.off = c.rest < this.quiet;
+      // (The dead hours: a car goes home, and comes back, only out of sight of the eye; one that should return in view is put back further round the loop.)
+      const gone = c.rest < this.quiet;
+      if (c.off !== gone) {
+        const away = (x: number, z: number): boolean => !eye || Math.hypot(x - eye.x, z - eye.z) > EX_SIGHT;
+        if (away(c.mesh.position.x, c.mesh.position.z)) c.off = gone;
+        else if (c.off) {
+          for (let k = 1; k <= 40; k++) {
+            const j = Math.floor(c.s + (k * L) / 40) % L;
+            if (!away(loop.x[j], loop.z[j])) continue;
+            c.s = j;
+            c.v = c.v0 * 0.8;
+            c.off = false;
+            break;
+          }
+        }
+      }
       c.mesh.visible = !c.off;
       if (c.off) continue;
       // The nearest thing ahead in this lane: another car, or you.

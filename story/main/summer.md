@@ -1,6 +1,6 @@
 # Summer: one hand (Proposed)
 
-**Lead:** the informant. **Districts:** Tōto Port, Ebisu-jima, Shiomi-jima, Denkō-chō, Sakuragaoka, the Wangan
+**Lead:** the informant. **Districts:** Tokyo Port, Ebisu-jima, Shiomi-jima, Denkō-chō, Sakuragaoka, the Wangan
 (plus spring's). **Reveal:** the Amakudari-kai: the yakuza, the triad and the bought police are paid by one hand.
 **Machine:** a car that drives itself, on the Wangan.
 

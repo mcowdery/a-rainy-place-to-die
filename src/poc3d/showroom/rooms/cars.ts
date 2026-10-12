@@ -5,7 +5,7 @@ import { startRoom } from '../shell';
 import { ADS, carKit, NAMES, PAINT_A, PAINT_B } from './carKit';
 
 /**
- * Cars (models-cars.html): every car, van, truck, scooter and patrol car of Tōto (models/vehicles.ts), in two paints, with the
+ * Cars (models-cars.html): every car, van, truck, scooter and patrol car of Tokyo (models/vehicles.ts), in two paints, with the
  * taxi ads on their roofs and doors, the middle-distance models and the working vehicles in their companies' lettering.
  * Manila's jeepneys and tricycles are in models-cars-ph.html.
  */

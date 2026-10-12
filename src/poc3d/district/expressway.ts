@@ -3,7 +3,7 @@ import type { Rect } from '../../core/coords';
 import { CELL, edgeKey } from './plan';
 
 /**
- * The Tōto Expressway (content/world3d/expressway.yaml): a network of elevated routes over the cell-edge roads,
+ * The Shuto Expressway (content/world3d/expressway.yaml): a network of elevated routes over the cell-edge roads,
  * ramps down to the street and back up, and spurs that run on into tunnels to the passes. A route is a list of
  * L0 grid points (its corners, rounded at `radius`); a closed one is a loop (the inner loop, C1), an open one
  * runs from its first point to its last (a radial, the Wangan). Routes are one-way, driven in the order of their

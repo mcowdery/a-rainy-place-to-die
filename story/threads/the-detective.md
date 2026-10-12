@@ -5,24 +5,27 @@ about himself, and the figure behind it all. See [cast/mc.md](../cast/mc.md) for
 
 ## His first night (day 1, the small hours)
 
-Straight after the cold open (Minato at the river, his phone lighting up), the same night, the story cuts here. (The game's day 1 starts here rather than
+Straight after the cold open (Minato at the river, his pager lighting up), the same night, the story cuts here. (The game's day 1 starts here rather than
 at Friday 22:00.)
 
 1. **The room.** A themed room at Hotel Rouge. The standard edition opens after (the uncensored edition's scene
    comes before it, from Grok's brief). The married woman dresses and talks about her husband, away on
    business until Monday. He isn't listening. His eye, a policeman's, has found a camera lens in the smoke alarm over the bed.
    He says nothing about it.
-2. **The message.** They leave separately. In the street his phone buzzes: KAIWA, from the Cash One collector.
-   A still of the two of them in that room, tonight, from above the bed. "Monday. Same as always."
+2. **The message.** They leave separately. In the street his pager goes: a number he knows. The payphone on the
+   corner, the collector's voice, and then, handed to him by a boy on a bicycle at the next corner, an envelope: a
+   print of the two of them in that room, tonight, from above the bed. On the back, in biro: "Monday. Same as always."
+   (The camera in the smoke alarm is a still camera on a timer, and the print was made in the hour he walked.
+   **Open:** whether that's too fast for 1992; a Polaroid-style instant camera would do.)
 3. **The walk.** The player walks him home, the first control of the detective: out of the Love District,
    through the back alleys, past Cash One's posters, to Manga Café Tsukiyo and booth 17.
 4. **Monday night.** Sirens pass, heading north toward the university. Mack doesn't look up.
 5. **Tuesday morning.** The TV on the café's wall: a Tōto University student killed an upper-year student and then
    himself, in a flat in the student town: a fight between students, the newsreader says. A girl survived.
 6. **The door.** A few days later, the student's mother at the door of Kirishima Investigations in Kawabata: the police closed it in
-   a day, and she doesn't believe it. **Proposed:** she brings his phone, which the police gave back with his
-   things. Mack reads it, and so does the player: the stranger's messages, Koharu's unanswered ones, and the one
-   from Koharu that Koharu never sent. Minato's case begins.
+   a day, and she doesn't believe it. **Proposed:** she brings his pager and the tapes from the machine in his flat, which the police gave back
+   with his things. Mack plays them, and so does the player: the stranger's messages, Koharu's unanswered ones, and the
+   one from Koharu that Koharu never made. Minato's case begins.
 
 **The married woman** doesn't matter yet: a name, a ring she takes off in the lift, a husband away on business.
 

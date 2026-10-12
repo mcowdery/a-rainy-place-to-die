@@ -1,5 +1,5 @@
 /**
- * Which city the page is: Tōto (content/world3d, the default) or Manilaya (content/manila, `?city=manila`). Both run on
+ * Which city the page is: Tokyo (content/world3d, the default) or Manilaya (content/manila, `?city=manila`). Both run on
  * the same engine; this is the one place that says where a city's content lives and the few facts about it the
  * page needs (where you start, its seed, its save slot's name).
  */
@@ -20,13 +20,13 @@ export interface CityConfig {
   readonly atmosphereKind: CellKind;
   /** Prefix for localStorage keys that are the city's own (saves). */
   readonly storage: string;
-  /** The crowd's skin tone (a colour): Tōto's, and Manila's deeper tan (the user's call: Filipinos are more tanned than Japanese). */
+  /** The crowd's skin tone (a colour): Tokyo's, and Manila's deeper tan (the user's call: Filipinos are more tanned than Japanese). */
   readonly skin: string;
-  /** The money's symbol: ¥ in Tōto, ₱ in Manila. */
+  /** The money's symbol: ¥ in Tokyo, ₱ in Manila. */
   readonly currency: string;
   /** Whether the city has ad art (district billboards, posters, taxi photo ads). Manilaya has none until it has Filipino ads: its signs are plain fascia signs. */
   readonly ads: boolean;
-  /** Big neon channel letters on the roofs of taller buildings: Tōto's skyline, not Manilaya's. */
+  /** Big neon channel letters on the roofs of taller buildings: Tokyo's skyline, not Manilaya's. */
   readonly rooftopSigns: boolean;
   /** A tropical city has no seasons to turn: always summer's green, no petals, no leaves, no snow (its rainy season is the forecast's). */
   readonly tropical: boolean;
@@ -45,7 +45,7 @@ export interface CityConfig {
 }
 
 export const CITIES: Readonly<Record<CityId, CityConfig>> = {
-  toto: { id: 'toto', name: '東都 Tōto', dir: 'world3d', startSpawn: 'kaburo_crossing.view', seed: 0x0c179090, atmosphereKind: 'neon', storage: 'rainyplace', skin: '#b08e74', currency: '¥', ads: true, rooftopSigns: true, tropical: false, filipino: false, boats: false, trees: TOTO_TREES, sunYaw: 0, mountains: { sector: [-2.6, -2.25, 0.85, 1.25], cone: { az: -1.95, width: 0.3, height: 0.092, snow: true, plume: 0 } } },
+  toto: { id: 'toto', name: '東京 Tokyo', dir: 'world3d', startSpawn: 'kaburo_crossing.view', seed: 0x0c179090, atmosphereKind: 'neon', storage: 'rainyplace', skin: '#b08e74', currency: '¥', ads: true, rooftopSigns: true, tropical: false, filipino: false, boats: false, trees: TOTO_TREES, sunYaw: 0, mountains: { sector: [-2.6, -2.25, 0.85, 1.25], cone: { az: -1.95, width: 0.3, height: 0.092, snow: true, plume: 0 } } },
   manila: { id: 'manila', name: 'Manilaya', dir: 'manila', startSpawn: 'bayside.start', seed: 0x4d4e4c31, atmosphereKind: 'neon', storage: 'rainyplace.manila',
     skin: '#8c6244',
     currency: '₱',
@@ -73,7 +73,7 @@ export const isCityId = (s: unknown): s is CityId => s === 'toto' || s === 'mani
 
 /**
  * The tree set of the city being built (treeSets.ts): set once at start-up, on the page (main.ts) and in each chunk
- * worker's init, as setFoliageVariant is for the foliage. Tōto's until set.
+ * worker's init, as setFoliageVariant is for the foliage. Tokyo's until set.
  */
 let TREES: TreeSet = TOTO_TREES;
 let FILIPINO = false;
@@ -85,7 +85,7 @@ export function setTreeSet(id: CityId): void {
 export const filipino = (): boolean => FILIPINO;
 export const treeSet = (): TreeSet => TREES;
 
-/** The city named by `?city=` (Tōto when absent or unknown). */
+/** The city named by `?city=` (Tokyo when absent or unknown). */
 export function cityFromUrl(search: string = typeof location === 'undefined' ? '' : location.search): CityConfig {
   const c = new URLSearchParams(search).get('city');
   return CITIES[isCityId(c) ? c : 'toto'];

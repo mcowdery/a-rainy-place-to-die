@@ -12,8 +12,8 @@ How the writing reads, and what each way of telling a scene can hold.
 - English dialogue with Japanese where it's natural: forms of address (-san, senpai, oyaji, mama for a bar's
   owner), exclamations (Ara), the names of places, food and things (oden, keep bottle, apāto). No glossary in the text;
   the context carries it.
-- Signs, menus and the phone's official accounts can be in Japanese with English beside it (KAIWAへようこそ!
-  Welcome to KAIWA.).
+- Signs, menus and the pager's service can be in Japanese with English beside it (the old KAIWAへようこそ! Welcome to
+  KAIWA. was the phone's; its replacement is **Open**).
 - Captions are present tense, second person, spare: "The rain stops. Somewhere above, a window closes."
 
 ## Grounded
@@ -38,7 +38,7 @@ monsters and the "aliens" are the fallen), so nothing new is let in.
 |---|---|---|---|
 | **VN with stills** | A still, letterboxed over the dimmed city, bubbles over it, choices, hotspots on the picture | Key moments, faces, places the 3D city can't show (a room's detail, a close-up) | Stills from Krea Studio, then the VN export |
 | **VN without stills** | The paused city between cinematic bars, the same bubbles and choices | Most conversations: at a door, with an npc in the street | Text only, no art |
-| **Phone (KAIWA)** | Messages arriving in the city while you walk; photos, videos, stickers, your replies | Keeping threads alive between scenes, people you haven't met, the time between chapters | `content/phone/<contact>.yaml` |
+| **Pager and telephone** (was the KAIWA messenger: [phone.md](phone.md)) | A page arriving in the city while you walk; the call at a payphone, the machine's tape, prints and tapes, your replies | Keeping threads alive between scenes, people you haven't met, the time between chapters | `content/phone/<contact>.yaml` (to be reworked) |
 | **Choreographed scene** | (Not built yet.) Figures moving in the real city, the camera directed | Chases, arrivals, a crowd at the Dome | Later |
 
 A scene starts where the player uses a world node: talking to an **npc**, a story **door** (a door that isn't a

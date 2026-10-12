@@ -129,7 +129,7 @@ function clockFace(k: Kit, d: number, u: number, t: number, y: number): void {
 }
 
 const SCHOOL_NAMES: Record<string, [string, string]> = {
-  school_1: ['東都市立 桜ヶ丘中学校', 'SAKURAGAOKA JUNIOR HIGH'],
+  school_1: ['東京市立 桜ヶ丘中学校', 'SAKURAGAOKA JUNIOR HIGH'],
   school_2: ['東都大学附属高等学校', 'TŌTO UNIVERSITY HIGH SCHOOL'],
 };
 
@@ -193,7 +193,7 @@ export const NORTH_BUILDERS: Record<NorthKind, (k: Kit, id: string) => ((camera:
       text(g, '体育館 GYM', W / 2, H * 0.6, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#1a3a6a');
     });
     // The gate and the school's name on the gatepost.
-    const [jp, en] = SCHOOL_NAMES[id] ?? ['東都市立中学校', 'TŌTO MUNICIPAL SCHOOL'];
+    const [jp, en] = SCHOOL_NAMES[id] ?? ['東京市立中学校', 'TOKYO MUNICIPAL SCHOOL'];
     for (const u of [-3, 3]) k.box(0xa8a49a, 37 + u - 0.5, 37 + u + 0.5, -1, 0, 0, 2.2);
     plate(k, 1.2, 4, 33.5, -1.05, 1.9, (g, W, H) => {
       g.fillStyle = '#e8e4d8';

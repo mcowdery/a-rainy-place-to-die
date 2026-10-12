@@ -129,7 +129,7 @@ zones:
 
   S:
     id: kawabata_avenue
-    name: Kawabata (Tōto-ōdōri)
+    name: Kawabata (Tokyo-ōdōri)
     plan:
       floors: [[4, 7, 60], [8, 11, 40]]
       lotW: [8, 16]
@@ -149,14 +149,14 @@ zones:
 
   K:
     id: kawabata_tower
-    name: Tōto Tower plaza
+    name: Tokyo Tower plaza
     plan:
       floors: [[3, 5, 60], [6, 9, 40]]
       lotW: [10, 20]
       signChance: 0.6
       streetTrees: 0.8
     signs:
-      words: [TŌTO TOWER, 東都タワー, 土産, CAFE, 蝋人形館, 水族館]
+      words: [TOKYO TOWER, 東京タワー, 土産, CAFE, 蝋人形館, 水族館]
       colors: ['#ffffff', '#ffe45f', '#ff4f4f']
     ads: { fun: 2, mainstream: 2, food: 2 }
     look:

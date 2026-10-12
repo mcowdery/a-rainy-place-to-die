@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadDistrictContent } from '../src/poc3d/district/content';
 
-// Manila (content/manila, ?city=manila) runs on the same engine as Toto: its content has to load and cross-validate.
+// Manila (content/manila, ?city=manila) runs on the same engine as Tokyo: its content has to load and cross-validate.
 describe('Manila content', () => {
   it('loads', () => {
     const c = loadDistrictContent('manila');
@@ -10,7 +10,7 @@ describe('Manila content', () => {
     expect(c.placed.some((p) => p.nodes.some((n) => n.id === 'bayside.start'))).toBe(true);
     expect(c.placed.some((p) => p.nodes.some((n) => n.id === 'city_garage.bay'))).toBe(true);
   });
-  it('leaves Toto as it was', () => {
+  it('leaves Tokyo as it was', () => {
     expect(loadDistrictContent().macro.cols).toBe(44);
   });
 });

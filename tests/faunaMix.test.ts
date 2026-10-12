@@ -29,7 +29,7 @@ describe('faunaMix', () => {
     expect(t({ hour: 12 }).butterfly).toBeGreaterThan(0);
     expect(t({ hour: 12 }).firefly).toBe(0);
   });
-  it('has no insects in a Tōto winter', () => {
+  it('has no insects in a Tokyo winter', () => {
     const w = t({ season: 'winter', hour: 21 });
     for (const k of ['butterfly', 'dragonfly', 'firefly', 'moth'] as const) expect(w[k]).toBe(0);
   });
@@ -37,7 +37,7 @@ describe('faunaMix', () => {
     expect(t({ water: 0 }).gull).toBe(0);
     expect(t({ water: 1 }).gull).toBeGreaterThan(0);
   });
-  it("gives Manila its own animals: dogs and hens, no crows; Tōto's crows and no hens", () => {
+  it("gives Manila its own animals: dogs and hens, no crows; Tokyo's crows and no hens", () => {
     const m = t({ tropical: true });
     const j = t({});
     expect(m.dog).toBeGreaterThan(0);

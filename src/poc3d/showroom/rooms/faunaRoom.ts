@@ -7,7 +7,7 @@ import { makeReview } from '../review';
 import { startRoom } from '../shell';
 
 /**
- * An animals room (models-fauna.html: Tōto's, models-fauna-ph.html: Manila's). A row for each animal, and along it every
+ * An animals room (models-fauna.html: Tokyo's, models-fauna-ph.html: Manila's). A row for each animal, and along it every
  * candidate for that animal, lettered A, B, C...: a model built in code (`from: 'built'`) or someone's model file from
  * poly.pizza (assets/animals/candidates/<id>.glb; credits in assets/animals/CREDITS.md; none of them is in the city). The
  * panel's Review section is the user's word on each: click to approve, again to reject (showroom/review.ts). Where a species

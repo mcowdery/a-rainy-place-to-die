@@ -41,8 +41,18 @@ what counts as which, **Proposed**, and until they're settled the guide and the 
 | 東都新聞 Tōto Shimbun, Tōto TV, Tōto Bank, the Tōto Department Store, Tōto Dome, Tōto Bay Hall, Hotel Tōto Inn | stay | **Proposed:** brands, and "Tōto" in a company's name is natural in Tokyo |
 | Manilaya, Manilaya Bay, the Pasigan River | Manila, Manila Bay, the Pasig | **Open:** whether the rule reaches the second city (its districts and avenues would keep their invented names) |
 
-**In the game** the signs, station boards, maps and menus still say 東都 / Tōto throughout (about 320 places in
-140 files): changing them is a pass of its own, once the table above is settled.
+**In the game** (2026-10-12): the rows marked decided or Proposed are applied: the city (東京 Tokyo), Tokyo Bay, the Tokyo
+Metropolitan Police (警視庁), the Shuto Expressway (首都高), Tokyo Tower, Tokyo Port (東京港) and Tokyo Airport are on the
+signs, boards, maps, menus and docs; the avenue Tōto-ōdōri and the bridge Tōto-bashi became Tokyo-ōdōri and Tokyo-bashi;
+the city hall, the central wholesale market, the flood tunnel, the education board, the municipal schools and the
+forecast (東京地方) say Tokyo. The airport's own control tower is now "Airport Tower", so it doesn't clash with Tokyo Tower.
+Kept as brands (the table's rows): Tōto University and its high school, Tōto Shimbun, Tōto TV, Tōto Bank, the Tōto
+Department Store (and its café and shrine), Tōto Dome, Tōto Bay Hall, Hotel Toto Inn, the Toto Line and the Tōto
+Monorail, Tōto-Chūō (the terminal, its west exit and mall), and the small firms on trucks, planes and signs (Tōto
+Unyu, Tōto Gas, Tōto Life, Tōto Air, Tōto Taxi, a tuning shop and a ferry line that carry 東都). Still **open**: the radio
+stations' and tracks' names (Tōto Jazz and the songs "Tōto Express", "Tōto City Lights", "東都ベイ・ドライブ", and the
+bands' names are in generated audio and `content/radio/stations.yaml`), the Sumikawa, Tōto-Chūō's name, and whether Tokyo
+Tower may stand in Kawabata. Ids (`station_totochuo`, `toto_bank`, the `toto` line and city ids, file names) are unchanged.
 
 ### The districts
 
@@ -108,7 +118,7 @@ family in New York (in his tentative backstory the Gambino family, named as it w
 
 Decided since: the language mechanic ([language.md](language.md)) does this as gameplay: names start in
 Japanese, and their readings and English handles arrive as Dom learns them (the mechanic is his since
-2026-10-12), and the phone keeps a record.
+2026-10-12), and the notebook keeps a record.
 
 **Proposed**, for players as much as for us:
 
@@ -117,7 +127,7 @@ Japanese, and their readings and English handles arrive as Dom learns them (the 
 2. **Few names at a time.** The map opening by season helps: spring has four districts, not fifteen.
 3. **People go by one short name.** Mack, Dom, Koharu, Rui, Julie, Minato, Jingūji. Full names only where it
    matters (a police file, a gravestone).
-4. **A people record.** Mack's case board, and a page in the phone: everyone he's met, with a face and one line
+4. **A people record.** Mack's case board, and a page in the notebook: everyone he's met, with a face and one line
    ("Koharu: Minato's girlfriend. She survived."). Players can look anyone up.
 5. **No sound-alikes.** Two clashes to fix now:
    - **Rui** (the host) and **Rei** (Jingūji's given name) sound alike. Jingūji already goes by his surname;

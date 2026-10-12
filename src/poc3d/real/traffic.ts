@@ -908,6 +908,26 @@ export class TrafficSystem {
     }
   }
 
+  /** A vehicle off the road for the dead hours comes back: further along its route, out of sight of the camera. False if no such place. */
+  private rejoin(v: Vehicle, camera: THREE.Vector3): boolean {
+    const L = v.route.length;
+    for (let k = 1; k <= 40; k++) {
+      const s = (v.s + (k * L) / 40) % L;
+      const p = along(v.route, s);
+      if (Math.hypot(p.x - camera.x, p.z - camera.z) <= this.drawDistance + 60) continue;
+      v.s = s;
+      v.v = v.driver.v0 * 0.6;
+      v.acc = 0;
+      v.dwell = 0;
+      v.stopDone = -1;
+      v.committed = -1;
+      v.waited = 0;
+      v.off = false;
+      return true;
+    }
+    return false;
+  }
+
   /** The time the signals run on (seconds). */
   get clock(): number {
     return this.time;
@@ -932,12 +952,20 @@ export class TrafficSystem {
   update(dt: number, camera: THREE.Vector3, people: readonly Walker[] = []): void {
     this.time += dt;
     const V = this.vehicles;
+    let rejoined = 0;
     for (const v of V) {
       const d = Math.hypot(v.x - camera.x, v.z - camera.z);
       const kept = v.mode !== 'traffic' || v === this.hail?.taxi;
-      // (The dead hours: it goes home, and comes back, out of sight; on the first frame, wherever it is.)
+      // The dead hours: a vehicle goes home, and comes back, only where it can't be seen (beyond the draw distance), so
+      // none vanishes or appears in view. One in view when it should go drives on until it's out of sight; one that
+      // should return in view is put back further along its route, out of sight, and drives in (a few a frame).
+      const gone = v.rest < this.quiet;
       if (kept) v.off = false;
-      else if (d > this.drawDistance || this.frame === 0) v.off = v.rest < this.quiet;
+      else if (this.frame === 0) v.off = gone;
+      else if (v.off !== gone) {
+        if (d > this.drawDistance) v.off = gone;
+        else if (v.off && rejoined < 6 && this.rejoin(v, camera)) rejoined++;
+      }
       v.live = kept || (d < SIM && !v.off);
     }
     for (const v of V) {

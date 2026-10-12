@@ -257,7 +257,7 @@ export class PhoneUI {
       home.style.backgroundImage = `linear-gradient(rgba(8,8,14,0.5), transparent 24%, transparent 62%, rgba(8,8,14,0.72)), url("${wall.url}")`;
     }
     const now = Phone.time(this.phone.clock);
-    home.append(wrap('div', 'ph-bigclock', [span('ph-bigtime', now), span('ph-bigdate', '東都 · TOTO')]));
+    home.append(wrap('div', 'ph-bigclock', [span('ph-bigtime', now), span('ph-bigdate', '東京 · TOKYO')]));
     const grid = el('div', 'ph-apps');
     const tiles: { id: string; name: string; icon: string; color: string; badge: number }[] = [
       { id: 'kaiwa', name: 'KAIWA', icon: '💬', color: '#2fbf71', badge: this.phone.totalUnread + this.phone.awaiting },

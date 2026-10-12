@@ -53,7 +53,7 @@ export const DAYLIGHT: Readonly<Record<'spring' | 'summer' | 'autumn' | 'winter'
   autumn: { rise: 5 * 60 + 45, set: 17 * 60 + 15, noon: 0.86 },
   winter: { rise: 6 * 60 + 50, set: 16 * 60 + 45, noon: 0.58 },
 };
-/** The turn of the sun's and moon's path about the vertical (rad) for a city whose sea or compass isn't Tōto's (cityConfig.ts `sunYaw`). */
+/** The turn of the sun's and moon's path about the vertical (rad) for a city whose sea or compass isn't Tokyo's (cityConfig.ts `sunYaw`). */
 let SUN_YAW = 0;
 /** Sets the city's day lengths (in place, so everything holding `DAYLIGHT` sees them) and the sun's turn. Once, at startup. */
 export function configureSky(daylight: Readonly<Record<'spring' | 'summer' | 'autumn' | 'winter', DayLight>> | undefined, sunYaw: number): void {

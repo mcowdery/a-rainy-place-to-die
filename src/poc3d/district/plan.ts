@@ -109,6 +109,8 @@ export interface ZoneLook {
   /** Share of wide lots that are a Spanish-colonial church (a bell-tower, a pediment, buttresses). */
   readonly church?: number;
   readonly vending?: number | null;
+  /** Payphones to expect in a cell of the zone (real/phoneSites.ts; null: its district's, PHONES_PER_CELL). */
+  readonly payphone?: number | null;
   readonly street?: number;
 }
 
@@ -503,9 +505,9 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     park: 0,
   },
   harbor: {
-    // Tōto Port: warehouses on big blocks along wide truck roads, container yards, a few office and hotel
+    // Tokyo Port: warehouses on big blocks along wide truck roads, container yards, a few office and hotel
     // towers by the water; only where its zone file paints (the islands come with their set pieces).
-    name: 'Tōto Port',
+    name: 'Tokyo Port',
     edgeRoads: [16, 18],
     localStreet: [8, 12],
     block: [40, 90],
