@@ -203,7 +203,7 @@ export function parseRails3(file: string, text: string, macro: MacroMap, errors:
  * there's none (water, open ground). `vertical`: the line runs north-south. Its piers stand in the median, or as
  * a portal frame over the carriageway (real/rail.ts, real/station.ts).
  */
-export type RoadUnder = (x: number, z: number, vertical: boolean) => { readonly half: number; readonly sidewalk: number; readonly median: boolean } | null;
+export type RoadUnder = (x: number, z: number, vertical: boolean) => { readonly half: number; readonly sidewalk: number; readonly median: boolean; readonly medianHalf: number } | null;
 
 /**
  * Where a portal frame's columns stand from the line over a road without a median: at the back of each pavement,
@@ -220,7 +220,7 @@ export function roadUnder(plan: (mx: number, my: number) => CellPlan3 | null): R
       if (r.vertical !== vertical || r.kind === 'coast') continue;
       const q = r.rect;
       if (x < q.x || x > q.x + q.w || z < q.y || z > q.y + q.h) continue;
-      return { half: (vertical ? q.w : q.h) / 2 - r.sidewalk, sidewalk: r.sidewalk, median: r.median > 0 };
+      return { half: (vertical ? q.w : q.h) / 2 - r.sidewalk, sidewalk: r.sidewalk, median: r.median > 0, medianHalf: r.median / 2 };
     }
     return null;
   };

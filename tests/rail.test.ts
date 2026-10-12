@@ -95,6 +95,10 @@ describe('the elevated lines', () => {
         const { s } = l.path.project(x, z);
         const h = l.path.at(s);
         const road = under(h.x, h.z, Math.abs(h.hz) > Math.abs(h.hx));
+        if (road?.median) {
+          const lat = Math.abs(Math.abs(h.hz) > Math.abs(h.hx) ? x - Math.round(x / 128) * 128 : z - Math.round(z / 128) * 128);
+          expect(lat > road.medianHalf + 0.8 && lat < road.half, `${l.id} pier at ${x.toFixed(0)},${z.toFixed(0)} on a carriageway`).toBe(false);
+        }
         if (!road || road.median) continue;
         // Across the line from its centre: past the kerb.
         const [lx, lz] = leftOf(h);

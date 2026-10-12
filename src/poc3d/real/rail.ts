@@ -62,15 +62,17 @@ const nearJunction = (x: number, z: number): boolean => {
 };
 
 /**
- * Whether a column at (x, z) stands on a carriageway (a road without a median: the median is where a column belongs,
- * the pavements are clear of it). The grid roads run along the multiples of the cell size.
+ * Whether a column at (x, z) stands on a carriageway (a median is where a column belongs; the
+ * pavements are clear of it). The grid roads run along the multiples of the cell size.
  */
 function onCarriageway(x: number, z: number, under: RoadUnder): boolean {
   for (const vertical of [true, false]) {
     const road = under(x, z, vertical);
-    if (!road || road.median) continue;
+    if (!road) continue;
     const lateral = Math.abs(vertical ? x - Math.round(x / 128) * 128 : z - Math.round(z / 128) * 128);
-    if (lateral < road.half) return true;
+    // With a median the column may stand on it; where the line swings off the road's middle (a corner's arc) it
+    // lands on the carriageway beside it.
+    if (road.median ? lateral > road.medianHalf + 0.8 && lateral < road.half : lateral < road.half) return true;
   }
   return false;
 }
