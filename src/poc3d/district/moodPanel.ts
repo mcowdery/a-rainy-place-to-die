@@ -74,6 +74,8 @@ export interface MoodSettings {
   shotgun: 'a' | 'b' | 'synth';
   guns: number;
   gunEcho: number;
+  /** How loud the pistol's reload is (1 as built). */
+  reloadSound: number;
   /** The car radio's level (real/radio.ts; 0 silences it). */
   music: number;
   /** Render resolution: auto (lowered while frames are slow, raised again when there's room) or a fixed share. */
@@ -126,7 +128,7 @@ export const SKY_COLOR_MODE: Record<SkyColors, { sky: number; light: number; tin
 export const RESOLUTIONS = ['auto', '100', '85', '70', '55'] as const;
 export type Resolution = (typeof RESOLUTIONS)[number];
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, windowFolk: 1, windowVice: 1, windowPeople: true, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, carDamp: 0.5, carRoof: 1, steps: 1, gun: DEFAULT_GUN_VOICE, shotgun: 'a', guns: 1, gunEcho: 0.3, music: 0.5, resolution: 'auto', mirror: 'all', quality: 'high', mob: 'ghost', mobShadows: true, mobEmotes: true, smoking: 1, mobBlush: EMOTE_LOOKS.blush, mobHearts: EMOTE_LOOKS.hearts, mobStars: EMOTE_LOOKS.stars, sky: 'deep', skyColors: 'painted', moonShape: 'calendar' };
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, windowFolk: 1, windowVice: 1, windowPeople: true, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, carDamp: 0.5, carRoof: 1, steps: 1, gun: DEFAULT_GUN_VOICE, shotgun: 'a', guns: 1, gunEcho: 0.3, reloadSound: 1, music: 0.5, resolution: 'auto', mirror: 'all', quality: 'high', mob: 'ghost', mobShadows: true, mobEmotes: true, smoking: 1, mobBlush: EMOTE_LOOKS.blush, mobHearts: EMOTE_LOOKS.hearts, mobStars: EMOTE_LOOKS.stars, sky: 'deep', skyColors: 'painted', moonShape: 'calendar' };
 const SHADOW_COUNTS = [0, 2, 4, 8];
 const SAVED_KEY = 'rainyplace.district.mood';
 
@@ -164,6 +166,7 @@ function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettin
   m.steps = num('steps', 0, 2) ?? m.steps;
   m.guns = num('guns', 0, 2) ?? m.guns;
   m.gunEcho = num('gunEcho', 0, 1) ?? m.gunEcho;
+  m.reloadSound = num('reloadSound', 0, 3) ?? m.reloadSound;
   const gv = params.get('gun') as GunVoice | null;
   if (gv && GUN_VOICES.includes(gv)) m.gun = gv;
   const sv = params.get('shotgun');
@@ -232,6 +235,7 @@ function moodParams(m: MoodSettings, base: MoodSettings, into = new URLSearchPar
   set('shotgun', m.shotgun, base.shotgun);
   set('guns', f(m.guns), f(base.guns));
   set('gunEcho', f(m.gunEcho), f(base.gunEcho));
+  set('reloadSound', f(m.reloadSound), f(base.reloadSound));
   set('music', f(m.music), f(base.music));
   set('cycle', m.cycle ? '1' : '0', base.cycle ? '1' : '0');
   set('mobShadows', m.mobShadows ? '1' : '0', base.mobShadows ? '1' : '0');
@@ -343,6 +347,7 @@ export class MoodPanel {
     this.choice('gun', 'Pistol shot', GUN_VOICES, () => s.gun, (v) => (s.gun = v as GunVoice));
     this.choice('shotgun', 'Shotgun shot', ['a', 'b', 'synth'], () => s.shotgun, (v) => (s.shotgun = v as MoodSettings['shotgun']));
     this.slider('guns', 'Gunshots', 0, 2, 0.01, () => s.guns, (v) => (s.guns = v), (v) => (v < 0.01 ? 'off' : pct(v)));
+    this.slider('reloadSound', 'Reload sound', 0, 3, 0.01, () => s.reloadSound, (v) => (s.reloadSound = v), (v) => (v < 0.01 ? 'off' : pct(v)));
     this.slider('gunEcho', 'Gunshot echo', 0, 1, 0.01, () => s.gunEcho, (v) => (s.gunEcho = v), (v) => (v < 0.01 ? 'dry' : pct(v)));
     this.slider('carDamp', 'In-car damping', 0, 1, 0.01, () => s.carDamp, (v) => (s.carDamp = v), (v) => (v < 0.01 ? 'none (as outside)' : pct(v)));
     this.slider('carRoof', 'Rain on car roof', 0, 2, 0.01, () => s.carRoof, (v) => (s.carRoof = v), (v) => (v < 0.01 ? 'off' : pct(v)));

@@ -1,0 +1,25 @@
+// The lawn as it looks: node debug-shots/grassshot.mjs <out dir> [clock] [spawn]
+import { mkdirSync } from 'node:fs';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
+import { shotServer } from '../scripts/shotServer.mjs';
+const out = process.argv[2] ?? 'debug-shots/grass';
+const clock = process.argv[3] ?? '15:00';
+const spawn = process.argv[4] ?? '';
+mkdirSync(out, { recursive: true });
+const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
+await server.listen();
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1600, height: 800 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
+page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 600)); });
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&clock=${clock}&weather=clear${spawn ? `&spawn=${spawn}` : ''}`);
+await page.waitForFunction(() => !/BUILDING|UPLOADING|LOADING/i.test(document.body.innerText), null, { timeout: 540000 }).catch(() => console.log('still loading'));
+await page.waitForTimeout(6000);
+await page.keyboard.press('Escape'); await page.keyboard.press('m'); await page.keyboard.press('Escape');
+await page.waitForTimeout(1500);
+await page.screenshot({ path: `${out}/level.png` });
+await page.evaluate(() => typeof window.__look === 'function' && window.__look(0, -0.45));
+await page.waitForTimeout(800);
+await page.screenshot({ path: `${out}/down.png` });
+await browser.close();
+await server.close();

@@ -420,7 +420,8 @@ export class CityGunfire {
   }
 
   /** Which recordings the pistol and the shotgun are, the guns' level (1 as built) and a recorded shot's street echo (0-1): race/gunSound.ts. */
-  setSound(voice: GunVoice, level: number, echo: number, shotgun: 'a' | 'b' | 'synth' = 'a'): void {
+  setSound(voice: GunVoice, level: number, echo: number, shotgun: 'a' | 'b' | 'synth' = 'a', reload = 1): void {
+    this.gunSound.reloadLevel = reload;
     this.gunSound.voice = voice;
     this.gunSound.shotgunVoice = shotgun;
     this.gunSound.setLevel(level, echo);

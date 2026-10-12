@@ -6,6 +6,7 @@ import { WINDOW_ATLAS, windowsAt, type WindowWeather } from './windowScenes';
 import { WIPER_GLSL } from '../models/wipers';
 import { CAR_RAIN_GLSL, WALL_RAIN_GLSL } from './carRainGlsl';
 import { WATER_ALPHA, WATER_GLSL } from './waterGlsl';
+import grassUrl from '../../../assets/textures/grass.webp?url';
 
 /** Cars whose headlights light the city (the nearest to the camera). */
 export const CAR_LIGHTS = 16;
@@ -107,6 +108,9 @@ export interface CityUniforms extends ScreenUniforms {
   uNight: { value: THREE.Vector4 };
   uWindow: { value: THREE.Vector4 };
   tLight: { value: THREE.Texture | null };
+  /** The lawn's photograph: colour in RGB, height in alpha (assets/textures/grass.webp); `uGrassOn` is 1 once it has loaded. */
+  tGrass: { value: THREE.Texture | null };
+  uGrassOn: { value: number };
   /** The storefront interiors' atlas (shopAtlas.ts): colour and mask; null leaves shops dark inside. */
   tShopCol: { value: THREE.Texture | null };
   tShopMask: { value: THREE.Texture | null };
@@ -138,7 +142,30 @@ export function windowHours(hour: number, u: Pick<CityUniforms, 'uLit' | 'uFolk'
 export const DEN_LIGHT = 0.62;
 export const DEN_TINT = 0.6;
 
+let grassTex: THREE.Texture | null = null;
+/** The lawn texture, loaded once for every page; `on` is told when it's ready (until then the lawn is plain). */
+function grassTexture(on: () => void): THREE.Texture {
+  if (!grassTex) {
+    grassTex = new THREE.TextureLoader().load(grassUrl, () => {
+      grassLoaded = true;
+      for (const f of grassWaiting) f();
+      grassWaiting.length = 0;
+    });
+    grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+    grassTex.colorSpace = THREE.SRGBColorSpace;
+    grassTex.anisotropy = 8;
+    grassTex.generateMipmaps = true;
+    grassTex.minFilter = THREE.LinearMipmapLinearFilter;
+  }
+  if (grassLoaded) on();
+  else grassWaiting.push(on);
+  return grassTex;
+}
+let grassLoaded = false;
+const grassWaiting: (() => void)[] = [];
+
 export function cityUniforms(): CityUniforms {
+  const grassOn = { value: 0 };
   return {
     uTime: { value: 0 },
     uWind: { value: new THREE.Vector3(1, 0, 0) },
@@ -180,6 +207,8 @@ export function cityUniforms(): CityUniforms {
     uNight: { value: new THREE.Vector4(...windowsAt(20.5).night) },
     uWindow: { value: new THREE.Vector4(1, 1, -1, 0.8) },
     tLight: { value: null },
+    tGrass: { value: grassTexture(() => (grassOn.value = 1)) },
+    uGrassOn: grassOn,
     tShopCol: { value: null },
     tShopMask: { value: null },
     uLightRect: { value: new THREE.Vector4(0, 0, 1, 1) },
@@ -368,6 +397,8 @@ const common = /* glsl */ `
   uniform vec4 uLit;
   uniform vec4 uWindow;
   uniform sampler2D tLight;
+  uniform sampler2D tGrass;
+  uniform float uGrassOn;
   uniform vec4 uLightRect;
   uniform vec2 uLightFade;
   uniform float uLightGain;
@@ -580,6 +611,8 @@ const BLACKOUT_PRELUDE = /* glsl */ `
   float shopPower = 1.0 - boK * (h1(vBid + 9.0) < 0.18 ? 0.0 : 0.94);
 `;
 
+/** How bright a lit room reads through its window (1 was the first look: at dusk the windows bloomed to white, the user's note, 2026-10-11). */
+const ROOM_GAIN = '0.6';
 const surface = /* glsl */ `
   // ---- city surface (see city.ts) ----
   // Derivatives first, in uniform control flow.
@@ -593,6 +626,7 @@ const surface = /* glsl */ `
   // (Foliage: its leaf bump, applied to the lighting normal after three works it out: normalFoliage.)
   float leafy = 0.0;
   vec3 leafBump = vec3(0.0);
+  vec3 grassBump = vec3(0.0);
   // (Water: its rippled normal, world space, given to the lighting the same way: the sun's glitter.)
   vec3 waterN = vec3(0.0);
   float sRough = 0.85;
@@ -1244,7 +1278,7 @@ const surface = /* glsl */ `
             c = mix(c, ink + wallA * 0.05, people * vis);
             c = mix(c, ink, smoothstep(0.3, 0.6, sf.b) * vis);
           }
-          vec3 interior = c * mix(1.0, 0.45, depthT) * (L * 0.55 + uRoomAmbient);
+          vec3 interior = c * mix(1.0, 0.45, depthT) * (L * ${ROOM_GAIN} * 0.55 + uRoomAmbient);
           // Blinds (lowered from the top) or curtains (drawn in from the sides).
           float hb = h1(hr * 43.0);
           if (hb < 0.3) {
@@ -1252,14 +1286,14 @@ const surface = /* glsl */ `
             if (yf > blindY) {
               float slat = 1.0 - smoothstep(0.004, 0.012, fwUV.y);
               vec3 blindC = mix(vec3(0.75, 0.73, 0.68), vec3(0.85), h1(hr * 7.0));
-              interior = blindC * (L * 0.4 + uRoomAmbient * 0.8 + 0.01) * (1.0 - 0.35 * slat * step(0.75, fract(yf / 0.05)));
+              interior = blindC * (L * ${ROOM_GAIN} * 0.4 + uRoomAmbient * 0.8 + 0.01) * (1.0 - 0.35 * slat * step(0.75, fract(yf / 0.05)));
             }
           } else if (hb < 0.55) {
             float cw = (x1 - x0) * (0.15 + 0.3 * h1(hr * 67.0));
             if (xb < x0 + cw || xb > x1 - cw) {
               vec3 fabric = h1(hr * 83.0) < 0.5 ? vec3(0.8, 0.7, 0.55) : h1(hr * 89.0) < 0.5 ? vec3(0.55, 0.65, 0.55) : vec3(0.5, 0.15, 0.15);
               float fold = 0.8 + 0.2 * sin(xb * 40.0) * (1.0 - smoothstep(0.004, 0.015, fwUV.x));
-              interior = fabric * fold * (L * 0.5 + uRoomAmbient + 0.005);
+              interior = fabric * fold * (L * ${ROOM_GAIN} * 0.5 + uRoomAmbient + 0.005);
             }
           }
           // Windows sit back in the wall: seen from a steep angle the reveal hides the room, so a wall seen
@@ -1293,7 +1327,7 @@ const surface = /* glsl */ `
       // warm; each room about 0.3 of its light (wall colour, depth falloff). It was a flat warm gold at 0.4,
       // so distant towers glowed gold until you came close enough to see their windows.
       vec3 roomAvg = office ? vec3(0.53, 0.74, 0.82) : vec3(1.0, 0.72, 0.45) * (den || love ? ${DEN_LIGHT} : 1.0) * glassTint;
-      vec3 glassAvg = (litFrac * roomAvg * 0.28 + uRoomAmbient * 0.3) * reveal * (1.0 - Fa) + refl * mix(0.2, 0.9, Fa);
+      vec3 glassAvg = (litFrac * roomAvg * 0.28 * ${ROOM_GAIN} + uRoomAmbient * 0.3) * reveal * (1.0 - Fa) + refl * mix(0.2, 0.9, Fa);
       bool rowY = ux >= 0.0 && ux < span && fv >= 0.0 && fl < floors && yf > y0 && yf < y1;
       vec3 bandAlbedo = rowY ? mix(wallCol, vec3(0.02), xFrac) : detailAlbedo;
       vec3 bandEmit = rowY ? glassAvg * xFrac : vec3(0.0);
@@ -1399,9 +1433,31 @@ const surface = /* glsl */ `
       albedo = vColor.rgb * (0.78 + 0.4 * gn);
       sRough = 0.9;
     } else if (kindF < 11.5) {
-      // Grass: patchy lawn, blades up close.
-      float blades = mix(0.5, h2(floor(p * 9.0)), fine);
-      albedo = vColor.rgb * (0.7 + 0.45 * gn) * (0.8 + 0.4 * blades) * mix(vec3(1.0), vec3(1.15, 1.05, 0.7), smoothstep(0.55, 0.8, vnoise(p * 0.12)));
+      // Grass: a photograph of turf (assets/textures/grass.webp) tiled over the lawn at two scales so it doesn't
+      // repeat, its colour kept and tinted a little by the slab's own, the height in its alpha making the blades
+      // catch the light up close (grassBump). Until it loads, or where it isn't (a showroom without it), a plain lawn.
+      float lush = vnoise(p * 0.035) * 0.6 + vnoise(p * 0.11) * 0.4;
+      if (uGrassOn > 0.5) {
+        vec2 g1 = p / 1.7;
+        vec4 t1 = texture2D(tGrass, g1);
+        vec4 t2 = texture2D(tGrass, p / 6.1 + vec2(0.37, 0.61));
+        float macro = clamp(dot(t2.rgb, vec3(0.2126, 0.7152, 0.0722)) / 0.145, 0.6, 1.5);
+        float meanC = max(dot(vColor.rgb, vec3(0.3333)), 1e-3);
+        vec3 tint = mix(vec3(1.0), vColor.rgb / meanC, 0.35);
+        albedo = t1.rgb * mix(1.0, macro, 0.7) * tint * (0.82 + 0.3 * gn);
+        // Drier and greener patches across the lawn, subtly: mown turf is never one tone.
+        albedo = mix(albedo, albedo * vec3(1.18, 1.05, 0.7), smoothstep(0.55, 0.8, lush) * 0.5);
+        albedo *= mix(1.0, 0.8, smoothstep(0.45, 0.2, lush));
+        float bumpK = 1.0 - smoothstep(0.02, 0.09, max(fwW.x, fwW.y));
+        if (bumpK > 0.0) {
+          float e = 1.0 / 1024.0;
+          float hx = texture2D(tGrass, g1 + vec2(e, 0.0)).a - t1.a;
+          float hy = texture2D(tGrass, g1 + vec2(0.0, e)).a - t1.a;
+          grassBump = vec3(-hx, 0.0, -hy) * 22.0 * bumpK;
+        }
+      } else {
+        albedo = vColor.rgb * (0.7 + 0.45 * gn);
+      }
       // The season: fresh in spring, deep in summer, going gold in autumn, straw in winter.
       if (uSeason < 0.5) albedo *= vec3(1.08, 1.12, 0.9);
       else if (uSeason < 1.5) albedo *= vec3(0.88, 1.02, 0.78);
@@ -1606,6 +1662,7 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         // normalFoliage: a tree crown's leaf clusters catch the light (city surface: leafBump, world space).
         if (leafy > 0.5) normal = normalize(normal + (viewMatrix * vec4(leafBump, 0.0)).xyz);
+        if (dot(grassBump, grassBump) > 0.0) normal = normalize(normal + (viewMatrix * vec4(grassBump, 0.0)).xyz);
         if (waterN.y > 0.0) normal = normalize((viewMatrix * vec4(waterN, 0.0)).xyz);`)
       .replace('#include <opaque_fragment>', `
         // Never hand the post chain more than a bright highlight's worth of light (or a NaN).

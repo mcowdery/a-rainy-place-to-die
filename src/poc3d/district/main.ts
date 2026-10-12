@@ -68,7 +68,6 @@ import { Driving } from './driving';
 import { CITY_ASSISTS, OwnCar } from './ownCar';
 import { FOLLOWERS, followFlag } from './followers';
 import { FollowerParty, type PartyMode } from '../real/followerParty';
-import { DamageHud } from './damageHud';
 import { RadioHud } from './radioHud';
 import { SaveApp } from './saveApp';
 import { readSave, SAVE_VERSION, SLOTS, writeSave, type SaveGame, type Slot } from '../../save/save';
@@ -3379,8 +3378,6 @@ async function run(): Promise<void> {
   const dash = document.createElement('div');
   Object.assign(dash.style, { position: 'fixed', left: '24px', bottom: '22px', zIndex: '16', padding: '8px 14px', background: 'rgba(8,8,14,0.72)', border: '1px solid #3a3850', color: '#e8e6f0', font: "bold 26px 'Consolas', monospace", display: 'none', pointerEvents: 'none' });
   document.body.append(dash);
-  // Your car's damage by part, over the speedo (damageHud.ts).
-  const damageHud = new DamageHud();
   // The car's radio (real/radio.ts): stations that broadcast on the real clock, and a tape deck for your own
   // music. At the wheel , and . turn the dial and / is the tape's button; a taxi driver has his own on, low.
   const radio = new Radio(loadStations(CITY.id));
@@ -4089,9 +4086,11 @@ async function run(): Promise<void> {
       autosave();
     }
     if (driving.bump > 2) audio.bump(driving.bump);
-    dash.style.display = driving.car ? 'block' : 'none';
-    if (driving.car) dash.textContent = `${Math.round(driving.kmh).toString().padStart(3, ' ')} km/h  ${driving.gear}${auto && autoMode ? `  ·  AUTO ${AUTO_NAMES[autoMode]}${auto.pilot.status === 'driving' ? '' : ` · ${auto.pilot.status}`}` : ''}`;
-    damageHud.update(inVn ? 0 : dt, driving.own === ownCar ? ownCar : null);
+    // No speed or damage readout: the cockpit's speedo shows the speed, the crumpled body the damage. Only the auto-drive status stays.
+    const autoText = driving.car && auto && autoMode ? `AUTO ${AUTO_NAMES[autoMode]}${auto.pilot.status === 'driving' ? '' : ` · ${auto.pilot.status}`}` : '';
+    dash.style.display = autoText ? 'block' : 'none';
+    if (autoText) dash.textContent = autoText;
+    ownCar.hits.length = 0;
     const onFoot = !driving.car && !controls.fly && !inVn && !rider.active && Math.abs(camAbove() - 1.7) < 1.2;
     let wvx = dt > 0 ? (cp0.x - lastWalker.x) / dt : 0;
     let wvz = dt > 0 ? (cp0.z - lastWalker.z) / dt : 0;
@@ -4148,7 +4147,7 @@ async function run(): Promise<void> {
         else crosshair.look(shown && (looking || lookRaised > 0.02), lookRaised, dt, seen.canUse ? seen.target!.interact!.label : (seen.target?.label ?? null), seen.progress, seen.canUse ? 'hand' : 'eye');
       }
       gunfire.dark = cityU.uHeadlights.value;
-      gunfire.setSound(mood.gun, (mood.volume / MOOD_DEFAULTS.volume) * mood.guns, mood.gunEcho, mood.shotgun);
+      gunfire.setSound(mood.gun, (mood.volume / MOOD_DEFAULTS.volume) * mood.guns, mood.gunEcho, mood.shotgun, mood.reloadSound);
       gunfire.update(mack, camera, inVn ? 0 : dt);
       if (shown) {
         // His gait from how fast you're going: the game's walk (4.5 m/s) is his walk, its run (9) his run. (He covers
