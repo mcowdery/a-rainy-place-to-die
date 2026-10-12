@@ -50,7 +50,6 @@ const shelterGlsl = /* glsl */ `
 export class RainSystem {
   readonly group = new THREE.Group();
   private readonly streaks: THREE.Mesh;
-  private readonly ripples: THREE.Mesh;
   private readonly splashes: THREE.Points;
   private readonly u = {
     uTime: { value: 0 },
@@ -161,71 +160,6 @@ export class RainSystem {
     );
     this.streaks.frustumCulled = false;
     this.streaks.renderOrder = 5;
-    // Ripples: rings spreading on the wet ground round the camera, each on its own cycle, lit like the splashes.
-    const RIPPLES = 900;
-    const ripGeo = new THREE.InstancedBufferGeometry();
-    const ripQuad = new THREE.PlaneGeometry(1, 1);
-    ripQuad.rotateX(-Math.PI / 2);
-    ripGeo.index = ripQuad.index;
-    ripGeo.setAttribute('position', ripQuad.getAttribute('position'));
-    const rs = new Float32Array(RIPPLES * 4);
-    for (let i = 0; i < RIPPLES; i++) rs.set([Math.random(), Math.random(), Math.random(), Math.random()], i * 4);
-    ripGeo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(rs, 4));
-    ripGeo.instanceCount = RIPPLES;
-    this.ripples = new THREE.Mesh(
-      ripGeo,
-      new THREE.ShaderMaterial({
-        uniforms: shared,
-        transparent: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        vertexShader: /* glsl */ `
-          attribute vec4 aSeed;
-          uniform float uTime;
-          uniform vec3 uCam;
-          uniform float uAmount;
-          uniform float uLamps;
-          ${lightmapGlsl}
-          ${shelterGlsl}
-          varying vec2 vUv;
-          varying vec3 vCol;
-          varying float vPh;
-          varying float vDist;
-          void main() {
-            float cycle = 0.7 + aSeed.w * 0.6;
-            float t = uTime / cycle + aSeed.z * 10.0;
-            float k = floor(t);
-            vPh = fract(t);
-            // A new spot each cycle, in a 28 m square round the camera.
-            vec2 o = fract(aSeed.xy + vec2(k * 0.618, k * 0.382)) * 28.0 - 14.0;
-            vec3 c = vec3(uCam.x + o.x, 0.05, uCam.z + o.y);
-            float radius = 0.14 + 0.2 * fract(aSeed.x * 7.3 + k * 0.37);
-            vDist = length(c - uCam);
-            float live = step(aSeed.w, uAmount) * (sheltered(c) ? 0.0 : 1.0) * (1.0 - smoothstep(5.0, 13.0, vDist));
-            float fade = (1.0 - vPh) * (1.0 - vPh);
-            vCol = (vec3(0.025, 0.03, 0.04) * (1.0 - uLamps * 0.7) + lightAt(c.xz) * 0.3) * live * fade;
-            vUv = position.xz * 2.0;
-            gl_Position = projectionMatrix * viewMatrix * vec4(c + vec3(position.x, 0.0, position.z) * 2.0 * radius, 1.0);
-          }`,
-        fragmentShader: /* glsl */ `
-          varying vec2 vUv;
-          varying vec3 vCol;
-          varying float vPh;
-          varying float vDist;
-          void main() {
-            float r = length(vUv);
-            if (r > 1.0) discard;
-            // Rings thicken with distance so they never alias to nothing.
-            float wd = 0.1 + vDist * 0.012;
-            float a = smoothstep(wd, 0.0, abs(r - (0.1 + vPh * 0.9))) + 0.5 * smoothstep(wd, 0.0, abs(r - vPh * 0.55));
-            if (a < 0.01) discard;
-            gl_FragColor = vec4(vCol * a * 1.4, 1.0);
-          }`,
-      }),
-    );
-    this.ripples.frustumCulled = false;
-    this.ripples.renderOrder = 4;
     // Splashes: flecks of spray on the ground round the camera, each on its own short cycle.
     const M = 3600;
     const sp = new Float32Array(M * 4);
@@ -264,7 +198,7 @@ export class RainSystem {
             gl_Position = projectionMatrix * mv;
             // A fleck of spray about 6 cm across, gone in a fraction of its cycle.
             // Capped: close to the camera a 6 cm fleck would otherwise fill dozens of pixels.
-            gl_PointSize = min(live * step(vPhase, 0.18) * (0.045 + 0.02 * uAmount) * 900.0 / max(-mv.z, 0.5), 5.0);
+            gl_PointSize = min(live * step(vPhase, 0.18) * (0.045 + 0.02 * uAmount) * 900.0 / max(-mv.z, 0.5), 3.0);
           }`,
         fragmentShader: /* glsl */ `
           varying vec3 vCol;
@@ -273,13 +207,13 @@ export class RainSystem {
             float r = length(gl_PointCoord - 0.5);
             float a = smoothstep(0.5, 0.1, r);
             if (a < 0.01) discard;
-            gl_FragColor = vec4(vCol * a * 2.0, 1.0);
+            gl_FragColor = vec4(vCol * a * 0.9, 1.0);
           }`,
       }),
     );
     this.splashes.frustumCulled = false;
     this.splashes.renderOrder = 5;
-    this.group.add(this.ripples, this.streaks, this.splashes);
+    this.group.add(this.streaks, this.splashes);
   }
 
   /**
@@ -435,17 +369,17 @@ export class RainLayers {
           float v = vWorld.y;
           vec2 tang = vec2(-sin(vAng), cos(vAng));
           u -= dot(uSlant, tang) * v;
-          float cols = 3.0;
+          float cols = 1.6;
           float c = floor(u * cols);
           float r = hh(vec2(c, uRadius));
           float line = 1.0 - smoothstep(0.0, 0.45, abs(fract(u * cols) - 0.5));
-          float seg = smoothstep(0.55, 1.0, fract(v * (0.12 + 0.05 * r) + uTime * (1.1 + 0.6 * r) + r * 7.0));
+          float seg = smoothstep(0.3, 1.0, fract(v * (0.3 + 0.1 * r) + uTime * (1.1 + 0.6 * r) + r * 7.0));
           // Heavier bands sweeping along the curtain.
           float band = 0.55 + 0.45 * sin(u * 0.04 + v * 0.03 - uTime * 0.7 + uRadius);
           float live = step(r, uAmount * 1.1);
           float fade = (1.0 - smoothstep(0.35, 1.0, uRadius / uFogFar)) * (1.0 - smoothstep(18.0, 60.0, v)) * smoothstep(0.0, 1.5, v);
           vec3 L = lightAt(vWorld.xz) * mix(1.0, 0.3, clamp(v / 25.0, 0.0, 1.0));
-          vec3 col = (L * 0.22 + uHorizon * 0.18 + vec3(0.03) * (1.0 - uLamps)) * line * seg * band * live * fade;
+          vec3 col = (L * 0.22 + uHorizon * 0.18 + vec3(0.03) * (1.0 - uLamps)) * line * seg * band * live * fade * 0.5;
           // A faint lit veil between the streaks.
           col += (L * 0.08 + uHorizon * 0.07) * uAmount * band * fade;
           gl_FragColor = vec4(col * 0.55, 1.0);
