@@ -137,8 +137,13 @@ const fragment = /* glsl */ `
   void main() {
     float d = texture2D(tDepth, vUv).x;
     // Open water marks itself in the scene's alpha (waterGlsl.ts); it reflects wet or dry.
-    bool water = uWater > 0.5 && texture2D(tColor, vUv).a < 0.5;
+    float sceneA = texture2D(tColor, vUv).a;
+    bool water = uWater > 0.5 && sceneA < 0.5;
     if (d >= 0.999999 || (uWet <= 0.0 && !water)) { gl_FragColor = vec4(0.0); return; }
+    // A tree's crown (the city shader writes 0.7 into its alpha): leaves cut out of cards, no surface to reflect in.
+    // (Their depth jumps from pixel to pixel, which made the "ground" under a leaf flicker in and out and the
+    // reflection speckle it with bright dots.)
+    if (sceneA > 0.5 && sceneA < 0.9) { gl_FragColor = vec4(0.0); return; }
     vec3 p = viewPos(vUv);
     vec3 px = viewPos(vUv + vec2(uTexel.x, 0.0)) - p;
     vec3 py = viewPos(vUv + vec2(0.0, uTexel.y)) - p;

@@ -11,7 +11,7 @@ const browser = await launchBrowser({ channel: 'msedge', headless: true, args: [
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   page.on('pageerror', (e) => console.log('pageerror', String(e)));
-  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=${spawn}&weather=${extra.includes("clear") ? "clear" : "rain"}&rain=${amt}${extra.includes("natural") ? "" : "&wet=1"}&clock=22:30${extra}`, { timeout: 240000 });
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&${spawn.startsWith("cam=") ? spawn : "spawn=" + spawn}&weather=${extra.includes("clear") ? "clear" : "rain"}&rain=${amt}${extra.includes("natural") ? "" : "&wet=1"}&clock=22:30${extra}`, { timeout: 240000 });
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
   await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });
   await page.waitForTimeout(extra.includes("natural") ? 24000 : 4000);
