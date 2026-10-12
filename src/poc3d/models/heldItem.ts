@@ -31,6 +31,22 @@ export interface HeldOut {
   readonly canopy: THREE.Vector3;
   open: number;
   radius: number;
+  /**
+   * A payphone's handset (`HeldItem.phone`): whether the hand is on it, whether it has hold of it (the handset leaves
+   * its hooks then), how far it is up at his ear (0-1), and where it is (its middle, and its turn: +y toward its
+   * earpiece, +z the way the earpiece faces).
+   */
+  readonly handset: { shown: boolean; gripped: boolean; ear: number; readonly pos: THREE.Vector3; readonly quat: THREE.Quaternion };
+}
+
+/** A payphone's handset at rest in its cradle: its middle and turn (world), and the way the phone faces (unit, horizontal). */
+export interface PhoneHold {
+  readonly rest: THREE.Vector3;
+  readonly restQ: THREE.Quaternion;
+  readonly n: THREE.Vector3;
+  /** In the handset's own frame: its length (toward the earpiece end) and the way the earpiece faces. */
+  readonly bar: THREE.Vector3;
+  readonly disc: THREE.Vector3;
 }
 
 const URLS = import.meta.glob('/assets/props/umbrella/*.glb', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
@@ -98,7 +114,18 @@ function buildFlashlight(): { root: THREE.Group; lens: THREE.Mesh } {
 export class HeldItem {
   /** World space like the smoking's: the rig adds it to its own object, which stays at the origin. */
   readonly group = new THREE.Group();
-  readonly out: HeldOut = { shown: false, tip: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, -1), lit: 0, canopy: new THREE.Vector3(), open: 0, radius: 0.5 };
+  readonly out: HeldOut = { shown: false, tip: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, -1), lit: 0, canopy: new THREE.Vector3(), open: 0, radius: 0.5, handset: { shown: false, gripped: false, ear: 0, pos: new THREE.Vector3(), quat: new THREE.Quaternion() } };
+  /**
+   * A payphone's handset (district/payphone.ts): the hand goes to it where it lies in its cradle, takes it and, on a
+   * call, lifts it to his ear; and on hanging up brings it down again and lets it go. `phoneAct` is while the phone
+   * is his (set each frame by `phone`); the hand goes on after it's cleared, down, with nothing in it.
+   */
+  private phoneAct: PhoneHold | null = null;
+  private phoneLast: PhoneHold | null = null;
+  private phoneCall = false;
+  /** The hand's reach to the handset (0 at his side, 1 on it) and the handset's lift to his ear (0 on its hooks, 1 at the ear). */
+  private reachK = 0;
+  private earK = 0;
   private item: HeldKind | null = null;
   private want: HeldKind | null = null;
   private wantOpen = false;
@@ -121,8 +148,20 @@ export class HeldItem {
     this.group.add(this.torch.root);
   }
 
+  /**
+   * His right hand and a payphone's handset: `hold` while it's his (null: let it go), `call` once he's to have it at his
+   * ear. The first brings the hand to it; with `call` it comes up to his ear; `call` off brings it back to its hooks,
+   * and only clearing `hold` after that takes the hand away. (An umbrella or a torch waits: the page stows it first.)
+   */
+  phone(hold: PhoneHold | null, call = false): void {
+    this.phoneAct = hold;
+    if (hold) this.phoneLast = hold;
+    this.phoneCall = call && hold !== null;
+  }
+
   /** What he should have in his hand, and whether the umbrella is to be open (it rains). */
   set(item: HeldKind | null, open = false): void {
+    if (this.phoneBusy) return;
     this.want = item;
     this.wantOpen = open;
     if (item === 'umbrella') this.load();
@@ -130,7 +169,11 @@ export class HeldItem {
 
   /** The right arm is this act's (so it's not free for lighting up). */
   get active(): boolean {
-    return this.item !== null || this.want !== null;
+    return this.item !== null || this.want !== null || this.phoneBusy;
+  }
+
+  private get phoneBusy(): boolean {
+    return this.phoneAct !== null || this.reachK > 0.001;
   }
 
   takeOver(old: HeldItem): void {
@@ -140,6 +183,11 @@ export class HeldItem {
     this.k = old.k;
     this.openK = old.openK;
     this.upK = old.upK;
+    this.phoneAct = old.phoneAct;
+    this.phoneLast = old.phoneLast;
+    this.phoneCall = old.phoneCall;
+    this.reachK = old.reachK;
+    this.earK = old.earK;
     if (this.want === 'umbrella' || this.item === 'umbrella') this.load();
   }
 
@@ -211,9 +259,103 @@ export class HeldItem {
     });
   }
 
+  /**
+   * The right hand on a payphone's handset (see `phone`): reaches from his side to where it lies, closes on it, and
+   * carries it up to his ear and back. The handset's own place (`out.handset`) is what the hand holds: the page puts
+   * the phone's handset there. The fingers close round the bar as the hand arrives (the grip as the torch's and the
+   * umbrella's), the palm toward it, the bar along the hand's across axis.
+   */
+  private posePhone(c: SmokeCtx): void {
+    const act = this.phoneAct;
+    const hold = act ?? this.phoneLast;
+    const o = this.out.handset;
+    if (!hold) {
+      this.reachK = this.earK = 0;
+      o.shown = o.gripped = false;
+      return;
+    }
+    if (act) {
+      this.reachK = Math.min(1, this.reachK + c.dt / 0.5);
+      const want = this.phoneCall && this.reachK >= 0.97 ? 1 : 0;
+      this.earK += Math.sign(want - this.earK) * Math.min(Math.abs(want - this.earK), c.dt / 0.6);
+    } else {
+      this.earK = Math.max(0, this.earK - c.dt / 0.4);
+      this.reachK = Math.max(0, this.reachK - c.dt / 0.35);
+    }
+    if (this.reachK <= 0.001 && !act) {
+      this.reachK = this.earK = 0;
+      o.shown = o.gripped = false;
+      o.ear = 0;
+      return;
+    }
+    const H = this.hands;
+    const arm = H.arm('r');
+    const usual = arm.hand.getWorldPosition(new THREE.Vector3());
+    const usualF = H.frame('r');
+    const sc = c.sc;
+    const viewF = new THREE.Vector3(0, 0, -1).applyQuaternion(c.viewQ);
+    const viewU = new THREE.Vector3(0, 1, 0).applyQuaternion(c.viewQ);
+    const viewR = new THREE.Vector3(1, 0, 0).applyQuaternion(c.viewQ);
+    H.reset('r');
+    // A hand that holds a bar: its fingers along `fwd0` (toward the knuckles) as nearly as the bar's axis `axis` allows, its
+    // palm toward `palmWant` as nearly as it can face, the bar along its across axis.
+    const frameFor = (fwd0: THREE.Vector3, axis: THREE.Vector3, palmWant: THREE.Vector3): { fwd: THREE.Vector3; palm: THREE.Vector3 } => {
+      const a = axis.clone();
+      const fwd = fwd0.clone().addScaledVector(a, -fwd0.dot(a)).normalize();
+      const palm = new THREE.Vector3().crossVectors(fwd, a);
+      if (palm.dot(palmWant) < 0) palm.negate();
+      return { fwd, palm };
+    };
+    // At rest in the cradle: the hand reaches in from the front, palm to his left, round the vertical bar.
+    const restAxis = hold.bar.clone().applyQuaternion(hold.restQ);
+    const left = viewR.clone().negate();
+    // (A bar standing up is gripped from the side, palm to his left; one lying across a phone, from above, palm down.)
+    const fr = frameFor(hold.n.clone().negate(), restAxis, Math.abs(restAxis.y) > 0.7 ? left : new THREE.Vector3(0, -1, 0));
+    // At his ear: the earpiece against it, the bar sloping down and forward to the mouthpiece, the palm to his head.
+    const ear = c.eye.clone().addScaledVector(viewR, 0.125).addScaledVector(viewU, -0.045).addScaledVector(viewF, -0.01);
+    const m = new THREE.Vector3().addScaledVector(viewU, -0.92).addScaledVector(viewF, 0.3).addScaledVector(viewR, -0.12).normalize();
+    const yAxis = m.clone().negate();
+    const zDisc = left.clone().addScaledVector(yAxis, -left.dot(yAxis)).normalize();
+    // (The handset turned so its length lies along `yAxis` and its earpiece faces his head, whichever way its own frame has them.)
+    const mLocal = new THREE.Matrix4().makeBasis(hold.bar, hold.disc, new THREE.Vector3().crossVectors(hold.bar, hold.disc));
+    const mTarget = new THREE.Matrix4().makeBasis(yAxis, zDisc, new THREE.Vector3().crossVectors(yAxis, zDisc));
+    const earQ = new THREE.Quaternion().setFromRotationMatrix(mTarget.multiply(mLocal.invert()));
+    const earMid = ear.clone().addScaledVector(m, 0.115);
+    const fe = frameFor(new THREE.Vector3().addScaledVector(viewU, 0.5).addScaledVector(viewR, -0.55).addScaledVector(viewF, 0.3), yAxis, left);
+    const e = ease(this.earK);
+    const r = ease(this.reachK);
+    const mid = hold.rest.clone().lerp(earMid, e);
+    // The bar goes up by an arc, not a straight line (the wrist turns in as the forearm comes up).
+    mid.addScaledVector(viewU, Math.sin(Math.PI * e) * 0.04);
+    const quat = hold.restQ.clone().slerp(earQ, e);
+    const fwd = fr.fwd.clone().lerp(fe.fwd, e).normalize();
+    const palm = fr.palm.clone().lerp(fe.palm, e).normalize();
+    const grip = mid.clone().addScaledVector(fwd, -GRIP.along * sc).addScaledVector(palm, -GRIP.shaft * sc);
+    // Up from his side to the handset by an arc, then with it.
+    const arc = Math.sin(Math.PI * r) * 0.08 * sc;
+    const wrist = usual.clone().lerp(grip, r).addScaledVector(UP, arc * (1 - e));
+    const f = { fwd: usualF.fwd.clone().lerp(fwd, r).normalize(), palm: usualF.palm.clone().lerp(palm, r).normalize() };
+    // The elbow down and out, a little further out as the hand comes up to his head.
+    const pole = new THREE.Vector3().addScaledVector(UP, -1).addScaledVector(viewR, 0.4 + 0.5 * e).addScaledVector(viewF, -0.3).normalize();
+    H.reach('r', wrist, pole);
+    H.orient('r', f.fwd, f.palm);
+    H.relax('r', 0.3 + 0.7 * ease((this.reachK - 0.5) / 0.45), CLOSED_FIST, THUMB_ROUND);
+    o.shown = act !== null;
+    o.gripped = act !== null && this.reachK >= 0.97;
+    o.ear = this.earK;
+    o.pos.copy(mid);
+    o.quat.copy(quat);
+    this.out.shown = true;
+  }
+
   /** Raises, lowers and poses the right arm (after the rig's own arms). */
   pose(c: SmokeCtx): void {
     this.time += c.dt;
+    if (this.phoneBusy) {
+      this.posePhone(c);
+      return;
+    }
+    this.out.handset.shown = this.out.handset.gripped = false;
     // Up or down: a change of item brings the hand down first.
     if (!c.free) this.want = null;
     // The umbrella: up from the hip to the chest and then open; shut, and then down.
@@ -308,7 +450,7 @@ export class HeldItem {
     this.torch.root.visible = false;
     if (this.open) this.open.visible = false;
     if (this.closed) this.closed.visible = false;
-    if (!o.shown || !this.item) return;
+    if (this.phoneBusy || !o.shown || !this.item) return;
     const H = this.hands;
     const hand = H.arm('r').hand.getWorldPosition(new THREE.Vector3());
     const { fwd, palm } = H.frame('r');

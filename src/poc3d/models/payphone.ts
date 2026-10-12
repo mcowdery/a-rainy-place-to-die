@@ -101,6 +101,14 @@ export class PayphoneRig {
     for (const o of [this.handset, this.hook, this.flap, this.door, this.dial, ...this.keys.values()]) if (o) this.rest.set(o, { p: o.position.clone(), q: o.quaternion.clone() });
   }
 
+  /** The handset at rest in its cradle (the model's own frame, which the phone's root carries into the world), or null. */
+  handsetRest(): { p: THREE.Vector3; q: THREE.Quaternion; bar: THREE.Vector3; disc: THREE.Vector3 } | null {
+    const r = this.handset && this.rest.get(this.handset);
+    // The handset's length and which way its earpiece faces, in its own frame: standing up beside the green phone's
+    // face (length +y, earpiece facing out +z), lying across the top of a stand phone (length +x, earpieces facing down).
+    return r ? { p: r.p.clone(), q: r.q.clone(), bar: this.dial ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0), disc: this.dial ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(0, 0, 1) } : null;
+  }
+
   /** The handset: 0 on its hooks, 1 held out in front (the hook switch pops up as it leaves). */
   setHandset(k: number): void {
     const r = this.handset && this.rest.get(this.handset);

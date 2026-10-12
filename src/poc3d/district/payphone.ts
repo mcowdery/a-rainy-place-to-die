@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PAYPHONE_KEYS } from '../models/payphone';
+import type { HeldItem } from '../models/heldItem';
 import type { PayphoneField } from '../real/payphoneField';
 
 /**
@@ -13,9 +14,10 @@ import type { PayphoneField } from '../real/payphoneField';
  * Who answers is `lines`: the caller's own table (the page's: the speaking clock, the weather, a taxi). Story calls
  * will be conversations played here; none yet.
  *
- * **Not acted**: his hand doesn't reach for the handset. It lifts off its hooks and is put out of sight while he's on
- * the line (at his ear, where first person can't see it); from outside it simply goes. That move wants its own
- * review (mack.md: moves are shown before they're wired).
+ * **His hand** (`HeldItem.phone`, models/heldItem.ts): his right hand goes to the handset where it lies in its cradle,
+ * closes on it, lifts it off its hooks and carries it up to his ear (the dial tone starts when it's there; the keys
+ * wait for it); hanging up brings it back and puts it on its hooks, and then the hand goes down. Without a rig to
+ * move (no hand: `hooks.hand` null) the handset just lifts off and is hidden while he's on the line.
  */
 export interface PhoneAnswer {
   /** What you hear, a line at a time. */
@@ -40,6 +42,10 @@ export interface PayphoneHooks {
   readonly toast: (text: string, seconds?: number) => void;
   /** Who a number reaches, or null. */
   readonly lines: (number: string) => PhoneAnswer | null;
+  /** His hand's act (Mack's rig), or null when there's none to show. */
+  readonly hand?: () => HeldItem | null;
+  /** His hand can't be on a phone with a torch or an umbrella in it: the page puts it away. */
+  readonly stow?: () => void;
 }
 
 const COST = 10;
@@ -72,6 +78,13 @@ export class PayphoneUse {
   private readonly panel: HTMLDivElement;
   private readonly hint: HTMLDivElement;
   private readonly dir = new THREE.Vector3();
+  /** The handset is up at his ear (the line is open to dial on), and whether his hand's still putting it back. */
+  private ready = false;
+  private putting = false;
+  private readonly tmpM = new THREE.Matrix4();
+  private readonly tmpInv = new THREE.Matrix4();
+  private readonly tmpQ = new THREE.Quaternion();
+  private readonly ONE = new THREE.Vector3(1, 1, 1);
 
   constructor(
     private readonly field: PayphoneField,
@@ -120,12 +133,22 @@ export class PayphoneUse {
     this.dialling = null;
     this.answer = null;
     this.flap = 0;
+    this.putting = false;
+    this.hooks.stow?.();
     this.hooks.hold(true);
-    this.hooks.audio.phoneHook();
     this.hooks.audio.phoneCoin();
+    // With his hand to show, the line opens when the handset is at his ear (update); without, at once.
+    this.ready = !this.hooks.hand?.();
+    if (this.ready) this.open();
+    return true;
+  }
+
+  /** The handset is at his ear: the dial tone, and the keys are live. */
+  private open(): void {
+    this.ready = true;
+    this.hooks.audio.phoneHook();
     this.hooks.audio.phoneTone('dial');
     this.show();
-    return true;
   }
 
   hangUp(): void {
@@ -137,6 +160,9 @@ export class PayphoneUse {
     this.queue.length = 0;
     this.dialling = null;
     this.panel.style.display = 'none';
+    // His hand brings the handset down to its hooks before it goes (update).
+    this.putting = !!this.hooks.hand?.();
+    this.ready = false;
   }
 
   /** A key while on the line: a digit dials, E hangs up. True if it was the phone's. */
@@ -148,7 +174,7 @@ export class PayphoneUse {
     }
     const m = /^(?:Digit|Numpad)([0-9])$/.exec(e.code);
     const digit = m ? m[1] : e.key === '*' ? '*' : e.key === '#' ? '#' : null;
-    if (digit === null || e.repeat) return true;
+    if (digit === null || e.repeat || !this.ready) return true;
     this.dial(digit);
     return true;
   }
@@ -196,6 +222,28 @@ export class PayphoneUse {
     const e = this.field.engaged;
     // Walked off, or the phone's gone: the line drops.
     if (this.active && !e) this.hangUp();
+    // His hand: on the handset from the pick-up to the hook; the line opens when it's at his ear.
+    const hand = this.hooks.hand?.() ?? null;
+    if (hand && e && (this.active || this.putting)) {
+      const rig = e.rig;
+      const rest = rig.handsetRest();
+      if (rest) {
+        this.tmpM.copy(e.root.matrix);
+        const holdAt = new THREE.Vector3().copy(rest.p).applyMatrix4(this.tmpM);
+        const restQ = this.tmpQ.setFromRotationMatrix(this.tmpM).multiply(rest.q).clone();
+        const n = this.dir.set(0, 0, 1).applyQuaternion(this.tmpQ.setFromRotationMatrix(this.tmpM)).setY(0).normalize().clone();
+        hand.phone({ rest: holdAt, restQ, n, bar: rest.bar, disc: rest.disc }, this.active);
+        if (this.active && !this.ready && hand.out.handset.ear >= 0.85) this.open();
+        if (this.putting && hand.out.handset.ear < 0.03) {
+          // On its hooks again: the hand lets go and goes down.
+          hand.phone(null);
+          this.putting = false;
+        }
+      }
+    } else if (this.putting) {
+      this.putting = false;
+      hand?.phone(null);
+    }
     this.hint.style.display = this.canUse(camera) ? 'block' : 'none';
     if (this.hint.style.display === 'block') this.hint.textContent = `[E] Pick up the phone  ·  ¥${COST}`;
     if (this.state === 'dialling') {
@@ -257,11 +305,29 @@ export class PayphoneUse {
       }
     }
     if (!e) return;
-    // The parts. The handset comes off its hooks and is then out of sight (at his ear) until he hangs up.
+    // The parts. The handset is in his hand while he has hold of it, and on its hooks otherwise; with no hand to show,
+    // it comes off its hooks and is out of sight while he's on the line.
     const rig = e.rig;
-    this.lift += ((this.active ? 1 : 0) - this.lift) * Math.min(1, dt * 9);
-    rig.setHandset(Math.min(1, this.lift * 1.4));
-    if (rig.handset) rig.handset.visible = this.lift < 0.8;
+    const grip = hand?.out.handset;
+    if (rig.handset) {
+      if (hand && grip?.gripped && (this.active || this.putting)) {
+        rig.handset.matrixAutoUpdate = false;
+        this.tmpInv.copy(e.root.matrix).invert();
+        rig.handset.matrix.compose(grip.pos, grip.quat, this.ONE).premultiply(this.tmpInv);
+        rig.handset.visible = true;
+        this.lift = 1;
+      } else if (hand) {
+        rig.handset.matrixAutoUpdate = true;
+        rig.handset.visible = true;
+        rig.setHandset(0);
+        this.lift = 0;
+      } else {
+        rig.handset.matrixAutoUpdate = true;
+        this.lift += ((this.active ? 1 : 0) - this.lift) * Math.min(1, dt * 9);
+        rig.setHandset(Math.min(1, this.lift * 1.4));
+        rig.handset.visible = this.lift < 0.8;
+      }
+    }
     for (const [name, t] of this.press) {
       const left = t - dt;
       rig.setKey(name, left > 0 ? Math.sin((left / 0.16) * Math.PI) : 0);
