@@ -77,13 +77,13 @@ describe('editions', () => {
     for (const name of Object.keys(kaburoArt)) expect(uncensored.kaburoArt[name], name).toBe(kaburoArt[name]);
     if (!here) expect(Object.keys(uncensored.kaburoArt).sort()).toEqual(Object.keys(kaburoArt).sort());
   });
-  it('only the uncensored edition has the hidden cast models (Mack nude), when adult/ is there', () => {
+  it('the hidden cast models (Mack nude: a smooth body, nothing shows) are in the repository and the standard edition, but not the demo', () => {
     for (const name of DEMO_HIDDEN_CHARACTERS) {
-      expect(characters[name], `${name} is not in the repository`).toBeUndefined();
+      expect(characters[name], `${name} is in the repository`).toBeTruthy();
       expect(demo.characters[name], name).toBeUndefined();
-      if (existsSync('adult/assets/characters')) expect(uncensored.characters[name], name).toBeTruthy();
+      expect(uncensored.characters[name], name).toBeTruthy();
     }
-    expect(Object.keys(demo.characters).sort()).toEqual(Object.keys(characters).sort());
+    expect(Object.keys(demo.characters).sort()).toEqual(Object.keys(characters).filter((n) => !DEMO_HIDDEN_CHARACTERS.has(n)).sort());
     expect(Object.keys(edition.characters).sort()).toEqual(Object.keys(characters).sort());
   });
 });
