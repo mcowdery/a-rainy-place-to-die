@@ -117,6 +117,8 @@ import { destinations, TravelMap, type Destination, type MapLine } from './trave
 import { RoutePicker } from './routePicker';
 import { subwayRoute } from './subway';
 import { EMIT, KIND, lin, MeshBuilder } from '../real/meshBuilder';
+import { PauseMenu, startScreen } from './startScreen';
+import { breathe, breatheIfDue } from '../real/breathe';
 import { AsciiOverlayPass, OVERLAY_PRESETS, type OverlayPreset } from '../real/overlay';
 import { addFigure, GhostBuilder, ghostMaterial, setMobEye, setMobLook, setMobSun, setPassengerMaterial, setSkinTone, type FigureSpec, type MobLook } from '../real/people';
 import { SignAtlas, signMaterial } from '../real/signs';
@@ -166,6 +168,7 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 /** The loading screen: the phase's name under the pink text, and the thin bar's fill (0..1). */
 const loadStep = (text: string, fraction: number): void => {
   $('overlay').textContent = text;
+  startScreen().progress(text);
   ($('loadbar').firstElementChild as HTMLElement).style.width = `${fraction * 100}%`;
 };
 const params = new URLSearchParams(location.search);
@@ -219,6 +222,8 @@ type C3 = [number, number, number];
 async function run(): Promise<void> {
   // The uncensored edition asks your age first (src/edition/ageGate.ts); the standard edition goes straight on.
   await edition.ageGate();
+  // The start screen (startScreen.ts) covers the loading screen; the city loads behind it.
+  const start = startScreen();
   performance.mark('boot:run');
   const content = loadDistrictContent(CITY.id);
   performance.mark('boot:content');
@@ -355,13 +360,16 @@ async function run(): Promise<void> {
       }),
   ];
   const words = content.zones.words([...new Set(DISTRICTS3.flatMap((k) => STYLES3[k]!.signWords))]);
+  await breathe();
   const atlas = new SignAtlas(signTexts(words, content.placed));
+  await breathe();
   const M = 16;
   const b = district.bounds;
   // The lightmap wraps round a 16-cell window (2 km) about the camera, so it doesn't grow with the city.
   const lightmap = new Lightmap(renderer, { x: b.minX - M, y: b.minZ - M, w: b.maxX - b.minX + 2 * M, h: b.maxZ - b.minZ + 2 * M }, CELL, LIGHTMAP_WINDOW);
   cityU.tLight.value = lightmap.texture;
   // The storefronts' interiors, painted once.
+  // (The rooms are painted a little later, after the city is ready: `shopAtlas.fill()` below.)
   const shopAtlas = new ShopAtlas(renderer, CITY.filipino ? MANILA_TEXT : TOTO_TEXT);
   cityU.tShopCol.value = shopAtlas.color;
   cityU.tShopMask.value = shopAtlas.mask;
@@ -371,9 +379,11 @@ async function run(): Promise<void> {
   const ghost = ghostMaterial({ tLight: cityU.tLight, uLightRect: cityU.uLightRect, uLightFade: cityU.uLightFade, uLightGain: cityU.uLightGain });
   // Passengers in the trains and buses are the mob too.
   setPassengerMaterial(ghost);
+  await breatheIfDue();
   const ads = adMaterial(cityU, new DistrictAdAtlas());
   const cityDepth = cityDepthMaterial(cityU);
   // Taxis' photo ads (parked and in traffic) and the vehicles' lettering (in the sign atlas).
+  await breatheIfDue();
   const taxiAds = adMaterial(cityU, new AdAtlas(TAXI_ADS));
   const signs = signMaterial(cityU, atlas);
   district.setKit({ city, cityDepth, signs, ghost, ads, taxiAds, atlas, lightmap, words });
@@ -487,6 +497,7 @@ async function run(): Promise<void> {
       npcMeshes.set(n.id, mesh);
     }
   }
+  await breatheIfDue();
   const dressingGeo = dressing.build();
   if (dressingGeo) {
     const m = new THREE.Mesh(dressingGeo, city);
@@ -518,7 +529,11 @@ async function run(): Promise<void> {
   useNewBuses(busMats);
   // The road under a viaduct (its piers stand in its median, or as a portal frame over its carriageway).
   const roadBelow = roadUnder((mx, my) => district.plan(mx, my));
-  const trainLines = new Map(rails.map((l) => [l.id, new TrainSystem(l, railStations.filter((s) => s.line === l.id), city, carMats, roadBelow)]));
+  const trainLines = new Map<string, TrainSystem>();
+  for (const l of rails) {
+    await breathe();
+    trainLines.set(l.id, new TrainSystem(l, railStations.filter((s) => s.line === l.id), city, carMats, roadBelow));
+  }
   for (const t of trainLines.values()) {
     scene.add(t.group);
     // (The viaduct stands still; the trains in the same group move.)
@@ -529,7 +544,9 @@ async function run(): Promise<void> {
   /** The line you're riding, if any. */
   const trainRiding = (): TrainSystem | null => [...trainLines.values()].find((t) => t.riding) ?? null;
   // The subway: tunnels and trains below ground (shown only there), and its stations (landmarks, below).
+  await breathe();
   const subway = new SubwaySystem(content.subway, city, carMats);
+  await breathe();
   subway.group.visible = false;
   scene.add(subway.group);
   const subwayViews: { view: SubwayStationView; x: number; z: number }[] = [];
@@ -550,6 +567,7 @@ async function run(): Promise<void> {
   const brown = new Brownout();
   signals.dead = (gx, gy) => brown.junctionDead(gx, gy);
   setTrafficGround(groundAt);
+  await breathe();
   const traffic = new TrafficSystem(
     carLoops(content.macro, content.traffic, plan, expressway.rampColliders()).map((c) => ({ route: routeFor(c.rect, true, plan, piers), spacing: c.spacing })),
     content.traffic.buses.map((line) => ({ line, route: routeFor(line.rect, false, plan, piers) })),
@@ -688,6 +706,7 @@ async function run(): Promise<void> {
   let treeY = 0;
   setTreeSink((t) => landmarkTrees.push({ ...t, y: treeY }));
   for (const placed of content.placed) {
+    await breatheIfDue();
     const lm = placed.stamp.landmark;
     // On a hill, the landmark stands level at its footing (everything it adds to the scene lifted with it).
     const sceneBefore = scene.children.length;
@@ -858,6 +877,7 @@ async function run(): Promise<void> {
   // What he can look at: the props about him, the people standing about (the walking ones' places are the shader's).
   const moment = { rain: () => weather() === 'rain', night: () => time() === 'night' };
   const propWords = new PropLookables(moment);
+  await breatheIfDue();
   const peopleWords = new PeopleLookables(moment);
   investigator.source((o) => [
     ...propWords.of(district.propsNear(o.x, o.z, 40), groundAt),
@@ -1120,6 +1140,7 @@ async function run(): Promise<void> {
     controls.setLevel(level);
     controls.setView(d.yaw, d.pitch);
   };
+  await breathe();
   const travel = new TravelMap(district, content.zones, allPlaces(), (d: Destination) => {
     goPlace(d);
     travel.hide();
@@ -1131,12 +1152,23 @@ async function run(): Promise<void> {
   Object.assign(toastEl.style, { position: 'fixed', top: '18%', left: '50%', transform: 'translateX(-50%)', padding: '10px 18px', background: 'rgba(8, 8, 14, 0.85)', border: '1px solid #3a3850', color: '#e8e6f0', font: "14px 'Consolas', monospace", zIndex: '16', display: 'none', pointerEvents: 'none' });
   document.body.append(toastEl);
   let toastTimer = 0;
+  // Nothing of the game's own shows over the start screen: what the boot says (the car's controls) waits for Start.
+  let begun = !start.shown;
+  let heldToast: [string, number] | null = null;
   const toast = (text: string, seconds = 4): void => {
+    if (!begun) {
+      heldToast = [text, seconds];
+      return;
+    }
     toastEl.textContent = text;
     toastEl.style.display = 'block';
     clearTimeout(toastTimer);
     toastTimer = window.setTimeout(() => (toastEl.style.display = 'none'), seconds * 1000);
   };
+  if (start.shown) void start.done.then(() => {
+    begun = true;
+    if (heldToast) toast(...heldToast);
+  });
   const LAST_TRAIN = '終電 · The last train has gone. Trains run again from 5:00.';
   const applyLate = (): void => {
     subway.running = !late();
@@ -1581,6 +1613,31 @@ async function run(): Promise<void> {
   performance.mark('boot:compile-end', { detail: { programs: renderer.info.programs?.length ?? 0, names: bootDiag ? renderer.info.programs?.map((p) => `${p.name || String(p.cacheKey)}#${p.id}`) : undefined } });
   loadStep('uploading textures and geometry...', 0.8);
   renderer.setRenderTarget(null);
+  /**
+   * Draws the whole scene once, a part of it at a time (each draw links the programs its parts use for the first time, a
+   * stall: in slices the page keeps answering). Lights are never hidden (that would recompile every city shader), so a
+   * part holding one stays up throughout; so does anything that was already hidden.
+   */
+  const drawInParts = async (): Promise<void> => {
+    const holdsLight = (c: THREE.Object3D): boolean => {
+      let l = false;
+      c.traverse((o) => void (l ||= (o as THREE.Light).isLight));
+      return l;
+    };
+    const parts = scene.children.filter((c) => c.visible && !holdsLight(c));
+    const batch = Math.max(1, Math.ceil(parts.length / 14));
+    for (const c of parts) c.visible = false;
+    for (let i = 0; i < parts.length; i += batch) {
+      const group = parts.slice(i, i + batch);
+      for (const c of group) c.visible = true;
+      await breathe();
+      composer.render(0);
+      for (const c of group) c.visible = false;
+    }
+    for (const c of parts) c.visible = true;
+    await breathe();
+    composer.render(0);
+  };
   // Upload every texture now too (sign canvases, posters): otherwise each uploads the first time its object
   // comes into view, a hitch of tens of milliseconds for the big ones.
   const textures = new Set<THREE.Texture>();
@@ -1592,7 +1649,11 @@ async function run(): Promise<void> {
       if (uniforms) for (const u of Object.values(uniforms)) if (u?.value instanceof THREE.Texture) textures.add(u.value);
     }
   });
-  for (const t of textures) renderer.initTexture(t);
+  let uploaded = 0;
+  for (const t of textures) {
+    renderer.initTexture(t);
+    if (++uploaded % 4 === 0) await breathe();
+  }
   // And every mesh's geometry: draw the whole scene once without culling, so the landmarks, the viaduct
   // and the trains upload now rather than the first time each comes into view.
   const culled: THREE.Object3D[] = [];
@@ -1602,11 +1663,9 @@ async function run(): Promise<void> {
       culled.push(o);
     }
   });
-  composer.render(0);
+  await drawInParts();
   performance.mark('boot:render-end', { detail: { programs: renderer.info.programs?.length ?? 0, names: bootDiag ? renderer.info.programs?.map((p) => `${p.name || String(p.cacheKey)}#${p.id}`) : undefined } });
   for (const o of culled) o.frustumCulled = true;
-  $('overlay').textContent = 'click to walk';
-  $('loadbar').hidden = true;
 
   // Interaction: nearest visible interactable within reach, roughly in front of you.
   // VN mode: the stories exported from the VN generator (content/vn/); a node no story knows shows the placeholder.
@@ -1774,6 +1833,7 @@ async function run(): Promise<void> {
   /** How much a wheel at (x, z) is wading in flood water, 0-1. */
   const wadingAt = (x: number, z: number): number => (flood && floodNow >= FLOOD_MIN ? wading(flood.field.depthAt(x, z, floodNow)) : 0);
   // Hanejima's airfield and its traffic (real/airport.ts).
+  await breatheIfDue();
   const airport = buildAirport(transitNew ? city : null);
   scene.add(airport.group);
   // Boats on the bay and the river (real/boats.ts; Manilaya).
@@ -1788,6 +1848,7 @@ async function run(): Promise<void> {
     const r = expressway.roads.find((q) => q.hill);
     return r ? hillOf(r) : null;
   })();
+  await breatheIfDue();
   const edges = buildEdges(content.macro, CELL, content.terrain, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), CITY.tropical, (x, z, r) => expressway.nearTunnel(x, z, r) || inPark(x, z, 40) || Math.hypot(x - (parkHill?.cx ?? -1e9), z - (parkHill?.cz ?? -1e9)) < 250 + r, (() => {
     // The view from the tunnel's mouth (where a new game starts) is kept pretty: no fringe houses, a blossom grove.
     const way = expressway.roads.find((r) => r.out);
@@ -2065,7 +2126,10 @@ async function run(): Promise<void> {
   };
   let snowCover = params.has('snowcover') ? Math.max(0, Math.min(1, Number(params.get('snowcover')))) : weather() === 'snow' ? 0.8 : 0;
   if (debug) (window as unknown as { __sea: unknown }).__sea = { sea, renderer, horizon: cityU.uHorizon };
+  await breathe();
   const exView = buildExpressway(expressway, city);
+  await breathe();
+  await breatheIfDue();
   const exTraffic = new ExpresswayTraffic(expressway, city, undefined, { signs, taxiAds, layout: atlas });
   scene.add(exView.group, exTraffic.group);
   freeze(exView.group);
@@ -2112,6 +2176,7 @@ async function run(): Promise<void> {
   }
   // What your car, your bikes and the auto drive meet: District.obstacle gathered once round them (nearProbe.ts), not ~40-65 us a probe.
   const driven = new NearObstacle(district);
+  await breatheIfDue();
   const ownCar = new OwnCar(
     city,
     traffic,
@@ -2126,6 +2191,7 @@ async function run(): Promise<void> {
   // Your motorcycles (race/bikeRide.ts), on the same handling as the car, parked in the bay either side of it
   // facing out: the black cruiser (Kaiun Raijin 1600, his shotgun) and the sports bike (Ōmi Hayate 900RR, his
   // Type 54 and a helmet). E by one gets on (Mack seated, first person; Q third), X draws his gun.
+  await breatheIfDue();
   const bikeEnv = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
   const cityBikes = (['cruiser', 'hayate'] as const).map((id, i) => {
     const side = i === 0 ? 1.9 : -1.9;
@@ -2233,6 +2299,7 @@ async function run(): Promise<void> {
   let leavingFor: string | null = null;
   // Taxis (taxi.ts): H at the kerb waves one down; it pulls in beside you; E gets in and you say where to.
   const taxiPicker = new TaxiPicker();
+  await breathe();
   const places = allPlaces();
   /** The ride under way: from, to, the fare, and the seconds it lasts (sped up) and has run. */
   let taxiRide: { dest: Destination; fare: number; t: number; T: number; x0: number; z0: number; path: [number, number][]; cum: number[]; heading?: number } | null = null;
@@ -3382,14 +3449,14 @@ async function run(): Promise<void> {
   // music. At the wheel , and . turn the dial and / is the tape's button; a taxi driver has his own on, low.
   const radio = new Radio(loadStations(CITY.id));
   const radioHud = new RadioHud();
-  radio.onReadout = (r) => radioHud.show(r);
+  radio.onReadout = (r) => begun && radioHud.show(r);
   // A new game starts with the city-pop station playing (it is heard once the first click has started the audio).
   if (startRoad) radio.tune('city_pop_radio');
   if (debug) (window as unknown as { __radio: Radio }).__radio = radio;
   // NAMI, the phone's music app (district/musicApp.ts): the same music on demand, anywhere, through his
   // noise-cancelling headphones (real/musicPlayer.ts) or the phone's speaker.
   const music = new MusicPlayer(radio.stations);
-  music.onReadout = (r) => radioHud.show(r);
+  music.onReadout = (r) => begun && radioHud.show(r);
   phoneUi.register(new MusicApp(music));
   /** How much of your own engine comes through what's on his ears. */
   const EAR_DUCK = { none: 1, worn: 0.7, nc: 0.25 } as const;
@@ -3843,12 +3910,32 @@ async function run(): Promise<void> {
       }
     }
   });
+  // The browser lets sound start only from a gesture: a key or a press counts as much as a click, so the music
+  // doesn't wait for a click (the first key or press starts it; later ones just resume it after a pause).
+  for (const gesture of ['pointerdown', 'keydown']) window.addEventListener(gesture, () => audio.start(), { capture: true });
+  const pauseMenu = new PauseMenu(() => controls.lock());
+  let everLocked = false;
   document.body.addEventListener('click', () => {
     audio.start();
-    if (!bench && !inVn && !travel.open && !picker.open && !taxiPicker.open && !debugMenu.open && !playtest?.open) controls.lock();
+    if (!bench && !inVn && !travel.open && !picker.open && !taxiPicker.open && !debugMenu.open && !playtest?.open && !pauseMenu.open) controls.lock();
   });
-  controls.look.addEventListener('lock', () => ($('overlay').hidden = true));
-  controls.look.addEventListener('unlock', () => ($('overlay').hidden = bench));
+  // Start takes the mouse (its click was the gesture); Esc, which releases the mouse, opens the pause menu unless
+  // something else of the game's has the mouse (the map, a panel, a scene), and Resume takes it back.
+  if (start.shown) void start.done.then(() => controls.lock());
+  controls.look.addEventListener('lock', () => {
+    everLocked = true;
+    pauseMenu.close(false);
+    $('overlay').hidden = true;
+  });
+  controls.look.addEventListener('unlock', () => {
+    $('overlay').hidden = bench;
+    setTimeout(() => {
+      // No pause when the page lost focus (Print Screen's snipping overlay, alt-tab): the pause menu would be in the snip.
+      if (!everLocked || bench || inVn || controls.look.isLocked || shot.asking || !document.hasFocus()) return;
+      if (travel.open || picker.open || taxiPicker.open || taxiRide || debugMenu.open || waitPanel.open || playtest?.open || phoneUi.isOpen) return;
+      pauseMenu.show();
+    }, 60);
+  });
   if (!bench && !debug) playtest?.showFirstTime();
   // Debug: start on a ride, ?debug=1&ride=<from station>,<to station> (placement ids, e.g. y01_station,w03_station).
   // ?debug=1&vn=<node id>: stand in front of the node (a step out from an npc), face it, play its scene.
@@ -3960,7 +4047,6 @@ async function run(): Promise<void> {
   // `debug-shots/driveprograms.mjs`: 8 programs compiling at once the first time the garage came into view, a stall of
   // seconds in the middle of a drive) compiles and uploads now, still loading, once more the same way.
   {
-    const label = $('overlay').textContent;
     $('overlay').textContent = 'compiling the rest...';
     renderer.setRenderTarget(rt);
     await renderer.compileAsync(scene, camera);
@@ -3972,18 +4058,31 @@ async function run(): Promise<void> {
         unculled.push(o);
       }
     });
-    composer.render(0);
+    await drawInParts();
     for (const o of unculled) o.frustumCulled = true;
     performance.mark('boot:late-warm', { detail: { programs: renderer.info.programs?.length ?? 0 } });
-    $('overlay').textContent = label;
+    // (Last, and only now: the test scripts wait for this text to know the whole boot has run, and the boot awaits along the way.)
+    $('overlay').textContent = 'click to walk';
   }
+
+  // The city is built: the start screen says so, and the game waits for Start (if it's up) before it runs a frame.
+  start.ready();
+  // What isn't needed at once is made now, behind the start screen or the first frames: the shops' insides and the
+  // people in the windows (their textures are empty until then), each in slices so the page keeps answering.
+  void shopAtlas.fill().then(() => {
+    renderer.initTexture(shopAtlas.color);
+    renderer.initTexture(shopAtlas.mask);
+  });
+  await start.done;
+  $('loadbar').hidden = true;
+  document.getElementById('loadbg')?.remove();
 
   let firstFrameMarked = false;
   renderer.setAnimationLoop(() => {
     if (!firstFrameMarked) { firstFrameMarked = true; performance.mark('boot:first-frame'); }
     // (Aiming from the car slows the world while the focus lasts: district/carGun.ts. `realDt` is the wall clock's.)
     const realDt = Math.min(clock.getDelta(), 0.1);
-    const dt = realDt * carGun.timeScale;
+    const dt = pauseMenu.open ? 0 : realDt * carGun.timeScale;
     const now = performance.now();
     let phase: string | null = null;
     if (bench) {

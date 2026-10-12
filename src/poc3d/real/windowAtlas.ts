@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { driveSync } from './breathe';
 import { ARM_L, ARM_R, BONES, FOOT_L, FOOT_R, FORE_L, FORE_R, HEAD, PARENT, PELVIS, pivotsOf, PROPORTIONS, ROOT, SHIN_L, SHIN_R, SPINE, THIGH_L, THIGH_R } from './mobRig';
 import { isTeen, TEEN_SCALE } from './mobShape';
 import { templateGeometry, templateIndex } from './people';
@@ -751,7 +752,8 @@ export interface WindowAtlasData {
 }
 
 /** Every scene of this edition, painted: the bytes that go under the storefronts' masks (shopAtlas.ts). */
-export function paintWindowAtlas(): WindowAtlasData {
+/** Paints the window scenes' atlas, yielding after each scene (`drive` in breathe.ts pauses for the browser at each; `paintWindowAtlas` doesn't). */
+export function* paintWindowAtlasSteps(): Generator<void, WindowAtlasData> {
   const t0 = performance.now();
   const A = WINDOW_ATLAS;
   const scenes = windowScenes();
@@ -778,7 +780,7 @@ export function paintWindowAtlas(): WindowAtlasData {
       for (let x = 0; x < A.cellW; x++, o += 4, i++) data[o] = px[i];
     }
   };
-  scenes.forEach((s, n) => {
+  for (const [n, s] of scenes.entries()) {
     const poses = lay.poses[n];
     if (s.back) {
       paintPart(L, s, 'back');
@@ -799,8 +801,13 @@ export function paintWindowAtlas(): WindowAtlasData {
       paintPart(L, s, poses[k]);
       write(lay.pool + Math.floor(sl / 4), sl % 4, L.field());
     }
-  });
+    yield;
+  }
   return { data, width, height, scenes, ms: Math.round(performance.now() - t0) };
+}
+
+export function paintWindowAtlas(): WindowAtlasData {
+  return driveSync(paintWindowAtlasSteps());
 }
 
 function roomFill(cat: string): string {

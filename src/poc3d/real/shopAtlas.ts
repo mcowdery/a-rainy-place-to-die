@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { hash, rng, type Rng } from '../../core/hash';
 import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, type Body, type FigureSpec, type Hair, type Outfit, type Pose } from './people';
 import { TRADE as T, TRADE_COUNT } from './shops';
-import { paintWindowAtlas, sceneLayerImage } from './windowAtlas';
+import { paintWindowAtlasSteps, sceneLayerImage } from './windowAtlas';
+import { drive, driveSync } from './breathe';
 import { TOTO_TEXT, type ShopText } from './shopText';
-import { SHOP_KINDS, shopScenes, WINDOW_ATLAS, type Scene, type ShopKind } from './windowScenes';
+import { SHOP_KINDS, shopScenes, WINDOW_ATLAS, WINDOW_ROWS, type Scene, type ShopKind } from './windowScenes';
 
 /**
  * The storefront interiors' art: each shop trade's room (shops.ts) painted once on canvas into an atlas, which
@@ -239,12 +240,13 @@ const SPRITE_COLS = 16;
 
 class MobSprites {
   /** The sheet (sRGB, alpha the figures) and the same in black, for the mask. */
-  readonly sheet: HTMLCanvasElement;
-  readonly black: HTMLCanvasElement;
+  sheet!: HTMLCanvasElement;
+  black!: HTMLCanvasElement;
   private readonly cells = new Map<MobKind, number[]>();
-  private readonly rows: number;
+  private rows = 0;
 
-  constructor(renderer: THREE.WebGLRenderer) {
+  /** Made empty; `build` paints it, in slices: the figures' shader compiles in the background (a sync compile of it held the page for seconds). */
+  *build(renderer: THREE.WebGLRenderer): Generator<void | Promise<unknown>, void> {
     const rnd = rng(hash(0x5e0b));
     const specs: FigureSpec[] = [];
     let n = 0;
@@ -273,9 +275,16 @@ class MobSprites {
     const cam = new THREE.OrthographicCamera(0, SPRITE_COLS, this.rows * 2, 0, 0.1, 100);
     cam.position.set(0, 0, 30);
     const rt = new THREE.WebGLRenderTarget(W, H);
+    yield;
     const prevTarget = renderer.getRenderTarget();
     const prevClear = renderer.getClearColor(new THREE.Color());
     const prevAlpha = renderer.getClearAlpha();
+    // (The compile starts with the target set, as it will be drawn, and the target goes back at once: the page may draw
+    // a frame of its own while the compile is waited for.)
+    renderer.setRenderTarget(rt);
+    const compiling = renderer.compileAsync(scene, cam);
+    renderer.setRenderTarget(prevTarget);
+    yield compiling;
     renderer.setRenderTarget(rt);
     renderer.setClearColor(0x000000, 0);
     renderer.clear();
@@ -287,6 +296,7 @@ class MobSprites {
     rt.dispose();
     mesh.geometry.dispose();
     mat.dispose();
+    yield;
     // GL rows run bottom up; the material writes linear colour, the canvas wants sRGB.
     const enc = new Uint8ClampedArray(256);
     for (let i = 0; i < 256; i++) {
@@ -1750,18 +1760,58 @@ export class ShopAtlas {
   readonly color: THREE.CanvasTexture;
   /** The storefronts' masks, and under them the rooms behind the upper floors' glass (windowAtlas.ts). */
   readonly mask: THREE.DataTexture;
+  private readonly col: HTMLCanvasElement;
+  private readonly maskCanvas: HTMLCanvasElement;
+  private readonly bytes: Uint8Array;
+  /** Whether the rooms are painted yet. */
+  painted = false;
 
-  constructor(renderer: THREE.WebGLRenderer, text: ShopText = TOTO_TEXT) {
-    TXT = text;
+  /**
+   * Made at once with the rooms still empty (blank textures of their final size, so the city can be built and drawn
+   * with them); `fill` paints them, in slices, whenever the caller has the time: the shops' insides and the people
+   * in the windows come in a moment later, and nothing waits for them.
+   */
+  constructor(private readonly renderer: THREE.WebGLRenderer, private readonly text: ShopText = TOTO_TEXT) {
+    this.col = document.createElement('canvas');
+    this.col.width = ATLAS_W;
+    this.col.height = ATLAS_H;
+    this.maskCanvas = document.createElement('canvas');
+    this.maskCanvas.width = ATLAS_W / 2;
+    this.maskCanvas.height = ATLAS_H / 2;
+    this.color = new THREE.CanvasTexture(this.col);
+    this.color.colorSpace = THREE.SRGBColorSpace;
+    this.color.premultiplyAlpha = true;
+    this.bytes = new Uint8Array(this.maskCanvas.width * (this.maskCanvas.height + WINDOW_ROWS) * 4);
+    this.mask = new THREE.DataTexture(this.bytes, this.maskCanvas.width, this.maskCanvas.height + WINDOW_ROWS, THREE.RGBAFormat, THREE.UnsignedByteType);
+    this.mask.needsUpdate = true;
+    for (const tex of [this.color, this.mask]) {
+      tex.generateMipmaps = true;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.anisotropy = 4;
+      tex.flipY = false;
+    }
+  }
+
+  /** Paints the rooms in slices, the browser getting a turn between them (so the page stays clickable). */
+  fill(): Promise<void> {
+    return drive(this.paint());
+  }
+
+  /** Paints the rooms straight through (a tool that has no use for the pauses). */
+  fillNow(): void {
+    driveSync(this.paint());
+  }
+
+  private *paint(): Generator<void | Promise<unknown>, void> {
+    const { renderer, col, maskCanvas: mask } = this;
+    TXT = this.text;
     const t0 = performance.now();
-    SPRITES = new MobSprites(renderer);
+    const sprites = new MobSprites();
+    yield* sprites.build(renderer);
+    SPRITES = sprites;
     const tSprites = performance.now();
-    const col = document.createElement('canvas');
-    col.width = ATLAS_W;
-    col.height = ATLAS_H;
-    const mask = document.createElement('canvas');
-    mask.width = ATLAS_W / 2;
-    mask.height = ATLAS_H / 2;
+    yield;
     const gc = col.getContext('2d')!;
     const gm = mask.getContext('2d', { willReadFrequently: true })!;
     gm.fillStyle = '#000';
@@ -1772,39 +1822,31 @@ export class ShopAtlas {
       if (!d) continue;
       d.paint(p, rng(hash(t, 0x5409)), t);
       p.end();
+      yield;
     }
     const tTrades = performance.now();
     // The shady rooms this edition has (the demo none of the adult ones: their blocks stay empty and are never read).
     const shady = shopScenes();
-    SHOP_KINDS.forEach((kind, k) => {
+    for (const [k, kind] of SHOP_KINDS.entries()) {
       const s = shady[kind];
-      if (!s) return;
+      if (!s) continue;
       paintShady(p, rng(hash(k, 0x5ad1)), TRADE_COUNT + k, kind, s);
       p.end();
-    });
-    this.color = new THREE.CanvasTexture(col);
-    this.color.colorSpace = THREE.SRGBColorSpace;
-    this.color.premultiplyAlpha = true;
+      yield;
+    }
     const tShady = performance.now();
     // The masks' bytes with the window scenes' rows under them: one texture (canvas pixels are premultiplied, which
     // the scenes' four independent channels can't be, so it's a plain byte array).
-    const rooms = paintWindowAtlas();
-    if (rooms.width !== mask.width || WINDOW_ATLAS.maskH !== mask.height) throw new Error('shop atlas: the window scenes are laid out for a mask of another size');
-    const bytes = new Uint8Array(mask.width * (mask.height + rooms.height) * 4);
-    bytes.set(gm.getImageData(0, 0, mask.width, mask.height).data);
-    bytes.set(rooms.data, mask.width * mask.height * 4);
-    this.mask = new THREE.DataTexture(bytes, mask.width, mask.height + rooms.height, THREE.RGBAFormat, THREE.UnsignedByteType);
+    const rooms = yield* paintWindowAtlasSteps();
+    if (rooms.width !== mask.width || WINDOW_ATLAS.maskH !== mask.height || rooms.height !== WINDOW_ROWS) throw new Error('shop atlas: the window scenes are laid out for a mask of another size');
+    this.bytes.set(gm.getImageData(0, 0, mask.width, mask.height).data);
+    this.bytes.set(rooms.data, mask.width * mask.height * 4);
     this.mask.userData = { windowMs: rooms.ms, scenes: rooms.scenes.map((s) => s.id), rows: rooms.height };
     this.mask.needsUpdate = true;
+    this.color.needsUpdate = true;
     // (How long each part took, for debug-shots/windowheadroom.mjs: the mob's sprites, the trades' rooms, the shady rooms.)
     this.color.userData = { ms: Math.round(performance.now() - t0) - rooms.ms, sprites: Math.round(tSprites - t0), trades: Math.round(tTrades - tSprites), shady: Math.round(tShady - tTrades) };
-    for (const tex of [this.color, this.mask]) {
-      tex.generateMipmaps = true;
-      tex.minFilter = THREE.LinearMipmapLinearFilter;
-      tex.magFilter = THREE.LinearFilter;
-      tex.anisotropy = 4;
-      tex.flipY = false;
-    }
+    this.painted = true;
   }
 }
 
