@@ -1,0 +1,13 @@
+{
+  "base": "mack.json",
+  "name": "mack_nude",
+  "out": "assets/characters/mack_nude.glb",
+  "preview": "assets/characters/previews/mack_nude.png",
+  "clothes": [],
+  "body": {
+    "decimate": 0.8
+  },
+  "without": [
+    "jacket"
+  ]
+}
