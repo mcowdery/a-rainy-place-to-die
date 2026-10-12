@@ -131,6 +131,12 @@ export class DistrictModel {
     return line ? this.stopsOf(line).sites : [];
   }
 
+  private allStops: readonly StopSite[] | null = null;
+  /** Every bus stop in the city (posters go up beside them: real/adSites.ts). */
+  stopSites(): readonly StopSite[] {
+    return (this.allStops ??= this.buses.flatMap((b) => this.stopsOf(b).sites));
+  }
+
   /** What the bus lines asked for and couldn't have (a place with no good spot near it): for the tests. */
   stopProblems(): string[] {
     return this.buses.flatMap((b) => this.stopsOf(b).problems);

@@ -1,5 +1,6 @@
 import { liftRaw } from './terrain';
 import { addBuilding } from '../real/buildings';
+import type { AdSites } from '../real/adSites';
 import { addDistrictAds } from '../real/districtAds';
 import { addGround } from '../real/ground';
 import { paintLights, type Light } from '../real/lightmap';
@@ -59,6 +60,8 @@ export class ChunkBuilder {
     private readonly layout: SignLayout,
     /** False for a city without ad art (cityConfig.ts `ads`): no billboards, posters or taxi photo ads. */
     private readonly ads = true,
+    /** Where the billboards and posters go (real/adSites.ts); none without it. */
+    private readonly adSites: AdSites | null = null,
   ) {
     this.signals = new Signals(scrambleKeys(model.placed, CELL));
   }
@@ -115,13 +118,13 @@ export class ChunkBuilder {
       addProps(pf, detail, { sb, layout: this.layout, photos: this.ads ? taxiPhotos(tb) : undefined }, 'swap');
       const pm = this.pm.reset();
       addProps(pm, detail, undefined, 'swap', true);
-      // Sightlines for billboards and rooftop letters: this cell's and the neighbours' buildings.
+      // Sightlines for the rooftop letters: this cell's and the neighbours' buildings.
       const around: Building3[] = [];
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) around.push(...m.buildings(mx + dx, my + dy));
       const seen = sightline(around);
       addSigns([...plan.signs, ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb, seen);
       const ab = this.ab.reset();
-      if (this.ads) addDistrictAds(ab, mb, buildings, plan.signs, m.detail(mx, my)!.props, undefined, seen, plan.open);
+      if (this.ads && this.adSites) addDistrictAds(ab, mb, this.adSites.sites(mx, my));
       return { mx, my, stage, meshes: { near: lift(mb.raw(cx, cz)), props: lift(pf.raw(cx, cz)), propsMid: lift(pm.raw(cx, cz)), signs: lift(sb.raw(cx, cz)), ads: lift(ab.raw(cx, cz)), taxiAds: lift(tb.raw(cx, cz)) }, ms: performance.now() - t0 };
     }
     // People as numbers (the main thread draws them instanced), standing on the lie of the land.

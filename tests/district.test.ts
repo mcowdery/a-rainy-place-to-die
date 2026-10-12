@@ -14,10 +14,8 @@ import { TrafficSystem } from '../src/poc3d/real/traffic';
 import { District } from '../src/poc3d/district/world';
 import { localFrame, toWorld } from '../src/poc3d/real/localFrame';
 import { DISTRICT_ADS } from '../src/poc3d/models/ads';
-import { addDistrictAds, type AdPlacement } from '../src/poc3d/real/districtAds';
-import { MeshBuilder } from '../src/poc3d/real/meshBuilder';
+import type { AdPlacement } from '../src/poc3d/real/districtAds';
 import { tiers } from '../src/poc3d/real/buildings';
-import { SignBuilder } from '../src/poc3d/real/signs';
 import { INTERIORS, interiorFor } from '../src/poc3d/real/interiors';
 import { CAFE } from '../src/poc3d/real/maidCafe';
 import { doorOpen, toggleDoor } from '../src/poc3d/real/swingDoors';
@@ -182,57 +180,79 @@ describe('3D stamps and atmosphere', () => {
 });
 
 describe('district ads', async () => {
-  const { addDistrictAds } = await import('../src/poc3d/real/districtAds');
+  const { addDistrictAds, BILLBOARDS, POSTERS } = await import('../src/poc3d/real/districtAds');
+  const { adBrand, AdSites, TILE } = await import('../src/poc3d/real/adSites');
+  const { Expressway, parseExpressway } = await import('../src/poc3d/district/expressway');
   const { styleFor, WIN } = await import('../src/poc3d/real/buildings');
   const { MeshBuilder } = await import('../src/poc3d/real/meshBuilder');
   const { SignBuilder } = await import('../src/poc3d/real/signs');
   const { DistrictModel } = await import('../src/poc3d/district/model');
-  const model = new DistrictModel(content.macro, 'neon', content.placed, 7);
-  const place = (mx: number, my: number) => {
-    const out: import('../src/poc3d/real/districtAds').AdPlacement[] = [];
-    addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), model.plan(mx, my)!.signs, model.detail(mx, my)!.props, out);
-    return out;
-  };
+  // Kaburo and the electric town beside it, with the expressway and the lines that pass them.
+  const model = new DistrictModel(content.macro, ['neon', 'electric'], content.placed, 7, content.zones, content.avenues);
+  const sources = { expressway: new Expressway(parseExpressway('expressway.yaml', content.expresswayText, [])!).roads, rails: content.rails };
+  const ads = new AdSites(model, sources);
+  const all = model.cells.flatMap(([mx, my]) => ads.sites(mx, my));
+  const boards = all.filter((s) => s.kind !== 'poster');
+  const posters = all.filter((s) => s.kind === 'poster');
+  const far = (a: (typeof all)[number], b: (typeof all)[number]): number => Math.hypot(a.c[0] - b.c[0], a.c[2] - b.c[2]);
 
-  it('fits the whole catalogue in the ad atlas', async () => {
-    const { BILLBOARDS, POSTERS } = await import('../src/poc3d/real/districtAds');
+  it('fits the whole catalogue in the ad atlas', () => {
     expect(BILLBOARDS.length).toBeLessThanOrEqual(36);
     expect(POSTERS.length).toBeLessThanOrEqual(48);
   });
 
-  it('is deterministic and places every kind somewhere', () => {
-    const cells = neonCells.slice(0, 20);
-    expect(cells.map(([x, y]) => place(x, y))).toEqual(cells.map(([x, y]) => place(x, y)));
-    const kinds = new Set(cells.flatMap(([x, y]) => place(x, y).map((p) => p.kind)));
-    expect([...kinds].sort()).toEqual(['poster', 'rooftop', 'wall']);
+  it('is the same whatever order the cells are asked for in, and builds what it sites', () => {
+    const again = new AdSites(model, sources);
+    const reversed = [...model.cells].reverse().flatMap(([mx, my]) => again.sites(mx, my));
+    const key = (s: (typeof all)[number]): string => `${s.kind} ${s.b.id} ${s.c.join(',')} ${s.n.join(',')} ${s.ad}`;
+    expect(reversed.map(key).sort()).toEqual(all.map(key).sort());
+    const out: AdPlacement[] = [];
+    for (const [mx, my] of model.cells) addDistrictAds(new SignBuilder(), new MeshBuilder(), ads.sites(mx, my), out);
+    expect(out.length).toBe(all.length);
+    expect(new Set(out.map((p) => p.kind))).toEqual(new Set(['rooftop', 'poster', ...(boards.some((s) => s.kind === 'wall' && !s.front) ? ['side'] : []), ...(boards.some((s) => s.kind === 'wall' && s.front) ? ['wall'] : [])]));
   });
 
-  it('hangs billboards on side walls that face a car park, playground or vacant lot', () => {
-    const sides: { p: import('../src/poc3d/real/districtAds').AdPlacement; open: Rect[] }[] = [];
-    for (const [mx, my] of neonCells) {
-      const plan = model.plan(mx, my)!;
-      const out: import('../src/poc3d/real/districtAds').AdPlacement[] = [];
-      addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), plan.signs, model.detail(mx, my)!.props, out, undefined, plan.open);
-      for (const p of out) if (p.kind === 'side') sides.push({ p, open: plan.open.filter((o) => o.kind !== 'plaza' && o.kind !== 'park').map((o) => o.rect) });
+  it('puts up a billboard only where it is seen, and never over windows', () => {
+    // A select few: the old rule hung one on every second or third mid-rise.
+    const buildings = model.cells.flatMap(([mx, my]) => model.plan(mx, my)!.buildings);
+    expect(boards.length).toBeGreaterThan(15);
+    expect(boards.length).toBeLessThan(buildings.length / 40);
+    for (const s of boards) {
+      expect(s.score).toBeGreaterThanOrEqual(1);
+      expect(styleFor(s.b).home).toBeFalsy();
+      if (s.kind === 'wall') expect(styleFor(s.b).type).toBe(WIN.blank);
+      // On a roof it stands above the parapet.
+      else expect(s.y0).toBeGreaterThan(s.b.h);
     }
-    expect(sides.length).toBeGreaterThan(5);
-    // Each faces into a lot: a few metres out along its normal is open ground.
-    for (const { p, open } of sides) {
-      const [x, z] = [p.x + p.nx * 3, p.z + p.nz * 3];
-      expect(open.some((r) => x > r.x - 0.5 && x < r.x + r.w + 0.5 && z > r.y - 0.5 && z < r.y + r.h + 0.5)).toBe(true);
+    // Each of the three kinds of viewer has some: drivers on the expressway, passengers on the lines, the street.
+    expect(new Set(boards.map((s) => s.view))).toEqual(new Set(['expressway', 'rail', 'street']));
+  });
+
+  it('keeps billboards apart, and the same brand out of sight of itself', () => {
+    for (let i = 0; i < boards.length; i++) for (let j = i + 1; j < boards.length; j++) expect(far(boards[i], boards[j])).toBeGreaterThanOrEqual(50);
+    for (const [list, size] of [[boards, TILE.billboard], [posters, TILE.poster]] as const) {
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (adBrand(list[i].ad) === adBrand(list[j].ad)) expect(far(list[i], list[j]), DISTRICT_ADS[list[i].ad].brand).toBeGreaterThan(size);
     }
   });
 
-  it('keeps facade billboards off balcony fronts and posters clear of vending machines', () => {
-    for (const [mx, my] of neonCells.slice(0, 20)) {
-      const buildings = model.buildings(mx, my);
+  it('puts posters only where people wait, clear of vending machines', () => {
+    expect(posters.length).toBeGreaterThan(20);
+    // (The old rule: one on every third shopfront, some 14 a cell.)
+    expect(posters.length).toBeLessThan(model.cells.length * 5);
+    for (const [mx, my] of model.cells) {
       const vending = model.detail(mx, my)!.props.filter((p) => p.kind === 'vending');
-      for (const p of place(mx, my)) {
-        if (p.kind === 'poster') expect(vending.every((v) => Math.hypot(v.x - p.x, v.z - p.z) >= 1.3)).toBe(true);
-        if (p.kind === 'wall') {
-          const b = buildings.find((q) => Math.abs(q.x - p.x) <= q.w / 2 + 0.01 && Math.abs(q.z - p.z) <= q.d / 2 + 0.01)!;
-          expect(styleFor(b).type).not.toBe(WIN.balcony);
-        }
+      for (const s of ads.sites(mx, my)) if (s.kind === 'poster') expect(vending.every((v) => Math.hypot(v.x - s.c[0], v.z - s.c[2]) >= 1.3)).toBe(true);
+    }
+  });
+
+  it('shows a zone the ads of its kinds, and the passing traffic the everyday ones', () => {
+    for (const s of all) {
+      const ad = DISTRICT_ADS[s.ad];
+      if (s.view === 'expressway' || s.view === 'rail') expect(['mainstream', 'food', 'loan']).toContain(ad.cat);
+      else {
+        // (A zone whose kinds have no ad in this format takes the everyday ones.)
+        const kinds = Object.keys(s.b.zone?.ads ?? {}).filter((c) => DISTRICT_ADS.some((a) => a.format === ad.format && a.cat === c));
+        expect(kinds.length ? kinds : ['mainstream', 'food', 'loan', 'lodging']).toContain(ad.cat);
       }
     }
   });
@@ -257,15 +277,6 @@ describe('Kaburo zones', () => {
     const crossing = stats('crossing');
     expect(alleys.h).toBeLessThan(crossing.h / 2);
     expect(alleys.n).toBeGreaterThan(crossing.n * 1.5);
-  });
-
-  it('fills the Love District with love hotel and adult ads only (where the build has them)', () => {
-    const out: AdPlacement[] = [];
-    for (const [mx, my] of inZone('love_district')) addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), model.plan(mx, my)!.signs, model.detail(mx, my)!.props, out);
-    expect(out.length).toBeGreaterThan(20);
-    // Those ads' pictures are in adult/ (src/edition/demoArt.ts), so the standard build has none and the district takes
-    // whatever ads there are; only the uncensored build, with them, is themed.
-    if (DISTRICT_ADS.some((a) => a.cat === 'lovehotel' || a.cat === 'adult')) for (const a of out) expect(['lovehotel', 'adult']).toContain(DISTRICT_ADS[a.ad].cat);
   });
 
   it('rejects malformed zones', () => {

@@ -47,7 +47,8 @@ Everything else about the city, racing, the cast, art, sound and story is writte
 - [bikes.md](.claude/rules/bikes.md): the three motorcycles, the helmet, riding in the showroom, on the race page and in the city.
 - [melee.md](.claude/rules/melee.md): the katana, the bat, the melee moves (whole-arm swings, the stances), ordinary fighters, kill moves, gore, duels with elites, the fight page.
 - [humans.md](.claude/rules/humans.md): the MakeHuman test page, the textured crowd and how it's built, the looks, the street, fighting them.
-- [generated-art.md](.claude/rules/generated-art.md): generating ad and signage art, the review flow, cropping and placing district ads.
+- [generated-art.md](.claude/rules/generated-art.md): generating ad and signage art, the review flow, cropping district ads.
+- [ads.md](.claude/rules/ads.md): where billboards and posters go: who each is put up for, the sight test, spacing, which ad a panel carries, the ad audit.
 - [story.md](.claude/rules/story.md): playing VN exports, the node mapping, the phone and its messenger, wallpapers, saves, writing a scene, the story guide.
 - [editions.md](.claude/rules/editions.md): the three builds, what each may contain, overlays from adult/, the demo's hidden art.
 - [licences.md](.claude/rules/licences.md): which licences an outside asset may have, what each asks, the credits list (`CREDITS.md`), what's in it so far.
