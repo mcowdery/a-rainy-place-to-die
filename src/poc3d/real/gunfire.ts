@@ -448,13 +448,13 @@ export class CityGunfire {
     const raised = rig.aim > 0.9;
     const bore = raised ? out : view;
     const pellets = gun.pellets ?? 1;
-    const spread = (gun.spread ?? 0.01) * (raised ? 1 : 2);
+    const spread = (gun.spread ?? 0.01) * (raised ? 1 : 2) * (1 + rig.bloom * 1.5);
     if (gun.kind === 'pistol') this.gunSound.play([{ kind: 'pistol', at: muzzle }], listener);
     else {
       this.blast(muzzle, listener);
       if (gun.lever) this.gunSound.play([{ kind: 'lever', at: muzzle }], listener);
     }
-    this.muzzleBlast(muzzle, out, pellets > 1 ? 1.8 : 1, 4);
+    this.muzzleBlast(muzzle, out, pellets > 1 ? 1.8 : 1, 4, undefined, rig.muzzleMount());
     const range = pellets > 1 ? PELLET_RANGE : BULLET_RANGE;
     this.skipOwn = false;
     this.probe = this.probes(muzzle.x, muzzle.z, muzzle.x + bore.x * range, muzzle.z + bore.z * range, range * spread * 2.5 + 1);

@@ -277,7 +277,7 @@ export class CarGun {
         if (pull && !H.gunfire.pick(muzzle, dir, 220, H.gunfire.bodies, true)?.body) dir.lerp(pull, ASSIST.pull).normalize();
       }
       const s = H.own.sim;
-      const spread = (rig.gun.spread ?? 0.006) * (1 + Math.abs(s.slide) * 2.5 + s.speed / 30) * (!aiming ? HIP : this.window === 'across' ? ACROSS : 1);
+      const spread = (rig.gun.spread ?? 0.006) * (1 + Math.abs(s.slide) * 2.5 + s.speed / 30) * (1 + rig.bloom * 1.5) * (!aiming ? HIP : this.window === 'across' ? ACROSS : 1);
       const vel = new THREE.Vector3(Math.sin(s.h) * s.u + Math.cos(s.h) * s.w, 0, Math.cos(s.h) * s.u - Math.sin(s.h) * s.w);
       const met = H.gunfire.shot({ muzzle, dir, spread, sound: 'pistol', listener: H.camera.position, skipOwn: true, by: 'you', vel, mount: rig.muzzleMount() });
       this.last = met ? { what: met.what, dist: +met.distance.toFixed(1), part: (met.body?.object.userData.part as string | undefined) ?? null } : null;

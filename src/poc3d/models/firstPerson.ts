@@ -244,6 +244,12 @@ function handFrame(fwd: THREE.Vector3, palm: THREE.Vector3, out: THREE.Matrix4):
   return out.makeBasis(f, a, n);
 }
 
+/** The pistol's trigger rate (s between shots), how late a click is still kept for the next, and the spread quick shots add (a share of the spread, per shot; fading per second). */
+const PISTOL_INTERVAL = 0.2;
+const FIRE_BUFFER = 0.1;
+const BLOOM_PER_SHOT = 0.3;
+const BLOOM_DECAY = 1.6;
+
 export class FirstPersonRig {
   /** Add this to the scene: the body and the gun, posed in world space each update. */
   readonly object = new THREE.Group();
@@ -265,6 +271,9 @@ export class FirstPersonRig {
   private rideTwist = 0;
   /** One-handed and upright, a shot waits for the gun to swing down level (`snap` holds it there a moment). */
   private queued = false;
+  /** Seconds until the gun can fire again (a pistol's trigger rate), and how much quick shots have spread it (0-1; decays). */
+  private cool = 0;
+  bloom = 0;
   private snap = 0;
   /** How far the gun's out: 0 put away at his belt, 1 in hand. */
   private draw = 0;
@@ -617,6 +626,11 @@ export class FirstPersonRig {
    * the gun down first and fires when it's level. */
   fire(): boolean {
     if (this.leverT >= 0 || this.reloadT > 0 || this.loaded <= 0) return false;
+    // Too soon after the last shot: a click in the last moments of the wait is kept and fires when it's up.
+    if (this.cool > 0) {
+      if (this.cool < FIRE_BUFFER) this.queued = true;
+      return false;
+    }
     // Still on its way out of his belt: it fires as soon as it's in hand.
     if (this.draw < DRAWN) {
       this.queued = this.armed;
@@ -634,6 +648,8 @@ export class FirstPersonRig {
     if (!this.aiming) this.snap = 0.95;
     this.loaded--;
     this.shotsFired++;
+    if (this.guns[this.kind].kind === 'pistol') this.cool = PISTOL_INTERVAL;
+    this.bloom = Math.min(1, this.bloom + BLOOM_PER_SHOT);
     // One hand can't hold it down: a harder kick (a pistol's far lighter).
     this.kickV += (oneHanded ? 13 : 9) * (this.guns[this.kind].recoil ?? 1);
     this.flashT = 0.05;
@@ -936,6 +952,8 @@ export class FirstPersonRig {
     this.kickV += (-this.kick * 260 - this.kickV * 22) * dt;
     this.kick += this.kickV * dt;
     this.flashT -= dt;
+    this.cool = Math.max(0, this.cool - dt);
+    this.bloom = Math.max(0, this.bloom - dt * BLOOM_DECAY);
     const cycle = this.flip ? FLIP_TIME : 0.42;
     if (this.leverT > -1) {
       this.leverT += dt;
