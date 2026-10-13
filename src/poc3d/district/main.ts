@@ -1165,15 +1165,7 @@ async function run(): Promise<void> {
     // The left fires it (on foot or on a bike; from your car's seat it's district/carGun.ts').
     if (e.button === 0 && mack?.armed && mack.object.visible && controls.look.isLocked && !inVn && !seated) {
       gunfire.resume();
-      if (mack.fire()) {
-        crosshair.fired();
-        // The view kicks with the shot and settles back (controls.kick): up, a little to either side, harder one-handed.
-        // `?recoil=<degrees>` (0 is off); `?recoilhold=1` leaves the view where the shot threw it, to pull down by hand.
-        const q = new URLSearchParams(location.search);
-        const deg = Number(q.get('recoil') ?? 1.5) * (mack.oneHand ? 1.4 : 1);
-        const rad = (deg * Math.PI) / 180;
-        controls.kick(rad * (0.85 + 0.3 * Math.random()), rad * 0.35 * (Math.random() * 2 - 1), q.get('recoilhold') !== '1');
-      }
+      mack.fire();
     }
   });
   document.addEventListener('mouseup', (e) => {
@@ -4564,6 +4556,26 @@ async function run(): Promise<void> {
   Object.assign(footVeil.style, { position: 'fixed', inset: '0', zIndex: '15', display: 'none', pointerEvents: 'none', opacity: '0', background: 'radial-gradient(ellipse at center, rgba(120,150,255,0) 50%, rgba(40,60,140,0.55) 100%)' });
   document.body.append(footVeil);
 
+  // The view and the crosshair kick with each shot the rig fires, however it came (a click, or one held for the gun to come up).
+  // The view settles back (controls.kick): up, a little to either side, harder one-handed. `?recoil=<degrees>` (0 is off);
+  // `?recoilhold=1` leaves the view where the shot threw it, to pull down by hand.
+  let kickedShots = 0;
+  const shotKick = (): void => {
+    if (!mack) return;
+    if (seated) {
+      kickedShots = mack.shotsFired;
+      return;
+    }
+    if (mack.shotsFired > kickedShots) {
+      crosshair.fired();
+      const q = new URLSearchParams(location.search);
+      const deg = Number(q.get('recoil') ?? 1.5) * (mack.oneHand ? 1.4 : 1);
+      const rad = (deg * Math.PI) / 180;
+      controls.kick(rad * (0.85 + 0.3 * Math.random()), rad * 0.35 * (Math.random() * 2 - 1), q.get('recoilhold') !== '1');
+    }
+    kickedShots = mack.shotsFired;
+  };
+
   let firstFrameMarked = false;
   renderer.setAnimationLoop(() => {
     if (!firstFrameMarked) { firstFrameMarked = true; performance.mark('boot:first-frame'); }
@@ -4736,6 +4748,7 @@ async function run(): Promise<void> {
         }
       }
       if (mack.armed) lookHeld = false;
+      shotKick();
       {
         const F = footFocus;
         const up = mack.armed && mack.aiming && !seated;
