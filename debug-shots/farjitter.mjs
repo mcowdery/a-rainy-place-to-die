@@ -12,7 +12,9 @@ await server.listen();
 const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 640 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
-await page.addInitScript(() => localStorage.setItem('rainyplace.driveView', 'far'));
+const zoom = process.argv[5] ?? '1';
+const carType = process.argv[6] ?? '';
+await page.addInitScript(([z, t]) => { localStorage.setItem('rainyplace.driveView', 'far'); localStorage.setItem('rainyplace.chaseZoom', z); if (t) localStorage.setItem('rainyplace.race.v1.profile', JSON.stringify({ v: 1, yen: 99999999, cars: [{ id: 'car1', type: t, paint: 0x0a0a0c, paint2: null, parts: {}, livery: { stripes: null, side: null, number: null, banner: null }, neon: null, neonFitted: false }], current: 'car1', earned: 0 })); }, [zoom, carType]);
 await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&${spawn.includes(",") ? "cam=" + spawn : "spawn=" + spawn}&car=home`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
@@ -31,7 +33,7 @@ const record = (label, look) => page.evaluate(async ([label, look]) => {
     const f = () => {
       const c = window.__camera.position, o = window.__own.view.obj.position, h = window.__own.view.obj.rotation.y;
       const dx = c.x - o.x, dz = c.z - o.z;
-      const d = window.__camera.getWorldDirection(new window.__camera.position.constructor()); const ob = window.__own.view.obj; const sm = window.__own.sim; rows.push({ t: performance.now(), px: o.x, pz: o.z, sx: sm.x, sz: sm.z, spd: sm.u, cyaw: Math.atan2(d.x, d.z) - h, cpit: Math.asin(d.y), rx: ob.rotation.x, rz: ob.rotation.z, x: dx, z: dz, y: c.y - o.y, along: dx * Math.sin(h) + dz * Math.cos(h), side: dx * Math.cos(h) - dz * Math.sin(h) });
+      const d = window.__camera.getWorldDirection(new window.__camera.position.constructor()); const ob = window.__own.view.obj; const sm = window.__own.sim; rows.push({ t: performance.now(), px: o.x, pz: o.z, sx: sm.x, sz: sm.z, spd: sm.u, hd: h, cyaw: Math.atan2(d.x, d.z) - h, cpit: Math.asin(d.y), rx: ob.rotation.x, rz: ob.rotation.z, x: dx, z: dz, y: c.y - o.y, along: dx * Math.sin(h) + dz * Math.cos(h), side: dx * Math.cos(h) - dz * Math.sin(h) });
       if (++n < 90) requestAnimationFrame(f); else res();
     };
     requestAnimationFrame(f);
@@ -44,7 +46,7 @@ const speedStat = (rows) => { const v = [], gap = []; for (let i = 1; i < rows.l
 for (const [label, look] of [['ahead', 0], ['side', yaw], ['otherside', -yaw]]) {
   const r = await record(label, look);
   const dts = r.rows.slice(1).map((v, i) => v.t - r.rows[i].t);
-  console.log(label, 'frame ms avg', (dts.reduce((a, b) => a + b, 0) / dts.length).toFixed(1), 'max', Math.max(...dts).toFixed(1), 'side', JSON.stringify(stat(r.rows, 'side')), 'along', JSON.stringify(stat(r.rows, 'along')), 'y', JSON.stringify(stat(r.rows, 'y')), ' | camYaw', JSON.stringify(stat(r.rows, 'cyaw')), 'camPitch', JSON.stringify(stat(r.rows, 'cpit')), 'carPitch', JSON.stringify(stat(r.rows, 'rx')), 'carRoll', JSON.stringify(stat(r.rows, 'rz')));
+  console.log(label, 'frame ms avg', (dts.reduce((a, b) => a + b, 0) / dts.length).toFixed(1), 'max', Math.max(...dts).toFixed(1), 'side', JSON.stringify(stat(r.rows, 'side')), 'along', JSON.stringify(stat(r.rows, 'along')), 'y', JSON.stringify(stat(r.rows, 'y')), ' | camYaw', JSON.stringify(stat(r.rows, 'cyaw')), 'camPitch', JSON.stringify(stat(r.rows, 'cpit')), 'heading', JSON.stringify(stat(r.rows, 'hd')), 'carPitch', JSON.stringify(stat(r.rows, 'rx')), 'carRoll', JSON.stringify(stat(r.rows, 'rz')));
   console.log('  ', speedStat(r.rows));
   res.push(r);
 }

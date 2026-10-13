@@ -537,10 +537,23 @@ export class Driving {
     const ce = Math.cos(elev);
     const orbited = _orbit.set(c.x + (ox * cd + oz * sd) * ce, this.camPos.y + Math.sin(elev) * r, c.z + (oz * cd - ox * sd) * ce);
     const pivot = new THREE.Vector3(c.x, (c.bus ? 2.6 : 1.3) + this.floor, c.z);
+    // How far out along the arm a wall allows: found by halving (not in steps of eight percent, whose jumps of a
+    // third of a metre, as the car passed a parapet it was borderline against, shook the view when zoomed in).
+    const hit = (t: number): boolean => this.collide(pivot.x + (orbited.x - pivot.x) * t, pivot.z + (orbited.z - pivot.z) * t, 0.3);
     let tWant = 1;
-    while (this.floor < 2 && tWant > 0.25 && this.collide(pivot.x + (orbited.x - pivot.x) * tWant, pivot.z + (orbited.z - pivot.z) * tWant, 0.3)) tWant -= 0.08;
-    // A wall pulls the camera in at once but lets it out slowly, so sweeping past a corner doesn't flicker.
-    this.camT += (tWant - this.camT) * (tWant < this.camT ? Math.min(1, dt * 25) : 1 - Math.exp(-dt * 3));
+    if (this.floor < 2 && hit(1)) {
+      let lo = 0.25;
+      let hi = 1;
+      if (hit(lo)) hi = lo;
+      else for (let i = 0; i < 6; i++) {
+        const mid = (lo + hi) / 2;
+        if (hit(mid)) hi = mid;
+        else lo = mid;
+      }
+      tWant = lo;
+    }
+    // A wall pulls the camera in quickly but lets it out slowly, so sweeping past a corner doesn't flicker.
+    this.camT += (tWant - this.camT) * (tWant < this.camT ? 1 - Math.exp(-dt * 14) : 1 - Math.exp(-dt * 3));
     const t = Math.min(this.camT, 1);
     cam.position.set(pivot.x + (orbited.x - pivot.x) * t + jolt(), pivot.y + (orbited.y - pivot.y) * t + jolt(), pivot.z + (orbited.z - pivot.z) * t);
     // Looking at the point ahead of the car, which gives way to the car itself as the view swings round it.
