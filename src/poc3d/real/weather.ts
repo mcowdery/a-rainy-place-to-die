@@ -154,8 +154,11 @@ export class RainSystem {
             // Gaussian across; brightest just behind the head, fading to nothing down the trail.
             float x = abs(vUv.x - 0.5) * 2.0;
             float prof = exp(-x * x * 3.5);
-            float taper = smoothstep(0.0, 0.12, vUv.y) * pow(1.0 - vUv.y, 1.5);
-            gl_FragColor = vec4(vCol * vA * prof * taper * 1.1, 1.0);
+            // (Clamped: at the quad's top edge a multisampled pixel reads vUv.y a hair past 1, and pow() of a
+            // negative number is undefined: it came out NaN, a black speck at the tail of every drop against the sky.)
+            float tail = clamp(1.0 - vUv.y, 0.0, 1.0);
+            float taper = smoothstep(0.0, 0.12, vUv.y) * tail * sqrt(tail);
+            gl_FragColor = vec4(max(vCol * vA * prof * taper * 1.1, 0.0), 1.0);
           }`,
       }),
     );
@@ -858,7 +861,7 @@ export class LampCones {
             // Brightest near the lamp, soft at the silhouette, gone before it reaches the ground.
             // Clamp before pow: at the rim 1 - vH can dip below 0, and pow of a negative is NaN (bright specks).
             float h = clamp(vH, 0.0, 1.0);
-            float a = uStrength * pow(1.0 - h, 1.6) * smoothstep(0.0, 0.08, h) * smoothstep(0.0, 0.7, vEdge);
+            float a = uStrength * pow(max(1.0 - h, 0.0), 1.6) * smoothstep(0.0, 0.08, h) * smoothstep(0.0, 0.7, vEdge);
             gl_FragColor = vec4(uColor * a, 1.0);
           }`,
       }),
