@@ -169,7 +169,7 @@ export class CarGun {
    * crosshair. Else (the chase cameras, from the hip): the way the camera looks past the car, level from his head,
    * or the chase car nearest that line.
    */
-  private target(eyes: boolean): THREE.Vector3 {
+  private target(eyes: boolean, cheap = false): THREE.Vector3 {
     const cam = this.host.camera;
     cam.updateMatrixWorld();
     const look = cam.getWorldDirection(new THREE.Vector3());
@@ -194,6 +194,8 @@ export class CarGun {
     }
     if (best) return best;
     const dir = new THREE.Vector3(Math.sin(yaw), -0.012, Math.cos(yaw)).normalize();
+    // (`cheap`: the reticle, every frame: a far point on the line, without marching the shot's whole way.)
+    if (cheap) return head.clone().addScaledVector(dir, 120);
     const met = G.pick(head, dir, 220, G.bodies, true);
     return met ? met.point : head.clone().addScaledVector(dir, 160);
   }
@@ -309,7 +311,7 @@ export class CarGun {
     let show = this.out;
     H.crosshair.place(null);
     if (chase && !aiming && this.equipped() && H.live()) {
-      const p = this.target(false).project(H.camera);
+      const p = this.target(false, true).project(H.camera);
       if (p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1) {
         H.crosshair.place((p.x * innerWidth) / 2, (-p.y * innerHeight) / 2);
         show = true;

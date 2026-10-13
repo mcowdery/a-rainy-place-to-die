@@ -94,6 +94,9 @@ export class Driving {
   private readonly camPos = new THREE.Vector3();
   /** How far out along the chase camera's arm it sits (1 free, less when a wall pulls it in; eased). */
   private camT = 1;
+  /** Observing from the seat (no gun out, the right button held): the view is his eyes, as aiming's, the pistol not raised. */
+  observing = false;
+  private beforeObserve: { yaw: number; pitch: number } | null = null;
   /** The chase cameras' distance (1 as built; the mouse wheel changes it). */
   private zoom = (() => {
     try {
@@ -215,6 +218,26 @@ export class Driving {
     this.orbitYaw = Math.atan2(Math.sin(rel), Math.cos(rel));
     this.lookPitch = outside(this.view) ? 0 : THREE.MathUtils.clamp(a.pitch, -0.6, 0.5);
     this.mouseIdle = 0;
+  }
+
+  /**
+   * Observe from the seat: the cockpit view for as long as it's held, then the chase camera as it was (from outside, the
+   * look round the car is kept for it). Does nothing on a bike.
+   */
+  setObserve(on: boolean): void {
+    on = on && !!this.car && !this.bike && !this.aim;
+    if (on === this.observing) return;
+    this.observing = on;
+    if (on && outside(this.view)) {
+      this.beforeObserve = { yaw: this.orbitYaw, pitch: this.lookPitch };
+      this.orbitYaw = 0;
+      this.lookPitch = 0;
+    } else if (!on && this.beforeObserve) {
+      this.orbitYaw = this.beforeObserve.yaw;
+      this.lookPitch = this.beforeObserve.pitch;
+      this.beforeObserve = null;
+      this.mouseIdle = 0;
+    }
   }
 
   /** A jolt to the view (a hit on the car, a ram): 0-1. */
@@ -384,7 +407,7 @@ export class Driving {
     const L = this.interior?.layout ?? null;
     // Aiming from your car's seat: his eyes, whatever the camera was.
     const aimed = this.aim && L && !this.bike ? this.aim : null;
-    const view: DriveViewId = this.bike ? (outside(this.view) ? 'chase' : 'bumper') : aimed ? 'cockpit' : this.view;
+    const view: DriveViewId = this.bike ? (outside(this.view) ? 'chase' : 'bumper') : aimed || (this.observing && !!L) ? 'cockpit' : this.view;
     const inside = view === 'cockpit' && (!!L || c.bus);
     c.hideBody = view === 'bumper' || (view === 'cockpit' && !inside);
     if (this.interior) this.interior.group.visible = inside;
