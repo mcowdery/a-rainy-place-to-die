@@ -206,6 +206,7 @@ export class Driving {
     this.aim = null;
     if (this.car) this.car.hideBody = false;
     if (this.interior) this.interior.group.visible = false;
+    if (this.own) for (const w of this.own.view.wheels) w.m.visible = true;
     this.interior = null;
     this.setFov(this.baseFov || this.camera.fov);
     this.own?.park();
@@ -361,6 +362,9 @@ export class Driving {
     const inside = view === 'cockpit' && (!!L || c.bus);
     c.hideBody = view === 'bumper' || (view === 'cockpit' && !inside);
     if (this.interior) this.interior.group.visible = inside;
+    // From the seat his own car's wheels are left out: the front ones reach into the footwell and show through it
+    // when steered (the user's snapshot); from outside they're drawn as ever.
+    if (this.own) for (const w of this.own.view.wheels) w.m.visible = !inside;
     const speed = Math.abs(this.own ? this.own.sim.u : c.v);
     const base = this.baseFov || 68;
     // (The cockpit keeps the walker's field of view: any wider shows more city, and the city's cost is its geometry.)

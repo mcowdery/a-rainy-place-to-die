@@ -1443,6 +1443,16 @@ function seats(cab: Cab, B: BodyShape, S: StyleDef, L: CockpitLayout): void {
       cab.abox(x - 0.13, x + 0.13, L.floor, B.wheelR * 2 + 0.06, Math.max(L.back, rw - 0.36), rw + 0.36, 0.06);
     }
   }
+  // The front wheels' tubs, where the footwell reaches back over them (a long-bonnet saloon's wheels stand in it).
+  const fw = B.wheelX[1] - half;
+  const firewall = B.windscreen[1] + 0.03 - half;
+  if (fw - B.wheelR < firewall) {
+    cab.color(S.trim, 0.8);
+    for (const s of [-1, 1]) {
+      const x = s * (B.halfW(B.wheelX[1]) - 0.16);
+      cab.abox(x - 0.13, x + 0.13, L.floor, B.wheelR * 2 + 0.06, fw - 0.36, fw + 0.36, 0.06);
+    }
+  }
   if (!S.rear) {
     // A bulkhead behind the seats (the roadster's engine, the truck's cab's back).
     cab.color(S.trim, 0.6);
