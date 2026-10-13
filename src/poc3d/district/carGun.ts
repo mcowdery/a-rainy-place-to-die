@@ -55,6 +55,8 @@ export interface CarGunHost {
   rig(): FirstPersonRig | null;
   /** The mouse is the game's (captured), and nothing else has the screen (a scene, a menu). */
   live(): boolean;
+  /** The pistol is in his hand (the inventory's: unequipped, the car's gun can't be raised or fired). */
+  equipped(): boolean;
 }
 
 export class CarGun {
@@ -72,6 +74,8 @@ export class CarGun {
   /** What the last shot met (for checks). */
   last: { what: string; dist: number; part: string | null } | null = null;
   private pulled = false;
+  /** Scripts (`raise(true)`, `fire()`) use the gun without the inventory's say-so; `lower` ends it. */
+  private forced = false;
   private hipT = 0;
   private blockedT = 0;
   /** Seconds since the gun was last out (he's still seen, putting it away and winding the window up, for a moment after). */
@@ -113,7 +117,11 @@ export class CarGun {
 
   /** At the wheel of your car, with the mouse: the gun's yours to use. */
   private ready(): boolean {
-    return !!this.host.seated() && !!this.host.rig() && this.host.live();
+    return !!this.host.seated() && !!this.host.rig() && this.host.live() && this.equipped();
+  }
+
+  private equipped(): boolean {
+    return this.forced || this.host.equipped();
   }
 
   /** He's to be seen at the wheel for the gun's sake: it's out, or only just put away. */
@@ -133,18 +141,21 @@ export class CarGun {
 
   /** The gun up (`script`: without the mouse captured, for checks). */
   raise(script = false): void {
+    if (script) this.forced = true;
     if (this.aiming || !(script ? this.host.seated() && this.host.rig() : this.ready())) return;
     this.host.driving.startAim();
     if (this.slowAuto && this.focus > 0.25) this.slowOn = true;
   }
 
   lower(): void {
+    this.forced = false;
     this.slowOn = false;
     this.host.driving.stopAim();
   }
 
   /** Pull the trigger (a click; scripts). */
   fire(): void {
+    this.forced = true;
     this.pulled = true;
   }
 
@@ -196,6 +207,12 @@ export class CarGun {
     const H = this.host;
     const seated = H.seated();
     const rig = H.rig();
+    // Put the pistol away (the inventory's key) and the gun comes down: no aim, no shot, no slow motion.
+    if (!this.equipped()) {
+      if (this.aiming) this.lower();
+      this.pulled = false;
+      this.hipT = 0;
+    }
     // The focus: drains while it slows the world, refills with the gun down.
     if (this.aiming && this.slowOn) {
       this.focus = Math.max(0, this.focus - dt / FOCUS_SECS);
