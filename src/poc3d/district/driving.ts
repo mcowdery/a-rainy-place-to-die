@@ -94,6 +94,14 @@ export class Driving {
   private readonly camPos = new THREE.Vector3();
   /** How far out along the chase camera's arm it sits (1 free, less when a wall pulls it in; eased). */
   private camT = 1;
+  /** The chase cameras' distance (1 as built; the mouse wheel changes it). */
+  private zoom = (() => {
+    try {
+      return THREE.MathUtils.clamp(Number(localStorage.getItem('rainyplace.chaseZoom')) || 1, 0.35, 3);
+    } catch {
+      return 1;
+    }
+  })();
   private shake = 0;
 
   constructor(
@@ -115,6 +123,20 @@ export class Driving {
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
+    // The wheel brings the chase cameras nearer or further (remembered).
+    document.addEventListener(
+      'wheel',
+      (e) => {
+        if (!this.car || !document.pointerLockElement || this.aim || !outside(this.view)) return;
+        this.zoom = THREE.MathUtils.clamp(this.zoom * Math.exp(e.deltaY * 0.001), 0.35, 3);
+        try {
+          localStorage.setItem('rainyplace.chaseZoom', this.zoom.toFixed(2));
+        } catch {
+          /* no storage */
+        }
+      },
+      { passive: true },
+    );
     document.addEventListener('mousemove', (e) => {
       if (!this.car || !document.pointerLockElement) return;
       if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
@@ -313,7 +335,7 @@ export class Driving {
   private chaseTarget(turn = 0, look = true): THREE.Vector3 {
     const c = this.car!;
     const far = this.view === 'far' && !this.bike;
-    const back = (c.bus ? 12 : 6.4) * (far ? 1.45 : 1);
+    const back = (c.bus ? 12 : 6.4) * (far ? 1.45 : 1) * this.zoom;
     const up = (c.bus ? 4.4 : 2.5) + (far ? 1.2 : 0);
     const a = Math.atan2(c.dx, c.dz) + (look ? this.orbitYaw : 0) + turn;
     // Looking up swings the camera down behind the car (and looking down lifts it), about the car.
