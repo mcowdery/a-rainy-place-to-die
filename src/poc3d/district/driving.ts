@@ -5,6 +5,8 @@ import type { CarInterior } from '../models/carInterior';
 import type { DrivenVehicle } from '../real/traffic';
 import type { OwnCar } from './ownCar';
 
+const _orbit = new THREE.Vector3();
+
 /**
  * Driving a vehicle you've taken the wheel of (E by a car stopped in traffic). A kinematic bicycle model: the
  * rear wheels don't slide, the front ones steer, so the car turns about a point on the rear axle's line (no
@@ -90,6 +92,8 @@ export class Driving {
   invertY = false;
   private mouseIdle = 0;
   private readonly camPos = new THREE.Vector3();
+  /** How far out along the chase camera's arm it sits (1 free, less when a wall pulls it in; eased). */
+  private camT = 1;
   private shake = 0;
 
   constructor(
@@ -148,7 +152,7 @@ export class Driving {
     this.orbitYaw = 0;
     this.lookPitch = 0;
     this.keys.clear();
-    this.camPos.copy(this.chaseTarget());
+    this.camPos.copy(this.chaseTarget(0, false));
   }
 
   /**
@@ -306,14 +310,14 @@ export class Driving {
     c.curv = v >= 0 ? curv : -curv;
   }
 
-  private chaseTarget(turn = 0): THREE.Vector3 {
+  private chaseTarget(turn = 0, look = true): THREE.Vector3 {
     const c = this.car!;
     const far = this.view === 'far' && !this.bike;
     const back = (c.bus ? 12 : 6.4) * (far ? 1.45 : 1);
     const up = (c.bus ? 4.4 : 2.5) + (far ? 1.2 : 0);
-    const a = Math.atan2(c.dx, c.dz) + this.orbitYaw + turn;
+    const a = Math.atan2(c.dx, c.dz) + (look ? this.orbitYaw : 0) + turn;
     // Looking up swings the camera down behind the car (and looking down lifts it), about the car.
-    const elev = -this.lookPitch;
+    const elev = look ? -this.lookPitch : 0;
     return new THREE.Vector3(c.x - Math.sin(a) * back * Math.cos(elev), this.floor + up + Math.sin(elev) * back, c.z - Math.cos(a) * back * Math.cos(elev));
   }
 
@@ -343,10 +347,10 @@ export class Driving {
     if (!c) return;
     this.mouseIdle += dt;
     // Let go of the mouse and the view swings back to straight ahead.
-    if (this.mouseIdle > 1.2) {
+    // (From outside it stays where you put it: a full turn round the car, not pulled back behind it.)
+    if (this.mouseIdle > 1.2 && !outside(this.view)) {
       const ease = 1 - Math.exp(-dt * 2.5);
       this.orbitYaw -= this.orbitYaw * ease;
-      if (outside(this.view)) this.lookPitch -= this.lookPitch * ease;
     }
     this.shake = Math.max(0, this.shake - dt * 3);
     const jolt = (): number => (Math.random() - 0.5) * this.shake * 0.25;
@@ -427,7 +431,7 @@ export class Driving {
         const at = L ? L.hood : new THREE.Vector3(0, c.bus ? 2.6 : 1.25, c.half - (c.bus ? 0.4 : 1.1));
         placeInCar(cam, frame, at, this.orbitYaw + back, this.lookPitch - 0.04);
       }
-      this.camPos.copy(this.chaseTarget());
+      this.camPos.copy(this.chaseTarget(0, false));
       return;
     }
     if (view === 'bumper' || view === 'cockpit') {
@@ -436,18 +440,33 @@ export class Driving {
       cam.position.set(c.x + c.dx * (c.half - 0.2) + jolt(), h + jolt(), c.z + c.dz * (c.half - 0.2));
       const a = Math.atan2(c.dx, c.dz) + this.orbitYaw + back;
       cam.lookAt(cam.position.x + Math.sin(a), h + Math.tan(this.lookPitch - 0.02), cam.position.z + Math.cos(a));
-      this.camPos.copy(this.chaseTarget());
+      this.camPos.copy(this.chaseTarget(0, false));
       return;
     }
     // Chase: follow a point behind (eased, so turns and stops show), pulled in if a wall is in the way.
-    const want = this.chaseTarget(back);
+    // The lag is for the car's own turns and stops; the mouse's turn about the car is applied on top, unlagged, so
+    // looking round (a full circle) follows the hand exactly.
+    const want = this.chaseTarget(back, false);
     this.camPos.lerp(want, 1 - Math.exp(-dt * (this.lookBack > 0.05 ? 12 : 5)));
+    const ox = this.camPos.x - c.x;
+    const oz = this.camPos.z - c.z;
+    const r = Math.hypot(ox, oz);
+    const cd = Math.cos(this.orbitYaw);
+    const sd = Math.sin(this.orbitYaw);
+    const elev = -this.lookPitch;
+    const ce = Math.cos(elev);
+    const orbited = _orbit.set(c.x + (ox * cd + oz * sd) * ce, this.camPos.y + Math.sin(elev) * r, c.z + (oz * cd - ox * sd) * ce);
     const pivot = new THREE.Vector3(c.x, (c.bus ? 2.6 : 1.3) + this.floor, c.z);
-    let t = 1;
-    while (this.floor < 2 && t > 0.25 && this.collide(pivot.x + (this.camPos.x - pivot.x) * t, pivot.z + (this.camPos.z - pivot.z) * t, 0.3)) t -= 0.08;
-    cam.position.set(pivot.x + (this.camPos.x - pivot.x) * t + jolt(), pivot.y + (this.camPos.y - pivot.y) * t + jolt(), pivot.z + (this.camPos.z - pivot.z) * t);
+    let tWant = 1;
+    while (this.floor < 2 && tWant > 0.25 && this.collide(pivot.x + (orbited.x - pivot.x) * tWant, pivot.z + (orbited.z - pivot.z) * tWant, 0.3)) tWant -= 0.08;
+    // A wall pulls the camera in at once but lets it out slowly, so sweeping past a corner doesn't flicker.
+    this.camT += (tWant - this.camT) * (tWant < this.camT ? Math.min(1, dt * 25) : 1 - Math.exp(-dt * 3));
+    const t = Math.min(this.camT, 1);
+    cam.position.set(pivot.x + (orbited.x - pivot.x) * t + jolt(), pivot.y + (orbited.y - pivot.y) * t + jolt(), pivot.z + (orbited.z - pivot.z) * t);
+    // Looking at the point ahead of the car, which gives way to the car itself as the view swings round it.
     const la = Math.atan2(c.dx, c.dz) + back;
-    cam.lookAt(c.x + Math.sin(la) * 3, (c.bus ? 2.2 : 1.1) + this.floor, c.z + Math.cos(la) * 3);
+    const ahead = 1.5 * (1 + cd);
+    cam.lookAt(c.x + Math.sin(la) * ahead, (c.bus ? 2.2 : 1.1) + this.floor, c.z + Math.cos(la) * ahead);
   }
 
   /** How far the look back has come round (0-1: Z or C held). */
