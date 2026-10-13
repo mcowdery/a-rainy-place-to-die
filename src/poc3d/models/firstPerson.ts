@@ -343,7 +343,13 @@ export class FirstPersonRig {
   private dropped = 0;
   private ankleRest = 0;
   private readonly neckRest = new THREE.Vector3();
-  private smokeFrame: Pick<SmokeCtx, 'dt' | 'eye' | 'viewQ' | 'fx' | 'fz' | 'floor' | 'idle' | 'running' | 'squat'> | null = null;
+  /**
+   * Where a raised gun points, when not the point AIM_RANGE along the view from the eyes: in third person the
+   * page sets what's under the crosshair as the over-the-shoulder camera sees it (the camera is off to the side
+   * and behind, so aiming at a point along the eyes' view put shots left of the crosshair at close range).
+   */
+  aimTarget: THREE.Vector3 | null = null;
+  private smokeFrame:Pick<SmokeCtx, 'dt' | 'eye' | 'viewQ' | 'fx' | 'fz' | 'floor' | 'idle' | 'running' | 'squat'> | null = null;
   private readonly head: THREE.Bone;
   /** The head bone's rest frame inverted (the model's own frame), for putting things on the head. */
   private readonly headRestInv: THREE.Matrix4;
@@ -362,7 +368,7 @@ export class FirstPersonRig {
   private robo: [THREE.Object3D, THREE.Object3D] | null = null;
   private readonly env: THREE.Texture | null;
   /** The model it was loaded from (an outfit: models/wardrobe.ts), and the eye height it was fitted to. */
-  model = 'mack';
+  model = 'dom';
   private fitHeight: number | null = null;
   /** Hair, brows and lashes: hidden under a helmet. */
   private readonly hairMeshes: THREE.Object3D[] = [];
@@ -545,7 +551,7 @@ export class FirstPersonRig {
   }
 
   /** Loads the body (a cast model, default Mack) and builds the guns. `env` lights the steel. */
-  static async load(name = 'mack', env: THREE.Texture | null = null): Promise<FirstPersonRig> {
+  static async load(name = 'dom', env: THREE.Texture | null = null): Promise<FirstPersonRig> {
     const [model, shadow] = await Promise.all([loadCharacterModel(name), loadCharacterModel(name)]);
     const rig = new FirstPersonRig(model, shadow, env);
     rig.model = name;
@@ -617,14 +623,15 @@ export class FirstPersonRig {
       return false;
     }
     const oneHanded = this.oneHand || this.mounted !== null;
-    if (oneHanded && this.aim < 0.96) {
+    // Not aiming, the gun comes up to the crosshair for the shot (as from a car's window) and is lowered after.
+    if ((oneHanded || !this.aiming) && this.aim < 0.96) {
       this.queued = true;
       this.snap = 0.5;
       return false;
     }
     this.queued = false;
     // Held level through the shot and the lever, then back up.
-    if (oneHanded && !this.aiming) this.snap = 0.95;
+    if (!this.aiming) this.snap = 0.95;
     this.loaded--;
     this.shotsFired++;
     // One hand can't hold it down: a harder kick (a pistol's far lighter).
@@ -924,7 +931,7 @@ export class FirstPersonRig {
     this.pulled += ((this.pulledBack && this.armed ? 1 : 0) - this.pulled) * Math.min(1, drawStep * 10);
     // (Putting it away, it goes from where it was held: the aim stays as it was until it's gone.)
     if (this.armed || this.draw <= 0) this.aim += ((this.aiming || snapping ? 1 : 0) - this.aim) * Math.min(1, dt * (snapping ? 16 : 9));
-    if (this.queued && this.draw >= DRAWN && (this.aim >= 0.96 || !(this.oneHand || this.mounted))) this.fire();
+    if (this.queued && this.draw >= DRAWN && (this.aim >= 0.96 || !(this.oneHand || this.mounted || !this.aiming))) this.fire();
     this.one += ((this.oneHand ? 1 : 0) - this.one) * Math.min(1, dt * 7);
     this.kickV += (-this.kick * 260 - this.kickV * 22) * dt;
     this.kick += this.kickV * dt;
@@ -1118,7 +1125,7 @@ export class FirstPersonRig {
     pos.y += -0.12 * reloadDip + (0.01 + 0.008 * run) * Math.sin(this.walk * 2) * k * (1 - 0.6 * a);
     pos.x += (0.006 + 0.004 * run) * Math.sin(this.walk) * k;
     // The recoil's push, in the camera's frame: added after the arm is straightened (below), so it still kicks.
-    const kickPush = new THREE.Vector3(0, (0.015 + 0.03 * one) * this.kick, (0.07 + 0.05 * one) * this.kick);
+    const kickPush = new THREE.Vector3(0, (0.03 + 0.05 * one) * this.kick, (0.16 + 0.1 * one) * this.kick);
     // Flipping, the arm drops and swings out to give the gun room.
     const flipArc = spin !== 0 ? Math.sin(Math.PI * lt) : 0;
     pos.y -= 0.14 * flipArc;
@@ -1131,7 +1138,7 @@ export class FirstPersonRig {
     // The lever's throw turns the gun a little in two hands; the flip-cock spins it instead (below).
     const throwTurn = this.flip ? 0 : this.lever;
     const rot = new THREE.Euler(
-      mix('x') + (0.28 + 0.4 * one) * this.kick - 0.5 * reloadDip,
+      mix('x') + (0.8 + 0.6 * one) * this.kick - 0.5 * reloadDip,
       mix('y') - 0.15 * throwTurn,
       mix('z') + 0.5 * reloadDip + 0.2 * throwTurn,
       'YXZ',
@@ -1163,8 +1170,8 @@ export class FirstPersonRig {
     // Raised, the gun points at what's under the crosshair (AIM_RANGE along the view), so shots converge on
     // it. One-handed, the arm goes out straight from the shoulder toward it: the wrist at the arm's full reach
     // on that line, the bore from there to the target, whichever way you look.
-    const target = camera.position.clone().addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(viewQ), AIM_RANGE);
-    const ext = one * a * (1 - (spin !== 0 ? Math.sin(Math.PI * lt) : 0));
+    const target = this.aimTarget ? this.aimTarget.clone() : camera.position.clone().addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(viewQ), AIM_RANGE);
+    const ext =one * a * (1 - (spin !== 0 ? Math.sin(Math.PI * lt) : 0));
     const wristLocal = gun.grip.at.clone().addScaledVector(gun.grip.palm, -PALM_OFF).addScaledVector(gun.grip.fwd, -PALM_BACK);
     // (The grip's frame is the gun's own while the lever is shut.)
     const viewUp = new THREE.Vector3(0, 1, 0).applyQuaternion(viewQ);
@@ -1195,6 +1202,15 @@ export class FirstPersonRig {
       const k = THREE.MathUtils.smoothstep(this.pulled, 0, 1);
       gun.root.position.lerp(wrist.sub(wristLocal.clone().applyQuaternion(q)), k);
       gun.root.quaternion.slerp(q, k);
+    }
+    // Raised, the aim above re-points the gun at the target and drops the muzzle flip the rotation above gave it:
+    // put it back, turning the gun up about the wrist (the hands follow the gun).
+    const reaimed = Math.max(ext, conv) * (1 - this.pulled);
+    if (reaimed > 0.001 && Math.abs(this.kick) > 1e-4) {
+      const flip = _q.setFromAxisAngle(new THREE.Vector3(1, 0, 0).applyQuaternion(viewQ), (0.8 + 0.6 * one) * this.kick * reaimed);
+      const pivot = wristLocal.clone().applyQuaternion(gun.root.quaternion).add(gun.root.position);
+      gun.root.position.sub(pivot).applyQuaternion(flip).add(pivot);
+      gun.root.quaternion.premultiply(flip);
     }
     gun.root.position.add(kickPush.applyQuaternion(viewQ));
     gun.root.updateMatrixWorld(true);
