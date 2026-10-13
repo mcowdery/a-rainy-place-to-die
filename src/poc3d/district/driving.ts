@@ -6,6 +6,9 @@ import type { DrivenVehicle } from '../real/traffic';
 import type { OwnCar } from './ownCar';
 
 const _orbit = new THREE.Vector3();
+const _vel = new THREE.Vector3();
+/** How long the chase camera trails the car's motion (s). */
+const TRAIL = 0.2;
 
 /**
  * Driving a vehicle you've taken the wheel of (E by a car stopped in traffic). A kinematic bicycle model: the
@@ -94,6 +97,9 @@ export class Driving {
   private readonly camPos = new THREE.Vector3();
   /** How far out along the chase camera's arm it sits (1 free, less when a wall pulls it in; eased). */
   private camT = 1;
+  /** The chase camera's offset from the car (x and z; y is the height), and the car's smoothed velocity. */
+  private readonly camOff = new THREE.Vector3();
+  private readonly velSm = new THREE.Vector3();
   /** Observing from the seat (no gun out, the right button held): the view is his eyes, as aiming's, the pistol not raised. */
   observing = false;
   private beforeObserve: { yaw: number; pitch: number } | null = null;
@@ -177,7 +183,7 @@ export class Driving {
     this.orbitYaw = 0;
     this.lookPitch = 0;
     this.keys.clear();
-    this.camPos.copy(this.chaseTarget(0, false));
+    this.restChase();
   }
 
   /**
@@ -355,6 +361,23 @@ export class Driving {
     c.curv = v >= 0 ? curv : -curv;
   }
 
+  /** The car's velocity in the world (m/s, x and z). */
+  private carVelocity(out: THREE.Vector3): THREE.Vector3 {
+    const c = this.car!;
+    const s = this.own?.sim;
+    if (s) return out.set(Math.sin(s.h) * s.u + Math.cos(s.h) * s.w, 0, Math.cos(s.h) * s.u - Math.sin(s.h) * s.w);
+    return out.set(c.dx * c.v, 0, c.dz * c.v);
+  }
+
+  /** The chase camera at rest behind the car (the other views keep it ready, and getting in starts from it). */
+  private restChase(): void {
+    const c = this.car!;
+    const t = this.chaseTarget(0, false);
+    this.camPos.copy(t);
+    this.camOff.set(t.x - c.x, t.y, t.z - c.z);
+    this.carVelocity(this.velSm);
+  }
+
   private chaseTarget(turn = 0, look = true): THREE.Vector3 {
     const c = this.car!;
     const far = this.view === 'far' && !this.bike;
@@ -476,7 +499,7 @@ export class Driving {
         const at = L ? L.hood : new THREE.Vector3(0, c.bus ? 2.6 : 1.25, c.half - (c.bus ? 0.4 : 1.1));
         placeInCar(cam, frame, at, this.orbitYaw + back, this.lookPitch - 0.04);
       }
-      this.camPos.copy(this.chaseTarget(0, false));
+      this.restChase();
       return;
     }
     if (view === 'bumper' || view === 'cockpit') {
@@ -485,14 +508,26 @@ export class Driving {
       cam.position.set(c.x + c.dx * (c.half - 0.2) + jolt(), h + jolt(), c.z + c.dz * (c.half - 0.2));
       const a = Math.atan2(c.dx, c.dz) + this.orbitYaw + back;
       cam.lookAt(cam.position.x + Math.sin(a), h + Math.tan(this.lookPitch - 0.02), cam.position.z + Math.cos(a));
-      this.camPos.copy(this.chaseTarget(0, false));
+      this.restChase();
       return;
     }
     // Chase: follow a point behind (eased, so turns and stops show), pulled in if a wall is in the way.
     // The lag is for the car's own turns and stops; the mouse's turn about the car is applied on top, unlagged, so
     // looking round (a full circle) follows the hand exactly.
+    // The camera is the car's own place plus an offset that eases round with its heading, less a share of the car's
+    // smoothed velocity (the trail behind it when it speeds up). It used to be the world point itself eased toward
+    // the car's: each frame's length then made the camera's gap to the car jump (a car at 25 m/s and a 5 ms
+    // wobble in the frame is 6 cm), which, swung round the side of the car, was the whole car shaking.
     const want = this.chaseTarget(back, false);
-    this.camPos.lerp(want, 1 - Math.exp(-dt * (this.lookBack > 0.05 ? 12 : 5)));
+    const k = 1 - Math.exp(-dt * (this.lookBack > 0.05 ? 12 : 5));
+    this.camOff.x += (want.x - c.x - this.camOff.x) * k;
+    this.camOff.z += (want.z - c.z - this.camOff.z) * k;
+    this.camOff.y += (want.y - this.camOff.y) * k;
+    this.carVelocity(_vel);
+    const vk = 1 - Math.exp(-dt * 5);
+    this.velSm.x += (_vel.x - this.velSm.x) * vk;
+    this.velSm.z += (_vel.z - this.velSm.z) * vk;
+    this.camPos.set(c.x + this.camOff.x - this.velSm.x * TRAIL, this.camOff.y, c.z + this.camOff.z - this.velSm.z * TRAIL);
     const ox = this.camPos.x - c.x;
     const oz = this.camPos.z - c.z;
     const r = Math.hypot(ox, oz);
