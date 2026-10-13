@@ -304,6 +304,17 @@ export class CarGun {
     // (They're this module's to make: the rig's own shots along its bore are for on foot.)
     H.gunfire.sync(rig);
     const blocked = this.out && !this.side;
-    H.crosshair.update(this.out, aiming ? 1 : 0.35, dt, blocked);
+    // From the chase cameras, which look at the car and not where the gun points, the reticle sits where a shot from
+    // the hip would land (so you can swing the view about and still see where you'd hit); out of view, there's none.
+    let show = this.out;
+    H.crosshair.place(null);
+    if (chase && !aiming && this.equipped() && H.live()) {
+      const p = this.target(false).project(H.camera);
+      if (p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1) {
+        H.crosshair.place((p.x * innerWidth) / 2, (-p.y * innerHeight) / 2);
+        show = true;
+      } else show = false;
+    }
+    H.crosshair.update(show, aiming ? 1 : 0.35, dt, blocked);
   }
 }

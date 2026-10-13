@@ -44,6 +44,11 @@ export class Crosshair {
     parent.append(this.el);
   }
 
+  /** Put the reticle at a screen point (px from the view's centre), as when the shot doesn't go where the view looks; `null` puts it back in the middle. */
+  place(dx: number | null, dy = 0): void {
+    this.el.style.transform = dx === null ? '' : `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+  }
+
   /** Each frame: whether the gun is out, how far raised (0..1), and dt for the shot's flash. `blocked`: there's no line of fire. */
   update(out: boolean, raised: number, dt: number, blocked = false): void {
     this.el.style.display = out ? 'block' : 'none';
