@@ -325,9 +325,8 @@ export class Expressway {
      * The ground's height (the page's terrain): the spurs and entries to a tunnel in a headland rise to stand just
      * above it where it climbs to the deck's height and over (else the deck is buried in the land there).
      */
-    ground?: (x: number, z: number) => number,
-  ) {
-    this.maxHalf = def.half;
+    private readonly ground?: (x: number, z: number) => number,
+  ) {    this.maxHalf = def.half;
     const edgeOf = rampEdgeKeys(def);
     // With a slip lane: in the middle of it, along the kerb (the road's carriageway runs to its width less 2 x 3 m of pavement,
     // the traffic's lanes to half the slip lane inside that).
@@ -782,7 +781,11 @@ export class Expressway {
         // have their own in the median, and its own would stand in a lane.)
         const connector = !!road.joins?.[0] && !!road.joins[1] && road.kind === 'route';
         if (overStreet(road.x[i], road.z[i]) && (connector || (Math.abs(road.tx[i]) > 0.02 && Math.abs(road.tz[i]) > 0.02))) continue;
-        out.push({ x: road.x[i] - road.tz[i] * o, z: road.z[i] + road.tx[i] * o, top: road.y[i] - 1.2 });
+        // (On the headland the deck stands a metre over the land: a pier there is buried, and its collider would be a block in the carriageway.)
+        const px = road.x[i] - road.tz[i] * o;
+        const pz = road.z[i] + road.tx[i] * o;
+        if (this.ground && road.y[i] - this.ground(px, pz) < 3) continue;
+        out.push({ x: px, z: pz, top: road.y[i] - 1.2 });
       }
     }
     return out;
