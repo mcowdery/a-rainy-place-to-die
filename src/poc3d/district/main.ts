@@ -4560,6 +4560,9 @@ async function run(): Promise<void> {
   // while the focus lasts (2.5 s, refilling over 6 s with the gun down, as in the car: district/carGun.ts; G is the inventory's here, so no toggle).
   const FOOT_SLOW = 0.7;
   const footFocus = { slow: 0, focus: 1, on: false, auto: true, zoom: 0, fov: camera.fov };
+  const footVeil = document.createElement('div');
+  Object.assign(footVeil.style, { position: 'fixed', inset: '0', zIndex: '15', display: 'none', pointerEvents: 'none', opacity: '0', background: 'radial-gradient(ellipse at center, rgba(120,150,255,0) 50%, rgba(40,60,140,0.55) 100%)' });
+  document.body.append(footVeil);
 
   let firstFrameMarked = false;
   renderer.setAnimationLoop(() => {
@@ -4745,6 +4748,8 @@ async function run(): Promise<void> {
         F.slow += ((F.on ? 1 : 0) - F.slow) * Math.min(1, realDt * 7);
         if (F.slow < 0.002) F.slow = 0;
         gunfire.setSlow(F.slow);
+        footVeil.style.display = F.slow > 0.01 ? 'block' : 'none';
+        footVeil.style.opacity = (F.slow * 0.9).toFixed(3);
         F.zoom += ((up && !thirdPerson ? 1 : 0) - F.zoom) * Math.min(1, realDt * 9);
         if (F.zoom < 0.002) F.zoom = 0;
         if (!seated && !riding) {
