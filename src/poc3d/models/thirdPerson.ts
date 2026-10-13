@@ -95,7 +95,8 @@ export interface ThirdOffset {
 /** On foot, raising a gun (closer, more over the shoulder) and riding (behind the bike, higher). */
 export const THIRD: { foot: ThirdOffset; aim: ThirdOffset; ride: ThirdOffset } = {
   foot: { back: 2.3, side: 0.42, up: 0.12 },
-  aim: { back: 1.25, side: 0.5, up: 0.06 },
+  // (Raised gun: tight over the right shoulder, as in most third-person shooters; was back 1.25, side 0.5.)
+  aim: { back: 0.8, side: 0.6, up: 0.1 },
   ride: { back: 3.4, side: 0, up: 0.55 },
 };
 
