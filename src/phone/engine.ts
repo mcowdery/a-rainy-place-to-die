@@ -21,15 +21,43 @@ export interface Msg {
   seen: boolean;
 }
 
-export type PhoneEvent = { readonly kind: 'message'; readonly contact: Contact; readonly msg: Msg } | { readonly kind: 'contact'; readonly contact: Contact };
+/** A page on his pager: the digits it shows (a number to ring, or a number code), and when it came. */
+export interface Page {
+  readonly digits: string;
+  /** Minutes since midnight. */
+  readonly at: number;
+  /** Who sent it (a contact's id), or null: for the game to name them if he has their card. Not shown by the pager. */
+  readonly from: string | null;
+  /** What a number code says, if he can read it. */
+  readonly reads: string | null;
+}
 
-/** idle -> armed (its condition held) -> running (their messages) -> awaiting (your reply) -> replied (their answer) -> done. */
-type BeatState = { phase: 'idle' } | { phase: 'armed'; at: number } | { phase: 'running' } | { phase: 'awaiting' } | { phase: 'replied' } | { phase: 'done' };
+/** How many pages the pager keeps: a new one pushes the oldest out. */
+export const PAGER_MEMORY = 4;
+
+/** What he hears when he rings a number back (district/payphone.ts plays it): the lines, and what to do once the last is said. */
+export interface CallBack {
+  readonly lines: readonly string[];
+  readonly then: () => void;
+}
+
+export type PhoneEvent =
+  | { readonly kind: 'message'; readonly contact: Contact; readonly msg: Msg }
+  | { readonly kind: 'contact'; readonly contact: Contact }
+  | { readonly kind: 'page'; readonly contact: Contact | null; readonly page: Page };
+
+/**
+ * idle -> armed (its condition held) -> running (their messages) -> awaiting (your reply) -> replied (their answer) -> done.
+ * A pager beat goes armed -> paged (his pager has gone, and it waits for him to ring back: `callBack`) -> done.
+ */
+type BeatState = { phase: 'idle' } | { phase: 'armed'; at: number } | { phase: 'running' } | { phase: 'awaiting' } | { phase: 'replied' } | { phase: 'paged' } | { phase: 'done' };
 
 /** The phone's state for a save: the clock, and each contact's conversation so far (by contact id). */
 export interface PhoneSave {
   readonly t: number;
   readonly clock: number;
+  /** The pager's memory, oldest first (absent in a save from before the pager). */
+  readonly pager?: Page[];
   readonly threads: Readonly<Record<string, { readonly beats: BeatState[]; readonly msgs: Msg[]; readonly queue: { msg: ScriptMsg; wait: number }[]; readonly current: number | null; readonly unread: number; readonly shown: boolean }>>;
 }
 
@@ -71,6 +99,8 @@ export class Phone {
   private t = 0;
   /** Minutes since midnight. */
   clock: number;
+  /** The pager's memory, oldest first. */
+  private readonly pager: Page[] = [];
 
   constructor(
     contacts: readonly Contact[],
@@ -84,7 +114,7 @@ export class Phone {
   /** Everything the phone holds, as plain data (for a save). */
   snapshot(): PhoneSave {
     const threads = Object.fromEntries(this.threads.map((th) => [th.contact.id, { beats: th.beats, msgs: th.msgs, queue: th.queue, current: th.current, unread: th.unread, shown: th.shown }]));
-    return JSON.parse(JSON.stringify({ t: this.t, clock: this.clock, threads })) as PhoneSave;
+    return JSON.parse(JSON.stringify({ t: this.t, clock: this.clock, pager: this.pager, threads })) as PhoneSave;
   }
 
   /**
@@ -94,6 +124,7 @@ export class Phone {
   restore(s: PhoneSave): void {
     this.t = s.t;
     this.clock = s.clock;
+    this.pager.splice(0, this.pager.length, ...(s.pager ?? []));
     for (const th of this.threads) {
       const d = s.threads[th.contact.id];
       if (!d || d.beats.length !== th.beats.length) continue;
@@ -146,6 +177,12 @@ export class Phone {
   private start(th: Thread, i: number, out: PhoneEvent[]): void {
     const b = th.contact.beats[i];
     th.current = i;
+    if (b.channel === 'pager') {
+      // His pager goes: the digits, and nothing else. What it's about waits until he rings the number (callBack).
+      th.beats[i] = { phase: 'paged' };
+      out.push({ kind: 'page', contact: th.contact, page: this.remember({ digits: b.page ?? th.contact.number ?? '', at: this.clock, from: th.contact.id, reads: b.reads }) });
+      return;
+    }
     th.beats[i] = { phase: 'running' };
     for (const m of b.messages) th.queue.push({ msg: m, wait: typingTime(m) });
     if (b.messages.length === 0) this.reveal(th, out);
@@ -156,7 +193,7 @@ export class Phone {
   private finishRunning(th: Thread): void {
     const i = th.current!;
     const phase = th.beats[i].phase;
-    if (phase === 'awaiting') return;
+    if (phase === 'awaiting' || phase === 'paged') return;
     if (phase === 'running' && th.contact.beats[i].replies.length) th.beats[i] = { phase: 'awaiting' };
     else this.complete(th);
   }
@@ -212,6 +249,52 @@ export class Phone {
     this.apply(b.set);
     th.beats[th.current!] = { phase: 'done' };
     th.current = null;
+  }
+
+  private remember(p: Page): Page {
+    this.pager.push(p);
+    while (this.pager.length > PAGER_MEMORY) this.pager.shift();
+    return p;
+  }
+
+  /** The pages in the pager's memory, oldest first. */
+  pages(): readonly Page[] {
+    return this.pager;
+  }
+
+  /** Erases page i from the pager's memory (the page's beat still waits for him to ring back). */
+  erasePage(i: number): void {
+    if (i >= 0 && i < this.pager.length) this.pager.splice(i, 1);
+  }
+
+  /** A page from nobody in the script (a wrong number, a test): his pager goes and remembers it. */
+  page(digits: string, reads: string | null = null): PhoneEvent {
+    return { kind: 'page', contact: null, page: this.remember({ digits, at: this.clock, from: null, reads }) };
+  }
+
+  /** Whose page this is, if he has their card. */
+  pagedBy(p: Page): Contact | null {
+    const c = p.from === null ? null : this.threads.find((th) => th.contact.id === p.from)?.contact;
+    return c?.card ? c : null;
+  }
+
+  /**
+   * He rings a number: if someone who paged him is waiting at it, what they say (their beat's text, a line each),
+   * and `then`, which ends the beat (its flags set) once he has heard it out. Hung up before the end, they still wait.
+   */
+  callBack(number: string): CallBack | null {
+    const dialled = number.replace(/\D/g, '');
+    for (const th of this.threads) {
+      if (th.current === null || th.beats[th.current].phase !== 'paged' || th.contact.number?.replace(/\D/g, '') !== dialled) continue;
+      const lines = th.contact.beats[th.current].messages.flatMap((m) => (m.from === 'them' && m.body.kind === 'text' ? [m.body.text] : []));
+      return {
+        lines,
+        then: () => {
+          if (th.current !== null && th.beats[th.current].phase === 'paged') this.complete(th);
+        },
+      };
+    }
+    return null;
   }
 
   markRead(id: string): void {

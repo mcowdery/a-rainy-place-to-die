@@ -174,7 +174,7 @@ describe('Phone engine', () => {
 });
 
 describe('Beat channels', () => {
-  const beat = (extra: string): string => `id: x\nname: X\nbeats:\n  - id: a\n${extra}    messages: [{ text: hi }]\n`;
+  const beat = (extra: string): string => `id: x\nname: X\nnumber: 03-5550-0100\nbeats:\n  - id: a\n${extra}    messages: [{ text: hi }]\n`;
   it('defaults to the messenger and accepts the era\'s channels', () => {
     const errors: string[] = [];
     expect(parseContact('x.yaml', beat(''), errors, () => true)?.beats[0].channel).toBe('chat');

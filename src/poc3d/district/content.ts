@@ -13,6 +13,7 @@ import { parseTerrain, Terrain } from './terrain';
 import { CITIES, type CityId } from './cityConfig';
 import { parseStreetRaces, type StreetRaceDef } from './streetRace';
 import { parseFootbridges, setFootbridges, type Footbridge } from './footbridges';
+import { eraPlaced } from './era';
 
 /** Every city's content files as raw text, by folder under content/ then path in it (`l0.txt`, `stamps/x.yaml`). */
 const RAW = import.meta.glob(['../../../content/world3d/**/*.{yaml,txt}', '../../../content/manila/**/*.{yaml,txt}'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
@@ -102,5 +103,6 @@ export function loadDistrictContent(city: CityId = 'toto'): DistrictContent {
   const footbridges = parseFootbridges(`${at}/footbridges.yaml`, files.get('footbridges.yaml') ?? '', avenues, errors);
   if (errors.length > 0 || !macro || !atmosphere) throw new ContentError(errors);
   setFootbridges(footbridges);
-  return { macro, placed, atmosphere, zones, rails, traffic, subway, avenues, bridges, terrain, races, streetRaces, expresswayText: files.get('expressway.yaml') ?? '', footbridges, city };
+  // (As the era has them: a landmark not built yet is an ordinary building on its plot. era.ts.)
+  return { macro, placed: eraPlaced(placed), atmosphere, zones, rails, traffic, subway, avenues, bridges, terrain, races, streetRaces, expresswayText: files.get('expressway.yaml') ?? '', footbridges, city };
 }

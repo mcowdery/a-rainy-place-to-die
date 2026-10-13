@@ -1,0 +1,34 @@
+{
+  "batch": "megumi-print-01",
+  "purpose": "The photograph of Megumi that Mack keeps in his notebook (story/phone.md, story/cast/mc.md): a small colour print tucked into the binder's pocket, where the phone's wallpaper used to be. The user asked for it, 2026-10-12. Megumi has no face of her own yet: these use the Kimoto face, which stood in for her in the phone wallpapers and belongs to no other character (Julie and Koharu are people in the story). She is Mack's wife, a newspaper crime reporter in her mid thirties. A snapshot he took, not a portrait. Nothing goes into the game without the user's approval.",
+  "use": "poster",
+  "defaults": {
+    "lora": "ohwx kimoto",
+    "variants": 2,
+    "width": 768,
+    "height": 1024
+  },
+  "items": [
+    {
+      "id": "megumi_kamakura",
+      "style": "candid 35mm colour snapshot print, late 1980s Japan, natural overcast daylight, soft film grain, slightly faded colours, a photograph taken by her husband",
+      "subject": "a Japanese woman in her mid thirties on a windy beach on a grey day, a beige trench coat over a dark sweater, her dark shoulder-length hair blown across her face, one hand holding it back, laughing at the camera, the grey sea and a line of surf behind her",
+      "composition": "vertical composition, head and shoulders, her face in the upper middle of the frame",
+      "notes": "The one the placeholder is captioned for: 恵 · 鎌倉."
+    },
+    {
+      "id": "megumi_newsroom",
+      "style": "candid 35mm colour snapshot print, late 1980s Japan, fluorescent office light at night, soft film grain, slightly faded colours, a photograph taken by her husband",
+      "subject": "a Japanese woman in her mid thirties at her desk in a newspaper newsroom late at night, white shirt with the sleeves rolled up, a telephone receiver held between ear and shoulder, a pen in her hand and piles of paper and an ashtray on the desk, looking up at the camera with a tired wry smile, empty desks and a dark window behind her",
+      "composition": "vertical composition, head and shoulders, her face in the upper middle of the frame",
+      "notes": "The reporter: one of the first women on the police beat."
+    },
+    {
+      "id": "megumi_home",
+      "style": "candid 35mm colour snapshot print, late 1980s Japan, warm evening lamp light, soft film grain, slightly faded colours, a photograph taken by her husband",
+      "subject": "a Japanese woman in her mid thirties at a small kitchen table in a Tokyo apartment in the evening, a loose grey cardigan, her dark hair tied back, chin resting on her hand, a cup of tea in front of her, looking at the camera fondly as if about to say something, a paper lampshade and a cluttered shelf behind her",
+      "composition": "vertical composition, head and shoulders, her face in the upper middle of the frame",
+      "notes": "At home: the flat he still walks through."
+    }
+  ]
+}

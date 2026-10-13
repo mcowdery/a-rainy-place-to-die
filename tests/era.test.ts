@@ -1,0 +1,106 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { CITY_CARS, pickCar } from '../src/poc3d/district/carMix';
+import { loadDistrictContent } from '../src/poc3d/district/content';
+import { era, eraCar, eraFromUrl, eraHeight, ERAS, setEra } from '../src/poc3d/district/era';
+import { DistrictModel } from '../src/poc3d/district/model';
+import { DISTRICTS3, type CellPlan3 } from '../src/poc3d/district/plan';
+
+afterEach(() => setEra('1992'));
+
+/** Every planned cell of the two central districts, in the era that is set. */
+function plans(): { content: ReturnType<typeof loadDistrictContent>; cells: CellPlan3[] } {
+  const content = loadDistrictContent();
+  const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
+  const cells: CellPlan3[] = [];
+  for (let my = 0; my < content.macro.rows; my++)
+    for (let mx = 0; mx < content.macro.cols; mx++) {
+      const kind = content.macro.kindAt(mx, my);
+      if (kind !== 'neon' && kind !== 'tower') continue;
+      const p = model.plan(mx, my);
+      if (p) cells.push(p);
+    }
+  return { content, cells };
+}
+
+describe('The city in another year', () => {
+  it('is 1992 unless the page says otherwise', () => {
+    expect(era().id).toBe('1992');
+    expect(eraFromUrl('?era=1977')).toBe('1977');
+    expect(eraFromUrl('?era=1964')).toBe('1964');
+    expect(eraFromUrl('?era=2077')).toBe('1992');
+    expect(eraFromUrl('')).toBe('1992');
+  });
+
+  it('changes nothing in 1992: no height is touched, every car is itself, every landmark is built', () => {
+    for (const h of [6, 31, 48, 120, 240]) expect(eraHeight(h, 100, 200)).toBe(h);
+    for (const t of ['sports', 'minivan', 'roadster', 'taxi'] as const) expect(eraCar(t, 3)).toBe(t);
+    const content = loadDistrictContent();
+    expect(content.placed.find((p) => p.id === 'kaburo_crossing')?.stamp.landmark).toBe('mega_sign');
+  });
+
+  it('keeps the same streets and lots in 1977 and brings the roofline down', () => {
+    const now = plans();
+    setEra('1977');
+    const then = plans();
+    expect(then.cells.length).toBe(now.cells.length);
+    const e = ERAS['1977'];
+    let lots = 0;
+    let tall = 0;
+    let lower = 0;
+    now.cells.forEach((a, i) => {
+      const b = then.cells[i];
+      // The roads are the same, to the metre.
+      expect(b.roads).toEqual(a.roads);
+      const before = new Map(a.buildings.map((x) => [`${x.x},${x.z}`, x]));
+      for (const x of b.buildings) {
+        const was = before.get(`${x.x},${x.z}`);
+        // Nothing stands in 1977 that isn't there in 1992, on the same footprint.
+        expect(was).toBeDefined();
+        expect([x.w, x.d]).toEqual([was!.w, was!.d]);
+        expect(x.h).toBeLessThanOrEqual(was!.h);
+        if (x.h < was!.h) lower++;
+        if (was!.h > e.cap! && x.h > e.cap! && x.h <= e.newCap) tall++;
+        lots++;
+      }
+      // Fewer buildings only where a plaza's tower isn't up yet.
+      expect(b.buildings.length).toBeLessThanOrEqual(a.buildings.length);
+    });
+    expect(lots).toBeGreaterThan(500);
+    expect(lower).toBeGreaterThan(50);
+    // A few newer buildings stand above the old limit; none of the lots' buildings above the newer one but the towers.
+    expect(tall).toBeGreaterThan(0);
+    const towersNow = now.cells.flatMap((c) => c.buildings).filter((x) => x.h > 60).length;
+    const towersThen = then.cells.flatMap((c) => c.buildings).filter((x) => x.h > 60).length;
+    expect(towersThen).toBeLessThan(towersNow * 0.6);
+    expect(towersThen).toBeGreaterThan(0);
+  });
+
+  it('puts an ordinary building where a landmark is not built yet, and keeps the place to stand', () => {
+    setEra('1977');
+    const content = loadDistrictContent();
+    const crossing = content.placed.find((p) => p.id === 'kaburo_crossing')!;
+    expect(crossing.stamp.landmark).toBeNull();
+    expect(crossing.building.h).toBeLessThanOrEqual(ERAS['1977'].cap!);
+    expect(crossing.nodes.map((n) => n.id)).toContain('kaburo_crossing.view');
+    expect(crossing.nodes.every((n) => n.kind === 'spawn')).toBe(true);
+    // One that was there already is as it is.
+    expect(content.placed.find((p) => p.id === 'hotel_rouge')?.stamp.landmark).toBe('love_hotel');
+    setEra('1992');
+    const now = loadDistrictContent();
+    // The plot is the same: the streets round it don't move between the years.
+    expect(crossing.rect).toEqual(now.placed.find((p) => p.id === 'kaburo_crossing')!.rect);
+    expect(content.placed.length).toBe(now.placed.length);
+  });
+
+  it('has only the cars the year had', () => {
+    setEra('1977');
+    const cars = ERAS['1977'].cars!;
+    const seen = new Set<string>();
+    for (let s = 0; s < 400; s++) seen.add(pickCar(CITY_CARS, s).type);
+    for (const t of seen) expect(cars).toContain(t);
+    expect(seen.size).toBeGreaterThan(3);
+    // A taxi is still a taxi; nothing ordinary turns into one.
+    expect(eraCar('taxi', 5)).toBe('taxi');
+    for (let s = 0; s < 50; s++) expect(['taxi', 'taxi2', 'police']).not.toContain(eraCar('sports', s));
+  });
+});

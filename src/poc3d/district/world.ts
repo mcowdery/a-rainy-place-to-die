@@ -26,6 +26,7 @@ import type { Rect } from '../../core/coords';
 import type { Interior } from '../real/interiors';
 import { doorOpen } from '../real/swingDoors';
 import { cityFromUrl } from './cityConfig';
+import { era } from './era';
 import { floorLevel, groundSurface, indoorSurface, type Surface } from './footing';
 import { footbridgeFloor, footbridgeGround, footbridgeRaised, footbridgeShelter, footbridges, footbridgesNear } from './footbridges';
 
@@ -483,7 +484,7 @@ export class District {
       );
       w.addEventListener('message', (e) => this.onMessage(i, e.data));
       w.addEventListener('error', (e) => console.error('chunk worker error', e.message));
-      w.postMessage({ type: 'init', kinds: typeof this.kinds === 'string' ? [this.kinds] : [...this.kinds], seed: this.seed, words: kit.words, city: cityFromUrl().id } satisfies WorkerIn);
+      w.postMessage({ type: 'init', kinds: typeof this.kinds === 'string' ? [this.kinds] : [...this.kinds], seed: this.seed, words: kit.words, city: cityFromUrl().id, era: era().id } satisfies WorkerIn);
       this.workers.push(w);
       this.inFlight.push(0);
     }

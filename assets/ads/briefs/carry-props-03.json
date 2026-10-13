@@ -1,0 +1,20 @@
+{
+  "batch": "carry-props-03",
+  "purpose": "A redo of the blank business card from carry-props-01 (story/phone.md): the approved one (source 99) is clean and has rounded corners, and a Japanese meishi has square ones. The user asked for the cards to be fixed before the design goes into the game (2026-10-12). Blank: the game prints the name and number on it. Nothing goes into the game without the user's approval.",
+  "use": "sign",
+  "defaults": {
+    "lora": null,
+    "variants": 3,
+    "width": 1024,
+    "height": 768
+  },
+  "items": [
+    {
+      "id": "card_worn",
+      "style": "top-down flat lay photograph, shot on 35mm film, soft even light, fine film grain, muted colours, true to life wear and patina, sharp focus",
+      "subject": "a single completely blank Japanese business card, a plain rectangle of thick off-white card stock with four sharp square right-angled corners, yellowed with age, the edges grubby and slightly frayed from years in a wallet, one corner bent over, a soft diagonal crease across it, a faint brown ring stain and grey thumb smudges, lying flat and seen straight down from directly above",
+      "composition": "the card with its long side horizontal, centred and whole in the frame with a margin all round, isolated on a plain matte dark grey seamless background, nothing else in the picture",
+      "notes": "Square corners, and as worn as the leather it lives in."
+    }
+  ]
+}

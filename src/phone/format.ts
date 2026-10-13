@@ -8,12 +8,18 @@ import { compileCondition, type Condition } from '../core/condition';
  *   name: Aya                         # shown in the chat list and the thread header
  *   avatar: media/aya_avatar.jpg      # optional (else the name's initial); media/ is content/phone/media/
  *   status: スナックかんぱい 18:00-02:00  # optional, under the name
+ *   number: 03-5550-0117             # optional: their telephone number (digits and dashes). A pager beat needs it: it's
+ *                                     #   what his pager shows, and what he rings from a payphone to hear what it was about
+ *   card: true                        # optional: he has their card, so the game can say whose number a page is
  *   beats:                            # bits of conversation, each arriving when its condition first holds
  *     - id: rain                      # [a-z0-9_], unique in the file, stable
  *       when: met_aya                 # a condition on story flags (node condition syntax); omitted = from the start
  *       after: 40                     # seconds after `when` first holds (default 0)
- *       channel: call                 # how it reaches you (story/phone.md): chat (the messenger, the default for now),
- *                                     #   pager, call, machine or paper. Parsed and kept; the phone's UI doesn't act on it yet
+ *       channel: pager                # how it reaches you (story/phone.md): chat (the messenger, the default for now),
+ *                                     #   pager, call, machine or paper. `pager` is acted on (engine.ts): the beat pages him and waits;
+ *                                     #   its messages are what he hears when he rings back. The others are parsed and kept
+ *       page: '724106'                # pager only, optional: the digits shown in place of their number (a number code),
+ *       reads: なにしてる               #   and what the code says, if he can read it
  *       messages:                     # from the contact, one at a time with typing; `from: me` for yours
  *         - text: It's coming down harder.
  *         - photo: media/bar.jpg      # or video: media/clip.webm (poster: optional still); caption: optional
@@ -52,6 +58,9 @@ export type Channel = (typeof CHANNELS)[number];
 export interface Beat {
   readonly id: string;
   readonly channel: Channel;
+  /** A pager beat's digits when they aren't the contact's number (a number code), and what the code says. */
+  readonly page: string | null;
+  readonly reads: string | null;
   readonly when: Condition | null;
   readonly after: number;
   readonly messages: readonly ScriptMsg[];
@@ -64,11 +73,17 @@ export interface Contact {
   readonly name: string;
   readonly avatar: string | null;
   readonly status: string | null;
+  /** Their telephone number, digits and dashes; null if they have none he knows. */
+  readonly number: string | null;
+  /** He has their card: a page from their number can be named. */
+  readonly card: boolean;
   readonly beats: readonly Beat[];
 }
 
 const ID = /^[a-z0-9_]+$/;
 const FLAG = /^[a-z0-9_.]{1,64}$/;
+/** What a pager can show: digits and dashes, twelve places. */
+const DIGITS = /^[0-9][0-9-]{0,11}$/;
 type Raw = Record<string, unknown>;
 const isObj = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -93,6 +108,8 @@ export function parseContact(file: string, text: string, errors: string[], hasMe
   const id = String(doc.id ?? '');
   if (!ID.test(id)) err(`id must match [a-z0-9_]+ (got "${id}")`);
   if (!overlay && (typeof doc.name !== 'string' || !doc.name)) err('name is required');
+  const number = doc.number === undefined ? null : String(doc.number);
+  if (number !== null && !DIGITS.test(number)) err(`number must be digits and dashes, at most twelve (got "${number}")`);
   const media = (where: string, v: unknown): string | null => {
     if (v === undefined || v === null) return null;
     const p = String(v);
@@ -171,6 +188,12 @@ export function parseContact(file: string, text: string, errors: string[], hasMe
     }
     const channel = rb.channel === undefined ? 'chat' : (CHANNELS as readonly string[]).includes(String(rb.channel)) ? (String(rb.channel) as Channel) : null;
     if (!channel) err(`${at}: channel must be one of ${CHANNELS.join(', ')}`);
+    const page = rb.page === undefined ? null : String(rb.page);
+    if (page !== null && !DIGITS.test(page)) err(`${at}: page must be digits and dashes, at most twelve`);
+    if (channel === 'pager') {
+      if (number === null) err(`${at}: a pager beat needs the contact's number (what he rings back)`);
+      if (rb.replies !== undefined) err(`${at}: a pager beat can't have replies yet (a call has no choices so far)`);
+    } else if (page !== null || rb.reads !== undefined) err(`${at}: page and reads are for a pager beat`);
     const after = rb.after === undefined ? 0 : Number(rb.after);
     if (!Number.isFinite(after) || after < 0) err(`${at}: after must be seconds >= 0`);
     const replies: Reply[] = [];
@@ -187,7 +210,7 @@ export function parseContact(file: string, text: string, errors: string[], hasMe
     }
     const messages = msgs(`${at} messages`, rb.messages);
     if (messages.length === 0 && replies.length === 0) err(`${at}: needs messages or replies`);
-    beats.push({ id: bid, channel: channel ?? 'chat', when, after: Number.isFinite(after) ? after : 0, messages, replies, set: flags(`${at}`, rb.set) });
+    beats.push({ id: bid, channel: channel ?? 'chat', page, reads: rb.reads === undefined ? null : String(rb.reads), when, after: Number.isFinite(after) ? after : 0, messages, replies, set: flags(`${at}`, rb.set) });
   }
   if (errors.length > before) return null;
   return {
@@ -195,6 +218,8 @@ export function parseContact(file: string, text: string, errors: string[], hasMe
     name: String(doc.name ?? ''),
     avatar: media('avatar', doc.avatar),
     status: doc.status === undefined ? null : String(doc.status),
+    number,
+    card: doc.card === true,
     beats,
   };
 }

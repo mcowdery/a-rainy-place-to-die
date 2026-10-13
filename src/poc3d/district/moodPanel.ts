@@ -2,6 +2,7 @@ import { BLUSH_LOOKS, EMOTE_LOOKS, HEART_LOOKS, STAR_LOOKS, type EmoteLooks } fr
 import { MOB_LOOK_NAMES, type MobLook } from '../real/people';
 import { GRADE_NAMES, type GradeName } from '../real/grade';
 import { SKY_LOOKS, type SkyLook } from './atmosphere';
+import { era } from './era';
 import { MOON_SHAPES, type MoonShape } from '../real/sky';
 import { ENGINE_VOICES, type EngineVoice } from '../../race/engineSamples';
 import { DEFAULT_GUN_VOICE, GUN_VOICES, type GunVoice } from '../../race/gunVoices';
@@ -224,6 +225,8 @@ function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettin
   if (he && HEART_LOOKS.includes(he)) m.mobHearts = he;
   const st = params.get('stars') as EmoteLooks['stars'] | null;
   if (st && STAR_LOOKS.includes(st)) m.mobStars = st;
+  // (An older year starts in its own film's grade; `?grade=` overrides it. district/era.ts.)
+  m.grade = era().grade;
   const g = params.get('grade') as GradeName | null;
   if (g && GRADE_NAMES.includes(g)) m.grade = g;
   const mi = params.get('mirror');

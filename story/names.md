@@ -86,7 +86,7 @@ Wangan**, "bayshore", runs along the port); the mountain passes 黒神峠 Kuroka
 |---|---|---|
 | The man behind it all | No face: always blocked or blurred. Japanese, very wealthy, listened to. | — |
 | **Mack** (真壁 Makabe; proposed: 真壁 誠 Makabe Makoto) | The detective, one of the two MCs. Japanese, an ex-cop, and only a man (the machine he used to be in this guide is gone); looking for his wife; sleeps around. | Kaburo (booth 17, the office) |
-| **Dom** (Dominic "Mad Dom" Verrazzo) | The other MC. An American mafioso, his family's "mad dog", hiding in Tokyo; quiet, unbeatable, not fully human (and not a machine). Mack becomes his "manager". The one without Japanese. | Open |
+| **Dom** (Dominic "Mad Dom" Wilks) | The other MC. A half-Italian, half-Ukrainian mobster from Brooklyn, the Gambino family's "mad dog" but never a member of it, hiding in Tokyo; quiet, unbeatable, not fully human (and not a machine). Mack becomes his "manager". The one without Japanese. | Open |
 | **Megumi** (真壁 恵 Makabe Megumi) | Mack's wife, a Tōto Shimbun crime reporter; taken because of the story she was chasing (the circle), probably trafficked, maybe dead. He's looking for her. | Unknown |
 | The old detective | Runs Kirishima Investigations (the agency on Kaburo's posters); ill, half retired; hires Mack off the books. | Kaburo (the office) |
 | **Michael** | The mysterious, knightly figure who freed Mack; perhaps an angel, never said. Very powerful. | Unknown |

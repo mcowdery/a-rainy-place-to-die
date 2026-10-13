@@ -1,4 +1,5 @@
 import { hash } from '../../core/hash';
+import { eraCar } from './era';
 import type { DistrictId } from '../../gen/macro';
 import { CAR_TYPES2, PAINTS, type CarType } from '../models/vehicles';
 
@@ -48,6 +49,8 @@ export function pickCar(mix: CarMix, seed: number): { type: CarType; paint: numb
       break;
     }
   }
+  // (Only the cars the era has: era.ts.)
+  type = eraCar(type, seed);
   const paints = PAINTS[type];
   return { type, paint: paints[hash(seed, 0x9a1) % paints.length] };
 }

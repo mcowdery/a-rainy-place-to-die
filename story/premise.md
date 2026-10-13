@@ -12,9 +12,11 @@ happens there at night (The dead hours, below).
 
 ### The year
 
-**Open** (the user asked for suggestions, 2026-10-12: the game is 70s, 80s and 90s Japan at once, and the
-question is whether to pick a real year or play it loose). **Proposed:** both: one anchor year in this guide,
-never printed on screen.
+**Decided** (the user, 2026-10-13): "an unspoken 1992". One anchor year in this guide, never printed on screen.
+(The user had asked for suggestions on 2026-10-12: the game is 70s, 80s and 90s Japan at once, and the question was
+whether to pick a real year or play it loose. This was Claude's proposal, and the points below are its reasons.)
+**And two older versions of the city are wanted**, the 1970s and the 1960s, to see how it changed: reached through
+what people tell of those years ([threads/the-old-case.md](threads/the-old-case.md), proposed).
 
 - **The anchor: 1992**, spring to spring. The story happens at the end of the three decades, so all three are
   in it honestly: a 1992 street is seventies buildings, eighties cars and eighties songs, with the nineties just
@@ -43,7 +45,7 @@ never printed on screen.
 
 - **Mack** (真壁 Makabe), Japanese, an ex-cop working as a detective, and only a man
   ([cast/mc.md](cast/mc.md)).
-- **Dom**, Dominic "Mad Dom" Verrazzo, a high-ranking American mafioso and his organisation's "mad dog", hiding
+- **Dom**, Dominic "Mad Dom" Wilks, a half-Italian, half-Ukrainian mobster, the Gambino family's "mad dog" though never one of its members, hiding
   in Japan after an incident at home ([cast/dom.md](cast/dom.md)). Uninterested in the city at first, a quiet
   and unbeatable fighter, and, the story finds out late, not fully human.
 

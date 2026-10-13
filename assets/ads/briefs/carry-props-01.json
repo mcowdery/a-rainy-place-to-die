@@ -1,0 +1,91 @@
+{
+  "batch": "carry-props-01",
+  "purpose": "Photographed-looking base pictures for what Mack carries in place of the phone (story/phone.md): the pager (ポケベル), the ring-bound notebook and the things tucked into it. Each is one object seen straight down on a plain ground, to be cut out and used as a surface the game draws on: every display, page, card and label is BLANK, because digits, handwriting and print are composited in the engine. Design reference: the mock-up at https://claude.ai/artifact/HmLoAUjpEfS679J4BH87pJ. Nothing here goes into the game without the user's approval.",
+  "use": "sign",
+  "defaults": {
+    "lora": null,
+    "variants": 2
+  },
+  "items": [
+    {
+      "id": "pager",
+      "style": "top-down flat lay photograph, shot on 35mm film, soft directional light from the upper left, fine film grain, muted colours, true to life wear and patina, sharp focus",
+      "subject": "a single early 1990s Japanese numeric pager, a small black matte plastic rectangular device the size of a matchbox with slightly rounded corners, one narrow single-line grey-green LCD window that is switched off and completely blank, two small dark rubber buttons below the window, one tiny red indicator lamp, scuffed corners worn pale and fine scratches from years in a coat pocket, a little dust in the seams, lying flat and seen straight down from directly above",
+      "composition": "the object centred and whole in the frame with a wide margin all round, long side horizontal, isolated on a plain matte mid-grey seamless background with a soft shadow, nothing else in the picture",
+      "width": 1024,
+      "height": 768,
+      "notes": "The LCD must be blank: the digits are drawn by the game. Any lettering on the case will be painted out."
+    },
+    {
+      "id": "notebook_open",
+      "style": "top-down flat lay photograph, shot on 35mm film, soft directional light from the upper left, fine film grain, muted colours, true to life wear and patina, sharp focus",
+      "subject": "a well-worn dark brown leather six-ring personal organiser binder of the late 1980s lying open and flat, seen straight down from directly above, six metal rings down the spine, the left half is the leather inner cover with empty card slots and a pen loop, the right half is one completely blank cream ruled page yellowed and foxed with age, four blank coloured index tabs of faded card sticking out past the right edge of the page, stitched edges, rubbed pale corners, creases in the leather",
+      "composition": "the object centred and whole in the frame with a margin all round, wide horizontal composition, isolated on a plain matte mid-grey seamless background with a soft shadow, nothing else in the picture",
+      "width": 1536,
+      "height": 1024,
+      "notes": "Page, tabs and card slots blank: handwriting, cards and the photo are composited."
+    },
+    {
+      "id": "notebook_closed",
+      "style": "top-down flat lay photograph, shot on 35mm film, soft directional light from the upper left, fine film grain, muted colours, true to life wear and patina, sharp focus",
+      "subject": "a closed well-worn dark brown leather six-ring personal organiser binder of the late 1980s with a snap strap, thick with loose papers, the edges of faded card index tabs showing at the side, stitched edges, rubbed pale corners, scratches and creases in the leather, seen straight down from directly above",
+      "composition": "the object centred and whole in the frame with a wide margin all round, upright, isolated on a plain matte mid-grey seamless background with a soft shadow, nothing else in the picture",
+      "width": 832,
+      "height": 1024
+    },
+    {
+      "id": "page_blank",
+      "style": "top-down flat lay photograph, shot on 35mm film, soft even light, fine film grain, muted colours, true to life wear and patina, sharp focus",
+      "subject": "a single loose sheet of cream ruled notebook paper with six punched holes down its left edge, completely blank, yellowed with age, faint foxing and a pale ring stain, a soft crease across it, one dog-eared corner, thumbed and slightly grubby along the outer edge, lying flat and seen straight down from directly above",
+      "composition": "the sheet upright, centred and whole in the frame with a narrow margin all round, isolated on a plain matte dark grey seamless background, nothing else in the picture",
+      "width": 832,
+      "height": 1216,
+      "notes": "The leaf the handwriting goes on. Dark ground so the pale sheet cuts out cleanly."
+    },
+    {
+      "id": "card_blank",
+      "style": "top-down flat lay photograph, shot on 35mm film, soft even light, fine film grain, muted colours, true to life wear and patina, sharp focus",
+      "subject": "a single completely blank Japanese business card of plain off-white card stock, slightly yellowed, one corner softened and bent, a faint thumb smudge and a crease, lying flat and seen straight down from directly above",
+      "composition": "the card with its long side horizontal, centred and whole in the frame with a margin all round, isolated on a plain matte dark grey seamless background, nothing else in the picture",
+      "width": 1024,
+      "height": 768,
+      "notes": "Card stock for the contacts: name and number are printed on by the game."
+    },
+    {
+      "id": "folded_sheet",
+      "style": "top-down flat lay photograph, shot on 35mm film, soft even light, fine film grain, muted colours, true to life wear and patina, sharp focus",
+      "subject": "a single sheet of thin off-white map paper that has been folded in four and opened out flat again, completely blank, the two fold creases crossing in the middle worn soft and slightly grey, rubbed corners, a small tear at one fold, lying flat and seen straight down from directly above",
+      "composition": "the sheet with its long side horizontal, centred and whole in the frame with a narrow margin all round, isolated on a plain matte dark grey seamless background, nothing else in the picture",
+      "width": 1216,
+      "height": 832,
+      "notes": "The pocket atlas page: the map itself is drawn by the game, so the sheet is blank."
+    },
+    {
+      "id": "microcassette",
+      "style": "top-down flat lay photograph, shot on 35mm film, soft directional light from the upper left, fine film grain, muted colours, true to life wear and patina, sharp focus",
+      "subject": "a single microcassette tape from a telephone answering machine, small black plastic shell, a clear window showing the two little tape reels, a completely blank white paper label, light scuffs, lying flat and seen straight down from directly above",
+      "composition": "the object with its long side horizontal, centred and whole in the frame with a wide margin all round, isolated on a plain matte mid-grey seamless background with a soft shadow, nothing else in the picture",
+      "width": 1024,
+      "height": 768,
+      "notes": "Evidence in the case notes. The label is written on by the game."
+    },
+    {
+      "id": "videotape",
+      "style": "top-down flat lay photograph, shot on 35mm film, soft directional light from the upper left, fine film grain, muted colours, true to life wear and patina, sharp focus",
+      "subject": "a single unlabelled black VHS videocassette, the label area a completely blank white paper sticker, two round reel windows, scuffed edges and a little dust, lying flat and seen straight down from directly above",
+      "composition": "the object with its long side horizontal, centred and whole in the frame with a wide margin all round, isolated on a plain matte mid-grey seamless background with a soft shadow, nothing else in the picture",
+      "width": 1216,
+      "height": 832,
+      "notes": "The tape with no label from the opening."
+    },
+    {
+      "id": "envelope",
+      "style": "top-down flat lay photograph, shot on 35mm film, soft directional light from the upper left, fine film grain, muted colours, true to life wear and patina, sharp focus",
+      "subject": "a single plain brown manila envelope of the size that holds a photograph, completely blank with no stamp and no address, its flap open, creased from a pocket, one corner bent, lying flat and seen straight down from directly above",
+      "composition": "the envelope with its long side horizontal, centred and whole in the frame with a wide margin all round, isolated on a plain matte mid-grey seamless background with a soft shadow, nothing else in the picture",
+      "width": 1024,
+      "height": 768,
+      "notes": "What Cash One's Monday print comes in."
+    }
+  ]
+}

@@ -192,7 +192,7 @@ him from.
 
 ## Dom's part
 
-The second MC, an American mafioso hiding in Tokyo, is not fully human, and the story finds it out late
+The second MC, an American mobster hiding in Tokyo, is not fully human, and the story finds it out late
 ([cast/dom.md](cast/dom.md)). He isn't the programme's: not a machine, not a hybrid. **Open:** what he is.
 **Proposed** there: the Watchers' blood, surfacing in a man. That would put the hidden layer inside one of the
 two leads again, where Mack's body used to carry it.

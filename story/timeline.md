@@ -107,6 +107,11 @@ ladder, and how these four stand beside the nightly hunts ([mythos.md](mythos.md
 tragedy with a small hope from the Bible, more openly Christian than anything before it. **Open:** whether and
 how he dies, and what the hope is. Megumi's fate may stay unknown.
 
+## Before the year
+
+**Proposed** ([threads/the-old-case.md](threads/the-old-case.md)): the story reaches back to about 1977 and about 1964,
+in what the old detective, Kuroneko's mama and the oyabun tell of those years, played in the city as it was then.
+
 ## Stories
 
 Each season has one main story ([main/](main/README.md)) and optional side content ([side/](side/README.md)).

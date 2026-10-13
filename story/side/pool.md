@@ -67,7 +67,7 @@ the first 200s.
 - **The informant.** Someone feeding Japan's Public Security police (公安, Kōan), or the Americans at the US
   base, about the triad, or about something stranger. They know more about the order's edges than they should.
   A way into the state and foreign-power threads, and (since Dom) into what the Americans know about a
-  mafioso hiding in Tokyo. Stays: a source who lies to
+  mobster hiding in Tokyo. Stays: a source who lies to
   everyone, Mack included.
 - **The teacher** (already a story character: Kōpo Sakura 102, Mack's neighbour if he moves up the ladder).
   Her own adult life, never her students': a secret she's being squeezed for (a married colleague, a weekend job

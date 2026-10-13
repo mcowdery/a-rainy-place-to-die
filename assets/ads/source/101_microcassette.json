@@ -1,0 +1,25 @@
+{
+  "file": "microcassette_v2.png",
+  "item": "microcassette",
+  "brand": null,
+  "copy": null,
+  "notes": "Evidence in the case notes. The label is written on by the game.",
+  "prompt": "top-down flat lay photograph, shot on 35mm film, soft directional light from the upper left, fine film grain, muted colours, true to life wear and patina, sharp focus, a single microcassette tape from a telephone answering machine, small black plastic shell, a clear window showing the two little tape reels, a completely blank white paper label, light scuffs, lying flat and seen straight down from directly above, the object with its long side horizontal, centred and whole in the frame with a wide margin all round, isolated on a plain matte mid-grey seamless background with a soft shadow, nothing else in the picture, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1024,
+    768
+  ],
+  "steps": 12,
+  "seed": 1375695088,
+  "studioJob": "46b018f4-18c7-41dc-9bc4-df15cec1d467-u1",
+  "generated": "2026-10-12T09:37:59.061Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/101_microcassette.png",
+  "decided": "2026-10-12T09:55:31.190Z",
+  "batch": "carry_props_01",
+  "purpose": "Photographed-looking base pictures for what Mack carries in place of the phone (story/phone.md): the pager (ポケベル), the ring-bound notebook and the things tucked into it. Each is one object seen straight down on a plain ground, to be cut out and used as a surface the game draws on: every display, page, card and label is BLANK, because digits, handwriting and print are composited in the engine. Design reference: the mock-up at https://claude.ai/artifact/HmLoAUjpEfS679J4BH87pJ. Nothing here goes into the game without the user's approval.",
+  "use": "sign",
+  "district": null
+}

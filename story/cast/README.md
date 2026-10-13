@@ -13,7 +13,7 @@ least one person behind who can come back.
 
 - [mc.md](mc.md): **Mack** (真壁 Makabe), Japanese, an ex-cop and a detective; the thread through every season's
   story.
-- [dom.md](dom.md): **Dom** (Dominic "Mad Dom" Verrazzo), an American mafioso hiding in Tokyo; the unbeatable
+- [dom.md](dom.md): **Dom** (Dominic "Mad Dom" Wilks), a half-Italian, half-Ukrainian mobster hiding in Tokyo; the unbeatable
   one, and not fully human. Mack becomes his "manager", and he Mack's "mad dog".
 
 ## Close to Mack

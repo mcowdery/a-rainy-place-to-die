@@ -33,6 +33,10 @@ export const GRADES = {
   nocturne: { sat: 0.42, neonKeep: 0.75, shadow: [0.8, 0.95, 1.15], highlight: [1.08, 1.0, 0.9], tone: 0.65, lift: [0.012, 0.017, 0.03], contrast: 1.1, vignette: 0.4, grain: 0.05, fringe: 0.0018, halation: 0.3, halColor: [1, 0.35, 0.18] },
   noir: { sat: 0.06, neonKeep: 0.3, shadow: [0.9, 0.96, 1.08], highlight: [1.06, 1.02, 0.95], tone: 0.5, lift: [0.008, 0.009, 0.012], contrast: 1.28, vignette: 0.6, grain: 0.085, fringe: 0.001, halation: 0.18, halColor: [1, 0.9, 0.8] },
   citypop: { sat: 0.85, neonKeep: 0.6, shadow: [0.88, 0.8, 1.18], highlight: [1.12, 0.96, 0.9], tone: 0.7, lift: [0.045, 0.022, 0.065], contrast: 0.9, vignette: 0.28, grain: 0.035, fringe: 0.0024, halation: 0.45, halColor: [1, 0.35, 0.55] },
+  // The older years' film (district/era.ts picks one by default): faded colour with the blacks lifted and a heavier grain, a warm
+  // halation round the lights; the sixties' colour is thinner still and the neon dimmer. **Candidates, to be judged by eye.**
+  seventies: { sat: 0.7, neonKeep: 0.5, shadow: [0.94, 1.03, 1.0], highlight: [1.1, 1.0, 0.86], tone: 0.55, lift: [0.03, 0.026, 0.018], contrast: 0.94, vignette: 0.38, grain: 0.085, fringe: 0.003, halation: 0.38, halColor: [1, 0.55, 0.22] },
+  sixties: { sat: 0.34, neonKeep: 0.18, shadow: [0.95, 0.98, 1.05], highlight: [1.1, 1.0, 0.84], tone: 0.5, lift: [0.024, 0.02, 0.014], contrast: 1.12, vignette: 0.5, grain: 0.11, fringe: 0.002, halation: 0.2, halColor: [1, 0.7, 0.4] },
 } as const satisfies Record<string, GradePreset>;
 export type GradeName = keyof typeof GRADES;
 export const GRADE_NAMES = Object.keys(GRADES) as GradeName[];
