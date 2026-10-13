@@ -567,6 +567,11 @@ export class Driving {
     return this.lookBack;
   }
 
+  /** The chase camera's workings, for a trace (debug/trace.ts): how far out along its arm, the zoom, its offset. */
+  get traceInfo(): { camT: number; zoom: number; offX: number; offY: number; offZ: number; velX: number; velZ: number; shake: number } {
+    return { camT: this.camT, zoom: this.zoom, offX: this.camOff.x, offY: this.camOff.y, offZ: this.camOff.z, velX: this.velSm.x, velZ: this.velSm.z, shake: this.shake };
+  }
+
   /** Looking about from the vehicle (rad): yaw left positive, pitch up positive (a bike's views use them). */
   get look(): { yaw: number; pitch: number } {
     return { yaw: this.orbitYaw, pitch: this.lookPitch };
