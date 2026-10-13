@@ -1,5 +1,5 @@
 /**
- * F10: a trace of a few seconds of play for a fault in how something moves (the car shaking in a chase camera),
+ * F8: a trace of a few seconds of play for a fault in how something moves (the car shaking in a chase camera),
  * taken on the user's own machine, where the fault shows: one row a frame of whatever the page samples (the
  * camera, the car, the frame's time), saved as JSON into debug-shots/ through the dev server's `/__shot`
  * endpoint (scripts/devEndpoints.mjs; a 1x1 PNG goes with it, since the endpoint writes both). Without the dev
@@ -15,7 +15,7 @@ export class Trace {
   constructor(private readonly page: string) {
     if (typeof window === 'undefined') return;
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'F10' && !this.rows) {
+      if (e.code === 'F8' && !this.rows) {
         e.preventDefault();
         this.rows = [];
       }
