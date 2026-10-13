@@ -4557,7 +4557,7 @@ async function run(): Promise<void> {
   document.getElementById('loadbg')?.remove();
 
   // On foot, the right button with a gun out is the car gun's aim: the view narrows (first person) and the world slows
-  // while the focus lasts (2.5 s, refilling over 6 s with the gun down, as in the car: district/carGun.ts; G is the inventory's here, so no toggle).
+  // while the focus lasts (5 s, refilling over 6 s with the gun down, as in the car: district/carGun.ts; G is the inventory's here, so no toggle).
   const FOOT_SLOW = 0.7;
   const footFocus = { slow: 0, focus: 1, on: false, auto: true, zoom: 0, fov: camera.fov };
   const footVeil = document.createElement('div');
@@ -4742,7 +4742,7 @@ async function run(): Promise<void> {
         if (up && !F.on && F.auto && F.focus > 0.25) F.on = true;
         if (!up) F.on = false;
         if (up && F.on) {
-          F.focus = Math.max(0, F.focus - realDt / 2.5);
+          F.focus = Math.max(0, F.focus - realDt / 5);
           if (F.focus <= 0) F.on = false;
         } else if (!up) F.focus = Math.min(1, F.focus + realDt / 6);
         F.slow += ((F.on ? 1 : 0) - F.slow) * Math.min(1, realDt * 7);

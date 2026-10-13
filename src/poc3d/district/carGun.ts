@@ -17,7 +17,7 @@ import type { OwnCar } from './ownCar';
  * (race/carDriver.ts).
  *
  * The right button aims: the view goes to his eyes, along an aim that holds its place in the world while the car
- * turns (district/driving.ts `startAim`), and the world slows to 30% while the focus lasts (2.5 s of it, refilling
+ * turns (district/driving.ts `startAim`), and the world slows to 30% while the focus lasts (5 s of it, refilling
  * over 6 s with the gun down; G turns that off). The left button fires: aimed, at what's under the crosshair; not
  * aimed, from the hip, with far more spread and never in slow motion. From the hip in the views on the car (his eyes,
  * the bonnet, the bumper) that's where you look; from the chase cameras (which look at your own car, from wherever
@@ -28,7 +28,7 @@ import type { OwnCar } from './ownCar';
  */
 
 /** Seconds of focus, and to refill it. */
-const FOCUS_SECS = 2.5;
+const FOCUS_SECS = 5;
 const FOCUS_REFILL = 6;
 /** How much the world slows at full focus. */
 const SLOW = 0.7;
@@ -295,8 +295,5 @@ export class CarGun {
     Object.assign(this.note.style, blocked
       ? { color: '#ff2b3a', fontSize: '15px', fontWeight: '800', top: 'calc(50% + 40px)', transform: `translateX(-50%) scale(${(1 + this.blockedT * 0.35).toFixed(3)})` }
       : { color: '#ffb0a0', fontSize: '12px', fontWeight: '600', top: 'calc(50% + 34px)', transform: 'translateX(-50%)' });
-    const bars = Math.round(this.focus * 10);
-    this.gun.style.display = 'block';
-    this.gun.innerHTML = `${rig.gun.label ?? 'Pistol'} · ${reloading ? 'reloading…' : '▮'.repeat(rig.shells) + '▯'.repeat(Math.max(0, rig.gun.shells - rig.shells))}<br><span style="opacity:${aiming || this.focus < 1 ? 1 : 0.45}">${this.slowAuto ? `FOCUS ${'▮'.repeat(bars)}${'▯'.repeat(10 - bars)}` : 'FOCUS off'}</span><br><span style="opacity:.55;font-weight:400">RMB aim · LMB fire · R reload · G focus</span>`;
   }
 }
