@@ -230,7 +230,6 @@ export class Car {
   bump = 0;
   private slam = 0;
   private prevThrottle = 0;
-  private acc = 0;
   /** The throttle as the engine sees it (a keyboard's 0/1 ramped), and time since the handbrake (s). */
   private throttle = 0;
   private sinceHandbrake = 99;
@@ -305,14 +304,20 @@ export class Car {
     this.y = ground.height(x, z);
   }
 
-  /** Advance by dt seconds (in fixed steps; any remainder carries over). */
+  /**
+   * Advance by dt seconds, in equal substeps no longer than STEP: the car moves exactly its speed times the frame's
+   * time, so the drawn motion is as even as the frames. (An accumulator of fixed steps with the remainder carried
+   * over was tried first: at a frame rate that isn't a multiple of 120 Hz the frames took one step and two by
+   * turns, the car moved twice as far in one frame as the next, and in the chase camera, pinned to the car, the
+   * world shook past it; a step of 1/120 or 1/60 s is unchanged, so the tests are.)
+   */
   update(dt: number, c: Controls, ground: Ground = FLAT): void {
     this.bump = 0;
-    this.acc += Math.min(dt, 0.1);
-    while (this.acc >= STEP) {
-      this.acc -= STEP;
-      this.step(STEP, c, ground);
-    }
+    dt = Math.min(dt, 0.1);
+    if (dt <= 0) return;
+    const n = Math.max(1, Math.ceil(dt / STEP - 1e-6));
+    const h = dt / n;
+    for (let i = 0; i < n; i++) this.step(h, c, ground);
   }
 
   private step(dt: number, c: Controls, ground: Ground): void {

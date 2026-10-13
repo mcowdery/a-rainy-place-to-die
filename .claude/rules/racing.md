@@ -14,7 +14,7 @@ Covers the car model and its stunts, venues, time trials, drift attack, circuits
 
 `race.html` + `src/race/`: **racing**, on its own venue maps (the city stays the place to explore and travel; racing is street and drift racing on mountain passes, like Initial D, and later Shuto-style expressways). This is the handling prototype. `vehicle.ts` is the car model, arcade-leaning over a real tyre model:
 
-- a planar bicycle model with Pacejka-style lateral force, a friction ellipse, load transfer, rear-wheel drive, a power limit, a handbrake that cuts rear grip, gravity along the slope, and a fixed 120 Hz step;
+- a planar bicycle model with Pacejka-style lateral force, a friction ellipse, load transfer, rear-wheel drive, a power limit, a handbrake that cuts rear grip, gravity along the slope, and substeps no longer than 1/120 s, equal within a frame (`Car.update`; 2026-10-13: a fixed-step accumulator carried its remainder over, so at the user's ~90 fps the frames took one step and two by turns and the car moved twice as far in one frame as the next: in the chase camera the world shook past the car, worst near the camera; steps of exactly 1/120 or 1/60 s are unchanged, so the tests are);
 
 - `CarSpec` (`COUPE`) and `Assists` (`DRIFT_ASSISTS` and `ROAD_ASSISTS`: countersteer, a slide-angle clamp, a yaw cap, traction help that stops full throttle alone spinning the car unless it's already sideways or you've just used the handbrake);
 
