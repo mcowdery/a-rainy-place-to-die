@@ -288,12 +288,5 @@ export class CarGun {
     H.gunfire.sync(rig);
     const blocked = this.out && !this.side;
     H.crosshair.update(this.out, aiming ? 1 : 0.35, dt, blocked);
-    const reloading = rig.reloading;
-    this.note.style.display = this.out && (blocked || reloading || this.window === 'across') ? 'block' : 'none';
-    this.note.textContent = blocked ? 'NO LINE OF FIRE' : reloading ? 'RELOADING' : 'THROUGH THE PASSENGER WINDOW';
-    // (No shot: said in red, larger, and it jumps when you pull the trigger anyway.)
-    Object.assign(this.note.style, blocked
-      ? { color: '#ff2b3a', fontSize: '15px', fontWeight: '800', top: 'calc(50% + 40px)', transform: `translateX(-50%) scale(${(1 + this.blockedT * 0.35).toFixed(3)})` }
-      : { color: '#ffb0a0', fontSize: '12px', fontWeight: '600', top: 'calc(50% + 34px)', transform: 'translateX(-50%)' });
   }
 }
