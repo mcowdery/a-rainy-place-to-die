@@ -60,6 +60,22 @@ export class GunSound {
   private slow = 0;
   /** Resolves once the recordings are decoded. */
   ready: Promise<void> = Promise.resolve();
+  /** The recordings' decoding, begun when the sound is made (not at the first click, which left the first shots to the synthesised report), and whether it's done. */
+  private loading: Promise<void> | null = null;
+  private loaded = false;
+
+  constructor() {
+    this.preload();
+  }
+
+  /** Fetch and decode the recordings now, with a context of their own (a buffer plays in any context). */
+  private preload(into?: BaseAudioContext): Promise<void> {
+    if (!this.loading) {
+      const ctx = into ?? (typeof OfflineAudioContext === 'undefined' ? null : new OfflineAudioContext(1, 1, 48000));
+      this.loading = (ctx ? this.load(ctx) : Promise.resolve()).then(() => void (this.loaded = true));
+    }
+    return this.loading;
+  }
 
   /** `into`: another context to play into (an offline one, for measuring); else the page's own, made on first use. */
   start(into?: BaseAudioContext): void {
@@ -115,7 +131,7 @@ export class GunSound {
     this.recordedWet.gain.value = this.echoAmount * RECORDED_WET;
     this.recorded.connect(this.recordedWet).connect(verb);
     this.out.gain.value = 0.8 * this.level;
-    this.ready = this.load(ctx);
+    this.ready = this.preload(ctx);
   }
 
   private async load(ctx: BaseAudioContext): Promise<void> {
@@ -235,6 +251,13 @@ export class GunSound {
 
   play(events: readonly ShotEvent[], listener: THREE.Vector3): void {
     if (!this.ctx) return;
+    // The recordings not decoded yet (the first moments of the page): wait for them rather than let the synthesised report stand in.
+    if (!this.loaded && this.loading && this.voice !== 'synth') {
+      const at = events.map((e) => ({ ...e, at: e.at.clone() }));
+      const from = listener.clone();
+      void this.loading.then(() => this.play(at, from));
+      return;
+    }
     for (const e of events) {
       const d = e.at.distanceTo(listener);
       const k = 1 / (1 + d / 12);
