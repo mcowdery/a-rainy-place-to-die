@@ -3,7 +3,8 @@
 **Character:** a young patrol officer at Kaburo's kōban, honest and new. **Open:** name. The player walks her
 beat.
 
-**Needs reworking since 2026-10-12:** Mack is Japanese and an ex-cop now, so he isn't the foreigner she stops,
+**Needs reworking since 2026-10-12:** Mack is Japanese and an ex-cop now, so he isn't the foreigner she stops
+(since 2026-10-14 he's half Italian and looks foreign, so a stop of him for his face, papers in order, is possible again),
 and the file she finds isn't an American reporter's. **Proposed:** the stop is Dom's (an American with papers
 that don't hold up and no Japanese, which is how she meets him), and the file is Mack's: a detective of her own
 force who left it when his wife's case was closed, whose photograph is the man she has seen with the American.

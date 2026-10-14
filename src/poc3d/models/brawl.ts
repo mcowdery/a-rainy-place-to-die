@@ -90,7 +90,8 @@ export class Brawl {
    * places in it as they arrive, the ones past its number put away. */
   private group: { n: number; place: (t: Thug, i: number) => void } = { n: 0, place: () => {} };
   /** Whose models the ordinary fighters are, in turn, and the elite's (models/characters.ts names); `setCast`. */
-  private cast: readonly string[] = ['salaryman'];
+  // (enemy_trench: Mack's first model, kept as an enemy when he was given a new head, 2026-10-14.)
+  private cast: readonly string[] = ['salaryman', 'enemy_trench'];
   private eliteModel = 'salaryman';
   private castGen = 0;
   private sinceHurt = 99;

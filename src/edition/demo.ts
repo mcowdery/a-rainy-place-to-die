@@ -31,7 +31,7 @@ const art = import.meta.glob(
 ) as Record<string, string>;
 
 /** The cast's models without DEMO_HIDDEN_CHARACTERS (demoArt.ts): Mack nude, for the arrival. */
-const models = import.meta.glob(['../../assets/characters/*.glb', '!**/mack_nude.glb'], { eager: true, query: '?url', import: 'default' }) as Record<
+const models = import.meta.glob(['../../assets/characters/*.glb', '!**/dom_nude.glb'], { eager: true, query: '?url', import: 'default' }) as Record<
   string,
   string
 >;

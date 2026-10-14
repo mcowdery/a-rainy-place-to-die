@@ -1,6 +1,6 @@
 """The face lab: shape a character's face (and body) by hand in Blender with MPFB's own sliders, then save it back.
 
-  npm run face:lab                      (Mack: scripts/blender/characters/mack.json)
+  npm run face:lab                      (Dom: scripts/blender/characters/dom.json)
   blender --python scripts/blender/face_lab.py -- scripts/blender/characters/<name>.json
 
 Opens Blender (with its window, not in the background) on the character as its definition builds it: the body, the
@@ -169,7 +169,7 @@ class CITYPOP_PT_face_lab(bpy.types.Panel):
 
 def main():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
-    path = argv[0] if argv else os.path.join(HERE, 'characters', 'mack.json')
+    path = argv[0] if argv else os.path.join(HERE, 'characters', 'dom.json')
     STATE['path'] = definition_file(path)
     build(STATE['path'])
     for cls in (CITYPOP_OT_save_face, CITYPOP_PT_face_lab):

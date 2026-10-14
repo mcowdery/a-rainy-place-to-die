@@ -26,6 +26,10 @@ export function config() {
     url: get('KREA_STUDIO_URL', 'http://127.0.0.1:7860').replace(/\/+$/, ''),
     username: get('KREA_STUDIO_USERNAME', ''),
     password: get('KREA_STUDIO_PASSWORD', ''),
+    // The Studio project every request works in (its id, as GET /api/projects lists them). Left out, the project whose
+    // name has "Rainy Place" in it, the game's; without either, Studio uses the account's current project, which is
+    // whatever was last open in the browser (the user, 2026-10-14: this script's generations had gone into Default).
+    project: get('KREA_STUDIO_PROJECT', ''),
   };
 }
 
@@ -46,7 +50,21 @@ export class Studio {
     this.session = loadSession(cfg.url);
   }
 
-  async request(method, route, body, { raw = false } = {}) {
+  /** The game's project id: KREA_STUDIO_PROJECT, else found by name once. */
+  async projectId() {
+    if (this.cfg.project) return this.cfg.project;
+    if (this._project === undefined) {
+      this._project = null;
+      const list = await this.request('GET', '/api/projects', undefined, { project: false }).catch(() => null);
+      const found = list?.projects?.find((p) => /rainy place/i.test(p.name));
+      this._project = found ? found.id : null;
+      if (!found) console.warn('Studio: no project named like "A Rainy Place to Die": using the current project of the account.');
+    }
+    return this._project;
+  }
+
+  async request(method, route, body, { raw = false, project = true } = {}) {
+    const pid = project ? await this.projectId() : null;
     let res;
     try {
       res = await fetch(this.cfg.url + route, {
@@ -54,6 +72,7 @@ export class Studio {
         headers: {
           ...(body ? { 'content-type': 'application/json' } : {}),
           ...(this.session ? { cookie: this.session.cookie } : {}),
+          ...(pid ? { 'x-trame-project': pid } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,
         redirect: 'manual',

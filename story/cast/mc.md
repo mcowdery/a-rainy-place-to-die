@@ -13,8 +13,12 @@ private detectives, so nobody asks for papers. The old man is rarely there; when
 gone, the agency passes to Mack, and in the end to Koharu. **Open:** his name, and what he and Mack were to each
 other before (the guide had Mack as his client, a foreigner who paid him to find a missing wife; a former police
 detective would more likely have known him from the job).
-**Heritage:** Japanese ("pure Japanese": the user's, 2026-10-12). A Tokyo man, who passes in any crowd. The one who
-stands out is Dom.
+**Heritage:** half Japanese, half Italian (the user, 2026-10-14: the picture his look is based on reads Italian, not
+Japanese, so the man was changed to fit it; before that, from 2026-10-12, "pure Japanese"). Still a Japanese ex-cop, so a
+Japanese citizen with the Makabe name. He doesn't pass in a crowd any more: people take him for a foreigner until he
+speaks. **Proposed:** a Japanese father (the Makabe name) and an Italian mother, raised in Tokyo; an insider who never
+looks like one, and a thread to Dom, who is half Italian too (an Italian mother, [dom.md](dom.md)). **Open:** which parent
+is which, how much Italian he has, and whether he knew his Italian side.
 **Name:** 真壁 **Makabe**; **Mack** is what he's called, and what the story calls him. Megumi is 真壁 恵 Makabe
 Megumi: the name is his, and hers by marriage. **Proposed:** his given name is 誠 **Makoto**, "sincerity" (the guide
 had it as Megumi's pet name for him; as his own name it carries the same weight, and his thread with Koharu hangs

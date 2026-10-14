@@ -47,7 +47,7 @@ startRoom({
       const x = (i - (CHARACTERS.length - 1) / 2) * 2.2;
       // Mack and his outfits stand here, each where it always did. The others made with MakeHuman (the salaryman, the
       // maid, Julie) have moved to the MakeHuman test page (humans.html, src/poc3d/humans/).
-      if (!name.startsWith('mack')) return;
+      if (!(name.startsWith('dom') || name.startsWith('mack'))) return;
       label('new', name, x, 2.15, CAST_Z);
       genItems.new.push({ name, group: 'Characters', at: new THREE.Vector3(x, 1.1, CAST_Z), size: 2.2, view: new THREE.Vector3(0.25, 0.2, 1).normalize() });
       genItems.new.push({ name: `${name}: face`, group: 'Characters', at: new THREE.Vector3(x, 1.55, CAST_Z), size: 0.45, view: new THREE.Vector3(0.2, 0.05, 1).normalize() });

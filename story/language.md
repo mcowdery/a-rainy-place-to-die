@@ -5,8 +5,8 @@ a country he didn't choose, with no Japanese and no wish for any. Being lost in 
 player is as lost as he is, and over the year, as he goes places and learns words, the English comes, in
 parentheses.
 
-(It was decided for Mack on 2026-10-01, when Mack was an American. Mack is Japanese now: played as him,
-everything reads plainly.)
+(It was decided for Mack on 2026-10-01, when Mack was an American. Mack is a Japanese ex-cop now (half Japanese,
+half Italian since 2026-10-14, [cast/mc.md](cast/mc.md)): played as him, everything reads plainly.)
 
 It fits Dom better than it fitted Mack: he doesn't want to learn, so each word that arrives is a measure of how
 far the city has got into him.

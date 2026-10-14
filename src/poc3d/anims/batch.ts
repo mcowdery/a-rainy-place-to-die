@@ -52,10 +52,10 @@ const GROUPS: readonly (readonly [string, RegExp])[] = [
 const groupOf = (name: string): string => GROUPS.find(([, re]) => re.test(name))?.[0] ?? 'Other';
 /** Whose list can be made: Mack, the crowd, and the rest of the cast (not his other clothes: they're him). And the
  * figure a list is judged on, where it isn't the one it's named for. */
-const PROFILES = ['mack', 'mob', ...CHARACTERS.filter((c) => !/^mack(_|$)/.test(c))].filter((p) => p === 'mob' || CHARACTERS.includes(p));
+const PROFILES = ['dom', 'mack', 'mob', ...CHARACTERS.filter((c) => !/^(dom|mack)(_|$)/.test(c))].filter((p) => p === 'mob' || CHARACTERS.includes(p));
 const FIGURE: Record<string, string> = { mob: CHARACTERS.includes('salaryman') ? 'salaryman' : CHARACTERS[0] };
 const figureOf = (profile: string): string => FIGURE[profile] ?? profile;
-const nameOf = (profile: string): string => (profile === 'mob' ? 'the mob' : profile === 'mack' ? 'Mack' : `the ${profile}`);
+const nameOf = (profile: string): string => (profile === 'mob' ? 'the mob' : profile === 'dom' ? 'Dom' : profile === 'mack' ? 'Mack' : `the ${profile}`);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 // F9: a snapshot and a note for reporting an issue (debug/snap.ts, saved to debug-shots/).

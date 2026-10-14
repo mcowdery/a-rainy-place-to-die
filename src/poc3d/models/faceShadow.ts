@@ -23,8 +23,9 @@ import * as THREE from 'three';
  */
 
 /** The characters whose faces stay hidden (file names under assets/characters/), with every outfit of theirs
- * (`mack_suit_black`...: models/wardrobe.ts). */
-export const FACELESS: ReadonlySet<string> = new Set(['mack']);
+ * (`dom_suit_black`...: models/wardrobe.ts). */
+// Empty since 2026-10-14: the user retired the rule that Mack's face is never seen. The styles stay, for review.
+export const FACELESS: ReadonlySet<string> = new Set<string>();
 
 /** Whether a model's face stays hidden: a faceless character's, or one of their outfits. */
 export const isFaceless = (model: string): boolean => FACELESS.has(model) || [...FACELESS].some((n) => model.startsWith(`${n}_`));
@@ -48,7 +49,7 @@ const MODE: Record<FaceStyle, number> = { none: 0, shadow: 1, brim: 2, mosaic: 0
 
 /** How much of the face is hidden (1 fully, 0 off), and the style's mode, for every faceless model at once. */
 export const FACE_SHADOW = { value: 1 };
-const FACE_MODE = { value: MODE.shadow };
+const FACE_MODE = { value: MODE.none };
 
 /** Sets the style in the skin (models/firstPerson.ts `setFaceStyle` also puts on the bar or the helmet). */
 export function setFaceMode(style: FaceStyle): void {
