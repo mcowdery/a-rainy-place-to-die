@@ -17,6 +17,8 @@ const VIEWS = {
   street: { query: 'fly=1&cam=3900,14,1480,0,0&clock=13:00&weather=clear', at: [3900, 14, 1480], look: [3500, 12, 1480] },
   // Shopfronts at eye level at night (the shops and signs of the year): along the street, and up a side street.
   shops: { query: 'fly=1&cam=3900,1.7,1480,0,0&clock=21:30&weather=clear', at: [3900, 1.7, 1480], look: [3820, 2.6, 1478] },
+  // The same side street by day, for the glazing and fascias.
+  shopsday: { query: 'fly=1&cam=3646,1.7,1430,0,0&clock=11:00&weather=clear', at: [3646, 1.7, 1430], look: [3650, 3.2, 1500] },
   shops2: { query: 'fly=1&cam=3646,1.7,1430,0,0&clock=21:30&weather=clear', at: [3646, 1.7, 1430], look: [3650, 3.2, 1500] },
 };
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });

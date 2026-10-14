@@ -1938,6 +1938,9 @@ async function run(): Promise<void> {
     beep: () => [0, 220, 440].forEach((ms) => window.setTimeout(() => audio.ping(), ms)),
     blocked: () => bench || document.body.classList.contains('vn-on') || travel.open,
   });
+  // In another year of the city there is no phone or pager (era.ts): hidden, their keys dead, no messages arriving.
+  const noPhone = era().id !== '1992';
+  if (noPhone) document.body.classList.add('no-phone');
   const tickPhone = (s: number): void => {
     const events = phone.update(s);
     phoneUi.update(events);
@@ -4634,7 +4637,7 @@ async function run(): Promise<void> {
     // applied after them it showed for a frame at their unadjusted values (a faint flash in the distance each minute).
     applyAtmosphere();
     placeLights();
-    if (!bench) {
+    if (!bench && !noPhone) {
       tickPhone(dt);
       phone.clock = Math.floor(clockTotal) % DAY;
       phoneUi.tick(dt);

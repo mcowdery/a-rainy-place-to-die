@@ -1,6 +1,6 @@
 import { hash } from '../../core/hash';
 import { isWide } from '../../core/wide';
-import { TRADE, tradeOfWord, type Trade } from '../real/shops';
+import { FRAME, TRADE, tradeOfWord, type Trade, type TradeDef } from '../real/shops';
 import type { GradeName } from '../real/grade';
 import type { CarType } from '../models/vehicles';
 import type { Placed3 } from './stamps';
@@ -56,6 +56,9 @@ export interface Era {
    * [word, the replacement when the sign is all wide characters, the replacement when it isn't]. First match wins.
    */
   readonly signs: readonly (readonly [string, string, string])[];
+  /** Shopfront frames (real/shops.ts `FRAME`) the year hadn't and what they were instead, and how much narrower its panes were (1 the same). */
+  readonly frames: ReadonlyMap<number, number>;
+  readonly pane: number;
 }
 
 /**
@@ -96,16 +99,18 @@ const SIXTIES_SIGNS: readonly (readonly [string, string, string])[] = [
 ];
 
 export const ERAS: Readonly<Record<EraId, Era>> = {
-  '1992': { id: '1992', year: 1992, cap: null, newShare: 1, newCap: Infinity, towers: 1, ads: true, cars: null, standIn: [], date: null, grade: 'neutral', unbuilt: [], trades: new Map(), signs: [] },
+  '1992': { id: '1992', year: 1992, cap: null, newShare: 1, newCap: Infinity, towers: 1, ads: true, cars: null, standIn: [], date: null, grade: 'neutral', unbuilt: [], trades: new Map(), signs: [], frames: new Map(), pane: 1 },
   // The neon district first: the crossing's sign with its video screens and the discount store are later than this.
-  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: ['kaburo_crossing', 'yasuichi'], trades: SEVENTIES_TRADES, signs: SEVENTIES_SIGNS },
+  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: ['kaburo_crossing', 'yasuichi'], trades: SEVENTIES_TRADES, signs: SEVENTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.metal]]), pane: 0.85 },
   // Defined so the setting has its second step; not looked at yet.
-  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: ['kaburo_crossing', 'yasuichi', 'hotel_rouge', 'yoru_mart'], trades: SIXTIES_TRADES, signs: SIXTIES_SIGNS },
+  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: ['kaburo_crossing', 'yasuichi', 'hotel_rouge', 'yoru_mart'], trades: SIXTIES_TRADES, signs: SIXTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.wood], [FRAME.metal, FRAME.wood]]), pane: 0.7 },
 };
 
 export const isEraId = (s: unknown): s is EraId => s === '1992' || s === '1977' || s === '1964';
 
-let ERA: Era = ERAS['1992'];
+// On a page, the year its address names from the first import on (city.ts builds its shader text as it loads, before main.ts
+// runs); a chunk worker or a test starts at 1992 and is told (`setEra`).
+let ERA: Era = ERAS[typeof window !== 'undefined' ? eraFromUrl() : '1992'];
 /** The era being built (1992 until set). */
 export const era = (): Era => ERA;
 export function setEra(id: EraId): void {
@@ -144,6 +149,17 @@ export function eraTrade(trade: Trade, sign?: string): Trade {
   const to = ERA.trades.get(trade);
   if (to === undefined) return trade;
   return sign !== undefined && tradeOfWord(sign) === trade ? trade : to;
+}
+
+/**
+ * A trade's shopfront glazing in this era (real/shopShader.ts builds its table from it, once the era is set): no frameless
+ * plate glass in 1977, aluminium sashes there instead; wooden frames in 1964; narrower panes the further back.
+ */
+export function eraGlass(glass: TradeDef['glass']): TradeDef['glass'] {
+  const e = ERA;
+  if (e.frames.size === 0 && e.pane === 1) return glass;
+  const [bay, frame, lower, frosted] = glass;
+  return [Math.round(bay * e.pane * 100) / 100, e.frames.get(frame) ?? frame, lower, frosted];
 }
 
 const allWide = (text: string): boolean => [...text].every((c) => isWide(c.codePointAt(0)!) || c === ' ');

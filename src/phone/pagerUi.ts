@@ -107,7 +107,8 @@ export class PagerUI {
     this.dot.hidden = true;
     this.dot.textContent = 'P';
     document.body.append(this.root, this.dot);
-    window.addEventListener('keydown', (e) => this.key(e));
+    // (Not in a time without one: `no-phone` on the body, the city in another year.)
+    window.addEventListener('keydown', (e) => void (document.body.classList.contains('no-phone') || this.key(e)));
     this.render();
   }
 
@@ -205,6 +206,7 @@ function injectCss(): void {
   const s = document.createElement('style');
   s.textContent = `
   .vn-on .pg-root, .vn-on .pg-dot { visibility: hidden; }
+  .no-phone .pg-root, .no-phone .pg-dot { display: none !important; }
   .pg-root[hidden], .pg-dot[hidden] { display: none; }
   .pg-root { position: fixed; left: 22px; bottom: 22px; z-index: 24; width: min(30vw, 340px); pointer-events: none; font-family: 'Yu Gothic', 'Meiryo', 'Segoe UI', sans-serif; animation: pg-up 0.22s ease-out; }
   @keyframes pg-up { from { transform: translateY(40%); opacity: 0; } }

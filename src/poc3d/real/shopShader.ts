@@ -1,6 +1,7 @@
 import { ATLAS_H, ATLAS_W, BLOCK, BLOCK_COLS, PPM, REGIONS, roomTables } from './shopAtlas';
 import { maskShare, windowGlsl } from './windowScenes';
 import { HUES, TRADES } from './shops';
+import { eraGlass } from '../district/era';
 
 /**
  * The city shader's storefront interiors (city.ts calls shopInterior for the glass of an open shop). Each trade's
@@ -25,7 +26,7 @@ const tables = (): string => {
   // Light colour (w: lit in the shop's own colour too) and glazing (panel width, frame, solid panel height,
   // frosted) per trade (shops.ts); the room (depth, ceiling) and its layers nearest first (depth, region, centred).
   const vec4 SHOP_LIGHTS[${TRADES.length}] = vec4[${TRADES.length}](${TRADES.map((d) => `vec4(${d.light.map(r3).join(', ')}, ${d.hued ? '1.0' : '0.0'})`).join(', ')});
-  const vec4 SHOP_GLASS[${TRADES.length}] = vec4[${TRADES.length}](${TRADES.map((d) => `vec4(${d.glass.map(f).join(', ')})`).join(', ')});
+  const vec4 SHOP_GLASS[${TRADES.length}] = vec4[${TRADES.length}](${TRADES.map((d) => `vec4(${eraGlass(d.glass).map(f).join(', ')})`).join(', ')});
   const vec2 SHOP_ROOM[${rooms.length}] = vec2[${rooms.length}](${rooms.map((r) => `vec2(${r.map(f).join(', ')})`).join(', ')});
   const vec3 SHOP_LAYER[${layers.length}] = vec3[${layers.length}](${layers.map((l) => `vec3(${l.map(f).join(', ')})`).join(', ')});
 `;

@@ -85,7 +85,8 @@ export class PhoneUI {
     window.addEventListener(
       'keydown',
       (e) => {
-        if (this.hooks.blocked()) return;
+        // (`no-phone` on the body: a time without one, the city in another year: district/era.ts.)
+        if (this.hooks.blocked() || document.body.classList.contains('no-phone')) return;
         if (e.code === 'Tab') {
           e.preventDefault();
           e.stopPropagation();
@@ -566,6 +567,7 @@ function injectStyle(): void {
   const s = document.createElement('style');
   s.textContent = `
   .vn-on .ph-chip, .vn-on .ph-banner, .vn-on .ph-root { visibility: hidden; }
+  .no-phone .ph-chip, .no-phone .ph-banner, .no-phone .ph-root { display: none !important; }
   .ph-root { position: fixed; right: 3vw; bottom: 3vh; z-index: 25; font-family: 'Yu Gothic', 'Meiryo', 'Segoe UI', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif; }
   .ph-root[hidden] { display: none; }
   .ph-device { width: min(360px, 44vh); height: min(740px, 90vh); background: #0c0b10; border-radius: 34px; padding: 12px; box-sizing: border-box;

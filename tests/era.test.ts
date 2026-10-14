@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CITY_CARS, pickCar } from '../src/poc3d/district/carMix';
 import { loadDistrictContent } from '../src/poc3d/district/content';
-import { era, eraCar, eraFromUrl, eraHeight, ERAS, eraSign, eraSignWords, eraTrade, setEra } from '../src/poc3d/district/era';
-import { TRADE, tradeOfWord } from '../src/poc3d/real/shops';
+import { era, eraCar, eraFromUrl, eraGlass, eraHeight, ERAS, eraSign, eraSignWords, eraTrade, setEra } from '../src/poc3d/district/era';
+import { FRAME, TRADE, TRADES, tradeOfWord } from '../src/poc3d/real/shops';
 import { DistrictModel } from '../src/poc3d/district/model';
 import { DISTRICTS3, type CellPlan3 } from '../src/poc3d/district/plan';
 
@@ -127,6 +127,14 @@ describe('The city in another year', () => {
     // The replacements name the trade they stand for where they name one.
     expect(tradeOfWord(eraSign('メイド喫茶'))).toBe(TRADE.cafe);
     expect(tradeOfWord(eraSign('カラオケ'))).toBe(TRADE.snack);
+    // No frameless plate glass in 1977; the panes narrower; 1992's glazing as it is.
+    expect(eraGlass(TRADES[TRADE.fashion].glass)[1]).toBe(FRAME.metal);
+    expect(eraGlass(TRADES[TRADE.izakaya].glass)[1]).toBe(FRAME.wood);
+    expect(eraGlass(TRADES[TRADE.konbini].glass)[0]).toBeLessThan(TRADES[TRADE.konbini].glass[0]);
+    setEra('1964');
+    for (const d of TRADES) expect([FRAME.wood, FRAME.lattice]).toContain(eraGlass(d.glass)[1]);
+    setEra('1992');
+    for (const d of TRADES) expect(eraGlass(d.glass)).toEqual(d.glass);
     setEra('1964');
     expect(eraTrade(TRADE.arcade)).toBe(TRADE.pachinko);
     expect(eraSign('GAME CENTER')).toBe('PACHINKO');
