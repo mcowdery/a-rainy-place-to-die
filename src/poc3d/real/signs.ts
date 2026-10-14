@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { hash, rng } from '../../core/hash';
 import { cellWidth, isWide } from '../../core/wide';
+import { eraSign } from '../district/era';
 import { frontSpan, type Building3, type Sign3 } from '../district/plan';
 import { styleFor, frontFrame, tierFront, tiers } from './buildings';
 import type { CityUniforms } from './city';
@@ -507,7 +508,8 @@ function rooftopBillboard(mb: MeshBuilder, b: Building3, seen: Sightline): void 
   const f = frontFrame(b);
   const tf = tierFront(b, tt);
   const inset = tf.inset + 1.2;
-  const word = rnd.pick(ROOF_WORDS);
+  // (A word another year hadn't is that year's own: a カラオケ on the roof in 1964 is a スナック. district/era.ts.)
+  const word = eraSign(rnd.pick(ROOF_WORDS));
   const color = lin(rnd.pick(NEON));
   // On the top tier's face, clear of a corner cut when the top is the cut tier.
   const [s0, s1] = ts.length === 1 ? frontSpan(b) : [0, f.fw];

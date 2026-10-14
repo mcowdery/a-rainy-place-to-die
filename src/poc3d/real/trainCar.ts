@@ -8,6 +8,7 @@ import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 import { SignBuilder } from './signs';
 import { taxiAdUv } from './taxiAdLayout';
 import { TAXI_ADS } from '../models/ads';
+import { era } from '../district/era';
 
 /**
  * The commuter car, second generation (review in models.html; `?transit=new` in the district): a modern
@@ -33,15 +34,20 @@ export interface CarLook {
   readonly mono?: boolean;
 }
 
-/** A line's car look: stainless with its colour (elevated), or white aluminium (subway). */
+/**
+ * A line's car look: stainless with its colour (elevated), or white aluminium (subway). In another year of the city
+ * (district/era.ts) an elevated line's car is painted steel all over in the line's colour, as the 1960s and 70s commuter
+ * cars were (the 103 series); the subway's and the monorail's stay as they are.
+ */
 export function carLook(lineColor: number, subway = false, mono = false): CarLook {
+  const painted = era().id !== '1992' && !subway && !mono;
   const mix = (a: number, b: number, k: number): number => {
     const c = (s: number): number => Math.round(((a >> s) & 255) * (1 - k) + ((b >> s) & 255) * k);
     return (c(16) << 16) | (c(8) << 8) | c(0);
   };
   const mixc = mix;
   return {
-    body: mono ? 0xc6cacc : subway ? 0xdfe2e4 : 0xb8bcc0,
+    body: painted ? lineColor : mono ? 0xc6cacc : subway ? 0xdfe2e4 : 0xb8bcc0,
     band: mono ? mixc(lineColor, 0x80878c, 0.3) : lineColor,
     seat: mix(lineColor, 0x34405a, mono ? 0.7 : 0.55),
     priority: 0xb8506e,

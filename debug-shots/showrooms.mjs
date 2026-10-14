@@ -17,7 +17,7 @@ const VIEWS = {
   mack: ['mack', 'shotgun: lever', 'katana', 'baseball bat', 'bike: bōsōzoku', 'bike: cruiser', 'bike: sports', 'helmet: black'],
   plants: [['trees', 18, 4, 0, 60, 0.1, 0.35, 1], ['row2', 18, 3, 16, 36, 0.1, 0.3, 1], ['foliage', 18, 4, 60, 40, 0.1, 0.25, 1], ['foliage4', 18, 4, 128, 40, 0.1, 0.25, 1]],
   buildings: [['mega', 58, 28, 22, 48, -1, 0.12, 1], ['wall', 4, 3, 0, 40, 1, 0.2, 0], ['street', 30, 1, 66, 40, 0.1, 0.35, 1], ['tanuki', 20, 0.8, 52, 3, 0.3, 0.15, 1], ['payphones', 66, 1.1, 66, 9, 0.35, 0.2, 1], ['payphone booth', 66, 1.2, 66, 3.4, 0.5, 0.15, 1], ['payphone blender', 74, 1.25, 66, 2.2, 0.3, 0.15, 1], ['booth blender', 78.5, 1.3, 66, 3.6, 0.4, 0.15, 1], ['red and pink', 83.2, 1.15, 66, 2.6, 0.3, 0.2, 1], ['payphones all', 79, 1.2, 68, 13, 0.25, 0.3, 1]],
-  transit: [['train', 0, 2, 0, 60, 1, 0.3, 0.6], ['bus', 26, 1.5, 0, 14, 1, 0.3, 0.7], ['planes', 130, 4, 0, 110, 0.2, 0.5, 1]],
+  transit: [['train', 0, 2, 0, 60, 1, 0.3, 0.6], 'train (cab)', ['bus', 26, 1.5, 0, 14, 1, 0.3, 0.7], ['planes', 130, 4, 0, 110, 0.2, 0.5, 1]],
   'cars-ph': [['jeepneys', 1, 1.5, 0, 26, 0.1, 0.4, 1], ['rear', 1, 1.5, -10, 26, 0.1, 0.4, -1], ['tricycles', 16, 1, -5, 14, 0.1, 0.5, 1], ['size', 1, 1, 12, 26, 0.1, 0.35, 1]],
   'plants-ph': [['trees', 38, 4, 0, 56, 0.1, 0.35, 1], ['banyan', 69, 4.5, 0, 12, 0.2, 0.2, 1], ['shrubs', 18, 1, 22, 40, 0.3, 0.3, 1]],
   'boats-ph': [['bangkas', 20, 1.2, 0, 22, 0.4, 0.35, 0.8], ['launch', 0, 2, 24, 32, 1, 0.35, 0.7], ['ships', 20, 12, 220, 190, 1, 0.25, 0.9]],
@@ -34,7 +34,8 @@ for (const room of rooms) {
   const errors = [];
   page.on('pageerror', (e) => errors.push('PAGEERROR ' + String(e).slice(0, 300)));
   page.on('console', (m) => { if ((m.type() === 'error' && !/404/.test(m.text())) || (m.type() === 'warning' && /candidate|animal/i.test(m.text()))) errors.push(m.type().toUpperCase() + ' ' + m.text().slice(0, 300)); });
-  await page.goto(`${server.resolvedUrls.local[0]}models-${room}.html`, { timeout: 300000 });
+  // (`CITYPOP_ERA=1977`: the room as another year of the city has its models, district/era.ts.)
+  await page.goto(`${server.resolvedUrls.local[0]}models-${room}.html${process.env.CITYPOP_ERA ? `?era=${process.env.CITYPOP_ERA}` : ''}`, { timeout: 300000 });
   await page.waitForFunction(() => typeof window.__view === 'function', null, { timeout: 300000, polling: 500 });
   await page.waitForTimeout(room === 'mack' ? 9000 : 5000);
   if (night) await page.keyboard.press('Digit2');

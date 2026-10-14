@@ -139,6 +139,9 @@ describe('The city in another year', () => {
     setEra('1964');
     expect(eraTrade(TRADE.arcade)).toBe(TRADE.pachinko);
     expect(eraSign('GAME CENTER')).toBe('PACHINKO');
+    // The rooftop words (real/signs.ts ROOF_WORDS) too: none of 1964's has a word the year hadn't.
+    for (const w of ['KABURO', 'HOTEL', 'SAUNA', 'CABARET', 'PARADISE', 'NEON', 'CLUB', 'LIVE', '大吉', '夢', '銀河', '酒', 'ゲーム', 'カラオケ', 'ホテル'])
+      for (const [bad] of ERAS['1964'].signs) expect(eraSign(w)).not.toContain(bad);
   });
 
   it('keeps the look of a building the year has lower, with no glass curtain wall under the old limit', () => {
