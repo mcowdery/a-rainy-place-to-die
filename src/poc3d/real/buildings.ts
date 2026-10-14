@@ -4,6 +4,7 @@ import { EMIT, KIND, lin, scale3, type MeshBuilder } from './meshBuilder';
 import { filipino } from '../district/cityConfig';
 import * as manila from './manilaBuilding';
 import { HUES, hueOfColor, pickTrade, shopFlags, TRADE, TRADES } from './shops';
+import { eraTrade } from '../district/era';
 
 /**
  * Realistic building styles and geometry. Everything is a pure function of the building (its id seeds
@@ -159,9 +160,11 @@ export function styleFor(b: Building3): RealStyle {
   const litBias = rnd.int(0, 7);
   // The shop: what its sign says, else what its zone and mood suggest (from its own hash).
   const [s0, s1] = frontSpan(b);
-  const { trade, hue } = stamp
+  const { trade: picked, hue } = stamp
     ? { trade: TRADE.bar, hue: hueOfColor(b.hue!) }
     : pickTrade({ id: b.id, sign: b.sign, words: b.zone?.style.signWords, colors: b.zone?.style.signColors, mood: shopPal, front: s1 - s0 - 0.7, tower: b.h >= 45 || type === WIN.curtain });
+  // (A trade the year hadn't is the year's own: a karaoke box in 1977 is a snack bar. district/era.ts.)
+  const trade = stamp ? picked : eraTrade(picked);
   // (From their own hash too.)
   const vice = stamp ? 0 : (look?.vice ?? 0);
   const den = !home && !stamp && b.h < 45 && rng(hash(b.id, 0xde17)).chance(vice * (NIGHT_TRADES.includes(trade) ? 0.95 : 0.5));

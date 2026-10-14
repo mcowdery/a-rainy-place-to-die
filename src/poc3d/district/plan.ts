@@ -1,7 +1,7 @@
 import type { PeopleMix } from './peopleMix';
 import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng, type Rng } from '../../core/hash';
-import { eraHeight, eraTower } from './era';
+import { eraHeight, eraSign, eraTower } from './era';
 import { isWide } from '../../core/wide';
 import { isLand, type CellKind, type DistrictId, type MacroMap } from '../../gen/macro';
 import { STYLES } from '../../gen/styles';
@@ -991,10 +991,13 @@ export function frontSpan(b: Pick<Building3, 'w' | 'd' | 'front' | 'cut'>): [num
 const withSign = (b: Building3, sign: Sign3 | null): Building3 => (sign ? { ...b, sign: { text: sign.text, color: sign.color } } : b);
 
 function makeSign(b: Building3, style: DistrictStyle3, rnd: Rng): Sign3 {
-  const text = rnd.pick(style.signWords);
+  const word = rnd.pick(style.signWords);
   const color = rnd.pick(style.signColors);
-  const allWide = [...text].every((c) => isWide(c.codePointAt(0)!) || c === ' ');
+  const allWide = [...word].every((c) => isWide(c.codePointAt(0)!) || c === ' ');
   const vertical = allWide && b.h >= 9 && rnd.chance(style.verticalSign);
+  // (What the sign says in this era: era.ts. The dice above are the word's own, so they're rolled alike in every year,
+  // and a wide word's replacement is wide, so a vertical sign stays one.)
+  const text = eraSign(word);
   const [s0, s1] = frontSpan(b);
   if (vertical) {
     const p = frontPoint(b, rnd.chance(0.5) ? s0 + 1.2 : s1 - 1.2, 0.4);

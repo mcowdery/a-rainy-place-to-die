@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CITY_CARS, pickCar } from '../src/poc3d/district/carMix';
 import { loadDistrictContent } from '../src/poc3d/district/content';
-import { era, eraCar, eraFromUrl, eraHeight, ERAS, setEra } from '../src/poc3d/district/era';
+import { era, eraCar, eraFromUrl, eraHeight, ERAS, eraSign, eraSignWords, eraTrade, setEra } from '../src/poc3d/district/era';
+import { TRADE, tradeOfWord } from '../src/poc3d/real/shops';
 import { DistrictModel } from '../src/poc3d/district/model';
 import { DISTRICTS3, type CellPlan3 } from '../src/poc3d/district/plan';
 
@@ -34,6 +35,8 @@ describe('The city in another year', () => {
   it('changes nothing in 1992: no height is touched, every car is itself, every landmark is built', () => {
     for (const h of [6, 31, 48, 120, 240]) expect(eraHeight(h, 100, 200)).toBe(h);
     for (const t of ['sports', 'minivan', 'roadster', 'taxi'] as const) expect(eraCar(t, 3)).toBe(t);
+    for (const w of ['カラオケ館', 'メイド', 'GYM', 'コンビニ']) expect(eraSign(w)).toBe(w);
+    expect(eraTrade(TRADE.karaoke)).toBe(TRADE.karaoke);
     const content = loadDistrictContent();
     expect(content.placed.find((p) => p.id === 'kaburo_crossing')?.stamp.landmark).toBe('mega_sign');
   });
@@ -90,6 +93,40 @@ describe('The city in another year', () => {
     // The plot is the same: the streets round it don't move between the years.
     expect(crossing.rect).toEqual(now.placed.find((p) => p.id === 'kaburo_crossing')!.rect);
     expect(content.placed.length).toBe(now.placed.length);
+  });
+
+  it('has only the shops and signs the year had, each sign where and as it was', () => {
+    const now = plans();
+    setEra('1977');
+    const then = plans();
+    const banned = ERAS['1977'].signs.map(([w]) => w);
+    let changed = 0;
+    now.cells.forEach((a, i) => {
+      const b = then.cells[i];
+      // Every sign stands where one stands in 1992 (within 3 m: a corner lot's side sign moves along the face with the
+      // building's height), the same way up and colour: only the words differ; a tower not up yet takes its sign with it.
+      for (const s of b.signs) {
+        const was = a.signs.find((o) => Math.hypot(o.x - s.x, o.z - s.z) < 3 && o.vertical === s.vertical && o.color === s.color);
+        expect(was).toBeDefined();
+        expect([s.vertical, s.color]).toEqual([was!.vertical, was!.color]);
+        for (const w of banned) expect(s.text.toUpperCase()).not.toContain(w);
+        if (s.text !== was!.text) changed++;
+      }
+    });
+    expect(changed).toBeGreaterThan(10);
+    // A wide sign's word is wide, a narrow one's narrow; the new words are in the atlas's list.
+    expect(eraSign('カラオケ館')).toBe('スナック');
+    expect(eraSign('KARAOKE')).toBe('BAR');
+    expect(eraSignWords(['カラオケ館', 'BANK', 'GYM'])).toEqual(['スナック', 'BANK', 'BILLIARDS']);
+    // A karaoke box, a maid café, a konbini, a gym and a figure shop are the year's own.
+    for (const t of [TRADE.karaoke, TRADE.maid, TRADE.konbini, TRADE.gym, TRADE.hobby]) expect(eraTrade(t)).not.toBe(t);
+    expect(eraTrade(TRADE.izakaya)).toBe(TRADE.izakaya);
+    // The replacements name the trade they stand for where they name one.
+    expect(tradeOfWord(eraSign('メイド喫茶'))).toBe(TRADE.cafe);
+    expect(tradeOfWord(eraSign('カラオケ'))).toBe(TRADE.snack);
+    setEra('1964');
+    expect(eraTrade(TRADE.arcade)).toBe(TRADE.pachinko);
+    expect(eraSign('GAME CENTER')).toBe('PACHINKO');
   });
 
   it('has only the cars the year had', () => {

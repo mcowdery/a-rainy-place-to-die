@@ -138,7 +138,7 @@ import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
 import { cityFromUrl, setTreeSet } from './cityConfig';
 import { deadAt } from './peopleHours';
-import { era, eraFromUrl, setEra } from './era';
+import { era, eraFromUrl, eraSignWords, setEra } from './era';
 import { EraCard } from './eraCard';
 import { setWorkLiveries } from '../models/vehicles';
 import { money, setCurrency } from '../../money';
@@ -378,7 +378,8 @@ async function run(): Promise<void> {
         return { id: `expressway.${r.id}`, name: `首都高 入口 Expressway entrance · ${r.sign}`, group: 'Expressway' as const, x, z, yaw: (Math.atan2(-r.tx[0], -r.tz[0]) * 180) / Math.PI, pitch: 4, floor: 0 };
       }),
   ];
-  const words = content.zones.words([...new Set(DISTRICTS3.flatMap((k) => STYLES3[k]!.signWords))]);
+  // (In another year, with the year's own words where a sign's isn't of it: era.ts `eraSign`.)
+  const words = eraSignWords(content.zones.words([...new Set(DISTRICTS3.flatMap((k) => STYLES3[k]!.signWords))]));
   await breathe();
   const atlas = new SignAtlas(signTexts(words, content.placed));
   await breathe();

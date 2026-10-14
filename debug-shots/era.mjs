@@ -15,6 +15,9 @@ const VIEWS = {
   over: { query: 'fly=1&cam=4150,150,1500,0,0&clock=17:40&weather=clear', at: [4150, 150, 1500], look: [2700, 20, 1380] },
   // Down a street of the neon district by day.
   street: { query: 'fly=1&cam=3900,14,1480,0,0&clock=13:00&weather=clear', at: [3900, 14, 1480], look: [3500, 12, 1480] },
+  // Shopfronts at eye level at night (the shops and signs of the year): along the street, and up a side street.
+  shops: { query: 'fly=1&cam=3900,1.7,1480,0,0&clock=21:30&weather=clear', at: [3900, 1.7, 1480], look: [3820, 2.6, 1478] },
+  shops2: { query: 'fly=1&cam=3646,1.7,1430,0,0&clock=21:30&weather=clear', at: [3646, 1.7, 1430], look: [3650, 3.2, 1500] },
 };
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
@@ -28,7 +31,7 @@ try {
     for (const name of want) {
       const v = VIEWS[name];
       if (!v) continue;
-      await page.goto(`${base}?debug=1&diag=1&era=${era}&${v.query}`);
+      await page.goto(`${base}?debug=1&diag=1&eracard=0&era=${era}&${v.query}`);
       await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240_000, polling: 500 });
       await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });
       if (v.at) {

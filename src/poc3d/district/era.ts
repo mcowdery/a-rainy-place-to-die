@@ -1,4 +1,6 @@
 import { hash } from '../../core/hash';
+import { isWide } from '../../core/wide';
+import { TRADE, type Trade } from '../real/shops';
 import type { GradeName } from '../real/grade';
 import type { CarType } from '../models/vehicles';
 import type { Placed3 } from './stamps';
@@ -47,6 +49,13 @@ export interface Era {
   readonly grade: GradeName;
   /** Placements (their ids) not built yet: an ordinary building of the street stands on the plot. */
   readonly unbuilt: readonly string[];
+  /** Shop trades the year hadn't, and what stands there instead (real/shops.ts `TRADE`): a karaoke box is a snack bar. */
+  readonly trades: ReadonlyMap<Trade, Trade>;
+  /**
+   * Sign words the year hadn't (as part of a sign's text, as `tradeOfWord` reads them) and what the sign says instead:
+   * [word, the replacement when the sign is all wide characters, the replacement when it isn't]. First match wins.
+   */
+  readonly signs: readonly (readonly [string, string, string])[];
 }
 
 /**
@@ -58,12 +67,40 @@ const OLD_CARS: readonly CarType[] = ['box70', 'coupe70', 'kei70', 'hardtop', 't
 /** What an ordinary 1970s car is, by weight: mostly the square saloon. */
 const OLD_STAND_IN: readonly CarType[] = ['box70', 'box70', 'box70', 'box70', 'kei70', 'kei70', 'coupe70', 'hardtop'];
 
+/**
+ * The 1970s high street (from memory, unchecked): no karaoke boxes (1985 on; karaoke was sung in snack bars), no maid
+ * cafés or anime and figure shops (the 2000s; a toy shop or a coffee house), few convenience stores (the first opened
+ * in 1974; a liquor shop or a greengrocer), no fitness gyms (a mahjong parlour or a billiard hall), no capsule hotels
+ * (1979), no slot parlours, no smartphones or PCs (radios and televisions), cabarets rather than cabaret clubs.
+ */
+const SEVENTIES_TRADES: ReadonlyMap<Trade, Trade> = new Map([
+  [TRADE.konbini, TRADE.grocer], [TRADE.maid, TRADE.cafe], [TRADE.karaoke, TRADE.snack], [TRADE.hobby, TRADE.craft], [TRADE.gym, TRADE.mahjong],
+]);
+const SEVENTIES_SIGNS: readonly (readonly [string, string, string])[] = [
+  ['カラオケ', 'スナック', 'BAR'], ['KARAOKE', 'スナック', 'BAR'],
+  ['メイド', '純喫茶', 'COFFEE'], ['萌え', '純喫茶', 'COFFEE'], ['おかえりなさいませ', '純喫茶', 'COFFEE'], ['耳かき', '純喫茶', 'COFFEE'],
+  ['ネットカフェ', '古本', 'BOOKS'], ['漫画喫茶', '古本', 'BOOKS'], ['カプセル', 'ホテル', 'HOTEL'],
+  ['ヨルマート', '酒店', 'LIQUOR'], ['コンビニ', '酒店', 'LIQUOR'], ['24H', '酒店', 'LIQUOR'], ['MART', '酒店', 'LIQUOR'],
+  ['レトロゲーム', '玩具', 'TOYS'], ['フィギュア', '玩具', 'TOYS'], ['ガチャ', '玩具', 'TOYS'], ['コスプレ', '玩具', 'TOYS'], ['同人誌', '古本', 'BOOKS'],
+  ['アニメ', '玩具', 'TOYS'], ['GOODS', '玩具', 'TOYS'], ['グッズ', '玩具', 'TOYS'],
+  ['スマホ', 'ラジオ', 'RADIO'], ['PC', '電気', 'RADIO'],
+  ['GYM', '麻雀', 'BILLIARDS'], ['ジム', '麻雀', 'BILLIARDS'], ['FITNESS', '麻雀', 'BILLIARDS'],
+  ['ドラッグ', '薬局', 'PHARMACY'], ['スロット', 'パチンコ', 'PACHINKO'], ['キャバクラ', 'キャバレー', 'CABARET'], ['DJ', 'ディスコ', 'DISCO'],
+];
+/** The 1960s besides: no game centres (pachinko), few coin laundries (the cleaner's), no discos (the jazz coffee houses). */
+const SIXTIES_TRADES: ReadonlyMap<Trade, Trade> = new Map([...SEVENTIES_TRADES, [TRADE.arcade, TRADE.pachinko], [TRADE.laundry, TRADE.craft]]);
+const SIXTIES_SIGNS: readonly (readonly [string, string, string])[] = [
+  ...SEVENTIES_SIGNS.filter(([w]) => w !== 'DJ'),
+  ['ゲームセンター', 'パチンコ', 'PACHINKO'], ['GAME', 'パチンコ', 'PACHINKO'], ['ゲーム', 'パチンコ', 'PACHINKO'],
+  ['コインランドリー', 'クリーニング', 'CLEANERS'], ['DISCO', 'ジャズ喫茶', 'JAZZ'], ['DJ', 'ジャズ喫茶', 'JAZZ'],
+];
+
 export const ERAS: Readonly<Record<EraId, Era>> = {
-  '1992': { id: '1992', year: 1992, cap: null, newShare: 1, newCap: Infinity, towers: 1, ads: true, cars: null, standIn: [], date: null, grade: 'neutral', unbuilt: [] },
+  '1992': { id: '1992', year: 1992, cap: null, newShare: 1, newCap: Infinity, towers: 1, ads: true, cars: null, standIn: [], date: null, grade: 'neutral', unbuilt: [], trades: new Map(), signs: [] },
   // The neon district first: the crossing's sign with its video screens and the discount store are later than this.
-  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: ['kaburo_crossing', 'yasuichi'] },
+  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: ['kaburo_crossing', 'yasuichi'], trades: SEVENTIES_TRADES, signs: SEVENTIES_SIGNS },
   // Defined so the setting has its second step; not looked at yet.
-  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: ['kaburo_crossing', 'yasuichi', 'hotel_rouge', 'yoru_mart'] },
+  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: ['kaburo_crossing', 'yasuichi', 'hotel_rouge', 'yoru_mart'], trades: SIXTIES_TRADES, signs: SIXTIES_SIGNS },
 };
 
 export const isEraId = (s: unknown): s is EraId => s === '1992' || s === '1977' || s === '1964';
@@ -97,6 +134,28 @@ export function eraHeight(h: number, x: number, z: number): number {
 
 /** Whether the plaza tower centred here is up in this era. */
 export const eraTower = (x: number, z: number): boolean => ERA.towers >= 1 || unit(x, z, 0xe7a3) < ERA.towers;
+
+/** The shop trade in this era for one the street picked (real/buildings.ts, after `pickTrade`). */
+export const eraTrade = (trade: Trade): Trade => ERA.trades.get(trade) ?? trade;
+
+const allWide = (text: string): boolean => [...text].every((c) => isWide(c.codePointAt(0)!) || c === ' ');
+
+/**
+ * What a sign says in this era (the plan's `makeSign`): a word the year hadn't is the year's own, in the same kind of
+ * characters (a wide sign stays wide, so a vertical sign stays one), else the sign as it is.
+ */
+export function eraSign(text: string): string {
+  const signs = ERA.signs;
+  if (signs.length === 0) return text;
+  const t = text.toUpperCase();
+  for (const [word, wide, narrow] of signs) if (t.includes(word)) return allWide(text) ? wide : narrow;
+  return text;
+}
+
+/** The sign words with this era's replacements among them (for the sign atlas and layout, which every thread builds alike). */
+export function eraSignWords(words: readonly string[]): string[] {
+  return [...new Set(words.map(eraSign))];
+}
 
 /** The car type on the road in this era for one the mix picked. */
 export function eraCar(type: CarType, seed: number): CarType {
