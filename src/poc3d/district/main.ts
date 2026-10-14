@@ -138,6 +138,8 @@ import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
 import { cityFromUrl, setTreeSet } from './cityConfig';
 import { deadAt } from './peopleHours';
+import { era, eraFromUrl, setEra } from './era';
+import { EraCard } from './eraCard';
 import { setWorkLiveries } from '../models/vehicles';
 import { money, setCurrency } from '../../money';
 import { signTexts } from './model';
@@ -215,6 +217,8 @@ const CITY = cityFromUrl();
 configureSky(CITY.daylight, CITY.sunYaw);
 setTreeSet(CITY.id);
 setSceneCity(CITY.filipino);
+// The year the city is built in (`?era=1977`; era.ts): set before any content is loaded or planned.
+setEra(eraFromUrl());
 setWorkLiveries(CITY.tropical);
 setCurrency(CITY.currency);
 setSkinTone(CITY.skin);
@@ -749,7 +753,7 @@ async function run(): Promise<void> {
       },
     };
     // The billboards' and posters' siting, to look over (district/adSitesDebug.ts: `__ads`, `?adsites=1` marks them).
-    if (CITY.ads) installAdDebug({ model: district.model, expresswayText: content.expresswayText, rails: content.rails, scene, camera, controls: { setLevel: (y) => controls.setLevel(y), setView: (yaw, pitch) => controls.setView(yaw, pitch) }, groundAt, marks: params.get('adsites') === '1' });
+    if (CITY.ads && era().ads) installAdDebug({ model: district.model, expresswayText: content.expresswayText, rails: content.rails, scene, camera, controls: { setLevel: (y) => controls.setLevel(y), setView: (yaw, pitch) => controls.setView(yaw, pitch) }, groundAt, marks: params.get('adsites') === '1' });
   }
   // Weather near the camera: rain streaks and splashes lit by the street, light cones under the lamps.
   const rain = new RainSystem(cityU);
@@ -3378,7 +3382,7 @@ async function run(): Promise<void> {
   // ride or a scene (you'd load into a moving train); the autosave waits for those to end.
   const played0 = loaded?.played ?? 0;
   const t0 = performance.now();
-  const saveBlocked = (): string | null => (inVn ? 'Not during a scene.' : taxiRide || aboard() ? 'Not during a ride.' : race || streetRace.active ? 'Not during a race.' : null);
+  const saveBlocked = (): string | null => (era().id !== '1992' ? 'Not in another year of the city.' : inVn ? 'Not during a scene.' : taxiRide || aboard() ? 'Not during a ride.' : race || streetRace.active ? 'Not during a race.' : null);
   const gather = (): SaveGame => {
     const d = camera.getWorldDirection(new THREE.Vector3());
     const p = driving.car ? { x: driving.car.x, z: driving.car.z } : camera.position;
@@ -4568,6 +4572,10 @@ async function run(): Promise<void> {
     }
     if (mack.shotsFired > kickedShots) {
       crosshair.fired();
+  // The date card of an older year (eraCard.ts), once, as the memory begins: `?eracard=0` turns it off.
+  const eraCard = new EraCard();
+  if (era().id !== '1992' && params.get('eracard') !== '0') window.setTimeout(() => eraCard.show(), 900);
+  if (debug) (window as unknown as { __eraCard: unknown }).__eraCard = eraCard;
       const q = new URLSearchParams(location.search);
       const deg = Number(q.get('recoil') ?? 1.5) * (mack.oneHand ? 1.4 : 1);
       const rad = (deg * Math.PI) / 180;

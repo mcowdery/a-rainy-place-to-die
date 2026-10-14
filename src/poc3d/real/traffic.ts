@@ -107,7 +107,7 @@ export interface TrafficSigns {
 const LABELS: Record<CarType, string> = {
   sedan: 'Car', luxury: 'Car', taxi: 'Taxi', taxi2: 'Taxi', kei: 'Kei car', minivan: 'Minivan', keitruck: 'Kei truck',
   sports: 'Sports car', hatch: 'Hatchback', rotary: 'Sports car', awd: 'Sports car', roadster: 'Roadster',
-  van: 'Van', keivan: 'Kei van', boxtruck: 'Truck', police: 'Police car', hardtop: 'Car', jeepney: 'Jeepney', tricycle: 'Tricycle',
+  van: 'Van', keivan: 'Kei van', boxtruck: 'Truck', police: 'Police car', hardtop: 'Car', jeepney: 'Jeepney', tricycle: 'Tricycle', coupe70: 'Sports car', box70: 'Car', kei70: 'Kei car',
 };
 
 /**

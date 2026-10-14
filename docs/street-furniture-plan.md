@@ -145,7 +145,7 @@ edge of the carriageway).
 | Kawabata (old town) | 4,565 | 81% | 0.6 m |
 | Denkō-chō | 1,939 | 69% | 0.5 m |
 | Kaburo | 1,125 | 63% | 1.0 m |
-| Tōto Port | 866 | 23% | 3.3 m |
+| Tokyo Port | 866 | 23% | 3.3 m |
 | Gakuenzaka | 741 | 62% | 2.3 m |
 | Asagiri | 239 | 19% | 3.3 m |
 
@@ -176,7 +176,7 @@ are spread out and never bunch. A first guess at the numbers:
 | Gakuenzaka | 1 | 40 | 40 |
 | Kawabata | 0.9 (shopping street 2) | 68 | 61 |
 | Residential | 0.45 (shopping streets 1.5, housing 0.3) | 327 | 147 |
-| Tōto Port | 0.2 | 165 | 33 |
+| Tokyo Port | 0.2 | 165 | 33 |
 | Total | | 690 | about 450 |
 
 A spot is ruled out by the same tests as a bus stop's (mouths, doors, entrances, claimed ground), and a phone is

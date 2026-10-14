@@ -20,7 +20,7 @@ const CREDITS: { title: string; lines: string[]; link?: string }[] = [
       'Kevin MacLeod (incompetech.com)',
       'Licensed under Creative Commons: By Attribution 4.0 License',
       'Tracks re-encoded and level-adjusted for this game',
-      'Tōto Jazz: Backed Vibes Clean · Comfortable Mystery · Cool Vibes · Covert Affair · Dances and Dames · Deadly Roulette · George Street Shuffle · Hard Boiled · I Knew a Guy · Just As Soon · Lobby Time · Shades of Spring · Slow Burn · Walking Along',
+      'Tokyo Jazz: Backed Vibes Clean · Comfortable Mystery · Cool Vibes · Covert Affair · Dances and Dames · Deadly Roulette · George Street Shuffle · Hard Boiled · I Knew a Guy · Just As Soon · Lobby Time · Shades of Spring · Slow Burn · Walking Along',
       'FM Shiomi: Aces High · AcidJazz · Airport Lounge · Bossa Antigua · Disco con Tutti · Feelin Good · Funkorama · Groove Grove · Late Night Radio · Local Forecast - Elevator · Protofunk · Smooth Lovin · Stringed Disco · Ultralounge',
     ],
     link: 'http://creativecommons.org/licenses/by/4.0/',
@@ -271,7 +271,7 @@ function makeStartScreen(): StartScreen {
     h.append('A Rainy Place', document.createElement('br'), 'to ');
     el('em', 'Die', h);
     el('div', undefined, box, 'rule');
-    el('div', '雨の街 · Tōto', box, 'sub');
+    el('div', '雨の街 · Tokyo', box, 'sub');
     // Start works at once: if the city isn't built yet, the loading screen (the phase and its bar) shows behind it.
     const start = button(box, 'Start', () => {
       root.hidden = true;
@@ -308,14 +308,15 @@ function makeStartScreen(): StartScreen {
 }
 
 /**
- * The pause menu: Resume, Controls, Credits, Title screen. `open` is read by the frame loop (the clock and the
+ * The pause menu: Resume, Save and load, Controls, Credits, Title screen. `open` is read by the frame loop (the clock and the
  * movement stop while it's up). `resume` is what Resume does (take the mouse again).
  */
 export class PauseMenu {
   open = false;
   private root: HTMLElement;
 
-  constructor(private resume: () => void) {
+  /** `savePage` fills the Save and load page (district/saveApp.ts `SavePanel.show`); none, no such button (the title screen's own pause). */
+  constructor(private resume: () => void, private savePage?: (page: HTMLElement) => void) {
     addStyle();
     this.root = el('div', undefined, document.body, 'noir pause');
     this.root.hidden = true;
@@ -350,6 +351,7 @@ export class PauseMenu {
     el('div', undefined, box, 'sub');
     box.classList.add('menu');
     button(box, 'Resume', () => this.close(true)).focus();
+    if (this.savePage) button(box, 'Save and load', () => showPage(root, 'Save and load', this.savePage!, () => this.main()));
     button(box, 'Controls', () => showPage(root, 'Controls', controlsPage, () => this.main()));
     button(box, 'Credits', () => showPage(root, 'Credits', creditsPage, () => this.main()));
     button(box, 'Title screen', () => {

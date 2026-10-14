@@ -12,7 +12,8 @@ function ROOMS_HAS(a) { return ['cars', 'mack', 'plants', 'buildings', 'transit'
 mkdirSync(out, { recursive: true });
 // [name, x, y, z, size, vx, vy, vz]: __focusAt(x, y, z, size, view)
 const VIEWS = {
-  cars: [['taxis', -4, 0.8, -8.5, 14, 0.2, 0.35, -1], ['work', 0, 1, -30, 26, 0.2, 0.4, 1], ['ads', 0, 1, -19, 30, 0.3, 0.5, 1], ['bikes', 0, 0.8, -13.5, 22, 0.1, 0.4, 1]],
+  // (The 1970s cars are the row's last three, from x 35 to 43: front paints facing the camera at z -1.5, the others facing away at z -8.5.)
+  cars: [['seventies', 39, 0.9, -1.5, 15, 0.3, 0.28, 1], ['seventies rear', 39, 0.9, -8.5, 15, 0.3, 0.28, -1], ['seventies side', 39, 0.9, -1.5, 15, 1, 0.2, 0.15], ['taxis', -4, 0.8, -8.5, 14, 0.2, 0.35, -1], ['work', 0, 1, -30, 26, 0.2, 0.4, 1], ['ads', 0, 1, -19, 30, 0.3, 0.5, 1], ['bikes', 0, 0.8, -13.5, 22, 0.1, 0.4, 1]],
   mack: ['mack', 'shotgun: lever', 'katana', 'baseball bat', 'bike: bōsōzoku', 'bike: cruiser', 'bike: sports', 'helmet: black'],
   plants: [['trees', 18, 4, 0, 60, 0.1, 0.35, 1], ['row2', 18, 3, 16, 36, 0.1, 0.3, 1], ['foliage', 18, 4, 60, 40, 0.1, 0.25, 1], ['foliage4', 18, 4, 128, 40, 0.1, 0.25, 1]],
   buildings: [['mega', 58, 28, 22, 48, -1, 0.12, 1], ['wall', 4, 3, 0, 40, 1, 0.2, 0], ['street', 30, 1, 66, 40, 0.1, 0.35, 1], ['tanuki', 20, 0.8, 52, 3, 0.3, 0.15, 1], ['payphones', 66, 1.1, 66, 9, 0.35, 0.2, 1], ['payphone booth', 66, 1.2, 66, 3.4, 0.5, 0.15, 1], ['payphone blender', 74, 1.25, 66, 2.2, 0.3, 0.15, 1], ['booth blender', 78.5, 1.3, 66, 3.6, 0.4, 0.15, 1], ['red and pink', 83.2, 1.15, 66, 2.6, 0.3, 0.2, 1], ['payphones all', 79, 1.2, 68, 13, 0.25, 0.3, 1]],

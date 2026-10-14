@@ -8,6 +8,7 @@ import { SignLayout, setRooftopSigns } from '../real/signs';
 import { ChunkBuilder, type Stage } from './chunkBuild';
 import { loadDistrictContent } from './content';
 import { CITIES, setTreeSet, type CityId } from './cityConfig';
+import { era, setEra, type EraId } from './era';
 import { setWorkLiveries } from '../models/vehicles';
 import { DistrictModel, signTexts } from './model';
 
@@ -20,7 +21,7 @@ import { DistrictModel, signTexts } from './model';
  *   -> { type: 'build', id, mx, my, stage }           <- { type: 'built', id, result }
  */
 export type WorkerIn =
-  | { type: 'init'; kinds: DistrictId[]; seed: number; words: readonly string[]; city: CityId }
+  | { type: 'init'; kinds: DistrictId[]; seed: number; words: readonly string[]; city: CityId; era: EraId }
   | { type: 'build'; id: number; mx: number; my: number; stage: Stage };
 
 let builder: ChunkBuilder | null = null;
@@ -28,12 +29,13 @@ let builder: ChunkBuilder | null = null;
 self.onmessage = (e: MessageEvent<WorkerIn>) => {
   const m = e.data;
   if (m.type === 'init') {
+    setEra(m.era);
     setTreeSet(m.city);
     setWorkLiveries(CITIES[m.city].tropical);
     const content = loadDistrictContent(m.city);
     const model = new DistrictModel(content.macro, m.kinds, content.placed, m.seed, content.zones, content.avenues, content.terrain, [...railReserved(content.rails), ...expresswayReservedFrom('expressway.yaml', content.expresswayText)], expresswayCoveredFrom('expressway.yaml', content.expresswayText), content.traffic.buses);
     setRooftopSigns(CITIES[m.city].rooftopSigns);
-    const ads = CITIES[m.city].ads;
+    const ads = CITIES[m.city].ads && era().ads;
     // The billboards are sited by who sees them: from the expressway's decks, the elevated lines and the streets.
     const exDef = ads && content.expresswayText.trim() ? parseExpressway('expressway.yaml', content.expresswayText, []) : null;
     const adSites = ads ? new AdSites(model, { expressway: exDef ? new Expressway(exDef).roads : [], rails: content.rails }) : null;

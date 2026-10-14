@@ -1,6 +1,7 @@
 import type { PeopleMix } from './peopleMix';
 import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng, type Rng } from '../../core/hash';
+import { eraHeight, eraTower } from './era';
 import { isWide } from '../../core/wide';
 import { isLand, type CellKind, type DistrictId, type MacroMap } from '../../gen/macro';
 import { STYLES } from '../../gen/styles';
@@ -819,6 +820,8 @@ function towerBlock(block: Rect, f: Fill): void {
     const cz = front === 'south' ? site.y + back + d / 2 : front === 'north' ? site.y + site.h - back - d / 2 : site.y + site.h / 2 + jz;
     const b: Building3 = { id: f.idBase + f.buildings.length, x: cx, z: cz, w, d, h: pickFloors(style, rnd) * FLOOR_H, front, ...(f.zone ? { zone: f.zone } : {}) };
     const sign = rnd.chance(style.signChance) ? makeSign(b, style, rnd) : null;
+    // (A tower not up yet in this era: its plaza is cleared ground. era.ts.)
+    if (!eraTower(cx, cz)) continue;
     f.buildings.push(withSign(b, sign));
     if (sign) f.signs.push(sign);
   }
@@ -889,7 +892,8 @@ function fillBlock(block: Rect, f: Fill): void {
       const lotFront: Side = x === r.x && end - x - w > 0.5 ? 'west' : end - x - w <= 0.5 && x > r.x ? 'east' : front;
       x += w;
       if (end - x > style.lotW[0] + 2 && rnd.chance(style.lotGap)) x += 1.5; // service alley
-      const height = pickFloors(style, rnd) * FLOOR_H;
+      // (As the era allows: era.ts. The dice are rolled the same in every year.)
+      const height = eraHeight(pickFloors(style, rnd) * FLOOR_H, lot.x, lot.y);
       const rear = between(rnd, style.rear) * (rows.length === 2 ? 1 : 0.5);
       const setback = rnd.chance(0.5) ? between(rnd, style.setback) : 0;
       const cutSize = rnd.chance(0.45) ? 1.8 + rnd.float() * 0.8 : 0;
