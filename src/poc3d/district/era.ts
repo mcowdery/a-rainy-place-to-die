@@ -51,7 +51,8 @@ export interface Era {
   readonly unbuilt: readonly string[];
   /**
    * Placements whose plot holds what stood there before them, a landmark of its own (built on the main thread as theirs
-   * are): Kaburo Crossing's corner the 1970s cinema palace (real/cinema70.ts, approved 2026-10-14).
+   * are): Kaburo Crossing's corner the 1970s cinema palace (real/cinema70.ts), Yasuichi's plot the pachinko hall, and in 1964
+   * Hotel Rouge's the tsurekomi inn and Yoru Mart's the rice-and-liquor shop (real/eraLandmarks.ts; all approved 2026-10-14).
    */
   readonly stands: Readonly<Record<string, Landmark>>;
   /** Shop trades the year hadn't, and what stands there instead (real/shops.ts `TRADE`): a karaoke box is a snack bar. */
@@ -106,9 +107,9 @@ const SIXTIES_SIGNS: readonly (readonly [string, string, string])[] = [
 export const ERAS: Readonly<Record<EraId, Era>> = {
   '1992': { id: '1992', year: 1992, cap: null, newShare: 1, newCap: Infinity, towers: 1, ads: true, cars: null, standIn: [], date: null, grade: 'neutral', unbuilt: [], stands: {}, trades: new Map(), signs: [], frames: new Map(), pane: 1 },
   // The neon district first: the crossing's sign with its video screens and the discount store are later than this.
-  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: ['yasuichi'], stands: { kaburo_crossing: 'cinema70' }, trades: SEVENTIES_TRADES, signs: SEVENTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.metal]]), pane: 0.85 },
+  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: [], stands: { kaburo_crossing: 'cinema70', yasuichi: 'pachinko70' }, trades: SEVENTIES_TRADES, signs: SEVENTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.metal]]), pane: 0.85 },
   // Defined so the setting has its second step; not looked at yet.
-  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: ['yasuichi', 'hotel_rouge', 'yoru_mart'], stands: { kaburo_crossing: 'cinema70' }, trades: SIXTIES_TRADES, signs: SIXTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.wood], [FRAME.metal, FRAME.wood]]), pane: 0.7 },
+  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: [], stands: { kaburo_crossing: 'cinema70', yasuichi: 'pachinko70', hotel_rouge: 'inn64', yoru_mart: 'liquor64' }, trades: SIXTIES_TRADES, signs: SIXTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.wood], [FRAME.metal, FRAME.wood]]), pane: 0.7 },
 };
 
 export const isEraId = (s: unknown): s is EraId => s === '1992' || s === '1977' || s === '1964';
@@ -144,6 +145,9 @@ export function eraHeight(h: number, x: number, z: number): number {
 
 /** Whether the plaza tower centred here is up in this era. */
 export const eraTower = (x: number, z: number): boolean => ERA.towers >= 1 || unit(x, z, 0xe7a3) < ERA.towers;
+
+/** How tall what stood there is (metres: its collision and occlusion box; the builders' own heights). */
+const STOOD_HEIGHT: Partial<Record<Landmark, number>> = { cinema70: 18, pachinko70: 14.3, inn64: 10, liquor64: 9 };
 
 /**
  * The shop trade in this era for one the street picked (real/buildings.ts, after `pickTrade`). A shop whose sign names its
@@ -209,7 +213,7 @@ export function eraPlaced(placed: readonly Placed3[]): readonly Placed3[] {
     return {
       ...p,
       stamp: { ...p.stamp, landmark: stood ?? null, name: null, signs: [], nodes: p.stamp.nodes.filter((n) => n.kind === 'spawn') },
-      building: { ...p.building, h: stood === 'cinema70' ? 18 : e.cap === null ? p.building.h : Math.min(p.building.h, e.cap) },
+      building: { ...p.building, h: stood ? STOOD_HEIGHT[stood] ?? 12 : e.cap === null ? p.building.h : Math.min(p.building.h, e.cap) },
       signs: [],
       nodes: p.nodes.filter((n) => n.kind === 'spawn'),
     };

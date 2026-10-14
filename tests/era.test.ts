@@ -83,18 +83,25 @@ describe('The city in another year', () => {
   it('puts what stood there, or an ordinary building, where a landmark is not built yet, and keeps the place to stand', () => {
     setEra('1977');
     const content = loadDistrictContent();
-    // The discount store's plot is an ordinary building; the crossing's corner the cinema palace (real/cinema70.ts).
+    // The discount store's plot is the pachinko hall, the crossing's corner the cinema palace (real/cinema70.ts, eraLandmarks.ts).
     const store = content.placed.find((p) => p.id === 'yasuichi')!;
-    expect(store.stamp.landmark).toBeNull();
+    expect(store.stamp.landmark).toBe('pachinko70');
     expect(store.building.h).toBeLessThanOrEqual(ERAS['1977'].cap!);
+    expect(content.placed.find((p) => p.id === 'hotel_rouge')!.stamp.landmark).toBe('love_hotel');
     const crossing = content.placed.find((p) => p.id === 'kaburo_crossing')!;
     expect(crossing.stamp.landmark).toBe('cinema70');
     expect(crossing.building.h).toBe(18);
     expect(crossing.signs).toEqual([]);
     expect(crossing.nodes.map((n) => n.id)).toContain('kaburo_crossing.view');
     expect(crossing.nodes.every((n) => n.kind === 'spawn')).toBe(true);
-    // One that was there already is as it is.
-    expect(content.placed.find((p) => p.id === 'hotel_rouge')?.stamp.landmark).toBe('love_hotel');
+    // One that was there already is as it is; in 1964, the inn and the rice-and-liquor shop instead.
+    expect(content.placed.find((p) => p.id === 'yoru_mart')?.stamp.landmark).toBe('konbini');
+    setEra('1964');
+    const sixties = loadDistrictContent();
+    expect(sixties.placed.find((p) => p.id === 'hotel_rouge')!.stamp.landmark).toBe('inn64');
+    expect(sixties.placed.find((p) => p.id === 'yoru_mart')!.stamp.landmark).toBe('liquor64');
+    expect(sixties.placed.find((p) => p.id === 'hotel_rouge')!.nodes.every((n) => n.kind === 'spawn')).toBe(true);
+    setEra('1977');
     setEra('1992');
     const now = loadDistrictContent();
     // The plot is the same: the streets round it don't move between the years.

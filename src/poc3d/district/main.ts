@@ -51,6 +51,7 @@ import { setSceneCity, windowSceneIndex } from '../real/windowScenes';
 import { Lightmap } from '../real/lightmap';
 import { buildMegaSign } from '../real/megaSign';
 import { buildCinema70 } from '../real/cinema70';
+import { buildInn64, buildLiquor64, buildPachinko70 } from '../real/eraLandmarks';
 import { buildKonbini } from '../real/konbini';
 import { buildShrine } from '../real/shrine';
 import { buildLoveHotel } from '../real/loveHotel';
@@ -829,6 +830,9 @@ async function run(): Promise<void> {
       const l = lineOfStation(placed)!;
       const other = railStations.find((s) => s.line === l.id && s.id !== placed.id)?.names ?? null;
       scene.add(buildStation(placed.building, city, placed.stamp.station!, other, l, stationKerb(placed.building, roadBelow)));
+    } else if (lm === 'pachinko70' || lm === 'inn64' || lm === 'liquor64') {
+      // What stood on these plots in another year (era.ts `stands`, real/eraLandmarks.ts): laid out in the plot's own frame.
+      scene.add((lm === 'pachinko70' ? buildPachinko70 : lm === 'inn64' ? buildInn64 : buildLiquor64)(placed.building, city).group);
     } else if (lm === 'cinema70') {
       // What stood on Kaburo Crossing's corner in another year (era.ts `stands`): the cinema palace, in the mega-sign's frame.
       const c = buildCinema70(city);
