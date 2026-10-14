@@ -33,8 +33,10 @@ export interface Era {
   readonly towers: number;
   /** Whether the city has its ad art (photo billboards, posters, taxi ads: all of it made in a late-80s look). */
   readonly ads: boolean;
-  /** The cars on the road; a car of any other type is one of these instead. null: every type. */
+  /** The cars on the road; a car of any other type is one of `standIn` instead. null: every type. */
   readonly cars: readonly CarType[] | null;
+  /** What takes the place of a type the year hadn't, by weight (a type listed twice is twice as likely): the year's ordinary cars. */
+  readonly standIn: readonly CarType[];
   /**
    * The date the older city's card shows (month, day, weekday 0 = Sunday). **A placeholder** (the user, 2026-10-13: "let's add it"):
    * the story hasn't dated its tellings. 1977's is a Friday, as the game's own first day is; 1964's is the day before the
@@ -47,15 +49,21 @@ export interface Era {
   readonly unbuilt: readonly string[];
 }
 
-/** The plainest of the game's cars: nothing here is a 1970s design, these are only the ones that jar least. */
-const OLD_CARS: readonly CarType[] = ['sedan', 'taxi', 'taxi2', 'kei', 'keitruck', 'keivan', 'van', 'boxtruck', 'hardtop', 'police'];
+/**
+ * The 1970s street (models/vehicles.ts `SEVENTIES_TYPES`, approved in the showroom 2026-10-14): the square family
+ * saloon, a few GT coupes and bubble kei cars, the big hardtop, the classic taxi, the work vehicles and the patrol car.
+ * The newer taxi, the minivan, the tall kei wagon, the hatchbacks and the rest are 1980s and 1990s.
+ */
+const OLD_CARS: readonly CarType[] = ['box70', 'coupe70', 'kei70', 'hardtop', 'taxi', 'keitruck', 'van', 'boxtruck', 'police'];
+/** What an ordinary 1970s car is, by weight: mostly the square saloon. */
+const OLD_STAND_IN: readonly CarType[] = ['box70', 'box70', 'box70', 'box70', 'kei70', 'kei70', 'coupe70', 'hardtop'];
 
 export const ERAS: Readonly<Record<EraId, Era>> = {
-  '1992': { id: '1992', year: 1992, cap: null, newShare: 1, newCap: Infinity, towers: 1, ads: true, cars: null, date: null, grade: 'neutral', unbuilt: [] },
+  '1992': { id: '1992', year: 1992, cap: null, newShare: 1, newCap: Infinity, towers: 1, ads: true, cars: null, standIn: [], date: null, grade: 'neutral', unbuilt: [] },
   // The neon district first: the crossing's sign with its video screens and the discount store are later than this.
-  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: ['kaburo_crossing', 'yasuichi'] },
+  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: ['kaburo_crossing', 'yasuichi'] },
   // Defined so the setting has its second step; not looked at yet.
-  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: ['kaburo_crossing', 'yasuichi', 'hotel_rouge', 'yoru_mart'] },
+  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: ['kaburo_crossing', 'yasuichi', 'hotel_rouge', 'yoru_mart'] },
 };
 
 export const isEraId = (s: unknown): s is EraId => s === '1992' || s === '1977' || s === '1964';
@@ -94,9 +102,8 @@ export const eraTower = (x: number, z: number): boolean => ERA.towers >= 1 || un
 export function eraCar(type: CarType, seed: number): CarType {
   const cars = ERA.cars;
   if (!cars || cars.includes(type)) return type;
-  // (Not the taxis or the patrol car: an ordinary car takes an ordinary car's place.)
-  const plain = cars.filter((t) => t !== 'taxi' && t !== 'taxi2' && t !== 'police');
-  return plain[hash(seed, 0xe7a4) % plain.length];
+  // (An ordinary car takes an ordinary car's place: never a taxi or the patrol car, and never a lorry.)
+  return ERA.standIn[hash(seed, 0xe7a4) % ERA.standIn.length];
 }
 
 /**

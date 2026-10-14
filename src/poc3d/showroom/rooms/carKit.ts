@@ -14,19 +14,19 @@ export const NAMES: Record<VehicleType, string> = {
   sedan: 'sedan', luxury: 'luxury sedan', sports: 'sports coupe', taxi: 'taxi (classic)', taxi2: 'taxi (modern)', kei: 'kei tall-wagon',
   minivan: 'minivan', keitruck: 'kei truck', scooter: 'scooter', motorcycle: 'motorcycle', delivery: 'delivery scooter',
   hatch: 'hatchback (80s)', rotary: 'rotary coupe', awd: 'turbo AWD coupe', roadster: 'kei roadster',
-  van: 'work van', keivan: 'kei van', boxtruck: 'box truck (2 t)', police: 'patrol car', hardtop: 'hardtop saloon (70s, noir)', jeepney: 'jeepney (Manila)', tricycle: 'tricycle (Manila)',
+  van: 'work van', keivan: 'kei van', boxtruck: 'box truck (2 t)', police: 'patrol car', hardtop: 'hardtop saloon (70s, noir)', coupe70: 'GT coupe (70s)', box70: 'family saloon (70s)', kei70: 'bubble kei (70s)', jeepney: 'jeepney (Manila)', tricycle: 'tricycle (Manila)',
 };
 export const PAINT_A: Record<VehicleType, number> = {
   sedan: 0xe8e8e4, luxury: 0x07070a, sports: 0xc01818, taxi: 0x121316, taxi2: 0x1c2240, kei: 0xa8d4bc, minivan: 0xb4b6ba, keitruck: 0xe8e8e4,
   scooter: 0xe8e0c8, motorcycle: 0xb81818, delivery: 0xc81818,
   hatch: 0xf0f0ec, rotary: 0xe8c020, awd: 0x5a5e66, roadster: 0xe8c020,
-  van: 0xf0f0ec, keivan: 0xf0f0ec, boxtruck: 0xf0f0ec, police: 0xf2f2ee, hardtop: 0x0a0a0c, jeepney: 0xe6e2d2, tricycle: 0xc81818,
+  van: 0xf0f0ec, keivan: 0xf0f0ec, boxtruck: 0xf0f0ec, police: 0xf2f2ee, hardtop: 0x0a0a0c, coupe70: 0xb89a2c, box70: 0xd6d2c6, kei70: 0xe0b0b8, jeepney: 0xe6e2d2, tricycle: 0xc81818,
 };
 export const PAINT_B: Record<VehicleType, number> = {
   sedan: 0x1c2a44, luxury: 0xf0efe8, sports: 0xf0f0ec, taxi: 0xe0a818, taxi2: 0x121316, kei: 0xd8c09a, minivan: 0x121316, keitruck: 0xb4b6ba,
   scooter: 0x8ab0d0, motorcycle: 0x121316, delivery: 0x1c4a9a,
   hatch: 0xc01818, rotary: 0xc01818, awd: 0x1a2c5a, roadster: 0xc01818,
-  van: 0x1c2a44, keivan: 0x8ab0d0, boxtruck: 0x2a5a9a, police: 0xf2f2ee, hardtop: 0x3a3428, jeepney: 0xc4c8cc, tricycle: 0x1c5aa8,
+  van: 0x1c2a44, keivan: 0x8ab0d0, boxtruck: 0x2a5a9a, police: 0xf2f2ee, hardtop: 0x3a3428, coupe70: 0x8a3a1e, box70: 0x3a3428, kei70: 0xa8d4bc, jeepney: 0xc4c8cc, tricycle: 0x1c5aa8,
 };
 
 export function carKit(ctx: RoomCtx, defaultGroup = 'Cars') {

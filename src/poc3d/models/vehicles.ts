@@ -24,13 +24,15 @@ import { TAXI_ADS } from './ads';
 
 export type CarType =
   | 'sedan' | 'luxury' | 'sports' | 'taxi' | 'taxi2' | 'kei' | 'minivan' | 'keitruck' | 'hatch' | 'rotary' | 'awd' | 'roadster'
-  | 'van' | 'keivan' | 'boxtruck' | 'police' | 'hardtop' | 'jeepney' | 'tricycle';
+  | 'van' | 'keivan' | 'boxtruck' | 'police' | 'hardtop' | 'jeepney' | 'tricycle' | 'coupe70' | 'box70' | 'kei70';
 export type VehicleType = CarType | BikeType;
-export const CAR_TYPES2: readonly CarType[] = ['sedan', 'luxury', 'sports', 'taxi', 'taxi2', 'kei', 'minivan', 'keitruck', 'hatch', 'rotary', 'awd', 'roadster', 'van', 'keivan', 'boxtruck', 'police', 'hardtop', 'jeepney', 'tricycle'];
+export const CAR_TYPES2: readonly CarType[] = ['sedan', 'luxury', 'sports', 'taxi', 'taxi2', 'kei', 'minivan', 'keitruck', 'hatch', 'rotary', 'awd', 'roadster', 'van', 'keivan', 'boxtruck', 'police', 'hardtop', 'jeepney', 'tricycle', 'coupe70', 'box70', 'kei70'];
 /** The working vehicles and the patrol car (under review in the showroom, not yet in the district's mixes). */
 export const WORK_TYPES: readonly CarType[] = ['van', 'keivan', 'boxtruck', 'police'];
 /** Manilaya's vehicles under review in the showroom (a row of their own; in no traffic mix yet): the jeepney. */
 export const FILIPINO_TYPES: readonly CarType[] = ['jeepney', 'tricycle'];
+/** The 1970s cars (approved 2026-10-14, for the older city: district/era.ts; in no 1992 mix): the saloon `hardtop` is theirs too. */
+export const SEVENTIES_TYPES: readonly CarType[] = ['coupe70', 'box70', 'kei70'];
 /** The cars you can own and race (the garage). */
 export const SPORT_TYPES: readonly CarType[] = ['sports', 'hatch', 'rotary', 'awd', 'roadster'];
 export const BIKE_TYPES: readonly BikeType[] = ['scooter', 'motorcycle', 'delivery'];
@@ -106,6 +108,54 @@ const HARDTOP: Design = {
   seams: [1.74, 2.64, 3.5],
   head: [0.66, 0.8, 0.46, 0.82], grille: [0.6, 0.82, 0, 0.46], grilleChrome: true, tail: [0.68, 0.9, 0.34, 0.83],
   plateY: [0.4, 0.52], plate: 'white', bumper: 'chrome', chromeBelt: true, fenderMirrors: 'chrome',
+};
+
+/**
+ * The 1970s coupe (approved 2026-10-14): a long-nosed two-door GT of the Z-car kind: a long low bonnet, a small cabin set back,
+ * a fastback tail (its `wing: 'lip'` came off after the first look: it stood as a stray box at the back of the roof), round lamps, a small low grille, chrome bumpers, steel wheels.
+ */
+const COUPE70: Design = {
+  name: 'coupe70', L: 4.2, W: 0.8, corner: 0.16, clear: 0.14, x0: 0,
+  top: [[0, 0.62], [0.05, 0.9], [0.3, 0.99], [0.7, 0.99], [1.15, 1.17], [1.6, 1.27], [2.05, 1.29], [2.4, 1.2], [2.85, 0.95], [3.6, 0.86], [4.05, 0.8], [4.2, 0.6]],
+  belt: [[0, 0.88], [4.2, 0.78]],
+  roofInset: 0.17,
+  windscreen: [2.4, 2.85], rearGlass: [0.8, 1.6], sideGlass: [1.2, 2.7], pillars: [], blackPillars: true,
+  wheelX: [0.8, 3.3], wheelR: 0.3, tyreW: 0.185, rims: 'steel',
+  seams: [1.2, 2.3, 3.0],
+  head: [0.66, 0.8, 0.3, 0.7], grille: [0.46, 0.62, 0, 0.3], grilleChrome: true, tail: [0.7, 0.82, 0.3, 0.78],
+  plateY: [0.36, 0.48], plate: 'white', bumper: 'chrome',
+};
+
+/**
+ * The 1970s family saloon (approved 2026-10-14): the square compact of the decade: three plain boxes, a flat bonnet and boot, an
+ * upright cabin on thin pillars, round lamps either side of a small chrome grille, chrome bumpers, steel wheels.
+ */
+const BOX70: Design = {
+  name: 'box70', L: 4.2, W: 0.8, corner: 0.1, clear: 0.16, x0: 0,
+  top: [[0, 0.6], [0.05, 0.85], [0.35, 0.9], [0.9, 0.92], [1.05, 0.93], [1.3, 1.28], [1.55, 1.32], [2.6, 1.33], [2.85, 1.3], [3.14, 0.97], [3.25, 0.93], [4.05, 0.88], [4.15, 0.8], [4.2, 0.62]],
+  belt: [[0, 0.85], [4.2, 0.84]],
+  roofInset: 0.1,
+  windscreen: [2.86, 3.14], rearGlass: [1.06, 1.3], sideGlass: [1.3, 2.86], pillars: [[2.0, 2.08]], blackPillars: false,
+  wheelX: [0.85, 3.25], wheelR: 0.3, tyreW: 0.17, rims: 'steel',
+  seams: [1.35, 2.04, 2.9],
+  head: [0.62, 0.74, 0.4, 0.74], grille: [0.56, 0.7, 0, 0.4], grilleChrome: true, tail: [0.64, 0.78, 0.36, 0.76],
+  plateY: [0.36, 0.48], plate: 'white', bumper: 'chrome',
+};
+
+/**
+ * The early kei car (approved 2026-10-14): the 1970s bubble, under 3 m: a rounded little two-box with a high roof for its length,
+ * tiny wheels, small round lamps, a yellow plate, a chrome strip bumper.
+ */
+const KEI70: Design = {
+  name: 'kei70', L: 2.99, W: 0.64, corner: 0.2, clear: 0.15, x0: 0,
+  top: [[0, 0.55], [0.05, 0.78], [0.2, 0.86], [0.6, 0.92], [0.8, 1.15], [1.0, 1.3], [1.7, 1.32], [1.95, 1.2], [2.25, 0.92], [2.4, 0.88], [2.85, 0.82], [2.99, 0.6]],
+  belt: [[0, 0.78], [2.99, 0.74]],
+  roofInset: 0.1,
+  windscreen: [1.95, 2.25], rearGlass: [0.8, 1.0], sideGlass: [1.0, 1.95], pillars: [], blackPillars: false,
+  wheelX: [0.5, 2.35], wheelR: 0.23, tyreW: 0.12, rims: 'steel',
+  seams: [1.0, 1.4, 2.0],
+  head: [0.62, 0.7, 0.2, 0.5], grille: [0.42, 0.5, 0, 0.3], grilleChrome: true, tail: [0.6, 0.7, 0.3, 0.55],
+  plateY: [0.3, 0.4], plate: 'yellow', bumper: 'chrome',
 };
 
 const SEDAN: Design = {
@@ -337,12 +387,16 @@ const TRICYCLE: Design = {
 /** The patrol car (after the Crown patrol cars): the saloon, white over black, steel wheels, a red light bar. */
 const POLICE: Design = { ...SEDAN, name: 'police', rims: 'steel', twoTone: 4 };
 
-const DESIGNS: Record<CarType, Design> = { hardtop: HARDTOP, van: VAN, keivan: KEIVAN, boxtruck: BOXTRUCK, jeepney: JEEPNEY, tricycle: TRICYCLE, police: POLICE, sedan: SEDAN, luxury: LUXURY, sports: SPORTS, taxi: TAXI, taxi2: TAXI2, kei: KEI, minivan: MINIVAN, keitruck: KEITRUCK, hatch: HATCH, rotary: ROTARY, awd: AWD, roadster: ROADSTER };
+const DESIGNS: Record<CarType, Design> = { coupe70: COUPE70, box70: BOX70, kei70: KEI70, hardtop: HARDTOP, van: VAN, keivan: KEIVAN, boxtruck: BOXTRUCK, jeepney: JEEPNEY, tricycle: TRICYCLE, police: POLICE, sedan: SEDAN, luxury: LUXURY, sports: SPORTS, taxi: TAXI, taxi2: TAXI2, kei: KEI, minivan: MINIVAN, keitruck: KEITRUCK, hatch: HATCH, rotary: ROTARY, awd: AWD, roadster: ROADSTER };
 
 export const PAINTS: Record<VehicleType, readonly number[]> = {
   sedan: [0xe8e8e4, 0x121316, 0xb4b6ba, 0x1c2a44, 0x5a1a20],
   luxury: [0x07070a, 0x1a2032, 0x2a1418, 0xf0efe8],
   hardtop: [0x0a0a0c, 0x16181e, 0x2a1418, 0x3a3428, 0xd6d2c6],
+  // The 1970s: muted, the decade's own, with no bright primaries: a mustard, a rust, a navy, a cream; a cream, a brown, an olive, a pale blue, a black; a pale pink, a beige, a mint, a white.
+  coupe70: [0xb89a2c, 0x8a3a1e, 0x1c2a44, 0xd6d2c6],
+  box70: [0xd6d2c6, 0x3a3428, 0x5a6a4a, 0x8ab0c0, 0x121316],
+  kei70: [0xe0b0b8, 0xd8c09a, 0xa8d4bc, 0xe8e8e4],
   sports: [0xc01818, 0xf0f0ec, 0x121316, 0xb4b6ba, 0x1c3a7a, 0xe8c020],
   taxi: [0x121316, 0xe0a818, 0x1f5a36, 0x1c2438],
   taxi2: [0x1c2240, 0x121316],
@@ -1545,7 +1599,10 @@ export function addVehicle(mb: MeshBuilder, spec: VehicleSpec, signs?: VehicleSi
     for (const sd of [-1, 1]) {
       const n = N([0, 0, sd]);
       const y = section(2.5)[3][0] + 0.02;
-      mb.quadN(P(1.4, y, sd * (d.W + 0.006)), P(4.0, y, sd * (d.W + 0.006)), P(4.0, y + 0.03, sd * (d.W + 0.006)), P(1.4, y + 0.03, sd * (d.W + 0.006)), n, n, n, n);
+      // Between the arches (it ran across the front one, over the wheel).
+      const x0 = Math.max(1.4, d.wheelX[0] + d.wheelR + 0.1);
+      const x1 = Math.min(4.0, d.wheelX[1] - d.wheelR - 0.1);
+      mb.quadN(P(x0, y, sd * (d.W + 0.006)), P(x1, y, sd * (d.W + 0.006)), P(x1, y + 0.03, sd * (d.W + 0.006)), P(x0, y + 0.03, sd * (d.W + 0.006)), n, n, n, n);
     }
   }
   if (spec.type === 'taxi2') {

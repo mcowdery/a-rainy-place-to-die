@@ -31,6 +31,9 @@ export type CabinStyle = 'sport' | 'eighties' | 'rotary' | 'turbo' | 'roadster' 
 
 export const CABIN_STYLE: Record<CarType, CabinStyle> = {
   hardtop: 'luxury',
+  coupe70: 'sport',
+  box70: 'saloon',
+  kei70: 'kei',
   sports: 'sport',
   hatch: 'eighties',
   rotary: 'rotary',

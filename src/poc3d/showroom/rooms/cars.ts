@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { KIND, lin } from '../../real/meshBuilder';
-import { addVehicleLow, BIKE_TYPES, CAR_TYPES2, FILIPINO_TYPES, WORK_TYPES, type VehicleType } from '../../models/vehicles';
+import { addVehicleLow, BIKE_TYPES, CAR_TYPES2, FILIPINO_TYPES, SEVENTIES_TYPES, WORK_TYPES, type VehicleType } from '../../models/vehicles';
 import { startRoom } from '../shell';
 import { ADS, carKit, NAMES, PAINT_A, PAINT_B } from './carKit';
 
@@ -27,7 +27,7 @@ startRoom({
     floor.box(0, -36, -0.2, 0, 110, 6, KIND.lot);
   });
     const { newCars, vehicle, finish } = carKit(ctx);
-    CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t) && !FILIPINO_TYPES.includes(t)).forEach((type, i) => {
+    CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t) && !FILIPINO_TYPES.includes(t) && !SEVENTIES_TYPES.includes(t)).forEach((type, i) => {
       const x = -13 + i * 3.7;
       vehicle({ x, z: -1.5, fx: 0, fz: 1, type, paint: PAINT_A[type] }, NAMES[type], 4.5);
       // Second row: other paints, facing away; the taxis carry ads.
@@ -35,10 +35,19 @@ startRoom({
       vehicle({ x, z: -8.5, fx: 0, fz: -1, type, paint: PAINT_B[type], ad }, `${NAMES[type]} (alt${ad ? ' + ad' : ''})`, 4.5);
     });
     // The middle-distance versions (addVehicleLow: parked cars beyond ~140 m, traffic beyond 80 m), in front of row 1.
-    CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t) && !FILIPINO_TYPES.includes(t)).forEach((type, i) => addVehicleLow(newCars, { x: -13 + i * 3.7, z: 3, fx: 0, fz: 1, type, paint: PAINT_A[type] }));
+    CAR_TYPES2.filter((t) => !WORK_TYPES.includes(t) && !FILIPINO_TYPES.includes(t) && !SEVENTIES_TYPES.includes(t)).forEach((type, i) => addVehicleLow(newCars, { x: -13 + i * 3.7, z: 3, fx: 0, fz: 1, type, paint: PAINT_A[type] }));
     WORK_TYPES.forEach((type, i) => addVehicleLow(newCars, { x: 30 + i * 6.5, z: 3, fx: 0, fz: 1, type, paint: PAINT_A[type] }));
     label('new', 'middle-distance models (parked beyond ~140 m, traffic beyond 80 m)', 4, 2.6, 3);
     genItems.new.push({ name: 'middle-distance cars', group: 'Cars', at: new THREE.Vector3(4, 0.8, 3), size: 16 });
+    // The 1970s cars (under review: the older city's, district/era.ts): a clear row of their own in front of the rest, each in its two
+    // first paints, the first facing the camera and the second turned away, with the late-70s hardtop saloon beside them to compare.
+    [...SEVENTIES_TYPES, 'hardtop' as const].forEach((type, i) => {
+      const x = -9 + i * 8;
+      vehicle({ x, z: 20, fx: 0, fz: 1, type, paint: PAINT_A[type] }, NAMES[type], 5.5);
+      vehicle({ x: x + 3.6, z: 20, fx: 0, fz: 1, type, paint: PAINT_B[type] }, `${NAMES[type]} (alt)`, 5.5);
+      vehicle({ x, z: 27, fx: 0, fz: -1, type, paint: PAINT_A[type] }, `${NAMES[type]} (rear)`, 5.5);
+    });
+    genItems.new.push({ name: '1970s cars', group: 'Cars', at: new THREE.Vector3(8, 0.9, 22), size: 36 });
     // Working vehicles and the patrol car (new, under review): a row of their own behind the taxi ads, the second
     // paint facing away.
     // Each in two companies' lettering (WORK_LIVERIES), the patrol cars two units.

@@ -99,8 +99,12 @@ describe('The city in another year', () => {
     for (let s = 0; s < 400; s++) seen.add(pickCar(CITY_CARS, s).type);
     for (const t of seen) expect(cars).toContain(t);
     expect(seen.size).toBeGreaterThan(3);
-    // A taxi is still a taxi; nothing ordinary turns into one.
+    // The ordinary 1970s car is the square saloon, mostly, and the year's own designs are on the street.
+    for (const t of ['box70', 'coupe70', 'kei70']) expect(seen).toContain(t);
+    // A taxi is still a taxi; nothing ordinary turns into one, or into a lorry.
     expect(eraCar('taxi', 5)).toBe('taxi');
-    for (let s = 0; s < 50; s++) expect(['taxi', 'taxi2', 'police']).not.toContain(eraCar('sports', s));
+    for (let s = 0; s < 50; s++) expect(['taxi', 'taxi2', 'police', 'van', 'boxtruck', 'keitruck']).not.toContain(eraCar('sports', s));
+    // Not one of the 1980s and 1990s designs is left.
+    for (const t of ['sedan', 'luxury', 'sports', 'hatch', 'rotary', 'awd', 'roadster', 'minivan', 'taxi2']) expect(seen).not.toContain(t);
   });
 });
