@@ -69,6 +69,11 @@ export interface Building3 {
   readonly w: number;
   readonly d: number;
   readonly h: number;
+  /**
+   * The height it has in 1992, where another year has it lower (district/era.ts): its look is chosen from that, so it's
+   * the same building, shorter.
+   */
+  readonly was?: number;
   /** Which face fronts the street. */
   readonly front: Side;
   /** A corner lot's corner cut at the junction (sumikiri): which footprint corner, and the cut's leg in metres. */
@@ -892,8 +897,10 @@ function fillBlock(block: Rect, f: Fill): void {
       const lotFront: Side = x === r.x && end - x - w > 0.5 ? 'west' : end - x - w <= 0.5 && x > r.x ? 'east' : front;
       x += w;
       if (end - x > style.lotW[0] + 2 && rnd.chance(style.lotGap)) x += 1.5; // service alley
-      // (As the era allows: era.ts. The dice are rolled the same in every year.)
-      const height = eraHeight(pickFloors(style, rnd) * FLOOR_H, lot.x, lot.y);
+      // (As the era allows: era.ts. The dice are rolled the same in every year, and what follows from the height (the cut
+      // corner here, the look in real/buildings.ts) from the height it has in 1992.)
+      const planned = pickFloors(style, rnd) * FLOOR_H;
+      const height = eraHeight(planned, lot.x, lot.y);
       const rear = between(rnd, style.rear) * (rows.length === 2 ? 1 : 0.5);
       const setback = rnd.chance(0.5) ? between(rnd, style.setback) : 0;
       const cutSize = rnd.chance(0.45) ? 1.8 + rnd.float() * 0.8 : 0;
@@ -922,8 +929,8 @@ function fillBlock(block: Rect, f: Fill): void {
       else x1 -= fs;
       // A corner lot's corner at the junction is often cut (sumikiri), on low and mid-rise buildings.
       const corner: Corner | null = lotFront === 'west' ? (front === 'north' ? 'nw' : 'sw') : lotFront === 'east' ? (front === 'north' ? 'ne' : 'se') : null;
-      const cut = corner && cutSize > 0 && height <= 45 && Math.min(x1 - x0, z1 - z0) >= 6 ? { cut: { corner, size: cutSize } } : {};
-      const b: Building3 = { id: idBase + buildings.length, x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, h: height, front: lotFront, ...cut, ...(zone ? { zone } : {}) };
+      const cut = corner && cutSize > 0 && planned <= 45 && Math.min(x1 - x0, z1 - z0) >= 6 ? { cut: { corner, size: cutSize } } : {};
+      const b: Building3 = { id: idBase + buildings.length, x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, h: height, ...(height < planned ? { was: planned } : {}), front: lotFront, ...cut, ...(zone ? { zone } : {}) };
       const sign = rnd.chance(style.signChance) ? makeSign(b, style, rnd) : null;
       buildings.push(withSign(b, sign));
       if (sign) signs.push(sign);

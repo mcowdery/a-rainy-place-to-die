@@ -4,7 +4,7 @@ import { EMIT, KIND, lin, scale3, type MeshBuilder } from './meshBuilder';
 import { filipino } from '../district/cityConfig';
 import * as manila from './manilaBuilding';
 import { HUES, hueOfColor, pickTrade, shopFlags, TRADE, TRADES } from './shops';
-import { eraTrade } from '../district/era';
+import { era, eraTrade } from '../district/era';
 
 /**
  * Realistic building styles and geometry. Everything is a pure function of the building (its id seeds
@@ -98,24 +98,33 @@ function weighted<T>(rnd: Rng, list: readonly (readonly [number, T])[]): T {
   return list[0][1];
 }
 
-const cache = new Map<number, RealStyle>();
+// (One a year: the same building is another style in another year, district/era.ts; a page builds one year.)
+const caches = new Map<string, Map<number, RealStyle>>();
 
 export function styleFor(b: Building3): RealStyle {
+  let cache = caches.get(era().id);
+  if (!cache) caches.set(era().id, (cache = new Map()));
   let s = cache.get(b.id);
   if (s) return s;
   const rnd = rng(hash(b.id, 0x5719e));
   const stamp = b.hue !== undefined;
   const look = b.zone?.look;
-  // A zone's window mix applies below tower height (towers keep curtain walls and ribbons).
-  const type = stamp
+  // A zone's window mix applies below tower height (towers keep curtain walls and ribbons). In another year, chosen by the
+  // height it has in 1992 (`was`), so a building the year has lower is the same building, shorter (district/era.ts).
+  const tall = b.was ?? b.h;
+  const window0 = stamp
     ? WIN.small
-    : look?.windows && b.h < 45
+    : look?.windows && tall < 45
       ? weighted(rnd, look.windows)
-      : b.h >= 45
+      : tall >= 45
       ? weighted(rnd, [[45, WIN.curtain], [30, WIN.ribbon], [25, WIN.punched]])
-      : b.h >= 15
+      : tall >= 15
         ? weighted(rnd, [[40, WIN.punched], [20, WIN.balcony], [25, WIN.ribbon], [5, WIN.curtain], [10, WIN.small]])
         : weighted(rnd, [[45, WIN.punched], [25, WIN.small], [15, WIN.ribbon], [15, WIN.balcony]]);
+  // (And no glass curtain wall at or under the old height limit then: only the tall ones built since have one; the rest
+  // have the period's ribbon windows.)
+  const cap = era().cap;
+  const type = window0 === WIN.curtain && cap !== null && b.h <= cap ? WIN.ribbon : window0;
   let [, hexes, tiled] = weighted(rnd, PALETTES.map((p) => [p[0], p] as const));
   let wallHex = rnd.pick(hexes);
   if (look?.walls) {

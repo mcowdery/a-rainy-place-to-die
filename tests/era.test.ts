@@ -3,6 +3,7 @@ import { CITY_CARS, pickCar } from '../src/poc3d/district/carMix';
 import { loadDistrictContent } from '../src/poc3d/district/content';
 import { era, eraCar, eraFromUrl, eraGlass, eraHeight, ERAS, eraSign, eraSignWords, eraTrade, setEra } from '../src/poc3d/district/era';
 import { FRAME, TRADE, TRADES, tradeOfWord } from '../src/poc3d/real/shops';
+import { styleFor, WIN } from '../src/poc3d/real/buildings';
 import { DistrictModel } from '../src/poc3d/district/model';
 import { DISTRICTS3, type CellPlan3 } from '../src/poc3d/district/plan';
 
@@ -103,10 +104,10 @@ describe('The city in another year', () => {
     let changed = 0;
     now.cells.forEach((a, i) => {
       const b = then.cells[i];
-      // Every sign stands where one stands in 1992 (within 3 m: a corner lot's side sign moves along the face with the
-      // building's height), the same way up and colour: only the words differ; a tower not up yet takes its sign with it.
+      // Every sign stands where one stands in 1992, the same way up and colour (a vertical one lower on a lower building):
+      // only the words differ; a tower not up yet takes its sign with it.
       for (const s of b.signs) {
-        const was = a.signs.find((o) => Math.hypot(o.x - s.x, o.z - s.z) < 3 && o.vertical === s.vertical && o.color === s.color);
+        const was = a.signs.find((o) => o.x === s.x && o.z === s.z && o.vertical === s.vertical && o.color === s.color);
         expect(was).toBeDefined();
         expect([s.vertical, s.color]).toEqual([was!.vertical, was!.color]);
         for (const w of banned) expect(s.text.toUpperCase()).not.toContain(w);
@@ -138,6 +139,34 @@ describe('The city in another year', () => {
     setEra('1964');
     expect(eraTrade(TRADE.arcade)).toBe(TRADE.pachinko);
     expect(eraSign('GAME CENTER')).toBe('PACHINKO');
+  });
+
+  it('keeps the look of a building the year has lower, with no glass curtain wall under the old limit', () => {
+    const now = plans();
+    setEra('1977');
+    const then = plans();
+    const cap = ERAS['1977'].cap!;
+    let lowered = 0;
+    now.cells.forEach((a, i) => {
+      const before = new Map(a.buildings.map((x) => [`${x.x},${x.z}`, x]));
+      for (const x of then.cells[i].buildings) {
+        const was = before.get(`${x.x},${x.z}`)!;
+        // A lower building knows its 1992 height, and its corner is cut as in 1992.
+        if (x.h < was.h) {
+          lowered++;
+          expect(x.was).toBe(was.h);
+        } else expect(x.was).toBeUndefined();
+        expect(x.cut).toEqual(was.cut);
+        const s = styleFor(x);
+        if (x.h <= cap) expect(s.type).not.toBe(WIN.curtain);
+        // Its walls are its 1992 walls unless it was glass.
+        setEra('1992');
+        const s0 = styleFor(was);
+        setEra('1977');
+        if (s0.type !== WIN.curtain) expect(s.type).toBe(s0.type);
+      }
+    });
+    expect(lowered).toBeGreaterThan(50);
   });
 
   it('has only the cars the year had', () => {

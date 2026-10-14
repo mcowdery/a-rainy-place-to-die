@@ -6,6 +6,7 @@ import { WINDOW_ATLAS, windowsAt, type WindowWeather } from './windowScenes';
 import { WIPER_GLSL } from '../models/wipers';
 import { CAR_RAIN_GLSL, WALL_RAIN_GLSL } from './carRainGlsl';
 import { WATER_ALPHA, WATER_GLSL } from './waterGlsl';
+import { era } from '../district/era';
 import grassUrl from '../../../assets/textures/grass.webp?url';
 
 /** Cars whose headlights light the city (the nearest to the camera). */
@@ -278,6 +279,9 @@ const swayVertex = /* glsl */ `
   }
   #endif
 `;
+
+/** Shopfronts as another year had them (district/era.ts): no lightbox fascias, dimmer lit panels. */
+const OLD_FRONTS = era().id !== '1992';
 
 const common = /* glsl */ `
   uniform float uTime;
@@ -983,7 +987,9 @@ const surface = /* glsl */ `
         // The fascia: the brand's stripes in a lightbox (convenience stores, drugstores), a lit panel in the shop's
         // colour (electronics, games), dark wood (the old shops and counters), the shop's colour painted (cafés,
         // boutiques), stone (lobbies, banks), or plain dark.
-        if (tr == ${TRADE.konbini} || tr == ${TRADE.drugstore}) {
+        // (In another year of the city, district/era.ts, which this text is built in: no chain-store lightbox, a painted
+        // fascia in its stead, and the lit panels at about half strength.)
+        if (${OLD_FRONTS ? 'false' : 'true'} && (tr == ${TRADE.konbini} || tr == ${TRADE.drugstore})) {
           float fy = (v - fasc) / (GF - fasc);
           albedo = fy > 0.18 && fy < 0.34 ? hue : fy > 0.34 && fy < 0.42 ? mix(hue, vec3(1.0), 0.55) : vec3(0.92);
           sEmit = albedo * (0.12 + 0.7 * uLamps);
@@ -991,12 +997,12 @@ const surface = /* glsl */ `
         } else if (tr == ${TRADE.electronics} || tr == ${TRADE.arcade} || tr == ${TRADE.pachinko} || tr == ${TRADE.karaoke} || tr == ${TRADE.hobby} || tr == ${TRADE.maid}) {
           bool rim = v < fasc + 0.05 || v > GF - 0.05;
           albedo = rim ? vec3(0.08) : hue * 0.7;
-          if (!rim) sEmit = hue * (0.08 + 0.9 * uLamps);
+          if (!rim) sEmit = hue * (0.08 + 0.9 * uLamps) * ${OLD_FRONTS ? '0.5' : '1.0'};
           sRough = 0.3;
         } else if (woodF || tr == ${TRADE.snack}) {
           albedo = woodC * (0.85 + 0.3 * step(0.5, fract(v / 0.19))) * (0.9 + 0.2 * vnoise(vec2(u * 3.0, v * 40.0)));
           sRough = 0.7;
-        } else if (tr == ${TRADE.cafe} || tr == ${TRADE.bakery} || tr == ${TRADE.florist} || tr == ${TRADE.salon} || tr == ${TRADE.books} || tr == ${TRADE.fashion}) {
+        } else if (tr == ${TRADE.cafe} || tr == ${TRADE.bakery} || tr == ${TRADE.florist} || tr == ${TRADE.salon} || tr == ${TRADE.books} || tr == ${TRADE.fashion} || tr == ${TRADE.konbini} || tr == ${TRADE.drugstore}) {
           albedo = mix(hue, wallCol, 0.45) * 0.55;
           sRough = 0.5;
         } else if (tallFront || tr == ${TRADE.lobby} || tr == ${TRADE.bank}) {
