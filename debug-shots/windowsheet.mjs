@@ -1,6 +1,6 @@
 // The rooms behind the windows, for review (real/windowScenes.ts, windowAtlas.ts): a contact sheet of every scene by
 // kind, each with its two frames, its cell number, id and what it is; and how long the whole atlas takes to paint.
-//   node debug-shots/windowsheet.mjs [out dir] [kinds: home,office,... or all] [vite mode: demo | uncensored]
+//   node debug-shots/windowsheet.mjs [out dir] [kinds: home,office,... or all] [vite mode: demo | uncensored]   (CITYPOP_ERA=1977 for another year)
 // (No city: the scenes are painted on their own in a blank page, so it takes seconds.)
 import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
@@ -15,7 +15,8 @@ const browser = await launchBrowser({ channel: 'msedge', headless: true, args: [
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404|favicon/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); });
-await page.goto(`${server.resolvedUrls.local[0]}debug-shots/blank.html`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+// (`CITYPOP_ERA=1977`: the rooms as another year of the city has them, district/era.ts.)
+await page.goto(`${server.resolvedUrls.local[0]}debug-shots/blank.html${process.env.CITYPOP_ERA ? `?era=${process.env.CITYPOP_ERA}` : ''}`, { waitUntil: 'domcontentloaded' }).catch(() => {});
 // (`ground`: the shady shops' rooms at street level.)
 const GROUND = ['g_cabaret', 'g_hostess', 'g_host', 'g_cards', 'g_loan', 'g_lobby', 'g_slumped', 'g_exchange'];
 const groups = [['home', 'home_tv'], ['office'], ['hotel'], ['den'], ['v_home'], ['v_office'], ['v_hotel', 'v_love'], ['v_den'], GROUND].filter((g) => !want || g.some((c) => want.includes(c)) || (g === GROUND && want.includes('ground')));

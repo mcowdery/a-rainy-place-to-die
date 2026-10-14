@@ -2,6 +2,7 @@ import { edition } from '@edition';
 import { isBare, OUTFITS, type Outfit } from '../district/peopleMix';
 import type { Body, Hair } from './mobRig';
 import { TRADE, TRADE_COUNT } from './shops';
+import { era } from '../district/era';
 
 /**
  * The rooms behind the windows: what goes on behind the upper floors' glass, as data. This module is pure (no DOM):
@@ -462,6 +463,9 @@ const bottle = (p: Pen, x: number, y: number, k = 1): void => {
 };
 
 /** Furniture, each drawn about x (the scene's metres), standing on the floor unless it says otherwise. */
+/** Whether the rooms are another year's (district/era.ts): set before the atlas is painted, as the page loads. */
+const oldYear = (): boolean => era().id !== '1992';
+
 export const ITEMS = {
   // Against the back wall.
   shelf: (p: Pen, x: number, w = 1, h = 1.8) => {
@@ -504,6 +508,15 @@ export const ITEMS = {
     p.rect(x - 0.56, 1.95, 1.12, 0.05);
   },
   tv: (p: Pen, x: number) => {
+    // (In another year of the city, district/era.ts: a deep cabinet set on short legs with rabbit-ear aerials.)
+    if (oldYear()) {
+      p.rect(x - 0.32, 0, 0.04, 0.26);
+      p.rect(x + 0.28, 0, 0.04, 0.26);
+      p.rr(x - 0.38, 0.24, 0.76, 0.56, 0.07);
+      p.line(x - 0.02, 0.8, x - 0.2, 1.12, 0.012);
+      p.line(x + 0.02, 0.8, x + 0.22, 1.1, 0.012);
+      return;
+    }
     p.rect(x - 0.55, 0, 1.1, 0.42);
     p.rect(x - 0.06, 0.42, 0.12, 0.08);
     p.rr(x - 0.5, 0.5, 1.0, 0.6, 0.03);
@@ -577,6 +590,13 @@ export const ITEMS = {
     p.rect(x - w / 2, 0, w, 0.74);
   },
   monitor: (p: Pen, x: number, y = 0.735) => {
+    // (In another year: no computer on the desk, a typewriter with a sheet in it.)
+    if (oldYear()) {
+      p.rr(x - 0.2, y, 0.4, 0.09, 0.02);
+      p.rr(x - 0.24, y + 0.09, 0.48, 0.045, 0.02);
+      p.rect(x - 0.1, y + 0.12, 0.2, 0.2);
+      return;
+    }
     p.rect(x - 0.1, y, 0.2, 0.02);
     p.rect(x - 0.025, y, 0.05, 0.1);
     p.rr(x - 0.24, y + 0.09, 0.48, 0.32, 0.02);
