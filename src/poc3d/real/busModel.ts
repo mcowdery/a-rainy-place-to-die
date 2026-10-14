@@ -6,6 +6,7 @@ import type { BusLine } from '../district/traffic';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
 import { wallRects, type CarMaterials } from './trainCar';
 import { passengerMesh } from './people';
+import { era } from '../district/era';
 
 let busCount = 0;
 
@@ -38,6 +39,17 @@ export interface Bus2 {
 }
 
 const CREAM = 0xf2efe6;
+/**
+ * In another year of the city (district/era.ts) the bus is of the 1970s outside: two-tone, cream over the line's colour
+ * (a little muted), no dark window band, smaller windows in cream pillars, a split windscreen, paired lamps and a
+ * chrome bumper, a white roller-blind destination, no air-conditioning on the roof. (Inside it's still the low-floor
+ * bus: the interiors wait, the user 2026-10-14.)
+ */
+const OLD_BUS = (): boolean => era().id !== '1992';
+const mute = (hex: number): number => {
+  const c = (sh: number): number => Math.round(((hex >> sh) & 255) * 0.62 + 0x48 * 0.38 * 0.8);
+  return (c(16) << 16) | (c(8) << 8) | c(0);
+};
 const BLACK = 0x121316;
 const LINING = 0xe9e7e0;
 const POLE = 0xe8a41c;
@@ -67,8 +79,10 @@ class BusScreens {
     if (key === this.key) return;
     this.key = key;
     const g = this.canvas.getContext('2d')!;
-    // The destination board (LED, amber on black): the line's mark, its name, and the English under it.
-    g.fillStyle = '#050505';
+    // The destination board (LED, amber on black; a roller blind, black on white, in an older year): the line's mark,
+    // its name, and the English under it.
+    const blind = OLD_BUS();
+    g.fillStyle = blind ? '#ecebe4' : '#050505';
     g.fillRect(0, 0, 512, 256);
     g.fillStyle = `#${this.color.toString(16).padStart(6, '0')}`;
     g.fillRect(14, 40, 120, 120);
@@ -77,7 +91,7 @@ class BusScreens {
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(this.line.name.slice(0, 2), 74, 100, 110);
-    g.fillStyle = '#ffb848';
+    g.fillStyle = blind ? '#141414' : '#ffb848';
     g.font = "bold 76px 'Yu Gothic', 'Meiryo', sans-serif";
     g.textAlign = 'left';
     g.fillText(this.line.name, 150, 92, 350);
@@ -116,7 +130,11 @@ class BusScreens {
 /** Builds a bus for a line (each bus its own: the doors and screens are per bus). */
 export function buildBus2(line: BusLine, mats: CarMaterials): Bus2 {
   const { H, W, INNER, FLOOR, REAR, SILL, HEAD, CEIL, TOP, FRONT_DOOR, MID_DOOR, DASH_Z, BACK_Z } = BUS;
-  const color = busColor(line);
+  const old = OLD_BUS();
+  const color = old ? mute(busColor(line)) : busColor(line);
+  // (Smaller side windows in an older year.)
+  const wSill = old ? SILL + 0.12 : SILL;
+  const wHead = old ? HEAD - 0.08 : HEAD;
   const mb = new MeshBuilder(1 << 14);
   const ib = new MeshBuilder(1 << 14);
   const gb = new MeshBuilder(1024);
@@ -169,18 +187,24 @@ export function buildBus2(line: BusLine, mats: CarMaterials): Bus2 {
   for (const s of [-1, 1] as const) {
     const ws = s > 0 ? wins : winsRight;
     const doorHoles: [number, number, number, number][] = s > 0 ? [FRONT_DOOR, MID_DOOR].map(([a, b]) => [a, b, 0.2, HEAD + 0.05]) : [];
-    const holes = [...doorHoles, ...ws.map(([a, b]) => [a, b, SILL, HEAD] as [number, number, number, number]), ...arches];
+    const holes = [...doorHoles, ...ws.map(([a, b]) => [a, b, wSill, wHead] as [number, number, number, number]), ...arches];
     for (const [za, zb, ya, yb] of wallRects(-H, H, 0.22, TOP - 0.1, holes)) box(CREAM, ...sx(s, W - 0.012, W), ya, yb, za, zb, KIND.gloss);
     for (const [za, zb, ya, yb] of wallRects(BACK_Z, DASH_Z, 0.3, CEIL, holes)) inner(LINING, ...sx(s, INNER, INNER + 0.012), ya, yb, za, zb, mb);
-    // The dark band round the windows (the pillars between them dark too), the line's colour low and a stripe.
-    for (const [za, zb, ya, yb] of wallRects(-H, H, SILL - 0.05, HEAD + 0.08, [...doorHoles, ...ws.map(([a, b]) => [a, b, SILL, HEAD] as [number, number, number, number])]))
-      box(BLACK, ...sx(s, W, W + 0.004), ya, yb, za, zb, KIND.gloss);
-    for (const [za, zb, ya, yb] of wallRects(-H, H, 0.24, 0.62, [...doorHoles, ...arches])) box(color, ...sx(s, W, W + 0.005), ya, yb, za, zb, KIND.gloss);
-    for (const [za, zb, ya, yb] of wallRects(-H, H, SILL - 0.2, SILL - 0.13, doorHoles)) box(color, ...sx(s, W, W + 0.005), ya, yb, za, zb, KIND.gloss);
+    if (old) {
+      // Two-tone: the line's colour from the skirt to under the windows, a cream line along its top.
+      for (const [za, zb, ya, yb] of wallRects(-H, H, 0.24, wSill - 0.12, [...doorHoles, ...arches])) box(color, ...sx(s, W, W + 0.005), ya, yb, za, zb, KIND.gloss);
+      for (const [za, zb, ya, yb] of wallRects(-H, H, wSill - 0.1, wSill - 0.06, doorHoles)) box(0xb8bcc0, ...sx(s, W, W + 0.006), ya, yb, za, zb, KIND.gloss);
+    } else {
+      // The dark band round the windows (the pillars between them dark too), the line's colour low and a stripe.
+      for (const [za, zb, ya, yb] of wallRects(-H, H, SILL - 0.05, HEAD + 0.08, [...doorHoles, ...ws.map(([a, b]) => [a, b, SILL, HEAD] as [number, number, number, number])]))
+        box(BLACK, ...sx(s, W, W + 0.004), ya, yb, za, zb, KIND.gloss);
+      for (const [za, zb, ya, yb] of wallRects(-H, H, 0.24, 0.62, [...doorHoles, ...arches])) box(color, ...sx(s, W, W + 0.005), ya, yb, za, zb, KIND.gloss);
+      for (const [za, zb, ya, yb] of wallRects(-H, H, SILL - 0.2, SILL - 0.13, doorHoles)) box(color, ...sx(s, W, W + 0.005), ya, yb, za, zb, KIND.gloss);
+    }
     for (const [a, b] of ws) {
-      gb.quad([s * (W - 0.006), SILL, s > 0 ? b : a], [0, 0, s > 0 ? a - b : b - a], [0, HEAD - SILL, 0]);
+      gb.quad([s * (W - 0.006), wSill, s > 0 ? b : a], [0, 0, s > 0 ? a - b : b - a], [0, wHead - wSill, 0]);
       // Reveals inside.
-      inner(0x3a3e44, ...sx(s, INNER, W), SILL - 0.02, SILL, a, b, mb);
+      inner(0x3a3e44, ...sx(s, INNER, W), wSill - 0.02, wSill, a, b, mb);
     }
     // The arches: dark wells.
     for (const [a, b] of arches.map(([a, b]) => [a, b])) box(0x0a0a0b, ...sx(s, W - 0.3, W - 0.01), 0.2, BUS.WHEEL_R + 0.45, a, b);
@@ -192,11 +216,23 @@ export function buildBus2(line: BusLine, mats: CarMaterials): Bus2 {
   // ---- Front: the windscreen (big, raked a little), the destination board over it, lamps, bumper, wipers.
   const F = H;
   box(CREAM, -W, W, 0.22, 1.02, F - 0.05, F, KIND.gloss);
-  box(color, -W, W, 0.62, 0.92, F, F + 0.006, KIND.gloss);
-  box(BLACK, -W, W, 0.22, 0.5, F, F + 0.08);
-  for (const s of [-1, 1]) {
-    glow([1.6, 1.55, 1.35], ...sx(s, 0.82, 1.12), 0.56, 0.72, F + 0.006, F + 0.014, mb, EMIT.lamp);
-    glow([0.3, 0.12, 0.02], ...sx(s, 1.12, 1.2), 0.56, 0.72, F + 0.006, F + 0.014);
+  if (old) {
+    // The lower front in the line's colour, a chrome bumper, two round-ish lamps a side, the windscreen split down the middle.
+    box(color, -W, W, 0.5, 1.0, F, F + 0.006, KIND.gloss);
+    box(0xb8bcc0, -W, W, 0.24, 0.42, F, F + 0.09, KIND.gloss);
+    for (const s of [-1, 1]) {
+      glow([1.6, 1.55, 1.35], ...sx(s, 0.86, 1.0), 0.6, 0.74, F + 0.006, F + 0.014, mb, EMIT.lamp);
+      glow([1.6, 1.55, 1.35], ...sx(s, 1.04, 1.18), 0.6, 0.74, F + 0.006, F + 0.014, mb, EMIT.lamp);
+      glow([0.3, 0.12, 0.02], ...sx(s, 1.04, 1.18), 0.48, 0.56, F + 0.006, F + 0.014);
+    }
+    box(0x2a2c30, -0.035, 0.035, 1.02, 2.44, F - 0.1, F - 0.02);
+  } else {
+    box(color, -W, W, 0.62, 0.92, F, F + 0.006, KIND.gloss);
+    box(BLACK, -W, W, 0.22, 0.5, F, F + 0.08);
+    for (const s of [-1, 1]) {
+      glow([1.6, 1.55, 1.35], ...sx(s, 0.82, 1.12), 0.56, 0.72, F + 0.006, F + 0.014, mb, EMIT.lamp);
+      glow([0.3, 0.12, 0.02], ...sx(s, 1.12, 1.2), 0.56, 0.72, F + 0.006, F + 0.014);
+    }
   }
   gb.quad([-W + 0.06, 1.02, F - 0.02], [2 * (W - 0.06), 0, 0], [0, 1.42, -0.12]);
   // The corner pillars either side of the windscreen.
@@ -209,7 +245,7 @@ export function buildBus2(line: BusLine, mats: CarMaterials): Bus2 {
   const B = -H;
   const backHoles: [number, number, number, number][] = [[-0.95, 0.95, 1.55, 2.3]];
   for (const [xa, xb, ya, yb] of wallRects(-W, W, 0.22, TOP, backHoles)) box(CREAM, xa, xb, ya, yb, B, B + 0.05, KIND.gloss);
-  box(color, -W, W, 0.24, 0.62, B - 0.006, B, KIND.gloss);
+  box(color, -W, W, 0.24, old ? 1.0 : 0.62, B - 0.006, B, KIND.gloss);
   box(BLACK, -0.95, 0.95, 1.55, 2.3, B + 0.02, B + 0.03);
   gb.quad([0.95, 1.55, B - 0.002], [-1.9, 0, 0], [0, 0.75, 0]);
   box(0x3a3c40, -0.8, 0.8, 0.7, 1.35, B - 0.01, B);
@@ -219,8 +255,9 @@ export function buildBus2(line: BusLine, mats: CarMaterials): Bus2 {
     glow([0.25, 0.1, 0.0], ...sx(s, 1.0, 1.22), 1.36, 1.5, B - 0.012, B - 0.006);
   }
   screen([0.6, 2.36, B - 0.008], [-1.2, 0, 0], 0.18, quadUv(0, 0.5, 1, 1));
-  // ---- Roof: the AC unit.
-  box(0xd4d6d8, -0.95, 0.95, TOP, TOP + 0.26, -3.4, 0.4);
+  // ---- Roof: the AC unit (none in an older year: roof vents instead).
+  if (old) for (const z of [-3.0, -0.6, 1.8]) box(0xc4c6c8, -0.3, 0.3, TOP, TOP + 0.08, z - 0.3, z + 0.3);
+  else box(0xd4d6d8, -0.95, 0.95, TOP, TOP + 0.26, -3.4, 0.4);
 
   // ---- Inside: floors (the step up), the ceiling and its lights, the driver, the fare box, seats, poles, straps.
   inner(0x4a4c50, -INNER, INNER, FLOOR - 0.01, FLOOR, BUS.STEP_Z[0], DASH_Z, mb);
