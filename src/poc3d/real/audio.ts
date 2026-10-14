@@ -873,6 +873,136 @@ export class CityAudio {
     }
   }
 
+  /**
+   * A payphone's earpiece (district/payphone.ts): Japan's call tones are one 400 Hz tone in three patterns, steady
+   * for the dial tone, a second on and two off with a 16 Hz flutter for ringing, half a second on and off for
+   * engaged. Thin and quiet, as through a small speaker held to the ear. null: silence. **Unheard**: written from
+   * the standard, never listened to.
+   */
+  private phoneLine: { stop: () => void } | null = null;
+  phoneTone(kind: 'dial' | 'ring' | 'busy' | null): void {
+    this.phoneLine?.stop();
+    this.phoneLine = null;
+    if (!this.ctx || !kind) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.03;
+    const o = ctx.createOscillator();
+    o.frequency.value = 400;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    const out = this.earpiece();
+    o.connect(g).connect(out);
+    const level = 0.06;
+    let flutter: OscillatorNode | null = null;
+    if (kind === 'dial') g.gain.linearRampToValueAtTime(level, t + 0.02);
+    else {
+      const [on, off] = kind === 'ring' ? [1, 2] : [0.5, 0.5];
+      for (let k = 0; k < 60; k++) {
+        const a = t + k * (on + off);
+        g.gain.setValueAtTime(0, a);
+        g.gain.linearRampToValueAtTime(level, a + 0.012);
+        g.gain.setValueAtTime(level, a + on - 0.012);
+        g.gain.linearRampToValueAtTime(0, a + on);
+      }
+      if (kind === 'ring') {
+        // The ringing tone's flutter: the 400 Hz tone's level wobbling at 16 Hz.
+        flutter = ctx.createOscillator();
+        flutter.frequency.value = 16;
+        const depth = ctx.createGain();
+        depth.gain.value = 0.5;
+        const am = ctx.createGain();
+        am.gain.value = 0.5;
+        flutter.connect(depth).connect(am.gain);
+        o.disconnect();
+        o.connect(am).connect(g);
+        flutter.start(t);
+      }
+    }
+    o.start(t);
+    this.phoneLine = {
+      stop: () => {
+        const e = ctx.currentTime;
+        g.gain.cancelScheduledValues(e);
+        g.gain.setValueAtTime(g.gain.value, e);
+        g.gain.linearRampToValueAtTime(0, e + 0.02);
+        o.stop(e + 0.05);
+        flutter?.stop(e + 0.05);
+      },
+    };
+  }
+
+  /** A key's tone as the earpiece plays it back (the standard pair for each key: a row's tone and a column's). */
+  phoneKey(key: string): void {
+    if (!this.ctx) return;
+    const i = '123456789*0#'.indexOf(key);
+    if (i < 0) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.01;
+    const out = this.earpiece();
+    for (const f of [[697, 770, 852, 941][Math.floor(i / 3)], [1209, 1336, 1477][i % 3]]) {
+      const o = ctx.createOscillator();
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.045, t + 0.008);
+      g.gain.setValueAtTime(0.045, t + 0.1);
+      g.gain.linearRampToValueAtTime(0, t + 0.115);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + 0.13);
+    }
+  }
+
+  /** A dial running back: `n` clicks, ten a second (a rotary phone sends a digit as that many breaks in the line). */
+  phonePulses(n: number): void {
+    if (!this.ctx) return;
+    for (let k = 0; k < n; k++) this.phoneClick(this.ctx.currentTime + 0.02 + k * 0.1, 0.05, 1800);
+  }
+
+  /** The hook going up or down, and a coin dropping into the box. */
+  phoneHook(): void {
+    if (this.ctx) this.phoneClick(this.ctx.currentTime + 0.01, 0.1, 900);
+  }
+
+  phoneCoin(): void {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime + 0.01;
+    this.phoneClick(t, 0.09, 2600);
+    this.phoneClick(t + 0.11, 0.12, 700);
+  }
+
+  /** A short click: a burst of noise through a narrow band. */
+  private phoneClick(t: number, level: number, f: number): void {
+    const ctx = this.ctx!;
+    const len = Math.floor(ctx.sampleRate * 0.03);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 2;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = f;
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.value = level;
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t);
+  }
+
+  /** A telephone's earpiece: the voice band only (300 to 3,400 Hz). */
+  private earpiece(): AudioNode {
+    const ctx = this.ctx!;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 300;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 3400;
+    hp.connect(lp).connect(this.master);
+    return hp;
+  }
+
   /** Thunder for a strike `distance` metres away; pan -1 (left) to 1 (right) from where the listener looks. */
   thunder(distance: number, panTo: number): void {
     if (!this.ctx) return;
@@ -1424,10 +1554,11 @@ export class CityAudio {
       if (this.tropical) this.geckoCall(hig);
       else this.higurashiCall(hig);
     }
-    // Manila's street (a tropical city only: `manila` is absent in Tōto).
+    // Manila's street (a tropical city only: `manila` is absent in Tokyo).
     if (f.manila) this.updateManila(f, f.manila, r, set);
     // Train rumble.
-    set(this.trainGain.gain, f.train ? 0.5 + 0.15 * Math.sin(t * 9.5) : 0, 0.2);
+    // (Constant and low: the cars run on magnets, no joints to pulse, only a steady hush.)
+    set(this.trainGain.gain, f.train ? 0.14 : 0, 0.4);
     set(this.passGain.gain, f.train ? 0 : (f.trainPass ?? 0) * 0.22, 0.6);
     // The siren is a point source at the car: the listener's place and facing go to the panner, which pans it and
     // lets it fall off with distance; the air takes its top off far away, and Doppler bends it past (not when you're

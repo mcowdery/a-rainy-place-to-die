@@ -35,6 +35,8 @@ export interface Interior {
   carry?(x: number, z: number, level: number): [number, number] | null;
   /** Moving parts (a door swinging, water drifting, doors that open as you come), stepped each frame while the interior is drawn (you're inside, or it shows from the street); `cam` is the camera's position. */
   tick?(dt: number, cam: THREE.Vector3): void;
+  /** Called while the interior is hidden: let go of anything it lends the scene (the lamps' light on a body). */
+  off?(): void;
 }
 
 type R4 = readonly [number, number, number, number];

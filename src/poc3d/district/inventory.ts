@@ -3,7 +3,7 @@
  * panel are `inventoryHud.ts`, what each item does in the city is main.ts). A slot holds one item or nothing; a
  * number key takes the item in that slot in hand, the same key again puts it away. One item is in hand at a time.
  */
-export type ItemId = 'umbrella' | 'flashlight';
+export type ItemId = 'umbrella' | 'flashlight' | 'pistol';
 
 export interface ItemDef {
   readonly id: ItemId;
@@ -15,12 +15,13 @@ export interface ItemDef {
 export const ITEMS: Readonly<Record<ItemId, ItemDef>> = {
   umbrella: { id: 'umbrella', name: 'Umbrella', jp: '傘', blurb: 'Holds the rain off you. Useless indoors.' },
   flashlight: { id: 'flashlight', name: 'Flashlight', jp: '懐中電灯', blurb: 'A beam where you look. For alleys, tunnels and the small hours.' },
+  pistol: { id: 'pistol', name: 'Type 54', jp: '黒星', blurb: 'The black-market pistol. Eight rounds. Right button aims, left fires, R reloads.' },
 };
 
 export const SLOTS = 9;
 
 /** What he starts with, in slot order (a key's number is its slot + 1). */
-export const STARTING: readonly ItemId[] = ['umbrella', 'flashlight'];
+export const STARTING: readonly ItemId[] = ['umbrella', 'flashlight', 'pistol'];
 
 export class Inventory {
   readonly slots: (ItemId | null)[] = Array.from({ length: SLOTS }, () => null);

@@ -11,6 +11,9 @@ const ICONS: Record<ItemId, string> = {
   // A torch: head, body and a beam.
   flashlight:
     '<svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><g transform="rotate(-45 16 18)"><path d="M12 8h8l-1.5 5h-5z"/><rect x="13" y="13" width="6" height="16" rx="1.5"/></g><path d="M22 5l2.5-2.5M26 10l3.5-1M19 3l.5-2.5" opacity=".6"/></svg>',
+  // A pistol in side view: slide, grip and trigger guard.
+  pistol:
+    '<svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h25v6H15l-2 2H11l-1 8H5l1-10H3z"/><path d="M11 17h4"/></svg>',
 };
 
 export class InventoryHud {

@@ -80,6 +80,7 @@ import { RadioHud } from './radioHud';
 import { SavePanel } from './saveApp';
 import { readSave, SAVE_VERSION, SLOTS, writeSave, type SaveGame, type Slot } from '../../save/save';
 import { installSnap } from '../../debug/snap';
+import { Trace } from '../../debug/trace';
 import { installPerfLog } from '../../debug/perfLog';
 import { NearObstacle } from './nearProbe';
 import { fare, rideMetres, TaxiPicker } from './taxi';
@@ -137,9 +138,9 @@ import { SKY_AZ, SKY_EL, SkyModel, type SkyStats } from '../real/skyModel';
 import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
 import { cityFromUrl, setTreeSet } from './cityConfig';
-import { deadAt } from './peopleHours';
 import { era, eraFromUrl, eraSignWords, setEra } from './era';
 import { EraCard } from './eraCard';
+import { deadAt } from './peopleHours';
 import { setWorkLiveries } from '../models/vehicles';
 import { money, setCurrency } from '../../money';
 import { signTexts } from './model';
@@ -216,9 +217,9 @@ const HEAT_GROUND = new THREE.Color(0x9a7a52);
 const CITY = cityFromUrl();
 configureSky(CITY.daylight, CITY.sunYaw);
 setTreeSet(CITY.id);
-setSceneCity(CITY.filipino);
 // The year the city is built in (`?era=1977`; era.ts): set before any content is loaded or planned.
 setEra(eraFromUrl());
+setSceneCity(CITY.filipino);
 setWorkLiveries(CITY.tropical);
 setCurrency(CITY.currency);
 setSkinTone(CITY.skin);
@@ -948,7 +949,8 @@ async function run(): Promise<void> {
   controls.floorAt = district.floorAt;
   // The expressway's deck is a floor you can walk on once you're up on it (getting out of your car up there); its
   // edge is a wall (the parapet), a point not on the deck but at its height and beside it.
-  district.deckFloor = (x, z, current) => (current - groundAt(x, z) > 0.6 ?(expressway.at(x, z, current)?.height ?? null) : null);
+  // (Up on it: over the ground, or in the headland's tunnel where the land is over the deck, as at the start.)
+  district.deckFloor = (x, z, current) => (current - groundAt(x, z) > 0.6 || current > 5 ? (expressway.at(x, z, current)?.height ?? null) : null);
   district.deckOpen = (x, z, floorAbs) => expressway.pushBack(x, z, floorAbs) === null;
   // Mack's body under the camera (models/firstPerson.ts): his arms, legs and boots when you look down, his
   // shadow on the street. Hands free; X draws the shotgun (the right button raises it, the left fires: shots
@@ -1161,12 +1163,22 @@ async function run(): Promise<void> {
       changing = false;
     }
   };
+  // Ctrl is a squat key here (as C), and Ctrl+W, which is forward with Ctrl held, closes the tab before the page can stop
+  // it: while the mouse is captured and Ctrl is down, closing the tab asks first (it was lost that way twice; a plain
+  // F5 isn't asked about).
+  let ctrlHeld = false;
+  window.addEventListener('keydown', (e) => void (ctrlHeld = e.ctrlKey));
+  window.addEventListener('keyup', (e) => void (ctrlHeld = e.ctrlKey));
+  window.addEventListener('blur', () => (ctrlHeld = false));
+  window.addEventListener('beforeunload', (ev) => {
+    if (ctrlHeld && controls.look.isLocked) ev.preventDefault();
+  });
   // The right button raises the shotgun while it's out.
   document.addEventListener('mousedown', (e) => {
     if (e.button === 2 && mack?.armed && controls.look.isLocked && !seated) mack.aiming = true;
-    else if (e.button === 2 && mack && !mack.armed && controls.look.isLocked && !seated && !inVn) lookHeld = true;
+    else if (e.button === 2 && mack && !mack.armed && controls.look.isLocked && (!seated || carObserve()) && !inVn) lookHeld = true;
     // Looking (no gun out): the left button does what the hand is over.
-    if (e.button === 0 && lookHeld && mack && !mack.armed && controls.look.isLocked && !inVn && !seated) investigator.use();
+    if (e.button === 0 && lookHeld && mack && !mack.armed && controls.look.isLocked && !inVn && (!seated || carObserve())) investigator.use();
     // The left fires it (on foot or on a bike; from your car's seat it's district/carGun.ts').
     if (e.button === 0 && mack?.armed && mack.object.visible && controls.look.isLocked && !inVn && !seated) {
       gunfire.resume();
@@ -1498,10 +1510,15 @@ async function run(): Promise<void> {
   /** Hands free for an item: on foot, not in a scene, no gun out. */
   let pistolOut = false; // drawn from its slot (not by a fight starting)
   const handsFree = (): boolean => !driving.car && !rider.active && !taxiRide && !aboard() && !inVn && (!mack?.armed || pistolOut);
+  /** At the wheel of your car: the pistol is the one item he can have in hand (carGun.ts); everything else waits. */
+  const atWheel = (): boolean => !!seated && !inVn && !taxiRide;
+  const canHold = (id: ItemId | null): boolean => handsFree() || (id === 'pistol' && atWheel());
+  /** At the wheel with the pistol away: the right button observes, as on foot. */
+  const carObserve = (): boolean => atWheel() && inventory.heldItem !== 'pistol';
   const pressSlot = (slot: number): void => {
     const id: ItemId | null = inventory.slots[slot];
     if (!id) return;
-    if (!handsFree()) {
+    if (!canHold(id)) {
       toast(mack?.armed ? 'Put the gun away first' : 'Not now', 2);
       return;
     }
@@ -1512,7 +1529,7 @@ async function run(): Promise<void> {
   };
   /** Each frame: puts the item away when the hands aren't free, tells his right hand what to hold, aims the flashlight. */
   const tickInventory = (dt: number): void => {
-    if (inventory.heldItem && !handsFree()) {
+    if (inventory.heldItem && !canHold(inventory.heldItem)) {
       inventory.stow();
       inventoryHud.render();
     }
@@ -1520,7 +1537,7 @@ async function run(): Promise<void> {
     const item = inventory.heldItem;
     // The pistol is drawn and put away with its slot's key (the gun itself is the rig's: `armed`).
     if (mack) {
-      if (item === 'pistol' && !mack.armed) {
+      if (item === 'pistol' && !mack.armed && !seated) {
         mack.setKind('pistol');
         mack.armed = true;
         pistolOut = true;
@@ -2904,7 +2921,7 @@ async function run(): Promise<void> {
   if (debug) (window as unknown as { __race: unknown }).__race = { start: (id: string) => startRace(content.races.find((r) => r.id === id)!), state: () => race && { phase: race.st.phase, t: race.st.t, you: race.you, rival: race.rival.s, result: race.st.result } };
   // Car chases (district/chase.ts, cityChase.ts): for trying the pistol from the car. A runner to stop, or cars of
   // gunmen after you; the debug menu's World tab offers them (`__chase.start(id)`).
-  const carGun = new CarGun({ camera, gunfire, driving, own: ownCar, crosshair, seated: () => seated, rig: () => mack, live: () => controls.look.isLocked && !inVn && !debugMenu.open && !travel.open });
+  const carGun = new CarGun({ camera, gunfire, driving, own: ownCar, crosshair, seated: () => seated, rig: () => mack, live: () => controls.look.isLocked && !inVn && !debugMenu.open && !travel.open, equipped: () => inventory.heldItem === 'pistol' });
   const chaseHost: ChaseHost = {
     scene,
     material: city,
@@ -3106,7 +3123,8 @@ async function run(): Promise<void> {
     // Up on the expressway's deck you step out onto it (a ramp, still climbing, is no place to).
     const carY = driving.own ? ownNow().sim.y : 0;
     // (Not "3 m up": where the land is high the deck stands only a metre over it, as at the start.)
-    const onDeck = !!driving.own && carY - groundAt(driving.car!.x, driving.car!.z) > 0.6 && expressway.at(driving.car!.x, driving.car!.z, carY) !== null;
+    // (Or over 5 m up: in the headland's tunnel the land is higher than the deck, and stepping out at street level dropped you to the street below.)
+    const onDeck = !!driving.own && (carY - groundAt(driving.car!.x, driving.car!.z) > 0.6 || carY > 5) && expressway.at(driving.car!.x, driving.car!.z, carY) !== null;
     if (driving.own && ownNow().aloft() && !onDeck) return toast('Not on the ramp: drive up onto the deck, or down to the street.');
     const spot = driving.exitSpot((x, z) => (onDeck ? !district.blocked(x, z, 0.4, carY, true) : !district.blocked(x, z, 0.4, 0) && !traffic.blocked(x, z, 0.4)) && !npcBlocked(x, z, 0.4));
     if (!spot) return toast('No room to get out here.');
@@ -3151,6 +3169,7 @@ async function run(): Promise<void> {
   if (exitRoad || startRoad) enterCar(ownCar.vehicle);
   if (me?.driving && !exitRoad && !startRoad) enterCar(ownCar.vehicle);
   if (debug) (window as unknown as { __own: OwnCar; __ex: Expressway }).__own = ownCar;
+  if (debug) (window as unknown as { __driving: Driving }).__driving = driving;
   // ?debug=1: window.__turn(deg) turns the view on foot by so much (third person: the camera comes round him).
   if (debug) (window as unknown as { __turn: (deg: number) => void }).__turn = (deg) => controls.setView(lookYaw() + deg, 0);
   if (debug) (window as unknown as { __mirrors: unknown }).__mirrors = { rear: rearMirror, mode: (v: 'off' | 'cockpit' | 'all') => (mood.mirror = v) };
@@ -3862,6 +3881,8 @@ async function run(): Promise<void> {
   /** How much of your own engine comes through what's on his ears. */
   const EAR_DUCK = { none: 1, worn: 0.7, nc: 0.25 } as const;
   if (debug) (window as unknown as { __music: MusicPlayer }).__music = music;
+  // F8: a trace of a few seconds of the car and the camera, a row a frame (debug/trace.ts, saved to debug-shots/).
+  const trace = new Trace('district');
   // F9: a snapshot and a note for reporting an issue (debug/snap.ts, saved to debug-shots/).
   const shot = installSnap(renderer.domElement, 'district', () => ({
     camera: [camera.position.x, camera.position.y, camera.position.z].map((v) => Math.round(v * 10) / 10),
@@ -4356,7 +4377,7 @@ async function run(): Promise<void> {
       mood.mirror = mood.mirror === 'all' ? 'cockpit' : 'all';
       toast(mood.mirror === 'all' ? 'Rear-view mirror on' : 'Rear-view mirror off (the cab keeps its own)');
     }
-    if (e.code === 'KeyC' && mack && !driving.car && !inVn && mack.object.visible && !controls.fly && !inventory.heldItem) {
+    if ((e.code === 'KeyC' || (e.code === 'ControlLeft' && !e.repeat)) && mack && !driving.car && !inVn && mack.object.visible && !controls.fly && !inventory.heldItem) {
       mack.squatting = !mack.squatting;
       // (Stood up by hand, he isn't back down by himself the moment after.)
       mackIdle = mack.squatting ? 0 : -60;
@@ -4541,6 +4562,8 @@ async function run(): Promise<void> {
     performance.mark('boot:late-warm', { detail: { programs: renderer.info.programs?.length ?? 0 } });
     // (Last, and only now: the test scripts wait for this text to know the whole boot has run, and the boot awaits along the way.)
     $('overlay').textContent = 'click to walk';
+    $('overlay').style.color = 'transparent'; // not shown, but the scripts wait for the text
+    $('overlay').style.textShadow = 'none';
   }
 
   // The city is built: the start screen says so, and the game waits for Start (if it's up) before it runs a frame.
@@ -4553,12 +4576,17 @@ async function run(): Promise<void> {
   });
   await start.done;
   start.begin(); // the title music (it ran through the loading screen) fades away
+  // The date card of an older year (eraCard.ts), once, as the memory begins: `?eracard=0` turns it off.
+  const eraCard = new EraCard();
+  if (era().id !== '1992' && params.get('eracard') !== '0') window.setTimeout(() => eraCard.show(), 900);
+  if (debug) (window as unknown as { __eraCard: unknown }).__eraCard = eraCard;
   $('loadbar').hidden = true;
   document.getElementById('loadbg')?.remove();
 
   // On foot, the right button with a gun out is the car gun's aim: the view narrows (first person) and the world slows
   // while the focus lasts (5 s, refilling over 6 s with the gun down, as in the car: district/carGun.ts; G is the inventory's here, so no toggle).
   const FOOT_SLOW = 0.7;
+  let camAim = 0;
   const footFocus = { slow: 0, focus: 1, on: false, auto: true, zoom: 0, fov: camera.fov };
   const footVeil = document.createElement('div');
   Object.assign(footVeil.style, { position: 'fixed', inset: '0', zIndex: '15', display: 'none', pointerEvents: 'none', opacity: '0', background: 'radial-gradient(ellipse at center, rgba(120,150,255,0) 50%, rgba(40,60,140,0.55) 100%)' });
@@ -4576,10 +4604,6 @@ async function run(): Promise<void> {
     }
     if (mack.shotsFired > kickedShots) {
       crosshair.fired();
-  // The date card of an older year (eraCard.ts), once, as the memory begins: `?eracard=0` turns it off.
-  const eraCard = new EraCard();
-  if (era().id !== '1992' && params.get('eracard') !== '0') window.setTimeout(() => eraCard.show(), 900);
-  if (debug) (window as unknown as { __eraCard: unknown }).__eraCard = eraCard;
       const q = new URLSearchParams(location.search);
       const deg = Number(q.get('recoil') ?? 1.5) * (mack.oneHand ? 1.4 : 1);
       const rad = (deg * Math.PI) / 180;
@@ -4652,7 +4676,25 @@ async function run(): Promise<void> {
     for (const b of cityBikes) b.own.pose(inVn ? 0 : dt);
     // The camera, now the car's posed (the cockpit and bonnet views ride in its frame).
     driving.lamps = cityU.uLamps.value;
+    driving.setObserve(!!seated && !inVn && lookHeld && carObserve());
     if (!inVn) driving.placeCamera(dt);
+    // F8: a trace of the next 300 frames (debug/trace.ts), for a fault in how the car or the camera moves.
+    trace.frame(
+      () => {
+        const o = ownCar.view.obj;
+        const s = ownCar.sim;
+        const d = camera.getWorldDirection(lookDir);
+        const T = driving.traceInfo;
+        return {
+          realDt, dt, fov: camera.fov, view: driving.view, lookYaw: driving.look.yaw, lookPitch: driving.look.pitch,
+          cx: camera.position.x, cy: camera.position.y, cz: camera.position.z, cyaw: Math.atan2(d.x, d.z), cpitch: Math.asin(d.y),
+          ox: o.position.x, oy: o.position.y, oz: o.position.z, orx: o.rotation.x, ory: o.rotation.y, orz: o.rotation.z,
+          sx: s.x, sy: s.y, sz: s.z, sh: s.h, su: s.u, sw: s.w, sr: s.r, sax: s.ax, say: s.ay, steer: s.steer,
+          ...T,
+        };
+      },
+      (file) => toast(`Trace saved: ${file}`, 4),
+    );
     if (taxiRide && !inVn) rideTaxi(dt);
     else meterEl.style.display = 'none';
     // Walked away from the taxi you hailed: it gives up after a while and drives on.
@@ -4740,10 +4782,10 @@ async function run(): Promise<void> {
       if (driving.own === ownCar && !seated) seat();
       // At the wheel: seen in the cockpit view (his head folded away), his hands turning the wheel; and from any
       // view while his pistol's out of a window (district/carGun.ts: the right button aims from his eyes, the left fires).
-      const cockpit = driving.view === 'cockpit' || !!driving.aim;
+      const cockpit = driving.view === 'cockpit' || !!driving.aim || driving.observing;
       const inCar = !!seated && !inVn;
       const atWheel = inCar && (cockpit || carGun.shown || ownCar.siren.busy);
-      carGun.update(inVn ? 0 : dt, realDt, cockpit, outside(driving.view) && !driving.aim, driving.pedals);
+      carGun.update(inVn ? 0 : dt, realDt, cockpit, outside(driving.view) && !driving.aim && !driving.observing, driving.pedals);
       mack.object.visible = shown || riding || atWheel;
       thirdNow = shown && thirdPerson;
       controls.gaitBob = shown ? bodyBob : null;
@@ -4775,18 +4817,20 @@ async function run(): Promise<void> {
         gunfire.setSlow(F.slow);
         footVeil.style.display = F.slow > 0.01 ? 'block' : 'none';
         footVeil.style.opacity = (F.slow * 0.9).toFixed(3);
-        F.zoom += ((up && !thirdPerson ? 1 : 0) - F.zoom) * Math.min(1, realDt * 9);
+        F.zoom += ((up ? 1 : 0) - F.zoom) * Math.min(1, realDt * 9);
         if (F.zoom < 0.002) F.zoom = 0;
         if (!seated && !riding) {
-          const f = F.fov * (1 - 0.28 * F.zoom);
+          // (Third person zooms too, a little less, over the shoulder.)
+          const f = F.fov * (1 - (thirdPerson ? 0.2 : 0.28) * F.zoom);
           if (Math.abs(camera.fov - f) > 0.01 && (F.zoom > 0 || camera.fov !== F.fov)) {
             camera.fov = f;
             camera.updateProjectionMatrix();
           }
         }
       }
-      lookRaised += ((lookHeld && shown && !mack.armed ? 1 : 0) - lookRaised) * Math.min(1, dt * 12);
-      const looking = lookHeld && shown && !mack.armed && !seated && controls.look.isLocked;
+      const observing = shown || carObserve();
+      lookRaised += ((lookHeld && observing && !mack.armed ? 1 : 0) - lookRaised) * Math.min(1, dt * 12);
+      const looking = lookHeld && observing && !mack.armed && (!seated || carObserve()) && controls.look.isLocked;
       const eye = camera.position;
       camera.getWorldDirection(lookDir);
       const seen = investigator.update(looking, eye, lookDir, dt, (to) => {
@@ -4795,9 +4839,9 @@ async function run(): Promise<void> {
         const met = gunfire.pick(eye, lookRay.normalize(), far);
         return !!met && met.distance < far - 1;
       });
-      if (!seated) {
+      if (!seated || carObserve()) {
         if (mack.armed) crosshair.update((shown || riding) && mack.armed, mack.aim, dt);
-        else crosshair.look(shown && (looking || lookRaised > 0.02), lookRaised, dt, seen.canUse ? seen.target!.interact!.label : (seen.target?.label ?? null), seen.progress, seen.canUse ? 'hand' : 'eye');
+        else crosshair.look(observing && (looking || lookRaised > 0.02), lookRaised, dt, seen.canUse ? seen.target!.interact!.label : (seen.target?.label ?? null), seen.progress, seen.canUse ? 'hand' : 'eye');
       }
       gunfire.dark = cityU.uHeadlights.value;
       Object.assign(engineTune, { voice: mood.engineVoice, level: (mood.volume / MOOD_DEFAULTS.volume) * mood.carSound, engine: mood.engineLevel, tone: mood.engineTone, pitch: mood.enginePitch, curve: mood.engineCurve, synth: mood.engineSynth, tyres: mood.tyreLevel, wind: mood.windNoise, whistle: mood.whistleLevel, traffic: mood.trafficEngines });
@@ -5243,7 +5287,9 @@ async function run(): Promise<void> {
       gl2.beginQuery(timer.TIME_ELAPSED_EXT, query);
     }
     if (thirdNow && mack) {
-      thirdCam.place(camera, footOffset(Math.max(mack.aim, lookRaised), thirdCam.zoom), dt, thirdClear);
+      // (The camera comes in for the right button only, not for a shot from the hip, which also raises the rig's `aim`.)
+      camAim += ((mack.armed && mack.aiming ? mack.aim : 0) - camAim) * Math.min(1, dt * 9);
+      thirdCam.place(camera, footOffset(Math.max(camAim, lookRaised), thirdCam.zoom), dt, thirdClear);
       // The gun aims at what's under the crosshair as this camera sees it (used from the next frame's pose).
       const eyes = thirdCam.eyes;
       if (mack.armed && mack.aim > 0.5 && eyes) {
@@ -5258,7 +5304,7 @@ async function run(): Promise<void> {
     // The rear-view mirror's picture, in the cockpit (without Mack; the sun's shadows as they are).
     const atWheel = driving.own === ownCar && !ownCar.bike && driving.interior === ownCar.interior;
     const inCabin = atWheel && !!driving.interior?.group.visible;
-    hudMirror.visible = atWheel && !inCabin && driving.view !== 'far' && !driving.aim && mood.mirror === 'all' && !inVn && driving.lookingBack < 0.3;
+    hudMirror.visible = atWheel && !inCabin && driving.view !== 'far' && !driving.aim && !driving.observing && mood.mirror === 'all' && !inVn && driving.lookingBack < 0.3;
     if (atWheel) driving.interior!.showMirror(mood.mirror === 'off' ? null : rearMirror.material);
     if (atWheel && mood.mirror !== 'off' && (inCabin || hudMirror.visible)) {
       const autoSun = sun.shadow.autoUpdate;

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { Inventory, SLOTS } from '../src/poc3d/district/inventory';
 
 describe('the inventory', () => {
-  it('starts with an umbrella in slot 1 and a flashlight in slot 2', () => {
+  it('starts with an umbrella in slot 1, a flashlight in slot 2 and the pistol in slot 3', () => {
     const inv = new Inventory();
-    expect(inv.slots.slice(0, 3)).toEqual(['umbrella', 'flashlight', null]);
+    expect(inv.slots.slice(0, 4)).toEqual(['umbrella', 'flashlight', 'pistol', null]);
     expect(inv.slots).toHaveLength(SLOTS);
     expect(inv.heldItem).toBeNull();
   });
