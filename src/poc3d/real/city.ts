@@ -10,7 +10,8 @@ import { era } from '../district/era';
 import grassUrl from '../../../assets/textures/grass.webp?url';
 
 /** Cars whose headlights light the city (the nearest to the camera). */
-export const CAR_LIGHTS = 16;
+import { CAR_LIGHTS, LAMP_LIGHTS_GLSL } from './lampLights';
+export { CAR_LIGHTS };
 /** Moving cars near the camera whose wipers clear their windscreens of rain and snow. */
 export const WIPERS = 8;
 /** Trees near the camera dropping petals or leaves (on the ground under them; weather.ts Drift has them falling). */
@@ -43,10 +44,12 @@ export interface CityUniforms extends ScreenUniforms {
   /** The cells in a brownout (district/brownout.ts): a bit field, 24 cells to a float; uOutMap is the map's columns, rows and cell size (columns 0: none). */
   uOut: { value: Float32Array };
   uOutMap: { value: THREE.Vector3 };
-  /** 1 in a Filipino city (CityConfig.filipino): none of Tōto's noren over its shopfronts. */
+  /** 1 in a Filipino city (CityConfig.filipino): none of Tokyo's noren over its shopfronts. */
   uFil: { value: number };
   uFlicker: { value: number };
   uWet: { value: number };
+  /** Standing water (0-1): puddles gather after the rain stops, while the ground is still wet, and shrink as it dries (district/main.ts). While it rains the whole ground is wet and there are none. */
+  uPuddle: { value: number };
   /** The season (district/seasons.ts): 0 spring, 1 summer, 2 autumn, 3 winter: tree crowns and lawns follow it. */
   uSeason: { value: number };
   /** Snow lying on what faces up (0 none, 1 covered). */
@@ -184,6 +187,7 @@ export function cityUniforms(): CityUniforms {
     uFil: { value: 0 },
     uFlicker: { value: 0 },
     uWet: { value: 0 },
+    uPuddle: { value: 0 },
     uSeason: { value: 0 },
     uSnow: { value: 0 },
     uDark: { value: 0 },
@@ -303,21 +307,13 @@ const common = /* glsl */ `
   }
   uniform float uFlicker;
   uniform float uWet;
+  uniform float uPuddle;
   uniform float uSeason;
   uniform float uSnow;
   uniform float uDark;
   uniform vec3 uSunDir;
   uniform vec3 uSunCol;
-  uniform vec4 uCars[${CAR_LIGHTS}];
-  uniform int uCarCount;
-  uniform float uHeadlights;
-  uniform vec4 uMyCar;
-  uniform vec4 uMyDir;
-  uniform vec4 uMyLamps;
-  uniform int uCarSkip;
-  uniform vec4 uBeacon;
-  uniform vec4 uTorch;
-  uniform vec3 uTorchDir;
+  ${LAMP_LIGHTS_GLSL}
   uniform vec4 uWipers[${WIPERS}];
   uniform vec4 uWiperGlass[${WIPERS}];
   uniform vec4 uWiperPivots[${WIPERS}];
@@ -330,102 +326,6 @@ const common = /* glsl */ `
   uniform float uLitterReach;
   ${screenLightGlsl}
 
-  // Headlights and tail lights of the cars near the camera, as light on the surfaces round them (no
-  // volumes): two beams ahead that spread and fade over ~35 m, low down; a short red glow behind.
-  vec3 carLights(vec3 wp, vec3 n, bool ground) {
-    vec3 acc = vec3(0.0);
-    for (int i = 0; i < ${CAR_LIGHTS}; i++) {
-      if (i >= uCarCount) break;
-      if (i == uCarSkip) continue;
-      vec4 c = uCars[i];
-      vec2 rel = wp.xz - c.xy;
-      if (dot(rel, rel) > 1600.0) continue;
-      vec2 d = c.zw;
-      vec2 sd = vec2(-d.y, d.x);
-      float along = dot(rel, d) - 2.2;
-      float side = dot(rel, sd);
-      // Facing: ground always; walls and people only on the side toward the car.
-      float face = ground ? 1.0 : clamp(dot(n.xz, -normalize(rel + d * 0.5)), 0.0, 1.0);
-      // Height: the beams sit low (0.7 m) and dip toward the road.
-      float hgt = exp(-max(wp.y - 0.4 - along * 0.02, 0.0) / 1.6);
-      if (along > 0.0) {
-        float beam = 0.0;
-        for (int k = -1; k <= 1; k += 2) {
-          float o = side - float(k) * 0.75;
-          float spread = 0.45 + along * 0.14;
-          beam += exp(-o * o / (spread * spread));
-        }
-        // Fades in off the bumper and out to nothing by 34 m (no edge where the list's reach ends).
-        float fall = smoothstep(0.0, 2.0, along) * smoothstep(34.0, 14.0, along) / (1.0 + along * along * 0.01);
-        acc += vec3(1.0, 0.9, 0.72) * beam * fall * hgt * face * 5.0;
-      } else if (along > -7.5) {
-        float back = -along - 2.4;
-        if (back > 0.0) acc += vec3(1.0, 0.05, 0.03) * exp(-side * side / 1.6) * exp(-back * 0.7) * hgt * face * 2.0;
-      }
-    }
-    return acc * uHeadlights;
-  }
-
-  // Your own car's lights: two beams well down the road (dipped: low and wide, to ~60 m; the main beam on to ~140 m
-  // and up the walls), a red glow behind it (more under braking) and a white one reversing. Heights are from the
-  // road's line through the car, so it works up on the expressway and on the hills, and the street a storey under a
-  // deck stays dark.
-  vec3 myLights(vec3 wp, vec3 n, bool ground) {
-    vec2 rel = wp.xz - uMyCar.xz;
-    if (dot(rel, rel) > 25600.0) return vec3(0.0);
-    vec2 d = uMyDir.xy;
-    float fwd = dot(rel, d);
-    float side = dot(rel, vec2(-d.y, d.x));
-    float h = wp.y - uMyCar.y - fwd * uMyDir.z;
-    float above = smoothstep(-4.0, -1.5, h);
-    // What lies flat is lit; walls only where they face the lamps.
-    float lies = ground ? 1.0 : smoothstep(0.5, 0.9, n.y);
-    vec3 acc = vec3(0.0);
-    float along = fwd - uMyCar.w;
-    if (along > 0.0) {
-      float face = mix(clamp(dot(n.xz, -normalize(rel - d * uMyCar.w)), 0.0, 1.0), 1.0, lies);
-      float spread = 0.7 + along * 0.2;
-      float beam = 0.0;
-      for (int k = -1; k <= 1; k += 2) {
-        float o = side - float(k) * uMyDir.w;
-        beam += exp(-o * o / (spread * spread));
-      }
-      // (The road just off the bumper is under the beams, not in them: they land a few metres on.)
-      float off = smoothstep(0.0, 7.0, along);
-      float dip = smoothstep(65.0, 25.0, along) / (1.0 + along * along * 0.004) * exp(-max(h - 0.7 - along * 0.012, 0.0) / 1.3);
-      float mainBeam = smoothstep(4.0, 30.0, along) * smoothstep(150.0, 60.0, along) / (1.0 + along * along * 0.0015) * exp(-max(h - 1.2 - along * 0.06, 0.0) / 3.0);
-      acc += vec3(1.0, 0.92, 0.76) * beam * off * face * (uMyLamps.x * dip * 6.0 + uMyLamps.y * mainBeam * 9.0);
-    }
-    float back = -fwd - uMyCar.w;
-    if (back > 0.0 && back < 16.0) {
-      float face = mix(clamp(dot(n.xz, -normalize(rel)), 0.0, 1.0), 1.0, lies);
-      float low = exp(-max(h - 0.5, 0.0) / 1.2) * face * smoothstep(0.0, 0.9, back);
-      acc += vec3(1.0, 0.05, 0.03) * exp(-side * side / 2.2) * exp(-back * 0.6) * low * 1.1 * uMyLamps.z;
-      acc += vec3(0.95, 0.95, 1.0) * exp(-side * side / 6.0) * exp(-back * 0.28) * low * 2.5 * uMyLamps.w;
-    }
-    return acc * above;
-  }
-  // The police beacon on the roof: a red wash on what's within ~26 m of it, brighter the nearer, on the ground and on
-  // the faces that look toward it (the lit half flashes; uBeacon.w is how bright now).
-  vec3 beaconLight(vec3 wp, vec3 n, bool ground) {
-    vec3 rel = wp - uBeacon.xyz;
-    float d2 = dot(rel, rel);
-    if (d2 > 700.0) return vec3(0.0);
-    float face = ground ? 1.0 : clamp(dot(n, -normalize(rel)), 0.0, 1.0);
-    return vec3(1.0, 0.04, 0.03) * uBeacon.w * face * 5.0 / (3.0 + d2 * 0.12) * smoothstep(700.0, 250.0, d2);
-  }
-  // Mack's flashlight: a warm cone (a bright core, a soft edge) out to ~28 m, on the ground and on the faces turned
-  // toward it; no light volume, as the headlights have none.
-  vec3 torchLight(vec3 wp, vec3 n) {
-    vec3 rel = wp - uTorch.xyz;
-    float d = length(rel);
-    if (d > 28.0 || d < 0.05) return vec3(0.0);
-    vec3 dir = rel / d;
-    float cone = smoothstep(0.90, 0.985, dot(dir, uTorchDir));
-    float face = clamp(dot(n, -dir) * 0.8 + 0.2, 0.0, 1.0);
-    float fall = smoothstep(28.0, 8.0, d) / (1.0 + d * d * 0.04);
-    return vec3(1.0, 0.93, 0.78) * uTorch.w * cone * face * fall * 6.0;
-  }
   uniform vec3 uZenith;
   uniform vec3 uHorizon;
   uniform vec3 uRoomAmbient;
@@ -1537,8 +1437,11 @@ const surface = /* glsl */ `
       // Puddles form once the ground is wet through (the same noise as ssr.ts, which reflects in them);
       // lawns soak most of it up.
       float pn = vnoise(p * 0.22) + 0.12 * vnoise(p * 1.9);
-      float puddle = smoothstep(0.62, 0.68, pn) * smoothstep(0.35, 0.9, uWet) * (kindF > 10.5 && kindF < 11.5 ? 0.25 : 1.0);
-      float wet = uWet * mix(0.6, 1.0, puddle);
+      // (Standing water gathers after the rain and shrinks as the ground dries: uPuddle. While it rains the
+      // whole ground is one wet sheet, and the rings on it are the reflection pass's, ssr.ts.)
+      float pedge = mix(0.8, 0.62, uPuddle);
+      float puddle = smoothstep(pedge, pedge + 0.06, pn) * smoothstep(0.0, 0.15, uPuddle) * (kindF > 10.5 && kindF < 11.5 ? 0.25 : 1.0);
+      float wet = uWet * mix(0.85, 1.0, puddle) * (kindF > 10.5 && kindF < 11.5 ? 0.7 : 1.0);
       albedo *= mix(1.0, 0.4, wet) * mix(1.0, 0.25, puddle);
       sRough = mix(mix(sRough, 0.14, wet), 0.02, puddle);
       // Reflections: the light pools further along the view direction, stretched toward the viewer
@@ -1547,7 +1450,7 @@ const surface = /* glsl */ `
       vec3 acc = vec3(0.0);
       for (int i = 1; i <= 5; i++) acc += lightAt(p + away * float(i) * 2.2) * (1.2 - float(i) * 0.18);
       float F = fresnel(clamp(-Vw.y, 0.0, 1.0));
-      sEmit += (acc * 0.09 * mix(0.4, 1.0, puddle) + uHorizon * 0.6) * mix(0.2, 1.0, F) * wet;
+      sEmit += (acc * 0.09 * mix(0.8, 1.0, puddle) + uHorizon * 0.6) * mix(0.45, 1.0, F) * wet;
     }
   }
   // Street light from the lightmap, sampled in front of the surface and fading with height.
@@ -1743,7 +1646,9 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
         // Never hand the post chain more than a bright highlight's worth of light (or a NaN).
         outgoingLight = clamp(outgoingLight, 0.0, 48.0);
         #include <opaque_fragment>
-        if (waterN.y > 0.0) gl_FragColor.a = ${WATER_ALPHA.toFixed(1)};`)
+        if (waterN.y > 0.0) gl_FragColor.a = ${WATER_ALPHA.toFixed(1)};
+        // Foliage marks itself for the reflection pass (ssr.ts): a crown's cut-out leaves have no surface to reflect in.
+        if (leafy > 0.5) gl_FragColor.a = 0.7;`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
         // Floor for the analytic (sun / moon) lights: a near-mirror GGX lobe on a point light peaks in the
         // tens of thousands, overflows the half-float target and blooms into a huge disc. Mirror-like
