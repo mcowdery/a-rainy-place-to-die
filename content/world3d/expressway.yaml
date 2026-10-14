@@ -24,7 +24,8 @@ routes:
 # a block in from the seawall, each two-way: a route each way, offset left of the line, decks side by side.
   - { id: r1_s, name: 1号線 南行, nameEn: ROUTE 1 SOUTH, loop: false, offset: 5.2, pts: [[24, 13], [24, 21]] }
   - { id: r1_n, name: 1号線 北行, nameEn: ROUTE 1 NORTH, loop: false, offset: 5.2, pts: [[24, 21], [24, 13]] }
-# (Its west end is the airport branch's junction at col 8, a link below: nothing runs on to col 7.)
+# (Their west end: past the airport branch's junction at col 8 to col 7, where the Kurokami tunnel bores into the hills
+# west of the city, as Yūnagi's at their east end: exits and entries below.)
   - { id: wangan_e, name: 湾岸線 東行, nameEn: WANGAN EAST, loop: false, offset: 5.2, pts: [[7, 21], [41, 21]] }
   - { id: wangan_w, name: 湾岸線 西行, nameEn: WANGAN WEST, loop: false, offset: 5.2, pts: [[41, 21], [7, 21]] }
 # The airport branch off the Wangan's west end, over the Hanejima bridge's upper deck. The deck ends at the bridge's
@@ -46,8 +47,8 @@ links:
   - { id: link_r1n_c1, from: r1_n, to: c1, radius: 60, cutFrom: true }
   - { id: link_r1s_we, from: r1_s, to: wangan_e, radius: 60, cutFrom: true }
   - { id: link_we_r1n, from: wangan_e, to: r1_n, radius: 60, cutTo: true }
-  - { id: link_ww_as, from: wangan_w, to: airport_s, radius: 60, cutFrom: true, cutTo: true }
-  - { id: link_an_we, from: airport_n, to: wangan_e, radius: 70.4, cutFrom: true, cutTo: true }
+  - { id: link_ww_as, from: wangan_w, to: airport_s, radius: 60, cutTo: true }
+  - { id: link_an_we, from: airport_n, to: wangan_e, radius: 70.4, cutFrom: true }
   - { id: link_ww_ss, from: wangan_w, to: shiomi_s, radius: 60, cutTo: true }
   - { id: link_sn_ww, from: shiomi_n, to: wangan_w, radius: 60, cutFrom: true }
 # The suspension bridge (a look: its decks are the routes above and, below, the street bridge in roads.yaml).
@@ -91,7 +92,9 @@ plazas:
 # Exits to the passes: at a route's point (a loop's corner, or an open route's end) the outside lane runs straight
 # on into a tunnel (a spur), signed to a venue. length: the spur's run to the portal.
 exits:
-  - { id: kurokami, venue: kurokami, route: c1, at: 0, length: 110, name: 黒神峠 KUROKAMI }
+# Kurokami: at the Wangan's west end, into the hills west of the city (it was a spur straight on from the loop's north-west
+# corner, a tunnel mouth standing on the deck among the buildings with no hill: the user, 2026-10-14).
+  - { id: kurokami, venue: kurokami, route: wangan_w, at: 1, length: 156, tube: 60, name: 黒神峠 KUROKAMI, hill: 70 }
 # Yūnagi: at the Wangan's east end, past the river mouth, into the headland (hill: its height in metres).
   - { id: yunagi, venue: yunagi, route: wangan_e, at: 1, length: 156, tube: 60, name: 夕凪峠 YŪNAGI, hill: 70 }
 # The way out of the Yūnagi tunnel, the other carriageway: it comes out of the hill at the exit spur's mouth (96 m past
@@ -99,3 +102,5 @@ exits:
 # westbound Wangan: where the game starts.
 entries:
   - { id: yunagi_out, venue: yunagi, route: wangan_w, length: 96, tube: 60, name: 夕凪峠 YŪNAGI }
+# And out of the Kurokami tunnel onto the eastbound Wangan, the same way.
+  - { id: kurokami_out, venue: kurokami, route: wangan_e, length: 96, tube: 60, name: 黒神峠 KUROKAMI }

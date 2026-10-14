@@ -32,7 +32,9 @@ zones:
       # How much of the city's vice shows behind its windows at night (real/windowScenes.ts).
       vice: 0.25
       windows: { ribbon: 35, punched: 30, blank: 20, curtain: 15 }
-      walls: ['#3a3a44', '#d8d8d0', '#8a8e94', '#2a2a30', '#c84a3a', '#e8e4d8', '#4a6a8a']
+      # (The red is a muted brick tile, '#86483a', as Akihabara's older buildings are faced: it was '#c84a3a', which the
+      # light made a pillar-box red on a seventh of the main street: the user, 2026-10-14.)
+      walls: ['#3a3a44', '#d8d8d0', '#8a8e94', '#2a2a30', '#86483a', '#e8e4d8', '#4a6a8a']
       tiled: false
       shops: { colourful: 6, cool: 2, warm: 1 }
       open: 1

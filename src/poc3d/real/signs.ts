@@ -520,19 +520,12 @@ function rooftopBillboard(mb: MeshBuilder, b: Building3, seen: Sightline): void 
   const base = top + 0.9;
   const s = Math.min(hgt / EM, (fwTop * 0.9) / textAdvance(word));
   const width = textAdvance(word) * s;
-  // Frame: two rails behind the letters and posts down to the roof, each post braced back to it, in galvanised steel (they
-  // were near-black and heavier, and read as bars behind the letters: the user, 2026-10-14).
+  // Frame: two rails behind the letters and posts down to the roof.
   mb.kind = KIND.plain;
-  mb.color = lin(0x7a7e82);
+  mb.color = lin(0x3a3c40);
   mb.style = [0, 0, 0, 0];
-  mb.frameBox(centre, f.r, f.n, -width / 2, width / 2, base - 0.2, base - 0.08, -0.33, -0.21);
-  mb.frameBox(centre, f.r, f.n, -width / 2, width / 2, base + EM * s * 0.55, base + EM * s * 0.55 + 0.1, -0.33, -0.21);
-  const postTop = base + EM * s * 0.6;
-  for (let u = -width / 2; u <= width / 2 + 0.01; u += Math.max(1.5, width / 4)) {
-    mb.frameBox(centre, f.r, f.n, u - 0.05, u + 0.05, top - 0.9, postTop, -0.32, -0.22);
-    // The brace: from high on the post back down to the roof, behind the sign.
-    const at = (back: number, y: number): C3 => [centre[0] + f.r[0] * u - f.n[0] * back, y, centre[2] + f.r[2] * u - f.n[2] * back];
-    mb.beam(at(0.27, postTop - 0.4), at(0.27 + Math.min(2.4, (postTop - top) * 0.7), top), 0.05);
-  }
+  mb.frameBox(centre, f.r, f.n, -width / 2, width / 2, base - 0.25, base - 0.05, -0.35, -0.15);
+  mb.frameBox(centre, f.r, f.n, -width / 2, width / 2, base + EM * s * 0.55, base + EM * s * 0.55 + 0.15, -0.35, -0.15);
+  for (let u = -width / 2; u <= width / 2 + 0.01; u += Math.max(1.5, width / 4)) mb.frameBox(centre, f.r, f.n, u - 0.07, u + 0.07, top - 0.9, base + EM * s * 0.6, -0.35, -0.2);
   channelLetters(mb, word, centre, f.r, f.n, base + (EM * s) / 2, EM * s, fwTop * 0.9, color, b.id, -0.1);
 }

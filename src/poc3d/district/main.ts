@@ -1400,7 +1400,7 @@ async function run(): Promise<void> {
   // is the old start on foot at Kaburo Crossing.
   const startRoad =
     CITY.id === 'toto' && !bench && !debug && !loaded && !spawnParam && !params.has('cam') && !params.has('from') && !params.has('vn') && !params.has('ride') && params.get('start') !== 'street'
-      ? expressway.roads.find((r) => r.out)
+      ? expressway.roads.find((r) => r.id === 'yunagi_out')
       : undefined;
   /** The start: this far in from the mouth, at this speed (m/s). */
   const START_IN = 25;
@@ -2133,13 +2133,13 @@ async function run(): Promise<void> {
   // are in the sky.
   // The headland the Yūnagi tunnel goes into (the park's mound; its woods are the park's trees).
   const parkHill = (() => {
-    const r = expressway.roads.find((q) => q.hill);
+    const r = expressway.roads.find((q) => q.id === 'yunagi');
     return r ? hillOf(r) : null;
   })();
   await breatheIfDue();
   const edges = buildEdges(content.macro, CELL, content.terrain, (mx, my) => district.model.has(mx, my) || onAirfield(mx, my), CITY.tropical, (x, z, r) => expressway.nearTunnel(x, z, r) || inPark(x, z, 40) || Math.hypot(x - (parkHill?.cx ?? -1e9), z - (parkHill?.cz ?? -1e9)) < 250 + r, (() => {
     // The view from the tunnel's mouth (where a new game starts) is kept pretty: no fringe houses, a blossom grove.
-    const way = expressway.roads.find((r) => r.out);
+    const way = expressway.roads.find((r) => r.id === 'yunagi_out');
     return way?.tube ? { x: way.x[way.tube], z: way.z[way.tube], radius: 380 } : undefined;
   })());
   scene.add(edges.group);
@@ -2423,7 +2423,8 @@ async function run(): Promise<void> {
   freeze(exView.group);
   const sodium = exView.group.getObjectByName('sodium') as THREE.Mesh | undefined;
   // The park between the river and the Yūnagi headland, which a new game looks out over (real/park.ts).
-  const yunagiHill = expressway.roads.find((r) => r.hill);
+  // (By name: the Kurokami tunnel has a hill of its own now, at the Wangan's west end.)
+  const yunagiHill = expressway.roads.find((r) => r.id === 'yunagi' && r.hill);
   const park = yunagiHill
     ? buildPark(
         {
@@ -2449,9 +2450,10 @@ async function run(): Promise<void> {
     // Its trees' trunks and lamp posts are solid; its headland is a hill you can't walk through (the lawn's ground is the
     // terrain's, not the mound's), as its ponds are water.
     district.extraColliders.push(...(park.userData.colliders as Rect[]));
-    const hill = yunagiHill ? hillOf(yunagiHill) : null;
-    if (hill) district.landBlocked = (x, z) => (hill.at(x, z) ?? -1e9) > groundAt(x, z) + 1.2;
   }
+  // Every tunnel's hill (the Yūnagi headland, Kurokami's west of the city) is a hill you can't walk through.
+  const tunnelHills = expressway.roads.filter((r) => r.hill && !r.out).map(hillOf).filter((h) => h !== null);
+  if (tunnelHills.length) district.landBlocked = (x, z) => tunnelHills.some((h) => (h.at(x, z) ?? -1e9) > groundAt(x, z) + 1.2);
   const parkPools = park?.getObjectByName('parkpools') as THREE.Mesh | undefined;
   const bay = nodeById.get('city_garage.bay');
   if (me?.profile) saveProfile(me.profile);

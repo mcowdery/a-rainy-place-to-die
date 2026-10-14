@@ -93,6 +93,11 @@ describe('the expressway', () => {
     const yunagi = ex.roads.find((r) => r.id === 'yunagi')!;
     expect(yunagi.x[0]).toBeGreaterThan(41 * 128 - 80);
     expect(yunagi.hill).toBeGreaterThan(0);
+    // The Kurokami tunnel at its west end, in the hills west of the city (it stood on the deck at the loop's north-west corner).
+    const kurokami = ex.roads.find((r) => r.id === 'kurokami')!;
+    expect(kurokami.x[kurokami.x.length - 1]).toBeLessThan(7 * 128 - 80);
+    expect(kurokami.hill).toBeGreaterThan(0);
+    expect(ex.roads.find((r) => r.id === 'kurokami_out')!.out).toBe(true);
     // Two-way routes: a deck each way, side by side, their piers shared on the line between them.
     const r1s = ex.roads.find((r) => r.id === 'r1_s')!;
     const r1n = ex.roads.find((r) => r.id === 'r1_n')!;
