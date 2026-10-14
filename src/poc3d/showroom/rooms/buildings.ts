@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { KIND, lin, MeshBuilder } from '../../real/meshBuilder';
 import { adMaterial, DistrictAdAtlas } from '../../real/adAtlas';
 import { buildMegaSign } from '../../real/megaSign';
+import { buildCinema70 } from '../../real/cinema70';
+import { era } from '../../district/era';
 import { addProps, type Prop } from '../../real/props';
 import { loadStatue } from '../../models/statues';
 import { loadPayphone, PAYPHONE_KEYS, PayphoneRig, type PayphoneKind } from '../../models/payphone';
@@ -85,11 +87,18 @@ startRoom({
       const plazaMesh = new THREE.Mesh(plaza.build()!, city);
       plazaMesh.receiveShadow = true;
       genRoot.new.add(plazaMesh);
-      const mega = buildMegaSign(cityU, city);
+      // (`?era=1977`: what stood on the corner before it, the 1970s cinema palace: a candidate, real/cinema70.ts.)
+      const old = era().id !== '1992';
+      const mega = old ? buildCinema70(city) : buildMegaSign(cityU, city);
       mega.group.position.copy(at);
       genRoot.new.add(mega.group);
       const head = mega.headAt.clone().add(at);
-      label('new', 'Kaburo mega-sign', at.x - 14, 38, at.z + 14);
+      label('new', old ? '歌舞路座 cinema (1970s candidate)' : 'Kaburo mega-sign', at.x - 14, old ? 24 : 38, at.z + 14);
+      if (old) {
+        genItems.new.push({ name: 'cinema (1970s)', group: 'Mega-sign', at: new THREE.Vector3(at.x - 4, 10, at.z + 4), size: 34, view: new THREE.Vector3(-1, 0.12, 1).normalize() });
+        genItems.new.push({ name: 'cinema: billboard', group: 'Mega-sign', at: new THREE.Vector3(at.x, 11, at.z + 10), size: 18, view: new THREE.Vector3(-0.2, 0.05, 1).normalize() });
+        genItems.new.push({ name: 'cinema: entrance', group: 'Mega-sign', at: new THREE.Vector3(at.x - 8, 3, at.z + 8), size: 12, view: new THREE.Vector3(-1, 0.15, 1).normalize() });
+      }
       genItems.new.push({ name: 'mega-sign', group: 'Mega-sign', at: new THREE.Vector3(at.x - 4, 28, at.z + 4), size: 48, view: new THREE.Vector3(-1, 0.12, 1).normalize() });
       genItems.new.push({ name: 'screens (close)', group: 'Mega-sign', at: new THREE.Vector3(at.x - 10, 20, at.z + 10), size: 16, view: new THREE.Vector3(-1, 0.05, 1).normalize() });
       genItems.new.push({ name: 'dragon', group: 'Mega-sign', at: new THREE.Vector3(at.x - 4, 40, at.z + 4), size: 40, view: new THREE.Vector3(-1, 0.05, -0.3).normalize() });

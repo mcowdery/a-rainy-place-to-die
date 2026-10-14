@@ -34,6 +34,12 @@ export interface CarLook {
   readonly mono?: boolean;
 }
 
+/** A colour darkened by k (0-1). */
+const shade = (hex: number, k: number): number => {
+  const c = (sh: number): number => Math.round(((hex >> sh) & 255) * k);
+  return (c(16) << 16) | (c(8) << 8) | c(0);
+};
+
 /**
  * A line's car look: stainless with its colour (elevated), or white aluminium (subway). In another year of the city
  * (district/era.ts) an elevated line's car is painted steel all over in the line's colour, as the 1960s and 70s commuter
@@ -47,8 +53,10 @@ export function carLook(lineColor: number, subway = false, mono = false): CarLoo
   };
   const mixc = mix;
   return {
-    body: painted ? lineColor : mono ? 0xc6cacc : subway ? 0xdfe2e4 : 0xb8bcc0,
-    band: mono ? mixc(lineColor, 0x80878c, 0.3) : lineColor,
+    // (Worn, as the monorail's first was, and then every car: the user, 2026-10-14. The bodies' dirtier tones, the line's
+    // colour faded toward grey.)
+    body: painted ? mixc(lineColor, 0x80878c, 0.2) : mono ? 0xc6cacc : subway ? 0xc9cdcf : 0xa9adb0,
+    band: mixc(lineColor, 0x80878c, 0.3),
     seat: mix(lineColor, 0x34405a, mono ? 0.7 : 0.55),
     priority: 0xb8506e,
     floor: subway || mono ? 0x8a8e94 : 0x8e877c,
@@ -209,12 +217,8 @@ function buildCar2(look: CarLook, ends: CarEnds, lamps: 'head' | 'tail' | null, 
     to.style = [0, 0, 0, 0];
   };
   const box = (hex: number, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, kind: number = KIND.plain): void => boxIn(mb, hex, kind, x0, x1, y0, y1, z0, z1);
-  /** Inside: lit by the car's own lights (self-lit, so it reads the same day and night). */
-  const dim = (hex: number): number => {
-    if (!look.mono) return hex;
-    const c = (sh: number): number => Math.round(((hex >> sh) & 255) * 0.66);
-    return (c(16) << 16) | (c(8) << 8) | c(0);
-  };
+  /** Inside: lit by the car's own lights (self-lit, so it reads the same day and night), dim (every car, as the monorail's). */
+  const dim = (hex: number): number => shade(hex, 0.66);
   const inner = (hex: number, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, to: MeshBuilder = ib): void =>
     boxIn(to, dim(hex), KIND.emit, x0, x1, y0, y1, z0, z1, EMIT.interior);
   const glow = (rgb: [number, number, number], x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, to: MeshBuilder = mb, channel: number = EMIT.always): void =>
@@ -287,9 +291,12 @@ function buildCar2(look: CarLook, ends: CarEnds, lamps: 'head' | 'tail' | null, 
     }
   }
 
-  // ---- A monorail car, worn: soot on the roof line, grime climbing from the skirts, streaks under the windows and
-  // from the door tracks, panel seams, a few rust blooms. (Plain boxes a hair proud of the skin, dark on a dirty white.)
-  if (look.mono) {
+  // ---- Every car worn (the monorail's first, then the rest the same way: the user, 2026-10-14): soot on the roof line,
+  // grime climbing from the foot (the monorail's skirts), streaks under the windows and from the door tracks, panel
+  // seams, a few rust blooms. Plain boxes a hair proud of the skin; the monorail's in its own greys on a dirty white,
+  // the others' darker shades of their own body (stainless, the subway's white, an older year's paint).
+  {
+    const dirt = (mono: number, k: number): number => (look.mono ? mono : shade(look.body, k));
     let seed = (ends.front === 'cab' ? 7 : ends.back === 'cab' ? 13 : 29) * 7919;
     const rnd = (): number => {
       seed = (seed * 1664525 + 1013904223) >>> 0;
@@ -300,16 +307,18 @@ function buildCar2(look: CarLook, ends: CarEnds, lamps: 'head' | 'tail' | null, 
     for (const s of [-1, 1] as const) {
       const o = (d: number): [number, number] => sx(s, W + 0.001, W + 0.001 + d);
       // The lower body, filthiest at the foot; the skirts' foot black with brake dust and rain.
-      for (const [za, zb, ya, yb] of wallRects(-H, H, 0.75, 1.02, doorHoles(s))) box(0x8d9295, ...o(0.002), ya, yb, za, zb, KIND.gloss);
-      for (const [za, zb, ya, yb] of wallRects(-H, H, 1.02, 1.3, doorHoles(s))) box(0xa4a9ab, ...o(0.002), ya, yb, za, zb, KIND.gloss);
-      box(0x4a4d50, ...sx(s, W - 0.019, W - 0.018 + 0.004), -1.05, -0.55, -H + 0.4, H - 0.4, KIND.gloss);
-      box(0x70757a, ...sx(s, W - 0.019, W - 0.018 + 0.004), -0.55, -0.25, -H + 0.4, H - 0.4, KIND.gloss);
+      for (const [za, zb, ya, yb] of wallRects(-H, H, 0.75, 1.02, doorHoles(s))) box(dirt(0x8d9295, 0.72), ...o(0.002), ya, yb, za, zb, KIND.gloss);
+      for (const [za, zb, ya, yb] of wallRects(-H, H, 1.02, 1.3, doorHoles(s))) box(dirt(0xa4a9ab, 0.84), ...o(0.002), ya, yb, za, zb, KIND.gloss);
+      if (look.mono) {
+        box(0x4a4d50, ...sx(s, W - 0.019, W - 0.018 + 0.004), -1.05, -0.55, -H + 0.4, H - 0.4, KIND.gloss);
+        box(0x70757a, ...sx(s, W - 0.019, W - 0.018 + 0.004), -0.55, -0.25, -H + 0.4, H - 0.4, KIND.gloss);
+      }
       // Soot along the roof line (the gutter) and over the windows.
-      for (const [za, zb, ya, yb] of wallRects(-H, H, TOP - 0.5, TOP - 0.19, doorHoles(s))) box(0xaaaeb1, ...o(0.002), ya, yb, za, zb, KIND.gloss);
+      for (const [za, zb, ya, yb] of wallRects(-H, H, TOP - 0.5, TOP - 0.19, doorHoles(s))) box(dirt(0xaaaeb1, 0.87), ...o(0.002), ya, yb, za, zb, KIND.gloss);
       // Panel seams: thin dark lines every few metres, and the rain streaks under each window and from the roof.
       for (let z = -H + 1.5; z < H - 1; z += 1.8 + rnd() * 1.2) {
         if (inDoor(z)) continue;
-        box(0x7d8285, ...o(0.003), 0.8, TOP - 0.2, z, z + 0.012, KIND.gloss);
+        box(dirt(0x7d8285, 0.64), ...o(0.003), 0.8, TOP - 0.2, z, z + 0.012, KIND.gloss);
       }
       for (const [a, b] of wins) {
         const n = 1 + Math.floor(rnd() * 3);
@@ -317,17 +326,18 @@ function buildCar2(look: CarLook, ends: CarEnds, lamps: 'head' | 'tail' | null, 
           const z = a + 0.1 + rnd() * (b - a - 0.2);
           if (inDoor(z)) continue;
           const len = 0.25 + rnd() * 0.75;
-          box(rnd() < 0.5 ? 0x9a9fa2 : 0x868b8e, ...o(0.003), SILL - 0.22 - len, SILL - 0.22, z, z + 0.03 + rnd() * 0.05, KIND.gloss);
+          box(rnd() < 0.5 ? dirt(0x9a9fa2, 0.79) : dirt(0x868b8e, 0.69), ...o(0.003), SILL - 0.22 - len, SILL - 0.22, z, z + 0.03 + rnd() * 0.05, KIND.gloss);
         }
       }
       for (const d of DOORS) for (const e of [-1, 1]) {
         const z = d + e * (DOOR_HALF + 0.05);
-        box(0x7f8487, ...o(0.003), 0.85, DOOR_TOP, z - 0.03, z + 0.03, KIND.gloss);
+        box(dirt(0x7f8487, 0.65), ...o(0.003), 0.85, DOOR_TOP, z - 0.03, z + 0.03, KIND.gloss);
       }
       // A few rust blooms where the skirts meet the floor and round the door sills.
       for (let k = 0; k < 7; k++) {
         const z = -H + 0.6 + rnd() * (H * 2 - 1.2);
-        const y = rnd() < 0.6 ? 0.55 + rnd() * 0.2 : -0.9 + rnd() * 0.3;
+        // (Round the sills; on the monorail its skirts' foot too.)
+        const y = rnd() < 0.6 || !look.mono ? (look.mono ? 0.55 : 0.78) + rnd() * 0.2 : -0.9 + rnd() * 0.3;
         box(0x7a5a45, ...sx(s, W - 0.018, W - 0.018 + 0.005), y, y + 0.08 + rnd() * 0.12, z, z + 0.1 + rnd() * 0.25, KIND.gloss);
       }
     }
@@ -336,10 +346,11 @@ function buildCar2(look: CarLook, ends: CarEnds, lamps: 'head' | 'tail' | null, 
   // ---- Roof: the roof itself, AC units, the pantograph.
   box(look.body, -W + 0.02, W - 0.02, TOP - 0.18, TOP - 0.06, -H, H, KIND.gloss);
   box(0x9aa0a6, -W + 0.15, W - 0.15, TOP - 0.06, TOP, -H, H);
-  if (look.mono) {
-    // Rounded-off shoulders: a sloped strip each side from the wall's top edge up to the roof, so the roof isn't a lid.
+  {
+    // Rounded-off shoulders (every car, as the monorail's): a sloped strip each side from the wall's top edge up to the
+    // roof, so the roof isn't a lid.
     mb.kind = KIND.gloss;
-    mb.color = lin(0xa9adb0);
+    mb.color = lin(look.mono ? 0xa9adb0 : shade(look.body, 0.9));
     for (const s of [-1, 1] as const) {
       const [p0, p1, p2, p3]: [number, number, number][] = [[s * W, TOP - 0.18, -H], [s * W, TOP - 0.18, H], [s * (W - 0.15), TOP, H], [s * (W - 0.15), TOP, -H]];
       if (s > 0) mb.poly4(p0, p3, p2, p1);
@@ -365,7 +376,7 @@ function buildCar2(look: CarLook, ends: CarEnds, lamps: 'head' | 'tail' | null, 
   // Lighter floor in the door vestibules.
   for (const d of DOORS) inner(0xa8a49c, -INNER, INNER, FLOOR + 0.002, FLOOR + 0.005, d - CAR.VESTIBULE + 0.1, d + CAR.VESTIBULE - 0.1);
   inner(0xf2f2ee, -INNER, INNER, CEIL, CEIL + 0.02, zLo, zHi, mb);
-  for (const s of [-1, 1]) glow(look.mono ? [1.0, 0.98, 0.9] : [1.7, 1.72, 1.68], ...sx(s, 0.48, 0.64), CEIL - 0.02, CEIL, zLo + 0.2, zHi - 0.2, ib);
+  for (const s of [-1, 1]) glow([1.0, 0.98, 0.9], ...sx(s, 0.48, 0.64), CEIL - 0.02, CEIL, zLo + 0.2, zHi - 0.2, ib);
   inner(0xdcdcd8, -0.3, 0.3, CEIL - 0.08, CEIL, zLo + 0.1, zHi - 0.1);
   for (let z = zLo + 0.6; z < zHi - 0.4; z += 0.9) inner(0x8a8c90, -0.22, 0.22, CEIL - 0.085, CEIL - 0.08, z, z + 0.4);
   const benches = carBenches(ends);
