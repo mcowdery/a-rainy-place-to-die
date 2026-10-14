@@ -889,8 +889,10 @@ function portal(mb: MeshBuilder, road: Road, mate?: Road): void {
   put(0x6a6a66, -tube, 0, hi, hi + 1.2, y - 1.2, y + 9);
   // An earth bank over the tube's roof, the hill's colour: a flat top just over the slab, sloping down at 1:1.5 to the land on
   // both sides and running back into the hill, so the tunnel reads as bored into it. Its front is a vertical face just behind the
-  // headwall's lintel, wings of earth at each side of it. (Each face is turned to the side its normal is on.)
-  {
+  // headwall's lintel, wings of earth at each side of it. (Each face is turned to the side its normal is on.) Only where there is a
+  // hill for it to belong to (`hillOf`: the headland's tunnels): the spurs that end in the city (黒神峠 KUROKAMI at the loop's
+  // north-west corner) had one too, a grass box floating over the deck among the buildings (the user's shot, 2026-10-14).
+  if (mound) {
     mb.kind = KIND.grass;
     mb.color = lin(0x4a6e36);
     const yTop = y + 9.6;

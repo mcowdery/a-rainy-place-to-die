@@ -220,8 +220,20 @@ export const NORTH_BUILDERS: Record<NorthKind, (k: Kit, id: string) => ((camera:
       k.box(0xf4f4f4, u - 0.06, u + 0.06, ct + 3.5, ct + 3.6, 0, 2.4);
       k.box(0xf4f4f4, u - 0.06, u + 0.06, ct - 3.6, ct + 3.6, 2.35, 2.45);
     }
-    k.box(0x6a6e72, fu1 - 14, fu1 - 13.8, ft1 - 14, ft1 - 2, 0, 7);
-    k.box(0x6a6e72, fu1 - 14, fu1 - 2, ft1 - 14, ft1 - 13.8, 0, 7);
+    // The backstop: steel posts and rails, a low kick panel, netting above it (below, with the fence's): it was two solid
+    // 7 m walls, which read as a wall standing on the field (the user's shot, 2026-10-14).
+    const bu = fu1 - 14;
+    const bt = ft1 - 14;
+    for (let d = 0; d <= 12.01; d += 3) {
+      k.box(0x6a6e72, bu - 0.07, bu + 0.07, bt + d - 0.07, bt + d + 0.07, 0, 7);
+      k.box(0x6a6e72, bu + d - 0.07, bu + d + 0.07, bt - 0.07, bt + 0.07, 0, 7);
+    }
+    for (const y of [6.9, 3.6]) {
+      k.box(0x6a6e72, bu - 0.05, bu + 0.05, bt, bt + 12, y, y + 0.1);
+      k.box(0x6a6e72, bu, bu + 12, bt - 0.05, bt + 0.05, y, y + 0.1);
+    }
+    k.box(0x5a5e62, bu - 0.03, bu + 0.03, bt, bt + 12, 0, 1.0);
+    k.box(0x5a5e62, bu, bu + 12, bt - 0.03, bt + 0.03, 0, 1.0);
     // The netted fence round the field (tall posts, the net a haze), open at the gate.
     const post = (u: number, t: number): void => k.box(0x7a8086, u - 0.1, u + 0.1, t - 0.1, t + 0.1, 0, 8);
     for (let u = fu0; u <= fu1; u += 6) {
@@ -248,6 +260,16 @@ export const NORTH_BUILDERS: Record<NorthKind, (k: Kit, id: string) => ((camera:
     netPlane(fu0, ft1, fu1, ft1);
     netPlane(fu0, ft0, fu0, ft1);
     netPlane(fu1, ft0, fu1, ft1);
+    // The backstop's netting, from its kick panel to its top rail.
+    for (const [u0, t0, u1, t1] of [[bu, bt, bu, bt + 12], [bu, bt, bu + 12, bt]]) {
+      const [ax, az] = toWorld(k.f, u0, t0);
+      const [bx, bz] = toWorld(k.f, u1, t1);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(Math.hypot(bx - ax, bz - az), 6), net);
+      m.position.set((ax + bx) / 2, 4, (az + bz) / 2);
+      m.rotation.y = Math.atan2(-(bz - az), bx - ax);
+      m.renderOrder = 3;
+      k.group.add(m);
+    }
     // Cherries along the front of the field's fence, as every Japanese school has them.
     for (const u of SCHOOL_CHERRIES) {
       const [x, z] = toWorld(k.f, u, SCHOOL_CHERRY_T);
