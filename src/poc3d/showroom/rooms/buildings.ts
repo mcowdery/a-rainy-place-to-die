@@ -3,6 +3,8 @@ import { KIND, lin, MeshBuilder } from '../../real/meshBuilder';
 import { adMaterial, DistrictAdAtlas } from '../../real/adAtlas';
 import { buildMegaSign } from '../../real/megaSign';
 import { buildCinema70 } from '../../real/cinema70';
+import { buildInn64, buildLiquor64, buildPachinko70 } from '../../real/eraLandmarks';
+import type { Building3 } from '../../district/plan';
 import { era } from '../../district/era';
 import { addProps, type Prop } from '../../real/props';
 import { loadStatue } from '../../models/statues';
@@ -98,6 +100,23 @@ startRoom({
         genItems.new.push({ name: 'cinema (1970s)', group: 'Mega-sign', at: new THREE.Vector3(at.x - 4, 10, at.z + 4), size: 34, view: new THREE.Vector3(-1, 0.12, 1).normalize() });
         genItems.new.push({ name: 'cinema: billboard', group: 'Mega-sign', at: new THREE.Vector3(at.x, 11, at.z + 10), size: 18, view: new THREE.Vector3(-0.2, 0.05, 1).normalize() });
         genItems.new.push({ name: 'cinema: entrance', group: 'Mega-sign', at: new THREE.Vector3(at.x - 8, 3, at.z + 8), size: 12, view: new THREE.Vector3(-1, 0.15, 1).normalize() });
+        // The other plots' predecessors (real/eraLandmarks.ts, candidates) on plots of their own sizes past the floor's far edge,
+        // facing south: Yasuichi's pachinko hall (both older years), and in 1964 Hotel Rouge's inn and Yoru Mart's shop.
+        const lots: [string, (b: Building3, c: THREE.Material) => { group: THREE.Group }, number, number, number, number][] = [['pachinko hall (1970s)', buildPachinko70, 8, 112, 22, 20]];
+        if (era().id === '1964') lots.push(['tsurekomi inn (1964)', buildInn64, 50, 117, 34, 30], ['rice and liquor shop (1964)', buildLiquor64, 88, 110, 10, 12]);
+        const ground = new MeshBuilder();
+        ground.kind = KIND.lot;
+        ground.color = lin(0x5e5e5c);
+        lots.forEach(([name, build, x, z, w, d], i) => {
+          ground.box(x, z + 4, -0.2, 0.01, w + 10, d + 18, KIND.lot);
+          const b: Building3 = { id: 99000 + i, x, z, w, d, h: 14, front: 'south' };
+          genRoot.new.add(build(b, city).group);
+          label('new', name, x, 18, z + d / 2);
+          genItems.new.push({ name, group: 'Mega-sign', at: new THREE.Vector3(x, 5, z + d / 2), size: Math.max(w, 16) + 6, view: new THREE.Vector3(-0.35, 0.18, 1).normalize() });
+        });
+        const groundMesh = new THREE.Mesh(ground.build()!, city);
+        groundMesh.receiveShadow = true;
+        genRoot.new.add(groundMesh);
       }
       genItems.new.push({ name: 'mega-sign', group: 'Mega-sign', at: new THREE.Vector3(at.x - 4, 28, at.z + 4), size: 48, view: new THREE.Vector3(-1, 0.12, 1).normalize() });
       genItems.new.push({ name: 'screens (close)', group: 'Mega-sign', at: new THREE.Vector3(at.x - 10, 20, at.z + 10), size: 16, view: new THREE.Vector3(-1, 0.05, 1).normalize() });
