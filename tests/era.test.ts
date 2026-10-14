@@ -4,6 +4,7 @@ import { loadDistrictContent } from '../src/poc3d/district/content';
 import { era, eraCar, eraFromUrl, eraGlass, eraHeight, ERAS, eraSign, eraSignWords, eraTrade, setEra } from '../src/poc3d/district/era';
 import { FRAME, TRADE, TRADES, tradeOfWord } from '../src/poc3d/real/shops';
 import { styleFor, WIN } from '../src/poc3d/real/buildings';
+import { allScenes, windowTables } from '../src/poc3d/real/windowScenes';
 import { DistrictModel } from '../src/poc3d/district/model';
 import { DISTRICTS3, type CellPlan3 } from '../src/poc3d/district/plan';
 
@@ -170,6 +171,16 @@ describe('The city in another year', () => {
       }
     });
     expect(lowered).toBeGreaterThan(50);
+  });
+
+  it('leaves the cordless phone out of the rooms behind the windows', () => {
+    const scenes = allScenes();
+    const ids = (): string[] => [...new Set(windowTables(scenes).picks)].map((n) => scenes[n].id);
+    expect(ids()).toContain('home_phone');
+    setEra('1977');
+    expect(ids()).not.toContain('home_phone');
+    expect(ids()).not.toContain('office_phone');
+    expect(ids()).toContain('home_dinner');
   });
 
   it('has only the cars the year had', () => {

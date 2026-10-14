@@ -465,6 +465,8 @@ const bottle = (p: Pen, x: number, y: number, k = 1): void => {
 /** Furniture, each drawn about x (the scene's metres), standing on the floor unless it says otherwise. */
 /** Whether the rooms are another year's (district/era.ts): set before the atlas is painted, as the page loads. */
 const oldYear = (): boolean => era().id !== '1992';
+/** Scenes another year can't have, left out of its picks (their cells stay): pacing about on a cordless phone. */
+const NOT_OLD: readonly string[] = ['home_phone', 'office_phone'];
 
 export const ITEMS = {
   // Against the back wall.
@@ -1937,7 +1939,7 @@ export function windowTables(scenes: readonly Scene[]): { play: number[][]; more
     for (const glass of [0, 1]) {
       const start = picks.length;
       scenes.forEach((s, n) => {
-        if (catsOf(s).includes(cat) && (glass === 1 || !s.low)) for (let k = 0; k < (s.weight ?? 1); k++) picks.push(n);
+        if (catsOf(s).includes(cat) && (glass === 1 || !s.low) && !(oldYear() && NOT_OLD.includes(s.id))) for (let k = 0; k < (s.weight ?? 1); k++) picks.push(n);
       });
       ranges.push([start % 256, Math.floor(start / 256), Math.min(255, picks.length - start)]);
     }
