@@ -1,6 +1,6 @@
 import { hash } from '../../core/hash';
 import { isWide } from '../../core/wide';
-import { TRADE, type Trade } from '../real/shops';
+import { TRADE, tradeOfWord, type Trade } from '../real/shops';
 import type { GradeName } from '../real/grade';
 import type { CarType } from '../models/vehicles';
 import type { Placed3 } from './stamps';
@@ -135,8 +135,16 @@ export function eraHeight(h: number, x: number, z: number): number {
 /** Whether the plaza tower centred here is up in this era. */
 export const eraTower = (x: number, z: number): boolean => ERA.towers >= 1 || unit(x, z, 0xe7a3) < ERA.towers;
 
-/** The shop trade in this era for one the street picked (real/buildings.ts, after `pickTrade`). */
-export const eraTrade = (trade: Trade): Trade => ERA.trades.get(trade) ?? trade;
+/**
+ * The shop trade in this era for one the street picked (real/buildings.ts, after `pickTrade`). A shop whose sign names its
+ * trade keeps it: the sign has been through `eraSign` already, so what it still names is of the year (a 映画館 is the
+ * karaoke trade's room, and a cinema in 1977 is a cinema).
+ */
+export function eraTrade(trade: Trade, sign?: string): Trade {
+  const to = ERA.trades.get(trade);
+  if (to === undefined) return trade;
+  return sign !== undefined && tradeOfWord(sign) === trade ? trade : to;
+}
 
 const allWide = (text: string): boolean => [...text].every((c) => isWide(c.codePointAt(0)!) || c === ' ');
 

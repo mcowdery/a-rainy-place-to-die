@@ -164,7 +164,7 @@ export function styleFor(b: Building3): RealStyle {
     ? { trade: TRADE.bar, hue: hueOfColor(b.hue!) }
     : pickTrade({ id: b.id, sign: b.sign, words: b.zone?.style.signWords, colors: b.zone?.style.signColors, mood: shopPal, front: s1 - s0 - 0.7, tower: b.h >= 45 || type === WIN.curtain });
   // (A trade the year hadn't is the year's own: a karaoke box in 1977 is a snack bar. district/era.ts.)
-  const trade = stamp ? picked : eraTrade(picked);
+  const trade = stamp ? picked : eraTrade(picked, b.sign?.text);
   // (From their own hash too.)
   const vice = stamp ? 0 : (look?.vice ?? 0);
   const den = !home && !stamp && b.h < 45 && rng(hash(b.id, 0xde17)).chance(vice * (NIGHT_TRADES.includes(trade) ? 0.95 : 0.5));

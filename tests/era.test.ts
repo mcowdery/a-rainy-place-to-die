@@ -121,6 +121,9 @@ describe('The city in another year', () => {
     // A karaoke box, a maid café, a konbini, a gym and a figure shop are the year's own.
     for (const t of [TRADE.karaoke, TRADE.maid, TRADE.konbini, TRADE.gym, TRADE.hobby]) expect(eraTrade(t)).not.toBe(t);
     expect(eraTrade(TRADE.izakaya)).toBe(TRADE.izakaya);
+    // A sign that names its trade and is of the year keeps it: a cinema (the karaoke trade's room) is a cinema.
+    expect(eraTrade(TRADE.karaoke, '映画館')).toBe(TRADE.karaoke);
+    expect(eraTrade(TRADE.karaoke, 'LIVE')).toBe(TRADE.snack);
     // The replacements name the trade they stand for where they name one.
     expect(tradeOfWord(eraSign('メイド喫茶'))).toBe(TRADE.cafe);
     expect(tradeOfWord(eraSign('カラオケ'))).toBe(TRADE.snack);
