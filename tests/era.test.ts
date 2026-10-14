@@ -80,12 +80,17 @@ describe('The city in another year', () => {
     expect(towersThen).toBeGreaterThan(0);
   });
 
-  it('puts an ordinary building where a landmark is not built yet, and keeps the place to stand', () => {
+  it('puts what stood there, or an ordinary building, where a landmark is not built yet, and keeps the place to stand', () => {
     setEra('1977');
     const content = loadDistrictContent();
+    // The discount store's plot is an ordinary building; the crossing's corner the cinema palace (real/cinema70.ts).
+    const store = content.placed.find((p) => p.id === 'yasuichi')!;
+    expect(store.stamp.landmark).toBeNull();
+    expect(store.building.h).toBeLessThanOrEqual(ERAS['1977'].cap!);
     const crossing = content.placed.find((p) => p.id === 'kaburo_crossing')!;
-    expect(crossing.stamp.landmark).toBeNull();
-    expect(crossing.building.h).toBeLessThanOrEqual(ERAS['1977'].cap!);
+    expect(crossing.stamp.landmark).toBe('cinema70');
+    expect(crossing.building.h).toBe(18);
+    expect(crossing.signs).toEqual([]);
     expect(crossing.nodes.map((n) => n.id)).toContain('kaburo_crossing.view');
     expect(crossing.nodes.every((n) => n.kind === 'spawn')).toBe(true);
     // One that was there already is as it is.

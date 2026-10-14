@@ -50,6 +50,7 @@ import { cityDepthMaterial, cityMaterial, cityUniforms, windowHours } from '../r
 import { setSceneCity, windowSceneIndex } from '../real/windowScenes';
 import { Lightmap } from '../real/lightmap';
 import { buildMegaSign } from '../real/megaSign';
+import { buildCinema70 } from '../real/cinema70';
 import { buildKonbini } from '../real/konbini';
 import { buildShrine } from '../real/shrine';
 import { buildLoveHotel } from '../real/loveHotel';
@@ -828,6 +829,11 @@ async function run(): Promise<void> {
       const l = lineOfStation(placed)!;
       const other = railStations.find((s) => s.line === l.id && s.id !== placed.id)?.names ?? null;
       scene.add(buildStation(placed.building, city, placed.stamp.station!, other, l, stationKerb(placed.building, roadBelow)));
+    } else if (lm === 'cinema70') {
+      // What stood on Kaburo Crossing's corner in another year (era.ts `stands`): the cinema palace, in the mega-sign's frame.
+      const c = buildCinema70(city);
+      c.group.position.set(placed.building.x, 0, placed.building.z);
+      scene.add(c.group);
     } else if (lm === 'mega_sign') {
       const mega = buildMegaSign(cityU, city);
       mega.group.position.set(placed.building.x, 0, placed.building.z);

@@ -3,7 +3,7 @@ import { isWide } from '../../core/wide';
 import { FRAME, TRADE, tradeOfWord, type Trade, type TradeDef } from '../real/shops';
 import type { GradeName } from '../real/grade';
 import type { CarType } from '../models/vehicles';
-import type { Placed3 } from './stamps';
+import type { Landmark, Placed3 } from './stamps';
 
 /**
  * The city in another year: the same map, streets and lots, with what differed then (story/threads/the-old-case.md:
@@ -49,6 +49,11 @@ export interface Era {
   readonly grade: GradeName;
   /** Placements (their ids) not built yet: an ordinary building of the street stands on the plot. */
   readonly unbuilt: readonly string[];
+  /**
+   * Placements whose plot holds what stood there before them, a landmark of its own (built on the main thread as theirs
+   * are): Kaburo Crossing's corner the 1970s cinema palace (real/cinema70.ts, approved 2026-10-14).
+   */
+  readonly stands: Readonly<Record<string, Landmark>>;
   /** Shop trades the year hadn't, and what stands there instead (real/shops.ts `TRADE`): a karaoke box is a snack bar. */
   readonly trades: ReadonlyMap<Trade, Trade>;
   /**
@@ -99,11 +104,11 @@ const SIXTIES_SIGNS: readonly (readonly [string, string, string])[] = [
 ];
 
 export const ERAS: Readonly<Record<EraId, Era>> = {
-  '1992': { id: '1992', year: 1992, cap: null, newShare: 1, newCap: Infinity, towers: 1, ads: true, cars: null, standIn: [], date: null, grade: 'neutral', unbuilt: [], trades: new Map(), signs: [], frames: new Map(), pane: 1 },
+  '1992': { id: '1992', year: 1992, cap: null, newShare: 1, newCap: Infinity, towers: 1, ads: true, cars: null, standIn: [], date: null, grade: 'neutral', unbuilt: [], stands: {}, trades: new Map(), signs: [], frames: new Map(), pane: 1 },
   // The neon district first: the crossing's sign with its video screens and the discount store are later than this.
-  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: ['kaburo_crossing', 'yasuichi'], trades: SEVENTIES_TRADES, signs: SEVENTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.metal]]), pane: 0.85 },
+  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: ['yasuichi'], stands: { kaburo_crossing: 'cinema70' }, trades: SEVENTIES_TRADES, signs: SEVENTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.metal]]), pane: 0.85 },
   // Defined so the setting has its second step; not looked at yet.
-  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: ['kaburo_crossing', 'yasuichi', 'hotel_rouge', 'yoru_mart'], trades: SIXTIES_TRADES, signs: SIXTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.wood], [FRAME.metal, FRAME.wood]]), pane: 0.7 },
+  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: ['yasuichi', 'hotel_rouge', 'yoru_mart'], stands: { kaburo_crossing: 'cinema70' }, trades: SIXTIES_TRADES, signs: SIXTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.wood], [FRAME.metal, FRAME.wood]]), pane: 0.7 },
 };
 
 export const isEraId = (s: unknown): s is EraId => s === '1992' || s === '1977' || s === '1964';
@@ -196,16 +201,17 @@ export function eraCar(type: CarType, seed: number): CarType {
  */
 export function eraPlaced(placed: readonly Placed3[]): readonly Placed3[] {
   const e = ERA;
-  if (e.unbuilt.length === 0) return placed;
-  return placed.map((p) =>
-    e.unbuilt.includes(p.id)
-      ? {
-          ...p,
-          stamp: { ...p.stamp, landmark: null, name: null, signs: [], nodes: p.stamp.nodes.filter((n) => n.kind === 'spawn') },
-          building: { ...p.building, h: e.cap === null ? p.building.h : Math.min(p.building.h, e.cap) },
-          signs: [],
-          nodes: p.nodes.filter((n) => n.kind === 'spawn'),
-        }
-      : p,
-  );
+  if (e.unbuilt.length === 0 && Object.keys(e.stands).length === 0) return placed;
+  return placed.map((p) => {
+    const stood = e.stands[p.id];
+    if (!stood && !e.unbuilt.includes(p.id)) return p;
+    // (What stood there before, or an ordinary building: either way none of the later one's name, signs or story nodes.)
+    return {
+      ...p,
+      stamp: { ...p.stamp, landmark: stood ?? null, name: null, signs: [], nodes: p.stamp.nodes.filter((n) => n.kind === 'spawn') },
+      building: { ...p.building, h: stood === 'cinema70' ? 18 : e.cap === null ? p.building.h : Math.min(p.building.h, e.cap) },
+      signs: [],
+      nodes: p.nodes.filter((n) => n.kind === 'spawn'),
+    };
+  });
 }

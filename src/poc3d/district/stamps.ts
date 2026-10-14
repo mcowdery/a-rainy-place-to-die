@@ -45,7 +45,7 @@ import { OUTFITS, type Outfit } from './peopleMix';
  */
 
 /** Landmarks built on the main thread instead of as a plain building mass. */
-export const LANDMARKS = ['mega_sign', 'konbini', 'shrine', 'love_hotel', 'live_house', 'yokocho', 'ryujin', 'discount', 'station', 'subway', 'rotary', ...ASAGIRI_KINDS] as const;
+export const LANDMARKS = ['mega_sign', 'cinema70', 'konbini', 'shrine', 'love_hotel', 'live_house', 'yokocho', 'ryujin', 'discount', 'station', 'subway', 'rotary', ...ASAGIRI_KINDS] as const;
 export type Landmark = (typeof LANDMARKS)[number];
 
 /** How an npc's ghost looks (see real/people.ts); anything left out gets a default. */
