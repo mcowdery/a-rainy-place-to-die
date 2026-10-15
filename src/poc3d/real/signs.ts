@@ -358,7 +358,13 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
         vec2 st = texture2D(tSigns, vSUv).rg;
         float flk = uFlicker > 0.5 && sh2(vec2(vSign.x, floor(uTime * 12.0))) > 0.992 ? 0.08 : 1.0;
         float on = uNeon * flk * (1.0 - blackoutAt(vOutP));
-        if (vSign.y > 3.5) {
+        if (vSign.y > 4.5) {
+          // A barber's pole (5): red, white and blue stripes winding up it, turning (aUv: round it, up it, 0 to 1).
+          float t = fract(vSUv.x * 2.0 + vSUv.y * 2.5 - uTime * 0.5);
+          vec3 c = t < 0.3 ? vec3(0.72, 0.04, 0.05) : t < 0.5 ? vec3(0.85, 0.85, 0.82) : t < 0.8 ? vec3(0.04, 0.1, 0.55) : vec3(0.85, 0.85, 0.82);
+          diffuseColor.rgb = c;
+          totalEmissiveRadiance += c * 0.7 * on;
+        } else if (vSign.y > 3.5) {
           // A red LED board (4): the text scrolls through the window the quad shows of its slot (aPlate: the slot's
           // left edge and width in u, and how much of it a second), drawn in dots on a fixed grid.
           vec2 ts = vec2(textureSize(tSigns, 0));
@@ -388,7 +394,7 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
           totalEmissiveRadiance += mix(vPlate * 0.9, vInk * inkGlow, st.r) * on;
         }`);
   };
-  m.customProgramCacheKey = () => 'signs-v6';
+  m.customProgramCacheKey = () => 'signs-v7';
   return m;
 }
 
@@ -513,7 +519,7 @@ export function signBox(sb: SignBuilder, p: C3, r: C3, n: C3, u0: number, u1: nu
 }
 
 export interface SignStyle {
-  /** 0 neon on dark plate, 1 lightbox, 2.25 a shop's painted board (lit by a lamp over it), 3 cut-out letters (3.25 on a window, backlit at night), 4 a red LED board. */
+  /** 0 neon on dark plate, 1 lightbox, 2.25 a shop's painted board (lit by a lamp over it), 3 cut-out letters (3.25 on a window, backlit at night), 4 a red LED board, 5 a barber's pole. */
   readonly style: number;
   readonly ink: C3;
   readonly plate: C3;

@@ -11,7 +11,7 @@ import { loadStatue } from '../../models/statues';
 import { loadPayphone, PAYPHONE_KEYS, PayphoneRig, type PayphoneKind } from '../../models/payphone';
 import { addSigns, ICON_NAMES, SignAtlas, SignBuilder, signBox, signMaterial } from '../../real/signs';
 import { addBuilding, frontFrame } from '../../real/buildings';
-import { bulbArrow, bulbFrame, crown, cube, hotelBoards, lantern, ledBoard, signKindTexts, standSign, tenantBoard, tubeSign, windowLetters, type Panel } from '../../real/signKinds';
+import { barberPole, bulbArrow, bulbFrame, crown, cube, hotelBoards, lantern, ledBoard, signKindTexts, standSign, tenantBoard, tubeSign, windowLetters, type Panel } from '../../real/signKinds';
 import { BILLBOARDS, DISTRICT_BLANK, districtAdUv, POSTERS } from '../../real/districtAds';
 import { startRoom } from '../shell';
 
@@ -198,6 +198,7 @@ startRoom({
         { name: 'electronics (Denkō-chō)', w: 7, h: 27, word: '家電', color: 0x4fe3ff },
         { name: 'kissaten', w: 7, h: 9, word: '喫茶', color: 0xffe45f },
         { name: 'office tower (Asagiri)', w: 16, h: 42, word: 'OFFICE', color: 0xffffff },
+        { name: 'barber', w: 5, h: 7, word: '理容', color: 0x4fe3ff },
       ];
       let x = -24;
       const bs: Building3[] = specs.map((sp, i) => {
@@ -205,7 +206,7 @@ startRoom({
         x += sp.w + 0.4;
         return b;
       });
-      const [bar, izakaya, hotel, pachinko, offices, denki, kissa, tower] = bs;
+      const [bar, izakaya, hotel, pachinko, offices, denki, kissa, tower, barber] = bs;
       const fr = frontFrame;
       // Today's kinds, through addSigns: a blade on the hotel and the pachinko, fascias.
       const sign = (b: Building3, text: string, color: number, look: Sign3['look'], u: number, vertical = false, top = 0): Sign3 => {
@@ -220,6 +221,7 @@ startRoom({
         sign(pachinko, 'パチンコ', 0xff4f4f, 'neon', 1.2, true, 9.6),
         sign(denki, 'DUTY FREE', 0x4fe3ff, 'channel', denki.w / 2),
         sign(offices, '英会話', 0xffffff, 'lightbox', offices.w / 2),
+        sign(barber, '理容 タナカ', 0x4fe3ff, 'lightbox', barber.w / 2),
       ];
       const tenants: Panel[] = [
         { text: 'スナック', color: 0xff5fc8, look: 'neon' },
@@ -300,6 +302,9 @@ startRoom({
         signBox(sb, fr(tower).p, fr(tower).r, fr(tower).n, 2 + i * 1.5, 3.2 + i * 1.5, 2.4, 3.6, 0.05, 0.1, atlas.blankUv, { n: [q.u0, q.v0, q.u1, q.v1] });
       });
       item('pictograms', V(wx(tower, 7.5), 3, zf), 13);
+      // 9. The barber's: the turning pole by its door (a candidate, 2026-10-15).
+      barberPole(sb, mb, fr(barber), 0.7, 1.7, 33);
+      item('barber pole (サインポール, candidate)', V(wx(barber, 0.7), 2.1, zf + 0.3), 2.6, V(0.5, 0.1, 1).normalize());
       item('the whole street', V(x / 2 - 12, 10, zf), 80, V(0.2, 0.25, 1).normalize());
       label('new', 'proposed signs', -24 + (x + 24) / 2, 30, zf);
       // The pavement and the street in front.

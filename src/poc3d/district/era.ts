@@ -4,6 +4,7 @@ import { FRAME, TRADE, tradeOfWord, type Trade, type TradeDef } from '../real/sh
 import type { GradeName } from '../real/grade';
 import type { CarType } from '../models/vehicles';
 import type { Landmark, Placed3 } from './stamps';
+import type { SignLook } from './plan';
 
 /**
  * The city in another year: the same map, streets and lots, with what differed then (story/threads/the-old-case.md:
@@ -65,6 +66,16 @@ export interface Era {
   /** Shopfront frames (real/shops.ts `FRAME`) the year hadn't and what they were instead, and how much narrower its panes were (1 the same). */
   readonly frames: ReadonlyMap<number, number>;
   readonly pane: number;
+  /**
+   * How a sign the siting made one way in 1992 was made this year (real/signSites.ts: `Sign3.look`), weighted: fewer
+   * plastic lightboxes, painted boards and neon in their place (story/threads/the-old-case.md: "no giant screens,
+   * painted boards and neon in their place"). A look not listed is as it is.
+   */
+  readonly looks: Readonly<Partial<Record<SignLook, readonly (readonly [SignLook, number])[]>>>;
+  /** Whether the year has the 24H cube over a door (real/signKinds.ts): the all-night shops came later. */
+  readonly cubes: boolean;
+  /** A love hotel's prices this year (rows of its board); none, no love-hotel boards. */
+  readonly hotelPrices: readonly (readonly string[])[];
 }
 
 /**
@@ -104,12 +115,20 @@ const SIXTIES_SIGNS: readonly (readonly [string, string, string])[] = [
   ['コインランドリー', 'クリーニング', 'CLEANERS'], ['DISCO', 'ジャズ喫茶', 'JAZZ'], ['DJ', 'ジャズ喫茶', 'JAZZ'],
 ];
 
+/** 1992's love-hotel prices; the 1970s', a little over half (from memory, as the rest). */
+const PRICES_92: readonly (readonly string[])[] = [['休憩 ¥3,800', '宿泊 ¥6,800'], ['休憩 ¥4,500', '宿泊 ¥7,800', 'サービスタイム'], ['休憩 ¥5,000', '宿泊 ¥8,500'], ['REST ¥4,000', 'STAY ¥7,000']];
+const PRICES_77: readonly (readonly string[])[] = [['休憩 ¥2,000', '宿泊 ¥4,000'], ['ご休憩 ¥2,500', 'ご宿泊 ¥4,500'], ['休憩 ¥3,000', '宿泊 ¥5,000']];
+/** Every year's prices, for the sign atlas. */
+export const ALL_HOTEL_PRICES: readonly string[] = [...new Set([...PRICES_92, ...PRICES_77].flat())];
+
 export const ERAS: Readonly<Record<EraId, Era>> = {
-  '1992': { id: '1992', year: 1992, cap: null, newShare: 1, newCap: Infinity, towers: 1, ads: true, cars: null, standIn: [], date: null, grade: 'neutral', unbuilt: [], stands: {}, trades: new Map(), signs: [], frames: new Map(), pane: 1 },
+  '1992': { id: '1992', year: 1992, cap: null, newShare: 1, newCap: Infinity, towers: 1, ads: true, cars: null, standIn: [], date: null, grade: 'neutral', unbuilt: [], stands: {}, trades: new Map(), signs: [], frames: new Map(), pane: 1, looks: {}, cubes: true, hotelPrices: PRICES_92 },
   // The neon district first: the crossing's sign with its video screens and the discount store are later than this.
-  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: [], stands: { kaburo_crossing: 'cinema70', yasuichi: 'pachinko70' }, trades: SEVENTIES_TRADES, signs: SEVENTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.metal]]), pane: 0.85 },
+  '1977': { id: '1977', year: 1977, cap: 31, newShare: 0.14, newCap: 48, towers: 0.3, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 14, weekday: 5 }, grade: 'seventies', unbuilt: [], stands: { kaburo_crossing: 'cinema70', yasuichi: 'pachinko70' }, trades: SEVENTIES_TRADES, signs: SEVENTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.metal]]), pane: 0.85,
+    looks: { lightbox: [['lightbox', 4], ['print', 1], ['neon', 1]], inverse: [['inverse', 2], ['lightbox', 1], ['neon', 1], ['print', 1]] }, cubes: false, hotelPrices: PRICES_77 },
   // Defined so the setting has its second step; not looked at yet.
-  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: [], stands: { kaburo_crossing: 'cinema70', yasuichi: 'pachinko70', hotel_rouge: 'inn64', yoru_mart: 'liquor64' }, trades: SIXTIES_TRADES, signs: SIXTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.wood], [FRAME.metal, FRAME.wood]]), pane: 0.7 },
+  '1964': { id: '1964', year: 1964, cap: 31, newShare: 0, newCap: 31, towers: 0, ads: false, cars: OLD_CARS, standIn: OLD_STAND_IN, date: { month: 10, day: 9, weekday: 5 }, grade: 'sixties', unbuilt: [], stands: { kaburo_crossing: 'cinema70', yasuichi: 'pachinko70', hotel_rouge: 'inn64', yoru_mart: 'liquor64' }, trades: SIXTIES_TRADES, signs: SIXTIES_SIGNS, frames: new Map([[FRAME.frameless, FRAME.wood], [FRAME.metal, FRAME.wood]]), pane: 0.7,
+    looks: { lightbox: [['print', 3], ['neon', 1]], inverse: [['print', 2], ['neon', 1]], channel: [['neon', 1]] }, cubes: false, hotelPrices: [] },
 };
 
 export const isEraId = (s: unknown): s is EraId => s === '1992' || s === '1977' || s === '1964';

@@ -1,4 +1,5 @@
 import type { SignLook } from '../district/plan';
+import { ALL_HOTEL_PRICES } from '../district/era';
 import { EM, textAdvance } from './letters';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
 import type { Light } from './lightmap';
@@ -317,6 +318,38 @@ export function cube(sb: SignBuilder, mb: MeshBuilder, layout: SignLayout, f: Wa
   mb.frameBox(f.p, f.r, f.n, u - 0.04, u + 0.04, y + s / 2 - 0.04, y + s / 2 + 0.04, 0, 0.3);
 }
 
+/**
+ * サインポール: a barber's pole on a bracket by the door at u, its foot at y: a lit glass column of red, white and blue
+ * stripes winding up and turning (the sign material's style 5, drawn without the atlas), chrome caps top and bottom.
+ */
+export function barberPole(sb: SignBuilder, mb: MeshBuilder, f: WallFrame, u: number, y: number, id: number): void {
+  const R = 0.09;
+  const H = 0.78;
+  const out = 0.26;
+  const c = at(f, u, y, out);
+  const SEG = 14;
+  sb.ink = [1, 1, 1];
+  sb.plate = [0, 0, 0];
+  sb.sign = [id % 100000, 5];
+  for (let i = 0; i < SEG; i++) {
+    const a0 = (i / SEG) * Math.PI * 2;
+    const a1 = ((i + 1) / SEG) * Math.PI * 2;
+    const p0: C3 = [c[0] + (f.n[0] * Math.cos(a0) + f.r[0] * Math.sin(a0)) * R, y, c[2] + (f.n[2] * Math.cos(a0) + f.r[2] * Math.sin(a0)) * R];
+    const p1: C3 = [c[0] + (f.n[0] * Math.cos(a1) + f.r[0] * Math.sin(a1)) * R, y, c[2] + (f.n[2] * Math.cos(a1) + f.r[2] * Math.sin(a1)) * R];
+    sb.quad(p0, [p1[0] - p0[0], 0, p1[2] - p0[2]], [0, H, 0], [i / SEG, 1, (i + 1) / SEG, 0]);
+  }
+  mb.kind = KIND.chrome;
+  mb.color = lin(0xc8ccd0);
+  mb.style = [0, 0, 0, 0];
+  mb.cylinder(c[0], c[2], y + H, y + H + 0.08, R * 1.25, 10);
+  mb.cylinder(c[0], c[2], y + H + 0.08, y + H + 0.16, R * 0.8, 10);
+  mb.cylinder(c[0], c[2], y - 0.08, y, R * 1.25, 10);
+  mb.cylinder(c[0], c[2], y - 0.14, y - 0.08, R * 0.6, 10);
+  mb.kind = KIND.plain;
+  mb.color = STEEL;
+  for (const yb of [y + H + 0.04, y - 0.04]) mb.frameBox(f.p, f.r, f.n, u - 0.025, u + 0.025, yb - 0.025, yb + 0.025, 0, out);
+}
+
 /** The atlas texts a set of signs needs (each kind's own: tenants' panels and lanterns vertical, the rest across). */
 export function signKindTexts(o: { vertical?: readonly string[]; horizontal?: readonly string[]; tube?: readonly string[]; icons?: readonly string[] }): SignText[] {
   return [
@@ -331,13 +364,7 @@ export function signKindTexts(o: { vertical?: readonly string[]; horizontal?: re
 
 /** Characters down a red lantern, by the words of the place's own sign (and 酒 on the other). */
 export const LANTERN_TEXTS = ['焼鳥', 'やきとり', 'もつ焼', 'ホルモン', '串焼', 'おでん', '居酒屋', '酒'] as const;
-/** A love hotel's prices (rows of its board), 1992's. */
-export const HOTEL_PRICES: readonly (readonly string[])[] = [
-  ['休憩 ¥3,800', '宿泊 ¥6,800'],
-  ['休憩 ¥4,500', '宿泊 ¥7,800', 'サービスタイム'],
-  ['休憩 ¥5,000', '宿泊 ¥8,500'],
-  ['REST ¥4,000', 'STAY ¥7,000'],
-];
+
 /** What an LED board says, by the trade it's over. */
 export const LED_MESSAGES: Readonly<Record<string, readonly string[]>> = {
   pachinko: ['本日新台入替 ★ 朝十時開店 ★ 全台開放中 ★ ', '新装開店 ★ 出玉大放出 ★ 本日も元気に営業中 ★ '],
@@ -424,7 +451,7 @@ export function extraLights(extras: readonly SignExtra[]): Light[] {
 export function signKindAtlasTexts(words: readonly string[]): SignText[] {
   return signKindTexts({
     vertical: LANTERN_TEXTS,
-    horizontal: [...HOTEL_PRICES.flat(), '空室', '満室', ...Object.values(LED_MESSAGES).flat(), ...Object.values(WINDOW_WORDS).flat(), ...CUBE_TEXTS],
+    horizontal: [...ALL_HOTEL_PRICES, '空室', '満室', ...Object.values(LED_MESSAGES).flat(), ...Object.values(WINDOW_WORDS).flat(), ...CUBE_TEXTS],
     tube: words.filter((w) => [...w].every((c) => c.charCodeAt(0) < 0x2e80)),
     icons: ICON_NAMES,
   });

@@ -35,6 +35,7 @@ try {
     kissa: [32.4, 3.2, Z, 7, 0.15, 0.1, 1],
     crown: [44.3, 39, Z, 20, 0.1, -0.15, 1],
     icons: [43.8, 3, Z, 13, 0.1, 0.1, 1],
+    barber: [53.4, 2.1, Z + 0.3, 2.8, 0.5, 0.1, 1],
   };
   const modes = when === 'both' ? ['night', 'day'] : [when];
   for (const mode of modes) {

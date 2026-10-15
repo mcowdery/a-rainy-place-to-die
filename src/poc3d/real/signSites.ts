@@ -7,7 +7,7 @@ import { frontSpan, frontWidth, type Building3, type CellPlan3, type Road3, type
 import { frontFrame, styleFor, tierFront, tiers, WIN } from './buildings';
 import { TRADE, tradeOfWord, type Trade } from './shops';
 import { shopName } from './shopNames';
-import { CROWN_NAMES, HOTEL_PRICES, LED_MESSAGES, WINDOW_WORDS, type Panel, type SignExtra, type WallFrame } from './signKinds';
+import { CROWN_NAMES, LED_MESSAGES, WINDOW_WORDS, type Panel, type SignExtra, type WallFrame } from './signKinds';
 import { bladeLength, fasciaSize, hasRooftopLetters, plateWidth } from './signs';
 
 /**
@@ -434,6 +434,11 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
   };
 
   const lookFor = (b: Building3, roll: number): SignLook | undefined => (P.looks ? pickLook(P.looks[CLASS[styleFor(b).trade as Trade] ?? 'daily'], roll) : undefined);
+  /** How the year made a sign 1992 makes so (era.ts `looks`: in the older city, painted boards and neon for plastic). */
+  const yearLook = <L extends SignLook | undefined>(look: L, roll: number): L | SignLook => {
+    const opts = look ? era().looks[look] : undefined;
+    return opts ? pickLook(opts, roll) : look;
+  };
 
   // Upstairs tenants' words (blades: the wide ones; Kaburo's only the night trades'), from the 1992 words so they're
   // the same pick in every year.
@@ -464,7 +469,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
 
     if (b.sign) {
       const { text, color } = b.sign;
-      const look = lookFor(b, h(1));
+      const look = yearLook(lookFor(b, h(1)), h(55));
       // The shop's own sign: a blade where its words read down and it's wanted (always, rather than face a wall), else on the fascia.
       const share = Math.min(0.95, plan.style.verticalSign * P.blades * (street.width <= 8 ? 1.3 : 0.85));
       let placed = false;
@@ -482,10 +487,10 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
         const maxW = front - 0.6;
         if (maxW >= 1.5) {
           const open = !walled && (street.width >= 10 || !view || view.d >= 14);
-          let fl: SignLook | undefined = P.looks && open && latin(text) && maxW >= 2.5 && h(5) < P.channel ? 'channel' : look;
+          let fl: SignLook | undefined = P.looks && open && latin(text) && maxW >= 2.5 && h(5) < P.channel ? yearLook('channel', h(56)) : look;
           // (No neon glows at a wall: a tower's either.)
           const facing = opposite(b, mid.x, mid.z, mid.nx, mid.nz, around);
-          if (fl === 'neon' && facing && facing.face !== 'front' && facing.d < WALLED) fl = 'lightbox';
+          if (fl === 'neon' && facing && facing.face !== 'front' && facing.d < WALLED) fl = yearLook('lightbox', h(58));
           // A neon name may be in tubing (Latin letters), with its trade's pictogram.
           const icon = fl === 'neon' && ICON_OF[trade] && h(30) < 0.6 ? ICON_OF[trade] : undefined;
           const tube = fl === 'neon' && latin(text) && h(31) < 0.6;
@@ -530,7 +535,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
           const name = filipino() ? word : shopName(word, hash(b.id, 60 + i));
           const text = eraSign(name);
           const color = plan.style.signColors[Math.floor(h(40 + i) * plan.style.signColors.length)];
-          const tenantLook = P.looks ? pickLook(P.tenants === 'night' ? P.looks.night : P.looks.shop, h(50 + i)) : undefined;
+          const tenantLook = P.looks ? yearLook(pickLook(P.tenants === 'night' ? P.looks.night : P.looks.shop, h(50 + i)), h(57 + i)) : undefined;
           if (asBoard) {
             panels.push({ text, color, look: tenantLook ?? 'lightbox' });
             fits.push(name);
@@ -572,7 +577,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
         const sx = p.x + p.nx * out_;
         const sz = p.z + p.nz * out_;
         if (!taken(sx, sz, 0.6)) {
-          extras.push({ kind: 'stand', f, u, out: out_, text: b.sign.text, color: b.sign.color, look: lookFor(b, h(1)) === 'neon' ? 'neon' : 'inverse', id: id + 2 });
+          extras.push({ kind: 'stand', f, u, out: out_, text: b.sign.text, color: b.sign.color, look: lookFor(b, h(1)) === 'neon' ? 'neon' : yearLook('inverse', h(56)), id: id + 2 });
           solids.push(rectIn(f, u - 0.2, u + 0.2, out_ - 0.28, out_ + 0.28));
           claims.push(rectIn(f, u - 0.6, u + 0.6, 0, out_ + 0.6));
         }
@@ -586,9 +591,10 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
       us.forEach((u, i) => extras.push({ kind: 'lantern', f, u, y: 2.55, text: i === 1 ? '酒' : own, id: id + 3 + i }));
     }
     // A love hotel's vacancy lamp and prices by its door, and (on a wide front) an arrow of bulbs to it.
-    if (trade === TRADE.lovehotel && front >= 4 && year !== '1964') {
+    const prices = era().hotelPrices;
+    if (trade === TRADE.lovehotel && front >= 4 && prices.length) {
       const left = h(26) < 0.5;
-      extras.push({ kind: 'hotel', f, u: left ? s0 + 1 : s1 - 1, y: 2.45, prices: HOTEL_PRICES[Math.floor(h(27) * HOTEL_PRICES.length)], full: h(28) < 0.25, id: id + 5 });
+      extras.push({ kind: 'hotel', f, u: left ? s0 + 1 : s1 - 1, y: 2.45, prices: prices[Math.floor(h(27) * prices.length)], full: h(28) < 0.25, id: id + 5 });
       if (front >= 7 && h(29) < 0.5) {
         const len = Math.min(2.2, front / 2 - 1.6);
         extras.push({ kind: 'arrow', f, u: left ? s1 - 0.6 : s0 + 0.6, y: 2.95, len, dir: left ? -1 : 1 });
@@ -630,7 +636,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
     }
     // The small lit 24H box over the door of a karaoke box, a manga café, a coin laundry; OPEN over a café's.
     const cubeText = trade === TRADE.karaoke || trade === TRADE.books || trade === TRADE.laundry ? '24H' : trade === TRADE.cafe ? 'OPEN' : null;
-    if (cubeText && year !== '1964' && !s.awning && front >= 3.5 && h(53) < E.cube) {
+    if (cubeText && era().cubes && !s.awning && front >= 3.5 && h(53) < E.cube) {
       const u = Math.min(s1 - 0.5, Math.max(s0 + 0.5, midU + (h(54) < 0.5 ? -1.3 : 1.3)));
       extras.push({ kind: 'cube', f, u, y: 2.75, text: cubeText, color: b.sign?.color ?? 0x4fe3ff, id: id + 13 });
     }
