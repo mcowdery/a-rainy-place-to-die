@@ -31,9 +31,12 @@ export const hoursOf = (trade: number): number => HOURS_OF[trade] ?? HOURS.alway
 /** A sign id (under 100000) with its hours class in its hundred-thousands (the sign shader reads it from there). */
 export const withHours = (id: number, hours: number): number => hours * 100000 + (Math.abs(Math.floor(id)) % 100000);
 
-/** How far from its class's closing time a place closes, -0.5 to 0.5 of 1.5 h: the same on the GPU (small integers only). */
+/**
+ * How far from its class's closing time a place closes, -0.5 to 0.5 of 1.5 h, from its building's id (a sign id's last
+ * five digits are it: so the shop, its signs and their glow shut together): the same on the GPU (small integers only).
+ */
 const jitter = (seed: number): number => {
-  const k = (Math.abs(Math.floor(seed)) % 997) * 0.618034;
+  const k = ((Math.abs(Math.floor(seed)) % 100000) % 997) * 0.618034;
   return k - Math.floor(k) - 0.5;
 };
 
@@ -64,7 +67,7 @@ export function hoursPhase(hour: number): string {
 /** The shaders' side: `uniform float uHour` must be declared before it. */
 export const HOURS_GLSL = /* glsl */ `
   const float TRADE_HOURS[${TRADE_COUNT}] = float[${TRADE_COUNT}](${Array.from({ length: TRADE_COUNT }, (_, t) => hoursOf(t).toFixed(1)).join(', ')});
-  float hoursJitter(float seed) { float k = mod(floor(abs(seed)), 997.0) * 0.618034; return fract(k) - 0.5; }
+  float hoursJitter(float seed) { float k = mod(mod(floor(abs(seed)), 100000.0), 997.0) * 0.618034; return fract(k) - 0.5; }
   float openHours(float cls, float seed) {
     if (cls < 0.5) return 1.0;
     vec2 o = cls < 1.5 ? vec2(${SPANS[1].map((v) => v.toFixed(1)).join(', ')}) : cls < 2.5 ? vec2(${SPANS[2].map((v) => v.toFixed(1)).join(', ')}) : cls < 3.5 ? vec2(${SPANS[3].map((v) => v.toFixed(1)).join(', ')}) : cls < 4.5 ? vec2(${SPANS[4].map((v) => v.toFixed(1)).join(', ')}) : vec2(${SPANS[5].map((v) => v.toFixed(1)).join(', ')});

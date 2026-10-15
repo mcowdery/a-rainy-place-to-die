@@ -357,7 +357,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
       const c: Placed = { x: x + nx * 0.4, z: z + nz * 0.4, nx, nz, y0: y1 - len, y1 };
       if (clash(c)) continue;
       blades.push(c);
-      const sign: Sign3 = { text, vertical: true, color, x: c.x, y: y1, z: c.z, nx, nz, ...(look ? { look } : {}), ...(hours ? { hours } : {}) };
+      const sign: Sign3 = { text, vertical: true, color, x: c.x, y: y1, z: c.z, nx, nz, ...(look ? { look } : {}), ...(hours ? { hours, seed: b.id } : {}) };
       fits.set(sign, y1 <= b.h - 0.8);
       return sign;
     }
@@ -464,10 +464,10 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
     const front = s1 - s0;
     const midU = (s0 + s1) / 2;
     const trade = s.trade as Trade;
-    const id = b.id * 16;
     // (When its signs are lit: its shop's hours, real/signs.ts HOURS.)
     const hrs = hoursOf(trade);
-    const sid = (k: number, hours = hrs): number => withHours(id + k, hours);
+    // (Every one of the shop's from its building's id: they shut together, hours.ts.)
+    const sid = (_k: number, hours = hrs): number => withHours(b.id, hours);
     let fascia: Sign3 | null = null;
 
     if (b.sign) {
@@ -497,7 +497,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
           // A neon name may be in tubing (Latin letters), with its trade's pictogram.
           const icon = fl === 'neon' && ICON_OF[trade] && h(30) < 0.6 ? ICON_OF[trade] : undefined;
           const tube = fl === 'neon' && latin(text) && h(31) < 0.6;
-          fascia = { text, vertical: false, color, x: mid.x + mid.nx * 0.4, y: 3.6, z: mid.z + mid.nz * 0.4, nx: mid.nx, nz: mid.nz, ...(fl ? { look: fl } : {}), ...(maxW < plateWidth(text) || icon || tube ? { maxW } : {}), ...(tube ? { form: 'tube' as const } : {}), ...(icon ? { icon } : {}), ...(hrs ? { hours: hrs } : {}) };
+          fascia = { text, vertical: false, color, x: mid.x + mid.nx * 0.4, y: 3.6, z: mid.z + mid.nz * 0.4, nx: mid.nx, nz: mid.nz, ...(fl ? { look: fl } : {}), ...(maxW < plateWidth(text) || icon || tube ? { maxW } : {}), ...(tube ? { form: 'tube' as const } : {}), ...(icon ? { icon } : {}), ...(hrs ? { hours: hrs, seed: b.id } : {}) };
           out.push(fascia);
         }
       }

@@ -67,8 +67,9 @@ export interface Sign3 {
   /** A fascia's letters bent in tubing (their outlines: real/signs.ts `SignForm`), and a pictogram before them (ICON_NAMES). */
   readonly form?: 'tube';
   readonly icon?: string;
-  /** When it's lit, by its shop's trade (real/signs.ts HOURS); absent, always. */
+  /** When it's lit, by its shop's trade (real/hours.ts HOURS); absent, always. And its building's id, which its closing time is from. */
   readonly hours?: number;
+  readonly seed?: number;
 }
 
 /** Neon on a dark plate, a lightbox (coloured letters on white), its inverse (white letters on colour), painted (unlit), channel letters. */

@@ -24,10 +24,15 @@ try {
     for (const el of document.querySelectorAll('#hud, #info')) el.style.display = 'none';
   });
   await page.keyboard.press('Escape');
+  // (The first view waits for its chunk's full detail: the storefronts are in it.)
+  let first = true;
   const shoot = async (tag) => {
     for (const i of picks) {
       await page.evaluate((i) => window.__signs.go(i), i);
-      await page.waitForTimeout(5000);
+      await page.waitForTimeout(first ? 20000 : 6000);
+      first = false;
+      const clock = await page.evaluate(() => window.__clock.now());
+      console.log(tag, i, 'clock', JSON.stringify(clock));
       await page.screenshot({ path: `${out}/${String(i).padStart(4, '0')}-${tag}.png` });
     }
   };

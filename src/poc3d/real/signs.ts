@@ -603,7 +603,7 @@ export function signLights(signs: readonly Sign3[]): Light[] {
     const glow = st.style === 0 ? st.ink : st.plate;
     const out = s.vertical ? 0.4 : 1.2;
     const hours = s.hours ?? HOURS.always;
-    return { x: s.x + s.nx * out, z: s.z + s.nz * out, r: s.vertical ? 4.5 : 4, color: glow, i: st.style === 0 ? 0.3 : 0.42, hours, seed: withHours(signId(s), hours) };
+    return { x: s.x + s.nx * out, z: s.z + s.nz * out, r: s.vertical ? 4.5 : 4, color: glow, i: st.style === 0 ? 0.3 : 0.42, hours, seed: withHours(s.seed ?? signId(s), hours) };
   });
 }
 
@@ -618,14 +618,14 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
     const r: C3 = [s.nz, 0, -s.nx];
     if (st.channel) {
       const p: C3 = [s.x - s.nx * 0.4, 0, s.z - s.nz * 0.4];
-      channelLetters(mb, s.text, p, r, n, 3.62, 0.62, Math.min(5.2, s.maxW ?? 5.2), st.ink, withHours(signId(s), s.hours ?? HOURS.always), 0.02, s.hours);
+      channelLetters(mb, s.text, p, r, n, 3.62, 0.62, Math.min(5.2, s.maxW ?? 5.2), st.ink, withHours(s.seed ?? signId(s), s.hours ?? HOURS.always), 0.02, s.hours);
       continue;
     }
     const rect = atlas.rect(s.text, s.vertical, s.form);
     if (!rect) continue;
     sb.ink = st.ink;
     sb.plate = st.plate;
-    sb.sign = [withHours(signId(s), s.hours ?? HOURS.always), st.style];
+    sb.sign = [withHours(s.seed ?? signId(s), s.hours ?? HOURS.always), st.style];
     const uv = [rect.u0, rect.v0, rect.u1, rect.v1] as const;
     // The anchor sits 0.4 m off the facade; build from the facade point.
     const p: C3 = [s.x - s.nx * 0.4, 0, s.z - s.nz * 0.4];
