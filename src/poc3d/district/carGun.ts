@@ -7,6 +7,7 @@ import type { FirstPersonRig } from '../models/firstPerson';
 import type { CityGunfire } from '../real/gunfire';
 import type { Driving } from './driving';
 import type { OwnCar } from './ownCar';
+import { FocusMeter } from './focusMeter';
 
 /**
  * Shooting from your car in the city, as on the race page (race/shooting.ts, race/main.ts): Mack's Type 54 from the
@@ -17,8 +18,8 @@ import type { OwnCar } from './ownCar';
  * (race/carDriver.ts).
  *
  * The right button aims: the view goes to his eyes, along an aim that holds its place in the world while the car
- * turns (district/driving.ts `startAim`), (G, apart from the aim, toggles slow motion: the world at 30% while the focus lasts, 5 s of it, refilling
- * over 6 s with it off; a meter shows it). The left button fires: aimed, at what's under the crosshair; not
+ * turns (district/driving.ts `startAim`), (Shift + right button adds slow motion: the world at 30% while the focus lasts, 5 s of it, refilling
+ * over 6 s without it; a meter shows it). The left button fires: aimed, at what's under the crosshair; not
  * aimed, from the hip, with far more spread and never in slow motion. From the hip in the views on the car (his eyes,
  * the bonnet, the bumper) that's where you look; from the chase cameras (which look at your own car, from wherever
  * you've swung them) it's the way the camera looks past the car, level from his window, and at a car in a chase if
@@ -67,10 +68,9 @@ export class CarGun {
   out = false;
   /** The window the aim's through (null: none: no line of fire). */
   side: Side | null = null;
-  /** Slow motion is switched on (G), at the wheel, with the gun or without it, aimed or not. */
+  /** Slow motion is on: the aim was raised with Shift held. It ends with the aim. */
   private slowOn = false;
-  private readonly meter: HTMLDivElement;
-  private readonly meterFill: HTMLDivElement;
+  private readonly meter: FocusMeter;
   private slowWas = 0;
   /** What the last shot met (for checks). */
   last: { what: string; dist: number; part: string | null } | null = null;
@@ -97,19 +97,11 @@ export class CarGun {
     this.note = el({ left: '50%', top: 'calc(50% + 34px)', transform: 'translateX(-50%)', letterSpacing: '0.12em', color: '#ffb0a0' });
     this.gun = el({ right: '18px', bottom: '64px', textAlign: 'right', lineHeight: '1.5' });
     this.veil = el({ inset: '0', zIndex: '15', background: 'radial-gradient(ellipse at center, rgba(120,150,255,0) 50%, rgba(40,60,140,0.55) 100%)', opacity: '0' });
-    // The focus meter: a thin pale bar low in the middle, the veil's blue, shown while slow motion is on or the focus is spent.
-    this.meter = el({ left: '50%', bottom: '38px', transform: 'translateX(-50%)', width: '168px', textAlign: 'center', letterSpacing: '0.2em', fontSize: '10px', color: '#aab8ee' });
-    this.meter.textContent = 'FOCUS 集中';
-    const track = document.createElement('div');
-    Object.assign(track.style, { marginTop: '4px', height: '3px', background: 'rgba(240,236,248,0.16)', boxShadow: '0 0 6px rgba(0,0,0,0.8)' });
-    this.meterFill = document.createElement('div');
-    Object.assign(this.meterFill.style, { height: '100%', width: '100%', background: '#9fb4ff', boxShadow: '0 0 6px rgba(120,150,255,0.8)' });
-    track.append(this.meterFill);
-    this.meter.append(track);
+    this.meter = new FocusMeter();
     document.addEventListener('mousedown', (e) => {
       if (!this.ready()) return;
       host.gunfire.resume();
-      if (e.button === 2) this.raise();
+      if (e.button === 2) this.raise(false, e.shiftKey);
       if (e.button === 0) this.pulled = true;
     });
     document.addEventListener('mouseup', (e) => {
@@ -119,17 +111,9 @@ export class CarGun {
       if (!document.pointerLockElement) this.lower();
     });
     window.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
-      if (e.code === 'KeyG' && host.seated() && host.live()) this.toggleSlow();
-      if (!this.ready()) return;
+      if (!this.ready() || e.repeat) return;
       if (e.code === 'KeyR') host.rig()?.reload();
     });
-  }
-
-  /** G: slow motion on or off (it needs a little focus to start). */
-  private toggleSlow(): void {
-    if (this.slowOn) this.slowOn = false;
-    else if (this.focus > 0.25) this.slowOn = true;
   }
 
   /** At the wheel of your car, with the mouse: the gun's yours to use. */
@@ -156,15 +140,17 @@ export class CarGun {
     return 1 - SLOW * this.slow;
   }
 
-  /** The gun up (`script`: without the mouse captured, for checks). */
-  raise(script = false): void {
+  /** The gun up (`script`: without the mouse captured, for checks; `slow`: Shift was held, so with slow motion). */
+  raise(script = false, slow = false): void {
     if (script) this.forced = true;
     if (this.aiming || !(script ? this.host.seated() && this.host.rig() : this.ready())) return;
     this.host.driving.startAim();
+    if (slow && this.focus > 0.25) this.slowOn = true;
   }
 
   lower(): void {
     this.forced = false;
+    this.slowOn = false;
     this.host.driving.stopAim();
   }
 
@@ -236,8 +222,7 @@ export class CarGun {
       this.focus = Math.max(0, this.focus - dt / FOCUS_SECS);
       if (this.focus <= 0) this.slowOn = false;
     } else this.focus = Math.min(1, this.focus + dt / FOCUS_REFILL);
-    this.meter.style.display = H.seated() && (this.slowOn || this.focus < 0.999) ? 'block' : 'none';
-    this.meterFill.style.width = `${(this.focus * 100).toFixed(1)}%`;
+    this.meter.update(!!H.seated(), this.slowOn, this.focus);
     this.slow += ((this.slowOn ? 1 : 0) - this.slow) * Math.min(1, dt * 7);
     if (this.slow < 0.002) this.slow = 0;
     this.veil.style.display = this.slow > 0.01 ? 'block' : 'none';
