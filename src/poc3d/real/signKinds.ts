@@ -397,7 +397,8 @@ export type SignExtra =
   | { readonly kind: 'led'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly w: number; readonly id: number }
   | { readonly kind: 'window'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly color: number; readonly maxW: number; readonly id: number }
   | { readonly kind: 'crown'; readonly f: WallFrame; readonly u: number; readonly top: number; readonly text: string; readonly maxW: number; readonly id: number }
-  | { readonly kind: 'cube'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly color: number; readonly id: number };
+  | { readonly kind: 'cube'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly color: number; readonly id: number }
+  | { readonly kind: 'pole'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly id: number };
 
 /** How far a lantern hangs from its wall. */
 export const LANTERN_OUT = 0.45;
@@ -416,6 +417,7 @@ export function addSignExtras(extras: readonly SignExtra[], layout: SignLayout, 
       case 'window': windowLetters(sb, layout, e.f, e.u, e.y, e.text, e.color, { maxW: e.maxW, id: e.id }); break;
       case 'crown': crown(mb, e.f, e.u, e.top, e.text, { maxW: e.maxW, id: e.id }); break;
       case 'cube': cube(sb, mb, layout, e.f, e.u, e.y, e.text, e.color, e.id); break;
+      case 'pole': barberPole(sb, mb, e.f, e.u, e.y, e.id); break;
     }
   }
 }
@@ -437,6 +439,7 @@ export function extraLights(extras: readonly SignExtra[]): Light[] {
       case 'arrow': put(e.f, e.u, 0.6, 3, [1, 0.4, 0.8], 0.2); break;
       case 'led': put(e.f, e.u, 0.6, 3.5, [1, 0.2, 0.1], 0.25); break;
       case 'cube': put(e.f, e.u, 0.5, 2, lin(e.color), 0.2); break;
+      case 'pole': put(e.f, e.u, 0.4, 1.8, [0.9, 0.6, 0.7], 0.15); break;
       default: break;
     }
   }

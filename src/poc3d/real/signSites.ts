@@ -634,6 +634,11 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
       const ft: WallFrame = { p: [f.p[0] - f.n[0] * tf.inset, 0, f.p[2] - f.n[2] * tf.inset], r: f.r, n: f.n };
       if (tf.fw >= 10) extras.push({ kind: 'crown', f: ft, u: ts.length === 1 ? midU : f.fw / 2, top: tt[3] - 0.3, text: CROWN_NAMES[Math.floor(h(52) * CROWN_NAMES.length)], maxW: tf.fw - 2, id: id + 12 });
     }
+    // A barber's turning pole by its door (理容, BARBER: not a beauty salon's).
+    const word = b.sign?.word.toUpperCase() ?? '';
+    if (trade === TRADE.salon && (word.includes('理容') || word.includes('BARBER')) && front >= 2.5 && h(59) < 0.85) {
+      extras.push({ kind: 'pole', f, u: h(60) < 0.5 ? s0 + 0.55 : s1 - 0.55, y: 1.7, id: id + 14 });
+    }
     // The small lit 24H box over the door of a karaoke box, a manga café, a coin laundry; OPEN over a café's.
     const cubeText = trade === TRADE.karaoke || trade === TRADE.books || trade === TRADE.laundry ? '24H' : trade === TRADE.cafe ? 'OPEN' : null;
     if (cubeText && era().cubes && !s.awning && front >= 3.5 && h(53) < E.cube) {
