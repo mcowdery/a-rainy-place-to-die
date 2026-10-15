@@ -237,6 +237,7 @@ export class CarGun {
       this.pulled = false;
       this.out = false;
       this.side = null;
+      H.crosshair.place(null); // on foot the reticle is the view's centre: drop the chase camera's offset
       this.note.style.display = this.gun.style.display = 'none';
       return;
     }
