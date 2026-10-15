@@ -296,11 +296,14 @@ describe('the expressway over the avenues', () => {
     for (const road of ex.roads) {
       if (road.kind !== 'loop' && road.kind !== 'route') continue;
       for (let i = 0; i < road.x.length; i += 3) {
-        const [x, z] = [road.x[i], road.z[i]];
-        // Over a street is clear already; over a lot, no building (set pieces and trees aside: the deck is 15 m up).
-        // (Within 20 m of a grid line is the avenue and its pavement, with lamps and trees.)
-        if (Math.abs(x - Math.round(x / CELL) * CELL) < 20 || Math.abs(z - Math.round(z / CELL) * CELL) < 20) continue;
-        expect(withClear.blocked(x, z, 1), `${road.id} at ${i} (${x.toFixed(0)}, ${z.toFixed(0)})`).toBe(false);
+        // The middle and both edges (at a corner's apex the middle is over the junction, the inner edge over the lot).
+        for (const s of [0, 1, -1]) {
+          const [x, z] = [road.x[i] + s * road.tz[i] * road.half, road.z[i] - s * road.tx[i] * road.half];
+          // Over a street is clear already; over a lot, no building (set pieces and trees aside: the deck is 15 m up).
+          // (Within 20 m of a grid line is the avenue and its pavement, with lamps and trees.)
+          if (Math.abs(x - Math.round(x / CELL) * CELL) < 20 || Math.abs(z - Math.round(z / CELL) * CELL) < 20) continue;
+          expect(withClear.blocked(x, z, 1), `${road.id} at ${i} side ${s} (${x.toFixed(0)}, ${z.toFixed(0)})`).toBe(false);
+        }
       }
     }
   });

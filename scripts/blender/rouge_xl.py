@@ -27,6 +27,8 @@ import rooms as GR  # noqa: E402
 import service as SV  # noqa: E402
 
 PART = B.arg('--part', 'ground')
+LIGHTS_OUT = B.arg('--lights', '')  # write every light made, for the game (halos at the fixtures, light on Mack)
+MADE = []
 ONLY = [s for s in B.arg('--only', '').split(',') if s]
 FLOOR = {'ground': 0, 'f2': 5, 'f3': 10}[PART]
 
@@ -39,6 +41,7 @@ def point(u, t, z, rgb, w, r=0.1, name='light'):
     o.data.color = rgb
     o.data.energy = w * 2.6
     o.data.shadow_soft_size = r
+    MADE.append([round(u, 3), round(t, 3), round(z, 3), round(rgb[0], 3), round(rgb[1], 3), round(rgb[2], 3), round(w, 2), name])
     return o
 
 
@@ -106,5 +109,10 @@ def shots():
 
 
 build()
+if LIGHTS_OUT:
+    import json
+    with open(LIGHTS_OUT, 'w', encoding='utf-8') as fh:
+        json.dump(MADE, fh, separators=(',', ':'))
+    print('lights', len(MADE), LIGHTS_OUT)
 room_obj = B.bake_and_export('rouge_xl_' + PART)
 B.preview(room_obj, shots())

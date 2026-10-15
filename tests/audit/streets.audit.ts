@@ -369,3 +369,42 @@ it('checks every traffic lane with the city own seed', async () => {
   LOG.push(`${loops.length} loops, ${(metres / 1000).toFixed(1)} km of lane; blocked samples: ${blocked}; lane more than 4.6 m from its kerb (clear of turns): ${(far / 1000).toFixed(2)} km; furthest ${worst.toFixed(1)} m`);
   flush('lanes.txt');
 });
+
+it('counts the payphones', () => {
+  const NAMES = ['hood', 'booth', 'red', 'pink'];
+  const by = new Map<string, number[]>();
+  const all: { x: number; z: number; v: number; kind: string }[] = [];
+  let bad = 0;
+  for (const [mx, my] of d.model.cells) {
+    const k = plan(mx, my)!.kind;
+    const row = by.get(k) ?? [0, 0, 0, 0, 0];
+    by.set(k, row);
+    row[4]++;
+    for (const p of d.model.phones(mx, my)?.props ?? []) {
+      row[p.variant]++;
+      all.push({ x: p.x, z: p.z, v: p.variant, kind: k });
+      // On a carriageway with pavements, or inside a building: wrong.
+      const inRoad = roadsAt(p.x, p.z).some((r) => r.kind !== 'coast' && r.sidewalk > 0 && (r.vertical ? p.x > r.rect.x + r.sidewalk && p.x < r.rect.x + r.rect.w - r.sidewalk : p.z > r.rect.y + r.sidewalk && p.z < r.rect.y + r.rect.h - r.sidewalk));
+      if (inRoad || buildingAt(p.x, p.z)) {
+        bad++;
+        if (bad <= 10) LOG.push(`BAD ${NAMES[p.variant]} at ${p.x.toFixed(1)}, ${p.z.toFixed(1)} (${inRoad ? 'in a carriageway' : 'in a building'})`);
+      }
+    }
+  }
+  LOG.push('district     cells  hood booth   red  pink  total  per cell');
+  let total = 0;
+  for (const [k, r] of by) {
+    const n = r[0] + r[1] + r[2] + r[3];
+    total += n;
+    LOG.push(`${k.padEnd(12)} ${String(r[4]).padStart(5)} ${r.slice(0, 4).map((v) => String(v).padStart(5)).join(' ')} ${String(n).padStart(6)}  ${(n / r[4]).toFixed(2)}`);
+  }
+  // The nearest other phone to each: how spread they are.
+  const nearest = all.map((a) => Math.min(...all.filter((b) => b !== a).map((b) => Math.hypot(a.x - b.x, a.z - b.z)))).sort((p, q) => p - q);
+  LOG.push(`total ${total}; wrongly placed ${bad}; nearest other phone: least ${nearest[0]?.toFixed(0)} m, median ${nearest[nearest.length >> 1]?.toFixed(0)} m, most ${nearest[nearest.length - 1]?.toFixed(0)} m; under 10 m apart: ${nearest.filter((v) => v < 10).length}`);
+  // The set pieces' own.
+  for (const q of content.placed) {
+    const near = all.filter((a) => Math.hypot(Math.max(q.rect.x - a.x, 0, a.x - q.rect.x - q.rect.w), Math.max(q.rect.y - a.z, 0, a.z - q.rect.y - q.rect.h)) < 2.5);
+    if (near.length) LOG.push(`  ${q.id} (${q.stamp.landmark}): ${near.map((a) => NAMES[a.v]).join(', ')}`);
+  }
+  flush('phones.txt');
+});

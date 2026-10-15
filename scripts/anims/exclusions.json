@@ -1,0 +1,15 @@
+{
+  "exclude": {
+    "dom": [
+      "DiveRoll_127_23",
+      "DiveRoll_127_24",
+      "JumpOver_127_25",
+      "JumpOver_127_27",
+      "RunDuck_127_29",
+      "RunDuck_127_37",
+      "RunOver_127_33",
+      "RunOver_127_35"
+    ]
+  },
+  "notes": {}
+}

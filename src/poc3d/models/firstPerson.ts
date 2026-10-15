@@ -372,7 +372,7 @@ export class FirstPersonRig {
   glassesKind: GlassesKind | null = null;
   /** How his face is hidden (models/faceShadow.ts): the skin's style, and what goes over it here: the censor bar
    * (a black bar that always faces the camera, over his eyes) or the RoboCop helmet (on the head, and the shadow's). */
-  faceStyle: FaceStyle = 'shadow';
+  faceStyle: FaceStyle = 'none';
   private faceBar: THREE.Mesh | null = null;
   private robo: [THREE.Object3D, THREE.Object3D] | null = null;
   private readonly env: THREE.Texture | null;

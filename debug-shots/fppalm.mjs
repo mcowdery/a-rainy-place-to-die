@@ -8,7 +8,7 @@ await page.goto(`${server.resolvedUrls.local[0]}models-mack.html`);
 const r = await page.evaluate(async () => {
   const THREE = await import('/node_modules/.vite/deps/three.js').catch(() => import('three'));
   const { loadCharacterModel } = await import('/src/poc3d/models/characters.ts');
-  const m = await loadCharacterModel('mack');
+  const m = await loadCharacterModel('dom');
   m.updateMatrixWorld(true);
   const b = {}; m.traverse((o) => { if (o.isBone) b[o.name] = o; });
   const P = (n) => b[n].getWorldPosition(new b[n].position.constructor());

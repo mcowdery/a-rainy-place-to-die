@@ -76,14 +76,19 @@ async function createPod() {
     imageName: 'runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04',
     cloudType: 'SECURE', computeType: 'GPU', gpuCount: 1,
     // Graphics-capable cards only (the A100 and H100 classes lack graphics), cheapest first: about $0.27 an hour for the
-    // A5000, $0.89 for the 4090. 'custom' takes them in this order; if RunPod refuses that, any that is in stock.
-    gpuTypeIds: (process.env.POD_GPUS ?? 'NVIDIA RTX A5000,NVIDIA GeForce RTX 3090,NVIDIA L4,NVIDIA RTX 4000 Ada Generation,NVIDIA GeForce RTX 4090').split(','),
+    // A5000, $0.89 for the 4090, $0.99 the RTX 6000 Ada, $1.09 the L40S (US-IL-1 carries only these four; the 3090, L4 and
+    // 4000 Ada are never offered there). 'custom' takes them in this order; if RunPod refuses that, any that is in stock.
+    gpuTypeIds: (process.env.POD_GPUS ?? 'NVIDIA RTX A5000,NVIDIA GeForce RTX 4090,NVIDIA RTX 6000 Ada Generation,NVIDIA L40S').split(','),
     gpuTypePriority: 'custom',
     dataCenterIds: [volume.dataCenterId], networkVolumeId: volume.id, volumeMountPath: '/workspace',
     containerDiskInGb: 30, ports: ['22/tcp'],
     env: { PUBLIC_KEY: pub, NVIDIA_DRIVER_CAPABILITIES: 'all' },
   };
-  const pod = await api('pods', 'POST', spec).catch((e) => (/gpuTypePriority/i.test(e.message) ? api('pods', 'POST', { ...spec, gpuTypePriority: 'availability' }) : Promise.reject(e)));
+  const pod = await api('pods', 'POST', spec)
+    .catch((e) => (/gpuTypePriority/i.test(e.message) ? api('pods', 'POST', { ...spec, gpuTypePriority: 'availability' }) : Promise.reject(e)))
+    .catch((e) => (/no instances currently available/i.test(e.message)
+      ? fail(`RunPod has no free GPU in ${volume.dataCenterId} right now (${spec.gpuTypeIds.map((g) => g.replace('NVIDIA ', '')).join(', ')}). Try again in a few minutes, or run this locally.`, 3)
+      : Promise.reject(e)));
   console.log(`Created ${pod.name} (${pod.machine?.gpuTypeId}, ${pod.costPerHr}/hr) in ${volume.dataCenterId}.`);
   return pod;
 }

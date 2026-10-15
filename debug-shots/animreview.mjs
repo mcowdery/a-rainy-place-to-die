@@ -9,7 +9,7 @@ import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2];
 const only = process.argv[3] && process.argv[3] !== 'all' ? process.argv[3].split(',') : null;
 const count = Number(process.argv[4] ?? 8);
-const who = process.argv[5] ?? 'mack';
+const who = process.argv[5] ?? 'dom';
 if (!out) {
   console.log('Usage: node debug-shots/animreview.mjs <out dir> [ids | all] [frames a candidate] [character]');
   process.exit(1);

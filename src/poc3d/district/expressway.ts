@@ -843,13 +843,19 @@ export function expresswayReserved(ex: Expressway): Rect[] {
     const w = r.plaza.width / 2 + 3;
     out.push(along ? { x: x0 - 3, y: z0 - w, w: x1 - x0 + 6, h: 2 * w } : { x: x0 - w, y: z0 - 3, w: 2 * w, h: z1 - z0 + 6 });
   }
+  // Over a street (within 17 m of a grid line) is clear already.
+  const offStreet = (x: number, z: number): boolean => Math.abs(x - Math.round(x / CELL) * CELL) >= 17 && Math.abs(z - Math.round(z / CELL) * CELL) >= 17;
   for (const road of ex.roads) {
     if (road.kind === 'ramp' || road.kind === 'deck' || road.kind === 'spur') continue;
     for (let i = 0; i < road.x.length; i += 5) {
       const x = road.x[i];
       const z = road.z[i];
-      // Over a street (within 17 m of a grid line) is clear already.
-      if (Math.abs(x - Math.round(x / CELL) * CELL) < 17 || Math.abs(z - Math.round(z / CELL) * CELL) < 17) continue;
+      // The deck's edges, not only its middle: at a 60 m corner's apex the centreline is 17.6 m off both grid lines,
+      // so it reads as over the street all round, while the inner edge reaches 21 m into the corner lot (a tower
+      // stood through the loop's south-west corner: the user's shot, 2026-10-14).
+      const ex2 = road.tz[i] * road.half;
+      const ez2 = -road.tx[i] * road.half;
+      if (!offStreet(x, z) && !offStreet(x + ex2, z + ez2) && !offStreet(x - ex2, z - ez2)) continue;
       const kx = Math.round(x / unit);
       const kz = Math.round(z / unit);
       const key = `${kx},${kz}`;

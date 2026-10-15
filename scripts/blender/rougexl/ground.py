@@ -89,7 +89,7 @@ def lobby():
     lu = (LOBBY[0] + LOBBY[1]) / 2
     ct = 8.0
     # The chandelier: a gold chain, a crown of glass drops, glowing.
-    g = glow('g_chand', (1.0, 0.8, 0.85), 3.5)
+    g = glow('g_chand', (1.0, 0.8, 0.85), 0.9)
     cyl(lu, ct, CEIL - 0.35, CEIL, 0.02, GOLD, 8, name='chain')
     cyl(lu, ct, CEIL - 0.5, CEIL - 0.35, 0.5, g, 20, r2=0.1, name='chand_top')
     cyl(lu, ct, CEIL - 0.8, CEIL - 0.5, 0.85, g, 20, r2=0.5, name='chand_mid')

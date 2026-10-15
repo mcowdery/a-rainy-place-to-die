@@ -6,7 +6,7 @@ import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/animbatch';
 const groups = (process.argv[3] ?? 'Standing,Walking').split(',');
-const who = process.argv[4] ?? 'mack';
+const who = process.argv[4] ?? 'dom';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();

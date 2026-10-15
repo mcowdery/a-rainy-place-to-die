@@ -113,6 +113,10 @@ script fetches only the files below.
 | `JumpForward_16` | `cmu_16.glb` | 16_05 | forward jump |
 | `Jump_118` | `cmu_118.glb` | 118_01 | Jump |
 | `Jump_13` | `cmu_13.glb` | 13_39 | jump |
+| `DiveRoll_127_23`, `DiveRoll_127_24` | `cmu_127.glb` | 127_23, 127_24 | dive over roll run (as the KIT mirror lists them; the CMU page not read) |
+| `JumpOver_127_25`, `JumpOver_127_27` | `cmu_127.glb` | 127_25, 127_27 | run and jump over (same) |
+| `RunOver_127_33`, `RunOver_127_35` | `cmu_127.glb` | 127_33, 127_35 | run over (same) |
+| `RunDuck_127_29`, `RunDuck_127_37` | `cmu_127.glb` | 127_29, 127_37 | run duck underneath (same) |
 
 Each trial is `http://mocap.cs.cmu.edu/subjects/<subject>/<trial>.amc` with its subject's skeleton
 `<subject>.asf`. Subject 105's files say she is a woman (`emotionWalksFemale` in their header); the database doesn't

@@ -7,6 +7,12 @@ import { animLibrary, type AnimInfo } from '../models/characterAnims';
 import { Character, CHARACTERS, registerCharacters, setCharacterEnvironment } from '../models/characters';
 import type { FirstPersonRig } from '../models/firstPerson';
 import { CANDIDATES, HOP, VERDICT_LABELS, type Candidate, type NowState, type Part, type Review, type Verdict } from './candidates';
+import { FACE_SHADOW } from '../models/faceShadow';
+
+// The faces show as modelled on this page (the user, 2026-10-13: Dom's blacked-out face is off here, "make him have his
+// bare face"). The shadow is one setting shared by every faceless model, so it's off for the page's Mack too; the game
+// and the showrooms keep theirs (models/faceShadow.ts).
+FACE_SHADOW.value = 0;
 
 /**
  * The animation review page (anims.html): one of the cast on a studio floor, playing a clip from the animation
@@ -209,7 +215,7 @@ async function startPart(i: number, fade = 0.15): Promise<void> {
 }
 
 /** Shows a candidate: its run of clips on `name` (Mack, coming into the review), and what he does today beside it. */
-async function review(id: string, name = cand ? charName : CHARACTERS.includes('mack') ? 'mack' : charName): Promise<void> {
+async function review(id: string, name = cand ? charName : CHARACTERS.includes('dom') ? 'dom' : charName): Promise<void> {
   const c = CANDIDATES.find((x) => x.id === id);
   if (!c) return;
   await load(name);
@@ -228,7 +234,7 @@ async function review(id: string, name = cand ? charName : CHARACTERS.includes('
   if (beside && !rigAsked) {
     rigAsked = true;
     void import('../models/firstPerson').then(async ({ FirstPersonRig }) => {
-      const r = await FirstPersonRig.load('mack', env);
+      const r = await FirstPersonRig.load('dom', env);
       r.setHeadless(false);
       r.armed = false;
       r.object.visible = false;
@@ -359,8 +365,9 @@ function buildPanel(): void {
     h.textContent = text;
     panel.appendChild(h);
   };
-  head('Who');
-  for (const n of CHARACTERS) panel.appendChild(button(n, n === charName, () => void (cand ? review(cand.id, n) : show(n, clipName))));
+  section('who', `Who: ${charName}`, CHARACTERS.length, (into) => {
+    for (const n of CHARACTERS) into.appendChild(button(n, n === charName, () => void (cand ? review(cand.id, n) : show(n, clipName))));
+  });
   if (!cand) {
     head('Hands (H)');
     panel.appendChild(button(openHands ? 'left open' : 'as the clip has them', openHands, () => void setHands(!openHands)));
@@ -385,26 +392,91 @@ function buildPanel(): void {
       buildPanel();
     }),
   );
+  // The clips, in sections that fold (what's open is kept across rebuilds): what's new first, then the rest; a search
+  // shows the matches alone.
+  const inputBox = document.createElement('input');
+  inputBox.type = 'search';
+  inputBox.placeholder = 'find a clip…';
+  inputBox.value = search;
+  inputBox.oninput = () => {
+    search = inputBox.value;
+    buildPanel();
+    const again = $('panel').querySelector('input');
+    if (again instanceof HTMLInputElement) {
+      again.focus();
+      again.setSelectionRange(search.length, search.length);
+    }
+  };
+  panel.appendChild(inputBox);
+  const clipButton = (c: (typeof clips)[number]): HTMLButtonElement =>
+    button(c.name, !cand && c.name === clipName, () => void show(charName, c.name), `${NEW_TAKES.test(c.name) || MIXAMO.test(c.name) ? 'new · ' : ''}${c.seconds.toFixed(1)} s`);
+  const needle = search.trim().toLowerCase();
+  if (needle) {
+    const found = clips.filter((c) => c.name.toLowerCase().includes(needle));
+    section('found', `Matches (${found.length})`, found.length, (into) => found.forEach((c) => into.appendChild(clipButton(c))), true);
+    panel.scrollTop = scroll;
+    return;
+  }
+  const fresh = clips.filter((c) => NEW_TAKES.test(c.name));
+  section('new', 'New: cover takes', fresh.length, (into) => fresh.forEach((c) => into.appendChild(clipButton(c))));
+  const coverLib = clips.filter((c) => COVER_LIBRARY.test(c.name));
+  section('coverlib', 'Cover and parkour, already in the library', coverLib.length, (into) => coverLib.forEach((c) => into.appendChild(clipButton(c))));
   // The clips proposed for the city, to judge one by one: first what would replace something of his, then what's new.
   const judged = CANDIDATES.filter((c) => reviews[c.id]?.verdict).length;
-  head(`For the city: ${judged} of ${CANDIDATES.length} judged (N / P)`);
-  for (const kind of ['replace', 'add'] as const) {
-    const h = document.createElement('h4');
-    h.textContent = kind === 'replace' ? 'would replace what he does' : 'new';
-    panel.appendChild(h);
-    for (const c of CANDIDATES) {
-      if (c.kind !== kind) continue;
-      const v = reviews[c.id]?.verdict;
-      panel.appendChild(button(c.title, c === cand, () => void review(c.id), v ? MARKS[v] : ''));
-    }
-  }
-  head('The procedural one');
-  panel.appendChild(button('idle (no clip)', !cand && clipName === null, () => void show(charName, null)));
+  section(
+    'city',
+    `For the city: ${judged} of ${CANDIDATES.length} judged (N / P)`,
+    CANDIDATES.length,
+    (into) => {
+      for (const kind of ['replace', 'add'] as const) {
+        const h = document.createElement('h4');
+        h.textContent = kind === 'replace' ? 'would replace what he does' : 'new';
+        into.appendChild(h);
+        for (const c of CANDIDATES) {
+          if (c.kind !== kind) continue;
+          const v = reviews[c.id]?.verdict;
+          into.appendChild(
+            button(c.title, c === cand, () => {
+              openSections.add('city');
+              void review(c.id);
+            }, v ? MARKS[v] : ''),
+          );
+        }
+      }
+    },
+    !!cand,
+  );
+  panel.appendChild(button('idle (no clip, the procedural one)', !cand && clipName === null, () => void show(charName, null)));
   for (const pack of [...new Set(clips.map((c) => c.pack))]) {
-    head(pack);
-    for (const c of clips) if (c.pack === pack) panel.appendChild(button(c.name, !cand && c.name === clipName, () => void show(charName, c.name), `${c.seconds.toFixed(1)} s`));
+    const mine = clips.filter((c) => c.pack === pack);
+    section(`pack:${pack}`, `${pack}`, mine.length, (into) => mine.forEach((c) => into.appendChild(clipButton(c))), mine.some((c) => !cand && c.name === clipName));
   }
   panel.scrollTop = scroll;
+}
+
+/** The takes for the cover mechanic (2026-10-12: CMU subject 127's obstacle takes, and Mixamo's rolls, dives, covers and crouches): shown first and tagged new until they're judged. */
+const NEW_TAKES = /^(DiveRoll|JumpOver|RunOver|RunDuck)_127_|^MX_(AA_)?.*(cover|roll|dive|crouch|sneak|prone|landing|falling|jumping_down|running_jump|pistol_jump)/i;
+/** Everything cut from Mixamo (scripts/anims/mixamo.mjs: `MX_`, the pack's own `MX_AA_`): new, all of it, until it's been looked through. */
+const MIXAMO = /^MX_/;
+/** The library's own crouching, rolling, climbing and sliding: the other clips a cover mechanic would draw on. */
+const COVER_LIBRARY = /^(Roll|Crouch_|ClimbUp|ClimbLedge|Slide_)/;
+/** Which sections are unfolded, and the clip search. */
+const openSections = new Set<string>(['new']);
+let search = '';
+
+/** A folding section of the panel; `open` keeps it unfolded (the clip playing, a search) whatever was chosen. */
+function section(key: string, title: string, count: number, fill: (into: HTMLElement) => void, open = false): void {
+  const d = document.createElement('details');
+  d.open = open || openSections.has(key);
+  const s = document.createElement('summary');
+  s.textContent = title.includes('(') ? title : `${title} (${count})`;
+  d.appendChild(s);
+  d.addEventListener('toggle', () => {
+    if (d.open) openSections.add(key);
+    else if (!open) openSections.delete(key);
+  });
+  fill(d);
+  $('panel').appendChild(d);
 }
 
 window.addEventListener('keydown', (e) => {

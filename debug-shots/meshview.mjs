@@ -48,6 +48,8 @@ window.__mesh = {
     tall = box.max.y - box.min.y;
     // (DOUBLE=1 in the environment: both sides drawn, which tells a hole from a surface turned inside out.)
     if (${JSON.stringify(!!process.env.DOUBLE)}) for (const m of own.values()) m.side = THREE.DoubleSide;
+    // (UNLIT=1 in the environment: each mesh's own colour with no light or tone mapping on it, for judging a colour bake.)
+    if (${JSON.stringify(!!process.env.UNLIT)}) { renderer.toneMapping = THREE.NoToneMapping; for (const [o, m] of own) own.set(o, new THREE.MeshBasicMaterial({ map: m.map ?? null, vertexColors: !!o.geometry.attributes.color, side: THREE.DoubleSide })); }
     scene.add(model);
     return { triangles: tris, size: box.getSize(new THREE.Vector3()).toArray() };
   },

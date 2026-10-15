@@ -142,7 +142,7 @@ export const hasInteriorModel = (name: string): boolean => modelUrl.has(name);
  * (-t), y up, its origin at the frame's (0, 0) on the flat's floor, so it turns about y by the face's normal.
  * Every material is its baked picture, drawn unlit like the rest of the interior.
  */
-export function placeModel(group: THREE.Group, b: Building3, y: number, name: string): void {
+export function placeModel(group: THREE.Group, b: Building3, y: number, name: string, dim = 1): void {
   const url = modelUrl.get(name);
   if (!url) {
     console.warn(`no interior model '${name}' in assets/interiors/`);
@@ -154,7 +154,7 @@ export function placeModel(group: THREE.Group, b: Building3, y: number, name: st
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       const map = (m.material as THREE.MeshStandardMaterial).map;
-      m.material = new THREE.MeshBasicMaterial({ map, side: THREE.FrontSide });
+      m.material = new THREE.MeshBasicMaterial({ map, side: THREE.FrontSide, color: new THREE.Color(dim, dim, dim) });
       m.castShadow = m.receiveShadow = false;
     });
     const [x, z] = toWorld(f, 0, 0);

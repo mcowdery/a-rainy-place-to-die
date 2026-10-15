@@ -6,9 +6,33 @@
 //
 //   node scripts/props/mesh_endpoint.mjs <picture> [--name tanuki] [--faces 200000] [--seed 0]
 //                                        [--steps 50] [--guidance 3] [--detail-steps 6] [--detail-guidance 3]
-//                                        [--cutout yes] [--engine hunyuan [--texture 2048] [--views 8]
+//                                        [--cutout yes] [--keep-on yes] [--engine hunyuan [--texture 2048] [--views 8]
 //                                        [--view-size 768] [--octree 384] [--texture-seed n]]
 //                                        [--engine pixal3d [--resolution 1024] [--fov 0.35] [--view 180:back.png ...]] [--job <id>]
+//                                        [--engine genia [--class tanuki] [--front model] [--override key=value ...]]
+//
+//   `--engine genia` sends the picture to the fourth mesh worker (Trame/trame-mesh-genia: Meta's GenIA, which keeps SAM
+//   3D Objects frozen and fits what it generates to the picture as it generates), which makes a COLOURED mesh: a colour a
+//   vertex inside the .glb, no texture map, no UVs, no normal.png.
+//   NON-COMMERCIAL BY LICENCE, and the user chose it knowing that (2026-10-13): GenIA's code is CC BY-NC 4.0, it renders
+//   with nvdiffrast (NVIDIA's licence: research or evaluation only) and its depth model's weights are CC BY-NC 4.0, so
+//   nothing from it goes into anything that is sold: it stays in debug-shots/.
+//   What it is good at: an ordinary object photographed in a real scene (it reads depth and a camera off the scene round
+//   the object, so the WHOLE picture is sent, with a mask). What it is bad at: an object cut out and pasted on a flat
+//   ground came out flattened front to back; people and faces come out badly; a picture that reads as a telephoto shot (a
+//   tight crop) is out of its range. It says how it did: report.json has `fit` (the PSNR and SSIM of its own render
+//   against the picture: 25 to 33 dB is a good fit, about 20 a failed one), `camera` (the camera it estimated, also
+//   written as camera.json) and `warnings` (a fit under 23 dB; a field of view under 25 degrees; a picture sent cut out),
+//   which are printed. `--class` is one word for what the object is ("object" unless told), `--seed` GenIA's own (42),
+//   `--faces` there is 150,000 unless told and 0 leaves the mesh as made (380,000 to 950,000, reduced only as far as an
+//   answer can carry), `--override key=value`, repeated, passes a setting of GenIA's own through
+//   (`finetuning.num_iterations=200`). Its .glb is y up and its longest side about 1 like the others'; the pictured side
+//   is towards +z by GenIA's own pose of the object (report.json's `facing`), and `--front model` leaves the object's
+//   own front there instead (a turtle photographed from the side then faces +z, not its flank). Beside the .glb it
+//   writes render_train.png (GenIA's render from the picture's view) and render_azpos / azneg / elpos / elneg.png (30
+//   degrees to each side, above and below): the quickest way to see whether the fit held. A job is about five minutes
+//   on an RTX 4090, on a 48GB card by choice (24GB only fits the smaller objects); a worker's first start also fetches
+//   19GB of weights, so this script may give up waiting before the job is done: `--job <id>` takes it up again.
 //
 //   `--engine pixal3d` sends the picture to the third mesh worker (Trame/trame-mesh-pixal3d: Pixal3D, MIT, shape
 //   only like Hi3DGen's: no colour, no normal.png), whose mesh is made IN THE PICTURE'S OWN CAMERA, so the picture can be
@@ -50,8 +74,14 @@
 //   about a unit tall), normal.png (the normal map the shape was made from), cutout.png (the picture as the
 //   model saw it) and report.json. `node debug-shots/meshview.mjs <out.png> <the .glb>` photographs it.
 //
+//   A PAUSED ENDPOINT (max workers 0, which is how the Studio gives an unused endpoint's worker slot back) is lifted to one
+//   worker first, the job is sent again, and when it is over the endpoint is paused again if nothing else is using it:
+//   `--keep-on yes` leaves it on. That changes the endpoint's settings, so it needs a key with REST access:
+//   RUNPOD_MANAGE_API_KEY (as in the Studio's .env), else RUNPOD_API_KEY. If every worker of the account is taken, it says so.
+//
 //   It needs the endpoint's id and a RunPod key: RUNPOD_MESH_ENDPOINT_ID (RUNPOD_MESH_HUNYUAN_ENDPOINT_ID for
-//   `--engine hunyuan`, RUNPOD_MESH_PIXAL3D_ENDPOINT_ID for `--engine pixal3d`) and RUNPOD_API_KEY, from the
+//   `--engine hunyuan`, RUNPOD_MESH_PIXAL3D_ENDPOINT_ID for `--engine pixal3d`, RUNPOD_MESH_GENIA_ENDPOINT_ID for
+//   `--engine genia`) and RUNPOD_API_KEY, from the
 //   environment or from the Studio's own trame-studio/.env (beside this repo; KREA_STUDIO_ENV says where if
 //   it's elsewhere). A job costs GPU time on the user's RunPod account: seconds once a worker is up, and the
 //   minutes it takes one to start from cold.
@@ -68,8 +98,10 @@ const args = process.argv.slice(2);
 const opt = {};
 const rest = [];
 const extraViews = []; // `--view 180:back.png`, repeated: Pixal3D's other views
+const overrides = []; // `--override key=value`, repeated: GenIA's own settings
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--view') extraViews.push(args[++i] ?? '');
+  else if (args[i] === '--override') overrides.push(args[++i] ?? '');
   else if (args[i].startsWith('--')) opt[args[i].slice(2)] = args[++i];
   else rest.push(args[i]);
 }
@@ -86,9 +118,9 @@ function setting(name) {
   const line = readFileSync(STUDIO_ENV, 'utf8').split(/\r?\n/).find((l) => l.startsWith(`${name}=`));
   return line ? line.slice(name.length + 1).trim().replace(/^["']|["']$/g, '') : '';
 }
-// The three mesh workers: Hi3DGen (shape only, usable in the game), Hunyuan3D 2.1 (textured, an experiment only) and
-// Pixal3D (shape only, in the picture's own camera).
-const ENGINES = { hi3dgen: ['RUNPOD_MESH_ENDPOINT_ID', 'trame-mesh'], hunyuan: ['RUNPOD_MESH_HUNYUAN_ENDPOINT_ID', 'trame-mesh-hunyuan'], pixal3d: ['RUNPOD_MESH_PIXAL3D_ENDPOINT_ID', 'trame-mesh-pixal3d'] };
+// The four mesh workers: Hi3DGen (shape only, usable in the game), Hunyuan3D 2.1 (textured, an experiment only),
+// Pixal3D (shape only, in the picture's own camera) and GenIA (a colour a vertex; non-commercial by licence).
+const ENGINES = { hi3dgen: ['RUNPOD_MESH_ENDPOINT_ID', 'trame-mesh'], hunyuan: ['RUNPOD_MESH_HUNYUAN_ENDPOINT_ID', 'trame-mesh-hunyuan'], pixal3d: ['RUNPOD_MESH_PIXAL3D_ENDPOINT_ID', 'trame-mesh-pixal3d'], genia: ['RUNPOD_MESH_GENIA_ENDPOINT_ID', 'trame-mesh-genia'] };
 const engine = opt.engine ?? 'hi3dgen';
 if (!ENGINES[engine]) {
   console.log(`--engine is ${Object.keys(ENGINES).join(' or ')}, not "${engine}".`);
@@ -138,8 +170,19 @@ if (extraViews.length) {
 for (const [flag, field] of [['faces', 'faces'], ['seed', 'seed'], ['steps', 'steps'], ['guidance', 'guidance'], ['detail-steps', 'detail_steps'], ['detail-guidance', 'detail_guidance'], ['texture', 'texture'], ['views', 'views'], ['view-size', 'view_size'], ['octree', 'octree'], ['texture-seed', 'texture_seed'], ['resolution', 'resolution'], ['fov', 'fov']]) {
   if (opt[flag] !== undefined) input[field] = Number(opt[flag]);
 }
+// (GenIA's own: what the object is, which side is turned to +z, settings passed through. `--cutout yes` there says the
+// picture's own transparency is the mask.)
+if (engine === 'genia') {
+  if (opt.class !== undefined) input.class = opt.class;
+  if (opt.front !== undefined) input.front = opt.front;
+  if (overrides.length) input.overrides = overrides;
+  if (opt.cutout === 'yes') input.cutout = true;
+} else if (overrides.length) {
+  console.log('--override is for --engine genia (a setting of GenIA\'s own).');
+  process.exit(1);
+}
 
-const api = `https://api.runpod.ai/v2/${endpoint}`;
+const api = `${process.env.RUNPOD_API_BASE ?? 'https://api.runpod.ai/v2'}/${endpoint}`;
 const headers = { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
 const call = async (path, init) => {
   const res = await fetch(api + path, { ...init, headers });
@@ -154,13 +197,89 @@ const call = async (path, init) => {
   return data;
 };
 
+// RunPod's worker quota counts every endpoint's max workers, so an endpoint nobody is using may have been paused
+// (max workers 0) to give its slot away; /run then answers 409. The settings are changed with the management API
+// (RUNPOD_MANAGE_API_KEY in the Studio .env, else the job key), as the Studio does for its own endpoints.
+const restBase = `${process.env.RUNPOD_REST_BASE ?? 'https://rest.runpod.io/v1'}/endpoints/${endpoint}`;
+const manageKey = setting('RUNPOD_MANAGE_API_KEY') || key;
+const setWorkers = async (workersMax) => {
+  const res = await fetch(restBase, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${manageKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ workersMin: 0, workersMax }),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    let detail = text.slice(0, 300);
+    try {
+      const data = JSON.parse(text);
+      const found = Array.isArray(data) ? data[0] : (data.error ?? data.message);
+      if (found) detail = String(found);
+    } catch {}
+    throw new Error(`RunPod ${res.status}: ${detail}`);
+  }
+};
+// (process.exit straight after a fetch can crash Node on Windows with a libuv assertion: a wrong exit code.)
+const exitSoon = async (code) => {
+  await new Promise((r) => setTimeout(r, 300));
+  process.exit(code);
+};
+const isPaused = (err) => /paused|max_workers=0/i.test(err.message);
+let liftedIt = false; // true when this run took the endpoint off max workers 0
+
+/** POST /run; a paused endpoint is lifted to one worker first and the job sent again. */
+async function sendJob() {
+  const run = () => call('/run', { method: 'POST', body: JSON.stringify({ input }) });
+  try {
+    return await run();
+  } catch (err) {
+    if (!isPaused(err)) throw err;
+  }
+  console.log('The endpoint is paused (max workers 0): lifting it to 1. Its first job waits for a new worker to start.');
+  try {
+    await setWorkers(1);
+  } catch (err) {
+    console.log(/workers quota/i.test(err.message)
+      ? 'Every worker of the RunPod account is in use (the quota counts every endpoint\'s max workers). Set Max workers to 0 on an endpoint nobody is using, then run this again.'
+      : `Couldn't lift the pause: ${err.message}. Set Max workers to 1 on endpoint ${endpoint} in RunPod (the management API needs RUNPOD_MANAGE_API_KEY, a key with REST access).`);
+    await exitSoon(1);
+  }
+  liftedIt = true;
+  // RunPod can take a moment to accept jobs again.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run();
+    } catch (err) {
+      if (!isPaused(err) || attempt >= 5) throw err;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+}
+
+/** Puts a paused endpoint back to paused once the job is over, unless something else is still using it (or `--keep-on yes`). */
+async function pauseAgain() {
+  if (!liftedIt || opt['keep-on'] === 'yes') return;
+  try {
+    const health = await call('/health');
+    const busy = (health.jobs?.inQueue ?? 0) + (health.jobs?.inProgress ?? 0);
+    if (busy > 0) {
+      console.log(`  (left the endpoint on: ${busy} other job(s) are still using it)`);
+      return;
+    }
+    await setWorkers(0);
+    console.log('  endpoint paused again, as it was found (--keep-on yes leaves it on)');
+  } catch (err) {
+    console.log(`  (couldn't pause the endpoint again: ${err.message}; it is on, max workers 1)`);
+  }
+}
+
 if (!opt.job && JSON.stringify({ input }).length > 9.5 * 2 ** 20) {
   console.log('The pictures together are over RunPod\'s 10 MB limit for a job: send smaller ones (the worker works at 1024 px at most).');
   process.exit(1);
 }
 const started = Date.now();
 // (`--job`: one already sent, which an earlier run of this gave up waiting for; the picture isn't sent again.)
-const job = opt.job ? await call(`/status/${opt.job}`) : await call('/run', { method: 'POST', body: JSON.stringify({ input }) });
+const job = opt.job ? await call(`/status/${opt.job}`) : await sendJob();
 console.log(`job ${job.id}: ${job.status}`);
 let status = job;
 let last = job.status;
@@ -180,10 +299,12 @@ while (!['COMPLETED', 'FAILED', 'CANCELLED', 'TIMED_OUT'].includes(status.status
   if (status.status !== last) console.log(`  ${status.status} after ${Math.round((Date.now() - started) / 1000)} s`);
   last = status.status;
 }
+await pauseAgain();
 const result = status.output ?? {};
 if (status.status !== 'COMPLETED' || result.error) {
   console.log(`The job ${status.status === 'COMPLETED' ? 'answered with an error' : status.status.toLowerCase()}: ${result.error ?? status.error ?? 'no reason given'}`);
   if (result.traceback) console.log(result.traceback);
+  if (result.log) console.log(`The last of the worker's log:\n${result.log}`); // (GenIA's own last lines)
   process.exit(1);
 }
 
@@ -193,12 +314,21 @@ if (result.normal) writeFileSync(join(out, 'normal.png'), Buffer.from(result.nor
 if (result.cutout) writeFileSync(join(out, 'cutout.png'), Buffer.from(result.cutout, 'base64'));
 // (Pixal3D's: the camera the mesh was made in, for cutout.png's pixels. report.json keeps its `camera_iou`.)
 if (result.camera) writeFileSync(join(out, 'camera.json'), JSON.stringify(result.camera, null, 2));
-const { mesh, normal, cutout, camera, ...report } = result;
+// (GenIA's: its own renders of what it fitted, from the picture's view and 30 degrees off it.)
+for (const [view, png] of Object.entries(result.renders ?? {})) writeFileSync(join(out, `render_${view}.png`), Buffer.from(png, 'base64'));
+const { mesh, normal, cutout, camera, renders, ...report } = result;
 writeFileSync(join(out, 'report.json'), JSON.stringify({ picture: resolve(picture), engine, endpoint, job: job.id, waited: Math.round((Date.now() - started) / 1000), runpod: { delayTime: status.delayTime, executionTime: status.executionTime }, ...report }, null, 2));
 console.log(`${join(out, `${name}.glb`)}`);
 console.log(`  ${result.triangles.toLocaleString('en')} triangles (${result.triangles_generated.toLocaleString('en')} as generated), ${(Buffer.byteLength(result.mesh, 'base64') / 2 ** 20).toFixed(1)} MB`);
 if (result.textured) console.log(`  textured: ${result.texture} px maps from ${result.views} views of ${result.view_size} px (an experiment only: see this script's header for the licence)`);
-if (result.camera) console.log(`  camera.json: field of view ${result.camera.fov_degrees.toFixed(1)} degrees (${result.camera.fov_from}), the mesh's outline through it against the cut-out's ${result.camera_iou} (1 = the same)`);
+if (result.camera && result.camera_iou !== undefined) console.log(`  camera.json: field of view ${result.camera.fov_degrees.toFixed(1)} degrees (${result.camera.fov_from}), the mesh's outline through it against the cut-out's ${result.camera_iou} (1 = the same)`);
+if (engine === 'genia') {
+  console.log(`  a colour a vertex, no texture (non-commercial by licence: see this script's header); ${result.facing?.from === 'pose' ? `turned ${result.facing.yaw_degrees} degrees so the pictured side faces +z` : 'the object\'s own front faces +z'}`);
+  console.log(`  fit: PSNR ${result.fit?.psnr ?? '?'} dB, SSIM ${result.fit?.ssim ?? '?'} (25 to 33 dB is a good fit, about 20 a failed one)`);
+  if (result.camera?.fov_degrees !== undefined) console.log(`  camera.json: field of view ${result.camera.fov_degrees.toFixed(1)} degrees (GenIA's estimate), fx ${result.camera.fx.toFixed(1)} fy ${result.camera.fy.toFixed(1)} at ${result.camera.width} x ${result.camera.height}`);
+  console.log(`  renders: ${Object.keys(result.renders ?? {}).map((view) => `render_${view}.png`).join(', ') || 'none'}`);
+  for (const warning of result.warnings ?? []) console.log(`  WARNING: ${warning}`);
+}
 if (result.views_used) console.log(`  ${result.views_used.length} views: ${result.views_used.map((v) => `${v.name} ${v.azimuth_deg}\u00b0`).join(', ')}; the front's frame in the picture sent: ${result.camera?.source_box?.map((v) => Math.round(v)).join(',')}`);
 for (const note of result.notes ?? []) console.log(`  note: ${note}`);
 console.log(`  ${result.seconds?.all ?? '?'} s on the worker, GPU peak ${result.gpu_peak_gib} GiB; waited ${Math.round((Date.now() - started) / 1000)} s in all`);

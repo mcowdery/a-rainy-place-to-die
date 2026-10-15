@@ -4,9 +4,11 @@ Proposed 2026-10-11 and approved the same day (all nine recommendations). **Step
 the bus stops are re-sited.** What was built, and where it differs from this plan, is in
 `.claude/rules/roads-traffic.md` (**Bus stops**); in short: 50 stops in place of 36, each line's listed in
 `traffic.yaml`; no stop is set back into a park yet; and no pole-only stop exists, because the blocks that would
-have had one were widened or had room for a bench. **Step 3 is half done**: the red and pink stand phones and the
-low versions of all four are built and in the showroom (`models-buildings.html`) for approval; they are not yet
-converted to the city's material. Steps 4 and 5 are not built: no phone is in the city and none can be used.
+have had one were widened or had room for a bench. **Steps 3 to 5 are built too (2026-10-12)**: the four phones (the booth in dark
+aluminium, at the user's word, not green), 445 of them placed, drawn by an instanced system of their own, and usable
+(E, the number keys, 117, 177 and 5100). What was built, what it differs in and what is left is in
+`.claude/rules/rendering.md` (**Payphones in the city**). His hand on the handset is built too (mack.md). Left of
+this plan: step 6's other items.
 
 The city was laid out before either of these was thought about. Bus stops were added by the traffic code, which
 knows the roads and not what stands beside them. Payphones need the same knowledge: what a spot is in front of, how

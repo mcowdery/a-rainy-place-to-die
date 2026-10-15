@@ -20,7 +20,7 @@ const shot = (n) => page.screenshot({ path: `${out}/${n}.png` });
 const outfits = ['leathers', 'suit_black', 'suit_charcoal', 'suit_navy', 'suit_cream', 'nude'];
 for (const o of outfits) {
   await page.evaluate((o) => __fp.wear(o, null), o);
-  await page.waitForFunction((o) => __fp.rig().model === (o === 'leathers' ? 'mack' : `mack_${o}`), o, { timeout: 30000, polling: 200 });
+  await page.waitForFunction((o) => __fp.rig().model === (o === 'leathers' ? 'dom' : `dom_${o}`), o, { timeout: 30000, polling: 200 });
   await page.evaluate(() => { __fp.freeze(false); __fp.third(true); __fp.look(Math.PI, -0.08); });
   await page.waitForTimeout(900);
   await shot(`o_${o}_back`);
@@ -30,7 +30,7 @@ for (const o of outfits) {
   await shot(`o_${o}_front`);
 }
 await page.evaluate(() => __fp.wear('leathers', null));
-await page.waitForFunction(() => __fp.rig().model === 'mack', null, { timeout: 30000, polling: 200 });
+await page.waitForFunction(() => __fp.rig().model === 'dom', null, { timeout: 30000, polling: 200 });
 for (const g of ['wrap', 'aviator', 'slim']) {
   await page.evaluate((g) => { __fp.freeze(false); __fp.wear('leathers', g); __fp.third(true); __fp.look(Math.PI, 0); }, g);
   await page.waitForTimeout(700);

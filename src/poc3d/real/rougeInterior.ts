@@ -3,6 +3,7 @@ import type { Rect } from '../../core/coords';
 import type { Building3 } from '../district/plan';
 import { addCar } from './cars';
 import { placeModel } from './homes';
+import { FixtureHalos, fixturesFrom, nearestFixtures, noFixtures, type Fixture } from './fixtureLights';
 import { doorOpen } from './swingDoors';
 import { Draw } from './interiorDraw';
 import type { Interior } from './interiors';
@@ -624,6 +625,11 @@ function* stairs(d: Draw): Generator<void> {
   yield;
 }
 
+/** The bake's lights, per floor (scripts/blender/rouge_xl.py --lights): what the game makes real at each fixture. */
+const LIGHT_FILES = import.meta.glob('../../../content/world3d/rouge_lights_*.json', { eager: true, import: 'default' }) as Record<string, (number | string)[][]>;
+/** The baked pictures are shown a little under their own brightness: the rooms are dimly lit, and the lamps (the halos, the light on a body) are what's bright. */
+const DIM = 0.8;
+
 /** The hotel's interior (hidden until you're inside), built a slice at a time. */
 export function* rougeInterior(b: Building3, city: THREE.Material, ghost: THREE.Material): Generator<void, Interior> {
   const k = new Kit(b);
@@ -634,7 +640,22 @@ export function* rougeInterior(b: Building3, city: THREE.Material, ghost: THREE.
   yield* upperFloor(d, FLOORS[2], anims);
   yield* stairs(d);
   const group = k.finish(city, ghost);
-  for (const m of ['rouge_xl_ground', 'rouge_xl_f2', 'rouge_xl_f3']) placeModel(group, b, 0, m);
-  group.visible = false;
-  return { group, ...rougeLayout(b), tick: (dt, cam) => { for (const a of anims) a(dt, cam); } };
+  for (const m of ['rouge_xl_ground', 'rouge_xl_f2', 'rouge_xl_f3']) placeModel(group, b, 0, m, DIM);
+  // The lamps: a glow at each (one draw), and the nearest light the body.
+  const f = k.f;
+  const fixtures: Fixture[] = Object.values(LIGHT_FILES).flatMap((l) => fixturesFrom(l, (u, t) => toWorld(f, u, t)));
+  const halos = new FixtureHalos(fixtures);
+  group.add(halos.object);
+  let clock = 0;
+  return {
+    group,
+    ...rougeLayout(b),
+    tick: (dt, cam) => {
+      clock += dt;
+      for (const a of anims) a(dt, cam);
+      halos.update(clock, 68, window.innerHeight);
+      nearestFixtures(fixtures, cam.x, cam.y, cam.z, clock);
+    },
+    off: noFixtures,
+  };
 }
