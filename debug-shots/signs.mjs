@@ -1,7 +1,7 @@
 // The city's shop signs, photographed from where they're read (real/signSites.ts placed them): a face-on sign from
 // across its street, a blade from along it.
 //   node debug-shots/signs.mjs [out dir] [which] [query]
-// which: `sample` (default: two of each form and look from each district), `extras` (two of each other kind from each
+// which: `sample` (default: two of each form and look from each district; `sample:neon,tower` those districts), `extras` (two of each other kind from each
 // district: real/signKinds.ts; `extras:crown,window` only those kinds), `all`, or indices (0,3,12). It prints how
 // many there are of each form. One page load; each sign is a teleport and a wait for its chunks.
 import { mkdirSync } from 'node:fs';
@@ -54,9 +54,10 @@ try {
   let pick;
   if (which.startsWith('extras')) pick = [];
   else if (which === 'all') pick = list;
-  else if (which === 'sample') {
+  else if (which.startsWith('sample')) {
     pick = [];
-    for (const d of [...new Set(list.map((s) => s.district))]) {
+    const ds = which.split(':')[1]?.split(',');
+    for (const d of [...new Set(list.map((s) => s.district))].filter((d) => !ds || ds.includes(d))) {
       for (const f of ['blade', 'fascia', 'channel']) {
         const of = list.filter((s) => s.district === d && s.form === f);
         const looks = [...new Set(of.map((s) => s.look))];
