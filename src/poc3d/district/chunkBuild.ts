@@ -95,8 +95,7 @@ export class ChunkBuilder {
         for (let dx = -1; dx <= 1; dx++) {
           const d = m.detail(mx + dx, my + dy);
           if (d) lights.push(...d.lights);
-          const p = m.plan(mx + dx, my + dy);
-          if (p) lights.push(...signLights(p.signs));
+          lights.push(...signLights(m.signs(mx + dx, my + dy)));
           for (const q of m.stamps(mx + dx, my + dy)) {
             lights.push(...signLights(q.signs));
             lights.push(...landmarkLights(q));
@@ -122,7 +121,7 @@ export class ChunkBuilder {
       const around: Building3[] = [];
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) around.push(...m.buildings(mx + dx, my + dy));
       const seen = sightline(around);
-      addSigns([...plan.signs, ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb, seen);
+      addSigns([...m.signs(mx, my), ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb, seen);
       const ab = this.ab.reset();
       if (this.ads && this.adSites) addDistrictAds(ab, mb, this.adSites.sites(mx, my));
       return { mx, my, stage, meshes: { near: lift(mb.raw(cx, cz)), props: lift(pf.raw(cx, cz)), propsMid: lift(pm.raw(cx, cz)), signs: lift(sb.raw(cx, cz)), ads: lift(ab.raw(cx, cz)), taxiAds: lift(tb.raw(cx, cz)) }, ms: performance.now() - t0 };

@@ -2,7 +2,7 @@ import { Terrain } from './terrain';
 import { intersect, overlaps, pad, type Rect } from '../../core/coords';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import { cellDetail, type CellDetail } from '../real/props';
-import { agreeJunctions, CELL, cellKey, edgeKey, planCell3, STYLES3, type Building3, type CellPlan3 } from './plan';
+import { agreeJunctions, CELL, cellKey, edgeKey, planCell3, STYLES3, type Building3, type CellPlan3, type Road3, type Sign3 } from './plan';
 import { plazaRect, reservedRect, type Placed3 } from './stamps';
 import { ZoneMap } from './zones';
 import type { Avenues, EdgeSpec } from './roads';
@@ -16,9 +16,10 @@ import { manilaTexts } from '../real/manilaStreet';
 import type { BusLine } from './traffic';
 import { lineStops, stopClaim, type LineStops, type StopSite } from './stops';
 import { placePhones, type PhonePlacement } from '../real/phoneSites';
+import { placeSigns } from '../real/signSites';
 
 /**
- * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings, signs) and
+ * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings), its signs and
  * street furniture, and the stamps placed in it. Everything is computed lazily and cached, and is a pure
  * function of (seed, L0 map, placements), so the main thread (collision) and the chunk workers (geometry)
  * each keep their own copy and always agree.
@@ -178,6 +179,31 @@ export class DistrictModel {
     return ph;
   }
 
+  private readonly signCache = new Map<number, readonly Sign3[]>();
+  /**
+   * A cell's shop signs (real/signSites.ts): where each hangs and how it's made, from the buildings and streets round
+   * it. The set pieces' own signs are theirs (`Placed3.signs`).
+   */
+  signs(mx: number, my: number): readonly Sign3[] {
+    const k = cellKey(mx, my);
+    let s = this.signCache.get(k);
+    if (!s) {
+      const p = this.plan(mx, my);
+      if (!p) return [];
+      const around: Building3[] = [];
+      const roads: Road3[] = [];
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          around.push(...this.buildings(mx + dx, my + dy));
+          roads.push(...(this.plan(mx + dx, my + dy)?.roads ?? []));
+        }
+      }
+      s = placeSigns(p, around, roads);
+      this.signCache.set(k, s);
+    }
+    return s;
+  }
+
   /** Street furniture and lights of a cell (null outside the district). */
   detail(mx: number, my: number): CellDetail | null {
     const k = cellKey(mx, my);
@@ -185,7 +211,7 @@ export class DistrictModel {
     if (!d) {
       const p = this.plan(mx, my);
       if (!p) return null;
-      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my), this.coveredIn(mx, my), this.claimed(mx, my), this.phones(mx, my));
+      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my), this.coveredIn(mx, my), this.claimed(mx, my), this.phones(mx, my), this.signs(mx, my));
       this.details.set(k, d);
     }
     return d;

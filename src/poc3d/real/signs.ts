@@ -31,6 +31,11 @@ const CELL_PX = 32;
 const H_SLOT = 80;
 const V_CHAR = 72;
 
+/** How long a blade with this text is, in metres (the atlas slot's height: SignLayout). */
+export const bladeLength = (text: string): number => ([...text].filter((c) => c !== ' ').length * V_CHAR + 24) / PX_PER_M;
+/** How wide a fascia plate with this text is, in metres, before it's held to 5.4 m and its shopfront (addSigns). */
+export const plateWidth = (text: string): number => ((cellWidth(text) + 1) * CELL_PX) / PX_PER_M;
+
 interface Slot {
   x: number;
   y: number;
@@ -238,8 +243,9 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
           diffuseColor.rgb = mix(vPlate, vInk * 0.6, st.r);
           totalEmissiveRadiance += vInk * (st.r * 3.0 + st.g * 0.35) * on;
         } else if (vSign.y > 1.5) {
-          // Print (vinyl wraps, stickers): lit by the scene, no glow.
+          // Print (vinyl wraps, stickers): lit by the scene, no glow; a shop's painted board (2.25) has a little lamp over it.
           diffuseColor.rgb = mix(vPlate, vInk, st.r);
+          if (vSign.y > 2.1) totalEmissiveRadiance += diffuseColor.rgb * 0.3 * on;
         } else {
           diffuseColor.rgb = mix(vPlate, vInk, st.r);
           // Dark lettering on a lit plate stays dark; white lettering on a coloured plate outshines it.
@@ -247,7 +253,7 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
           totalEmissiveRadiance += mix(vPlate * 0.9, vInk * inkGlow, st.r) * on;
         }`);
   };
-  m.customProgramCacheKey = () => 'signs-v3';
+  m.customProgramCacheKey = () => 'signs-v4';
   return m;
 }
 
@@ -372,16 +378,30 @@ export function signBox(sb: SignBuilder, p: C3, r: C3, n: C3, u0: number, u1: nu
 }
 
 export interface SignStyle {
-  /** 0 neon on dark plate, 1 lightbox. */
+  /** 0 neon on dark plate, 1 lightbox, 2.25 a shop's painted board (lit by a lamp over it). */
   readonly style: number;
   readonly ink: C3;
   readonly plate: C3;
   readonly channel: boolean;
 }
 
+/** Painted boards (unlit, lit by the street): cream with dark letters, or dark wood with cream ones. */
+const PRINT: readonly (readonly [plate: number, ink: number])[] = [[0xd8cfb8, 0x1c1a18], [0x3a2a1e, 0xe8dcc0], [0xe4e0d4, 0x8a1c18]];
+
 export function signStyle(s: Sign3): SignStyle {
   const rnd = rng(hash(Math.round(s.x * 10), Math.round(s.z * 10), Math.round(s.y * 10), 0x5160));
   const color = lin(s.color);
+  // What its siting chose (signSites.ts); stamps' signs and anything else without a look, from its own hash as before.
+  switch (s.look) {
+    case 'neon': return { style: 0, ink: color, plate: lin(0x141418), channel: false };
+    case 'channel': return { style: 0, ink: color, plate: lin(0x141418), channel: true };
+    case 'lightbox': return { style: 1, ink: scale3(color, 0.35), plate: lin(0xe8e6de), channel: false };
+    case 'inverse': return { style: 1, ink: lin(0xfaf8f0), plate: scale3(color, 0.8), channel: false };
+    case 'print': {
+      const [plate, ink] = rnd.pick(PRINT);
+      return { style: 2.25, ink: lin(ink), plate: lin(plate), channel: false };
+    }
+  }
   const latin = [...s.text].every((c) => !isWide(c.codePointAt(0)!));
   const channel = !s.vertical && latin && rnd.chance(0.45);
   const roll = rnd.float();
@@ -396,7 +416,8 @@ const signId = (s: Sign3): number => hash(Math.round(s.x * 10), Math.round(s.z *
 
 /** Each sign's glow on the street below it, for the lightmap. */
 export function signLights(signs: readonly Sign3[]): Light[] {
-  return signs.map((s) => {
+  // (A painted board gives no light.)
+  return signs.filter((s) => s.look !== 'print').map((s) => {
     const st = signStyle(s);
     const glow = st.style === 0 ? st.ink : st.plate;
     const out = s.vertical ? 0.4 : 1.2;
@@ -415,7 +436,7 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
     const r: C3 = [s.nz, 0, -s.nx];
     if (st.channel) {
       const p: C3 = [s.x - s.nx * 0.4, 0, s.z - s.nz * 0.4];
-      channelLetters(mb, s.text, p, r, n, 3.62, 0.62, 5.2, st.ink, signId(s), 0.02);
+      channelLetters(mb, s.text, p, r, n, 3.62, 0.62, Math.min(5.2, s.maxW ?? 5.2), st.ink, signId(s), 0.02);
       continue;
     }
     const rect = atlas.rect(s.text, s.vertical);
@@ -434,7 +455,7 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
       signBox(sb, p, r, n, -0.03, 0.03, s.y - 0.12, s.y - 0.04, 0, 0.14, atlas.blankUv, {});
       signBox(sb, p, r, n, -0.03, 0.03, s.y - rect.h + 0.04, s.y - rect.h + 0.12, 0, 0.14, atlas.blankUv, {});
     } else {
-      const w = Math.min(rect.w, 5.4);
+      const w = Math.min(rect.w, 5.4, s.maxW ?? 5.4);
       const h = rect.h * (w / rect.w);
       signBox(sb, p, r, n, -w / 2, w / 2, 3.62 - h / 2, 3.62 + h / 2, 0.02, 0.2, atlas.blankUv, { n: uv });
     }
@@ -493,15 +514,18 @@ function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: 
 let ROOFTOP_SIGNS = true;
 export const setRooftopSigns = (on: boolean): void => void (ROOFTOP_SIGNS = on);
 
+/** The share of tall enough buildings with letters on the roof: the district's (`rooftopLetters`: none over homes, the old town, the campus). */
+const roofChance = (b: Building3): number => b.zone?.style.rooftopLetters ?? 0.3;
+
 export function hasRooftopLetters(b: Building3, seen: Sightline = ALWAYS_SEEN): boolean {
-  return ROOFTOP_SIGNS && b.h >= 18 && b.hue === undefined && rng(hash(b.id, 0xb111)).chance(0.3) && seen(b, b.h + 3);
+  return ROOFTOP_SIGNS && b.h >= 18 && b.hue === undefined && rng(hash(b.id, 0xb111)).chance(roofChance(b)) && !styleFor(b).home && seen(b, b.h + 3);
 }
 
 /** Rooftop billboard: big channel letters on a steel frame near the front edge of some taller buildings. */
 function rooftopBillboard(mb: MeshBuilder, b: Building3, seen: Sightline): void {
   if (!hasRooftopLetters(b, seen)) return;
   const rnd = rng(hash(b.id, 0xb111));
-  rnd.chance(0.3);
+  rnd.chance(roofChance(b));
   const ts = tiers(b);
   const tt = ts[ts.length - 1];
   const top = tt[3] + styleFor(b).parapet;

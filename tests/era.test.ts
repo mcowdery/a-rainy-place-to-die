@@ -6,21 +6,21 @@ import { FRAME, TRADE, TRADES, tradeOfWord } from '../src/poc3d/real/shops';
 import { styleFor, WIN } from '../src/poc3d/real/buildings';
 import { allScenes, windowTables } from '../src/poc3d/real/windowScenes';
 import { DistrictModel } from '../src/poc3d/district/model';
-import { DISTRICTS3, type CellPlan3 } from '../src/poc3d/district/plan';
+import { DISTRICTS3, type CellPlan3, type Sign3 } from '../src/poc3d/district/plan';
 
 afterEach(() => setEra('1992'));
 
-/** Every planned cell of the two central districts, in the era that is set. */
-function plans(): { content: ReturnType<typeof loadDistrictContent>; cells: CellPlan3[] } {
+/** Every planned cell of the two central districts, in the era that is set, with its signs. */
+function plans(): { content: ReturnType<typeof loadDistrictContent>; cells: (CellPlan3 & { signs: readonly Sign3[] })[] } {
   const content = loadDistrictContent();
   const model = new DistrictModel(content.macro, DISTRICTS3, content.placed, 7, content.zones, content.avenues);
-  const cells: CellPlan3[] = [];
+  const cells: (CellPlan3 & { signs: readonly Sign3[] })[] = [];
   for (let my = 0; my < content.macro.rows; my++)
     for (let mx = 0; mx < content.macro.cols; mx++) {
       const kind = content.macro.kindAt(mx, my);
       if (kind !== 'neon' && kind !== 'tower') continue;
       const p = model.plan(mx, my);
-      if (p) cells.push(p);
+      if (p) cells.push({ ...p, signs: model.signs(mx, my) });
     }
   return { content, cells };
 }

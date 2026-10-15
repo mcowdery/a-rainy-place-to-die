@@ -58,7 +58,14 @@ export interface Sign3 {
   /** Facade normal (the sign is only readable from this side). */
   readonly nx: number;
   readonly nz: number;
+  /** How it's made (real/signs.ts `signStyle`), where its siting chose (real/signSites.ts); absent, from its own hash. */
+  readonly look?: SignLook;
+  /** The widest a horizontal sign may be (its own shopfront), in metres. */
+  readonly maxW?: number;
 }
+
+/** Neon on a dark plate, a lightbox (coloured letters on white), its inverse (white letters on colour), painted (unlit), channel letters. */
+export type SignLook = 'neon' | 'lightbox' | 'inverse' | 'print' | 'channel';
 
 export interface Building3 {
   /** Stable id: seeds the facade style, hue and windows in the shader. */
@@ -79,8 +86,11 @@ export interface Building3 {
   /** A corner lot's corner cut at the junction (sumikiri): which footprint corner, and the cut's leg in metres. */
   readonly cut?: { readonly corner: Corner; readonly size: number };
   readonly hue?: number;
-  /** Its shop sign's text and colour, if it has one (the shop is what its sign says: real/shops.ts). */
-  readonly sign?: { readonly text: string; readonly color: number };
+  /**
+   * Its shop sign's text and colour, if it has one (the shop is what its sign says: real/shops.ts), and the word it says
+   * in 1992 (the same in every year: `text` is the year's own, district/era.ts).
+   */
+  readonly sign?: { readonly text: string; readonly color: number; readonly word: string };
   /** The zone it was generated in (look and ads); absent for stamps and zone-less districts. */
   readonly zone?: Zone3;
 }
@@ -167,7 +177,6 @@ export interface CellPlan3 {
   readonly medians: readonly Rect[];
   readonly buildings: readonly Building3[];
   readonly open: readonly OpenLot3[];
-  readonly signs: readonly Sign3[];
 }
 
 export type Corner = 'nw' | 'ne' | 'sw' | 'se';
@@ -189,6 +198,8 @@ export interface DistrictStyle3 {
   readonly floors: readonly (readonly [number, number, number])[];
   readonly signChance: number;
   readonly verticalSign: number;
+  /** Share of buildings tall enough (18 m) with neon channel letters on the roof (real/signs.ts; absent, 0.3). */
+  readonly rooftopLetters?: number;
   readonly signWords: readonly string[];
   readonly signColors: readonly number[];
   /** Share of lots left open, by kind (coin parking, a pocket playground, a vacant lot). */
@@ -348,6 +359,7 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     ],
     signChance: 0.85,
     verticalSign: 0.55,
+    rooftopLetters: 0.3,
     signWords: [...STYLES.neon.signs.words, 'スナック 夜', 'ネオン', '麻雀', 'バー', '二次会', 'LIVE', 'PACHINKO', 'GAME CENTER', 'カラオケ館', '風俗案内所'],
     signColors: NEON_SIGN_COLORS,
     open: { parking: 0.06, vacant: 0.02, playground: 0.01 },
@@ -377,6 +389,7 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     ],
     signChance: 0.35,
     verticalSign: 0.2,
+    rooftopLetters: 0.1,
     signWords: ['BANK', '銀行', 'HOTEL', 'CAFE', '郵便局', 'CLINIC', '証券', '保険', 'ビジネス', '書店', 'BAKERY', 'GYM'],
     signColors: [0xffffff, 0x4fe3ff, 0xffe45f, 0x6bff8a],
     open: { parking: 0.04 },
@@ -406,6 +419,7 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     ],
     signChance: 0.12,
     verticalSign: 0.3,
+    rooftopLetters: 0,
     signWords: ['クリーニング', '理容', 'コインランドリー', '薬局', '八百屋', '酒店', 'パン', 'たばこ', '歯科', '整骨院', '不動産', '牛乳'],
     signColors: [0xffffff, 0x4fe3ff, 0xffe45f, 0x6bff8a],
     open: { parking: 0.07, playground: 0.03, vacant: 0.03 },
@@ -437,6 +451,7 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     ],
     signChance: 0.45,
     verticalSign: 0.6,
+    rooftopLetters: 0,
     signWords: ['煎餅', '甘味処', '団子', '天ぷら', '蕎麦', '人形焼', '銭湯', '酒', '呉服', '下駄', '骨董', '豆腐', '佃煮', '鰻', 'もんじゃ', '質'],
     signColors: [0xffffff, 0xffe45f, 0xff4f4f, 0x6bff8a],
     open: { parking: 0.05, vacant: 0.03, playground: 0.02 },
@@ -467,6 +482,7 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     ],
     signChance: 0.2,
     verticalSign: 0.2,
+    rooftopLetters: 0,
     signWords: ['学生会館', '図書館', '研究棟', '講義棟', '学生食堂', '生協', '書店', 'CAFE', '体育館', '国際会議場'],
     signColors: [0xffffff, 0x4fe3ff, 0xffe45f],
     open: { parking: 0.05, playground: 0.02 },
@@ -498,6 +514,7 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     ],
     signChance: 0.95,
     verticalSign: 0.7,
+    rooftopLetters: 0.3,
     signWords: ['電気', 'PC', 'パーツ', '無線', 'ゲーム', 'アニメ', 'フィギュア', 'カード', '中古', '買取', 'DUTY FREE', '免税', 'メイドカフェ', 'ホビー', 'レトロゲーム', 'オーディオ', 'カメラ', 'スマホ', '電子部品', 'ジャンク'],
     signColors: [0xff5fc8, 0x4fe3ff, 0xffe45f, 0x6bff8a, 0xff4f4f, 0xffffff, 0xff9a2a],
     open: { parking: 0.04 },
@@ -527,6 +544,7 @@ export const STYLES3: Readonly<Partial<Record<DistrictId, DistrictStyle3>>> = {
     ],
     signChance: 0.25,
     verticalSign: 0.1,
+    rooftopLetters: 0.1,
     signWords: ['倉庫', '東都港運', '冷蔵倉庫', '物流センター', '水産', '港湾', '海運', 'SHIPPING', 'LOGISTICS', '食堂', '運送', '船具'],
     signColors: [0xffffff, 0x4fe3ff, 0xffe45f, 0xff4f4f],
     open: { parking: 0.12, vacant: 0.05 },
@@ -691,17 +709,16 @@ export function planCell3(
   if (rest) subdivide(rest, style, rnd, roads, blocks, reserved, road);
 
   const buildings: Building3[] = [];
-  const signs: Sign3[] = [];
   // 256 ids per cell (dense zones have many small lots); stamps use 900000 and up.
   const idBase = 1 + (my * macro.cols + mx) * 256;
-  const fill: Fill = { style, rnd, reserved, buildings, signs, open, idBase, zone };
+  const fill: Fill = { style, rnd, reserved, buildings, open, idBase, zone };
   for (const b of blocks) {
     if (style.towerCover && Math.min(b.w, b.h) >= 30 && !reserved.some((q) => overlaps(q, b))) towerBlock(b, fill);
     else if (style.yardCover && Math.min(b.w, b.h) >= 30 && !reserved.some((q) => overlaps(q, b)) && rnd.chance(style.yardCover)) {
       open.push({ kind: 'yard', rect: b, front: b.w >= b.h ? 'south' : 'east', seed: openSeed(b, 6) });
     } else fillBlock(b, fill);
   }
-  return { mx, my, kind, rect: R, style, roads, medians: medianRects(roads), buildings, open, signs };
+  return { mx, my, kind, rect: R, style, roads, medians: medianRects(roads), buildings, open };
 }
 
 /**
@@ -731,7 +748,6 @@ interface Fill {
   readonly rnd: Rng;
   readonly reserved: readonly Rect[];
   readonly buildings: Building3[];
-  readonly signs: Sign3[];
   readonly open: OpenLot3[];
   readonly idBase: number;
   readonly zone?: Zone3;
@@ -828,7 +844,6 @@ function towerBlock(block: Rect, f: Fill): void {
     // (A tower not up yet in this era: its plaza is cleared ground. era.ts.)
     if (!eraTower(cx, cz)) continue;
     f.buildings.push(withSign(b, sign));
-    if (sign) f.signs.push(sign);
   }
 }
 
@@ -873,7 +888,7 @@ function subdivide(
  * corner lots at either end of a row front the side street instead, so every street is lined with fronts.
  */
 function fillBlock(block: Rect, f: Fill): void {
-  const { style, rnd, reserved, buildings, signs, idBase, zone } = f;
+  const { style, rnd, reserved, buildings, idBase, zone } = f;
   const rows: { r: Rect; front: Side }[] = [];
   if (block.h > style.twoRowDepth) {
     const split = block.h * (0.4 + rnd.float() * 0.2);
@@ -933,7 +948,6 @@ function fillBlock(block: Rect, f: Fill): void {
       const b: Building3 = { id: idBase + buildings.length, x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, h: height, ...(height < planned ? { was: planned } : {}), front: lotFront, ...cut, ...(zone ? { zone } : {}) };
       const sign = rnd.chance(style.signChance) ? makeSign(b, style, rnd) : null;
       buildings.push(withSign(b, sign));
-      if (sign) signs.push(sign);
     }
   }
 }
@@ -994,23 +1008,24 @@ export function frontSpan(b: Pick<Building3, 'w' | 'd' | 'front' | 'cut'>): [num
   return c.corner === a ? [c.size, fw] : c.corner === e ? [0, fw - c.size] : [0, fw];
 }
 
-/** A building with its sign's text and colour (what its shop is: real/shops.ts). */
-const withSign = (b: Building3, sign: Sign3 | null): Building3 => (sign ? { ...b, sign: { text: sign.text, color: sign.color } } : b);
+/** A building with its shop sign's text and colour (what its shop is: real/shops.ts; where its signs go: real/signSites.ts). */
+const withSign = (b: Building3, sign: ShopSign | null): Building3 => (sign ? { ...b, sign } : b);
 
-function makeSign(b: Building3, style: DistrictStyle3, rnd: Rng): Sign3 {
+type ShopSign = NonNullable<Building3['sign']>;
+
+/**
+ * The shop's sign: its word and colour. Only what it says: where signs go and how they're made is the siting's
+ * (real/signSites.ts). The dice for the old placement are still rolled, so every roll after them, and so the rest of
+ * the cell (lots, heights, the shops), stays as it was.
+ */
+function makeSign(b: Building3, style: DistrictStyle3, rnd: Rng): ShopSign {
   const word = rnd.pick(style.signWords);
   const color = rnd.pick(style.signColors);
   const allWide = [...word].every((c) => isWide(c.codePointAt(0)!) || c === ' ');
-  const vertical = allWide && b.h >= 9 && rnd.chance(style.verticalSign);
-  // (What the sign says in this era: era.ts. The dice above are the word's own, so they're rolled alike in every year,
-  // and a wide word's replacement is wide, so a vertical sign stays one.)
-  const text = eraSign(word);
-  const [s0, s1] = frontSpan(b);
-  if (vertical) {
-    const p = frontPoint(b, rnd.chance(0.5) ? s0 + 1.2 : s1 - 1.2, 0.4);
-    return { text, vertical, color, x: p.x, y: Math.min(b.h - 1, 7 + rnd.float() * 6), z: p.z, nx: p.nx, nz: p.nz };
+  if (allWide && b.h >= 9 && rnd.chance(style.verticalSign)) {
+    rnd.chance(0.5);
+    rnd.float();
   }
-  // Horizontal signs sit on the fascia over the shopfront.
-  const p = frontPoint(b, (s0 + s1) / 2, 0.4);
-  return { text, vertical, color, x: p.x, y: 3.6, z: p.z, nx: p.nx, nz: p.nz };
+  // (What the sign says in this era: era.ts. The dice above are the word's own, so they're rolled alike in every year.)
+  return { text: eraSign(word), color, word };
 }

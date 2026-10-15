@@ -146,7 +146,7 @@ import { deadAt } from './peopleHours';
 import { setWorkLiveries } from '../models/vehicles';
 import { money, setCurrency } from '../../money';
 import { signTexts } from './model';
-import { CELL, DISTRICTS3, STYLES3 } from './plan';
+import { CELL, DISTRICTS3, STYLES3, type Sign3 } from './plan';
 import type { Node3 } from './stamps';
 import { District, LIGHTMAP_WINDOW } from './world';
 import { FirstPersonRig } from '../models/firstPerson';
@@ -753,6 +753,26 @@ async function run(): Promise<void> {
         controls.setLevel(g);
         controls.setView((Math.atan2(q.x - x, q.z - z) * 180) / Math.PI + 180, (-Math.atan2(up - 1.25, Math.hypot(q.x - x, q.z - z)) * 180) / Math.PI);
         phoneField.update(camera.position, true);
+        return true;
+      },
+    };
+    // Every shop sign in the city, to look them over (real/signSites.ts; debug-shots/signs.mjs): `all()` lists them (form,
+    // look, where, the district); `go(i)` stands the camera where it's read from: across the street from a face-on sign,
+    // along the street from a blade.
+    const signList = (): (Sign3 & { kind: string })[] => district.model.cells.flatMap(([mx, my]) => district.model.signs(mx, my).map((s) => ({ ...s, kind: district.plan(mx, my)?.kind ?? '' })));
+    (window as unknown as { __signs: unknown }).__signs = {
+      all: () => signList().map((s) => ({ form: s.vertical ? 'blade' : s.look === 'channel' ? 'channel' : 'fascia', look: s.look ?? '', text: s.text, x: Math.round(s.x), z: Math.round(s.z), district: s.kind })),
+      go: (i: number, back = 9): boolean => {
+        const s = signList()[i];
+        if (!s) return false;
+        const [rx, rz] = [s.nz, -s.nx];
+        const x = s.vertical ? s.x + s.nx * 2.5 + rx * back : s.x + s.nx * back;
+        const z = s.vertical ? s.z + s.nz * 2.5 + rz * back : s.z + s.nz * back;
+        const g = groundAt(x, z);
+        const ty = s.vertical ? s.y - 1.6 : 3.6;
+        camera.position.set(x, g + 1.6, z);
+        controls.setLevel(g);
+        controls.setView((Math.atan2(s.x - x, s.z - z) * 180) / Math.PI + 180, (Math.atan2(ty - 1.6, Math.hypot(s.x - x, s.z - z)) * 180) / Math.PI);
         return true;
       },
     };

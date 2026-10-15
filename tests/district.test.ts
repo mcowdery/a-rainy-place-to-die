@@ -353,7 +353,7 @@ describe('Open ground and greenery', () => {
     expect(props.filter((q) => q.kind === 'tree').length / cells.length).toBeGreaterThan(8);
     expect(props.some((q) => q.kind === 'hedge')).toBe(true);
     for (const [mx, my] of cells) {
-      const blades = model.plan(mx, my)!.signs.filter((s) => s.vertical);
+      const blades = model.signs(mx, my).filter((s) => s.vertical);
       for (const t of model.detail(mx, my)!.props.filter((q) => q.kind === 'tree' && q.grate !== false)) {
         expect(blades.some((s) => Math.hypot(s.x - t.x, s.z - t.z) < 3.2)).toBe(false);
       }

@@ -1,7 +1,7 @@
 import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng, u01 } from '../../core/hash';
 import { inPark } from '../district/parkLand';
-import { frontSpan, isRiverWalk, isVerge, throughMouths, type Building3, type CellPlan3, type Road3 } from '../district/plan';
+import { frontSpan, isRiverWalk, isVerge, throughMouths, type Building3, type CellPlan3, type Road3, type Sign3 } from '../district/plan';
 import { frontFrame, styleFor } from './buildings';
 import { shopLight, TRADES } from './shops';
 import type { Light } from './lightmap';
@@ -111,6 +111,8 @@ export function cellDetail(
   claimed: readonly Rect[] = [],
   /** The cell's payphones (phoneSites.ts placePhones: DistrictModel.phones), which stand before anything else here. */
   phones: PhonePlacement | null = null,
+  /** The cell's signs (signSites.ts: DistrictModel.signs): street trees keep clear of the blades. */
+  signs: readonly Sign3[] = [],
 ): CellDetail {
   const props: Prop[] = [];
   // (The payphones, placed below, add the ground they take.)
@@ -299,7 +301,7 @@ export function cellDetail(
       const homey = !edgeRoad && plan.buildings.some((b) => (b.zone?.look.homes ?? 0) > 0.3) ? 12 : 0;
       const cuts = boulevard ? treeSet().boulevard : treeSet().street;
       const streetSpecies: TreeSpecies = cuts.cuts.find(([, upTo, shifts]) => line < upTo - (shifts ? homey : 0))?.[0] ?? cuts.rest;
-      const bladeClear = (x: number, z: number, m: number): boolean => !plan.signs.some((g) => g.vertical && Math.hypot(g.x - x, g.z - z) < m);
+      const bladeClear = (x: number, z: number, m: number): boolean => !signs.some((g) => g.vertical && Math.hypot(g.x - x, g.z - z) < m);
       for (const side of [-1, 1]) {
         for (const [s, e] of freeSpans(r, reach, 2, side)) {
           // Street lamps on both pavements at the kerb, staggered; street trees between them (always on
