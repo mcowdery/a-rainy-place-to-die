@@ -261,6 +261,8 @@ export class CarDriver {
   /** Out of the seat (the rig free to stand again), and the seat gone from the car. */
   release(): void {
     if (this.rig && this.rig.mounted === this.mount) this.rig.mounted = null;
+    // (On foot the gun's aimed where he looks: the car's 'no line of fire' pose mustn't outlast the seat.)
+    if (this.rig) this.rig.pulledBack = false;
     this.view.obj.remove(this.seat);
     // (Getting out with a window still down: nobody's left to wind it up, so it's up.)
     this.winL = this.winR = 0;
