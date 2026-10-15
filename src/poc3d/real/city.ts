@@ -41,6 +41,8 @@ export interface CityUniforms extends ScreenUniforms {
   uWindowLit: { value: number };
   uLamps: { value: number };
   uNeon: { value: number };
+  /** The story clock's hour of the day, 0 to 24 (main.ts): shop signs go dark when their shops close (signs.ts `openAt`). */
+  uHour: { value: number };
   /** The cells in a brownout (district/brownout.ts): a bit field, 24 cells to a float; uOutMap is the map's columns, rows and cell size (columns 0: none). */
   uOut: { value: Float32Array };
   uOutMap: { value: THREE.Vector3 };
@@ -182,6 +184,7 @@ export function cityUniforms(): CityUniforms {
     uWindowLit: { value: 0.4 },
     uLamps: { value: 1 },
     uNeon: { value: 1 },
+    uHour: { value: 21 },
     uOut: { value: new Float32Array(64) },
     uOutMap: { value: new THREE.Vector3(0, 0, 128) },
     uFil: { value: 0 },

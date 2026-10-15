@@ -6,6 +6,7 @@ import { frontSpan, type Building3, type Sign3, type SignLook } from '../distric
 import { styleFor, frontFrame, tierFront, tiers } from './buildings';
 import type { CityUniforms } from './city';
 import { EM, glyph, textAdvance } from './letters';
+import { TRADE } from './shops';
 import type { Light } from './lightmap';
 import { EMIT, KIND, lin, scale3, type MeshBuilder } from './meshBuilder';
 import { ALWAYS_SEEN, type Sightline } from './sightline';
@@ -304,6 +305,7 @@ const signCommon = /* glsl */ `
   uniform sampler2D tSigns;
   uniform float uTime;
   uniform float uNeon;
+  uniform float uHour;
   uniform float uFlicker;
   varying vec2 vSUv;
   varying vec3 vInk;
@@ -322,7 +324,37 @@ const signCommon = /* glsl */ `
     return mod(floor(uOut[int(w)] / exp2(i - w * 24.0)), 2.0);
   }
   float sh2(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+  // Whether a sign's shop is open (HOURS: its class is the sign id's hundred-thousands), each closing within 45 minutes
+  // of its trade's time, so a street goes dark a sign at a time.
+  float openAt(float id) {
+    float cls = floor(id / 100000.0);
+    if (cls < 0.5) return 1.0;
+    vec2 o = cls < 1.5 ? vec2(17.0, 29.0) : cls < 2.5 ? vec2(11.0, 24.0) : cls < 3.5 ? vec2(10.0, 22.0) : cls < 4.5 ? vec2(8.0, 20.0) : vec2(9.0, 19.0);
+    o.y += (sh2(vec2(id, 7.0)) - 0.5) * 1.5;
+    float h = uHour;
+    return (h >= o.x && h < o.y) || (h + 24.0 >= o.x && h + 24.0 < o.y) ? 1.0 : 0.0;
+  }
 `;
+
+/**
+ * When a sign is lit, by its shop's trade (the class goes in the sign id: `withHours`): 0 always (stamps, hotels, the
+ * konbini, a coin laundry), 1 the night trades (17:00 to 5:00), 2 izakaya, noodles, pachinko, game centres (to midnight),
+ * 3 shops and cafés (10:00 to 22:00), 4 the grocer's, the barber's, the baker's (8:00 to 20:00), 5 banks, clinics,
+ * offices (to 19:00). The lightmap's glow under it stays (painted once a chunk).
+ */
+export const HOURS = { always: 0, night: 1, late: 2, shops: 3, day: 4, office: 5 } as const;
+const HOURS_OF: Readonly<Partial<Record<number, number>>> = {
+  [TRADE.bar]: HOURS.night, [TRADE.snack]: HOURS.night, [TRADE.lounge]: HOURS.night, [TRADE.mahjong]: HOURS.night, [TRADE.karaoke]: HOURS.night,
+  [TRADE.izakaya]: HOURS.late, [TRADE.noodles]: HOURS.late, [TRADE.pachinko]: HOURS.late, [TRADE.arcade]: HOURS.late,
+  [TRADE.cafe]: HOURS.shops, [TRADE.fashion]: HOURS.shops, [TRADE.electronics]: HOURS.shops, [TRADE.hobby]: HOURS.shops, [TRADE.maid]: HOURS.shops,
+  [TRADE.books]: HOURS.shops, [TRADE.drugstore]: HOURS.shops, [TRADE.general]: HOURS.shops, [TRADE.gym]: HOURS.shops,
+  [TRADE.grocer]: HOURS.day, [TRADE.bakery]: HOURS.day, [TRADE.salon]: HOURS.day, [TRADE.florist]: HOURS.day, [TRADE.craft]: HOURS.day,
+  [TRADE.bank]: HOURS.office, [TRADE.clinic]: HOURS.office, [TRADE.estate]: HOURS.office, [TRADE.lobby]: HOURS.office, [TRADE.warehouse]: HOURS.office,
+};
+/** A shop's sign hours (HOURS) by its trade. */
+export const hoursOf = (trade: number): number => HOURS_OF[trade] ?? HOURS.always;
+/** A sign id (under 100000) with its hours class in it. */
+export const withHours = (id: number, hours: number): number => hours * 100000 + (Math.abs(Math.floor(id)) % 100000);
 
 /**
  * Material for textured signs: neon text on a dark plate (style 0), a lit lightbox (1), print (2), or a decal (3:
@@ -336,6 +368,7 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
     shader.uniforms.uTime = u.uTime;
     shader.uniforms.uNeon = u.uNeon;
     shader.uniforms.uFlicker = u.uFlicker;
+    shader.uniforms.uHour = u.uHour;
     shader.uniforms.uOut = u.uOut;
     shader.uniforms.uOutMap = u.uOutMap;
     shader.vertexShader = shader.vertexShader
@@ -357,7 +390,7 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec2 st = texture2D(tSigns, vSUv).rg;
         float flk = uFlicker > 0.5 && sh2(vec2(vSign.x, floor(uTime * 12.0))) > 0.992 ? 0.08 : 1.0;
-        float on = uNeon * flk * (1.0 - blackoutAt(vOutP));
+        float on = uNeon * flk * (1.0 - blackoutAt(vOutP)) * openAt(vSign.x);
         if (vSign.y > 4.5) {
           // A barber's pole (5): red, white and blue stripes winding up it, turning (aUv: round it, up it, 0 to 1).
           float t = fract(vSUv.x * 2.0 + vSUv.y * 2.5 - uTime * 0.5);
@@ -394,7 +427,7 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
           totalEmissiveRadiance += mix(vPlate * 0.9, vInk * inkGlow, st.r) * on;
         }`);
   };
-  m.customProgramCacheKey = () => 'signs-v7';
+  m.customProgramCacheKey = () => 'signs-v8';
   return m;
 }
 
@@ -615,7 +648,7 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
     if (!rect) continue;
     sb.ink = st.ink;
     sb.plate = st.plate;
-    sb.sign = [signId(s), st.style];
+    sb.sign = [withHours(signId(s), s.hours ?? HOURS.always), st.style];
     const uv = [rect.u0, rect.v0, rect.u1, rect.v1] as const;
     // The anchor sits 0.4 m off the facade; build from the facade point.
     const p: C3 = [s.x - s.nx * 0.4, 0, s.z - s.nz * 0.4];

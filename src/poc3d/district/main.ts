@@ -1763,6 +1763,7 @@ async function run(): Promise<void> {
     cityU.uLamps.value = atm.lamps;
     cityU.uLightGain.value = 1.4 * atm.lamps;
     cityU.uNeon.value = neonLevel;
+    cityU.uHour.value = minute / 60;
     cityU.uFlicker.value = atm.neon === 'flicker' ? 1 : 0;
     renderer.toneMappingExposure = atm.exposure;
     applyMood();

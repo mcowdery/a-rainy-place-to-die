@@ -69,6 +69,7 @@ it('audits the signs', () => {
       bump(k, 'signs');
       bump(k, form);
       bump(k, `look ${lookOf(s)}`);
+      bump(k, `hours ${['always', 'night 17-5', 'late to 24', 'shops 10-22', 'day 8-20', 'office 9-19'][s.hours ?? 0]}`);
       // Its building: the one whose wall it's on.
       const b = plan.buildings.find((q) => Math.abs(q.x - s.x) <= q.w / 2 + 0.5 && Math.abs(q.z - s.z) <= q.d / 2 + 0.5);
       if (b && styleFor(b).home) bump(k, 'CHECK on a home');

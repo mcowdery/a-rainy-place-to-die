@@ -8,7 +8,7 @@ import { frontFrame, styleFor, tierFront, tiers, WIN } from './buildings';
 import { TRADE, tradeOfWord, type Trade } from './shops';
 import { shopName } from './shopNames';
 import { CROWN_NAMES, LED_MESSAGES, WINDOW_WORDS, type Panel, type SignExtra, type WallFrame } from './signKinds';
-import { bladeLength, fasciaSize, hasRooftopLetters, plateWidth } from './signs';
+import { bladeLength, fasciaSize, hasRooftopLetters, HOURS, hoursOf, plateWidth, withHours } from './signs';
 
 /**
  * Where a cell's shop signs go and how each is made (the user, 2026-10-15: "remove and then re-add all the neon signs
@@ -345,7 +345,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
    * the others, or null. Chosen from the building's 1992 height; in a year it's lower, a blade that no longer fits keeps
    * its place among the others (so the rest are where they are in 1992) and is left off at the end (`fits`).
    */
-  const blade = (b: Building3, x: number, z: number, nx: number, nz: number, text: string, color: number, look: SignLook | undefined, floor: number, fit = text): Sign3 | null => {
+  const blade = (b: Building3, x: number, z: number, nx: number, nz: number, text: string, color: number, look: SignLook | undefined, floor: number, fit = text, hours = 0): Sign3 | null => {
     // (Its length from what it says in 1992, `fit`: the year's own words may be shorter.)
     const len = Math.max(bladeLength(text), bladeLength(fit));
     const ys = tops(b.was ?? b.h, len);
@@ -357,7 +357,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
       const c: Placed = { x: x + nx * 0.4, z: z + nz * 0.4, nx, nz, y0: y1 - len, y1 };
       if (clash(c)) continue;
       blades.push(c);
-      const sign: Sign3 = { text, vertical: true, color, x: c.x, y: y1, z: c.z, nx, nz, ...(look ? { look } : {}) };
+      const sign: Sign3 = { text, vertical: true, color, x: c.x, y: y1, z: c.z, nx, nz, ...(look ? { look } : {}), ...(hours ? { hours } : {}) };
       fits.set(sign, y1 <= b.h - 0.8);
       return sign;
     }
@@ -465,6 +465,9 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
     const midU = (s0 + s1) / 2;
     const trade = s.trade as Trade;
     const id = b.id * 16;
+    // (When its signs are lit: its shop's hours, real/signs.ts HOURS.)
+    const hrs = hoursOf(trade);
+    const sid = (k: number, hours = hrs): number => withHours(id + k, hours);
     let fascia: Sign3 | null = null;
 
     if (b.sign) {
@@ -477,7 +480,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
         // At the corner end where there is one (seen from both streets), else either.
         const end = corners[0] !== corners[1] ? (corners[0] ? 0 : 1) : h(3) < 0.5 ? 0 : 1;
         const p = onFront(b, end === 0 ? s0 + 1.2 : s1 - 1.2);
-        const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, look, Math.floor(h(4) * 2), b.sign.name);
+        const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, look, Math.floor(h(4) * 2), b.sign.name, hrs);
         if (sign) {
           out.push(sign);
           placed = true;
@@ -494,7 +497,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
           // A neon name may be in tubing (Latin letters), with its trade's pictogram.
           const icon = fl === 'neon' && ICON_OF[trade] && h(30) < 0.6 ? ICON_OF[trade] : undefined;
           const tube = fl === 'neon' && latin(text) && h(31) < 0.6;
-          fascia = { text, vertical: false, color, x: mid.x + mid.nx * 0.4, y: 3.6, z: mid.z + mid.nz * 0.4, nx: mid.nx, nz: mid.nz, ...(fl ? { look: fl } : {}), ...(maxW < plateWidth(text) || icon || tube ? { maxW } : {}), ...(tube ? { form: 'tube' as const } : {}), ...(icon ? { icon } : {}) };
+          fascia = { text, vertical: false, color, x: mid.x + mid.nx * 0.4, y: 3.6, z: mid.z + mid.nz * 0.4, nx: mid.nx, nz: mid.nz, ...(fl ? { look: fl } : {}), ...(maxW < plateWidth(text) || icon || tube ? { maxW } : {}), ...(tube ? { form: 'tube' as const } : {}), ...(icon ? { icon } : {}), ...(hrs ? { hours: hrs } : {}) };
           out.push(fascia);
         }
       }
@@ -506,7 +509,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
           if (back > depthOf(b) - 1) continue;
           const p = onSide(b, end, back);
           if (!streetAhead(p.x, p.z, p.nx, p.nz, 8)) continue;
-          const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, look, 1 + Math.floor(h(8) * 2), b.sign.name);
+          const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, look, 1 + Math.floor(h(8) * 2), b.sign.name, hrs);
           if (sign) {
             out.push(sign);
             break;
@@ -543,7 +546,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
           }
           for (const end of (h(18 + i) < 0.5 ? [0, 1] : [1, 0]) as (0 | 1)[]) {
             const p = onFront(b, end === 0 ? s0 + 1.2 : s1 - 1.2);
-            const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, tenantLook, 1 + i, name);
+            const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, tenantLook, 1 + i, name, hoursOf(tradeOfWord(word) ?? -1));
             if (sign) {
               out.push(sign);
               break;
@@ -553,7 +556,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
         if (asBoard && panels.length >= 2) {
           const flush = P.tenants !== 'night';
           for (const end of (h(18) < 0.5 ? [0, 1] : [1, 0]) as (0 | 1)[]) {
-            const e = board(b, end === 0 ? s0 + (flush ? 1.1 : 1.2) : s1 - (flush ? 1.1 : 1.2), panels, fits, flush, flush ? 2 : 3, id + 1);
+            const e = board(b, end === 0 ? s0 + (flush ? 1.1 : 1.2) : s1 - (flush ? 1.1 : 1.2), panels, fits, flush, flush ? 2 : 3, sid(1, flush ? HOURS.shops : HOURS.night));
             if (e) {
               extras.push(e);
               bannered = flush;
@@ -577,7 +580,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
         const sx = p.x + p.nx * out_;
         const sz = p.z + p.nz * out_;
         if (!taken(sx, sz, 0.6)) {
-          extras.push({ kind: 'stand', f, u, out: out_, text: b.sign.text, color: b.sign.color, look: lookFor(b, h(1)) === 'neon' ? 'neon' : yearLook('inverse', h(56)), id: id + 2 });
+          extras.push({ kind: 'stand', f, u, out: out_, text: b.sign.text, color: b.sign.color, look: lookFor(b, h(1)) === 'neon' ? 'neon' : yearLook('inverse', h(56)), id: sid(2) });
           solids.push(rectIn(f, u - 0.2, u + 0.2, out_ - 0.28, out_ + 0.28));
           claims.push(rectIn(f, u - 0.6, u + 0.6, 0, out_ + 0.6));
         }
@@ -588,13 +591,13 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
       const word = b.sign?.word ?? '';
       const own = word.includes('焼鳥') || word.includes('焼き鳥') ? (h(24) < 0.5 ? '焼鳥' : 'やきとり') : word.includes('もつ') ? 'もつ焼' : word.includes('ホルモン') ? 'ホルモン' : word.includes('串') ? '串焼' : word.includes('煮込') ? 'おでん' : (['焼鳥', 'やきとり', 'おでん', '居酒屋'] as const)[Math.floor(h(24) * 4)];
       const us = front >= 4.5 ? [s0 + 0.9, s1 - 0.9] : [midU + (h(25) < 0.5 ? -0.6 : 0.6)];
-      us.forEach((u, i) => extras.push({ kind: 'lantern', f, u, y: 2.55, text: i === 1 ? '酒' : own, id: id + 3 + i }));
+      us.forEach((u, i) => extras.push({ kind: 'lantern', f, u, y: 2.55, text: i === 1 ? '酒' : own, id: sid(3 + i) }));
     }
     // A love hotel's vacancy lamp and prices by its door, and (on a wide front) an arrow of bulbs to it.
     const prices = era().hotelPrices;
     if (trade === TRADE.lovehotel && front >= 4 && prices.length) {
       const left = h(26) < 0.5;
-      extras.push({ kind: 'hotel', f, u: left ? s0 + 1 : s1 - 1, y: 2.45, prices: prices[Math.floor(h(27) * prices.length)], full: h(28) < 0.25, id: id + 5 });
+      extras.push({ kind: 'hotel', f, u: left ? s0 + 1 : s1 - 1, y: 2.45, prices: prices[Math.floor(h(27) * prices.length)], full: h(28) < 0.25, id: sid(5, HOURS.always) });
       if (front >= 7 && h(29) < 0.5) {
         const len = Math.min(2.2, front / 2 - 1.6);
         extras.push({ kind: 'arrow', f, u: left ? s1 - 0.6 : s0 + 0.6, y: 2.95, len, dir: left ? -1 : 1 });
@@ -609,7 +612,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
     const led = LED[trade];
     if (led && year === '1992' && b.h >= 7 && front >= 6.2 && (trade !== TRADE.electronics || plan.kind === 'electric') && h(33) < led[1]) {
       const msgs = LED_MESSAGES[led[0]];
-      extras.push({ kind: 'led', f, u: midU, y: 4.35, text: msgs[Math.floor(h(34) * msgs.length)], w: Math.min(front - 3.2, 9), id: id + 6 });
+      extras.push({ kind: 'led', f, u: midU, y: 4.35, text: msgs[Math.floor(h(34) * msgs.length)], w: Math.min(front - 3.2, 9), id: sid(6) });
     }
     // The names of the offices and schools upstairs on their windows, a floor each (tenant buildings with ribbon windows,
     // whose glass runs the width of the floor; not the towers).
@@ -623,7 +626,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
         const word = words[Math.floor(h(42 + j) * words.length)];
         words = words.filter((w) => w !== word);
         if (y + 1.4 > b.h - 0.3) continue;
-        extras.push({ kind: 'window', f, u: midU, y, text: word, color: WINDOW_INK[Math.floor(h(46 + j) * WINDOW_INK.length)], maxW: front - 1.6, id: id + 7 + j });
+        extras.push({ kind: 'window', f, u: midU, y, text: word, color: WINDOW_INK[Math.floor(h(46 + j) * WINDOW_INK.length)], maxW: front - 1.6, id: sid(7 + j, HOURS.office) });
       }
     }
     // A company's name along a tower's top (not one with letters on its roof).
@@ -637,13 +640,13 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
     // A barber's turning pole by its door (理容, BARBER: not a beauty salon's).
     const word = b.sign?.word.toUpperCase() ?? '';
     if (trade === TRADE.salon && (word.includes('理容') || word.includes('BARBER')) && front >= 2.5 && h(59) < 0.85) {
-      extras.push({ kind: 'pole', f, u: h(60) < 0.5 ? s0 + 0.55 : s1 - 0.55, y: 1.7, id: id + 14 });
+      extras.push({ kind: 'pole', f, u: h(60) < 0.5 ? s0 + 0.55 : s1 - 0.55, y: 1.7, id: sid(14) });
     }
     // The small lit 24H box over the door of a karaoke box, a manga café, a coin laundry; OPEN over a café's.
     const cubeText = trade === TRADE.karaoke || trade === TRADE.books || trade === TRADE.laundry ? '24H' : trade === TRADE.cafe ? 'OPEN' : null;
     if (cubeText && era().cubes && !s.awning && front >= 3.5 && h(53) < E.cube) {
       const u = Math.min(s1 - 0.5, Math.max(s0 + 0.5, midU + (h(54) < 0.5 ? -1.3 : 1.3)));
-      extras.push({ kind: 'cube', f, u, y: 2.75, text: cubeText, color: b.sign?.color ?? 0x4fe3ff, id: id + 13 });
+      extras.push({ kind: 'cube', f, u, y: 2.75, text: cubeText, color: b.sign?.color ?? 0x4fe3ff, id: sid(13, cubeText === '24H' ? HOURS.always : hrs) });
     }
   }
   return { signs: out.filter((s) => fits.get(s) ?? true), extras: extras.filter((e) => fits.get(e) ?? true), claims, solids };

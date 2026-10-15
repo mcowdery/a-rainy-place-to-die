@@ -47,7 +47,7 @@ function setLook(sb: SignBuilder, look: SignLook, hex: number, id: number): void
   const st = lookStyle(look, hex, id);
   sb.ink = st.ink;
   sb.plate = st.plate;
-  sb.sign = [id % 100000, st.style];
+  sb.sign = [id % 1000000, st.style];
 }
 
 export interface Panel {
@@ -103,7 +103,7 @@ export function windowLetters(sb: SignBuilder, layout: SignLayout, f: WallFrame,
   // (3.25: cut-out letters with the room's light behind them at night.)
   sb.ink = lin(hex);
   sb.plate = [0, 0, 0];
-  sb.sign = [o.id % 100000, 3.25];
+  sb.sign = [o.id % 1000000, 3.25];
   signBox(sb, f.p, f.r, f.n, u - w / 2, u + w / 2, y + 0.25, y + 0.25 + h, 0.025, 0.03, layout.blankUv, { n: uvOf(q) });
 }
 
@@ -148,7 +148,7 @@ export function lantern(sb: SignBuilder, mb: MeshBuilder, layout: SignLayout, f:
   // A lightbox of red paper with black letters: the paper glows, the letters stay dark.
   sb.ink = [0.03, 0.02, 0.02];
   sb.plate = lin(o.hex ?? RED_LANTERN);
-  sb.sign = [o.id % 100000, 1];
+  sb.sign = [o.id % 1000000, 1];
   const blank = layout.blankUv;
   const V = (t: number): number => q.v1 - (0.1 + 0.8 * t) * (q.v1 - q.v0);
   for (let i = 0; i < SEG; i++) {
@@ -265,7 +265,7 @@ export function ledBoard(sb: SignBuilder, mb: MeshBuilder, layout: SignLayout, f
   const uw = q.u1 - q.u0;
   sb.ink = lin(LED_RED);
   sb.plate = [q.u0, uw, (o.speed ?? 1.2) / slotW];
-  sb.sign = [o.id % 100000, 4];
+  sb.sign = [o.id % 1000000, 4];
   const w = Math.min(o.w, slotW);
   signBox(sb, f.p, f.r, f.n, u - w / 2, u + w / 2, y, y + h, 0.06, 0.1, layout.blankUv, { n: [q.u0, q.v0, q.u0 + uw * frac, q.v1] });
   mb.kind = KIND.plain;
@@ -330,7 +330,7 @@ export function barberPole(sb: SignBuilder, mb: MeshBuilder, f: WallFrame, u: nu
   const SEG = 14;
   sb.ink = [1, 1, 1];
   sb.plate = [0, 0, 0];
-  sb.sign = [id % 100000, 5];
+  sb.sign = [id % 1000000, 5];
   for (let i = 0; i < SEG; i++) {
     const a0 = (i / SEG) * Math.PI * 2;
     const a1 = ((i + 1) / SEG) * Math.PI * 2;
