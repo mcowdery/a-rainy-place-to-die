@@ -16,6 +16,7 @@ import { addDressing } from './dressing';
 import { footbridges, underFootbridge } from '../district/footbridges';
 import { openLayout, type OpenLayout } from './openLots';
 import type { PhonePlacement } from './phoneSites';
+import type { SignPlacement } from './signSites';
 
 /** Cell size (district/plan.ts CELL): signals stand where cell-edge roads cross. */
 const CELL3 = 128;
@@ -111,9 +112,10 @@ export function cellDetail(
   claimed: readonly Rect[] = [],
   /** The cell's payphones (phoneSites.ts placePhones: DistrictModel.phones), which stand before anything else here. */
   phones: PhonePlacement | null = null,
-  /** The cell's signs (signSites.ts: DistrictModel.signs): street trees keep clear of the blades. */
-  signs: readonly Sign3[] = [],
+  /** The cell's signs (signSites.ts: DistrictModel.signPlacement): street trees keep clear of the blades, everything off the stand signs. */
+  signPlacement: SignPlacement | null = null,
 ): CellDetail {
+  const signs: readonly Sign3[] = signPlacement?.signs ?? [];
   const props: Prop[] = [];
   // (The payphones, placed below, add the ground they take.)
   const claims: Rect[] = [...claimed];
@@ -147,6 +149,9 @@ export function cellDetail(
     props.push(...phones.props);
     lights.push(...phones.lights);
     claims.push(...phones.claims);
+  }
+  if (signPlacement) {
+    claims.push(...signPlacement.claims);
   }
   const cellStreet = fil ? plan.buildings.reduce((m, b) => Math.max(m, b.zone?.look.street ?? 0), 0) : 0;
   const rc = { props, lights, mine };
@@ -477,7 +482,7 @@ export function cellDetail(
   }
   // Open ground: its props and lights, and solids for collision.
   const open = plan.open.map((o) => openLayout(o, buildings));
-  const solids: Rect[] = [...(phones?.solids ?? [])];
+  const solids: Rect[] = [...(phones?.solids ?? []), ...(signPlacement?.solids ?? [])];
   for (const o of open) {
     props.push(...o.props);
     lights.push(...o.lights);

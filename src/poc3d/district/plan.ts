@@ -62,6 +62,9 @@ export interface Sign3 {
   readonly look?: SignLook;
   /** The widest a horizontal sign may be (its own shopfront), in metres. */
   readonly maxW?: number;
+  /** A fascia's letters bent in tubing (their outlines: real/signs.ts `SignForm`), and a pictogram before them (ICON_NAMES). */
+  readonly form?: 'tube';
+  readonly icon?: string;
 }
 
 /** Neon on a dark plate, a lightbox (coloured letters on white), its inverse (white letters on colour), painted (unlit), channel letters. */

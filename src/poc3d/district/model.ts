@@ -16,7 +16,9 @@ import { manilaTexts } from '../real/manilaStreet';
 import type { BusLine } from './traffic';
 import { lineStops, stopClaim, type LineStops, type StopSite } from './stops';
 import { placePhones, type PhonePlacement } from '../real/phoneSites';
-import { placeSigns } from '../real/signSites';
+import { placeSigns, type SignPlacement } from '../real/signSites';
+import { signKindAtlasTexts, type SignExtra } from '../real/signKinds';
+import type { SignText } from '../real/signs';
 
 /**
  * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings), its signs and
@@ -179,29 +181,48 @@ export class DistrictModel {
     return ph;
   }
 
-  private readonly signCache = new Map<number, readonly Sign3[]>();
+  private readonly signCache = new Map<number, SignPlacement | null>();
   /**
-   * A cell's shop signs (real/signSites.ts): where each hangs and how it's made, from the buildings and streets round
-   * it. The set pieces' own signs are theirs (`Placed3.signs`).
+   * What the sign siting (real/signSites.ts) puts up in a cell: blades and fascias, the other kinds (lanterns, boards,
+   * bulbs...), and the ground the stand signs take, from the buildings and streets round it. The set pieces' own signs
+   * are theirs (`Placed3.signs`).
    */
-  signs(mx: number, my: number): readonly Sign3[] {
+  signPlacement(mx: number, my: number): SignPlacement | null {
     const k = cellKey(mx, my);
     let s = this.signCache.get(k);
-    if (!s) {
+    if (s === undefined) {
       const p = this.plan(mx, my);
-      if (!p) return [];
-      const around: Building3[] = [];
-      const roads: Road3[] = [];
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          around.push(...this.buildings(mx + dx, my + dy));
-          roads.push(...(this.plan(mx + dx, my + dy)?.roads ?? []));
+      if (!p) s = null;
+      else {
+        const around: Building3[] = [];
+        const roads: Road3[] = [];
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            around.push(...this.buildings(mx + dx, my + dy));
+            roads.push(...(this.plan(mx + dx, my + dy)?.roads ?? []));
+          }
         }
+        // (A stand sign keeps off a bus stop's ground, a payphone's, a stairwell, a set piece's door.)
+        const claimed = [...this.claimed(mx, my), ...(this.phones(mx, my)?.claims ?? [])];
+        const holes = this.holes(mx, my);
+        const nodes = this.stamps(mx, my).flatMap((q) => q.nodes).filter((n) => n.floor === 0);
+        const within = (q: Rect, x: number, z: number, m: number): boolean => x > q.x - m && x < q.x + q.w + m && z > q.y - m && z < q.y + q.h + m;
+        const taken = (x: number, z: number, m = 0): boolean => claimed.some((q) => within(q, x, z, m)) || holes.some((q) => within(q, x, z, m + 1.6)) || nodes.some((n) => Math.hypot(n.x - x, n.z - z) < m + 1.8);
+        s = placeSigns(p, around, roads, taken);
       }
-      s = placeSigns(p, around, roads);
       this.signCache.set(k, s);
     }
     return s;
+  }
+
+  /** A cell's blades and fascias (signPlacement). */
+  signs(mx: number, my: number): readonly Sign3[] {
+    return this.signPlacement(mx, my)?.signs ?? [];
+  }
+
+  /** A cell's other kinds of sign (signPlacement: real/signKinds.ts). */
+  signExtras(mx: number, my: number): readonly SignExtra[] {
+    return this.signPlacement(mx, my)?.extras ?? [];
   }
 
   /** Street furniture and lights of a cell (null outside the district). */
@@ -211,7 +232,7 @@ export class DistrictModel {
     if (!d) {
       const p = this.plan(mx, my);
       if (!p) return null;
-      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my), this.coveredIn(mx, my), this.claimed(mx, my), this.phones(mx, my), this.signs(mx, my));
+      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my), this.coveredIn(mx, my), this.claimed(mx, my), this.phones(mx, my), this.signPlacement(mx, my));
       this.details.set(k, d);
     }
     return d;
@@ -345,9 +366,11 @@ export class DistrictModel {
 }
 
 /** Every sign text the district can show (for the sign atlas / layout; identical on every thread). */
-export function signTexts(words: readonly string[], placed: readonly Placed3[]): { text: string; vertical: boolean }[] {
+export function signTexts(words: readonly string[], placed: readonly Placed3[]): SignText[] {
   return [
     ...words.flatMap((text) => [{ text, vertical: false }, { text, vertical: true }]),
+    // The other kinds' (real/signKinds.ts): lanterns, prices, LED messages, window names, tubing, pictograms.
+    ...signKindAtlasTexts(words),
     ...placed.flatMap((p) => p.signs.map((s) => ({ text: s.text, vertical: s.vertical }))),
     // The vehicles' lettering and taxi ads' copy.
     ...vehicleTexts(),

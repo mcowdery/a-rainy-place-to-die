@@ -759,6 +759,14 @@ async function run(): Promise<void> {
     // Every shop sign in the city, to look them over (real/signSites.ts; debug-shots/signs.mjs): `all()` lists them (form,
     // look, where, the district); `go(i)` stands the camera where it's read from: across the street from a face-on sign,
     // along the street from a blade.
+    const extraList = (): { kind: string; x: number; z: number; nx: number; nz: number; y: number; district: string }[] =>
+      district.model.cells.flatMap(([mx, my]) =>
+        district.model.signExtras(mx, my).map((e) => {
+          const u = e.kind === 'bulbs' ? (e.u0 + e.u1) / 2 : e.u;
+          const y = e.kind === 'crown' ? e.top - 1 : e.kind === 'tenants' ? e.top - 3 : e.kind === 'bulbs' ? e.y1 : e.kind === 'stand' ? 1 : e.kind === 'window' ? e.y + 0.6 : e.y;
+          return { kind: e.kind, x: e.f.p[0] + e.f.r[0] * u, z: e.f.p[2] + e.f.r[2] * u, nx: e.f.n[0], nz: e.f.n[2], y, district: district.plan(mx, my)?.kind ?? '' };
+        }),
+      );
     const signList = (): (Sign3 & { kind: string })[] => district.model.cells.flatMap(([mx, my]) => district.model.signs(mx, my).map((s) => ({ ...s, kind: district.plan(mx, my)?.kind ?? '' })));
     (window as unknown as { __signs: unknown }).__signs = {
       all: () => signList().map((s) => ({ form: s.vertical ? 'blade' : s.look === 'channel' ? 'channel' : 'fascia', look: s.look ?? '', text: s.text, x: Math.round(s.x), z: Math.round(s.z), district: s.kind })),
@@ -773,6 +781,22 @@ async function run(): Promise<void> {
         camera.position.set(x, g + 1.6, z);
         controls.setLevel(g);
         controls.setView((Math.atan2(s.x - x, s.z - z) * 180) / Math.PI + 180, (Math.atan2(ty - 1.6, Math.hypot(s.x - x, s.z - z)) * 180) / Math.PI);
+        return true;
+      },
+      // The other kinds (real/signKinds.ts): `extras()` lists them, `goExtra(i)` stands the camera across the street from one.
+      extras: () => extraList().map((e) => ({ kind: e.kind, x: Math.round(e.x), z: Math.round(e.z), district: e.district })),
+      goExtra: (i: number, back = 8): boolean => {
+        const e = extraList()[i];
+        if (!e) return false;
+        const far = e.kind === 'crown' ? 140 : back;
+        const x = e.x + e.nx * far;
+        const z = e.z + e.nz * far;
+        const g = groundAt(x, z);
+        // (A crown from the air, over the roofs across the way: `?fly=1`.)
+        const eye = e.kind === 'crown' ? e.y + 25 : 1.6;
+        camera.position.set(x, g + eye, z);
+        controls.setLevel(g);
+        controls.setView((Math.atan2(e.x - x, e.z - z) * 180) / Math.PI + 180, (Math.atan2(e.y - eye, far) * 180) / Math.PI);
         return true;
       },
     };

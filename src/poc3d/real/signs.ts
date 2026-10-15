@@ -529,6 +529,31 @@ export function signStyle(s: Sign3): SignStyle {
 
 const RETURN: C3 = [0.05, 0.05, 0.06];
 
+/**
+ * How big a fascia is drawn, in metres (addSigns: its plate, or its channel letters): its natural size (tubing thinner
+ * than plain letters, a pictogram as wide as it is tall) held to 5.4 m and its shopfront. Pure (no canvas), for the
+ * siting too (a frame of bulbs round it).
+ */
+export function fasciaSize(s: Sign3): { w: number; h: number } {
+  if (signStyle(s).channel) {
+    // (Channel letters' width from their characters, not measured: no canvas here. A wide one is an em, a Latin one
+    // about 0.8 of one, a space 0.4.)
+    const adv = [...s.text].reduce((a, c) => a + (c === ' ' ? 0.4 : isWide(c.codePointAt(0)!) ? 1 : 0.8) * EM, 0);
+    const k = Math.min(0.62 / EM, Math.min(5.2, s.maxW ?? 5.2) / adv);
+    return { w: adv * k, h: EM * k };
+  }
+  const ph = H_SLOT / PX_PER_M;
+  let h = s.form === 'tube' ? 0.6 : ph;
+  let w = plateWidth(s.text) * (h / ph);
+  const maxW = Math.min(5.4, s.maxW ?? 5.4);
+  const total = w + (s.icon ? h : 0);
+  if (total > maxW) {
+    w *= maxW / total;
+    h *= maxW / total;
+  }
+  return { w: w + (s.icon ? h : 0), h };
+}
+
 const signId = (s: Sign3): number => hash(Math.round(s.x * 10), Math.round(s.z * 10), Math.round(s.y * 10)) % 100000;
 
 /** Each sign's glow on the street below it, for the lightmap. */
@@ -556,7 +581,7 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
       channelLetters(mb, s.text, p, r, n, 3.62, 0.62, Math.min(5.2, s.maxW ?? 5.2), st.ink, signId(s), 0.02);
       continue;
     }
-    const rect = atlas.rect(s.text, s.vertical);
+    const rect = atlas.rect(s.text, s.vertical, s.form);
     if (!rect) continue;
     sb.ink = st.ink;
     sb.plate = st.plate;
@@ -572,9 +597,12 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
       signBox(sb, p, r, n, -0.03, 0.03, s.y - 0.12, s.y - 0.04, 0, 0.14, atlas.blankUv, {});
       signBox(sb, p, r, n, -0.03, 0.03, s.y - rect.h + 0.04, s.y - rect.h + 0.12, 0, 0.14, atlas.blankUv, {});
     } else {
-      const w = Math.min(rect.w, 5.4, s.maxW ?? 5.4);
-      const h = rect.h * (w / rect.w);
-      signBox(sb, p, r, n, -w / 2, w / 2, 3.62 - h / 2, 3.62 + h / 2, 0.02, 0.2, atlas.blankUv, { n: uv });
+      // (With a pictogram first, on the same plate, in the same colour.)
+      const { w, h } = fasciaSize(s);
+      const ic = s.icon ? atlas.rect(s.icon, false, 'icon') : null;
+      const iw = ic ? h : 0;
+      if (ic) signBox(sb, p, r, n, -w / 2, -w / 2 + iw, 3.62 - h / 2, 3.62 + h / 2, 0.02, 0.2, atlas.blankUv, { n: [ic.u0, ic.v0, ic.u1, ic.v1] });
+      signBox(sb, p, r, n, -w / 2 + iw, w / 2, 3.62 - h / 2, 3.62 + h / 2, 0.02, 0.2, atlas.blankUv, { n: uv });
     }
   }
   for (const b of buildings) rooftopBillboard(mb, b, seen);

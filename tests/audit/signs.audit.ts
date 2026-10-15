@@ -13,12 +13,13 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { it } from 'vitest';
 import { loadDistrictContent } from '../../src/poc3d/district/content';
 import { expresswayCoveredFrom, expresswayReservedFrom } from '../../src/poc3d/district/expressway';
-import { DistrictModel } from '../../src/poc3d/district/model';
-import { CELL, DISTRICTS3, frontSpan, type Building3, type Sign3 } from '../../src/poc3d/district/plan';
+import { CELL, DISTRICTS3, frontSpan, STYLES3, type Building3, type Sign3 } from '../../src/poc3d/district/plan';
 import { railReserved } from '../../src/poc3d/district/rail';
 import { frontFrame, styleFor } from '../../src/poc3d/real/buildings';
 import { sightline } from '../../src/poc3d/real/sightline';
-import { bladeLength, hasRooftopLetters, plateWidth, signStyle } from '../../src/poc3d/real/signs';
+import { bladeLength, hasRooftopLetters, plateWidth, SignLayout, signStyle } from '../../src/poc3d/real/signs';
+import { DistrictModel, signTexts } from '../../src/poc3d/district/model';
+import { eraSignWords } from '../../src/poc3d/district/era';
 
 const SEED = 0x0c179090;
 const DIR = 'debug-shots/sign-audit/';
@@ -58,6 +59,8 @@ it('audits the signs', () => {
         marks.push({ s: { text: '', vertical: false, color: 0, x: b.x, y: b.h, z: b.z, nx: 0, nz: 0 }, roof: b });
       }
     }
+    for (const e of model.signExtras(mx, my)) bump(k, `extra ${e.kind}`);
+    bump(k, 'stand-sign solids', model.signPlacement(mx, my)?.solids.length ?? 0);
     const signs = model.signs(mx, my);
     const blades = signs.filter((s) => s.vertical);
     for (const s of signs) {
@@ -115,6 +118,8 @@ it('audits the signs', () => {
     for (const [f, n] of [...m].sort((a, b) => a[0].localeCompare(b[0]))) out.push(`  ${f.padEnd(44)} ${n}`);
   };
   out.push(`siting: ${Math.round(ms)} ms for ${model.cells.length} cells (${r1(ms / model.cells.length)} ms a cell, plans included)`);
+  const layout = new SignLayout(signTexts(eraSignWords(content.zones.words([...new Set(DISTRICTS3.flatMap((k) => STYLES3[k]!.signWords))])), content.placed));
+  out.push(`sign atlas: ${layout.width} x ${layout.height}`);
   out.push('(neon* and box*: a sign with no look of its own, its look from its hash as before)', '');
   show('ALL', total);
   for (const [k, m] of tally) {

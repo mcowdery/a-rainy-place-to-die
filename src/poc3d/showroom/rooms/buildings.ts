@@ -278,7 +278,7 @@ startRoom({
       bulbFrame(mb, fr(pachinko), pachinko.w / 2 - 3.1, pachinko.w / 2 + 3.1, 3.15, 4.1, { step: 0.26, out: 0.24 });
       item('LED board (電光掲示板)', V(wx(pachinko, pachinko.w / 2), 4.8, zf), 9);
       // 5. Tenant offices: cut-out letters across the windows, a floor each.
-      windows.forEach(([t, c], i) => windowLetters(sb, atlas, fr(offices), offices.w / 2, 3 * (i + 2), t, c, { maxW: offices.w - 1.2, id: 9 + i }));
+      windows.forEach(([t, c], i) => windowLetters(sb, atlas, fr(offices), offices.w / 2, 4.2 + 3 * i + 0.75, t, c, { maxW: offices.w - 1.2, id: 9 + i }));
       item('window lettering (窓文字)', V(wx(offices, offices.w / 2), 11, zf), 16);
       // 6. Denkō-chō: a banner of the shop's lines flat down the facade.
       tenantBoard(sb, mb, atlas, fr(denki), denki.w - 1.3, 25.5, banner, { flush: true, width: 1.9, id: 20 });

@@ -1,7 +1,8 @@
 // The city's shop signs, photographed from where they're read (real/signSites.ts placed them): a face-on sign from
 // across its street, a blade from along it.
 //   node debug-shots/signs.mjs [out dir] [which] [query]
-// which: `sample` (default: two of each form and look from each district), `all`, or indices (0,3,12). It prints how
+// which: `sample` (default: two of each form and look from each district), `extras` (two of each other kind from each
+// district: real/signKinds.ts; `extras:crown,window` only those kinds), `all`, or indices (0,3,12). It prints how
 // many there are of each form. One page load; each sign is a teleport and a wait for its chunks.
 import { mkdirSync } from 'node:fs';
 import { launchBrowser } from '../scripts/launchBrowser.mjs';
@@ -28,8 +29,31 @@ try {
   if (await page.evaluate(() => /MAP \+ FAST TRAVEL/.test(document.body.innerText))) await page.keyboard.press('KeyM');
   const list = (await page.evaluate(() => window.__signs.all())).map((s, i) => ({ ...s, i }));
   console.log(`${list.length} signs: ${['blade', 'fascia', 'channel'].map((k) => `${list.filter((s) => s.form === k).length} ${k}`).join(', ')}`);
+  if (which.startsWith('extras')) {
+    const only = which.split(':')[1]?.split(',');
+    const ex = (await page.evaluate(() => window.__signs.extras())).map((e, i) => ({ ...e, i })).filter((e) => !only || only.includes(e.kind));
+    const counts = {};
+    for (const e of ex) counts[e.kind] = (counts[e.kind] ?? 0) + 1;
+    console.log(`${ex.length} extras:`, JSON.stringify(counts));
+    const pick = [];
+    for (const d of [...new Set(ex.map((e) => e.district))]) {
+      for (const k of Object.keys(counts)) {
+        const of = ex.filter((e) => e.district === d && e.kind === k);
+        for (const j of [0.3, 0.75]) if (of.length) pick.push(of[Math.floor(of.length * j)]);
+      }
+    }
+    for (const e of [...new Set(pick)]) {
+      await page.evaluate((i) => window.__signs.goExtra(i), e.i);
+      await page.waitForTimeout(6000);
+      const name = `x${String(e.i).padStart(4, '0')}-${e.district}-${e.kind}`;
+      await page.screenshot({ path: `${out}/${name}.png` });
+      console.log(name, `${e.x},${e.z}`);
+    }
+    process.exitCode = 0;
+  }
   let pick;
-  if (which === 'all') pick = list;
+  if (which.startsWith('extras')) pick = [];
+  else if (which === 'all') pick = list;
   else if (which === 'sample') {
     pick = [];
     for (const d of [...new Set(list.map((s) => s.district))]) {

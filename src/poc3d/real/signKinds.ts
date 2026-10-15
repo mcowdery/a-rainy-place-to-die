@@ -1,7 +1,8 @@
 import type { SignLook } from '../district/plan';
 import { EM, textAdvance } from './letters';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
-import { channelLetters, lookStyle, signBox, type SignBuilder, type SignLayout, type SignText } from './signs';
+import type { Light } from './lightmap';
+import { channelLetters, ICON_NAMES, lookStyle, signBox, type SignBuilder, type SignLayout, type SignText } from './signs';
 
 /**
  * More kinds of sign than the blade and the fascia (real/signs.ts), as the 1992 city has them (the user, 2026-10-15:
@@ -324,4 +325,107 @@ export function signKindTexts(o: { vertical?: readonly string[]; horizontal?: re
     ...(o.tube ?? []).map((text) => ({ text, vertical: false, form: 'tube' as const })),
     ...(o.icons ?? []).map((text) => ({ text, vertical: false, form: 'icon' as const })),
   ];
+}
+
+// ---- In the city: what the siting (signSites.ts) places, and the texts the atlas needs for it. ----
+
+/** Characters down a red lantern, by the words of the place's own sign (and 酒 on the other). */
+export const LANTERN_TEXTS = ['焼鳥', 'やきとり', 'もつ焼', 'ホルモン', '串焼', 'おでん', '居酒屋', '酒'] as const;
+/** A love hotel's prices (rows of its board), 1992's. */
+export const HOTEL_PRICES: readonly (readonly string[])[] = [
+  ['休憩 ¥3,800', '宿泊 ¥6,800'],
+  ['休憩 ¥4,500', '宿泊 ¥7,800', 'サービスタイム'],
+  ['休憩 ¥5,000', '宿泊 ¥8,500'],
+  ['REST ¥4,000', 'STAY ¥7,000'],
+];
+/** What an LED board says, by the trade it's over. */
+export const LED_MESSAGES: Readonly<Record<string, readonly string[]>> = {
+  pachinko: ['本日新台入替 ★ 朝十時開店 ★ 全台開放中 ★ ', '新装開店 ★ 出玉大放出 ★ 本日も元気に営業中 ★ '],
+  arcade: ['ゲーム新作入荷 ★ 一回五十円 ★ 両替機あります ★ '],
+  electronics: ['免税 TAX FREE ★ 本日特価 ★ パソコン大安売り ★ '],
+  karaoke: ['カラオケ一時間五百円 ★ 飲み放題 ★ 団体様歓迎 ★ '],
+};
+/** The offices and schools whose names are on an upstairs floor's windows, by district. */
+export const WINDOW_WORDS: Readonly<Record<string, readonly string[]>> = {
+  neon: ['雀荘', '金融', '興信所', '不動産', '英会話', 'ローン', '探偵'],
+  tower: ['英会話', '税理士', '司法書士', '法律事務所', '会計事務所', '歯科', '貸会議室', '人材派遣'],
+  electric: ['パソコン教室', '英会話', '歯科', '中古ゲーム', '修理', '買取'],
+  campus: ['学習塾', '予備校', '英会話', '歯科', '書道教室'],
+  residential: ['学習塾', '歯科', '整骨院', 'そろばん', '書道教室', 'ピアノ教室'],
+  oldtown: ['三味線', '書道教室', '整骨院', '歯科', '囲碁'],
+  harbor: ['海運', '通関', '船舶代理店', '運送'],
+};
+/** Companies (invented) whose names crown towers. */
+export const CROWN_NAMES = ['朝霧生命', '朝霧信託銀行', '東都海上火災', '光和商事', '白峰電機', '曙重工', '環洋汽船', '北辰証券'] as const;
+export const CUBE_TEXTS = ['24H', 'OPEN'] as const;
+
+/** One of the kinds above, where the siting put it (on a building's wall frame). */
+export type SignExtra =
+  | { readonly kind: 'tenants'; readonly f: WallFrame; readonly u: number; readonly top: number; readonly panels: readonly Panel[]; readonly flush: boolean; readonly width: number; readonly id: number }
+  | { readonly kind: 'stand'; readonly f: WallFrame; readonly u: number; readonly out: number; readonly text: string; readonly color: number; readonly look: SignLook; readonly id: number }
+  | { readonly kind: 'lantern'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly id: number }
+  | { readonly kind: 'hotel'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly prices: readonly string[]; readonly full: boolean; readonly id: number }
+  | { readonly kind: 'bulbs'; readonly f: WallFrame; readonly u0: number; readonly u1: number; readonly y0: number; readonly y1: number }
+  | { readonly kind: 'arrow'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly len: number; readonly dir: 1 | -1 }
+  | { readonly kind: 'led'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly w: number; readonly id: number }
+  | { readonly kind: 'window'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly color: number; readonly maxW: number; readonly id: number }
+  | { readonly kind: 'crown'; readonly f: WallFrame; readonly u: number; readonly top: number; readonly text: string; readonly maxW: number; readonly id: number }
+  | { readonly kind: 'cube'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly color: number; readonly id: number };
+
+/** How far a lantern hangs from its wall. */
+export const LANTERN_OUT = 0.45;
+
+/** Builds a chunk's sign extras: lettering into sb (the sign material), frames, bulbs and caps into mb (the city's). */
+export function addSignExtras(extras: readonly SignExtra[], layout: SignLayout, sb: SignBuilder, mb: MeshBuilder): void {
+  for (const e of extras) {
+    switch (e.kind) {
+      case 'tenants': tenantBoard(sb, mb, layout, e.f, e.u, e.top, e.panels, { width: e.width, flush: e.flush, id: e.id }); break;
+      case 'stand': standSign(sb, mb, layout, e.f, e.u, e.out, e.text, e.color, e.look, e.id); break;
+      case 'lantern': lantern(sb, mb, layout, e.f, e.u, LANTERN_OUT, e.y, e.text, { id: e.id }); break;
+      case 'hotel': hotelBoards(sb, mb, layout, e.f, e.u, e.y, e.prices, { full: e.full, id: e.id }); break;
+      case 'bulbs': bulbFrame(mb, e.f, e.u0, e.u1, e.y0, e.y1, { out: 0.1 }); break;
+      case 'arrow': bulbArrow(mb, e.f, e.u, e.y, e.len, e.dir, { color: [1.9, 0.5, 1.2] }); break;
+      case 'led': ledBoard(sb, mb, layout, e.f, e.u, e.y, e.text, { w: e.w, id: e.id }); break;
+      case 'window': windowLetters(sb, layout, e.f, e.u, e.y, e.text, e.color, { maxW: e.maxW, id: e.id }); break;
+      case 'crown': crown(mb, e.f, e.u, e.top, e.text, { maxW: e.maxW, id: e.id }); break;
+      case 'cube': cube(sb, mb, layout, e.f, e.u, e.y, e.text, e.color, e.id); break;
+    }
+  }
+}
+
+/** Their light on the street, for the lightmap (window letters and crowns give none). */
+export function extraLights(extras: readonly SignExtra[]): Light[] {
+  const out: Light[] = [];
+  const put = (f: WallFrame, u: number, o: number, r: number, color: C3, i: number): void => {
+    const p = at(f, u, 0, o);
+    out.push({ x: p[0], z: p[2], r, color, i });
+  };
+  for (const e of extras) {
+    switch (e.kind) {
+      case 'tenants': put(e.f, e.u, e.flush ? 0.5 : 0.8, 4.5, lin(e.panels[0]?.color ?? 0xffffff), 0.32); break;
+      case 'stand': put(e.f, e.u, e.out, 2.2, lin(e.color), 0.28); break;
+      case 'lantern': put(e.f, e.u, LANTERN_OUT, 2.6, [1, 0.25, 0.1], 0.3); break;
+      case 'hotel': put(e.f, e.u, 0.4, 2, e.full ? [1, 0.3, 0.3] : [0.4, 1, 0.5], 0.2); break;
+      case 'bulbs': put(e.f, (e.u0 + e.u1) / 2, 1, 5, [1, 0.8, 0.5], 0.35); break;
+      case 'arrow': put(e.f, e.u, 0.6, 3, [1, 0.4, 0.8], 0.2); break;
+      case 'led': put(e.f, e.u, 0.6, 3.5, [1, 0.2, 0.1], 0.25); break;
+      case 'cube': put(e.f, e.u, 0.5, 2, lin(e.color), 0.2); break;
+      default: break;
+    }
+  }
+  return out;
+}
+
+/**
+ * The atlas texts the extras can show anywhere in the city (the tenants' and stand signs' are the sign words, already
+ * there): lantern characters, prices, the vacancy lamps, LED messages, window names, cubes, tubing for the Latin sign
+ * words, the pictograms.
+ */
+export function signKindAtlasTexts(words: readonly string[]): SignText[] {
+  return signKindTexts({
+    vertical: LANTERN_TEXTS,
+    horizontal: [...HOTEL_PRICES.flat(), '空室', '満室', ...Object.values(LED_MESSAGES).flat(), ...Object.values(WINDOW_WORDS).flat(), ...CUBE_TEXTS],
+    tube: words.filter((w) => [...w].every((c) => c.charCodeAt(0) < 0x2e80)),
+    icons: ICON_NAMES,
+  });
 }
