@@ -20,6 +20,7 @@ import { sightline } from '../../src/poc3d/real/sightline';
 import { bladeLength, hasRooftopLetters, plateWidth, SignLayout, signStyle } from '../../src/poc3d/real/signs';
 import { DistrictModel, signTexts } from '../../src/poc3d/district/model';
 import { eraSignWords } from '../../src/poc3d/district/era';
+import { withShopNames } from '../../src/poc3d/real/shopNames';
 
 const SEED = 0x0c179090;
 const DIR = 'debug-shots/sign-audit/';
@@ -118,7 +119,7 @@ it('audits the signs', () => {
     for (const [f, n] of [...m].sort((a, b) => a[0].localeCompare(b[0]))) out.push(`  ${f.padEnd(44)} ${n}`);
   };
   out.push(`siting: ${Math.round(ms)} ms for ${model.cells.length} cells (${r1(ms / model.cells.length)} ms a cell, plans included)`);
-  const layout = new SignLayout(signTexts(eraSignWords(content.zones.words([...new Set(DISTRICTS3.flatMap((k) => STYLES3[k]!.signWords))])), content.placed));
+  const layout = new SignLayout(signTexts(eraSignWords(withShopNames(content.zones.words([...new Set(DISTRICTS3.flatMap((k) => STYLES3[k]!.signWords))]))), content.placed));
   out.push(`sign atlas: ${layout.width} x ${layout.height}`);
   out.push('(neon* and box*: a sign with no look of its own, its look from its hash as before)', '');
   show('ALL', total);

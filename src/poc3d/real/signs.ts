@@ -30,6 +30,8 @@ const PX_PER_M = 32 / 0.36;
 const CELL_PX = 32;
 const H_SLOT = 80;
 const V_CHAR = 72;
+/** The tallest a sign atlas may be before it goes twice as wide. */
+const MAX_ATLAS = 16384;
 
 /** How long a blade with this text is, in metres (the atlas slot's height: SignLayout). */
 export const bladeLength = (text: string): number => ([...text].filter((c) => c !== ' ').length * V_CHAR + 24) / PX_PER_M;
@@ -66,7 +68,6 @@ export class SignLayout {
   readonly height: number;
 
   constructor(texts: readonly SignText[]) {
-    const W = 2048;
     const want = this.want;
     for (const t of texts) {
       const key = keyOf(t.text, t.vertical, t.form);
@@ -74,24 +75,33 @@ export class SignLayout {
       const n = [...t.text].filter((c) => c !== ' ').length;
       want.set(key, t.form === 'icon' ? { ...t, w: H_SLOT, h: H_SLOT } : t.vertical && !t.form ? { ...t, w: 80, h: n * V_CHAR + 24 } : { ...t, w: (cellWidth(t.text) + 1) * CELL_PX, h: H_SLOT });
     }
-    // Shelf packing, tallest first; the first 8x8 pixels stay black (blank sides/backs sample there).
+    // Shelf packing, tallest first; the first 8x8 pixels stay black (blank sides/backs sample there). 2048 wide, or 4096
+    // when that would be taller than a texture may be (16384: ANGLE's D3D11, Edge and Chrome on Windows).
     const items = [...want.entries()].sort((a, b) => b[1].h - a[1].h);
-    let x = 16;
-    let y = 0;
-    let shelf = 16;
-    const PAD = 8;
-    for (const [key, it] of items) {
-      if (x + it.w + PAD > W) {
-        x = 0;
-        y += shelf + PAD;
-        shelf = 0;
+    const pack = (W: number): number => {
+      this.slots.clear();
+      let x = 16;
+      let y = 0;
+      let shelf = 16;
+      const PAD = 8;
+      for (const [key, it] of items) {
+        if (x + it.w + PAD > W) {
+          x = 0;
+          y += shelf + PAD;
+          shelf = 0;
+        }
+        this.slots.set(key, { x, y, w: it.w, h: it.h });
+        x += it.w + PAD;
+        shelf = Math.max(shelf, it.h);
       }
-      this.slots.set(key, { x, y, w: it.w, h: it.h });
-      x += it.w + PAD;
-      shelf = Math.max(shelf, it.h);
-    }
+      return y + shelf + PAD;
+    };
+    let W = 2048;
+    let used = pack(W);
+    if (used > MAX_ATLAS) used = pack((W = 4096));
     this.width = W;
-    this.height = 2 ** Math.ceil(Math.log2(Math.max(64, y + shelf + PAD)));
+    // (Only as tall as it's filled, to the next 64 rows: WebGL2 doesn't need a power of two, mipmaps and all.)
+    this.height = Math.max(64, Math.ceil(used / 64) * 64);
   }
 
   /** UV rect (u0, v0 top, u1, v1 bottom) and size in metres of a text's slot. */
@@ -106,7 +116,11 @@ export class SignLayout {
   }
 }
 
-/** The sign atlas texture: every text of the layout rendered sharp (red) and blurred for the neon halo (green). */
+/**
+ * The sign atlas texture: every text of the layout rendered sharp (red) and blurred for the neon halo (green), two
+ * channels a pixel (RG8: half the memory four would take). Drawn a band of rows at a time, so it never needs canvases
+ * the size of the whole atlas (they were half a gigabyte at load).
+ */
 export class SignAtlas extends SignLayout {
   readonly texture: THREE.DataTexture;
 
@@ -114,42 +128,52 @@ export class SignAtlas extends SignLayout {
     super(texts);
     const W = this.width;
     const H = this.height;
-    const want = this.want;
+    const want = [...this.want];
+    const BAND = 2048;
+    // (Room over and under a band for the blur to reach across its edges.)
+    const EDGE = 32;
     const sharp = document.createElement('canvas');
     sharp.width = W;
-    sharp.height = H;
+    sharp.height = BAND + 2 * EDGE;
     const blur = document.createElement('canvas');
     blur.width = W;
-    blur.height = H;
+    blur.height = BAND + 2 * EDGE;
     const gs = sharp.getContext('2d', { willReadFrequently: true })!;
     const gb = blur.getContext('2d', { willReadFrequently: true })!;
-    for (const g of [gs, gb]) {
-      g.fillStyle = '#000';
-      g.fillRect(0, 0, W, H);
-    }
-    for (const [key, it] of want) {
-      const s = this.slots.get(key)!;
-      gs.fillStyle = '#fff';
+    const data = new Uint8Array(W * H * 2);
+    for (let y0 = 0; y0 < H; y0 += BAND) {
+      const rows = Math.min(BAND, H - y0);
+      for (const g of [gs, gb]) {
+        g.fillStyle = '#000';
+        g.fillRect(0, 0, W, BAND + 2 * EDGE);
+      }
       gs.save();
-      if (it.form === 'icon') drawIcon(gs, it.text, s);
-      else if (it.form === 'tube') drawHorizontal(gs, it.text, s, true);
-      else if (it.vertical) drawVertical(gs, it.text, s);
-      else drawHorizontal(gs, it.text, s);
+      gs.translate(0, EDGE - y0);
+      for (const [key, it] of want) {
+        const s = this.slots.get(key)!;
+        if (s.y > y0 + rows + EDGE || s.y + s.h < y0 - EDGE) continue;
+        gs.fillStyle = '#fff';
+        gs.save();
+        if (it.form === 'icon') drawIcon(gs, it.text, s);
+        else if (it.form === 'tube') drawHorizontal(gs, it.text, s, true);
+        else if (it.vertical) drawVertical(gs, it.text, s);
+        else drawHorizontal(gs, it.text, s);
+        gs.restore();
+      }
       gs.restore();
+      // The halo: the sharp text blurred in one pass (a filter on every text draw was very slow).
+      gb.filter = 'blur(7px)';
+      gb.drawImage(sharp, 0, 0);
+      gb.filter = 'none';
+      const a = gs.getImageData(0, EDGE, W, rows).data;
+      const b = gb.getImageData(0, EDGE, W, rows).data;
+      const o = y0 * W * 2;
+      for (let i = 0; i < W * rows; i++) {
+        data[o + i * 2] = a[i * 4];
+        data[o + i * 2 + 1] = Math.min(255, b[i * 4] * 1.6);
+      }
     }
-    // The halo: the sharp text blurred in one pass (a filter on every text draw was very slow).
-    gb.filter = 'blur(7px)';
-    gb.drawImage(sharp, 0, 0);
-    gb.filter = 'none';
-    const a = gs.getImageData(0, 0, W, H).data;
-    const b = gb.getImageData(0, 0, W, H).data;
-    const data = new Uint8Array(W * H * 4);
-    for (let i = 0; i < W * H; i++) {
-      data[i * 4] = a[i * 4];
-      data[i * 4 + 1] = Math.min(255, b[i * 4] * 1.6);
-      data[i * 4 + 3] = 255;
-    }
-    this.texture = new THREE.DataTexture(data, W, H);
+    this.texture = new THREE.DataTexture(data, W, H, THREE.RGFormat);
     this.texture.generateMipmaps = true;
     this.texture.minFilter = THREE.LinearMipmapLinearFilter;
     this.texture.magFilter = THREE.LinearFilter;

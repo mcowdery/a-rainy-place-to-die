@@ -6,6 +6,7 @@ import { era, eraSign } from '../district/era';
 import { frontSpan, frontWidth, type Building3, type CellPlan3, type Road3, type Sign3, type SignLook } from '../district/plan';
 import { frontFrame, styleFor, tierFront, tiers, WIN } from './buildings';
 import { TRADE, tradeOfWord, type Trade } from './shops';
+import { shopName } from './shopNames';
 import { CROWN_NAMES, HOTEL_PRICES, LED_MESSAGES, WINDOW_WORDS, type Panel, type SignExtra, type WallFrame } from './signKinds';
 import { bladeLength, fasciaSize, hasRooftopLetters, plateWidth } from './signs';
 
@@ -344,8 +345,9 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
    * the others, or null. Chosen from the building's 1992 height; in a year it's lower, a blade that no longer fits keeps
    * its place among the others (so the rest are where they are in 1992) and is left off at the end (`fits`).
    */
-  const blade = (b: Building3, x: number, z: number, nx: number, nz: number, text: string, color: number, look: SignLook | undefined, floor: number): Sign3 | null => {
-    const len = bladeLength(text);
+  const blade = (b: Building3, x: number, z: number, nx: number, nz: number, text: string, color: number, look: SignLook | undefined, floor: number, fit = text): Sign3 | null => {
+    // (Its length from what it says in 1992, `fit`: the year's own words may be shorter.)
+    const len = Math.max(bladeLength(text), bladeLength(fit));
     const ys = tops(b.was ?? b.h, len);
     if (!ys.length) return null;
     const ahead = opposite(b, x, z, nx, nz);
@@ -367,7 +369,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
    * banner), as many panels as fit between the fascia and its top (at least `min`), or null. Kept clear of the blades
    * like one of them.
    */
-  const board = (b: Building3, u: number, panels: Panel[], flush: boolean, min: number, id: number): SignExtra | null => {
+  const board = (b: Building3, u: number, panels: Panel[], fit: readonly string[], flush: boolean, min: number, id: number): SignExtra | null => {
     const f = frontFrame(b);
     const width = flush ? 1.8 : 0.8;
     const x = f.p[0] + f.r[0] * u;
@@ -376,7 +378,8 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
       const ahead = opposite(b, x, z, f.n[0], f.n[2]);
       if (ahead && ahead.d < 0.2 + width + PASS) return null;
     }
-    const lens = panels.map((pn) => bladeLength(pn.text) * (width / 0.9) + 0.1);
+    // (Their lengths from what they say in 1992, `fit`.)
+    const lens = panels.map((pn, i) => Math.max(bladeLength(pn.text), bladeLength(fit[i] ?? pn.text)) * (width / 0.9) + 0.1);
     for (let n = panels.length; n >= min; n--) {
       const len = lens.slice(0, n).reduce((a, l) => a + l, 0.1);
       for (const y1 of tops(b.was ?? b.h, len)) {
@@ -469,7 +472,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
         // At the corner end where there is one (seen from both streets), else either.
         const end = corners[0] !== corners[1] ? (corners[0] ? 0 : 1) : h(3) < 0.5 ? 0 : 1;
         const p = onFront(b, end === 0 ? s0 + 1.2 : s1 - 1.2);
-        const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, look, Math.floor(h(4) * 2));
+        const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, look, Math.floor(h(4) * 2), b.sign.name);
         if (sign) {
           out.push(sign);
           placed = true;
@@ -498,7 +501,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
           if (back > depthOf(b) - 1) continue;
           const p = onSide(b, end, back);
           if (!streetAhead(p.x, p.z, p.nx, p.nz, 8)) continue;
-          const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, look, 1 + Math.floor(h(8) * 2));
+          const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, look, 1 + Math.floor(h(8) * 2), b.sign.name);
           if (sign) {
             out.push(sign);
             break;
@@ -519,19 +522,23 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
         // (Not the shop's own word again, nor another tenant's.)
         let words = tenantWords.filter((w) => w !== b.sign?.word);
         const panels: Panel[] = [];
+        const fits: string[] = [];
         for (let i = 0; i < n && words.length; i++) {
           const word = words[Math.floor(h(12 + i) * words.length)];
           words = words.filter((w) => w !== word);
-          const text = eraSign(word);
+          // (Each tenant its own name: shopNames.ts.)
+          const name = filipino() ? word : shopName(word, hash(b.id, 60 + i));
+          const text = eraSign(name);
           const color = plan.style.signColors[Math.floor(h(40 + i) * plan.style.signColors.length)];
           const tenantLook = P.looks ? pickLook(P.tenants === 'night' ? P.looks.night : P.looks.shop, h(50 + i)) : undefined;
           if (asBoard) {
             panels.push({ text, color, look: tenantLook ?? 'lightbox' });
+            fits.push(name);
             continue;
           }
           for (const end of (h(18 + i) < 0.5 ? [0, 1] : [1, 0]) as (0 | 1)[]) {
             const p = onFront(b, end === 0 ? s0 + 1.2 : s1 - 1.2);
-            const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, tenantLook, 1 + i);
+            const sign = blade(b, p.x, p.z, p.nx, p.nz, text, color, tenantLook, 1 + i, name);
             if (sign) {
               out.push(sign);
               break;
@@ -541,7 +548,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
         if (asBoard && panels.length >= 2) {
           const flush = P.tenants !== 'night';
           for (const end of (h(18) < 0.5 ? [0, 1] : [1, 0]) as (0 | 1)[]) {
-            const e = board(b, end === 0 ? s0 + (flush ? 1.1 : 1.2) : s1 - (flush ? 1.1 : 1.2), panels, flush, flush ? 2 : 3, id + 1);
+            const e = board(b, end === 0 ? s0 + (flush ? 1.1 : 1.2) : s1 - (flush ? 1.1 : 1.2), panels, fits, flush, flush ? 2 : 3, id + 1);
             if (e) {
               extras.push(e);
               bannered = flush;

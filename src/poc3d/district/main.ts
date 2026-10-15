@@ -146,6 +146,7 @@ import { deadAt } from './peopleHours';
 import { setWorkLiveries } from '../models/vehicles';
 import { money, setCurrency } from '../../money';
 import { signTexts } from './model';
+import { withShopNames } from '../real/shopNames';
 import { CELL, DISTRICTS3, STYLES3, type Sign3 } from './plan';
 import type { Node3 } from './stamps';
 import { District, LIGHTMAP_WINDOW } from './world';
@@ -382,7 +383,8 @@ async function run(): Promise<void> {
       }),
   ];
   // (In another year, with the year's own words where a sign's isn't of it: era.ts `eraSign`.)
-  const words = eraSignWords(content.zones.words([...new Set(DISTRICTS3.flatMap((k) => STYLES3[k]!.signWords))]));
+  // (With every shop's own name for them: real/shopNames.ts.)
+  const words = eraSignWords(withShopNames(content.zones.words([...new Set(DISTRICTS3.flatMap((k) => STYLES3[k]!.signWords))])));
   await breathe();
   const atlas = new SignAtlas(signTexts(words, content.placed));
   await breathe();

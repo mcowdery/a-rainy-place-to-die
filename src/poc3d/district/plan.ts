@@ -2,6 +2,8 @@ import type { PeopleMix } from './peopleMix';
 import { overlaps, type Rect } from '../../core/coords';
 import { hash, rng, type Rng } from '../../core/hash';
 import { eraHeight, eraSign, eraTower } from './era';
+import { filipino } from './cityConfig';
+import { shopName } from '../real/shopNames';
 import { isWide } from '../../core/wide';
 import { isLand, type CellKind, type DistrictId, type MacroMap } from '../../gen/macro';
 import { STYLES } from '../../gen/styles';
@@ -90,10 +92,11 @@ export interface Building3 {
   readonly cut?: { readonly corner: Corner; readonly size: number };
   readonly hue?: number;
   /**
-   * Its shop sign's text and colour, if it has one (the shop is what its sign says: real/shops.ts), and the word it says
-   * in 1992 (the same in every year: `text` is the year's own, district/era.ts).
+   * Its shop sign's text and colour, if it has one (the shop is what its sign says: real/shops.ts); the word of its trade
+   * it was given (its zone's sign word) and what it says in 1992, the shop's own name (real/shopNames.ts): the same in
+   * every year, where `text` is the year's own (district/era.ts).
    */
-  readonly sign?: { readonly text: string; readonly color: number; readonly word: string };
+  readonly sign?: { readonly text: string; readonly color: number; readonly word: string; readonly name: string };
   /** The zone it was generated in (look and ads); absent for stamps and zone-less districts. */
   readonly zone?: Zone3;
 }
@@ -1029,6 +1032,8 @@ function makeSign(b: Building3, style: DistrictStyle3, rnd: Rng): ShopSign {
     rnd.chance(0.5);
     rnd.float();
   }
-  // (What the sign says in this era: era.ts. The dice above are the word's own, so they're rolled alike in every year.)
-  return { text: eraSign(word), color, word };
+  // The shop's own name for its word (from its id, not the dice: shopNames.ts; Manila's keep their words), and what it
+  // says in this era (era.ts). The dice above are the word's own, so they're rolled alike in every year.
+  const name = filipino() ? word : shopName(word, b.id);
+  return { text: eraSign(name), color, word, name };
 }

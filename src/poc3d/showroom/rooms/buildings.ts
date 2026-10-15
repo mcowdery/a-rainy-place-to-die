@@ -201,7 +201,7 @@ startRoom({
       ];
       let x = -24;
       const bs: Building3[] = specs.map((sp, i) => {
-        const b: Building3 = { id: 310000 + i * 7, x: x + sp.w / 2, z: Z, w: sp.w, d: D, h: sp.h, front: 'south', sign: { text: sp.word, color: sp.color, word: sp.word } };
+        const b: Building3 = { id: 310000 + i * 7, x: x + sp.w / 2, z: Z, w: sp.w, d: D, h: sp.h, front: 'south', sign: { text: sp.word, color: sp.color, word: sp.word, name: sp.word } };
         x += sp.w + 0.4;
         return b;
       });

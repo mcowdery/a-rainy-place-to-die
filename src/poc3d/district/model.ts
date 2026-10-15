@@ -18,6 +18,7 @@ import { lineStops, stopClaim, type LineStops, type StopSite } from './stops';
 import { placePhones, type PhonePlacement } from '../real/phoneSites';
 import { placeSigns, type SignPlacement } from '../real/signSites';
 import { signKindAtlasTexts, type SignExtra } from '../real/signKinds';
+import { isWide } from '../../core/wide';
 import type { SignText } from '../real/signs';
 
 /**
@@ -368,7 +369,8 @@ export class DistrictModel {
 /** Every sign text the district can show (for the sign atlas / layout; identical on every thread). */
 export function signTexts(words: readonly string[], placed: readonly Placed3[]): SignText[] {
   return [
-    ...words.flatMap((text) => [{ text, vertical: false }, { text, vertical: true }]),
+    // (Down a blade only what's all wide: a Latin word is never one, and its slot would be the tallest.)
+    ...words.flatMap((text) => [{ text, vertical: false }, ...([...text].every((c) => isWide(c.codePointAt(0)!) || c === ' ') ? [{ text, vertical: true }] : [])]),
     // The other kinds' (real/signKinds.ts): lanterns, prices, LED messages, window names, tubing, pictograms.
     ...signKindAtlasTexts(words),
     ...placed.flatMap((p) => p.signs.map((s) => ({ text: s.text, vertical: s.vertical }))),
