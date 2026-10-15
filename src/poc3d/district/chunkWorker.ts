@@ -22,7 +22,7 @@ import { DistrictModel, signTexts } from './model';
  */
 export type WorkerIn =
   | { type: 'init'; kinds: DistrictId[]; seed: number; words: readonly string[]; city: CityId; era: EraId }
-  | { type: 'build'; id: number; mx: number; my: number; stage: Stage };
+  | { type: 'build'; id: number; mx: number; my: number; stage: Stage; hour?: number };
 
 let builder: ChunkBuilder | null = null;
 
@@ -43,7 +43,7 @@ self.onmessage = (e: MessageEvent<WorkerIn>) => {
     self.postMessage({ type: 'ready' });
     return;
   }
-  const result = builder!.build(m.mx, m.my, m.stage);
+  const result = builder!.build(m.mx, m.my, m.stage, m.hour);
   const transfer: Transferable[] = rawTransfer(Object.values(result.meshes));
   if (result.lightmap) transfer.push(result.lightmap.buffer as ArrayBuffer);
   if (result.crowd) transfer.push(result.crowd.buffer as ArrayBuffer);

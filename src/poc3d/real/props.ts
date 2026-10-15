@@ -17,6 +17,7 @@ import { footbridges, underFootbridge } from '../district/footbridges';
 import { openLayout, type OpenLayout } from './openLots';
 import type { PhonePlacement } from './phoneSites';
 import type { SignPlacement } from './signSites';
+import { hoursOf } from './hours';
 
 /** Cell size (district/plan.ts CELL): signals stand where cell-edge roads cross. */
 const CELL3 = 128;
@@ -426,6 +427,9 @@ export function cellDetail(
         color,
         i: TRADES[s.trade].spill,
         band: { dx: f.r[0] * (sw - 0.8), dz: f.r[2] * (sw - 0.8), nx: f.n[0], nz: f.n[2], depth: 4.5 },
+        // (Out when the shop shuts: hours.ts.)
+        hours: hoursOf(s.trade),
+        seed: b.id,
       });
     }
     const rnd = rng(hash(b.id, 0x7e4d));

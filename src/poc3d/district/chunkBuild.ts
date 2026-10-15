@@ -12,6 +12,7 @@ import type { RawGeometry } from '../real/rawGeometry';
 import { sightline } from '../real/sightline';
 import { addSigns, signLights, SignBuilder, type SignLayout } from '../real/signs';
 import { addSignExtras, extraLights } from '../real/signKinds';
+import { openHours } from '../real/hours';
 import type { Building3 } from './plan';
 import { landmarkLights } from './landmarks';
 import type { DistrictModel } from './model';
@@ -27,7 +28,8 @@ import { scrambleKeys, Signals } from './traffic';
  * - ghosts: the crowd of people, as numbers (people.ts packFigures) for the instanced crowd (real/crowd.ts).
  * Coordinates are relative to the cell centre.
  */
-export type Stage = 'base' | 'near' | 'ghosts';
+/** `light`: the lightmap tile alone, painted again for the hour (shops opening and shutting: real/hours.ts). */
+export type Stage = 'base' | 'near' | 'ghosts' | 'light';
 
 export interface ChunkBuilt {
   readonly mx: number;
@@ -67,9 +69,29 @@ export class ChunkBuilder {
     this.signals = new Signals(scrambleKeys(model.placed, CELL));
   }
 
-  build(mx: number, my: number, stage: Stage): ChunkBuilt {
+  /** This cell's lightmap tile, with its neighbours' lights that reach across the border: the shops' and signs' only while they're open at `hour`. */
+  private lightTile(mx: number, my: number, hour: number): Uint8Array {
+    const m = this.model;
+    const lights: Light[] = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const d = m.detail(mx + dx, my + dy);
+        if (d) lights.push(...d.lights);
+        lights.push(...signLights(m.signs(mx + dx, my + dy)), ...extraLights(m.signExtras(mx + dx, my + dy)));
+        for (const q of m.stamps(mx + dx, my + dy)) {
+          lights.push(...signLights(q.signs));
+          lights.push(...landmarkLights(q));
+          for (const n of q.nodes) if (n.kind === 'door') lights.push({ x: n.x, z: n.z, r: 6, color: [1.0, 0.7, 0.4], i: 0.9 });
+        }
+      }
+    }
+    return paintLights(this.g, mx * CELL, my * CELL, CELL, lights.filter((l) => l.hours === undefined || openHours(l.hours, l.seed ?? 0, hour)));
+  }
+
+  build(mx: number, my: number, stage: Stage, hour = 21): ChunkBuilt {
     const t0 = performance.now();
     const m = this.model;
+    if (stage === 'light') return { mx, my, stage, meshes: {}, lightmap: this.lightTile(mx, my, hour), ms: performance.now() - t0 };
     const plan = m.plan(mx, my)!;
     const cx = (mx + 0.5) * CELL;
     const cz = (my + 0.5) * CELL;
@@ -90,21 +112,7 @@ export class ChunkBuilder {
       const mb = this.mb.reset();
       for (const b of buildings) addBuilding(mb, b, false);
       const far = lift(mb.raw(cx, cz));
-      // Lightmap tile: this cell's lights plus any from the neighbours that reach across the border.
-      const lights: Light[] = [];
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const d = m.detail(mx + dx, my + dy);
-          if (d) lights.push(...d.lights);
-          lights.push(...signLights(m.signs(mx + dx, my + dy)), ...extraLights(m.signExtras(mx + dx, my + dy)));
-          for (const q of m.stamps(mx + dx, my + dy)) {
-            lights.push(...signLights(q.signs));
-            lights.push(...landmarkLights(q));
-            for (const n of q.nodes) if (n.kind === 'door') lights.push({ x: n.x, z: n.z, r: 6, color: [1.0, 0.7, 0.4], i: 0.9 });
-          }
-        }
-      }
-      const lightmap = paintLights(this.g, mx * CELL, my * CELL, CELL, lights);
+      const lightmap = this.lightTile(mx, my, hour);
       return { mx, my, stage, meshes: { base, far }, lightmap, ms: performance.now() - t0 };
     }
     if (stage === 'near') {

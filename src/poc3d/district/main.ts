@@ -1764,6 +1764,8 @@ async function run(): Promise<void> {
     cityU.uLightGain.value = 1.4 * atm.lamps;
     cityU.uNeon.value = neonLevel;
     cityU.uHour.value = minute / 60;
+    // (The lightmap follows the shops' hours too: a closed shop's glow on the pavement goes out with its sign.)
+    district.setHour(minute / 60);
     cityU.uFlicker.value = atm.neon === 'flicker' ? 1 : 0;
     renderer.toneMappingExposure = atm.exposure;
     applyMood();

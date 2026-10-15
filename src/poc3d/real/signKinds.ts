@@ -207,11 +207,11 @@ export function hotelBoards(sb: SignBuilder, mb: MeshBuilder, layout: SignLayout
   mb.frameBox(f.p, f.r, f.n, u - W / 2, u + W / 2, yy - 0.04, y - 0.06, 0, 0.04);
 }
 
-/** A bulb in the chase (aStyle.y: its place in it, 0 to 1; 0 is a steady bulb). */
-function bulb(mb: MeshBuilder, c: C3, f: WallFrame, hex: readonly [number, number, number], phase: number): void {
+/** A bulb in the chase (aStyle.y: its place in it, 0 to 1; 0 is a steady bulb; aStyle.z its shop's hours class + 1, 0 always lit). */
+function bulb(mb: MeshBuilder, c: C3, f: WallFrame, hex: readonly [number, number, number], phase: number, hours = -1): void {
   mb.kind = KIND.emit;
   mb.color = hex as C3;
-  mb.style = [EMIT.neon, phase, 0, 0];
+  mb.style = [EMIT.neon, phase, hours + 1, 0];
   const s = 0.05;
   mb.frameBox(c, f.r, f.n, -s, s, c[1] - s, c[1] + s, 0, 2 * s);
   mb.style = [0, 0, 0, 0];
@@ -220,7 +220,7 @@ function bulb(mb: MeshBuilder, c: C3, f: WallFrame, hex: readonly [number, numbe
 const BULB: C3 = [1.9, 1.45, 0.75];
 
 /** Bulbs round a rectangle on the wall (u0..u1, y0..y1), `step` apart, `out` from it, chasing round it in threes. */
-export function bulbFrame(mb: MeshBuilder, f: WallFrame, u0: number, u1: number, y0: number, y1: number, o: { step?: number; out?: number; color?: C3 } = {}): void {
+export function bulbFrame(mb: MeshBuilder, f: WallFrame, u0: number, u1: number, y0: number, y1: number, o: { step?: number; out?: number; color?: C3; hours?: number } = {}): void {
   const step = o.step ?? 0.3;
   const out = o.out ?? 0.06;
   const pts: [number, number][] = [];
@@ -230,14 +230,14 @@ export function bulbFrame(mb: MeshBuilder, f: WallFrame, u0: number, u1: number,
   for (let i = 0; i < ny; i++) pts.push([u1, y1 - ((y1 - y0) * i) / ny]);
   for (let i = 0; i < nu; i++) pts.push([u1 - ((u1 - u0) * i) / nu, y0]);
   for (let i = 0; i < ny; i++) pts.push([u0, y0 + ((y1 - y0) * i) / ny]);
-  pts.forEach(([u, y], k) => bulb(mb, at(f, u, y, out), f, o.color ?? BULB, 0.01 + (k % 3) / 3));
+  pts.forEach(([u, y], k) => bulb(mb, at(f, u, y, out), f, o.color ?? BULB, 0.01 + (k % 3) / 3, o.hours));
 }
 
 /**
  * An arrow of bulbs on the wall pointing along it (dir +1 right, -1 left) from u, at height y, `len` long: the bulbs
  * light in a band that runs to its head, over and over (to the door it points at).
  */
-export function bulbArrow(mb: MeshBuilder, f: WallFrame, u: number, y: number, len: number, dir: 1 | -1, o: { out?: number; color?: C3 } = {}): void {
+export function bulbArrow(mb: MeshBuilder, f: WallFrame, u: number, y: number, len: number, dir: 1 | -1, o: { out?: number; color?: C3; hours?: number } = {}): void {
   const out = o.out ?? 0.06;
   const pts: [number, number, number][] = [];
   const n = Math.round(len / 0.22);
@@ -247,7 +247,7 @@ export function bulbArrow(mb: MeshBuilder, f: WallFrame, u: number, y: number, l
     const k = (i / 3) * head;
     pts.push([u + dir * (len - k), y + k, 1 - k / len], [u + dir * (len - k), y - k, 1 - k / len]);
   }
-  for (const [pu, py, t] of pts) bulb(mb, at(f, pu, py, out), f, o.color ?? BULB, 0.01 + 0.98 * (1 - t) * 0.66);
+  for (const [pu, py, t] of pts) bulb(mb, at(f, pu, py, out), f, o.color ?? BULB, 0.01 + 0.98 * (1 - t) * 0.66, o.hours);
 }
 
 /**
@@ -298,10 +298,10 @@ export function tubeSign(sb: SignBuilder, mb: MeshBuilder, layout: SignLayout, f
 }
 
 /** A company's name in white channel letters along the top of a tower's face (its top at `top`), at most maxW wide. */
-export function crown(mb: MeshBuilder, f: WallFrame, u: number, top: number, text: string, o: { height?: number; maxW: number; hex?: number; id: number }): void {
+export function crown(mb: MeshBuilder, f: WallFrame, u: number, top: number, text: string, o: { height?: number; maxW: number; hex?: number; id: number; hours?: number }): void {
   const hgt = o.height ?? 2.2;
   const s = Math.min(hgt / EM, o.maxW / textAdvance(text));
-  channelLetters(mb, text, at(f, u, 0, 0), f.r, f.n, top - 0.6 - (EM * s) / 2, EM * s, o.maxW, lin(o.hex ?? 0x8f98ac), o.id, 0.05);
+  channelLetters(mb, text, at(f, u, 0, 0), f.r, f.n, top - 0.6 - (EM * s) / 2, EM * s, o.maxW, lin(o.hex ?? 0x8f98ac), o.id, 0.05, o.hours);
 }
 
 /** The small lit box over a door (24H, OPEN), standing out from the wall at u, its foot at y, lettered on its three faces. */
@@ -392,13 +392,16 @@ export type SignExtra =
   | { readonly kind: 'stand'; readonly f: WallFrame; readonly u: number; readonly out: number; readonly text: string; readonly color: number; readonly look: SignLook; readonly id: number }
   | { readonly kind: 'lantern'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly id: number }
   | { readonly kind: 'hotel'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly prices: readonly string[]; readonly full: boolean; readonly id: number }
-  | { readonly kind: 'bulbs'; readonly f: WallFrame; readonly u0: number; readonly u1: number; readonly y0: number; readonly y1: number }
-  | { readonly kind: 'arrow'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly len: number; readonly dir: 1 | -1 }
+  | { readonly kind: 'bulbs'; readonly f: WallFrame; readonly u0: number; readonly u1: number; readonly y0: number; readonly y1: number; readonly id: number }
+  | { readonly kind: 'arrow'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly len: number; readonly dir: 1 | -1; readonly id: number }
   | { readonly kind: 'led'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly w: number; readonly id: number }
   | { readonly kind: 'window'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly color: number; readonly maxW: number; readonly id: number }
   | { readonly kind: 'crown'; readonly f: WallFrame; readonly u: number; readonly top: number; readonly text: string; readonly maxW: number; readonly id: number }
   | { readonly kind: 'cube'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly text: string; readonly color: number; readonly id: number }
   | { readonly kind: 'pole'; readonly f: WallFrame; readonly u: number; readonly y: number; readonly id: number };
+
+/** The hours class a sign id carries (hours.ts withHours). */
+const hoursIn = (id: number): number => Math.floor(id / 100000);
 
 /** How far a lantern hangs from its wall. */
 export const LANTERN_OUT = 0.45;
@@ -411,11 +414,11 @@ export function addSignExtras(extras: readonly SignExtra[], layout: SignLayout, 
       case 'stand': standSign(sb, mb, layout, e.f, e.u, e.out, e.text, e.color, e.look, e.id); break;
       case 'lantern': lantern(sb, mb, layout, e.f, e.u, LANTERN_OUT, e.y, e.text, { id: e.id }); break;
       case 'hotel': hotelBoards(sb, mb, layout, e.f, e.u, e.y, e.prices, { full: e.full, id: e.id }); break;
-      case 'bulbs': bulbFrame(mb, e.f, e.u0, e.u1, e.y0, e.y1, { out: 0.1 }); break;
-      case 'arrow': bulbArrow(mb, e.f, e.u, e.y, e.len, e.dir, { color: [1.9, 0.5, 1.2] }); break;
+      case 'bulbs': mb.id = e.id; bulbFrame(mb, e.f, e.u0, e.u1, e.y0, e.y1, { out: 0.1, hours: hoursIn(e.id) }); break;
+      case 'arrow': mb.id = e.id; bulbArrow(mb, e.f, e.u, e.y, e.len, e.dir, { color: [1.9, 0.5, 1.2], hours: hoursIn(e.id) }); break;
       case 'led': ledBoard(sb, mb, layout, e.f, e.u, e.y, e.text, { w: e.w, id: e.id }); break;
       case 'window': windowLetters(sb, layout, e.f, e.u, e.y, e.text, e.color, { maxW: e.maxW, id: e.id }); break;
-      case 'crown': crown(mb, e.f, e.u, e.top, e.text, { maxW: e.maxW, id: e.id }); break;
+      case 'crown': crown(mb, e.f, e.u, e.top, e.text, { maxW: e.maxW, id: e.id, hours: hoursIn(e.id) }); break;
       case 'cube': cube(sb, mb, layout, e.f, e.u, e.y, e.text, e.color, e.id); break;
       case 'pole': barberPole(sb, mb, e.f, e.u, e.y, e.id); break;
     }
@@ -425,11 +428,12 @@ export function addSignExtras(extras: readonly SignExtra[], layout: SignLayout, 
 /** Their light on the street, for the lightmap (window letters and crowns give none). */
 export function extraLights(extras: readonly SignExtra[]): Light[] {
   const out: Light[] = [];
-  const put = (f: WallFrame, u: number, o: number, r: number, color: C3, i: number): void => {
-    const p = at(f, u, 0, o);
-    out.push({ x: p[0], z: p[2], r, color, i });
-  };
   for (const e of extras) {
+    // (Out when its shop shuts, with its sign: the class and seed in its id, hours.ts.)
+    const put = (f: WallFrame, u: number, o: number, r: number, color: C3, i: number): void => {
+      const p = at(f, u, 0, o);
+      out.push({ x: p[0], z: p[2], r, color, i, hours: hoursIn(e.id), seed: e.id });
+    };
     switch (e.kind) {
       case 'tenants': put(e.f, e.u, e.flush ? 0.5 : 0.8, 4.5, lin(e.panels[0]?.color ?? 0xffffff), 0.32); break;
       case 'stand': put(e.f, e.u, e.out, 2.2, lin(e.color), 0.28); break;

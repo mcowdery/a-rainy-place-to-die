@@ -6,7 +6,7 @@ import { frontSpan, type Building3, type Sign3, type SignLook } from '../distric
 import { styleFor, frontFrame, tierFront, tiers } from './buildings';
 import type { CityUniforms } from './city';
 import { EM, glyph, textAdvance } from './letters';
-import { TRADE } from './shops';
+import { HOURS, HOURS_GLSL, withHours } from './hours';
 import type { Light } from './lightmap';
 import { EMIT, KIND, lin, scale3, type MeshBuilder } from './meshBuilder';
 import { ALWAYS_SEEN, type Sightline } from './sightline';
@@ -324,37 +324,13 @@ const signCommon = /* glsl */ `
     return mod(floor(uOut[int(w)] / exp2(i - w * 24.0)), 2.0);
   }
   float sh2(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
-  // Whether a sign's shop is open (HOURS: its class is the sign id's hundred-thousands), each closing within 45 minutes
-  // of its trade's time, so a street goes dark a sign at a time.
-  float openAt(float id) {
-    float cls = floor(id / 100000.0);
-    if (cls < 0.5) return 1.0;
-    vec2 o = cls < 1.5 ? vec2(17.0, 29.0) : cls < 2.5 ? vec2(11.0, 24.0) : cls < 3.5 ? vec2(10.0, 22.0) : cls < 4.5 ? vec2(8.0, 20.0) : vec2(9.0, 19.0);
-    o.y += (sh2(vec2(id, 7.0)) - 0.5) * 1.5;
-    float h = uHour;
-    return (h >= o.x && h < o.y) || (h + 24.0 >= o.x && h + 24.0 < o.y) ? 1.0 : 0.0;
-  }
+  ${HOURS_GLSL}
+  // Whether a sign's shop is open: its hours class is the sign id's hundred-thousands (hours.ts withHours).
+  float openAt(float id) { return openHours(floor(id / 100000.0), id); }
 `;
 
-/**
- * When a sign is lit, by its shop's trade (the class goes in the sign id: `withHours`): 0 always (stamps, hotels, the
- * konbini, a coin laundry), 1 the night trades (17:00 to 5:00), 2 izakaya, noodles, pachinko, game centres (to midnight),
- * 3 shops and cafés (10:00 to 22:00), 4 the grocer's, the barber's, the baker's (8:00 to 20:00), 5 banks, clinics,
- * offices (to 19:00). The lightmap's glow under it stays (painted once a chunk).
- */
-export const HOURS = { always: 0, night: 1, late: 2, shops: 3, day: 4, office: 5 } as const;
-const HOURS_OF: Readonly<Partial<Record<number, number>>> = {
-  [TRADE.bar]: HOURS.night, [TRADE.snack]: HOURS.night, [TRADE.lounge]: HOURS.night, [TRADE.mahjong]: HOURS.night, [TRADE.karaoke]: HOURS.night,
-  [TRADE.izakaya]: HOURS.late, [TRADE.noodles]: HOURS.late, [TRADE.pachinko]: HOURS.late, [TRADE.arcade]: HOURS.late,
-  [TRADE.cafe]: HOURS.shops, [TRADE.fashion]: HOURS.shops, [TRADE.electronics]: HOURS.shops, [TRADE.hobby]: HOURS.shops, [TRADE.maid]: HOURS.shops,
-  [TRADE.books]: HOURS.shops, [TRADE.drugstore]: HOURS.shops, [TRADE.general]: HOURS.shops, [TRADE.gym]: HOURS.shops,
-  [TRADE.grocer]: HOURS.day, [TRADE.bakery]: HOURS.day, [TRADE.salon]: HOURS.day, [TRADE.florist]: HOURS.day, [TRADE.craft]: HOURS.day,
-  [TRADE.bank]: HOURS.office, [TRADE.clinic]: HOURS.office, [TRADE.estate]: HOURS.office, [TRADE.lobby]: HOURS.office, [TRADE.warehouse]: HOURS.office,
-};
-/** A shop's sign hours (HOURS) by its trade. */
-export const hoursOf = (trade: number): number => HOURS_OF[trade] ?? HOURS.always;
-/** A sign id (under 100000) with its hours class in it. */
-export const withHours = (id: number, hours: number): number => hours * 100000 + (Math.abs(Math.floor(id)) % 100000);
+/** When signs are lit: their shops' hours (hours.ts). */
+export { HOURS, hoursOf, withHours } from './hours';
 
 /**
  * Material for textured signs: neon text on a dark plate (style 0), a lit lightbox (1), print (2), or a decal (3:
@@ -427,7 +403,7 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
           totalEmissiveRadiance += mix(vPlate * 0.9, vInk * inkGlow, st.r) * on;
         }`);
   };
-  m.customProgramCacheKey = () => 'signs-v8';
+  m.customProgramCacheKey = () => 'signs-v9';
   return m;
 }
 
@@ -626,7 +602,8 @@ export function signLights(signs: readonly Sign3[]): Light[] {
     const st = signStyle(s);
     const glow = st.style === 0 ? st.ink : st.plate;
     const out = s.vertical ? 0.4 : 1.2;
-    return { x: s.x + s.nx * out, z: s.z + s.nz * out, r: s.vertical ? 4.5 : 4, color: glow, i: st.style === 0 ? 0.3 : 0.42 };
+    const hours = s.hours ?? HOURS.always;
+    return { x: s.x + s.nx * out, z: s.z + s.nz * out, r: s.vertical ? 4.5 : 4, color: glow, i: st.style === 0 ? 0.3 : 0.42, hours, seed: withHours(signId(s), hours) };
   });
 }
 
@@ -641,7 +618,7 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
     const r: C3 = [s.nz, 0, -s.nx];
     if (st.channel) {
       const p: C3 = [s.x - s.nx * 0.4, 0, s.z - s.nz * 0.4];
-      channelLetters(mb, s.text, p, r, n, 3.62, 0.62, Math.min(5.2, s.maxW ?? 5.2), st.ink, signId(s), 0.02);
+      channelLetters(mb, s.text, p, r, n, 3.62, 0.62, Math.min(5.2, s.maxW ?? 5.2), st.ink, withHours(signId(s), s.hours ?? HOURS.always), 0.02, s.hours);
       continue;
     }
     const rect = atlas.rect(s.text, s.vertical, s.form);
@@ -675,7 +652,7 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
  * Extruded letters centred at p (a facade point) along r, facing n: letter height hgt metres centred on
  * height yc, scaled to fit maxW, standing off the wall by `off`. Faces glow (neon channel); returns dark.
  */
-export function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: number, hgt: number, maxW: number, color: C3, id: number, off: number): void {
+export function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: number, hgt: number, maxW: number, color: C3, id: number, off: number, hours = -1): void {
   let s = hgt / EM;
   const adv = textAdvance(text);
   if (adv * s > maxW) s = maxW / adv;
@@ -699,7 +676,7 @@ export function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C
       const U: C3 = [0, y1 - y0, 0];
       mb.kind = KIND.emit;
       mb.color = color;
-      mb.style = [EMIT.neon, 0, 0, 0];
+      mb.style = [EMIT.neon, 0, hours + 1, 0];
       mb.quad(P(u0, y0, o1), R, U);
       mb.kind = KIND.plain;
       mb.color = RETURN;

@@ -600,13 +600,13 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
       extras.push({ kind: 'hotel', f, u: left ? s0 + 1 : s1 - 1, y: 2.45, prices: prices[Math.floor(h(27) * prices.length)], full: h(28) < 0.25, id: sid(5, HOURS.always) });
       if (front >= 7 && h(29) < 0.5) {
         const len = Math.min(2.2, front / 2 - 1.6);
-        extras.push({ kind: 'arrow', f, u: left ? s1 - 0.6 : s0 + 0.6, y: 2.95, len, dir: left ? -1 : 1 });
+        extras.push({ kind: 'arrow', f, u: left ? s1 - 0.6 : s0 + 0.6, y: 2.95, len, dir: left ? -1 : 1, id: sid(16, HOURS.always) });
       }
     }
     // Bulbs chasing round the shop's fascia (pachinko, a love hotel, a cabaret, a game centre).
     if (fascia && (BULBS[trade] ?? 0) > h(32)) {
       const { w, h: fh } = fasciaSize(fascia);
-      extras.push({ kind: 'bulbs', f, u0: midU - w / 2 - 0.25, u1: midU + w / 2 + 0.25, y0: 3.62 - fh / 2 - 0.2, y1: 3.62 + fh / 2 + 0.2 });
+      extras.push({ kind: 'bulbs', f, u0: midU - w / 2 - 0.25, u1: midU + w / 2 + 0.25, y0: 3.62 - fh / 2 - 0.2, y1: 3.62 + fh / 2 + 0.2, id: sid(15) });
     }
     // An LED board over the fascia, its message scrolling (1992's: pachinko, game centres, karaoke, Denkō-chō's shops).
     const led = LED[trade];
@@ -635,7 +635,7 @@ export function placeSigns(plan: CellPlan3, around: readonly Building3[], roads:
       const tt = ts[ts.length - 1];
       const tf = tierFront(b, tt);
       const ft: WallFrame = { p: [f.p[0] - f.n[0] * tf.inset, 0, f.p[2] - f.n[2] * tf.inset], r: f.r, n: f.n };
-      if (tf.fw >= 10) extras.push({ kind: 'crown', f: ft, u: ts.length === 1 ? midU : f.fw / 2, top: tt[3] - 0.3, text: CROWN_NAMES[Math.floor(h(52) * CROWN_NAMES.length)], maxW: tf.fw - 2, id: id + 12 });
+      if (tf.fw >= 10) extras.push({ kind: 'crown', f: ft, u: ts.length === 1 ? midU : f.fw / 2, top: tt[3] - 0.3, text: CROWN_NAMES[Math.floor(h(52) * CROWN_NAMES.length)], maxW: tf.fw - 2, id: sid(12, HOURS.late) });
     }
     // A barber's turning pole by its door (理容, BARBER: not a beauty salon's).
     const word = b.sign?.word.toUpperCase() ?? '';

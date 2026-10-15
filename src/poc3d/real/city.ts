@@ -1,3 +1,4 @@
+import { HOURS_GLSL } from './hours';
 import * as THREE from 'three';
 import { screenLightGlsl, screenUniforms, type ScreenUniforms } from './screenLight';
 import { shopGlsl } from './shopShader';
@@ -296,6 +297,8 @@ const common = /* glsl */ `
   uniform float uWindowLit;
   uniform float uLamps;
   uniform float uNeon;
+  uniform float uHour;
+  ${HOURS_GLSL}
   uniform float uOut[64];
   uniform vec3 uOutMap;
   uniform float uFil;
@@ -864,6 +867,8 @@ const surface = /* glsl */ `
       vec3 frameC = woodF ? woodC : darkFrame ? vec3(0.05) : vec3(0.42, 0.44, 0.47);
       float hb = h1(vBid + 57.0);
       vec3 L = shopLightOf(tr, hue, shopPal, h1(vBid + 21.0));
+      // A closed shop (real/hours.ts: its trade's hours) is down to a night light.
+      L *= mix(0.06, 1.0, openHours(TRADE_HOURS[tr], vBid));
       // A shady house (windowScenes.ts SHOP_KINDS, shopAtlas.ts): where the zone has the most vice, some shops of
       // a few trades are a strip club, a hostess club, a back-room card game, a loan office... instead (which, and
       // how many, are a texel of numbers by the trade: shadyTable). Such a place doesn't show itself to the
@@ -1354,6 +1359,8 @@ const surface = /* glsl */ `
       float gain = ch < 0.5 ? 1.6 : ch < 1.5 ? uLamps * 6.0 : uNeon * 3.5 * flick(vBid);
       // Chasing bulbs (aStyle.y, the bulb's place in the chase; 0 for everything else): a band of them lit, stepping on.
       if (vStyle.y > 0.0) gain *= 0.15 + 0.85 * step(fract(uTime * 1.6 - vStyle.y), 0.34);
+      // A shop's own lights (a sign's bulbs, a tower's name: aStyle.z, its hours class + 1, real/hours.ts) go out when it closes.
+      if (ch > 1.5 && vStyle.z > 0.5) gain *= openHours(vStyle.z - 1.0, vBid);
       sEmit = vColor.rgb * gain;
       albedo = vColor.rgb * 0.3;
     }

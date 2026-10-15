@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Crowd } from '../real/crowd';
 import type { OcclusionBox } from '../real/occlusion';
 import type { DistrictId, MacroMap } from '../../gen/macro';
+import { hoursPhase } from '../real/hours';
 import type { Lightmap } from '../real/lightmap';
 import { KIND } from '../real/meshBuilder';
 import { offKerb, pavementCorners, type PavementCorner } from '../real/ground';
@@ -116,7 +117,12 @@ export class District {
   readonly nodes: readonly Node3[];
   readonly model: DistrictModel;
   /** Worker build times per stage, and main-thread time spent turning results into meshes. */
-  readonly stats = { base: stageStats(), near: stageStats(), ghosts: stageStats(), integrate: stageStats(), disposed: 0 };
+  readonly stats = { base: stageStats(), near: stageStats(), ghosts: stageStats(), light: stageStats(), integrate: stageStats(), disposed: 0 };
+  /** The story clock's hour (setHour), and what's open then as the lightmap shows it (real/hours.ts hoursPhase). */
+  private hour = 21;
+  private hoursSeen = '';
+  /** Loaded chunks whose lightmap is to be painted again for the hour (the 'light' stage). */
+  private readonly relight = new Set<number>();
   private readonly chunks = new Map<number, Chunk>();
   private kit: DistrictKit | null = null;
   private workers: Worker[] = [];
@@ -864,6 +870,18 @@ export class District {
     return Math.hypot((mx + 0.5) * CELL - pos.x, (my + 0.5) * CELL - pos.z);
   }
 
+  /**
+   * The story clock's hour (main.ts, each time the light is set): when what's open changes, every loaded chunk's lightmap
+   * is painted again, so a shop's glow on the pavement goes out with its sign (the shaders do the sign and the shop).
+   */
+  setHour(hour: number): void {
+    this.hour = hour;
+    const phase = hoursPhase(hour);
+    if (phase === this.hoursSeen) return;
+    this.hoursSeen = phase;
+    for (const k of this.chunks.keys()) this.relight.add(k);
+  }
+
   /** Stages wanted around pos, nearest first: missing chunks, then detail, then crowds. */
   private wanted(pos: THREE.Vector3): { key: number; mx: number; my: number; stage: Stage; d: number }[] {
     const out: { key: number; mx: number; my: number; stage: Stage; d: number }[] = [];
@@ -873,6 +891,7 @@ export class District {
       const c = this.chunks.get(key);
       let stage: Stage | null = null;
       if (!c) stage = d <= LOAD_RADIUS ? 'base' : null;
+      else if (this.relight.has(key)) stage = 'light';
       else if (!c.near) stage = d <= NEAR_BUILD ? 'near' : null;
       else if (!c.ghostsBuilt) stage = d <= GHOST_BUILD ? 'ghosts' : null;
       if (stage && !this.pending.has(`${key}:${stage}`)) out.push({ key, mx, my, stage, d });
@@ -890,7 +909,8 @@ export class District {
       const task: Task = { id: this.nextId++, key: w.key, stage: w.stage, worker: best };
       this.pending.set(`${w.key}:${w.stage}`, task);
       this.inFlight[best]++;
-      this.workers[best].postMessage({ type: 'build', id: task.id, mx: w.mx, my: w.my, stage: w.stage } satisfies WorkerIn);
+      if (w.stage === 'light') this.relight.delete(w.key);
+      this.workers[best].postMessage({ type: 'build', id: task.id, mx: w.mx, my: w.my, stage: w.stage, hour: this.hour } satisfies WorkerIn);
     }
   }
 
@@ -917,6 +937,11 @@ export class District {
     const cz = (r.my + 0.5) * CELL;
     const d = Math.hypot(cx - pos.x, cz - pos.z);
     const c = this.chunks.get(task.key);
+    if (r.stage === 'light') {
+      if (!c || !r.lightmap) return false;
+      kit.lightmap.upload(r.mx * CELL, r.my * CELL, r.lightmap);
+      return true;
+    }
     if (r.stage === 'base') {
       if (c || d > UNLOAD_RADIUS) return false;
       const base = new THREE.Mesh(toGeometry(r.meshes.base!), kit.city);
