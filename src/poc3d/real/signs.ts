@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { hash, rng } from '../../core/hash';
 import { cellWidth, isWide } from '../../core/wide';
 import { eraSign } from '../district/era';
-import { frontSpan, type Building3, type Sign3 } from '../district/plan';
+import { frontSpan, type Building3, type Sign3, type SignLook } from '../district/plan';
 import { styleFor, frontFrame, tierFront, tiers } from './buildings';
 import type { CityUniforms } from './city';
 import { EM, glyph, textAdvance } from './letters';
@@ -36,6 +36,18 @@ export const bladeLength = (text: string): number => ([...text].filter((c) => c 
 /** How wide a fascia plate with this text is, in metres, before it's held to 5.4 m and its shopfront (addSigns). */
 export const plateWidth = (text: string): number => ((cellWidth(text) + 1) * CELL_PX) / PX_PER_M;
 
+/**
+ * How a text is drawn in the atlas besides plain letters: `tube`, the letters' outlines (neon tubing bent round each
+ * letter); `icon`, a pictogram by name (ICONS: a cocktail glass, a beer mug...), its text the name.
+ */
+export type SignForm = 'tube' | 'icon';
+export interface SignText {
+  readonly text: string;
+  readonly vertical: boolean;
+  readonly form?: SignForm;
+}
+const keyOf = (text: string, vertical: boolean, form?: SignForm): string => (form ? `${form}:${text}` : `${vertical ? 'v' : 'h'}:${text}`);
+
 interface Slot {
   x: number;
   y: number;
@@ -49,18 +61,18 @@ interface Slot {
  */
 export class SignLayout {
   protected readonly slots = new Map<string, Slot>();
-  protected readonly want = new Map<string, { text: string; vertical: boolean; w: number; h: number }>();
+  protected readonly want = new Map<string, SignText & { w: number; h: number }>();
   readonly width: number;
   readonly height: number;
 
-  constructor(texts: readonly { text: string; vertical: boolean }[]) {
+  constructor(texts: readonly SignText[]) {
     const W = 2048;
     const want = this.want;
     for (const t of texts) {
-      const key = `${t.vertical ? 'v' : 'h'}:${t.text}`;
+      const key = keyOf(t.text, t.vertical, t.form);
       if (want.has(key)) continue;
       const n = [...t.text].filter((c) => c !== ' ').length;
-      want.set(key, t.vertical ? { ...t, w: 80, h: n * V_CHAR + 24 } : { ...t, w: (cellWidth(t.text) + 1) * CELL_PX, h: H_SLOT });
+      want.set(key, t.form === 'icon' ? { ...t, w: H_SLOT, h: H_SLOT } : t.vertical && !t.form ? { ...t, w: 80, h: n * V_CHAR + 24 } : { ...t, w: (cellWidth(t.text) + 1) * CELL_PX, h: H_SLOT });
     }
     // Shelf packing, tallest first; the first 8x8 pixels stay black (blank sides/backs sample there).
     const items = [...want.entries()].sort((a, b) => b[1].h - a[1].h);
@@ -83,8 +95,8 @@ export class SignLayout {
   }
 
   /** UV rect (u0, v0 top, u1, v1 bottom) and size in metres of a text's slot. */
-  rect(text: string, vertical: boolean): { u0: number; v0: number; u1: number; v1: number; w: number; h: number } | null {
-    const s = this.slots.get(`${vertical ? 'v' : 'h'}:${text}`);
+  rect(text: string, vertical: boolean, form?: SignForm): { u0: number; v0: number; u1: number; v1: number; w: number; h: number } | null {
+    const s = this.slots.get(keyOf(text, vertical, form));
     if (!s) return null;
     return { u0: s.x / this.width, v0: s.y / this.height, u1: (s.x + s.w) / this.width, v1: (s.y + s.h) / this.height, w: s.w / PX_PER_M, h: s.h / PX_PER_M };
   }
@@ -98,7 +110,7 @@ export class SignLayout {
 export class SignAtlas extends SignLayout {
   readonly texture: THREE.DataTexture;
 
-  constructor(texts: readonly { text: string; vertical: boolean }[]) {
+  constructor(texts: readonly SignText[]) {
     super(texts);
     const W = this.width;
     const H = this.height;
@@ -119,7 +131,9 @@ export class SignAtlas extends SignLayout {
       const s = this.slots.get(key)!;
       gs.fillStyle = '#fff';
       gs.save();
-      if (it.vertical) drawVertical(gs, it.text, s);
+      if (it.form === 'icon') drawIcon(gs, it.text, s);
+      else if (it.form === 'tube') drawHorizontal(gs, it.text, s, true);
+      else if (it.vertical) drawVertical(gs, it.text, s);
       else drawHorizontal(gs, it.text, s);
       gs.restore();
     }
@@ -144,7 +158,7 @@ export class SignAtlas extends SignLayout {
   }
 }
 
-function drawHorizontal(g: CanvasRenderingContext2D, text: string, s: Slot): void {
+function drawHorizontal(g: CanvasRenderingContext2D, text: string, s: Slot, tube = false): void {
   g.font = `bold 60px 'Arial Narrow', 'Arial', 'Yu Gothic', 'Meiryo', sans-serif`;
   g.textBaseline = 'middle';
   g.textAlign = 'left';
@@ -153,7 +167,91 @@ function drawHorizontal(g: CanvasRenderingContext2D, text: string, s: Slot): voi
   const k = Math.min(1.3, target / Math.max(1, w));
   g.translate(s.x + CELL_PX / 2 + (target - w * k) / 2, s.y + s.h / 2 + 2);
   g.scale(k, 1);
-  g.fillText(text, 0, 0);
+  if (!tube) return void g.fillText(text, 0, 0);
+  // Tubing: each letter's outline, round at the bends.
+  g.strokeStyle = '#fff';
+  g.lineWidth = 5;
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  g.strokeText(text, 0, 0);
+}
+
+/** Pictograms bent in neon tubing (an 80 px slot, drawn in strokes). */
+const ICONS: Readonly<Record<string, (g: CanvasRenderingContext2D) => void>> = {
+  cocktail: (g) => {
+    g.beginPath();
+    g.moveTo(14, 16); g.lineTo(66, 16); g.lineTo(40, 44); g.closePath();
+    g.moveTo(40, 44); g.lineTo(40, 64);
+    g.moveTo(26, 66); g.lineTo(54, 66);
+    g.moveTo(50, 22); g.lineTo(60, 8);
+    g.stroke();
+    g.beginPath();
+    g.arc(33, 24, 4, 0, Math.PI * 2);
+    g.stroke();
+  },
+  beer: (g) => {
+    g.strokeRect(18, 22, 32, 44);
+    g.beginPath();
+    g.moveTo(50, 30); g.lineTo(60, 30); g.lineTo(60, 54); g.lineTo(50, 54);
+    g.moveTo(16, 22); g.quadraticCurveTo(22, 10, 30, 18); g.quadraticCurveTo(36, 8, 44, 16); g.quadraticCurveTo(52, 10, 52, 22);
+    g.stroke();
+  },
+  coffee: (g) => {
+    g.beginPath();
+    g.moveTo(16, 36); g.lineTo(54, 36); g.lineTo(50, 60); g.lineTo(20, 60); g.closePath();
+    g.moveTo(54, 40); g.quadraticCurveTo(66, 44, 52, 54);
+    g.moveTo(10, 66); g.lineTo(62, 66);
+    for (const x of [28, 40]) {
+      g.moveTo(x, 30); g.quadraticCurveTo(x - 6, 22, x, 16); g.quadraticCurveTo(x + 6, 10, x, 4);
+    }
+    g.stroke();
+  },
+  note: (g) => {
+    g.beginPath();
+    g.ellipse(24, 60, 8, 6, -0.4, 0, Math.PI * 2);
+    g.moveTo(32, 58); g.lineTo(32, 16); g.lineTo(60, 10); g.lineTo(60, 52);
+    g.moveTo(32, 26); g.lineTo(60, 20);
+    g.stroke();
+    g.beginPath();
+    g.ellipse(52, 54, 8, 6, -0.4, 0, Math.PI * 2);
+    g.stroke();
+  },
+  heart: (g) => {
+    g.beginPath();
+    g.moveTo(40, 66); g.bezierCurveTo(4, 40, 14, 8, 40, 26); g.bezierCurveTo(66, 8, 76, 40, 40, 66);
+    g.stroke();
+  },
+  moon: (g) => {
+    g.beginPath();
+    g.arc(40, 40, 26, 0.6, Math.PI * 2 - 0.6);
+    g.arc(52, 40, 20, Math.PI * 2 - 0.9, 0.9, true);
+    g.closePath();
+    g.stroke();
+  },
+  star: (g) => {
+    g.beginPath();
+    for (let i = 0; i <= 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const r = i % 2 ? 12 : 28;
+      g.lineTo(40 + Math.cos(a) * r, 42 + Math.sin(a) * r);
+    }
+    g.stroke();
+  },
+  arrow: (g) => {
+    g.beginPath();
+    g.moveTo(8, 32); g.lineTo(46, 32); g.lineTo(46, 18); g.lineTo(72, 40); g.lineTo(46, 62); g.lineTo(46, 48); g.lineTo(8, 48); g.closePath();
+    g.stroke();
+  },
+};
+export const ICON_NAMES = Object.keys(ICONS);
+
+function drawIcon(g: CanvasRenderingContext2D, name: string, s: Slot): void {
+  g.translate(s.x, s.y);
+  g.strokeStyle = '#fff';
+  g.lineWidth = 5;
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  ICONS[name]?.(g);
 }
 
 function drawVertical(g: CanvasRenderingContext2D, text: string, s: Slot): void {
@@ -236,9 +334,22 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
         vec2 st = texture2D(tSigns, vSUv).rg;
         float flk = uFlicker > 0.5 && sh2(vec2(vSign.x, floor(uTime * 12.0))) > 0.992 ? 0.08 : 1.0;
         float on = uNeon * flk * (1.0 - blackoutAt(vOutP));
-        if (vSign.y > 2.5) {
+        if (vSign.y > 3.5) {
+          // A red LED board (4): the text scrolls through the window the quad shows of its slot (aPlate: the slot's
+          // left edge and width in u, and how much of it a second), drawn in dots on a fixed grid.
+          vec2 ts = vec2(textureSize(tSigns, 0));
+          vec2 g = vSUv * ts / 5.0;
+          vec2 cellUv = (floor(g) + 0.5) * 5.0 / ts;
+          float us = vPlate.x + fract((cellUv.x - vPlate.x) / vPlate.y + uTime * vPlate.z) * vPlate.y;
+          float lit = textureLod(tSigns, vec2(us, cellUv.y), 0.0).r;
+          float dotMask = 1.0 - smoothstep(0.28, 0.42, length(fract(g) - 0.5));
+          diffuseColor.rgb = vec3(0.02);
+          totalEmissiveRadiance += vInk * (lit > 0.45 ? 3.2 : 0.05) * dotMask * on;
+        } else if (vSign.y > 2.5) {
           if (st.r < 0.4) discard;
           diffuseColor.rgb = vInk;
+          // Lettering on a window (3.25): the room's light behind it at night.
+          if (vSign.y > 3.1) totalEmissiveRadiance += vInk * 0.35 * on;
         } else if (vSign.y < 0.5) {
           diffuseColor.rgb = mix(vPlate, vInk * 0.6, st.r);
           totalEmissiveRadiance += vInk * (st.r * 3.0 + st.g * 0.35) * on;
@@ -253,7 +364,7 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
           totalEmissiveRadiance += mix(vPlate * 0.9, vInk * inkGlow, st.r) * on;
         }`);
   };
-  m.customProgramCacheKey = () => 'signs-v4';
+  m.customProgramCacheKey = () => 'signs-v6';
   return m;
 }
 
@@ -378,7 +489,7 @@ export function signBox(sb: SignBuilder, p: C3, r: C3, n: C3, u0: number, u1: nu
 }
 
 export interface SignStyle {
-  /** 0 neon on dark plate, 1 lightbox, 2.25 a shop's painted board (lit by a lamp over it). */
+  /** 0 neon on dark plate, 1 lightbox, 2.25 a shop's painted board (lit by a lamp over it), 3 cut-out letters (3.25 on a window, backlit at night), 4 a red LED board. */
   readonly style: number;
   readonly ink: C3;
   readonly plate: C3;
@@ -388,20 +499,26 @@ export interface SignStyle {
 /** Painted boards (unlit, lit by the street): cream with dark letters, or dark wood with cream ones. */
 const PRINT: readonly (readonly [plate: number, ink: number])[] = [[0xd8cfb8, 0x1c1a18], [0x3a2a1e, 0xe8dcc0], [0xe4e0d4, 0x8a1c18]];
 
-export function signStyle(s: Sign3): SignStyle {
-  const rnd = rng(hash(Math.round(s.x * 10), Math.round(s.z * 10), Math.round(s.y * 10), 0x5160));
-  const color = lin(s.color);
-  // What its siting chose (signSites.ts); stamps' signs and anything else without a look, from its own hash as before.
-  switch (s.look) {
+/** How a sign of this look and colour is made (`seed` picks a painted board's colours). */
+export function lookStyle(look: SignLook, hex: number, seed = 0): SignStyle {
+  const color = lin(hex);
+  switch (look) {
     case 'neon': return { style: 0, ink: color, plate: lin(0x141418), channel: false };
     case 'channel': return { style: 0, ink: color, plate: lin(0x141418), channel: true };
     case 'lightbox': return { style: 1, ink: scale3(color, 0.35), plate: lin(0xe8e6de), channel: false };
     case 'inverse': return { style: 1, ink: lin(0xfaf8f0), plate: scale3(color, 0.8), channel: false };
     case 'print': {
-      const [plate, ink] = rnd.pick(PRINT);
+      const [plate, ink] = PRINT[seed % PRINT.length];
       return { style: 2.25, ink: lin(ink), plate: lin(plate), channel: false };
     }
   }
+}
+
+export function signStyle(s: Sign3): SignStyle {
+  const rnd = rng(hash(Math.round(s.x * 10), Math.round(s.z * 10), Math.round(s.y * 10), 0x5160));
+  const color = lin(s.color);
+  // What its siting chose (signSites.ts); stamps' signs and anything else without a look, from its own hash as before.
+  if (s.look) return lookStyle(s.look, s.color, rnd.int(0, PRINT.length - 1));
   const latin = [...s.text].every((c) => !isWide(c.codePointAt(0)!));
   const channel = !s.vertical && latin && rnd.chance(0.45);
   const roll = rnd.float();
@@ -467,7 +584,7 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
  * Extruded letters centred at p (a facade point) along r, facing n: letter height hgt metres centred on
  * height yc, scaled to fit maxW, standing off the wall by `off`. Faces glow (neon channel); returns dark.
  */
-function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: number, hgt: number, maxW: number, color: C3, id: number, off: number): void {
+export function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: number, hgt: number, maxW: number, color: C3, id: number, off: number): void {
   let s = hgt / EM;
   const adv = textAdvance(text);
   if (adv * s > maxW) s = maxW / adv;

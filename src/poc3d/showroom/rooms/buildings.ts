@@ -4,26 +4,29 @@ import { adMaterial, DistrictAdAtlas } from '../../real/adAtlas';
 import { buildMegaSign } from '../../real/megaSign';
 import { buildCinema70 } from '../../real/cinema70';
 import { buildInn64, buildLiquor64, buildPachinko70 } from '../../real/eraLandmarks';
-import type { Building3 } from '../../district/plan';
+import type { Building3, Sign3 } from '../../district/plan';
 import { era } from '../../district/era';
 import { addProps, type Prop } from '../../real/props';
 import { loadStatue } from '../../models/statues';
 import { loadPayphone, PAYPHONE_KEYS, PayphoneRig, type PayphoneKind } from '../../models/payphone';
-import { SignBuilder, signBox } from '../../real/signs';
+import { addSigns, ICON_NAMES, SignAtlas, SignBuilder, signBox, signMaterial } from '../../real/signs';
+import { addBuilding, frontFrame } from '../../real/buildings';
+import { bulbArrow, bulbFrame, crown, cube, hotelBoards, lantern, ledBoard, signKindTexts, standSign, tenantBoard, tubeSign, windowLetters, type Panel } from '../../real/signKinds';
 import { BILLBOARDS, DISTRICT_BLANK, districtAdUv, POSTERS } from '../../real/districtAds';
 import { startRoom } from '../shell';
 
 /**
  * Buildings and street (models-buildings.html): Kaburo's mega-sign (the corner tower with its screens and the neon dragon) on
  * its plaza, the tanuki statue candidate, the wall of every approved district billboard and poster, and the street and park
- * furniture the district uses (real/dressing.ts) on paving: hedges, lamps, benches, fences, the playground.
+ * furniture the district uses (real/dressing.ts) on paving: hedges, lamps, benches, fences, the playground; and the street of
+ * proposed signs (real/signKinds.ts), each kind on the building it belongs on.
  */
 const GARDEN_X = -8;
 /** The furniture's row (along z). */
 const FURN_Z = 66;
 startRoom({
   title: 'Buildings and street',
-  groups: ['Mega-sign', 'Billboards', 'Posters', 'Street & park'],
+  groups: ['Mega-sign', 'Billboards', 'Posters', 'Street & park', 'Signs (proposed)'],
   camera: { pos: [30, 20, 96], target: [30, 6, 24] },
   shadow: { x: 30, z: 40, half: 70 },
   overview: { at: [30, 4, 30], size: 70, view: [0.1, 0.5, 1] },
@@ -178,6 +181,137 @@ startRoom({
     const furnMesh = new THREE.Mesh(furn.build()!, city);
     furnMesh.castShadow = furnMesh.receiveShadow = true;
     genRoot.new.add(furnMesh);
+    }
+    // The proposed sign kinds (real/signKinds.ts), a street of them: eight buildings fronting south across z = 113, each
+    // with the kinds that belong on it, the blades and fascias of today's signs (real/signs.ts) among them.
+    {
+      const Z = 108;
+      const D = 10;
+      const V = (x: number, y: number, z: number): THREE.Vector3 => new THREE.Vector3(x, y, z);
+      const FRONT = V(0.15, 0.12, 1).normalize();
+      const specs: { name: string; w: number; h: number; word: string; color: number }[] = [
+        { name: 'bar building', w: 7, h: 18, word: 'スナック', color: 0xff5fc8 },
+        { name: 'izakaya', w: 6.5, h: 7, word: '居酒屋', color: 0xffb040 },
+        { name: 'love hotel', w: 10, h: 15, word: 'レジャーホテル', color: 0xff5fc8 },
+        { name: 'pachinko', w: 12, h: 12, word: 'パチンコ', color: 0xff4f4f },
+        { name: 'tenant offices', w: 8, h: 21, word: 'OFFICE', color: 0xffffff },
+        { name: 'electronics (Denkō-chō)', w: 7, h: 27, word: '家電', color: 0x4fe3ff },
+        { name: 'kissaten', w: 7, h: 9, word: '喫茶', color: 0xffe45f },
+        { name: 'office tower (Asagiri)', w: 16, h: 42, word: 'OFFICE', color: 0xffffff },
+      ];
+      let x = -24;
+      const bs: Building3[] = specs.map((sp, i) => {
+        const b: Building3 = { id: 310000 + i * 7, x: x + sp.w / 2, z: Z, w: sp.w, d: D, h: sp.h, front: 'south', sign: { text: sp.word, color: sp.color, word: sp.word } };
+        x += sp.w + 0.4;
+        return b;
+      });
+      const [bar, izakaya, hotel, pachinko, offices, denki, kissa, tower] = bs;
+      const fr = frontFrame;
+      // Today's kinds, through addSigns: a blade on the hotel and the pachinko, fascias.
+      const sign = (b: Building3, text: string, color: number, look: Sign3['look'], u: number, vertical = false, top = 0): Sign3 => {
+        const f = fr(b);
+        const p = { x: f.p[0] + f.r[0] * u + f.n[0] * 0.4, z: f.p[2] + f.r[2] * u + f.n[2] * 0.4 };
+        return { text, vertical, color, ...p, y: vertical ? top : 3.6, nx: f.n[0], nz: f.n[2], look, maxW: b.w - 0.8 };
+      };
+      const plain: Sign3[] = [
+        sign(izakaya, '居酒屋', 0xffb040, 'print', izakaya.w / 2),
+        sign(hotel, 'ホテル', 0xff5fc8, 'neon', hotel.w - 1.2, true, 12.6),
+        sign(pachinko, 'パーラー大吉', 0xff4f4f, 'inverse', pachinko.w / 2),
+        sign(pachinko, 'パチンコ', 0xff4f4f, 'neon', 1.2, true, 9.6),
+        sign(denki, 'DUTY FREE', 0x4fe3ff, 'channel', denki.w / 2),
+        sign(offices, '英会話', 0xffffff, 'lightbox', offices.w / 2),
+      ];
+      const tenants: Panel[] = [
+        { text: 'スナック', color: 0xff5fc8, look: 'neon' },
+        { text: 'ラウンジ蘭', color: 0xb48cff, look: 'inverse' },
+        { text: '麻雀', color: 0x6bff8a, look: 'lightbox' },
+        { text: 'クラブ', color: 0x4fe3ff, look: 'neon' },
+        { text: '和子', color: 0xffe45f, look: 'inverse' },
+      ];
+      const banner: Panel[] = [
+        { text: '家電', color: 0x4fe3ff, look: 'inverse' },
+        { text: 'パソコン', color: 0xff4f4f, look: 'inverse' },
+        { text: 'ゲーム', color: 0xffe45f, look: 'lightbox' },
+        { text: '免税', color: 0x6bff8a, look: 'inverse' },
+        { text: '買取', color: 0xff9a2a, look: 'inverse' },
+      ];
+      const windows: [string, number][] = [['英会話スクール', 0xffffff], ['歯科', 0x9ad8ff], ['学習塾', 0xffe45f], ['雀荘', 0xff6a5a], ['司法書士', 0xffffff]];
+      const prices = ['休憩 ¥4,500', '宿泊 ¥7,800', 'サービスタイム'];
+      const led = '本日新台入替 ★ 朝十時開店 ★ 全台開放中 ★ ';
+      const atlas = new SignAtlas([
+        ...plain.map((q) => ({ text: q.text, vertical: q.vertical })),
+        ...signKindTexts({
+          vertical: [...tenants, ...banner].map((q) => q.text).concat(['焼鳥', '酒', 'スナック']),
+          horizontal: [...windows.map(([t]) => t), ...prices, '空室', '満室', led, 'OPEN'],
+          tube: ['SNACK', 'HOTEL VENUS', '喫茶ルナ'],
+          icons: ICON_NAMES,
+        }),
+      ]);
+      const sb = new SignBuilder();
+      const mb = new MeshBuilder(1 << 16);
+      for (const b of bs) addBuilding(mb, b, true);
+      addSigns(plain, [], atlas, sb, mb);
+      const item = (name: string, at: THREE.Vector3, size: number, view = FRONT): void => void genItems.new.push({ name, group: 'Signs (proposed)', at, size, view });
+      const wx = (b: Building3, u: number): number => b.x - b.w / 2 + u;
+      const zf = Z + D / 2;
+      // 1. The bar building: a tenant board down the front, the snack's stand sign at its door, its name in tubing.
+      tenantBoard(sb, mb, atlas, fr(bar), 1.0, 17, tenants, { id: 1 });
+      standSign(sb, mb, atlas, fr(bar), 5.6, 0.9, 'スナック', 0xff5fc8, 'neon', 2);
+      tubeSign(sb, mb, atlas, fr(bar), 4.4, 3.3, 'SNACK', 'moon', 0xff5fc8, { iconHex: 0xffe45f, id: 3 });
+      item('tenant board (袖看板)', V(wx(bar, 1.6), 10, zf), 15, V(0.8, 0.1, 1).normalize());
+      item('stand sign (電飾スタンド)', V(wx(bar, 5.6), 0.8, zf + 0.9), 2.4, V(0.6, 0.15, 1).normalize());
+      item('tube lettering + icon', V(wx(bar, 4.4), 3.6, zf), 3.2);
+      // 2. The izakaya: red lanterns either side of its door under a painted board.
+      lantern(sb, mb, atlas, fr(izakaya), 1.1, 0.45, 2.6, '焼鳥', { id: 4 });
+      lantern(sb, mb, atlas, fr(izakaya), izakaya.w - 1.1, 0.45, 2.6, '酒', { id: 5 });
+      item('red lanterns (赤ちょうちん)', V(wx(izakaya, izakaya.w / 2), 2.8, zf), 6);
+      // 3. The love hotel: its name in tubing in a frame of chasing bulbs, the vacancy lamp and price board by the door, an arrow of bulbs to it.
+      const hotelW = tubeSign(sb, mb, atlas, fr(hotel), hotel.w / 2, 4.4, 'HOTEL VENUS', 'heart', 0xff5fc8, { h: 0.7, iconHex: 0xff4f4f, id: 6 });
+      bulbFrame(mb, fr(hotel), hotel.w / 2 - hotelW / 2 - 0.25, hotel.w / 2 + hotelW / 2 + 0.25, 4.15, 5.35, { out: 0.1 });
+      hotelBoards(sb, mb, atlas, fr(hotel), 1.3, 2.6, prices, { id: 7 });
+      bulbArrow(mb, fr(hotel), hotel.w - 0.6, 3.2, 1.8, -1, { color: [1.9, 0.5, 1.2] });
+      item('chasing bulbs round a name', V(wx(hotel, hotel.w / 2), 4.8, zf), 7);
+      item('vacancy lamp + price board', V(wx(hotel, 1.3), 2.2, zf), 2.6);
+      item('arrow of bulbs', V(wx(hotel, hotel.w - 1.5), 3.2, zf), 3.4);
+      // 4. The pachinko parlour: an LED board over the doors, bulbs round its fascia.
+      ledBoard(sb, mb, atlas, fr(pachinko), pachinko.w / 2, 4.55, led, { w: 8, id: 8 });
+      bulbFrame(mb, fr(pachinko), pachinko.w / 2 - 3.1, pachinko.w / 2 + 3.1, 3.15, 4.1, { step: 0.26, out: 0.24 });
+      item('LED board (電光掲示板)', V(wx(pachinko, pachinko.w / 2), 4.8, zf), 9);
+      // 5. Tenant offices: cut-out letters across the windows, a floor each.
+      windows.forEach(([t, c], i) => windowLetters(sb, atlas, fr(offices), offices.w / 2, 3 * (i + 2), t, c, { maxW: offices.w - 1.2, id: 9 + i }));
+      item('window lettering (窓文字)', V(wx(offices, offices.w / 2), 11, zf), 16);
+      // 6. Denkō-chō: a banner of the shop's lines flat down the facade.
+      tenantBoard(sb, mb, atlas, fr(denki), denki.w - 1.3, 25.5, banner, { flush: true, width: 1.9, id: 20 });
+      item('full-height banner (flush)', V(wx(denki, denki.w - 1.3), 14, zf), 26);
+      // 7. The kissaten: its name in tubing with a cup, an OPEN cube over the door.
+      tubeSign(sb, mb, atlas, fr(kissa), kissa.w / 2, 3.35, '喫茶ルナ', 'coffee', 0xffe45f, { id: 30 });
+      cube(sb, mb, atlas, fr(kissa), kissa.w - 1.0, 2.6, 'OPEN', 0x6bff8a, 31);
+      item('kissaten: tube + cup, OPEN cube', V(wx(kissa, kissa.w / 2), 3.2, zf), 7);
+      // 8. The tower: the company's name at its top. (An invented company: 朝霧生命, Asagiri Life.)
+      crown(mb, fr(tower), tower.w / 2, tower.h, '朝霧生命', { maxW: tower.w - 2, id: 32 });
+      item('crown letters (company)', V(wx(tower, tower.w / 2), tower.h - 2, zf), 20, V(0.1, -0.2, 1).normalize());
+      // Every pictogram, lit in a row on the tower's foot.
+      ICON_NAMES.forEach((name, i) => {
+        const q = atlas.rect(name, false, 'icon');
+        if (!q) return;
+        sb.ink = lin([0xff5fc8, 0x4fe3ff, 0xffe45f, 0x6bff8a][i % 4]);
+        sb.plate = lin(0x141418);
+        sb.sign = [40 + i, 0];
+        signBox(sb, fr(tower).p, fr(tower).r, fr(tower).n, 2 + i * 1.5, 3.2 + i * 1.5, 2.4, 3.6, 0.05, 0.1, atlas.blankUv, { n: [q.u0, q.v0, q.u1, q.v1] });
+      });
+      item('pictograms', V(wx(tower, 7.5), 3, zf), 13);
+      item('the whole street', V(x / 2 - 12, 10, zf), 80, V(0.2, 0.25, 1).normalize());
+      label('new', 'proposed signs', -24 + (x + 24) / 2, 30, zf);
+      // The pavement and the street in front.
+      mb.kind = KIND.sidewalk;
+      mb.color = lin(0x8a867e);
+      mb.box((x - 24) / 2, zf + 1.75, -0.1, 0.15, x + 24 + 4, 3.5, KIND.sidewalk);
+      mb.kind = KIND.asphalt;
+      mb.box((x - 24) / 2, zf + 8.5, -0.2, 0.0, x + 24 + 4, 10, KIND.asphalt);
+      const mesh = new THREE.Mesh(mb.build()!, city);
+      mesh.castShadow = mesh.receiveShadow = true;
+      genRoot.new.add(mesh);
+      genRoot.new.add(new THREE.Mesh(sb.build(0, 0)!, signMaterial(cityU, atlas)));
     }
     // The Blender-modelled payphones (scripts/blender/payphone.py), with their parts moving: the handset comes off its
     // hooks, the keys go in one after another, the flap and the booth's door swing, then it all goes back. A candidate,

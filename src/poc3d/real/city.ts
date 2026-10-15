@@ -1349,6 +1349,8 @@ const surface = /* glsl */ `
       sEmit = vColor.rgb * (ch > 3.5 ? 0.42 : uLamps * 0.3);
     } else {
       float gain = ch < 0.5 ? 1.6 : ch < 1.5 ? uLamps * 6.0 : uNeon * 3.5 * flick(vBid);
+      // Chasing bulbs (aStyle.y, the bulb's place in the chase; 0 for everything else): a band of them lit, stepping on.
+      if (vStyle.y > 0.0) gain *= 0.15 + 0.85 * step(fract(uTime * 1.6 - vStyle.y), 0.34);
       sEmit = vColor.rgb * gain;
       albedo = vColor.rgb * 0.3;
     }
