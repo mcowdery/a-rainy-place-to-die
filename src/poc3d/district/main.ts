@@ -153,6 +153,8 @@ import { District, LIGHTMAP_WINDOW } from './world';
 import { FirstPersonRig } from '../models/firstPerson';
 import { BodyFacing, footOffset, ThirdPersonCamera } from '../models/thirdPerson';
 import { withCityMoves } from '../models/cityMoves';
+import { Cover, type ActionFrame } from '../models/cover';
+import coverClips from '../../../assets/anims/mixamo_picked.json';
 import { CensorPass } from '../models/censorPass';
 import { underfoot } from './footing';
 import { MackSmoke } from '../real/smoke';
@@ -169,6 +171,7 @@ import { wiperBeat, wiperLayout, wiperPhase, WiperSet, wiperSwing, wiperUniforms
 import { outside, RearMirror, VIEW_NAMES } from '../../race/driveCam';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Crosshair } from '../models/crosshair';
+import { FocusMeter } from './focusMeter';
 import { Investigator, Stance } from './investigate';
 import { PeopleLookables, PropLookables } from './lookables';
 import { CityGunfire } from '../real/gunfire';
@@ -1079,6 +1082,82 @@ async function run(): Promise<void> {
   const SQUAT_AFTER = 22;
   // In third person the camera turns freely round him: he faces the way he goes (models/thirdPerson.ts BodyFacing).
   const facing = new BodyFacing();
+  // Space on foot is cover, a vault or a roll, not a jump (models/cover.ts; the user, 2026-10-16; `?jump=1` brings the jump back): against a
+  // wall he stands to cover, behind something low he crouches, W + Space goes over a low one, and in the open it's a roll. The controller moves him
+  // (the controls' moveLock), the clips lie over his pose (`mack.action`) and third person is forced for as long as it has him. Obstacles are the
+  // world's buildings, set pieces and props near him (District.coverObstacles), asked when Space is pressed and as he sidles.
+  const cover = new Cover([], coverClips);
+  const coverNow: { at: { x: number; z: number }; press: boolean; acting: boolean; frame: ActionFrame | null } = { at: { x: 1e9, z: 1e9 }, press: false, acting: false, frame: null };
+  controls.jumpEnabled = new URLSearchParams(location.search).get('jump') === '1';
+  controls.onSpace = () => {
+    coverNow.press = true;
+  };
+  // The roll's feel as the user set it on the fight page (scripts/cover-tuning.json, through the dev server), when there's a dev server.
+  void fetch('/__tune')
+    .then((r) => (r.ok ? r.json() : null))
+    .then((saved: Record<string, number> | null) => {
+      if (saved && typeof saved === 'object') Object.assign(cover.tuning, saved);
+    })
+    .catch(() => undefined);
+  const coverDir = new THREE.Vector3();
+  const coverTick = (dt: number): void => {
+    const c = coverNow;
+    // (A press while a panel's open is no press: with the mouse in a panel the controls don't pass Space on, and a script's does.)
+    const press = c.press && !travel.open && !debugMenu.open && !pauseMenu.open && !inventoryHud.open;
+    c.press = false;
+    // Only on foot and free: not in a scene, a car, a ride, flying or held.
+    const free = !!mack && !inVn && !rider.active && !driving.car && !controls.fly && !controls.held && !taxiRide;
+    if (!free) {
+      cover.cancel();
+      c.frame = null;
+      controls.moveLock = false;
+      if (mack) mack.action = [];
+      c.acting = false;
+      return;
+    }
+    const pos = camera.position;
+    if ((press || cover.active) && Math.hypot(pos.x - c.at.x, pos.z - c.at.z) > 4) {
+      cover.setObstacles(district.coverObstacles(pos.x, pos.z, 18));
+      c.at = { x: pos.x, z: pos.z };
+    }
+    camera.getWorldDirection(coverDir);
+    const f = cover.update({
+      dt,
+      x: pos.x,
+      z: pos.z,
+      viewYaw: Math.atan2(-coverDir.x, -coverDir.z),
+      space: press,
+      forward: controls.isDown('KeyW'),
+      back: controls.isDown('KeyS'),
+      left: controls.isDown('KeyA'),
+      right: controls.isDown('KeyD'),
+      run: controls.isDown('ShiftLeft') || controls.isDown('ShiftRight'),
+      // (Aiming a gun in cover peeks him out of it.)
+      aim: mack!.armed && mack!.aiming,
+    });
+    c.frame = f;
+    controls.moveLock = !!f;
+    if (f) {
+      pos.x = f.x;
+      pos.z = f.z;
+    }
+    // (His gun stays in his hand through it: FirstPersonRig.gunInHand.)
+    c.acting = !!f;
+  };
+  // For scripted checks (debug-shots/citycover.mjs): what it's doing, Space pressed without a locked pointer, the obstacles round a point and
+  // putting him at a place looking a way (degrees).
+  (window as unknown as { __cover: unknown }).__cover = {
+    state: () => ({ state: cover.current, third: thirdNow, body: coverNow.frame ? [coverNow.frame.x, coverNow.frame.z] : null, tuning: cover.tuning }),
+    press: () => (coverNow.press = true),
+    obstacles: (x: number, z: number, r: number) => district.coverObstacles(x, z, r),
+    pos: () => [camera.position.x, camera.position.y, camera.position.z],
+    at: (x: number, z: number, yawDeg: number) => {
+      camera.position.x = x;
+      camera.position.z = z;
+      controls.setView(yawDeg, 0);
+    },
+    cover,
+  };
   try {
     if (localStorage.getItem('rainyplace.smoke') === 'cigar') smokes = 'cigar';
   } catch {
@@ -1231,7 +1310,10 @@ async function run(): Promise<void> {
   });
   // The right button raises the shotgun while it's out.
   document.addEventListener('mousedown', (e) => {
-    if (e.button === 2 && mack?.armed && controls.look.isLocked && !seated) mack.aiming = true;
+    if (e.button === 2 && mack?.armed && controls.look.isLocked && !seated) {
+      mack.aiming = true;
+      footFocus.want = e.shiftKey; // Shift + the right button: the aim with slow motion
+    }
     else if (e.button === 2 && mack && !mack.armed && controls.look.isLocked && (!seated || carObserve()) && !inVn) lookHeld = true;
     // Looking (no gun out): the left button does what the hand is over.
     if (e.button === 0 && lookHeld && mack && !mack.armed && controls.look.isLocked && !inVn && (!seated || carObserve())) investigator.use();
@@ -4645,10 +4727,11 @@ async function run(): Promise<void> {
   document.getElementById('loadbg')?.remove();
 
   // On foot, the right button with a gun out is the car gun's aim: the view narrows (first person) and the world slows
-  // while the focus lasts (5 s, refilling over 6 s with the gun down, as in the car: district/carGun.ts; G is the inventory's here, so no toggle).
+  // while the focus lasts (5 s, refilling over 6 s with the gun down, as in the car: district/carGun.ts), but only when the aim was begun with Shift held.
   const FOOT_SLOW = 0.7;
   let camAim = 0;
-  const footFocus = { slow: 0, focus: 1, on: false, auto: true, zoom: 0, fov: camera.fov };
+  const footFocus = { slow: 0, focus: 1, on: false, want: false, zoom: 0, fov: camera.fov };
+  const footMeter = new FocusMeter();
   const footVeil = document.createElement('div');
   Object.assign(footVeil.style, { position: 'fixed', inset: '0', zIndex: '15', display: 'none', pointerEvents: 'none', opacity: '0', background: 'radial-gradient(ellipse at center, rgba(120,150,255,0) 50%, rgba(40,60,140,0.55) 100%)' });
   document.body.append(footVeil);
@@ -4695,6 +4778,7 @@ async function run(): Promise<void> {
         (window as unknown as { __bench: unknown }).__bench = summarize();
       }
     } else if (!inVn) {
+      coverTick(dt);
       rider.before();
       controls.update(dt);
       rider.after();
@@ -4848,7 +4932,7 @@ async function run(): Promise<void> {
       const atWheel = inCar && (cockpit || carGun.shown || ownCar.siren.busy);
       carGun.update(inVn ? 0 : dt, realDt, cockpit, outside(driving.view) && !driving.aim && !driving.observing, driving.pedals);
       mack.object.visible = shown || riding || atWheel;
-      thirdNow = shown && thirdPerson;
+      thirdNow = shown && (thirdPerson || coverNow.acting);
       controls.gaitBob = shown ? bodyBob : null;
       if (shown) mack.setHeadless(!thirdNow);
       // Fight mode draws and puts away by itself; the gun's aim in it, the looking ring out of it.
@@ -4867,8 +4951,8 @@ async function run(): Promise<void> {
       {
         const F = footFocus;
         const up = mack.armed && mack.aiming && !seated;
-        if (up && !F.on && F.auto && F.focus > 0.25) F.on = true;
-        if (!up) F.on = false;
+        if (up && !F.on && F.want && F.focus > 0.25) F.on = true;
+        if (!up) F.on = F.want = false;
         if (up && F.on) {
           F.focus = Math.max(0, F.focus - realDt / 5);
           if (F.focus <= 0) F.on = false;
@@ -4876,6 +4960,7 @@ async function run(): Promise<void> {
         F.slow += ((F.on ? 1 : 0) - F.slow) * Math.min(1, realDt * 7);
         if (F.slow < 0.002) F.slow = 0;
         gunfire.setSlow(F.slow);
+        footMeter.update(!seated, F.on, F.focus);
         footVeil.style.display = F.slow > 0.01 ? 'block' : 'none';
         footVeil.style.opacity = (F.slow * 0.9).toFixed(3);
         F.zoom += ((up ? 1 : 0) - F.zoom) * Math.min(1, realDt * 9);
@@ -4932,13 +5017,17 @@ async function run(): Promise<void> {
         if (idleSquats && mackIdle > SQUAT_AFTER && !inventory.heldItem) mack.squatting = true;
         mack.smoking.auto = idleSmokes ? smokes : null;
         // In third person he faces the way he's going, not where the camera looks (unless a gun's up or just fired).
-        const mode = facing.modeFor(thirdNow, mack, dt);
+        // (Peeked out of cover, aiming, he's turned to the view, as any aim.)
+        const driven = !!coverNow.frame && coverNow.frame.peek < 1;
+        mack.action = coverNow.frame?.layers ?? [];
+        if (driven) facing.face(coverNow.frame!.heading);
+        const mode = driven ? 'free' : facing.modeFor(thirdNow, mack, dt);
         if (mode === 'eyes') {
           facing.update(dt, camera, mode, 0, 0, controls.viewPitch);
           mack.update(dt, camera, gait, feet + paved, controls.viewPitch);
         } else {
           const k = dt > 0 && v < 12 ? 1 / dt : 0;
-          mack.update(dt, facing.update(dt, camera, mode, walkDx * k, walkDz * k, controls.viewPitch), gait, feet + paved);
+          mack.update(dt, facing.update(dt, camera, mode, driven ? 0 : walkDx * k, driven ? 0 : walkDz * k, controls.viewPitch), gait, feet + paved);
         }
         controls.drop = mack.eyeDrop;
       } else {

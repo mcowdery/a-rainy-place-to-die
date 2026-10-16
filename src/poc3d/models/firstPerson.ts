@@ -417,6 +417,8 @@ export class FirstPersonRig {
   /** A kill move's pose for him (models/killMoves.ts), in place of the melee's own, and its gun placement. */
   poseOverride: MeleePose | null = null;
   gunOverride: { pos: THREE.Vector3; quat: THREE.Quaternion } | null = null;
+  /** Clips from the library over his whole body, hands and all (cover, a vault, a roll: models/cover.ts), laid in order, each by its weight, over the pose he's in; none when empty. With any he stands as if his hands were free (his gun away for them) and the page moves and turns him. */
+  action: readonly { name: string; time: number; weight: number }[] = [];
   /** The fighting pose he was last put in (a kill move starts from it). */
   lastPose: MeleePose | null = null;
   /** The ball of the right foot, for a kick's striking part. */
@@ -1106,7 +1108,8 @@ export class FirstPersonRig {
       return;
     }
     this.katana.sword.visible = this.katana.saya.visible = this.bat.root.visible = false;
-    const away = !this.armed && this.draw <= 0;
+    const acting = this.action.length > 0 && this.anims !== null && !bike;
+    const away = acting || (!this.armed && this.draw <= 0);
     if (away && bike) {
       for (const g of Object.values(this.guns)) g.root.visible = false;
       this.flash.visible = false;
@@ -1123,9 +1126,15 @@ export class FirstPersonRig {
       this.flash.visible = false;
       this.flashLight.intensity = 0;
       this.freeArms(fx, fz, Math.sin(this.walk) * k, s * k, run * k, sq, this.airK);
-      // (The library's walk moves the arms only: its hands would undo the hanging pose, so they're posed after it.)
-      this.layMoves(dt, speed, false, 0, { at: (this.walk - strikePhase(run, k)) / (2 * Math.PI), k: k * (1 - sq) * (1 - this.airK), run }, true);
-      this.hangHands(fx, fz, run, sq);
+      if (acting) {
+        // An action's clips are the whole body, the hands too (a hand planted on a wall): in turn, the last by its weight over the rest.
+        for (const a of this.action) this.layClip(a);
+        this.gunInHand();
+      } else {
+        // (The library's walk moves the arms only: its hands would undo the hanging pose, so they're posed after it.)
+        this.layMoves(dt, speed, false, 0, { at: (this.walk - strikePhase(run, k)) / (2 * Math.PI), k: k * (1 - sq) * (1 - this.airK), run }, true);
+        this.hangHands(fx, fz, run, sq);
+      }
       // (His head stays up over the squat's lean.)
       this.poseShadow(pitch, bend + SQUAT.lean * sq);
       return;
@@ -1510,6 +1519,30 @@ export class FirstPersonRig {
       this.dropped = Math.max(this.dropped, neckWas.y - this.neck.getWorldPosition(new THREE.Vector3()).y);
     }
     return true;
+  }
+
+  /**
+   * The gun in his right hand through an action's clips (a roll, a vault, cover: models/cover.ts): put there from the hand's own turn, as the
+   * katana and the bat are over a melee clip (`overlayClip`), the fingers closed on the grip; nothing if it isn't out (the user, 2026-10-16:
+   * the gun was disappearing for rolls and vaults).
+   */
+  private gunInHand(): void {
+    if (!this.armed || this.draw <= GRAB) return;
+    const gun = this.guns[this.kind];
+    const arm = this.arms.r;
+    for (const f of [...arm.fingers.flat(), ...arm.thumb]) f.quaternion.copy(this.rest.get(f)!);
+    this.relaxHand(arm, CLIP_GRIP, FIST, [0, 0]);
+    this.thumbOver(arm);
+    const h = gun.grip;
+    arm.hand.updateWorldMatrix(true, false);
+    const turned = arm.hand.getWorldQuaternion(new THREE.Quaternion()).multiply(arm.q0.clone().invert());
+    const holdFrame = handFrame(h.fwd, h.palm, new THREE.Matrix4());
+    const q = turned.multiply(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().copy(arm.frame0).multiply(holdFrame.transpose())));
+    const wrist = h.at.clone().addScaledVector(h.palm, -(h.seat?.[1] ?? PALM_OFF)).addScaledVector(h.fwd, -(h.seat?.[0] ?? PALM_BACK));
+    gun.root.quaternion.copy(q);
+    gun.root.position.copy(arm.hand.getWorldPosition(new THREE.Vector3())).sub(wrist.applyQuaternion(q));
+    gun.root.visible = true;
+    gun.root.updateMatrixWorld(true);
   }
 
   private fightKeyed(m: Melee, camera: THREE.Camera, viewQ: THREE.Quaternion, fx: number, fz: number, swing: number, k: number, run: number): void {
