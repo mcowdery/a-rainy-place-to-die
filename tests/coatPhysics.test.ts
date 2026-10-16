@@ -90,7 +90,7 @@ const rig = (r: THREE.Object3D) => rigFrom(r, (b) => b.matrixWorld);
 function walk(fig: Awaited<ReturnType<typeof load>>, clip: THREE.AnimationClip, advance: (dt: number) => void) {
   const mixer = new THREE.AnimationMixer(fig.root);
   mixer.clipAction(clip).play();
-  const caps = [['thigh_l', 'calf_l', 0.095, 0.075], ['calf_l', 'foot_l', 0.075, 0.06], ['thigh_r', 'calf_r', 0.095, 0.075], ['calf_r', 'foot_r', 0.075, 0.06]] as const;
+  const caps = [['thigh_l', 'calf_l', 0.135, 0.105], ['calf_l', 'foot_l', 0.092, 0.08], ['thigh_r', 'calf_r', 0.135, 0.105], ['calf_r', 'foot_r', 0.092, 0.08]] as const;
   let worstInside = 0;
   let sumInside = 0;
   let lowest = Infinity;
@@ -112,8 +112,8 @@ function walk(fig: Awaited<ReturnType<typeof load>>, clip: THREE.AnimationClip, 
           const ab = B.clone().sub(A);
           const u = THREE.MathUtils.clamp(p.clone().sub(A).dot(ab) / ab.lengthSq(), 0, 1);
           const d = p.distanceTo(A.addScaledVector(ab, u));
-          // inside the leg: closer to its axis than its own radius (taken a little under, so a coat lying on it isn't counted)
-          if (d < (ra + (rb - ra) * u) * 0.85) {
+          // inside the leg: closer to its axis than its own radius
+          if (d < (ra + (rb - ra) * u)) {
             inside++;
             break;
           }
@@ -130,6 +130,27 @@ function walk(fig: Awaited<ReturnType<typeof load>>, clip: THREE.AnimationClip, 
   return { worstInside, meanInside: sumInside / frames, lowest };
 }
 
+/** The same share with the figure standing in its bind pose: what's inside a leg just by lying on it. */
+function atRest(fig: Awaited<ReturnType<typeof load>>): number {
+  const caps = [['thigh_l', 'calf_l', 0.135, 0.105], ['calf_l', 'foot_l', 0.092, 0.08], ['thigh_r', 'calf_r', 0.135, 0.105], ['calf_r', 'foot_r', 0.092, 0.08]] as const;
+  fig.scene.updateMatrixWorld(true);
+  const pts = fig.skinned();
+  let inside = 0;
+  for (const p of pts) {
+    for (const [a, b, ra, rb] of caps) {
+      const A = fig.joint(a).getWorldPosition(new THREE.Vector3());
+      const B = fig.joint(b).getWorldPosition(new THREE.Vector3());
+      const ab = B.clone().sub(A);
+      const u = THREE.MathUtils.clamp(p.clone().sub(A).dot(ab) / ab.lengthSq(), 0, 1);
+      if (p.distanceTo(A.addScaledVector(ab, u)) < ra + (rb - ra) * u) {
+        inside++;
+        break;
+      }
+    }
+  }
+  return inside / pts.length;
+}
+
 describe('the coat on Mack', () => {
   it('has chain bones and keeps the skirt out of his legs in a walk, where the thigh-skinned one went through', async () => {
     const names = ['Walk_Loop', 'Jog_Fwd_Loop', 'Crouch_Idle_Loop'];
@@ -138,8 +159,9 @@ describe('the coat on Mack', () => {
     const coat = await load('assets/characters/mack_gen_coat.glb');
     expect(coat.count).toBeGreaterThan(300);
     const sim = CoatPhysics.of(coat.scene)!;
+    if (process.env.COAT_CLEARANCE) sim.options.clearance = Number(process.env.COAT_CLEARANCE);
     expect(sim).not.toBeNull();
-    const rows: string[] = [];
+    const rows: string[] = [`at rest (standing): ${(atRest(old) * 100).toFixed(1)}% inside a leg by the same measure`];
     for (const name of names) {
       const clip = lib.clips.find((c) => c.name === name)!;
       const before = walk(old, retarget(clip, rig(lib.root), rig(old.root)), () => {});

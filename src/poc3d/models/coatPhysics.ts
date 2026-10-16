@@ -27,7 +27,7 @@ export interface CoatOptions {
   teleport: number;
 }
 
-export const COAT: CoatOptions = { stiffness: [6, 3, 1.5], damping: 0.985, gravity: 9.8, clearance: 0.025, teleport: 12 };
+export const COAT: CoatOptions = { stiffness: [6, 3, 1.5], damping: 0.985, gravity: 9.8, clearance: 0.02, teleport: 12 };
 
 /** A leg bone pair as a capsule, in world space each step. */
 interface Capsule {
@@ -98,7 +98,7 @@ export class CoatPhysics {
       this.pos.push(rest.map((p) => p.clone().applyMatrix4(pelvis.matrixWorld)));
       this.prev.push(rest.map((p) => p.clone().applyMatrix4(pelvis.matrixWorld)));
     }
-    for (const [a, b, ra, rb] of [['thigh_l', 'calf_l', 0.095, 0.075], ['calf_l', 'foot_l', 0.075, 0.06], ['thigh_r', 'calf_r', 0.095, 0.075], ['calf_r', 'foot_r', 0.075, 0.06]] as const) {
+    for (const [a, b, ra, rb] of [['thigh_l', 'calf_l', 0.135, 0.105], ['calf_l', 'foot_l', 0.092, 0.08], ['thigh_r', 'calf_r', 0.135, 0.105], ['calf_r', 'foot_r', 0.092, 0.08]] as const) {
       const oa = model.getObjectByName(a);
       const ob = model.getObjectByName(b);
       if (oa && ob) this.capsules.push({ a: oa, b: ob, ra, rb });

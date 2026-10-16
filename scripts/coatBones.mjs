@@ -70,6 +70,44 @@ const hem = Math.min(...skirt.map((v) => v.p.y));
 const L = (hip.y - hem) / K;
 console.log(`skirt: ${skirt.length} vertices from ${hip.y.toFixed(2)} m down to ${hem.toFixed(2)} m; ${S} chains of ${K} bones, ${L.toFixed(3)} m apart`);
 
+// The skirt out of the legs, at rest: the model's side panels lie slightly inside the trouser legs (the coat 0.22 m from the
+// centre, a thigh's surface 0.235), and cloth can't be pushed out of a leg it starts in. Each skirt vertex inside a leg's
+// capsule (the radii measured from this model's trousers, the same as coatPhysics.ts's, and its clearance) is moved straight
+// out of it, and the bones' rest places below are worked out from the moved vertices.
+const LEGS = [['thigh_l', 'calf_l', 0.135, 0.105], ['calf_l', 'foot_l', 0.092, 0.08], ['thigh_r', 'calf_r', 0.135, 0.105], ['calf_r', 'foot_r', 0.092, 0.08]];
+const CLEARANCE = Number(flag('clearance', 0.02));
+const at = (n) => new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().fromArray(byName(n).getWorldMatrix()));
+function byName(n) {
+  return root.listNodes().find((x) => x.getName() === n);
+}
+let pushed = 0;
+for (const v of skirt) {
+  for (let pass = 0; pass < 3; pass++) {
+    let moved = false;
+    for (const [a, b, ra, rb] of LEGS) {
+      const A = at(a);
+      const ab = at(b).sub(A);
+      const t = Math.min(Math.max(v.p.clone().sub(A).dot(ab) / ab.lengthSq(), 0), 1);
+      const axis = A.clone().addScaledVector(ab, t);
+      const out = v.p.clone().sub(axis);
+      const r = ra + (rb - ra) * t + CLEARANCE;
+      if (out.length() < r && out.length() > 1e-6) {
+        v.p.copy(axis).addScaledVector(out.normalize(), r);
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+}
+for (const v of skirt) {
+  const was = v.prim.getAttribute('POSITION').getElement(v.i, []);
+  if (Math.abs(was[0] - v.p.x) + Math.abs(was[1] - v.p.y) + Math.abs(was[2] - v.p.z) > 1e-6) {
+    v.prim.getAttribute('POSITION').setElement(v.i, [v.p.x, v.p.y, v.p.z]);
+    pushed++;
+  }
+}
+console.log(`moved ${pushed} skirt vertices out of the legs`);
+
 const angleOf = (p) => Math.atan2(p.x - hip.x, p.z - hip.z); // 0 forward (+z), turning towards +x
 const TAU = Math.PI * 2;
 const norm = (a) => ((a % TAU) + TAU) % TAU;

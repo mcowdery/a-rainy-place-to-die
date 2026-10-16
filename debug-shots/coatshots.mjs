@@ -14,8 +14,8 @@ if (!out) {
   process.exit(1);
 }
 mkdirSync(out, { recursive: true });
-const W = 300;
-const H = 380;
+const W = Number(process.env.COAT_W ?? 300);
+const H = Number(process.env.COAT_H ?? 380);
 const FIGURES = ['mack_gen', 'mack_gen_coat'];
 const VIEWS = { side: [4.0, 1.2, 0, 0, 0.95, 0], front: [1.9, 1.35, 3.4, 0, 0.95, 0] };
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
