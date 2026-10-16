@@ -29,7 +29,23 @@ try {
   if (await page.evaluate(() => /MAP \+ FAST TRAVEL/.test(document.body.innerText))) await page.keyboard.press('KeyM');
   const list = (await page.evaluate(() => window.__signs.all())).map((s, i) => ({ ...s, i }));
   console.log(`${list.length} signs: ${['blade', 'fascia', 'channel'].map((k) => `${list.filter((s) => s.form === k).length} ${k}`).join(', ')}`);
-  if (which.startsWith('extras')) {
+  if (which === 'roofs') {
+    // The rooftop signs (real/roofSigns.ts): a few from each district, from the street across.
+    const rs = (await page.evaluate(() => window.__signs.roofs())).map((r, i) => ({ ...r, i }));
+    console.log(`${rs.length} roof signs, ${new Set(rs.map((r) => r.text)).size} different`);
+    const pick = [];
+    for (const d of [...new Set(rs.map((r) => r.district))]) {
+      const of = rs.filter((r) => r.district === d);
+      for (const j of [0.1, 0.35, 0.6, 0.85]) if (of.length) pick.push(of[Math.floor(of.length * j)]);
+    }
+    for (const r of [...new Set(pick)]) {
+      await page.evaluate((i) => window.__signs.goRoof(i), r.i);
+      await page.waitForTimeout(7000);
+      const name = `r${String(r.i).padStart(4, '0')}-${r.district}`;
+      await page.screenshot({ path: `${out}/${name}.png` });
+      console.log(name, `${r.x},${r.z}`, r.text);
+    }
+  } else if (which.startsWith('extras')) {
     const only = which.split(':')[1]?.split(',');
     const ex = (await page.evaluate(() => window.__signs.extras())).map((e, i) => ({ ...e, i })).filter((e) => !only || only.includes(e.kind));
     const counts = {};
@@ -52,7 +68,7 @@ try {
     process.exitCode = 0;
   }
   let pick;
-  if (which.startsWith('extras')) pick = [];
+  if (which.startsWith('extras') || which === 'roofs') pick = [];
   else if (which === 'all') pick = list;
   else if (which.startsWith('sample')) {
     pick = [];
