@@ -264,11 +264,140 @@ function legLength(rig: Rig): number {
   return rig.restP[hip].distanceTo(rig.restP[knee]) + rig.restP[knee].distanceTo(rig.restP[ankle]);
 }
 
+interface LegFrame {
+  /** World turns of the pelvis, thigh, shin and foot. */
+  turns: THREE.Quaternion[];
+  pelvis: THREE.Vector3;
+  ankle: THREE.Vector3;
+  /** How down the foot is in the clip: 1 on the ground, toward 0 as it rises. */
+  down: number;
+}
+
+/**
+ * `retarget`'s second pass for `footIK`: each foot held still through each step it's down for (see there), the thigh
+ * and shin turned to reach it, and their tracks (and the foot's, whose world turn is kept) rewritten.
+ */
+function holdFeet(legs: readonly { chain: number[]; frames: LegFrame[] }[], localP: readonly THREE.Vector3[], quats: (Float32Array | null)[], frames: number, loop: boolean): void {
+  const dt = 1 / RATE;
+  // the ground's speed under the feet: the planted feet's common speed (a clip walking on the spot carries them back)
+  const vx: number[] = [];
+  const vz: number[] = [];
+  for (const leg of legs) {
+    for (let i = 0; i + 1 < frames; i++) {
+      const [a, b] = [leg.frames[i], leg.frames[i + 1]];
+      if (a.down < 0.7 || b.down < 0.7) continue;
+      vx.push((b.ankle.x - a.ankle.x) / dt);
+      vz.push((b.ankle.z - a.ankle.z) / dt);
+    }
+  }
+  const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[a.length >> 1] : 0);
+  const ground = new THREE.Vector3(median(vx), 0, median(vz));
+
+  const hip = new THREE.Vector3();
+  const knee = new THREE.Vector3();
+  const goal = new THREE.Vector3();
+  const toGoal = new THREE.Vector3();
+  const pole = new THREE.Vector3();
+  const swing = new THREE.Quaternion();
+  const turn = new THREE.Quaternion();
+  const q = new THREE.Quaternion();
+  for (const leg of legs) {
+    const fr = leg.frames;
+    // the steps: runs of frames with the foot down; one that runs off the clip's end is anchored there, so a loop's
+    // two halves of the same step meet at its seam
+    const steps: [number, number, number][] = [];
+    for (let i = 0; i < frames; ) {
+      if (fr[i].down <= 0.5) {
+        i++;
+        continue;
+      }
+      let j = i;
+      while (j + 1 < frames && fr[j + 1].down > 0.5) j++;
+      const anchor = i === 0 ? 0 : j === frames - 1 ? frames - 1 : (i + j) >> 1;
+      if (j > i) steps.push([i, j, anchor]);
+      i = j + 1;
+    }
+    const [th, ca, fo] = leg.chain;
+    // How far each frame's ankle is moved, along the ground: within a step, to where it's held; between steps, from
+    // where the last step left it to where the next will hold it, so the foot lands where it's held and leaves from
+    // there (letting go all at once snapped it back as it lifted); before the first and after the last step of a clip
+    // that doesn't loop, eased in and out over a fifth of a second.
+    const shift: (THREE.Vector3 | null)[] = new Array(frames).fill(null);
+    for (const [a, b, m] of steps) {
+      for (let i = a; i <= b; i++) shift[i] = fr[m].ankle.clone().addScaledVector(ground, (i - m) * dt).sub(fr[i].ankle).setY(0);
+    }
+    // (a loop's last frame is its first again: between its last step and its first, the way round the seam)
+    const period = frames - 1;
+    const ease = Math.round(0.2 * RATE);
+    steps.forEach(([, end], n) => {
+      const next = n + 1 < steps.length ? steps[n + 1][0] : loop ? steps[0][0] + period : null;
+      if (next !== null) {
+        // a curve that leaves the last step and meets the next at the speed each has there (a straight line between
+        // them kinked at both ends: a hitch in the foot's swing)
+        const at = (j: number) => shift[loop ? ((j % period) + period) % period : j];
+        const p0 = shift[end]!;
+        const p1 = at(next)!;
+        const span = next - end;
+        // (each end's speed capped at the size of the change: a step whose hold changes fast would throw the foot past)
+        const cap = Math.max(p1.distanceTo(p0), 1e-6);
+        const m0 = at(end - 1) ? p0.clone().sub(at(end - 1)!).multiplyScalar(span).clampLength(0, cap) : new THREE.Vector3();
+        const m1 = at(next + 1) ? at(next + 1)!.clone().sub(p1).multiplyScalar(span).clampLength(0, cap) : new THREE.Vector3();
+        for (let j = end + 1; j < next; j++) {
+          const t = (j - end) / span;
+          const [h00, h10, h01, h11] = [2 * t ** 3 - 3 * t ** 2 + 1, t ** 3 - 2 * t ** 2 + t, -2 * t ** 3 + 3 * t ** 2, t ** 3 - t ** 2];
+          shift[loop ? j % period : j] = p0.clone().multiplyScalar(h00).addScaledVector(m0, h10).addScaledVector(p1, h01).addScaledVector(m1, h11);
+        }
+      } else {
+        for (let i = end + 1; i < Math.min(frames, end + 1 + ease); i++) shift[i] = shift[end]!.clone().multiplyScalar(1 - (i - end) / ease);
+      }
+    });
+    if (steps.length && !loop) {
+      const start = steps[0][0];
+      for (let i = Math.max(0, start - ease); i < start; i++) shift[i] = shift[start]!.clone().multiplyScalar(1 - (start - i) / ease);
+    }
+    if (loop && shift[0]) shift[period] = shift[0].clone();
+    for (let i = 0; i < frames; i++) {
+      {
+        const f = fr[i];
+        if (!shift[i] || shift[i]!.lengthSq() < 1e-10) continue;
+        goal.copy(f.ankle).add(shift[i]!);
+        const [pelvisQ, thighQ, shinQ, footQ] = f.turns;
+        hip.copy(localP[th]).applyQuaternion(pelvisQ).add(f.pelvis);
+        knee.copy(localP[ca]).applyQuaternion(thighQ).add(hip);
+        const l1 = knee.distanceTo(hip);
+        const l2 = f.ankle.distanceTo(knee);
+        toGoal.subVectors(goal, hip);
+        const d = THREE.MathUtils.clamp(toGoal.length(), Math.abs(l1 - l2) + 1e-4, l1 + l2 - 1e-4);
+        toGoal.normalize();
+        // the knee where both lengths meet, on the side it already bends to
+        pole.subVectors(knee, hip).addScaledVector(toGoal, -knee.clone().sub(hip).dot(toGoal));
+        if (pole.lengthSq() < 1e-10) continue;
+        pole.normalize();
+        const cos = (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d);
+        const newKnee = hip.clone().addScaledVector(toGoal, l1 * cos).addScaledVector(pole, l1 * Math.sqrt(Math.max(0, 1 - cos * cos)));
+        swing.setFromUnitVectors(knee.clone().sub(hip).normalize(), newKnee.clone().sub(hip).normalize());
+        const thigh = thighQ.clone().premultiply(swing);
+        const shinWas = f.ankle.clone().sub(knee).applyQuaternion(swing).normalize();
+        turn.setFromUnitVectors(shinWas, hip.clone().addScaledVector(toGoal, d).sub(newKnee).normalize());
+        const shin = shinQ.clone().premultiply(swing).premultiply(turn);
+        // the tracks, each bone's turn in its parent's (the foot keeps its world turn)
+        for (const [bone, world, up] of [[th, thigh, pelvisQ], [ca, shin, thigh], [fo, footQ, shin]] as const) {
+          const out = quats[bone]!;
+          q.copy(up).invert().multiply(world);
+          // (the same rotation has two signs: keep to the one nearer the frame before)
+          if (i > 0 && out[(i - 1) * 4] * q.x + out[(i - 1) * 4 + 1] * q.y + out[(i - 1) * 4 + 2] * q.z + out[(i - 1) * 4 + 3] * q.w < 0) q.set(-q.x, -q.y, -q.z, -q.w);
+          q.toArray(out, i * 4);
+        }
+      }
+    }
+  }
+}
+
 /**
  * A clip made on `source` (the mannequin), as a clip for `target` (a character): tracks by the character's bone
  * names, sampled at RATE. See the header for how.
  */
-export function retarget(clip: THREE.AnimationClip, source: Rig, target: Rig): THREE.AnimationClip {
+export function retarget(clip: THREE.AnimationClip, source: Rig, target: Rig, opts: { footIK?: boolean } = {}): THREE.AnimationClip {
   const { from, fit: fits } = fit(source, target);
   const scale = legLength(target) / legLength(source);
   // (The library's keys are linear: a frame each, at RATE.)
@@ -324,6 +453,15 @@ export function retarget(clip: THREE.AnimationClip, source: Rig, target: Rig): T
   const tLocalP = target.restP.map((p, i) => (target.parent[i] < 0 ? p.clone() : p.clone().sub(target.restP[target.parent[i]]).applyQuaternion(target.restQ[target.parent[i]].clone().invert())));
   const legP = new THREE.Vector3();
   const pelvisW = new THREE.Vector3();
+  // Holding the planted feet still, when asked (`opts.footIK`; off in the game until it's been seen moving): each
+  // step the clip has a foot down for, that foot is held where it is at the step's middle, moving only as the ground
+  // does under a clip that walks on the spot (the planted feet's common speed), and the thigh and shin are turned to
+  // reach it (two bones, the knee kept in its own plane; the foot keeps its turn). A second pass over the frames, since
+  // a step is known only whole. A foot in the air is left as fitted. This takes out the slide the fitting adds (the
+  // same angles on other proportions put a planted foot somewhere else each frame) and the clip's own as well.
+  const ik = opts.footIK ? plant.filter((k) => k.chain.length === 3 && k.chain.every((i) => quats[i] !== null)) : [];
+  // per leg, per frame: the leg's world turns (pelvis, thigh, shin, foot), where the ankle is, and how down it is
+  const legFrames = ik.map(() => [] as { turns: THREE.Quaternion[]; pelvis: THREE.Vector3; ankle: THREE.Vector3; down: number }[]);
 
   for (let f = 0; f < frames; f++) {
     const t = Math.min(clip.duration, f / RATE);
@@ -397,8 +535,25 @@ export function retarget(clip: THREE.AnimationClip, source: Rig, target: Rig): T
         v.add(_b.set(0, sum / weights, 0).applyQuaternion(q.copy(tQ[tRoot]).invert()));
       }
       v.toArray(pelvisPos, f * 3);
+      if (ik.length) {
+        pelvisW.copy(v).applyQuaternion(tQ[tRoot]).add(_a.fromArray(rootPos, f * 3));
+        ik.forEach((leg, n) => {
+          const [th, ca, fo] = leg.chain;
+          const ankle = _b.copy(tLocalP[th]).applyQuaternion(tQ[tPelvis]).add(pelvisW);
+          ankle.add(_a.copy(tLocalP[ca]).applyQuaternion(tQ[th])).add(_a.copy(tLocalP[fo]).applyQuaternion(tQ[ca]));
+          const up = sP[leg.s].y - source.restP[leg.s].y;
+          legFrames[n].push({
+            turns: [tPelvis, th, ca, fo].map((i) => tQ[i].clone()),
+            pelvis: pelvisW.clone(),
+            ankle: ankle.clone(),
+            down: Math.exp(-Math.max(up, 0) / reach),
+          });
+        });
+      }
     }
   }
+
+  if (ik.length) holdFeet(ik.map((leg, n) => ({ chain: leg.chain, frames: legFrames[n] })), tLocalP, quats, frames, /loop/i.test(clip.name));
 
   const out: THREE.KeyframeTrack[] = [];
   target.names.forEach((name, i) => {
@@ -444,6 +599,9 @@ export class AnimLibrary {
   clips: readonly AnimInfo[] = [];
   private readonly source = new Map<string, { rig: Rig; clip: THREE.AnimationClip }>();
   private readonly fitted = new Map<string, THREE.AnimationClip>();
+  /** Fit clips with the planted feet held forward and back too (`retarget`'s `footIK`); a page's choice, off in the
+   * game until the user has seen it moving (anims.html `?footik=1`). Clips already fitted aren't refitted. */
+  footIK = false;
 
   constructor(packs: readonly { pack: string; scene: THREE.Object3D; animations: readonly THREE.AnimationClip[] }[]) {
     for (const p of packs) this.add(p.pack, p.scene, p.animations);
@@ -480,13 +638,13 @@ export class AnimLibrary {
    * either way.
    */
   clipFor(key: string, model: THREE.Object3D, name: string, openHands = false): THREE.AnimationClip | null {
-    const id = `${key}:${name}`;
+    const id = `${key}${this.footIK ? '+ik' : ''}:${name}`;
     let clip = this.fitted.get(id) ?? null;
     if (!clip) {
       const src = this.source.get(name);
       const rig = characterRig(model);
       if (!src || !rig) return null;
-      clip = retarget(src.clip, src.rig, rig);
+      clip = retarget(src.clip, src.rig, rig, { footIK: this.footIK });
       if (!clip.tracks.some((t) => FINGER.test(t.name))) clip = atEase(clip, rig);
       this.fitted.set(id, clip);
     }
