@@ -15,8 +15,10 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
  * feet are only turned about the vertical, so a foot stays as flat as its own shape has it. The root's and the
  * pelvis's travel is scaled by leg length, so a short figure takes short steps.
  *
- * What it doesn't do: plant the feet. A clip made for the mannequin's hips and shoulders, played on a broader or
- * narrower body, lets the feet slide a little and the hands miss each other by the difference.
+ * The feet are planted up and down only: the pelvis is raised or lowered each frame so the feet are at the clip's
+ * height (legs of other proportions bent to the same angles reach higher or lower). Not sideways: a clip made for
+ * the mannequin's hips and shoulders, played on a broader or narrower body, lets the feet slide a little and the
+ * hands miss each other by the difference.
  */
 
 /** The library's files by name (ual1, ual2); nothing is fetched until a clip is wanted. */
@@ -303,6 +305,25 @@ export function retarget(clip: THREE.AnimationClip, source: Rig, target: Rig): T
   // The pelvis from the root, at rest, in the model's space.
   const sOff = sPelvis < 0 ? new THREE.Vector3() : source.restP[sPelvis].clone().sub(source.restP[sRoot]);
   const tOff = tPelvis < 0 ? new THREE.Vector3() : target.restP[tPelvis].clone().sub(target.restP[tRoot]);
+  // Planting the feet: the same knee angles on legs of other proportions reach higher or lower than the mannequin's
+  // (on Mack the fighting stance put his feet 3.5 cm into the floor, a standing idle 1 cm), so each frame the pelvis
+  // is moved up or down to put the feet at the clip's height, scaled, the foot that's lower in the clip counting
+  // most (the one on the ground holds). Only up and down: moving him sideways to hold one foot drags the other.
+  const plant = ['l', 'r']
+    .map((s) => ({ t: target.names.indexOf(`foot_${s}`), s: source.names.indexOf(`foot_${s}`) }))
+    .filter((k) => k.t >= 0 && k.s >= 0 && tPelvis >= 0 && quats[tPelvis] !== null)
+    .map((k) => {
+      // the leg from the pelvis down to the foot, pelvis first
+      const chain: number[] = [];
+      for (let i = k.t; i >= 0 && i !== tPelvis; i = target.parent[i]) chain.unshift(i);
+      return { ...k, chain };
+    })
+    .filter((k) => target.parent[k.chain[0]] === tPelvis);
+  const reach = 0.05 * legLength(source);
+  // each bone's rest offset from its parent, in the parent's own frame
+  const tLocalP = target.restP.map((p, i) => (target.parent[i] < 0 ? p.clone() : p.clone().sub(target.restP[target.parent[i]]).applyQuaternion(target.restQ[target.parent[i]].clone().invert())));
+  const legP = new THREE.Vector3();
+  const pelvisW = new THREE.Vector3();
 
   for (let f = 0; f < frames; f++) {
     const t = Math.min(clip.duration, f / RATE);
@@ -355,6 +376,26 @@ export function retarget(clip: THREE.AnimationClip, source: Rig, target: Rig): T
       v.copy(sP[sPelvis]).sub(sP[sRoot]).applyQuaternion(q.copy(turn).invert()).sub(sOff).multiplyScalar(scale).add(tOff);
       // (Now in the model's space as if the root hadn't turned: into the root's own frame.)
       v.applyQuaternion(q.copy(target.restQ[tRoot]).invert());
+      if (plant.length) {
+        // where each foot is with the pelvis there: down the leg on its rest offsets, turned as this frame has it
+        pelvisW.copy(v).applyQuaternion(tQ[tRoot]).add(_a.fromArray(rootPos, f * 3));
+        let sum = 0;
+        let weights = 0;
+        for (const leg of plant) {
+          legP.copy(pelvisW);
+          let parent = tPelvis;
+          for (const i of leg.chain) {
+            legP.add(_b.copy(tLocalP[i]).applyQuaternion(tQ[parent]));
+            parent = i;
+          }
+          const up = sP[leg.s].y - source.restP[leg.s].y;
+          const w = Math.exp(-Math.max(up, 0) / reach);
+          sum += (target.restP[leg.t].y + up * scale - legP.y) * w;
+          weights += w;
+        }
+        // (up and down in the model, into the root's frame as it has turned)
+        v.add(_b.set(0, sum / weights, 0).applyQuaternion(q.copy(tQ[tRoot]).invert()));
+      }
       v.toArray(pelvisPos, f * 3);
     }
   }
