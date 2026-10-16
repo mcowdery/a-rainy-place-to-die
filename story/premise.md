@@ -106,7 +106,7 @@ Told in the style of *Fading Afternoon*: its vibe and narrative, not its systems
 
 Rewritten 2026-10-12, when Mack became a man and Dom arrived. Three kinds:
 
-- **Against the order's puppets** (the triad, the yakuza, bought police, the cult's followers, hired guns sent
+- **Against the order's puppets** (the triad, the yakuza, the cult's followers, hired guns sent
   by corrupt politicians): lots of them, all through the year.
   - *As Mack* it's a man's fight: he's trained and he's good, but he can be hurt, and being surrounded is the
     danger. Guns, the car, and knowing when to leave.

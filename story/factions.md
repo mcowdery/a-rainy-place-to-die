@@ -12,6 +12,8 @@ with the crest's lanterns, a pine, black sedans, young men outside. Nodes: `rind
   real mind; the wakagashira. The old code: no drugs, no women sold; the festival stalls and the old town
   protected; the family's land under the Kasumi-chō redevelopment site.
 - **Proposed:** an old family being taken apart by a new one: Ryujin Kogyo, the Amakudari-kai's front.
+- **Enemies and allies by turns** (the user, 2026-10-16): Mack fights them at some points of the story and stands
+  with them at others. **Open:** which, when.
 
 ## 竜神興業 Ryujin Kogyo
 
@@ -37,6 +39,9 @@ The Tokyo Metropolitan Police HQ in Asagiri (stone, flags, patrol cars), and in 
 notices. Nodes: `police_hq.entrance`, `police_hq.officer`.
 
 Corrupt: officers are bought, cases buried. There are honest ones too.
+
+**Never fought** (the user, 2026-10-16): Mack doesn't fight the police, bought or not, and the game has no wanted
+level. The bought ones work against him by other means.
 
 - **Mack was one of them** (the user's, 2026-10-12): an ex-cop, working as a detective. He answers to the force
   now only through a kept licence, a *kyōryoku* 協力 cooperating-investigator's, and the police beacon that goes
