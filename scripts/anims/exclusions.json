@@ -11,5 +11,13 @@
       "RunOver_127_35"
     ]
   },
-  "notes": {}
+  "notes": {
+    "Punch_Jab": "asset-check 2026-10-16, all in the library clip itself (the same on its own skeleton): the hand snaps for one frame at 0.17 s, and the left elbow bends about 55° off its hinge.",
+    "Sword_Attack_Standing": "asset-check 2026-10-16, all in the library clip itself: the head and collar bones snap at 0.33 s, the right elbow bends 28° backwards at 0.33 s and about 46° off its hinge at 0.99 s, and the right knee about 61° off its hinge at 0.66 s. On a long coat the wide stance also sinks the hem into the floor.",
+    "Climb_Idle_Loop": "asset-check 2026-10-16, in the library clip itself: the left elbow and the right knee bend about 60° and 64° off their hinge through the whole loop.",
+    "Counter_Idle_Loop": "asset-check 2026-10-16: the left elbow bends about 59° off its hinge through the loop (in the library clip itself).",
+    "Crawl_Idle_Loop": "asset-check 2026-10-16, in the library clip itself: the right knee and both elbows bend 54-75° off their hinge through the loop. On Mack a coat hem goes through the floor.",
+    "Drink": "asset-check 2026-10-16: the right elbow bends about 54° off its hinge while it lifts the cup (in the library clip itself).",
+    "GroundSit_Idle_Loop": "asset-check 2026-10-16, in the library clip itself: the right knee bends about 51° off its hinge through the loop. On Mack a coat goes through the floor."
+  }
 }

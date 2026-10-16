@@ -1259,6 +1259,18 @@ def load_definition(path):
     return out
 
 
+def _clean_glb(path):
+    """Takes the triangles with no area out of the exported file (a glasses asset has dozens), with scripts/glbClean.mjs:
+    nothing else changes (only a mesh's own debris, which isn't a thing to guess at in a whole figure)."""
+    import shutil
+    import subprocess
+    if not shutil.which('node'):
+        print('node not found: run scripts/glbClean.mjs --degenerate-only on', path)
+        return
+    out = subprocess.run(['node', repo_path('scripts/glbClean.mjs'), path, '--degenerate-only'], capture_output=True, text=True).stdout.strip().splitlines()
+    print('GLB_CLEAN', out[-1] if out else '')
+
+
 def main():
     argv =sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     if not argv:
@@ -1389,6 +1401,7 @@ def main():
     print('CHARACTER_REPORT ' + json.dumps(report))
     if d.get('out') and not preview_only:
         mb.export_glb(repo_path(d['out']), rig, meshes, morph=bool(expr))
+        _clean_glb(repo_path(d['out']))
         print('CHARACTER_GLB %s %.2f MB' % (d['out'], os.path.getsize(repo_path(d['out'])) / 1e6))
     if d.get('compare') and '--no-compare' not in argv:
         render_compare(d['compare'], meshes, rig, L)

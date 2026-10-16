@@ -2,12 +2,13 @@
 // the rest of it: a generated head's bake leaves bits of hair floating off the fringe) and triangles with no area.
 // Only index buffers change; vertices, materials, skins and textures are left as they are.
 //
-//   node scripts/glbClean.mjs <in.glb> [out.glb] [--mesh name,name] [--specks 8] [--gap 0.004] [--dry]
+//   node scripts/glbClean.mjs <in.glb> [out.glb] [--mesh name,name] [--specks 8] [--gap 0.004] [--degenerate-only] [--dry]
 //
 //   --specks n   a piece of at most n distinct points is a speck if no point of it is within --gap (metres) of the
 //                rest of its mesh (default 8 points, 4 mm). A piece is found with the points welded by position, since
 //                glTF splits a mesh at every UV seam.
 //   --mesh       only these meshes (by name); default all.
+//   --degenerate-only   leave the specks alone: only the triangles with no area (always safe on any mesh).
 //   --dry        say what it would take out, write nothing.
 // Out defaults to the input (overwritten). Find what to take out first with asset-check (its "floating" and "faces with
 // no area" faults), and look at it there: a piece sitting just off on purpose (an epaulette, a belt's end) isn't debris.
@@ -16,16 +17,17 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 
 const args = process.argv.slice(2);
 const flag = (k, d) => (args.includes(`--${k}`) ? args[args.indexOf(`--${k}`) + 1] : d);
-const files = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1].startsWith('--') && args[i - 1] !== '--dry'));
+const files = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1].startsWith('--') && !['--dry', '--degenerate-only'].includes(args[i - 1])));
 const [input, output = input] = files;
 if (!input) {
-  console.log('Usage: node scripts/glbClean.mjs <in.glb> [out.glb] [--mesh names] [--specks 8] [--gap 0.004] [--dry]');
+  console.log('Usage: node scripts/glbClean.mjs <in.glb> [out.glb] [--mesh names] [--specks 8] [--gap 0.004] [--degenerate-only] [--dry]');
   process.exit(1);
 }
 const maxPoints = Number(flag('specks', 8));
 const gap = Number(flag('gap', 0.004));
 const only = flag('mesh', null)?.split(',');
 const dry = args.includes('--dry');
+const degenerateOnly = args.includes('--degenerate-only');
 
 /** Distance from point q to the triangle a, b, c (vertex numbers into the flat positions p). */
 function toTriangle(q, a, b, c, p) {
@@ -101,7 +103,7 @@ for (const mesh of doc.getRoot().listMeshes()) {
     // a small piece with no other surface of the mesh near it (to the triangles, not their corners: on a coarse mesh
     // a bit lying on the surface can be far from every vertex)
     const specks = new Set();
-    for (const [r, set] of members) {
+    for (const [r, set] of degenerateOnly ? [] : members) {
       const points = new Set([...set].map((i) => weld[i]));
       if (points.size > maxPoints) continue;
       let near = Infinity;

@@ -324,3 +324,13 @@ for o in bpy.context.selected_objects:
 bpy.ops.export_scene.gltf(filepath=out_file, export_format='GLB', export_yup=True, export_skins=True, export_animations=False,
                           export_apply=False, export_image_format='AUTO')
 print('wrote', out_file)
+
+# The bake leaves single triangles of hair floating off the fringe: take them out of the head (scripts/glbClean.mjs; only
+# the head's own mesh, since a coat's epaulettes are pieces sitting just off on purpose). Skipped, with a note, if node isn't there.
+import shutil
+import subprocess
+if shutil.which('node'):
+    clean = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'glbClean.mjs')
+    print(subprocess.run(['node', clean, out_file, '--mesh', head.data.name], capture_output=True, text=True).stdout.strip().splitlines()[-1])
+else:
+    print('node not found: run scripts/glbClean.mjs on', out_file, '--mesh', head.data.name)

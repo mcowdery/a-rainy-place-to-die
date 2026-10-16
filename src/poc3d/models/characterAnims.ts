@@ -599,9 +599,9 @@ export class AnimLibrary {
   clips: readonly AnimInfo[] = [];
   private readonly source = new Map<string, { rig: Rig; clip: THREE.AnimationClip }>();
   private readonly fitted = new Map<string, THREE.AnimationClip>();
-  /** Fit clips with the planted feet held forward and back too (`retarget`'s `footIK`); a page's choice, off in the
-   * game until the user has seen it moving (anims.html `?footik=1`). Clips already fitted aren't refitted. */
-  footIK = false;
+  /** Fit clips with the planted feet held still too (`retarget`'s `footIK`): on everywhere since the user saw it on Mack's walks
+   * (2026-10-16); a page can turn it off to compare (anims.html `?footik=0`). Clips already fitted aren't refitted. */
+  footIK = true;
 
   constructor(packs: readonly { pack: string; scene: THREE.Object3D; animations: readonly THREE.AnimationClip[] }[]) {
     for (const p of packs) this.add(p.pack, p.scene, p.animations);
