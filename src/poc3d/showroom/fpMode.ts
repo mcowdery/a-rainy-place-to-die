@@ -253,18 +253,20 @@ export class FpMode {
     const skip = new Set<THREE.Object3D>();
     if (this.rig) skip.add(this.rig.object);
     for (const o of this.notWalls()) skip.add(o);
-    const hits = this.ray.intersectObjects(this.scene.children, true);
-    for (const h of hits) {
-      const o = h.object as THREE.Mesh;
-      if (!o.isMesh || (o as unknown as THREE.InstancedMesh).isInstancedMesh || !h.face || o.name.startsWith('gore')) continue;
-      let anc: THREE.Object3D | null = o;
-      let skipIt = false;
-      while (anc) {
-        if (skip.has(anc)) skipIt = true;
-        anc = anc.parent;
-      }
-      if (skipIt) continue;
-      const normal = h.face.normal.clone().transformDirection(o.matrixWorld);
+    // What can be hit is collected first, leaving out him, the people, gore and anything skinned or instanced: a ray cast at a
+    // skinned mesh has three skin every vertex of it on the CPU, ~10 ms a frame in third person and far worse when the ray starts
+    // inside the body, as the camera's do in a roll (found with debug-shots/coverprofile.mjs).
+    const targets: THREE.Mesh[] = [];
+    const collect = (o: THREE.Object3D): void => {
+      if (skip.has(o) || o.name.startsWith('gore')) return;
+      const m = o as THREE.Mesh;
+      if (m.isMesh && !(m as unknown as THREE.InstancedMesh).isInstancedMesh && !(m as unknown as THREE.SkinnedMesh).isSkinnedMesh) targets.push(m);
+      for (const c of o.children) collect(c);
+    };
+    for (const c of this.scene.children) collect(c);
+    for (const h of this.ray.intersectObjects(targets, false)) {
+      if (!h.face) continue;
+      const normal = h.face.normal.clone().transformDirection((h.object as THREE.Mesh).matrixWorld);
       return { point: h.point.clone(), normal };
     }
     return null;
