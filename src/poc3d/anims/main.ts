@@ -639,8 +639,8 @@ const api = {
 
 void (async () => {
   const library = await animLibrary();
-  // ?footik=1: the clips fitted with the planted feet held forward and back too (characterAnims.ts, on trial)
-  library.footIK = query.get('footik') === '1';
+  // ?footik=0: the clips fitted without holding the planted feet still (characterAnims.ts), to compare
+  library.footIK = query.get('footik') !== '0';
   // Clips under review that the game doesn't take (assets/anims/review/: cut, looked at, not chosen yet).
   // (A file in the list that has since gone, which a server running from before it went comes back as the page's HTML,
   // is left out with a warning, not the whole page: re-save this file to give the server a fresh list.)
