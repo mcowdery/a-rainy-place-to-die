@@ -640,7 +640,15 @@ const api = {
 void (async () => {
   const library = await animLibrary();
   // Clips under review that the game doesn't take (assets/anims/review/: cut, looked at, not chosen yet).
-  for (const url of Object.values(import.meta.glob('/assets/anims/review/*.glb', { eager: true, query: '?url', import: 'default' }) as Record<string, string>)) await library.addFile(url);
+  // (A file in the list that has since gone, which a server running from before it went comes back as the page's HTML,
+  // is left out with a warning, not the whole page: re-save this file to give the server a fresh list.)
+  for (const url of Object.values(import.meta.glob('/assets/anims/review/*.glb', { eager: true, query: '?url', import: 'default' }) as Record<string, string>)) {
+    try {
+      await library.addFile(url);
+    } catch (err) {
+      console.warn(`left out ${url}:`, err);
+    }
+  }
   // A take under review, not in the library: its file's clips join the list, and the first of them is shown.
   const extra = query.get('extra');
   if (extra) {
