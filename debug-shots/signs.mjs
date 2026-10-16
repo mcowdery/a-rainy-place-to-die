@@ -45,9 +45,7 @@ try {
       await page.screenshot({ path: `${out}/${name}.png` });
       console.log(name, `${r.x},${r.z}`, r.text);
     }
-    return;
-  }
-  if (which.startsWith('extras')) {
+  } else if (which.startsWith('extras')) {
     const only = which.split(':')[1]?.split(',');
     const ex = (await page.evaluate(() => window.__signs.extras())).map((e, i) => ({ ...e, i })).filter((e) => !only || only.includes(e.kind));
     const counts = {};
@@ -70,7 +68,7 @@ try {
     process.exitCode = 0;
   }
   let pick;
-  if (which.startsWith('extras')) pick = [];
+  if (which.startsWith('extras') || which === 'roofs') pick = [];
   else if (which === 'all') pick = list;
   else if (which.startsWith('sample')) {
     pick = [];
