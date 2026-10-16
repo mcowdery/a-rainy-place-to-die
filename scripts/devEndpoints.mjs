@@ -309,7 +309,36 @@ function review(server, req, res) {
 }
 
 /** The endpoints by path. A new one goes here. */
-export const ENDPOINTS = { '/__perf': perf, '/__shot': shot, '/__window': windowLab, '/__scene': scene, '/__anims': anims, '/__animcast': animCast, '/__review': review };
+// The fight page's cover and roll sliders (src/poc3d/fight/main.ts): the values the user has set, in scripts/cover-tuning.json (in git: it's what
+// the defaults are made from), so they aren't only in one browser's storage.
+//   GET  /__tune                 the saved values ({} if none)
+//   POST /__tune { ...values }   keeps them (numbers only, the names models/cover.ts `Tuning` has)
+function tune(server, req, res) {
+  const json = (code, body) => {
+    res.statusCode = code;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
+  const file = resolve(server.config.root, 'scripts', 'cover-tuning.json');
+  if (req.method === 'GET') return json(200, existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {});
+  if (req.method !== 'POST') return json(405, { error: 'GET or POST' });
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    try {
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      const keep = {};
+      for (const [k, v] of Object.entries(body)) if (/^[A-Za-z]{1,30}$/.test(k) && typeof v === 'number' && Number.isFinite(v)) keep[k] = Math.round(v * 1000) / 1000;
+      writeFileSync(file, `${JSON.stringify(keep, null, 2)}
+`);
+      json(200, keep);
+    } catch (err) {
+      json(400, { error: String(err) });
+    }
+  });
+}
+
+export const ENDPOINTS = { '/__perf': perf, '/__shot': shot, '/__window': windowLab, '/__scene': scene, '/__anims': anims, '/__animcast': animCast, '/__review': review, '/__tune': tune };
 
 // These endpoints write files, so a web page open in the same browser mustn't be able to drive them (a cross-site POST
 // to localhost, or a DNS-rebinding name that points at it). The game and the tools are on localhost; scripts send no

@@ -128,6 +128,21 @@ describe('Cover: Space by what is ahead', () => {
     expect(running.layers[0].time).toBeCloseTo(DEFAULT_TUNING.rollLeadRun, 1);
   });
 
+  it('a roll fades out over its last 0.3 s (it ends in a run: the way back to standing is slow), not snapping off', () => {
+    const c = new Cover([], table);
+    let f = c.update(input({ space: true }))!;
+    const weights: number[] = [f.layers[0].weight];
+    while (c.active) {
+      f = c.update(input({}))!;
+      weights.push(f.layers[0].weight);
+    }
+    expect(Math.max(...weights)).toBe(1);
+    // The last frames come down gradually: no step bigger than a fraction of the whole.
+    const steps = weights.slice(1).map((w, k) => Math.abs(w - weights[k]));
+    expect(Math.max(...steps)).toBeLessThan(0.15);
+    expect(weights.filter((w) => w < 1 && w > 0).length).toBeGreaterThan(8);
+  });
+
   it('standing, a roll goes the view’s way; with keys held, theirs', () => {
     const ahead = run(new Cover([], table), { x: 0, z: 0 }, 3, (t) => ({ space: t < DT }))!;
     expect(ahead.x).toBeGreaterThan(2);

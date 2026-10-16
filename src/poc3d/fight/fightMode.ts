@@ -162,6 +162,12 @@ export class FightMode extends FpMode {
   private readonly cover = new Cover([], clipTable);
   private spacePressed = false;
   private lastAct: ActionFrame | null = null;
+  /** An action has him, how long his hands stay free after one (`Tuning.recover`), and whether the gun is to be drawn again after: it goes
+   * away for the action, so it comes out as it does from the holster, and the weapon's pose waits, not snapping up the moment a roll ends
+   * (the user, 2026-10-16: "he transitions to his fighting stance way too quickly"). */
+  private acting = false;
+  private recover = 0;
+  private reArm = false;
 
   /** What's to be got right by feel (the roll's speed, run-in and distance: the panel's sliders). */
   get tuning(): Tuning {
@@ -188,11 +194,37 @@ export class FightMode extends FpMode {
     // (Not while he's down or a kill move has him, nor before the library's in: no clips, nothing to play.)
     if (this.held || !this.rig || !this.anims) {
       this.cover.cancel();
+      this.acting = false;
+      this.rearm();
       return null;
     }
     const k = this.keys;
     this.lastAct = this.cover.update({ dt, x, z, viewYaw: this.yaw, space, forward: k.has('KeyW'), back: k.has('KeyS'), left: k.has('KeyA'), right: k.has('KeyD'), run: k.has('ShiftLeft') || k.has('ShiftRight') });
-    return this.lastAct;
+    const act = this.lastAct;
+    if (act && !this.acting) {
+      this.acting = true;
+      this.recover = 0;
+      if (this.rig.armed) {
+        this.reArm = true;
+        this.rig.armed = false;
+        this.rig.aiming = false;
+      }
+    } else if (!act && this.acting) {
+      this.acting = false;
+      this.recover = this.tuning.recover;
+      if (this.recover <= 0) this.rearm();
+    } else if (!act && this.recover > 0) {
+      this.recover -= dt;
+      if (this.recover <= 0) this.rearm();
+    }
+    return act;
+  }
+
+  /** Hands back to the weapon: the gun is drawn again (its own draw), the melee pose is let back. */
+  private rearm(): void {
+    this.recover = 0;
+    if (this.reArm && this.rig) this.rig.armed = true;
+    this.reArm = false;
   }
 
   protected override paceOf(running: boolean): number {
@@ -422,7 +454,8 @@ export class FightMode extends FpMode {
   }
 
   protected override meleeNow(): Melee | null {
-    return this.hand !== 'gun' ? this.brawl.melee : null;
+    // (Hands free through an action and a moment after.)
+    return this.hand !== 'gun' && !this.acting && this.recover <= 0 ? this.brawl.melee : null;
   }
 
   protected override fight(dt: number, rig: FirstPersonRig): { dt: number; shake: number; cine: { pos: THREE.Vector3; look: THREE.Vector3 } | null } {

@@ -102,8 +102,10 @@ export interface Tuning {
   rollLeadRun: number;
   /** How far it goes, as a share of what the clip itself travels from where it starts. */
   rollDistance: number;
+  /** How long his hands stay free after an action before the weapon or the gun comes back (s): the page's (models/fight/fightMode.ts), not the controller's. */
+  recover: number;
 }
-export const DEFAULT_TUNING: Readonly<Tuning> = { rollSpeed: 1.35, rollLeadStill: 0.4, rollLeadRun: 0, rollDistance: 0.7 };
+export const DEFAULT_TUNING: Readonly<Tuning> = { rollSpeed: 1.35, rollLeadStill: 0.4, rollLeadRun: 0, rollDistance: 0.7, recover: 0.7 };
 export type ClipTable = Readonly<Record<string, ClipInfo>>;
 
 /** A clip over his pose, and how much of it. */
@@ -161,8 +163,9 @@ export const VAULT_TOP = 1.25;
 /** How far from the face the body stands in cover (m), how far ahead he looks for something, how far a roll goes. */
 export const STAND_OFF = 0.38;
 export const REACH = 2.2;
-/** A clip fades in and out over this long (s). */
+/** A clip fades in and out over this long (s), and a roll's out: it ends in a run, and the way back to standing is slower. */
 const FADE = 0.14;
+const ROLL_OUT = 0.3;
 
 const ease = (u: number): number => u * u * (3 - 2 * u);
 const clamp01 = (u: number): number => Math.max(0, Math.min(1, u));
@@ -327,7 +330,7 @@ export class Cover {
 
   private weights(): number {
     const fadeIn = this.state === 'enter' || this.state === 'vault' || this.state === 'roll' ? clamp01(this.t / FADE) : 1;
-    const fadeOut = this.state === 'exit' || this.state === 'vault' || this.state === 'roll' ? clamp01((this.dur - this.t) / FADE) : 1;
+    const fadeOut = this.state === 'exit' || this.state === 'vault' || this.state === 'roll' ? clamp01((this.dur - this.t) / (this.state === 'roll' ? ROLL_OUT : FADE)) : 1;
     return Math.min(fadeIn, fadeOut);
   }
 

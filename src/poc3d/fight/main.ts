@@ -153,13 +153,28 @@ try {
 } catch {
   /* no storage, or not ours */
 }
+let tuneSent = 0;
 const saveTune = (): void => {
   try {
     localStorage.setItem(TUNE_KEY, JSON.stringify(fp.tuning));
   } catch {
     /* no storage */
   }
+  // Also to the dev server's file (scripts/cover-tuning.json, through /__tune), a moment after the last move of a slider, so the values
+  // are somewhere that can be read and made the defaults.
+  window.clearTimeout(tuneSent);
+  tuneSent = window.setTimeout(() => void fetch('/__tune', { method: 'POST', body: JSON.stringify(fp.tuning) }).catch(() => undefined), 300);
 };
+// What's in that file is the truth where there's a dev server (the browser's storage is only this browser's): taken up when the page opens.
+void fetch('/__tune')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((saved: Partial<Tuning> | null) => {
+    if (saved && typeof saved === 'object' && Object.keys(saved).length) {
+      Object.assign(fp.tuning, saved);
+      renderPanel();
+    }
+  })
+  .catch(() => undefined);
 const enterFp = (): Promise<void> => fp.enter(0, 3, 0);
 (window as unknown as { __fp: unknown }).__fp = fp.script();
 // For scripted shots that add to the scene (a wall of their own).
@@ -301,6 +316,7 @@ function renderPanel(): void {
   slider('skip, standing', 'rollLeadStill', 0, 0.6, 0.02, ' s');
   slider('skip, running', 'rollLeadRun', 0, 0.6, 0.02, ' s');
   slider('distance', 'rollDistance', 0.3, 1.2, 0.05, '×');
+  slider('hands free after', 'recover', 0, 1.5, 0.05, ' s');
   button('reset the roll', false, () => {
     Object.assign(fp.tuning, DEFAULT_TUNING);
     saveTune();
