@@ -111,5 +111,5 @@ describe('weather on the road', () => {
     expect(snow.s).toBeGreaterThan(3200);
     expect(snow.walls).toBeLessThanOrEqual(3);
     expect(snow.t).toBeGreaterThan(dry.t * 1.08);
-  });
+  }, 30_000); // (two whole laps simulated: 5 to 7 s, over Vitest's 5 s default on a busy machine and on CI)
 });
