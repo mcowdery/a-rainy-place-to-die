@@ -1357,6 +1357,9 @@ const surface = /* glsl */ `
       sEmit = vColor.rgb * (ch > 3.5 ? 0.42 : uLamps * 0.3);
     } else {
       float gain = ch < 0.5 ? 1.6 : ch < 1.5 ? uLamps * 6.0 : uNeon * 3.5 * flick(vBid);
+      // Neon tubes of a dimmer colour by luminance (red, violet, pink) are lifted to the luminance of the brighter ones (up to
+      // twice), or they fell under the bloom's threshold and didn't glow like them.
+      if (ch > 1.5 && ch < 2.5) gain *= clamp(0.62 / max(dot(vColor.rgb, vec3(0.299, 0.587, 0.114)), 0.05), 1.0, 2.0);
       // Chasing bulbs (aStyle.y, the bulb's place in the chase; 0 for everything else): a band of them lit, stepping on.
       if (vStyle.y > 0.0) gain *= 0.15 + 0.85 * step(fract(uTime * 1.6 - vStyle.y), 0.34);
       // A shop's own lights (a sign's bulbs, a tower's name: aStyle.z, its hours class + 1, real/hours.ts) go out when it closes.

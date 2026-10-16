@@ -6,7 +6,8 @@ import { frontSpan, type Building3, type Sign3, type SignLook } from '../distric
 import { styleFor, frontFrame, tierFront, tiers } from './buildings';
 import type { CityUniforms } from './city';
 import { EM, glyph, textAdvance } from './letters';
-import { HOURS, HOURS_GLSL, withHours } from './hours';
+import { HOURS, HOURS_GLSL, hoursOf, withHours } from './hours';
+import { roofSign } from './roofSigns';
 import type { Light } from './lightmap';
 import { EMIT, KIND, lin, scale3, type MeshBuilder } from './meshBuilder';
 import { ALWAYS_SEEN, type Sightline } from './sightline';
@@ -22,9 +23,6 @@ import { sphereOf, toGeometry, type RawGeometry } from './rawGeometry';
 
 type C3 = [number, number, number];
 
-/** Rooftop billboard words (invented names only). */
-const ROOF_WORDS = ['KABURO', 'HOTEL', 'SAUNA', 'CABARET', 'PARADISE', 'NEON', 'CLUB', 'LIVE', '大吉', '夢', '銀河', '酒', 'ゲーム', 'カラオケ', 'ホテル'];
-const NEON = [0xff5fc8, 0x4fe3ff, 0xffe45f, 0x6bff8a, 0xff4f4f, 0xb48cff];
 
 /** Atlas pixels per metre of sign face (text 64 px = 0.72 m tall). */
 const PX_PER_M = 32 / 0.36;
@@ -391,7 +389,10 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
           if (vSign.y > 3.1) totalEmissiveRadiance += vInk * 0.35 * on;
         } else if (vSign.y < 0.5) {
           diffuseColor.rgb = mix(vPlate, vInk * 0.6, st.r);
-          totalEmissiveRadiance += vInk * (st.r * 3.0 + st.g * 0.35) * on;
+          // Red, violet and pink tubes are dimmer by luminance than cyan, gold or green, and fell under the bloom's threshold:
+          // lifted to the same luminance (up to twice), they glow alike.
+          float inkLum = dot(vInk, vec3(0.299, 0.587, 0.114));
+          totalEmissiveRadiance += vInk * clamp(0.62 / max(inkLum, 0.05), 1.0, 2.0) * (st.r * 3.0 + st.g * 0.35) * on;
         } else if (vSign.y > 1.5) {
           // Print (vinyl wraps, stickers): lit by the scene, no glow; a shop's painted board (2.25) has a little lamp over it.
           diffuseColor.rgb = mix(vPlate, vInk, st.r);
@@ -403,7 +404,7 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
           totalEmissiveRadiance += mix(vPlate * 0.9, vInk * inkGlow, st.r) * on;
         }`);
   };
-  m.customProgramCacheKey = () => 'signs-v9';
+  m.customProgramCacheKey = () => 'signs-v10';
   return m;
 }
 
@@ -709,17 +710,18 @@ export function hasRooftopLetters(b: Building3, seen: Sightline = ALWAYS_SEEN): 
 /** Rooftop billboard: big channel letters on a steel frame near the front edge of some taller buildings. */
 function rooftopBillboard(mb: MeshBuilder, b: Building3, seen: Sightline): void {
   if (!hasRooftopLetters(b, seen)) return;
-  const rnd = rng(hash(b.id, 0xb111));
-  rnd.chance(roofChance(b));
   const ts = tiers(b);
   const tt = ts[ts.length - 1];
   const top = tt[3] + styleFor(b).parapet;
   const f = frontFrame(b);
   const tf = tierFront(b, tt);
   const inset = tf.inset + 1.2;
-  // (A word another year hadn't is that year's own: a カラオケ on the roof in 1964 is a スナック. district/era.ts.)
-  const word = eraSign(rnd.pick(ROOF_WORDS));
-  const color = lin(rnd.pick(NEON));
+  // What the building is, named (roofSigns.ts); a word another year hadn't is that year's own: a カラオケ on the roof in 1964
+  // is a スナック. district/era.ts.
+  const st = styleFor(b);
+  const roof = roofSign(b.id, b.x, b.z, st.trade, b.sign?.name ?? null);
+  const word = eraSign(roof.text);
+  const color = lin(roof.color);
   // On the top tier's face, clear of a corner cut when the top is the cut tier.
   const [s0, s1] = ts.length === 1 ? frontSpan(b) : [0, f.fw];
   const fwTop = ts.length === 1 ? s1 - s0 : tf.fw;
@@ -736,5 +738,6 @@ function rooftopBillboard(mb: MeshBuilder, b: Building3, seen: Sightline): void 
   mb.frameBox(centre, f.r, f.n, -width / 2, width / 2, base - 0.25, base - 0.05, -0.35, -0.15);
   mb.frameBox(centre, f.r, f.n, -width / 2, width / 2, base + EM * s * 0.55, base + EM * s * 0.55 + 0.15, -0.35, -0.15);
   for (let u = -width / 2; u <= width / 2 + 0.01; u += Math.max(1.5, width / 4)) mb.frameBox(centre, f.r, f.n, u - 0.07, u + 0.07, top - 0.9, base + EM * s * 0.6, -0.35, -0.2);
-  channelLetters(mb, word, centre, f.r, f.n, base + (EM * s) / 2, EM * s, fwTop * 0.9, color, b.id, -0.1);
+  // (Lit while its building's trade is open: hours.ts.)
+  channelLetters(mb, word, centre, f.r, f.n, base + (EM * s) / 2, EM * s, fwTop * 0.9, color, b.id, -0.1, hoursOf(st.trade));
 }

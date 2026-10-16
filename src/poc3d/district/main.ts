@@ -45,7 +45,10 @@ import { PagerUI } from '../../phone/pagerUi';
 import { PhoneUI } from '../../phone/ui';
 import { WallpaperApp } from '../../phone/wallpaperApp';
 import { FirstPerson } from '../controls';
-import { frontFrame } from '../real/buildings';
+import { frontFrame, styleFor } from '../real/buildings';
+import { sightline } from '../real/sightline';
+import { roofSign } from '../real/roofSigns';
+import { hasRooftopLetters } from '../real/signs';
 import { cityDepthMaterial, cityMaterial, cityUniforms, windowHours } from '../real/city';
 import { setSceneCity, windowSceneIndex } from '../real/windowScenes';
 import { Lightmap } from '../real/lightmap';
@@ -140,7 +143,7 @@ import { SKY_AZ, SKY_EL, SkyModel, type SkyStats } from '../real/skyModel';
 import type { Atmosphere3 } from './atmosphere';
 import { loadDistrictContent } from './content';
 import { cityFromUrl, setTreeSet } from './cityConfig';
-import { era, eraFromUrl, eraSignWords, setEra } from './era';
+import { era, eraFromUrl, eraSign, eraSignWords, setEra } from './era';
 import { EraCard } from './eraCard';
 import { deadAt } from './peopleHours';
 import { setWorkLiveries } from '../models/vehicles';
@@ -769,6 +772,15 @@ async function run(): Promise<void> {
           return { kind: e.kind, x: e.f.p[0] + e.f.r[0] * u, z: e.f.p[2] + e.f.r[2] * u, nx: e.f.n[0], nz: e.f.n[2], y, district: district.plan(mx, my)?.kind ?? '' };
         }),
       );
+    const roofList = (): { text: string; x: number; z: number; nx: number; nz: number; h: number; district: string }[] =>
+      district.model.cells.flatMap(([mx, my]) => {
+        const around = [-1, 0, 1].flatMap((dy) => [-1, 0, 1].flatMap((dx) => district.model.buildings(mx + dx, my + dy)));
+        const seen = sightline(around);
+        return (district.plan(mx, my)?.buildings ?? []).filter((b) => hasRooftopLetters(b, seen)).map((b) => {
+          const f = frontFrame(b);
+          return { text: eraSign(roofSign(b.id, b.x, b.z, styleFor(b).trade, b.sign?.name ?? null).text), x: b.x, z: b.z, nx: f.n[0], nz: f.n[2], h: b.h, district: district.plan(mx, my)?.kind ?? '' };
+        });
+      });
     const signList = (): (Sign3 & { kind: string })[] => district.model.cells.flatMap(([mx, my]) => district.model.signs(mx, my).map((s) => ({ ...s, kind: district.plan(mx, my)?.kind ?? '' })));
     (window as unknown as { __signs: unknown }).__signs = {
       all: () => signList().map((s) => ({ form: s.vertical ? 'blade' : s.look === 'channel' ? 'channel' : 'fascia', look: s.look ?? '', text: s.text, x: Math.round(s.x), z: Math.round(s.z), district: s.kind })),
@@ -783,6 +795,20 @@ async function run(): Promise<void> {
         camera.position.set(x, g + 1.6, z);
         controls.setLevel(g);
         controls.setView((Math.atan2(s.x - x, s.z - z) * 180) / Math.PI + 180, (Math.atan2(ty - 1.6, Math.hypot(s.x - x, s.z - z)) * 180) / Math.PI);
+        return true;
+      },
+      // The rooftop signs (real/roofSigns.ts: what each says): `roofs()` lists them, `goRoof(i)` stands the camera in the street across from one.
+      roofs: () => roofList().map((r) => ({ text: r.text, x: Math.round(r.x), z: Math.round(r.z), district: r.district })),
+      goRoof: (i: number): boolean => {
+        const r = roofList()[i];
+        if (!r) return false;
+        const far = Math.max(30, r.h * 1.3);
+        const x = r.x + r.nx * far;
+        const z = r.z + r.nz * far;
+        const g = groundAt(x, z);
+        camera.position.set(x, g + 1.6, z);
+        controls.setLevel(g);
+        controls.setView((Math.atan2(r.x - x, r.z - z) * 180) / Math.PI + 180, (Math.atan2(r.h + 2 - 1.6, far) * 180) / Math.PI);
         return true;
       },
       // The other kinds (real/signKinds.ts): `extras()` lists them, `goExtra(i)` stands the camera across the street from one.
