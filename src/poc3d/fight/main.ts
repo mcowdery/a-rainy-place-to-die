@@ -314,8 +314,18 @@ const snap = installSnap(renderer.domElement, 'fight', () => ({
 }));
 
 const clock = new THREE.Clock();
+/** The last sixty frames' times (ms, as the clock saw them, before the step is capped): the HUD's last line says how smooth it is. */
+const frames: number[] = [];
+const frameLine = (): string => {
+  if (frames.length < 10) return '';
+  const mean = frames.reduce((a, b) => a + b, 0) / frames.length;
+  return `\nframe ${mean.toFixed(1)} ms (${Math.round(1000 / mean)} fps), worst ${Math.max(...frames).toFixed(0)} ms · ${window.innerWidth}x${window.innerHeight} at ${Math.round(renderScale * 100)}%`;
+};
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.1);
+  const raw = clock.getDelta();
+  frames.push(raw * 1000);
+  if (frames.length > 60) frames.shift();
+  const dt = Math.min(raw, 0.1);
   wasActive = fp.active;
   if (fp.active) fp.update(dt);
   else controls.update();
@@ -327,7 +337,8 @@ renderer.setAnimationLoop(() => {
     panelShown = panelState();
     renderPanel();
   }
-  $('hud').textContent = fp.active
-    ? fp.hud()
-    : `FIGHT TEST · orbiting, the fight paused · ${mode} lighting\nleft-drag orbit · right-drag pan · wheel zoom · V back into first person`;
+  $('hud').textContent =
+    (fp.active
+      ? fp.hud()
+      : `FIGHT TEST · orbiting, the fight paused · ${mode} lighting\nleft-drag orbit · right-drag pan · wheel zoom · V back into first person`) + frameLine();
 });
