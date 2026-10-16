@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { loadCharacterModel } from './characters';
+import type { GunCtx } from './gunmanBrain';
 import { collapse, cutPart } from './dismember';
 import { buildKatana, type Katana } from './katana';
 import { FIST_BLOCK, FIST_GUARD, lerpHand, lerpSword, Melee, MOVES, partFactor, swordQuat, type Capsule, type HandKey, type Hitter, type HitInfo, type MeleeTarget, type MeleeWeapon, type MoveId, type SwordKey } from './melee';
@@ -61,6 +62,15 @@ const NO_SHEATH: SwordKey = { p: new THREE.Vector3(), dir: new THREE.Vector3(0, 
 
 export type ThugState = 'fight' | 'stagger' | 'floored' | 'getup' | 'broken' | 'dead' | 'scripted';
 export type Tier = 'mook' | 'elite';
+/** A brawler comes at you with his fists; a gunman keeps to cover and shoots (models/gunman.ts). */
+export type Role = 'brawler' | 'gunman';
+/** What takes a fighter's place at the head of him: a gunman's (models/gunman.ts). Run each frame he's on his feet and fighting; `reset` when he's back on them after a fall or a stagger. */
+export interface ThugBrain {
+  step(self: Thug, dt: number, f: FightCtx): void;
+  reset(): void;
+  /** The cover he's at or going to, for the other gunmen to keep off. */
+  readonly at?: { x: number; z: number } | null;
+}
 /** A man's guard: his left, his right, or high. */
 export type GuardSide = 'left' | 'right' | 'high';
 /** Where a blow comes at the one it's aimed at: his left, his right, high, or straight in. */
@@ -76,6 +86,8 @@ export interface ThugOpts {
   readonly name?: string;
   /** Drawn bigger than the model was built (the dead hours' giant): his reach and his moves grow with him. */
   readonly scale?: number;
+  /** A brawler (the default) or a gunman. */
+  readonly role?: Role;
 }
 
 /** An elite's numbers: health, posture, his moves' pace and tell, his ranges, how often he reads your swing and
@@ -150,6 +162,8 @@ export interface FightCtx {
   readonly youYaw: number;
   readonly others: readonly Thug[];
   readonly floorAt: (x: number, z: number) => number;
+  /** What the gunmen need of the world (obstacles, you, the others' cover, a way to shoot or throw): set when the page has any. */
+  readonly gun?: GunCtx | null;
   /** Whether he may start a blow now (the page spaces them a little), and telling it he has. */
   mayAttack(): boolean;
   attacked(): void;
@@ -233,6 +247,10 @@ export class Thug implements MeleeTarget {
   private readonly cuts: THREE.Object3D[] = [];
   private readonly scaled: THREE.Bone[] = [];
   readonly tier: Tier;
+  readonly role: Role;
+  /** A gunman's head, in place of the brawler's (set by models/gunman.ts); null for a brawler. */
+  brain: ThugBrain | null = null;
+  private brainOn = false;
   readonly weapon: ThugWeapon;
   readonly name: string;
   readonly maxHealth: number;
@@ -284,6 +302,7 @@ export class Thug implements MeleeTarget {
     this.headY = this.bone('head').getWorldPosition(new THREE.Vector3()).y;
     this.size = this.headY / 1.72;
     this.tier = opts.tier ?? 'mook';
+    this.role = opts.role ?? 'brawler';
     this.weapon = opts.weapon ?? 'fists';
     this.name = opts.name ?? (this.tier === 'elite' ? 'swordsman' : 'thug');
     this.maxHealth = this.tier === 'elite' ? ELITE.health : HEALTH;
@@ -684,6 +703,18 @@ export class Thug implements MeleeTarget {
     if (this.state === 'stagger') {
       this.staggerT -= dt;
       if (this.staggerT <= 0) this.state = 'fight';
+    }
+    // A gunman's own head takes over from here on his feet (it poses him too); knocked about, he's the brawlers' fall and getting up, and starts over after.
+    if (this.brain) {
+      if (this.state === 'fight') {
+        if (!this.brainOn) {
+          this.brainOn = true;
+          this.brain.reset();
+        }
+        this.brain.step(this, dt, f);
+        return ev;
+      }
+      this.brainOn = false;
     }
     let step = new THREE.Vector3();
     if (this.state === 'fight') {

@@ -85,6 +85,37 @@ export function rayObstacles(obstacles: readonly Obstacle[], ox: number, oz: num
   return best;
 }
 
+/**
+ * How far along a ray (a bullet's) the first obstacle that's tall enough where it passes is met, or null: from `o` along the unit `d`, up to
+ * `max`. A ray over a low wall goes on; one into a wall, or low enough to go through one, stops. The heights make cover work both ways: a gunman
+ * behind a crate is safe from a shot at his chest and exposed when he stands up to fire.
+ */
+export function rayBlockedAt(obstacles: readonly Obstacle[], o: { x: number; y: number; z: number }, d: { x: number; y: number; z: number }, max: number): number | null {
+  const h = Math.hypot(d.x, d.z);
+  let best: number | null = null;
+  for (const b of obstacles) {
+    // The ray's stretch inside the box's footprint (slab test, along the ray's own length).
+    let t0 = 0;
+    let t1 = max;
+    let ok = true;
+    for (const [p, v, lo, hi] of [[o.x, d.x, b.x0, b.x1], [o.z, d.z, b.z0, b.z1]] as const) {
+      if (Math.abs(v) < 1e-9) {
+        if (p < lo || p > hi) ok = false;
+        continue;
+      }
+      let a = (lo - p) / v;
+      let c = (hi - p) / v;
+      if (a > c) [a, c] = [c, a];
+      t0 = Math.max(t0, a);
+      t1 = Math.min(t1, c);
+    }
+    if (!ok || t0 > t1 || h < 1e-9) continue;
+    // It's stopped if it's below the top somewhere in there (the lower of its two ends: it's a straight line).
+    if (Math.min(o.y + d.y * t0, o.y + d.y * t1) < b.h && Math.max(o.y + d.y * t0, o.y + d.y * t1) > 0 && (best === null || t0 < best)) best = t0;
+  }
+  return best;
+}
+
 /** Whether a circle of radius r at (x, z) is inside any obstacle (to walk, and to land on). */
 export function blockedBy(obstacles: readonly Obstacle[], x: number, z: number, r: number): boolean {
   return obstacles.some((o) => x > o.x0 - r && x < o.x1 + r && z > o.z0 - r && z < o.z1 + r);

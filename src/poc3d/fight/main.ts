@@ -280,6 +280,7 @@ function renderPanel(): void {
   section('Against');
   for (const n of [1, 2, 4, 6]) button(n === 1 ? 'one man' : `${n}${n === 4 ? ' (T)' : ''}`, false, () => inFight(() => fp.spawn(n)));
   button('a duel (B)', false, () => inFight(() => fp.duel()));
+  button('2 + 2 gunmen (5)', false, () => inFight(() => fp.spawnMixed(2, 2)));
   button('nobody', false, () => inFight(() => fp.spawn(0)));
   section('Gore (Y)');
   for (const g of GORE_LEVELS) button(g, b.gore.level === g, () => fp.setGore(g));
