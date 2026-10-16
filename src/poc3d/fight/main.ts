@@ -14,7 +14,7 @@ import { installSnap } from '../../debug/snap';
 import { GORE_LEVELS, STANCES } from '../models/melee';
 import { FightMode, KILL_CHANCES, type Hand } from './fightMode';
 import { buildWeaponRack } from './weaponRack';
-import type { Obstacle } from '../models/cover';
+import { DEFAULT_TUNING, type Obstacle, type Tuning } from '../models/cover';
 
 /**
  * The fight test (fight.html): a yard for trying the melee (models/brawl.ts) as Mack in first person, apart from
@@ -146,6 +146,20 @@ scene.add(weaponRack);
 // Mack in first person, in the yard facing its north wall.
 const fp = new FightMode(scene, camera, renderer.domElement, controls, charEnv, () => 0);
 fp.setObstacles(OBSTACLES);
+// The roll's feel, kept between visits (the panel's sliders: models/cover.ts `Tuning`).
+const TUNE_KEY = 'rainyplace.coverTune';
+try {
+  Object.assign(fp.tuning, JSON.parse(localStorage.getItem(TUNE_KEY) ?? '{}'));
+} catch {
+  /* no storage, or not ours */
+}
+const saveTune = (): void => {
+  try {
+    localStorage.setItem(TUNE_KEY, JSON.stringify(fp.tuning));
+  } catch {
+    /* no storage */
+  }
+};
 const enterFp = (): Promise<void> => fp.enter(0, 3, 0);
 (window as unknown as { __fp: unknown }).__fp = fp.script();
 // For scripted shots that add to the scene (a wall of their own).
@@ -259,6 +273,39 @@ function renderPanel(): void {
     section('Kill-move chance (U)');
     for (const k of KILL_CHANCES) button(`${Math.round(k * 100)}%`, Math.abs(b.killChance - k) < 1e-3, () => (b.killChance = k));
   }
+  section('Roll (Esc frees the mouse for these)');
+  // (The sliders change nothing the panel redraws on, so a drag isn't cut off by a redraw.)
+  const slider = (label: string, key: keyof Tuning, min: number, max: number, step: number, unit: string): void => {
+    // (The name and its value on a line, the slider under it: the panel is narrow.)
+    const wrap = document.createElement('label');
+    Object.assign(wrap.style, { display: 'flex', flexWrap: 'wrap', alignItems: 'center', flex: '1 1 100%', margin: '2px 0 4px' });
+    const name = document.createElement('span');
+    name.textContent = label;
+    name.style.flex = '1';
+    const val = document.createElement('span');
+    val.style.color = '#ffb0e0';
+    const input = document.createElement('input');
+    Object.assign(input, { type: 'range', min: String(min), max: String(max), step: String(step), value: String(fp.tuning[key]) });
+    input.style.flex = '1 1 100%';
+    const show = (): void => void (val.textContent = `${fp.tuning[key].toFixed(2)}${unit}`);
+    show();
+    input.oninput = () => {
+      fp.tuning[key] = Number(input.value);
+      show();
+      saveTune();
+    };
+    wrap.append(name, val, input);
+    row.appendChild(wrap);
+  };
+  slider('speed', 'rollSpeed', 0.6, 2.5, 0.05, '×');
+  slider('skip, standing', 'rollLeadStill', 0, 0.6, 0.02, ' s');
+  slider('skip, running', 'rollLeadRun', 0, 0.6, 0.02, ' s');
+  slider('distance', 'rollDistance', 0.3, 1.2, 0.05, '×');
+  button('reset the roll', false, () => {
+    Object.assign(fp.tuning, DEFAULT_TUNING);
+    saveTune();
+    renderPanel();
+  });
   section('Lighting');
   for (const m of MODES) button(m, mode === m, () => applyMode(m));
   section('Resolution (less is smoother)');

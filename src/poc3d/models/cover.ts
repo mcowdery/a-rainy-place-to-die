@@ -11,9 +11,10 @@
  *   with A and D (the camera's sides), and Space again steps out;
  * - something low (0.55 to 1.45 m): **down behind it**, sidling crouched; W with Space from there goes **over** it, and so
  *   does Space with W held, or running, at it from further off, if it's no higher than 1.25 m (one hand planted);
- * - nothing there: a **roll** the way he's running (Shift and a direction), and only then: the dive from a stand didn't look
- *   right (the user, 2026-10-16: "removed the roll from a still position... It doesn't look good"), so standing or walking, Space in
- *   the open does nothing.
+ * - nothing there: a **roll** the way the keys go (the view's way standing still), Mixamo's sprint-to-roll from a stand as well as
+ *   from a run (the user, 2026-10-16: the dive roll from a stand "doesn't look good"; "fill in the vacancy with the shift roll animation and
+ *   also make that animation faster"). The clip has a run-in before the roll itself (half its travel in its first half second), so from a
+ *   stand some of it is skipped, and the body is moved by the clip's own travel curve; how fast, how much to skip and how far are `Tuning`.
  *
  * The Mixamo clips are authored with the wall along their +z (the way a clip's rest pose faces): the entry steps toward it
  * and turns, the exit steps away from it, the sneaks go along x. So the body's heading is set to point +z at the wall
@@ -88,7 +89,21 @@ export interface ClipInfo {
   /** Where the hips went over the clip, in the clip's frame (x to his left, z the way the rest pose faces), metres. */
   readonly travel: readonly number[];
   readonly seconds: number;
+  /** The share of that travel done at 13 evenly spaced moments of the clip (0 to 1), where it moved at all. */
+  readonly path?: readonly number[];
 }
+
+/** What's to be got right by feel (the fight page's sliders), the roll's. */
+export interface Tuning {
+  /** How fast the roll plays, times the clip's own pace. */
+  rollSpeed: number;
+  /** How much of the clip's run-in is skipped, starting from a stand and from a run (s). */
+  rollLeadStill: number;
+  rollLeadRun: number;
+  /** How far it goes, as a share of what the clip itself travels from where it starts. */
+  rollDistance: number;
+}
+export const DEFAULT_TUNING: Readonly<Tuning> = { rollSpeed: 1.35, rollLeadStill: 0.4, rollLeadRun: 0, rollDistance: 0.7 };
 export type ClipTable = Readonly<Record<string, ClipInfo>>;
 
 /** A clip over his pose, and how much of it. */
@@ -146,7 +161,6 @@ export const VAULT_TOP = 1.25;
 /** How far from the face the body stands in cover (m), how far ahead he looks for something, how far a roll goes. */
 export const STAND_OFF = 0.38;
 export const REACH = 2.2;
-export const ROLL = 3.2;
 /** A clip fades in and out over this long (s). */
 const FADE = 0.14;
 
@@ -169,8 +183,12 @@ export class Cover {
   private sidleClip = '';
   private since = 99;
   private vaultN = 0;
-  /** The clip a vault or a roll plays, and how much of it. */
-  private play = 1;
+  /** A roll's start in its clip (s), how fast it plays and the share of the clip's travel done by its start. */
+  private rollLead = 0;
+  private rollSpeed = 1;
+  private rollShare0 = 0;
+  /** The things to get right by feel: the page's sliders set these. */
+  tuning: Tuning = { ...DEFAULT_TUNING };
 
   constructor(
     private obstacles: readonly Obstacle[],
@@ -199,6 +217,17 @@ export class Cover {
 
   private len(name: string): number {
     return this.table[name]?.seconds ?? 1;
+  }
+
+  /** The share (0 to 1) of a clip's travel done `at` seconds in, by its own curve (evenly if it has none). */
+  private share(name: string, at: number): number {
+    const info = this.table[name];
+    const u = clamp01(at / (info?.seconds || 1));
+    const path = info?.path;
+    if (!path || path.length < 2) return u;
+    const x = u * (path.length - 1);
+    const i = Math.min(path.length - 2, Math.floor(x));
+    return path[i] + (path[i + 1] - path[i]) * (x - i);
   }
 
   private travel(name: string): readonly number[] {
@@ -277,13 +306,22 @@ export class Cover {
       dx /= m;
       dz /= m;
     }
-    if (!(i.run && (f || r))) return false;
-    const wall = rayObstacles(this.obstacles, i.x, i.z, dx, dz, ROLL + 0.5);
-    const room = Math.min(ROLL, wall ? wall.dist - 0.5 : ROLL);
-    if (room < 0.9) return false;
+    // Standing, walking or running: the clip's run-in is skipped by `tuning`'s lead (more from a stand, where a sprint's first strides are
+    // out of place), and it goes `rollDistance` of what the clip travels from there, less if a wall is in the way.
     const clip = CLIPS.rollRun;
-    this.play = this.len(clip);
-    this.begin('roll', clip, here, { x: i.x + dx * room, z: i.z + dz * room }, heading(dx, dz), false, this.play);
+    const t = this.tuning;
+    const len = this.len(clip);
+    const lead = Math.max(0, Math.min(len - 0.3, i.run && (f || r) ? t.rollLeadRun : t.rollLeadStill));
+    const share0 = this.share(clip, lead);
+    const net = Math.hypot(...(this.travel(clip) as [number, number]));
+    const want = net * (1 - share0) * t.rollDistance;
+    const wall = rayObstacles(this.obstacles, i.x, i.z, dx, dz, want + 0.5);
+    const room = Math.min(want, wall ? wall.dist - 0.5 : want);
+    if (room < 0.9) return false;
+    this.rollLead = lead;
+    this.rollSpeed = Math.max(0.3, t.rollSpeed);
+    this.rollShare0 = share0;
+    this.begin('roll', clip, here, { x: i.x + dx * room, z: i.z + dz * room }, heading(dx, dz), false, (len - lead) / this.rollSpeed);
     return true;
   }
 
@@ -302,10 +340,12 @@ export class Cover {
       const [tx = 0, tz = 0] = this.travel(this.clip);
       pos = this.frame(this.from, this.head, tx * ease(u), tz * ease(u));
     } else {
-      const k = s === 'roll' ? 1 - (1 - u) * (1 - u) : ease(u);
+      // A roll goes by the clip's own travel curve (its run-in fast, the roll itself slow), so the body moves as the pose does.
+      const k = s === 'roll' ? clamp01((this.share(this.clip, this.rollLead + this.t * this.rollSpeed) - this.rollShare0) / Math.max(1e-6, 1 - this.rollShare0)) : ease(u);
       pos = { x: this.from.x + (this.to.x - this.from.x) * k, z: this.from.z + (this.to.z - this.from.z) * k };
     }
-    const frame: ActionFrame = { ...pos, heading: this.head, layers: [{ name: this.clip, time: Math.min(this.t, this.len(this.clip)), weight: this.weights() }], state: s, crouched: this.low && s !== 'exit' };
+    const at = s === 'roll' ? this.rollLead + this.t * this.rollSpeed : this.t;
+    const frame: ActionFrame = { ...pos, heading: this.head, layers: [{ name: this.clip, time: Math.min(at, this.len(this.clip)), weight: this.weights() }], state: s, crouched: this.low && s !== 'exit' };
     if (this.t >= this.dur) {
       if (s === 'enter') {
         this.state = 'hold';

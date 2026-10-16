@@ -93,7 +93,17 @@ async function write(group, file) {
       if (k && Math.abs(a - yaw[k - 1]) > 180) a += a < yaw[k - 1] ? 360 : -360;
       yaw.push(Math.round(a));
     }
-    anim.setExtras({ travel: [+dx.toFixed(3), +dz.toFixed(3)], seconds: +(n / rate).toFixed(3), yaw });
+    // (And how the travel is spread over the clip: the share of it done at thirteen evenly spaced frames, along the way it went in
+    // the end, for whatever moves the body to match: a roll's run-in covers half of it before the roll itself.)
+    const net = Math.hypot(dx, dz);
+    const path = [];
+    if (net > 0.05) {
+      for (let k = 0; k < 13; k++) {
+        const i = Math.round((k * (n - 1)) / 12);
+        path.push(+((((c.hips[i][0] - c.hips[0][0]) * dx + (c.hips[i][2] - c.hips[0][2]) * dz) / (net * net))).toFixed(3));
+      }
+    }
+    anim.setExtras({ travel: [+dx.toFixed(3), +dz.toFixed(3)], seconds: +(n / rate).toFixed(3), yaw, path });
     const hips = c.hips.map((p, i) => [p[0] - c.hips[0][0] - (dx * i) / Math.max(1, n - 1), p[1], p[2] - c.hips[0][2] - (dz * i) / Math.max(1, n - 1)]);
     add(nodes.get('pelvis'), 'translation', doc.createAccessor().setType('VEC3').setArray(Float32Array.from(hips.flat())).setBuffer(buffer));
     const world = Object.fromEntries(ORDER.map((b) => [b, c.turns[b].map((q) => new THREE.Quaternion(...q))]));

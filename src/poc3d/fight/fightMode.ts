@@ -8,7 +8,7 @@ import { attacksOf, clipAttacksOf, GORE_LEVELS, saveGore, STANCES, ZONES, type D
 import type { Thug } from '../models/thug';
 import { FpMode } from '../showroom/fpMode';
 import clipTable from '../../../assets/anims/mixamo_picked.json';
-import { blockedBy, Cover, type ActionFrame, type Obstacle } from '../models/cover';
+import { blockedBy, Cover, type ActionFrame, type Obstacle, type Tuning } from '../models/cover';
 
 /**
  * The fight page's first person (fight.html): the showroom's (showroom/fpMode.ts: Mack's body, his guns, the
@@ -162,6 +162,11 @@ export class FightMode extends FpMode {
   private readonly cover = new Cover([], clipTable);
   private spacePressed = false;
   private lastAct: ActionFrame | null = null;
+
+  /** What's to be got right by feel (the roll's speed, run-in and distance: the panel's sliders). */
+  get tuning(): Tuning {
+    return this.cover.tuning;
+  }
 
   /** The yard's solid things: walked round, hidden behind, vaulted. */
   setObstacles(list: readonly Obstacle[]): void {
@@ -508,7 +513,7 @@ export class FightMode extends FpMode {
       'sidestep: tap left or right twice (the arrows, or A / D) · E dodges too',
       'T fresh group · B a duel',
       this.brawl.killMoves ? 'Y gore · U kill-move chance' : 'Y gore',
-      'WASD move (Shift runs) · Space: against a wall or behind something low, cover (A / D along it, Space again out); W + Space over something low; running (Shift + a direction), a roll',
+      'WASD move (Shift runs) · Space: against a wall or behind something low, cover (A / D along it, Space again out); W + Space over something low; in the open, a roll (the way you hold, or ahead; sliders in the panel)',
       'Q third person (wheel zooms; the camera goes round him, he strikes the way he faces)',
       'F9 a snapshot for a report',
       'V orbit the yard',

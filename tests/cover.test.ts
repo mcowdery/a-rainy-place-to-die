@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import table from '../assets/anims/mixamo_picked.json';
-import { blockedBy, CLIPS, Cover, HIGH, rayObstacles, STAND_OFF, type ActionFrame, type CoverInput, type Obstacle } from '../src/poc3d/models/cover';
+import { blockedBy, CLIPS, Cover, DEFAULT_TUNING, HIGH, rayObstacles, STAND_OFF, type ActionFrame, type CoverInput, type Obstacle } from '../src/poc3d/models/cover';
 
 const DT = 1 / 60;
 /** The camera yaw that looks along +x. */
@@ -115,12 +115,55 @@ describe('Cover: Space by what is ahead', () => {
     expect(c.update(input({ space: true, forward: true }))!.state).toBe('enter');
   });
 
-  it('nothing ahead: a roll only when running (Shift and a direction); standing or walking, Space does nothing', () => {
-    expect(new Cover([], table).update(input({ space: true }))).toBeNull();
-    expect(new Cover([], table).update(input({ space: true, forward: true }))).toBeNull();
-    expect(new Cover([], table).update(input({ space: true, run: true }))).toBeNull();
-    const d = new Cover([], table);
-    expect(d.update(input({ space: true, forward: true, run: true }))!.layers[0].name).toBe(CLIPS.rollRun);
+  it('nothing ahead: Mixamo’s sprint-to-roll, standing, walking or running, the run-in skipped more from a stand', () => {
+    const still = new Cover([], table).update(input({ space: true }))!;
+    expect(still.state).toBe('roll');
+    expect(still.layers[0].name).toBe(CLIPS.rollRun);
+    // (It starts partway into the clip: the lead for a stand.)
+    expect(still.layers[0].time).toBeCloseTo(DEFAULT_TUNING.rollLeadStill, 1);
+    const walking = new Cover([], table).update(input({ space: true, forward: true }))!;
+    expect(walking.layers[0].time).toBeCloseTo(DEFAULT_TUNING.rollLeadStill, 1);
+    const running = new Cover([], table).update(input({ space: true, forward: true, run: true }))!;
+    expect(running.layers[0].name).toBe(CLIPS.rollRun);
+    expect(running.layers[0].time).toBeCloseTo(DEFAULT_TUNING.rollLeadRun, 1);
+  });
+
+  it('standing, a roll goes the view’s way; with keys held, theirs', () => {
+    const ahead = run(new Cover([], table), { x: 0, z: 0 }, 3, (t) => ({ space: t < DT }))!;
+    expect(ahead.x).toBeGreaterThan(2);
+    expect(Math.abs(ahead.z)).toBeLessThan(0.01);
+    const back = run(new Cover([], table), { x: 0, z: 0 }, 3, (t) => ({ space: t < DT, back: true }))!;
+    expect(back.x).toBeLessThan(-2);
+  });
+
+  it('a faster roll is over sooner, and a longer distance goes further; the clip’s own curve moves the body (fast in the run-in, slow in the roll)', () => {
+    const seconds = (speed: number): number => {
+      const c = new Cover([], table);
+      c.tuning.rollSpeed = speed;
+      c.update(input({ space: true }));
+      let t = 0;
+      while (c.active && t < 10) {
+        c.update(input({}));
+        t += DT;
+      }
+      return t;
+    };
+    expect(seconds(2)).toBeLessThan(seconds(1) * 0.6);
+    const far = (share: number): number => {
+      const c = new Cover([], table);
+      c.tuning.rollDistance = share;
+      return run(c, { x: 0, z: 0 }, 4, (t) => ({ space: t < DT }))!.x;
+    };
+    expect(far(1)).toBeGreaterThan(far(0.5) * 1.8);
+    // From the start of the clip (nothing skipped, its own pace, the whole distance) the first half of its time covers more than half
+    // of the way: the run-in is fast, the roll itself slow (the sprint-to-roll's curve: 0.655 of it by 0.6 s).
+    const c = new Cover([], table);
+    Object.assign(c.tuning, { rollLeadStill: 0, rollSpeed: 1, rollDistance: 1 });
+    let x = c.update(input({ space: true }))!.x;
+    for (let t = DT; t < 0.6; t += DT) x = c.update(input({}))!.x;
+    const whole = (table as Record<string, { travel: number[] }>)[CLIPS.rollRun].travel[1];
+    expect(x).toBeGreaterThan(whole * 0.55);
+    expect(x).toBeLessThan(whole * 0.75);
   });
 
   it('the roll goes the way the keys say (D is the camera’s right), and stops short of a wall', () => {
