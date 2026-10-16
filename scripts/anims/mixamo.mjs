@@ -45,22 +45,9 @@ if (!sources.length) {
   console.log('Usage: node scripts/anims/mixamo.mjs <clips.json>[:prefix] ...');
   process.exit(1);
 }
-const clips = [];
-for (const src of sources) {
-  const [file, prefix = ''] = src.split(/:(?=[^\\/]*$)/);
-  const data = JSON.parse(readFileSync(resolve(ROOT, file), 'utf8'));
-  for (const [name, clip] of Object.entries(data)) clips.push({ name: clipName(name, prefix), ...clip });
-}
-
 // Clips come on one of a few skeletons (Mixamo's own, and the one of a pack's character, a few cm different in the
 // stance): a file is written for each, since a clip is fitted from the rest of the file it's in.
 const near = (a, b) => ORDER.every((k) => new THREE.Vector3(...a.rest[k]).distanceTo(new THREE.Vector3(...b.rest[k])) < 0.01);
-const groups = [];
-for (const c of clips) {
-  const g = groups.find((g) => near(g[0], c));
-  if (g) g.push(c);
-  else groups.push([c]);
-}
 
 async function write(group, file) {
   const rest = group[0].rest;
@@ -115,4 +102,17 @@ async function write(group, file) {
 }
 
 mkdirSync(OUT, { recursive: true });
-for (const [i, g] of groups.entries()) await write(g, join(OUT, i ? `mixamo_${i + 1}.glb` : 'mixamo.glb'));
+// One file (or two, for a second skeleton) for each source json, named after it: mixamo_b03.json -> mixamo_b03.glb.
+for (const src of sources) {
+  const [file, prefix = ''] = src.split(/:(?=[^\/]*$)/);
+  const data = JSON.parse(readFileSync(resolve(ROOT, file), 'utf8'));
+  const groups = [];
+  for (const [name, clip] of Object.entries(data)) {
+    const c = { name: clipName(name, prefix), ...clip };
+    const g = groups.find((g) => near(g[0], c));
+    if (g) g.push(c);
+    else groups.push([c]);
+  }
+  const stem = file.replace(/^.*[\/]/, '').replace(/\.json$/, '');
+  for (const [i, g] of groups.entries()) await write(g, join(OUT, `${stem}${i ? `_${i + 1}` : ''}.glb`));
+}

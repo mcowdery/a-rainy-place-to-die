@@ -17,6 +17,8 @@ adult/
 assets/ads/pending/
 # Generated music awaiting review (scripts/radio/generate.py; approved tracks move to assets/radio/<station>/)
 assets/radio_pending/
+# The converted Mixamo library (assets/anims/review/mixamo*.glb, scripts/anims/mixamo.mjs): Mixamo's terms don't let the raw files be passed on, and the game ships only the clips picked (scripts/anims/mixamo_pick.mjs)
+assets/anims/review/mixamo*.glb
 # Shots, logs and their folders; the scripts that take them are kept
 debug-shots/*
 !debug-shots/*.mjs

@@ -33,13 +33,19 @@ for side, s in (('l', 'Left'), ('r', 'Right')):
         for k in (1, 2, 3):
             BONES[f'{finger}_0{k}_{side}'] = f'{s}Hand{m}{k}'
 
-folder, out = sys.argv[sys.argv.index('--') + 1:][:2]
+args = sys.argv[sys.argv.index('--') + 1:]
+folder, out = args[:2]
+files = sorted(n for n in os.listdir(folder) if n.lower().endswith('.fbx'))
+if len(args) > 3:  # a slice: <offset> <count>, to do a big folder in batches
+    files = files[int(args[2]):int(args[2]) + int(args[3])]
 clips = {}
-for name in sorted(os.listdir(folder)):
-    if not name.lower().endswith('.fbx'):
-        continue
+for name in files:
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.fbx(filepath=os.path.join(folder, name))
+    try:
+        bpy.ops.import_scene.fbx(filepath=os.path.join(folder, name))
+    except Exception as err:
+        print('SKIP (import failed: %s):' % err, name)
+        continue
     arms = [o for o in bpy.data.objects if o.type == 'ARMATURE']
     if not arms or not arms[0].animation_data or not arms[0].animation_data.action:
         print('SKIP (no armature or action):', name)
