@@ -1,0 +1,11 @@
+# Your garage in Manilaya: a lock-up bay under the Skyway (built by real/asagiri.ts, kind garage). Same nodes as Toto's.
+id: city_garage
+name: Dela Cruz Auto Garage
+footprint: [14, 20]
+height: 7.2
+front: west
+landmark: garage
+nodes:
+  front: { kind: spawn, name: Dela Cruz Auto Garage (your garage), at: [10, 9], facing: east, view: [-90, 4] }
+  door: { kind: door, name: your garage, at: [7.6, -1.2], returnSpawn: front }
+  bay: { kind: spawn, at: [10, -3.2], facing: west }

@@ -8,10 +8,10 @@ import { localFrame, localRect, toWorld } from './localFrame';
 import { EMIT } from './meshBuilder';
 
 /**
- * Tōto Port's set pieces (the whole-city plan: docs/city-plan.md), built like Asagiri's (asagiri.ts registers
+ * Tokyo Port's set pieces (the whole-city plan: docs/city-plan.md), built like Asagiri's (asagiri.ts registers
  * them; each has a builder, collision, shelters and lightmap lights, all in the building's local frame: u along
  * the street face, t inward, so behind a quayside piece is the sea):
- * - fish_market: 東都中央卸売市場, the wholesale market (Tsukiji-like): the long hall, its loading bays and
+ * - fish_market: 東京中央卸売市場, the wholesale market (Tsukiji-like): the long hall, its loading bays and
  *   turret trucks, styrofoam boxes, and the outer market's little shops and food stalls at one end.
  * - disco: JULIET BAYSIDE, a bubble-era disco in a black warehouse: the neon name, a lit portal, velvet ropes and
  *   a queue, doormen, a limousine at the kerb.
@@ -31,7 +31,7 @@ import { EMIT } from './meshBuilder';
  * - bay_hall: TŌTO BAY HALL (Zepp-like), a black box concert hall: tonight's show on the marquee, fans queueing
  *   with light sticks, the merch tent.
  * Hanejima (the airfield itself is real/airport.ts):
- * - airport_terminal: 東都空港 TŌTO AIRPORT's terminal: a long glass hall under a wing of a roof, the departures
+ * - airport_terminal: 東京空港 TOKYO AIRPORT's terminal: a long glass hall under a wing of a roof, the departures
  *   kerb with its canopy, taxis and buses waiting, the name along the roof.
  * - control_tower: the control tower, its cab glowing green-blue at night, the beacon on top.
  */
@@ -158,7 +158,7 @@ const SPIRAL_PIERS: readonly [number, number][] = Array.from({ length: 8 }, (_, 
 });
 
 export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: string) => Kit) => ((camera: THREE.Vector3, dt: number) => void) | void> = {
-  // ---- 東都中央卸売市場: the long wholesale hall (sawtooth roof, grey concrete), open loading bays under a deep
+  // ---- 東京中央卸売市場: the long wholesale hall (sawtooth roof, grey concrete), open loading bays under a deep
   // canopy with turret trucks and stacks of styrofoam boxes, and the outer market's shops at the west end ----
   fish_market(k) {
     const CONC = 0x8a8c88;
@@ -212,8 +212,8 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: s
     plate(k, 26, 2.4, 39, -0.05, 6.6, (g, W, H) => {
       g.fillStyle = '#f2f0e8';
       g.fillRect(0, 0, W, H);
-      text(g, '東都中央卸売市場', W / 2, H * 0.62, `bold ${Math.round(H * 0.56)}px 'Yu Gothic', sans-serif`, '#1a3a6a');
-      text(g, 'TŌTO CENTRAL WHOLESALE MARKET', W / 2, H * 0.9, `600 ${Math.round(H * 0.18)}px Consolas, monospace`, '#1a3a6a');
+      text(g, '東京中央卸売市場', W / 2, H * 0.62, `bold ${Math.round(H * 0.56)}px 'Yu Gothic', sans-serif`, '#1a3a6a');
+      text(g, 'TOKYO CENTRAL WHOLESALE MARKET', W / 2, H * 0.9, `600 ${Math.round(H * 0.18)}px Consolas, monospace`, '#1a3a6a');
     });
     k.person(20, -2, 0, 1, { body: 'man', pose: 'stand', color: [0.8, 0.86, 1.0] });
     k.person(34, -2.5, 1, 0, { body: 'man', pose: 'talk', color: [0.85, 0.8, 0.7] });
@@ -287,7 +287,7 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: s
       g.fillStyle = '#e8c020';
       g.fillRect(0, H * 0.82, W, H * 0.1);
       text(g, 'SPEED LAB', W * 0.36, H * 0.68, `italic 900 ${Math.round(H * 0.62)}px Arial, sans-serif`, '#ffffff');
-      text(g, 'チューニング 東都', W * 0.8, H * 0.62, `bold ${Math.round(H * 0.32)}px 'Yu Gothic', sans-serif`, '#e8c020');
+      text(g, 'チューニング 東京', W * 0.8, H * 0.62, `bold ${Math.round(H * 0.32)}px 'Yu Gothic', sans-serif`, '#e8c020');
     });
     // Out front: a customer's sports car and the mechanic.
     car(k, 18, -4, 1, 0, 'sedan', 0xc81a1a, 13);
@@ -311,8 +311,8 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: s
     plate(k, 30, 2.2, 20, 2.9, 10, (g, W, H) => {
       g.fillStyle = '#1a4a8a';
       g.fillRect(0, 0, W, H);
-      text(g, '東都港フェリーターミナル', W / 2, H * 0.6, `bold ${Math.round(H * 0.5)}px 'Yu Gothic', sans-serif`, '#ffffff');
-      text(g, 'TŌTO PORT FERRY TERMINAL', W / 2, H * 0.9, `600 ${Math.round(H * 0.18)}px Consolas, monospace`, '#c8e0ff');
+      text(g, '東京港フェリーターミナル', W / 2, H * 0.6, `bold ${Math.round(H * 0.5)}px 'Yu Gothic', sans-serif`, '#ffffff');
+      text(g, 'TOKYO PORT FERRY TERMINAL', W / 2, H * 0.9, `600 ${Math.round(H * 0.18)}px Consolas, monospace`, '#c8e0ff');
     });
     plate(k, 5, 2.4, 33, 3.4, 2.6, (g, W, H) => {
       g.fillStyle = '#06080a';
@@ -345,7 +345,7 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: s
     plate(k, 18, 1.6, 20, T0 - 0.1, 4.2, (g, W, H) => {
       g.fillStyle = '#f0f0ec';
       g.fillRect(0, 0, W, H);
-      text(g, 'フェリーかもめ 東都', W / 2, H * 0.72, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#1a4aa0');
+      text(g, 'フェリーかもめ 東京', W / 2, H * 0.72, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#1a4aa0');
     }, false, 'in');
     k.person(12, -2, 0, 1, { body: 'woman', pose: 'stand', color: [0.9, 0.85, 1.0] });
     k.person(22, -3, -1, 0, { body: 'man', pose: 'phone', color: [0.8, 0.9, 1.0] });
@@ -630,7 +630,7 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: s
     car(k, 54, 28, 0, 1, 'minivan', 0x1a1a1c, 32);
   },
 
-  // ---- 東都空港 TŌTO AIRPORT's terminal: a long glass hall lit inside, a deep wing of a roof over it and the
+  // ---- 東京空港 TOKYO AIRPORT's terminal: a long glass hall lit inside, a deep wing of a roof over it and the
   // departures kerb, the name along the roof edge, taxis and a limousine bus at the kerb, travellers with cases ----
   airport_terminal(k) {
     k.lit(0xe8eef0, 0, 96, 6, 60, 0, 14, true);
@@ -644,8 +644,8 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: s
     plate(k, 46, 3.2, 48, -7.1, 17.9, (g, W, H) => {
       g.fillStyle = '#f4f6f8';
       g.fillRect(0, 0, W, H);
-      text(g, '東都空港', W * 0.3, H * 0.55, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#1a2a5a');
-      text(g, 'TŌTO AIRPORT · DEPARTURES 出発', W * 0.72, H * 0.55, `bold ${Math.round(H * 0.24)}px Arial, sans-serif`, '#1a4aa0');
+      text(g, '東京空港', W * 0.3, H * 0.55, `bold ${Math.round(H * 0.6)}px 'Yu Gothic', sans-serif`, '#1a2a5a');
+      text(g, 'TOKYO AIRPORT · DEPARTURES 出発', W * 0.72, H * 0.55, `bold ${Math.round(H * 0.24)}px Arial, sans-serif`, '#1a4aa0');
     });
     // The kerb: taxis in a line, the limousine bus, travellers.
     for (let i = 0; i < 4; i++) car(k, 12 + i * 5.5, -9, 1, 0, 'taxi', 0x2a2a2e, 40 + i);
@@ -666,7 +666,7 @@ export const PORT_BUILDERS: Record<PortKind, (k: Kit, id: string, part: (name: s
     plate(k, 10, 1.4, 8, -0.05, 50, (g, W, H) => {
       g.fillStyle = '#e8ecf0';
       g.fillRect(0, 0, W, H);
-      text(g, 'TŌTO TOWER', W / 2, H * 0.6, `bold ${Math.round(H * 0.55)}px Arial, sans-serif`, '#1a2a5a');
+      text(g, 'AIRPORT TOWER', W / 2, H * 0.6, `bold ${Math.round(H * 0.55)}px Arial, sans-serif`, '#1a2a5a');
     });
   },
 };

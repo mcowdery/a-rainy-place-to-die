@@ -2,7 +2,7 @@ import { Terrain } from './terrain';
 import { intersect, overlaps, pad, type Rect } from '../../core/coords';
 import type { DistrictId, MacroMap } from '../../gen/macro';
 import { cellDetail, type CellDetail } from '../real/props';
-import { agreeJunctions, CELL, cellKey, edgeKey, planCell3, STYLES3, type Building3, type CellPlan3 } from './plan';
+import { agreeJunctions, CELL, cellKey, edgeKey, planCell3, STYLES3, type Building3, type CellPlan3, type Road3, type Sign3 } from './plan';
 import { plazaRect, reservedRect, type Placed3 } from './stamps';
 import { ZoneMap } from './zones';
 import type { Avenues, EdgeSpec } from './roads';
@@ -11,9 +11,18 @@ import { landmarkColliders, landmarkHoles } from './landmarks';
 import { roadUnder } from './rail';
 import { stationKerb } from '../real/station';
 import { vehicleTexts } from '../models/vehicles';
+import { filipino } from './cityConfig';
+import { manilaTexts } from '../real/manilaStreet';
+import type { BusLine } from './traffic';
+import { lineStops, stopClaim, type LineStops, type StopSite } from './stops';
+import { placePhones, type PhonePlacement } from '../real/phoneSites';
+import { placeSigns, type SignPlacement } from '../real/signSites';
+import { signKindAtlasTexts, type SignExtra } from '../real/signKinds';
+import { isWide } from '../../core/wide';
+import type { SignText } from '../real/signs';
 
 /**
- * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings, signs) and
+ * The district as data: which cells belong to it, each cell's plan (roads, lots, buildings), its signs and
  * street furniture, and the stamps placed in it. Everything is computed lazily and cached, and is a pure
  * function of (seed, L0 map, placements), so the main thread (collision) and the chunk workers (geometry)
  * each keep their own copy and always agree.
@@ -42,6 +51,10 @@ export class DistrictModel {
     readonly terrain: Terrain = Terrain.FLAT,
     /** More ground to keep clear (under the rail lines' curves: rail.ts railReserved). */
     private readonly extraReserved: readonly Rect[] = [],
+    /** Ground under something built over it (the expressway's parking area): no trees or planting there. */
+    private readonly covered: readonly Rect[] = [],
+    /** The bus lines (traffic.yaml): their stops stand on the pavements, and the street furniture keeps off them. */
+    private readonly buses: readonly BusLine[] = [],
   ) {
     for (const [k, v] of avenues) this.edges.set(k, v);
     const cells: [number, number][] = [];
@@ -106,6 +119,113 @@ export class DistrictModel {
     return p;
   }
 
+  private readonly lineSites = new Map<string, LineStops>();
+  private stopsOf(line: BusLine): LineStops {
+    let s = this.lineSites.get(line.id);
+    if (!s) {
+      s = lineStops(line, { plan: (mx, my) => this.plan(mx, my), buildings: (mx, my) => this.buildings(mx, my), placed: this.placed });
+      this.lineSites.set(line.id, s);
+    }
+    return s;
+  }
+
+  /** A bus line's stops (stops.ts): where each stands and what kind it is. The traffic's routes take them (routeFor). */
+  busStops(lineId: string): readonly StopSite[] {
+    const line = this.buses.find((b) => b.id === lineId);
+    return line ? this.stopsOf(line).sites : [];
+  }
+
+  private allStops: readonly StopSite[] | null = null;
+  /** Every bus stop in the city (posters go up beside them: real/adSites.ts). */
+  stopSites(): readonly StopSite[] {
+    return (this.allStops ??= this.buses.flatMap((b) => this.stopsOf(b).sites));
+  }
+
+  /** What the bus lines asked for and couldn't have (a place with no good spot near it): for the tests. */
+  stopProblems(): string[] {
+    return this.buses.flatMap((b) => this.stopsOf(b).problems);
+  }
+
+  private stopClaims: { rect: Rect }[] | null = null;
+  /** The ground taken by bus stops in or beside a cell: the street furniture keeps out of it (cellDetail's `claimed`). */
+  claimed(mx: number, my: number): Rect[] {
+    this.stopClaims ??= this.buses.flatMap((b) => this.stopsOf(b).sites.map((s) => ({ rect: stopClaim(s) })));
+    const cell: Rect = pad({ x: mx * CELL, y: my * CELL, w: CELL, h: CELL }, 12);
+    return this.stopClaims.filter((c) => overlaps(c.rect, cell)).map((c) => c.rect);
+  }
+
+  private readonly phoneCache = new Map<number, PhonePlacement | null>();
+  /**
+   * A cell's payphones (real/phoneSites.ts): where each stands and which it is. On their own, without the rest of
+   * the cell's furniture, because the page draws them from much further off than it needs anything else of a cell's
+   * (real/payphoneField.ts). Manila has none yet.
+   */
+  phones(mx: number, my: number): PhonePlacement | null {
+    const k = cellKey(mx, my);
+    let ph = this.phoneCache.get(k);
+    if (ph === undefined) {
+      const p = this.plan(mx, my);
+      if (!p || filipino()) ph = null;
+      else {
+        const stamps = this.stamps(mx, my);
+        const claimed = this.claimed(mx, my);
+        // Not on a bus stop's ground, nor by a stairwell down from the pavement or a set piece's door, counter or
+        // people (its nodes at street level): a phone at the end of a front mustn't stand in the way in.
+        const holes = this.holes(mx, my);
+        const nodes = stamps.flatMap((q) => q.nodes).filter((n) => n.floor === 0);
+        const within = (q: Rect, x: number, z: number, m: number): boolean => x > q.x - m && x < q.x + q.w + m && z > q.y - m && z < q.y + q.h + m;
+        const taken = (x: number, z: number, m = 0): boolean => claimed.some((q) => within(q, x, z, m)) || holes.some((q) => within(q, x, z, m + 1.6)) || nodes.some((n) => Math.hypot(n.x - x, n.z - z) < m + 1.8);
+        ph = placePhones(p, [...p.buildings, ...stamps.map((q) => q.building)], new Map(stamps.map((q) => [q.building.id, q.stamp.landmark ?? ''])), taken);
+      }
+      this.phoneCache.set(k, ph);
+    }
+    return ph;
+  }
+
+  private readonly signCache = new Map<number, SignPlacement | null>();
+  /**
+   * What the sign siting (real/signSites.ts) puts up in a cell: blades and fascias, the other kinds (lanterns, boards,
+   * bulbs...), and the ground the stand signs take, from the buildings and streets round it. The set pieces' own signs
+   * are theirs (`Placed3.signs`).
+   */
+  signPlacement(mx: number, my: number): SignPlacement | null {
+    const k = cellKey(mx, my);
+    let s = this.signCache.get(k);
+    if (s === undefined) {
+      const p = this.plan(mx, my);
+      if (!p) s = null;
+      else {
+        const around: Building3[] = [];
+        const roads: Road3[] = [];
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            around.push(...this.buildings(mx + dx, my + dy));
+            roads.push(...(this.plan(mx + dx, my + dy)?.roads ?? []));
+          }
+        }
+        // (A stand sign keeps off a bus stop's ground, a payphone's, a stairwell, a set piece's door.)
+        const claimed = [...this.claimed(mx, my), ...(this.phones(mx, my)?.claims ?? [])];
+        const holes = this.holes(mx, my);
+        const nodes = this.stamps(mx, my).flatMap((q) => q.nodes).filter((n) => n.floor === 0);
+        const within = (q: Rect, x: number, z: number, m: number): boolean => x > q.x - m && x < q.x + q.w + m && z > q.y - m && z < q.y + q.h + m;
+        const taken = (x: number, z: number, m = 0): boolean => claimed.some((q) => within(q, x, z, m)) || holes.some((q) => within(q, x, z, m + 1.6)) || nodes.some((n) => Math.hypot(n.x - x, n.z - z) < m + 1.8);
+        s = placeSigns(p, around, roads, taken);
+      }
+      this.signCache.set(k, s);
+    }
+    return s;
+  }
+
+  /** A cell's blades and fascias (signPlacement). */
+  signs(mx: number, my: number): readonly Sign3[] {
+    return this.signPlacement(mx, my)?.signs ?? [];
+  }
+
+  /** A cell's other kinds of sign (signPlacement: real/signKinds.ts). */
+  signExtras(mx: number, my: number): readonly SignExtra[] {
+    return this.signPlacement(mx, my)?.extras ?? [];
+  }
+
   /** Street furniture and lights of a cell (null outside the district). */
   detail(mx: number, my: number): CellDetail | null {
     const k = cellKey(mx, my);
@@ -113,7 +233,7 @@ export class DistrictModel {
     if (!d) {
       const p = this.plan(mx, my);
       if (!p) return null;
-      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my));
+      d = cellDetail(p, this.stamps(mx, my).map((q) => q.building), this.plazas(mx, my), this.coveredIn(mx, my), this.claimed(mx, my), this.phones(mx, my), this.signPlacement(mx, my));
       this.details.set(k, d);
     }
     return d;
@@ -123,6 +243,12 @@ export class DistrictModel {
    * The parts of stamp plazas in this cell that are off the roads (paved, with lamps and trees). A road
    * crossing a plaza piece trims it to the largest side left over.
    */
+  /** The covered ground that touches a cell. */
+  coveredIn(mx: number, my: number): Rect[] {
+    const cell: Rect = { x: mx * 128, y: my * 128, w: 128, h: 128 };
+    return this.covered.filter((r) => overlaps(r, cell));
+  }
+
   /** The cell's pieces of stamps' plazas, each with its landmark's centre (`focus`: what people there look at). */
   plazas(mx: number, my: number): (Rect & { readonly focus?: readonly [number, number] })[] {
     const p = this.plan(mx, my);
@@ -241,11 +367,16 @@ export class DistrictModel {
 }
 
 /** Every sign text the district can show (for the sign atlas / layout; identical on every thread). */
-export function signTexts(words: readonly string[], placed: readonly Placed3[]): { text: string; vertical: boolean }[] {
+export function signTexts(words: readonly string[], placed: readonly Placed3[]): SignText[] {
   return [
-    ...words.flatMap((text) => [{ text, vertical: false }, { text, vertical: true }]),
+    // (Down a blade only what's all wide: a Latin word is never one, and its slot would be the tallest.)
+    ...words.flatMap((text) => [{ text, vertical: false }, ...([...text].every((c) => isWide(c.codePointAt(0)!) || c === ' ') ? [{ text, vertical: true }] : [])]),
+    // The other kinds' (real/signKinds.ts): lanterns, prices, LED messages, window names, tubing, pictograms.
+    ...signKindAtlasTexts(words),
     ...placed.flatMap((p) => p.signs.map((s) => ({ text: s.text, vertical: s.vertical }))),
     // The vehicles' lettering and taxi ads' copy.
     ...vehicleTexts(),
+    // Manila's tarpaulins, banners and stop signs.
+    ...(filipino() ? manilaTexts() : []),
   ];
 }

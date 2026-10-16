@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Crowd } from '../real/crowd';
 import type { OcclusionBox } from '../real/occlusion';
 import type { DistrictId, MacroMap } from '../../gen/macro';
+import { hoursPhase } from '../real/hours';
 import type { Lightmap } from '../real/lightmap';
 import { KIND } from '../real/meshBuilder';
 import { offKerb, pavementCorners, type PavementCorner } from '../real/ground';
@@ -17,12 +18,19 @@ import { CELL, cellKey, DISTRICTS3, isRiverWalk, isVerge, STYLES3, throughMouths
 import type { Node3, Placed3 } from './stamps';
 import type { ZoneMap } from './zones';
 import type { Avenues, Bridge3 } from './roads';
+import type { BusLine } from './traffic';
 import { landmarkColliders, landmarkFloor, landmarkRaisedColliders, landmarkShelters, type Shelter } from './landmarks';
 import { roadUnder } from './rail';
+import { inPark, inPond } from './parkLand';
 import { stationKerb } from '../real/station';
 import type { Rect } from '../../core/coords';
+import { PROP_COVER, type Obstacle } from '../models/cover';
 import type { Interior } from '../real/interiors';
+import { doorOpen } from '../real/swingDoors';
+import { cityFromUrl } from './cityConfig';
+import { era } from './era';
 import { floorLevel, groundSurface, indoorSurface, type Surface } from './footing';
+import { footbridgeFloor, footbridgeGround, footbridgeRaised, footbridgeShelter, footbridges, footbridgesNear } from './footbridges';
 
 /** Chunks (one per macro cell) whose centre is within LOAD_RADIUS are built; beyond UNLOAD_RADIUS dropped. */
 /** The largest radius `District.obstacleNear` is asked with (m). */
@@ -110,7 +118,12 @@ export class District {
   readonly nodes: readonly Node3[];
   readonly model: DistrictModel;
   /** Worker build times per stage, and main-thread time spent turning results into meshes. */
-  readonly stats = { base: stageStats(), near: stageStats(), ghosts: stageStats(), integrate: stageStats(), disposed: 0 };
+  readonly stats = { base: stageStats(), near: stageStats(), ghosts: stageStats(), light: stageStats(), integrate: stageStats(), disposed: 0 };
+  /** The story clock's hour (setHour), and what's open then as the lightmap shows it (real/hours.ts hoursPhase). */
+  private hour = 21;
+  private hoursSeen = '';
+  /** Loaded chunks whose lightmap is to be painted again for the hour (the 'light' stage). */
+  private readonly relight = new Set<number>();
   private readonly chunks = new Map<number, Chunk>();
   private kit: DistrictKit | null = null;
   private workers: Worker[] = [];
@@ -151,9 +164,14 @@ export class District {
     readonly terrain: Terrain = Terrain.FLAT,
     /** Ground kept clear under the rail lines' curves (rail.ts railReserved). */
     reserved: readonly Rect[] = [],
+    /** Ground under something built over it: no trees or planting (expressway.ts `expresswayCovered`). */
+    covered: readonly Rect[] = [],
+    /** The bus lines (traffic.yaml): the model places their stops (DistrictModel.busStops). */
+    buses: readonly BusLine[] = [],
   ) {
-    this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues, terrain, reserved);
+    this.model = new DistrictModel(macro, kinds, placed, seed, zones, avenues, terrain, reserved, covered, buses);
     this.nodes = placed.flatMap((p) => p.nodes);
+    this.doorGaps = this.nodes.filter((n) => n.swing !== null && n.gap !== null).map((n) => ({ key: n.swing!, rect: n.gap!, floor: n.floor }));
     // Stamps collide as their footprint, or (landmarks you can walk into) as their walls and fixtures.
     const solid = (p: Placed3): Rect[] => [{ x: p.building.x - p.building.w / 2, y: p.building.z - p.building.d / 2, w: p.building.w, h: p.building.d }];
     // (A station's piers: in the road's median, or as portal frames over its carriageway.)
@@ -163,8 +181,15 @@ export class District {
     this.basementColliders = placed.map((p) => landmarkColliders(p, -5) ?? []);
     this.deepColliders = placed.map((p) => landmarkColliders(p, -11) ?? []);
     this.shelters.push(...placed.flatMap(landmarkShelters));
+    // Manila's footbridges (footbridges.ts): their towers and columns on the ground, their decks roofed against the rain.
+    for (const b of footbridges()) {
+      this.extraColliders.push(...footbridgeGround(b));
+      this.shelters.push(footbridgeShelter(b));
+    }
   }
 
+  /** The doorways of doors you open and close (stamp nodes with `swing` and `gap`): walls while their door is shut, from either side. */
+  private readonly doorGaps: readonly { key: string; rect: Rect; floor: number }[];
   private readonly stampColliders: (readonly Rect[])[];
   private readonly stampOutside = new Map<number, readonly Rect[]>();
 
@@ -197,6 +222,13 @@ export class District {
     }
   }
 
+  /**
+   * The expressway's deck as a floor to walk on (set by the page): the deck's height under (x, z) for someone
+   * already up on it (`current` well over the ground), else null. Off its edge `deckOpen` is false: a wall.
+   */
+  deckFloor: ((x: number, z: number, current: number) => number | null) | null = null;
+  deckOpen: ((x: number, z: number, floorAbs: number) => boolean) | null = null;
+
   /** More street-level colliders (the viaduct's piers). */
   addColliders(rects: readonly Rect[]): void {
     this.stampColliders.push(rects);
@@ -210,6 +242,8 @@ export class District {
    * Where levels overlap (a platform over the pavement), the one nearest the walker's current floor wins.
    */
   floorAt = (x: number, z: number, current = 0): number => {
+    const deck = this.deckFloor?.(x, z, current);
+    if (deck !== null && deck !== undefined) return deck;
     for (const it of this.interiors.values()) {
       const y = it.floorAt(x, z, current);
       if (y !== null) return y;
@@ -220,7 +254,12 @@ export class District {
       const y = landmarkFloor(p, x, z, current - base);
       if (y !== null) return y + base;
     }
-    return this.terrain.height(x, z);
+    const ground = this.terrain.height(x, z);
+    for (const b of footbridgesNear(x, z)) {
+      const y = footbridgeFloor(b, x, z, current - ground);
+      if (y !== null) return y + ground;
+    }
+    return ground;
   };
 
   /** Each cell's pavement corners (real/ground.ts), for what's past their rounded kerbs. */
@@ -246,7 +285,7 @@ export class District {
     const mx = Math.floor(x / CELL);
     const my = Math.floor(z / CELL);
     const p = this.model.plan(mx, my);
-    if (!p) return { top: 0, surface: 'paving' };
+    if (!p) return { top: 0, surface: inPark(x, z) ? 'grass' : 'paving' };
     const inR = (q: Rect): boolean => x >= q.x && x <= q.x + q.w && z >= q.y && z <= q.y + q.h;
     if (p.medians.some(inR)) return { top: 0.18, surface: 'grass' };
     // Inside a carriageway (a road less its pavements): the road.
@@ -315,9 +354,9 @@ export class District {
   readonly shelters: Shelter[] = [];
 
   /** The covered volumes within r metres of (x, z), nearest first (for the rain shader). */
-  sheltersNear(x: number, z: number, r: number, max: number): Shelter[] {
+  sheltersNear(x: number, z: number, r: number, max: number, enclosedOnly = false): Shelter[] {
     const d = (s: Shelter): number => Math.hypot(Math.max(s.rect.x - x, 0, x - s.rect.x - s.rect.w), Math.max(s.rect.y - z, 0, z - s.rect.y - s.rect.h));
-    return this.shelters.filter((s) => d(s) < r).sort((a, b) => d(a) - d(b)).slice(0, max);
+    return this.shelters.filter((s) => (!enclosedOnly || !!s.enclosed) && d(s) < r).sort((a, b) => d(a) - d(b)).slice(0, max);
   }
 
   /** Every prop (street furniture, greenery, an open lot's furnishings) within r metres of (x, z), for looking at. */
@@ -328,6 +367,17 @@ export class District {
         const d = this.model.detail(mx, my);
         if (!d) continue;
         for (const list of [d.props, ...d.open.map((o) => o.props)]) for (const p of list) if (Math.hypot(p.x - x, p.z - z) < r) out.push(p);
+      }
+    }
+    return out;
+  }
+
+  /** The payphones within r metres of (x, z) (real/payphoneField.ts draws them): props of kind 'payphone'. */
+  phonesNear(x: number, z: number, r: number): Prop[] {
+    const out: Prop[] = [];
+    for (let my = Math.floor((z - r) / CELL); my <= Math.floor((z + r) / CELL); my++) {
+      for (let mx = Math.floor((x - r) / CELL); mx <= Math.floor((x + r) / CELL); mx++) {
+        for (const p of this.model.phones(mx, my)?.props ?? []) if (Math.hypot(p.x - x, p.z - z) < r) out.push(p);
       }
     }
     return out;
@@ -441,7 +491,7 @@ export class District {
       );
       w.addEventListener('message', (e) => this.onMessage(i, e.data));
       w.addEventListener('error', (e) => console.error('chunk worker error', e.message));
-      w.postMessage({ type: 'init', kinds: typeof this.kinds === 'string' ? [this.kinds] : [...this.kinds], seed: this.seed, words: kit.words } satisfies WorkerIn);
+      w.postMessage({ type: 'init', kinds: typeof this.kinds === 'string' ? [this.kinds] : [...this.kinds], seed: this.seed, words: kit.words, city: cityFromUrl().id, era: era().id } satisfies WorkerIn);
       this.workers.push(w);
       this.inFlight.push(0);
     }
@@ -451,8 +501,13 @@ export class District {
     return this.workers.length;
   }
 
+  /** More land nothing walks or drives onto (the park's headland: main.ts sets it); the park's ponds are always closed. */
+  landBlocked: ((x: number, z: number, r: number) => boolean) | null = null;
+
   inDistrict(x: number, z: number): boolean {
     if (this.model.has(Math.floor(x / CELL), Math.floor(z / CELL))) return true;
+    // Yūnagi Riverside Park: open land, walked and driven like the streets (its ponds and headland are closed: below).
+    if (inPark(x, z)) return true;
     return this.bridges.some((b) => x >= b.road.rect.x && x <= b.road.rect.x + b.road.rect.w && z >= b.road.rect.y && z <= b.road.rect.y + b.road.rect.h);
   }
 
@@ -469,13 +524,18 @@ export class District {
     // (Levels are relative to the ground: street level on a hill is still 0.)
     const floor = floorAbs - this.terrain.height(x, z);
     const inRects = (rs: readonly Rect[]): boolean => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
+    for (const g of this.doorGaps) {
+      if (Math.abs(floor - g.floor) < 1.6 && !doorOpen(g.key) && x > g.rect.x - r && x < g.rect.x + g.rect.w + r && z > g.rect.y - r && z < g.rect.y + g.rect.h + r) return true;
+    }
     const inside = (): boolean => {
       for (const it of this.interiors.values()) if (inRects(it.colliders(floor))) return true;
       return false;
     };
     if (floor < -1) return (floor > -8 ? this.basementColliders : this.deepColliders).some(inRects) || inside();
-    if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? [])) || inside();
+    if (floor > 0.6 && this.deckOpen && !this.deckOpen(x, z, floorAbs)) return true;
+    if (floor > 1) return this.model.placed.some((p) => inRects(landmarkRaisedColliders(p, floor) ?? [])) || inside() || footbridgesNear(x, z, 1).some((b) => inRects(footbridgeRaised(b)));
     if (!this.inDistrict(x, z)) return true;
+    if (inPark(x, z) && (inPond(x, z, r) || (this.landBlocked?.(x, z, r) ?? false))) return true;
     if (!onFoot && this.onBridgeMedian(x, z, r)) return true;
     const mx = Math.floor(x / CELL);
     const my = Math.floor(z / CELL);
@@ -494,6 +554,43 @@ export class District {
   };
 
   /**
+   * The solid things within `radius` of (x, z) as boxes with heights, at street level, for cover (models/cover.ts): buildings (their own
+   * heights; a cut corner is whole here), set pieces and other colliders (tall), the cell's solids, and props by kind (`PROP_COVER`: parked cars,
+   * hedges, fences, vending machines; a run's capsule as the box that holds it). Asked when Space is pressed, and as he sidles along a wall.
+   */
+  coverObstacles = (x: number, z: number, radius: number): Obstacle[] => {
+    const out: Obstacle[] = [];
+    const near = (x0: number, x1: number, z0: number, z1: number): boolean => x1 > x - radius && x0 < x + radius && z1 > z - radius && z0 < z + radius;
+    const rect = (q: Rect, h: number): void => {
+      if (near(q.x, q.x + q.w, q.y, q.y + q.h)) out.push({ x0: q.x, x1: q.x + q.w, z0: q.y, z1: q.y + q.h, h });
+    };
+    const mx = Math.floor(x / CELL);
+    const my = Math.floor(z / CELL);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (const b of this.model.plan(mx + dx, my + dy)?.buildings ?? []) {
+          if (near(b.x - b.w / 2, b.x + b.w / 2, b.z - b.d / 2, b.z + b.d / 2)) out.push({ x0: b.x - b.w / 2, x1: b.x + b.w / 2, z0: b.z - b.d / 2, z1: b.z + b.d / 2, h: b.h });
+        }
+        const d = this.model.detail(mx + dx, my + dy);
+        if (!d) continue;
+        for (const q of d.solids) rect(q, 3);
+        for (const p of d.props) {
+          const h = PROP_COVER[p.kind];
+          if (!h || p.solid === false) continue;
+          // (A run lies along the right vector (nz, -nx): its capsule's half-length and radius, as the box round it.)
+          const along = (p.half ?? 0) + p.radius;
+          const ex = Math.abs(p.nz) * along + Math.abs(p.nx) * p.radius;
+          const ez = Math.abs(p.nx) * along + Math.abs(p.nz) * p.radius;
+          if (near(p.x - ex, p.x + ex, p.z - ez, p.z + ez)) out.push({ x0: p.x - ex, x1: p.x + ex, z0: p.z - ez, z1: p.z + ez, h });
+        }
+      }
+    }
+    for (const rs of this.stampColliders) for (const q of rs) rect(q, 3);
+    for (const q of this.extraColliders) rect(q, 3);
+    return out;
+  };
+
+  /**
    * For a car at street level (crash.ts): what's at (x, z) within r, the most solid first: a `wall` (buildings,
    * set pieces, playground frames and toilets, the expressway's piers and ramp walls, the edge of the district),
    * a `car` (parked), a `pole` (lamps, poles, signals, trees, vending machines), `soft` (hedges, pots, bikes,
@@ -503,6 +600,7 @@ export class District {
     const inRects = (rs: readonly Rect[]): boolean => rs.some((q) => x > q.x - r && x < q.x + q.w + r && z > q.y - r && z < q.y + q.h + r);
     for (const it of this.interiors.values()) if (inRects(it.colliders(0))) return 'wall';
     if (!this.inDistrict(x, z)) return 'wall';
+    if (inPark(x, z) && (inPond(x, z, r) || (this.landBlocked?.(x, z, r) ?? false))) return 'wall';
     if (this.stampColliders.some(inRects) || inRects(this.extraColliders)) return 'wall';
     if (this.onBridgeMedian(x, z, r)) return 'soft';
     const mx = Math.floor(x / CELL);
@@ -583,6 +681,7 @@ export class District {
     return (x, z, r) => {
       if (inRects(interior, x, z, r)) return 'wall';
       if (!this.inDistrict(x, z)) return 'wall';
+      if (inPark(x, z) && (inPond(x, z, r) || (this.landBlocked?.(x, z, r) ?? false))) return 'wall';
       if (inRects(fixed, x, z, r)) return 'wall';
       if (this.onBridgeMedian(x, z, r)) return 'soft';
       for (const b of buildings) if (Math.abs(x - b.x) < b.w / 2 + r && Math.abs(z - b.z) < b.d / 2 + r) return 'wall';
@@ -809,6 +908,18 @@ export class District {
     return Math.hypot((mx + 0.5) * CELL - pos.x, (my + 0.5) * CELL - pos.z);
   }
 
+  /**
+   * The story clock's hour (main.ts, each time the light is set): when what's open changes, every loaded chunk's lightmap
+   * is painted again, so a shop's glow on the pavement goes out with its sign (the shaders do the sign and the shop).
+   */
+  setHour(hour: number): void {
+    this.hour = hour;
+    const phase = hoursPhase(hour);
+    if (phase === this.hoursSeen) return;
+    this.hoursSeen = phase;
+    for (const k of this.chunks.keys()) this.relight.add(k);
+  }
+
   /** Stages wanted around pos, nearest first: missing chunks, then detail, then crowds. */
   private wanted(pos: THREE.Vector3): { key: number; mx: number; my: number; stage: Stage; d: number }[] {
     const out: { key: number; mx: number; my: number; stage: Stage; d: number }[] = [];
@@ -818,6 +929,7 @@ export class District {
       const c = this.chunks.get(key);
       let stage: Stage | null = null;
       if (!c) stage = d <= LOAD_RADIUS ? 'base' : null;
+      else if (this.relight.has(key)) stage = 'light';
       else if (!c.near) stage = d <= NEAR_BUILD ? 'near' : null;
       else if (!c.ghostsBuilt) stage = d <= GHOST_BUILD ? 'ghosts' : null;
       if (stage && !this.pending.has(`${key}:${stage}`)) out.push({ key, mx, my, stage, d });
@@ -835,7 +947,8 @@ export class District {
       const task: Task = { id: this.nextId++, key: w.key, stage: w.stage, worker: best };
       this.pending.set(`${w.key}:${w.stage}`, task);
       this.inFlight[best]++;
-      this.workers[best].postMessage({ type: 'build', id: task.id, mx: w.mx, my: w.my, stage: w.stage } satisfies WorkerIn);
+      if (w.stage === 'light') this.relight.delete(w.key);
+      this.workers[best].postMessage({ type: 'build', id: task.id, mx: w.mx, my: w.my, stage: w.stage, hour: this.hour } satisfies WorkerIn);
     }
   }
 
@@ -862,6 +975,11 @@ export class District {
     const cz = (r.my + 0.5) * CELL;
     const d = Math.hypot(cx - pos.x, cz - pos.z);
     const c = this.chunks.get(task.key);
+    if (r.stage === 'light') {
+      if (!c || !r.lightmap) return false;
+      kit.lightmap.upload(r.mx * CELL, r.my * CELL, r.lightmap);
+      return true;
+    }
     if (r.stage === 'base') {
       if (c || d > UNLOAD_RADIUS) return false;
       const base = new THREE.Mesh(toGeometry(r.meshes.base!), kit.city);

@@ -1,0 +1,185 @@
+{
+  "pager": {
+    "source": "105_pager",
+    "width": 443,
+    "height": 277,
+    "areas": {
+      "lcd": [
+        20,
+        39.5,
+        64,
+        18.5
+      ],
+      "digits": [
+        21.5,
+        42.5,
+        61,
+        13.5
+      ],
+      "buttons": [
+        [
+          37,
+          68.5,
+          16.5,
+          12
+        ],
+        [
+          58.5,
+          68.5,
+          15.5,
+          12
+        ]
+      ],
+      "lamp": [
+        77.1,
+        71.5,
+        4.5,
+        7.2
+      ],
+      "maker": [
+        9,
+        14,
+        34,
+        7
+      ]
+    }
+  },
+  "notebook_open": {
+    "source": "104_notebook_open",
+    "width": 1003,
+    "height": 596,
+    "areas": {
+      "page": [
+        50.8,
+        10.5,
+        28,
+        77
+      ],
+      "tabs": [
+        [
+          81,
+          13.4,
+          2.6,
+          11.6
+        ],
+        [
+          81,
+          26,
+          2.6,
+          12.6
+        ],
+        [
+          81,
+          40,
+          2.6,
+          12.3
+        ],
+        [
+          81,
+          54.5,
+          2.6,
+          12.3
+        ],
+        [
+          81,
+          68.8,
+          2.6,
+          12.9
+        ]
+      ],
+      "slots": [
+        [
+          2.4,
+          16.5,
+          21.6,
+          8
+        ],
+        [
+          2.4,
+          24.5,
+          21.6,
+          8
+        ],
+        [
+          2.4,
+          32.5,
+          21.6,
+          8.3
+        ],
+        [
+          2.4,
+          40.8,
+          21.6,
+          19.7
+        ],
+        [
+          2.4,
+          60.5,
+          21.6,
+          30
+        ]
+      ],
+      "cover": [
+        5,
+        64,
+        18,
+        28
+      ]
+    }
+  },
+  "notebook_closed": {
+    "source": "103_notebook_closed",
+    "width": 443,
+    "height": 508,
+    "areas": {}
+  },
+  "page": {
+    "source": "98_page_blank",
+    "width": 670,
+    "height": 916,
+    "areas": {}
+  },
+  "card": {
+    "source": "99_card_blank",
+    "width": 686,
+    "height": 425,
+    "areas": {}
+  },
+  "sheet": {
+    "source": "100_folded_sheet",
+    "width": 912,
+    "height": 640,
+    "areas": {}
+  },
+  "cassette": {
+    "source": "101_microcassette",
+    "width": 393,
+    "height": 273,
+    "areas": {}
+  },
+  "envelope": {
+    "source": "102_envelope",
+    "width": 567,
+    "height": 462,
+    "areas": {}
+  },
+  "videotape": {
+    "source": "106_videotape_partway",
+    "width": 711,
+    "height": 409,
+    "areas": {
+      "label": [
+        31.5,
+        32,
+        37,
+        40
+      ]
+    }
+  },
+  "megumi": {
+    "source": "107_megumi_kamakura",
+    "width": 420,
+    "height": 516,
+    "areas": {}
+  }
+}

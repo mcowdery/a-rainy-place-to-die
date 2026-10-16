@@ -1,6 +1,6 @@
 # Summer, chapter 4: Bayshore (working title) — Proposed, the finale
 
-**Character:** an informant: a woman inside the triad's accounts (Chinese, born in Tōto, never fully either)
+**Character:** an informant: a woman inside the triad's accounts (Chinese, born in Tokyo, never fully either)
 who has been feeding Japan's Public Security police for years. The player lives her last week of doing it.
 
 ## The story

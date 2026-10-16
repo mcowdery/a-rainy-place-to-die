@@ -1,12 +1,12 @@
 // Mack at the wheel on the race page: chase view, aiming out of the driver's window, across the car, a shot,
 // and close-ups of the open windows. node debug-shots/racecar.mjs <out dir> [venue]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2];
 const venue = process.argv[3] ?? 'kurokami';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 640 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.goto(`${server.resolvedUrls.local[0]}race.html?venue=${venue}&mode=free`);

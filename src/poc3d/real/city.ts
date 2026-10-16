@@ -1,3 +1,4 @@
+import { HOURS_GLSL } from './hours';
 import * as THREE from 'three';
 import { screenLightGlsl, screenUniforms, type ScreenUniforms } from './screenLight';
 import { shopGlsl } from './shopShader';
@@ -6,9 +7,12 @@ import { WINDOW_ATLAS, windowsAt, type WindowWeather } from './windowScenes';
 import { WIPER_GLSL } from '../models/wipers';
 import { CAR_RAIN_GLSL, WALL_RAIN_GLSL } from './carRainGlsl';
 import { WATER_ALPHA, WATER_GLSL } from './waterGlsl';
+import { era } from '../district/era';
+import grassUrl from '../../../assets/textures/grass.webp?url';
 
 /** Cars whose headlights light the city (the nearest to the camera). */
-export const CAR_LIGHTS = 16;
+import { CAR_LIGHTS, LAMP_LIGHTS_GLSL } from './lampLights';
+export { CAR_LIGHTS };
 /** Moving cars near the camera whose wipers clear their windscreens of rain and snow. */
 export const WIPERS = 8;
 /** Trees near the camera dropping petals or leaves (on the ground under them; weather.ts Drift has them falling). */
@@ -38,8 +42,17 @@ export interface CityUniforms extends ScreenUniforms {
   uWindowLit: { value: number };
   uLamps: { value: number };
   uNeon: { value: number };
+  /** The story clock's hour of the day, 0 to 24 (main.ts): shop signs go dark when their shops close (signs.ts `openAt`). */
+  uHour: { value: number };
+  /** The cells in a brownout (district/brownout.ts): a bit field, 24 cells to a float; uOutMap is the map's columns, rows and cell size (columns 0: none). */
+  uOut: { value: Float32Array };
+  uOutMap: { value: THREE.Vector3 };
+  /** 1 in a Filipino city (CityConfig.filipino): none of Tokyo's noren over its shopfronts. */
+  uFil: { value: number };
   uFlicker: { value: number };
   uWet: { value: number };
+  /** Standing water (0-1): puddles gather after the rain stops, while the ground is still wet, and shrink as it dries (district/main.ts). While it rains the whole ground is wet and there are none. */
+  uPuddle: { value: number };
   /** The season (district/seasons.ts): 0 spring, 1 summer, 2 autumn, 3 winter: tree crowns and lawns follow it. */
   uSeason: { value: number };
   /** Snow lying on what faces up (0 none, 1 covered). */
@@ -64,6 +77,12 @@ export interface CityUniforms extends ScreenUniforms {
   uMyDir: { value: THREE.Vector4 };
   uMyLamps: { value: THREE.Vector4 };
   uCarSkip: { value: number };
+  /** The police beacon on your car's roof (district/siren.ts): its place (x, y, z) and how bright its red is now
+   * (0 off); a red wash on whatever's near it, a pulse as it flashes. */
+  uBeacon: { value: THREE.Vector4 };
+  /** Mack's flashlight (district/main.ts): where it is (x, y, z) and how bright (w, 0 off), and the way it points. */
+  uTorch: { value: THREE.Vector4 };
+  uTorchDir: { value: THREE.Vector3 };
   /** Moving cars whose wipers are going: (x, z, heading, ground y), and how many (rain and snow off their
    * windscreens); each one's glass and pivots (models/wipers.ts `wiperUniforms`), and the beat (in sweeps). */
   uWipers: { value: THREE.Vector4[] };
@@ -102,6 +121,9 @@ export interface CityUniforms extends ScreenUniforms {
   uNight: { value: THREE.Vector4 };
   uWindow: { value: THREE.Vector4 };
   tLight: { value: THREE.Texture | null };
+  /** The lawn's photograph: colour in RGB, height in alpha (assets/textures/grass.webp); `uGrassOn` is 1 once it has loaded. */
+  tGrass: { value: THREE.Texture | null };
+  uGrassOn: { value: number };
   /** The storefront interiors' atlas (shopAtlas.ts): colour and mask; null leaves shops dark inside. */
   tShopCol: { value: THREE.Texture | null };
   tShopMask: { value: THREE.Texture | null };
@@ -133,15 +155,43 @@ export function windowHours(hour: number, u: Pick<CityUniforms, 'uLit' | 'uFolk'
 export const DEN_LIGHT = 0.62;
 export const DEN_TINT = 0.6;
 
+let grassTex: THREE.Texture | null = null;
+/** The lawn texture, loaded once for every page; `on` is told when it's ready (until then the lawn is plain). */
+function grassTexture(on: () => void): THREE.Texture {
+  if (!grassTex) {
+    grassTex = new THREE.TextureLoader().load(grassUrl, () => {
+      grassLoaded = true;
+      for (const f of grassWaiting) f();
+      grassWaiting.length = 0;
+    });
+    grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+    grassTex.colorSpace = THREE.SRGBColorSpace;
+    grassTex.anisotropy = 8;
+    grassTex.generateMipmaps = true;
+    grassTex.minFilter = THREE.LinearMipmapLinearFilter;
+  }
+  if (grassLoaded) on();
+  else grassWaiting.push(on);
+  return grassTex;
+}
+let grassLoaded = false;
+const grassWaiting: (() => void)[] = [];
+
 export function cityUniforms(): CityUniforms {
+  const grassOn = { value: 0 };
   return {
     uTime: { value: 0 },
     uWind: { value: new THREE.Vector3(1, 0, 0) },
     uWindowLit: { value: 0.4 },
     uLamps: { value: 1 },
     uNeon: { value: 1 },
+    uHour: { value: 21 },
+    uOut: { value: new Float32Array(64) },
+    uOutMap: { value: new THREE.Vector3(0, 0, 128) },
+    uFil: { value: 0 },
     uFlicker: { value: 0 },
     uWet: { value: 0 },
+    uPuddle: { value: 0 },
     uSeason: { value: 0 },
     uSnow: { value: 0 },
     uDark: { value: 0 },
@@ -154,6 +204,9 @@ export function cityUniforms(): CityUniforms {
     uMyDir: { value: new THREE.Vector4(0, 1, 0, 0.62) },
     uMyLamps: { value: new THREE.Vector4() },
     uCarSkip: { value: -1 },
+    uBeacon: { value: new THREE.Vector4() },
+    uTorch: { value: new THREE.Vector4() },
+    uTorchDir: { value: new THREE.Vector3(0, 0, -1) },
     uWipers: { value: Array.from({ length: WIPERS }, () => new THREE.Vector4()) },
     uWiperGlass: { value: Array.from({ length: WIPERS }, () => new THREE.Vector4()) },
     uWiperPivots: { value: Array.from({ length: WIPERS }, () => new THREE.Vector4()) },
@@ -172,6 +225,8 @@ export function cityUniforms(): CityUniforms {
     uNight: { value: new THREE.Vector4(...windowsAt(20.5).night) },
     uWindow: { value: new THREE.Vector4(1, 1, -1, 0.8) },
     tLight: { value: null },
+    tGrass: { value: grassTexture(() => (grassOn.value = 1)) },
+    uGrassOn: grassOn,
     tShopCol: { value: null },
     tShopMask: { value: null },
     uLightRect: { value: new THREE.Vector4(0, 0, 1, 1) },
@@ -233,26 +288,38 @@ const swayVertex = /* glsl */ `
   #endif
 `;
 
+/** Shopfronts as another year had them (district/era.ts): no lightbox fascias, dimmer lit panels. */
+const OLD_FRONTS = era().id !== '1992';
+
 const common = /* glsl */ `
   uniform float uTime;
   uniform vec3 uWind;
   uniform float uWindowLit;
   uniform float uLamps;
   uniform float uNeon;
+  uniform float uHour;
+  ${HOURS_GLSL}
+  uniform float uOut[64];
+  uniform vec3 uOutMap;
+  uniform float uFil;
+  // 1 where the power is out (a brownout's cell), else 0: a cell is one bit of the packed floats.
+  float blackoutAt(vec2 p) {
+    if (uOutMap.x < 0.5) return 0.0;
+    vec2 c = floor(p / uOutMap.z);
+    if (c.x < 0.0 || c.y < 0.0 || c.x >= uOutMap.x || c.y >= uOutMap.y) return 0.0;
+    float i = c.y * uOutMap.x + c.x;
+    float w = floor(i / 24.0);
+    return mod(floor(uOut[int(w)] / exp2(i - w * 24.0)), 2.0);
+  }
   uniform float uFlicker;
   uniform float uWet;
+  uniform float uPuddle;
   uniform float uSeason;
   uniform float uSnow;
   uniform float uDark;
   uniform vec3 uSunDir;
   uniform vec3 uSunCol;
-  uniform vec4 uCars[${CAR_LIGHTS}];
-  uniform int uCarCount;
-  uniform float uHeadlights;
-  uniform vec4 uMyCar;
-  uniform vec4 uMyDir;
-  uniform vec4 uMyLamps;
-  uniform int uCarSkip;
+  ${LAMP_LIGHTS_GLSL}
   uniform vec4 uWipers[${WIPERS}];
   uniform vec4 uWiperGlass[${WIPERS}];
   uniform vec4 uWiperPivots[${WIPERS}];
@@ -265,81 +332,6 @@ const common = /* glsl */ `
   uniform float uLitterReach;
   ${screenLightGlsl}
 
-  // Headlights and tail lights of the cars near the camera, as light on the surfaces round them (no
-  // volumes): two beams ahead that spread and fade over ~35 m, low down; a short red glow behind.
-  vec3 carLights(vec3 wp, vec3 n, bool ground) {
-    vec3 acc = vec3(0.0);
-    for (int i = 0; i < ${CAR_LIGHTS}; i++) {
-      if (i >= uCarCount) break;
-      if (i == uCarSkip) continue;
-      vec4 c = uCars[i];
-      vec2 rel = wp.xz - c.xy;
-      if (dot(rel, rel) > 1600.0) continue;
-      vec2 d = c.zw;
-      vec2 sd = vec2(-d.y, d.x);
-      float along = dot(rel, d) - 2.2;
-      float side = dot(rel, sd);
-      // Facing: ground always; walls and people only on the side toward the car.
-      float face = ground ? 1.0 : clamp(dot(n.xz, -normalize(rel + d * 0.5)), 0.0, 1.0);
-      // Height: the beams sit low (0.7 m) and dip toward the road.
-      float hgt = exp(-max(wp.y - 0.4 - along * 0.02, 0.0) / 1.6);
-      if (along > 0.0) {
-        float beam = 0.0;
-        for (int k = -1; k <= 1; k += 2) {
-          float o = side - float(k) * 0.75;
-          float spread = 0.45 + along * 0.14;
-          beam += exp(-o * o / (spread * spread));
-        }
-        // Fades in off the bumper and out to nothing by 34 m (no edge where the list's reach ends).
-        float fall = smoothstep(0.0, 2.0, along) * smoothstep(34.0, 14.0, along) / (1.0 + along * along * 0.01);
-        acc += vec3(1.0, 0.9, 0.72) * beam * fall * hgt * face * 5.0;
-      } else if (along > -7.5) {
-        float back = -along - 2.4;
-        if (back > 0.0) acc += vec3(1.0, 0.05, 0.03) * exp(-side * side / 1.6) * exp(-back * 0.7) * hgt * face * 2.0;
-      }
-    }
-    return acc * uHeadlights;
-  }
-
-  // Your own car's lights: two beams well down the road (dipped: low and wide, to ~60 m; the main beam on to ~140 m
-  // and up the walls), a red glow behind it (more under braking) and a white one reversing. Heights are from the
-  // road's line through the car, so it works up on the expressway and on the hills, and the street a storey under a
-  // deck stays dark.
-  vec3 myLights(vec3 wp, vec3 n, bool ground) {
-    vec2 rel = wp.xz - uMyCar.xz;
-    if (dot(rel, rel) > 25600.0) return vec3(0.0);
-    vec2 d = uMyDir.xy;
-    float fwd = dot(rel, d);
-    float side = dot(rel, vec2(-d.y, d.x));
-    float h = wp.y - uMyCar.y - fwd * uMyDir.z;
-    float above = smoothstep(-4.0, -1.5, h);
-    // What lies flat is lit; walls only where they face the lamps.
-    float lies = ground ? 1.0 : smoothstep(0.5, 0.9, n.y);
-    vec3 acc = vec3(0.0);
-    float along = fwd - uMyCar.w;
-    if (along > 0.0) {
-      float face = mix(clamp(dot(n.xz, -normalize(rel - d * uMyCar.w)), 0.0, 1.0), 1.0, lies);
-      float spread = 0.7 + along * 0.2;
-      float beam = 0.0;
-      for (int k = -1; k <= 1; k += 2) {
-        float o = side - float(k) * uMyDir.w;
-        beam += exp(-o * o / (spread * spread));
-      }
-      // (The road just off the bumper is under the beams, not in them: they land a few metres on.)
-      float off = smoothstep(0.0, 7.0, along);
-      float dip = smoothstep(65.0, 25.0, along) / (1.0 + along * along * 0.004) * exp(-max(h - 0.7 - along * 0.012, 0.0) / 1.3);
-      float mainBeam = smoothstep(4.0, 30.0, along) * smoothstep(150.0, 60.0, along) / (1.0 + along * along * 0.0015) * exp(-max(h - 1.2 - along * 0.06, 0.0) / 3.0);
-      acc += vec3(1.0, 0.92, 0.76) * beam * off * face * (uMyLamps.x * dip * 6.0 + uMyLamps.y * mainBeam * 9.0);
-    }
-    float back = -fwd - uMyCar.w;
-    if (back > 0.0 && back < 16.0) {
-      float face = mix(clamp(dot(n.xz, -normalize(rel)), 0.0, 1.0), 1.0, lies);
-      float low = exp(-max(h - 0.5, 0.0) / 1.2) * face * smoothstep(0.0, 0.9, back);
-      acc += vec3(1.0, 0.05, 0.03) * exp(-side * side / 2.2) * exp(-back * 0.6) * low * 1.1 * uMyLamps.z;
-      acc += vec3(0.95, 0.95, 1.0) * exp(-side * side / 6.0) * exp(-back * 0.28) * low * 2.5 * uMyLamps.w;
-    }
-    return acc * above;
-  }
   uniform vec3 uZenith;
   uniform vec3 uHorizon;
   uniform vec3 uRoomAmbient;
@@ -348,6 +340,8 @@ const common = /* glsl */ `
   uniform vec4 uLit;
   uniform vec4 uWindow;
   uniform sampler2D tLight;
+  uniform sampler2D tGrass;
+  uniform float uGrassOn;
   uniform vec4 uLightRect;
   uniform vec2 uLightFade;
   uniform float uLightGain;
@@ -376,7 +370,7 @@ const common = /* glsl */ `
     return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
   }
   vec3 lightAt(vec2 p) {
-    vec3 L = texture2D(tLight, (p - uLightRect.xy) * uLightRect.zw).rgb * uLightGain;
+    vec3 L = texture2D(tLight, (p - uLightRect.xy) * uLightRect.zw).rgb * uLightGain * (1.0 - 0.97 * blackoutAt(p));
     if (uLightFade.y > 0.0) {
       vec2 dc = abs(p - cameraPosition.xz);
       L *= 1.0 - smoothstep(uLightFade.x, uLightFade.y, max(dc.x, dc.y));
@@ -535,12 +529,33 @@ const common = /* glsl */ `
     // (The last: a room lit by its television, a pale cool grey-blue.)
     return h < 0.55 ? vec3(1.0, 0.62, 0.3) : h < 0.85 ? vec3(1.0, 0.86, 0.66) : h < 0.94 ? vec3(0.8, 0.9, 1.0) : vec3(0.64, 0.72, 0.9);
   }
+  // The rooms as they were before the scenes (uWindow.w < 0, the debug menu's window scenes switch off): every lit room
+  // a plain full-strength light, with the old odd one out lit blue.
+  vec3 roomLightColorOld(float h, bool office) {
+    if (office) return h < 0.8 ? vec3(0.85, 0.95, 1.0) : vec3(1.0, 0.86, 0.66);
+    return h < 0.55 ? vec3(1.0, 0.62, 0.3) : h < 0.85 ? vec3(1.0, 0.86, 0.66) : h < 0.96 ? vec3(0.8, 0.9, 1.0) : vec3(0.45, 0.55, 1.0);
+  }
   float flick(float id) {
     return uFlicker > 0.5 && h2(vec2(id, floor(uTime * 12.0))) > 0.99 ? 0.1 : 1.0;
   }
   ${shopGlsl()}
 `;
 
+/**
+ * A brownout's cells (district/brownout.ts) put the lights out where they stand: the surface code below reads
+ * `uLampsB`, `uNeonB` and `uWindowLitB` (its own copies of the uniforms, switched off in the dark); a few shops run
+ * a generator and keep their lights, and a few windows a candle. (`boK`: 1 in the dark.)
+ */
+const BLACKOUT_PRELUDE = /* glsl */ `
+  float boK = blackoutAt(vWPos.xz);
+  float uLampsB = uLamps * (1.0 - boK);
+  float uNeonB = uNeon * (1.0 - boK);
+  float uWindowLitB = uWindowLit * (1.0 - boK);
+  float shopPower = 1.0 - boK * (h1(vBid + 9.0) < 0.18 ? 0.0 : 0.94);
+`;
+
+/** How bright a lit room reads through its window (1 was the first look: at dusk the windows bloomed to white, the user's note, 2026-10-11). */
+const ROOM_GAIN = '0.6';
 const surface = /* glsl */ `
   // ---- city surface (see city.ts) ----
   // Derivatives first, in uniform control flow.
@@ -554,6 +569,7 @@ const surface = /* glsl */ `
   // (Foliage: its leaf bump, applied to the lighting normal after three works it out: normalFoliage.)
   float leafy = 0.0;
   vec3 leafBump = vec3(0.0);
+  vec3 grassBump = vec3(0.0);
   // (Water: its rippled normal, world space, given to the lighting the same way: the sun's glitter.)
   vec3 waterN = vec3(0.0);
   float sRough = 0.85;
@@ -601,13 +617,22 @@ const surface = /* glsl */ `
         float edgeOn = abs(dot(geoN, Vw));
         float keep = (1.0 - d) * 1.4 + (vnoise(q * 4.0 + seed) - 0.5) * 0.9 - (1.0 - smoothstep(0.12, 0.45, edgeOn)) * 0.9;
         if (keep < 0.25) discard;
-        vec2 lq = q * 11.0 + seed;
+        // (Tropical broadleaves have their own leaf: rain tree and flame tree a fine feathery leaflet, mango a long
+        // narrow glossy blade, banyan a broad ovate one; the rest the common leaf.)
+        float lScale = 11.0;
+        vec2 lShape = vec2(0.54, 0.3);
+        float spc = vStyle.x - 20.0;
+        if (spc > 13.5 && spc < 14.5) { lScale = 17.0; lShape = vec2(0.56, 0.15); }
+        else if (spc > 14.5 && spc < 15.5) { lScale = 8.0; lShape = vec2(0.68, 0.19); }
+        else if (spc > 16.5 && spc < 17.5) { lScale = 9.0; lShape = vec2(0.52, 0.4); }
+        else if (spc > 17.5 && spc < 18.5) { lScale = 19.0; lShape = vec2(0.56, 0.13); }
+        vec2 lq = q * lScale + seed;
         vec2 cell = floor(lq);
         // A leaf per cell: a pointed ellipse, turned at random, in the cell's middle.
         vec2 f = fract(lq) - 0.5 - (vec2(h2(cell), h2(cell + 3.7)) - 0.5) * 0.35;
         float ang = h2(cell + 9.1) * 6.2832;
         vec2 rq = vec2(cos(ang) * f.x + sin(ang) * f.y, -sin(ang) * f.x + cos(ang) * f.y);
-        float leaf = 1.0 - smoothstep(0.85, 1.0, length(rq / vec2(0.54, 0.3)));
+        float leaf = 1.0 - smoothstep(0.85, 1.0, length(rq / lShape));
         if (closeL > 0.2 && leaf < 0.5) discard;
         leafShade = mix(0.72, 1.18, h2(cell + 5.3)) * mix(0.8, 1.0, 1.0 - d * 0.5);
         bumpK = 0.6;
@@ -690,6 +715,8 @@ const surface = /* glsl */ `
     bool tiled = mod(floor(vFlags / 128.0), 2.0) > 0.5;
     // A home (buildings.ts HOME_FLAG): a door and a window on a lower ground floor instead of a shop.
     bool home = mod(floor(vFlags / 256.0), 2.0) > 0.5;
+    // An informal settlement's shack (buildings.ts INFORMAL_FLAG): patchwork walls.
+    bool informal = mod(floor(vFlags / 4194304.0), 2.0) > 0.5;
     const float FH = 3.0;
     float GF = home ? 3.0 : 4.2;
 
@@ -704,6 +731,15 @@ const surface = /* glsl */ `
     float row = floor(v / 0.1);
     float grout = max(step(fract(v / 0.1), 0.12), step(fract(u / 0.3 + 0.5 * mod(row, 2.0)), 0.035));
     wallCol *= 1.0 - 0.12 * grout * tileFade;
+    // Unplastered hollow block (buildings.ts BLOCK_FLAG, Manila's houses): 0.4 x 0.2 m blocks in running bond, each its own tone, the joints dark.
+    if (mod(floor(vFlags / 2097152.0), 2.0) > 0.5) {
+      float bFade = 1.0 - smoothstep(0.02, 0.06, max(fwUV.x, fwUV.y));
+      float brow = floor(v / 0.2);
+      float bu = u / 0.4 + 0.5 * mod(brow, 2.0);
+      float bj = max(step(fract(v / 0.2), 0.12), step(fract(bu), 0.06));
+      wallCol *= mix(1.0, 0.82 + 0.3 * h3(vec3(vBid, floor(bu), brow)), bFade);
+      wallCol *= 1.0 - 0.32 * bj * bFade;
+    }
     // Wet walls go darker, and unevenly: the rain soaks in in tall runs down the face (broad ones, narrower ones
     // within them), the gaps between filling in as it goes on; the splash zone at the foot is wet through.
     float wetFoot = max(fwUV.x, fwUV.y);
@@ -721,7 +757,72 @@ const surface = /* glsl */ `
     vec3 rd = vec3(dot(Vw, T), Vw.y, dot(Vw, Nw));
     vec3 refl = skyRefl(reflect(Vw, Nw));
 
-    if (isFront && v < GF && home) {
+    if (informal) {
+      // A shack: a patchwork of mismatched panels (corrugated sheet with vertical ribs, plywood, painted planks, blue
+      // tarpaulin, rusted sheet) in patches of about 0.8 x 1.2 m, uneven (each column's rows start at their own
+      // height, each row's columns are shifted), the seams dark, rust and stain running down in streaks. One hash per
+      // patch, two value noises for the streaks; ribs, seams and grain fade out where they're smaller than a pixel.
+      float fine = 1.0 - smoothstep(0.03, 0.09, wetFoot);
+      float col0 = floor(u / 0.8);
+      float vv = v + (h1(col0 * 2.3 + vBid * 0.13) - 0.5) * 0.7;
+      float prow = floor(vv / 1.2);
+      float uu = u + h1(prow * 4.1 + vBid * 0.29) * 0.8;
+      float pcol = floor(uu / 0.8);
+      float pid = h1(pcol * 1.7 + prow * 17.3 + vBid * 0.37);
+      float pid2 = h1(pcol * 5.1 + prow * 3.9 + vBid * 0.11);
+      float lu = (uu / 0.8 - pcol) * 0.8;
+      float lv = (vv / 1.2 - prow) * 1.2;
+      vec3 pc;
+      float pm = 0.0;
+      float pr = 0.8;
+      if (pid < 0.3) {
+        float rib = mix(1.0, 0.7 + 0.3 * abs(fract(u / 0.1) * 2.0 - 1.0), fine);
+        bool rusted = pid2 < 0.45;
+        pc = (rusted ? mix(vec3(0.46, 0.25, 0.12), vec3(0.3, 0.17, 0.1), pid2 * 2.2) : mix(vec3(0.54, 0.57, 0.57), vec3(0.4, 0.43, 0.44), pid2)) * rib;
+        pm = rusted ? 0.1 : 0.55;
+        pr = rusted ? 0.8 : 0.45;
+      } else if (pid < 0.5) {
+        pc = mix(vec3(0.5, 0.36, 0.22), vec3(0.64, 0.5, 0.32), pid2);
+        pc *= mix(1.0, 0.86 + 0.14 * h1(floor(lv * 22.0) + pcol * 3.0 + prow * 7.0 + vBid), fine);
+      } else if (pid < 0.68) {
+        pc = pid2 < 0.25 ? vec3(0.45, 0.62, 0.5) : pid2 < 0.5 ? vec3(0.4, 0.52, 0.66) : pid2 < 0.75 ? vec3(0.74, 0.55, 0.55) : vec3(0.74, 0.64, 0.3);
+        pc *= mix(1.0, 0.55 + 0.45 * smoothstep(0.0, 0.07, fract(uu / 0.14)), fine);
+        pc = mix(pc, vec3(0.46, 0.4, 0.32), smoothstep(0.55, 0.9, vnoise(vec2(u * 5.0 + vBid, v * 2.5))) * 0.6);
+      } else if (pid < 0.8) {
+        float fold = abs(fract((uu + vv * 0.6) / 0.35) * 2.0 - 1.0);
+        pc = mix(vec3(0.08, 0.27, 0.62), vec3(0.15, 0.4, 0.8), mix(0.5, fold, fine));
+        pr = 0.35;
+      } else {
+        pc = mix(vec3(0.42, 0.22, 0.12), vec3(0.58, 0.36, 0.2), vnoise(vec2(u * 3.0, v * 3.0) + vBid));
+      }
+      // Seams, nails' rust, long streaks of rust and stain, grime at the foot.
+      float seam = min(min(lu, 0.8 - lu), min(lv, 1.2 - lv));
+      pc *= mix(1.0, 0.45 + 0.55 * smoothstep(0.0, 0.035, seam), fine);
+      float streak = smoothstep(0.55, 0.85, vnoise(vec2(uu * 3.5 + vBid * 3.1, vv * 0.12)));
+      pc = mix(pc, vec3(0.34, 0.15, 0.07), streak * 0.5 * (1.0 - 0.5 * lv / 1.2));
+      pc *= 1.0 - 0.4 * smoothstep(0.5, 0.85, vnoise(vec2(u * 0.9 + vBid, v * 0.05)));
+      pc *= 1.0 - 0.45 * exp(-v / 0.8);
+      albedo = pow(pc, vec3(2.2)) * (1.0 - 0.3 * uWet);
+      sMetal = pm;
+      sRough = pr;
+      if (isFront) {
+        // A plank door and a small lit window.
+        float ihs = h1(vBid + 5.0);
+        float idx = faceW * (ihs < 0.5 ? 0.26 : 0.74);
+        float iwx = faceW * (ihs < 0.5 ? 0.66 : 0.34);
+        float inLitI = step(h1(vBid + 11.0), clamp(uWindowLit * 1.2, 0.0, 1.0));
+        if (abs(u - idx) < 0.38 && v < 1.95) {
+          bool frameI = abs(u - idx) > 0.33 || v > 1.89;
+          albedo = pow(frameI ? vec3(0.2, 0.16, 0.12) : mix(vec3(0.3, 0.22, 0.15), vec3(0.38, 0.3, 0.2), step(0.5, fract((u - idx) / 0.1))), vec3(2.2));
+          sMetal = 0.0;
+          sRough = 0.8;
+        } else if (abs(u - iwx) < 0.3 && v > 1.15 && v < 1.7 && faceW > 3.0) {
+          bool frameW = abs(u - iwx) > 0.26 || v < 1.2 || v > 1.65;
+          albedo = frameW ? pow(vec3(0.3, 0.24, 0.18), vec3(2.2)) : vec3(0.02);
+          if (!frameW) sEmit = vec3(1.0, 0.78, 0.5) * 0.4 * inLitI;
+        }
+      }
+    } else if (isFront && v < GF && home) {
       // A house front: the door near one end under a little lamp, a window beside it, the wall.
       float hs = h1(vBid + 5.0);
       float dx = faceW * (hs < 0.5 ? 0.24 : 0.76);
@@ -766,6 +867,8 @@ const surface = /* glsl */ `
       vec3 frameC = woodF ? woodC : darkFrame ? vec3(0.05) : vec3(0.42, 0.44, 0.47);
       float hb = h1(vBid + 57.0);
       vec3 L = shopLightOf(tr, hue, shopPal, h1(vBid + 21.0));
+      // A closed shop (real/hours.ts: its trade's hours) is down to a night light.
+      L *= mix(0.06, 1.0, openHours(TRADE_HOURS[tr], vBid));
       // A shady house (windowScenes.ts SHOP_KINDS, shopAtlas.ts): where the zone has the most vice, some shops of
       // a few trades are a strip club, a hostess club, a back-room card game, a loan office... instead (which, and
       // how many, are a texel of numbers by the trade: shadyTable). Such a place doesn't show itself to the
@@ -792,7 +895,9 @@ const surface = /* glsl */ `
         // The fascia: the brand's stripes in a lightbox (convenience stores, drugstores), a lit panel in the shop's
         // colour (electronics, games), dark wood (the old shops and counters), the shop's colour painted (cafés,
         // boutiques), stone (lobbies, banks), or plain dark.
-        if (tr == ${TRADE.konbini} || tr == ${TRADE.drugstore}) {
+        // (In another year of the city, district/era.ts, which this text is built in: no chain-store lightbox, a painted
+        // fascia in its stead, and the lit panels at about half strength.)
+        if (${OLD_FRONTS ? 'false' : 'true'} && (tr == ${TRADE.konbini} || tr == ${TRADE.drugstore})) {
           float fy = (v - fasc) / (GF - fasc);
           albedo = fy > 0.18 && fy < 0.34 ? hue : fy > 0.34 && fy < 0.42 ? mix(hue, vec3(1.0), 0.55) : vec3(0.92);
           sEmit = albedo * (0.12 + 0.7 * uLamps);
@@ -800,12 +905,12 @@ const surface = /* glsl */ `
         } else if (tr == ${TRADE.electronics} || tr == ${TRADE.arcade} || tr == ${TRADE.pachinko} || tr == ${TRADE.karaoke} || tr == ${TRADE.hobby} || tr == ${TRADE.maid}) {
           bool rim = v < fasc + 0.05 || v > GF - 0.05;
           albedo = rim ? vec3(0.08) : hue * 0.7;
-          if (!rim) sEmit = hue * (0.08 + 0.9 * uLamps);
+          if (!rim) sEmit = hue * (0.08 + 0.9 * uLamps) * ${OLD_FRONTS ? '0.5' : '1.0'};
           sRough = 0.3;
         } else if (woodF || tr == ${TRADE.snack}) {
           albedo = woodC * (0.85 + 0.3 * step(0.5, fract(v / 0.19))) * (0.9 + 0.2 * vnoise(vec2(u * 3.0, v * 40.0)));
           sRough = 0.7;
-        } else if (tr == ${TRADE.cafe} || tr == ${TRADE.bakery} || tr == ${TRADE.florist} || tr == ${TRADE.salon} || tr == ${TRADE.books} || tr == ${TRADE.fashion}) {
+        } else if (tr == ${TRADE.cafe} || tr == ${TRADE.bakery} || tr == ${TRADE.florist} || tr == ${TRADE.salon} || tr == ${TRADE.books} || tr == ${TRADE.fashion} || tr == ${TRADE.konbini} || tr == ${TRADE.drugstore}) {
           albedo = mix(hue, wallCol, 0.45) * 0.55;
           sRough = 0.5;
         } else if (tallFront || tr == ${TRADE.lobby} || tr == ${TRADE.bank}) {
@@ -844,7 +949,7 @@ const surface = /* glsl */ `
           float cw = mw - 2.0 * ft;
           float cx = mx - ft;
           bool covered = true;
-          if (door && v > 2.05 && (shady || tr == ${TRADE.noodles} || tr == ${TRADE.izakaya} || (tr == ${TRADE.craft} && hb < 0.6))) {
+          if (door && v > 2.05 && uFil < 0.5 && (shady || tr == ${TRADE.noodles} || tr == ${TRADE.izakaya} || (tr == ${TRADE.craft} && hb < 0.6))) {
             // Noren over the door of a noodle shop, an izakaya or an old shop: cloth in the shop's colour (deep
             // indigo in most), split in three, the shop's mark in white. A shady house's is dark red.
             vec3 cloth = shady ? vec3(0.2, 0.015, 0.04) : mix(hue, vec3(0.04, 0.06, 0.2), hb < 0.5 ? 0.75 : 0.25);
@@ -892,7 +997,7 @@ const surface = /* glsl */ `
               sRough = 0.1;
               sEmit = refl * F * 0.8 + hue * step(v, lowTop + 0.04) * 0.5 * uLamps;
             } else {
-              vec3 interior = shopInterior(vec2(sx, v), rd, sw, roomN, vBid, hue, L, length(vWPos - cameraPosition), pxAng) * max(uLamps, shady ? 0.2 : 0.55);
+              vec3 interior = shopInterior(vec2(sx, v), rd, sw, roomN, vBid, hue, L, length(vWPos - cameraPosition), pxAng) * max(uLamps, shady ? 0.2 : 0.55) * shopPower;
               // At a tower's foot the glass is tinted like the curtain wall above it.
               if (towerFoot) interior *= vec3(0.75, 0.85, 0.88);
               albedo = vec3(0.02);
@@ -917,7 +1022,8 @@ const surface = /* glsl */ `
     } else if (type < 4.5 && faceW > 1.5) {
       float margin = 0.5;
       float span = faceW - 2.0 * margin;
-      float nb = max(1.0, floor(span / bay));
+      // (+0.001: a span of exactly so many bays, 13 m of 2.6, came out 4 or 5 from one pixel to the next, from rounding in the interpolated bay: stripes.)
+      float nb = max(1.0, floor(span / bay + 0.001));
       float b = span / nb;
       float ux = u - margin;
       float col = floor(ux / b);
@@ -949,6 +1055,17 @@ const surface = /* glsl */ `
       else if (type < 3.5) { float ww = b * 0.86; x0 = (b - ww) * 0.5; x1 = x0 + ww; y0 = 0.05; y1 = 2.25; }
       else { x0 = b * 0.5 - 0.32; x1 = b * 0.5 + 0.32; y0 = 1.45; y1 = 2.05; inGrid = inGrid && h3(vec3(vBid, col, fl)) > 0.45; }
 
+      // Arched windows (buildings.ts ARCH_FLAG, Manila): taller, with a round head.
+      float archD = 9.0;
+      if (type < 0.5 && mod(floor(vFlags / 1048576.0), 2.0) > 0.5) {
+        y1 = FH - 0.3;
+        float rad = (x1 - x0) * 0.5;
+        float cy = y1 - rad;
+        if (yf > cy) {
+          archD = rad - length(vec2(xb - (x0 + x1) * 0.5, yf - cy));
+          if (archD < 0.0) { x1 = x0; }
+        }
+      }
       bool inWin = inGrid && xb > x0 && xb < x1 && yf > y0 && yf < y1;
       // Rooms span 2 bays on ribbon / curtain-wall floors (open-plan offices; the bays are narrow, so a flat or a
       // bar behind them takes two as well, a hotel room one).
@@ -960,8 +1077,12 @@ const surface = /* glsl */ `
       // How many rooms are lit: the atmosphere's share, the building's own bias, and what the building is at this
       // hour (uLit). A room's hash against it is its bedtime, so the lights go out one by one (each eased over a
       // couple of seconds); an office's hash is mostly its floor's, so floors are lit or dark together.
-      float litFrac = clamp(uWindowLit * (0.35 + 1.3 * litBias) * (office ? uLit.x : den || love ? uLit.w : hotel ? uLit.z : uLit.y), 0.0, 1.0);
+      float litFrac = max(clamp(uWindowLit * (0.35 + 1.3 * litBias) * (office ? uLit.x : den || love ? uLit.w : hotel ? uLit.z : uLit.y), 0.0, 1.0), boK * 0.05);
       float glow = clamp((litFrac - (office ? 0.65 * h3(vec3(vBid, 7.0, fl)) + 0.35 * hr : hr)) / 0.012, 0.0, 1.0);
+      bool legacy = uWindow.w < 0.0;
+      if (legacy) {
+        glow = step(hr, clamp(uWindowLit * (0.35 + 1.3 * litBias), 0.0, 1.0));
+      }
       bool lit = glow > 0.0;
 
       vec3 detailAlbedo = albedo;
@@ -970,7 +1091,7 @@ const surface = /* glsl */ `
       float detailMetal = 0.0;
       if (inWin) {
         float fx = min(xb - x0, x1 - xb);
-        float fy = min(yf - y0, y1 - yf);
+        float fy = min(min(yf - y0, y1 - yf), archD);
         float fr = type > 1.5 && type < 2.5 ? 0.05 : 0.07;
         bool spandrel = type > 1.5 && type < 2.5 && yf < 0.5;
         bool sash = type < 0.5 && (x1 - x0) > 1.3 && abs(xb - (x0 + x1) * 0.5) < 0.03;
@@ -988,10 +1109,10 @@ const surface = /* glsl */ `
           float depth = 3.5 + 3.0 * h1(hr * 91.0);
           vec3 hp = roomHit(vec3(rx, yf, 0.0), rd, rw, FH - 0.25, depth, face);
           float hl = h1(hr * 37.0);
-          vec3 L = roomLightColor(hl, office) * glow;
+          vec3 L = (legacy ? roomLightColorOld(hl, office) : roomLightColor(hl, office)) * glow;
           // The rooms lit by a television: its light drifts, gently (between scenes, not frame to frame: eased from
           // one level to the next about once a second, within a fifth of its brightness).
-          bool tvRoom = !office && !den && hl >= 0.94;
+          bool tvRoom = !legacy && !office && !den && hl >= 0.94;
           float tvT = uTime * 0.9 + hr * 57.0;
           L *= tvRoom ? 0.86 + 0.2 * mix(h1(floor(tvT)), h1(floor(tvT) + 1.0), smoothstep(0.0, 1.0, fract(tvT))) : 1.0;
           // A tenant building's bars and clubs and a love hotel's rooms are lit like any room, only lower and
@@ -999,10 +1120,10 @@ const surface = /* glsl */ `
           // much of the tint; nothing saturated).
           float hc = h1(hr * 41.0);
           vec3 lampL = mix(vec3(1.0, 0.8, 0.58), hc < 0.14 ? vec3(1.0, 0.72, 0.46) : hc < 0.28 ? vec3(1.0, 0.72, 0.62) : vec3(1.0, 0.8, 0.58), ${DEN_TINT});
-          if (den || love) L = lampL * (${DEN_LIGHT} * glow);
+          if ((den || love) && !legacy) L = lampL * (${DEN_LIGHT} * glow);
           // A room that's a place (most are): its furniture and whoever is in it come from the scenes' atlas, below.
           float forced = step(0.0, uWindow.z);
-          bool furnished = type < 3.5 && (h1(hr * 101.0) < uWindow.w || forced > 0.5);
+          bool furnished = !legacy && type < 3.5 && (h1(hr * 101.0) < uWindow.w || forced > 0.5);
           vec3 wallA = mix(vec3(0.78, 0.74, 0.68), vec3(0.62, 0.66, 0.7), h1(hr * 13.0));
           vec3 c;
           float depthT = -hp.z / depth;
@@ -1105,7 +1226,7 @@ const surface = /* glsl */ `
             c = mix(c, ink + wallA * 0.05, people * vis);
             c = mix(c, ink, smoothstep(0.3, 0.6, sf.b) * vis);
           }
-          vec3 interior = c * mix(1.0, 0.45, depthT) * (L * 0.55 + uRoomAmbient);
+          vec3 interior = c * mix(1.0, 0.45, depthT) * (L * ${ROOM_GAIN} * 0.55 + uRoomAmbient);
           // Blinds (lowered from the top) or curtains (drawn in from the sides).
           float hb = h1(hr * 43.0);
           if (hb < 0.3) {
@@ -1113,14 +1234,14 @@ const surface = /* glsl */ `
             if (yf > blindY) {
               float slat = 1.0 - smoothstep(0.004, 0.012, fwUV.y);
               vec3 blindC = mix(vec3(0.75, 0.73, 0.68), vec3(0.85), h1(hr * 7.0));
-              interior = blindC * (L * 0.4 + uRoomAmbient * 0.8 + 0.01) * (1.0 - 0.35 * slat * step(0.75, fract(yf / 0.05)));
+              interior = blindC * (L * ${ROOM_GAIN} * 0.4 + uRoomAmbient * 0.8 + 0.01) * (1.0 - 0.35 * slat * step(0.75, fract(yf / 0.05)));
             }
           } else if (hb < 0.55) {
             float cw = (x1 - x0) * (0.15 + 0.3 * h1(hr * 67.0));
             if (xb < x0 + cw || xb > x1 - cw) {
               vec3 fabric = h1(hr * 83.0) < 0.5 ? vec3(0.8, 0.7, 0.55) : h1(hr * 89.0) < 0.5 ? vec3(0.55, 0.65, 0.55) : vec3(0.5, 0.15, 0.15);
               float fold = 0.8 + 0.2 * sin(xb * 40.0) * (1.0 - smoothstep(0.004, 0.015, fwUV.x));
-              interior = fabric * fold * (L * 0.5 + uRoomAmbient + 0.005);
+              interior = fabric * fold * (L * ${ROOM_GAIN} * 0.5 + uRoomAmbient + 0.005);
             }
           }
           // Windows sit back in the wall: seen from a steep angle the reveal hides the room, so a wall seen
@@ -1154,7 +1275,7 @@ const surface = /* glsl */ `
       // warm; each room about 0.3 of its light (wall colour, depth falloff). It was a flat warm gold at 0.4,
       // so distant towers glowed gold until you came close enough to see their windows.
       vec3 roomAvg = office ? vec3(0.53, 0.74, 0.82) : vec3(1.0, 0.72, 0.45) * (den || love ? ${DEN_LIGHT} : 1.0) * glassTint;
-      vec3 glassAvg = (litFrac * roomAvg * 0.28 + uRoomAmbient * 0.3) * reveal * (1.0 - Fa) + refl * mix(0.2, 0.9, Fa);
+      vec3 glassAvg = (litFrac * roomAvg * 0.28 * ${ROOM_GAIN} + uRoomAmbient * 0.3) * reveal * (1.0 - Fa) + refl * mix(0.2, 0.9, Fa);
       bool rowY = ux >= 0.0 && ux < span && fv >= 0.0 && fl < floors && yf > y0 && yf < y1;
       vec3 bandAlbedo = rowY ? mix(wallCol, vec3(0.02), xFrac) : detailAlbedo;
       vec3 bandEmit = rowY ? glassAvg * xFrac : vec3(0.0);
@@ -1236,6 +1357,13 @@ const surface = /* glsl */ `
       sEmit = vColor.rgb * (ch > 3.5 ? 0.42 : uLamps * 0.3);
     } else {
       float gain = ch < 0.5 ? 1.6 : ch < 1.5 ? uLamps * 6.0 : uNeon * 3.5 * flick(vBid);
+      // Neon tubes of a dimmer colour by luminance (red, violet, pink) are lifted to the luminance of the brighter ones (up to
+      // twice), or they fell under the bloom's threshold and didn't glow like them.
+      if (ch > 1.5 && ch < 2.5) gain *= clamp(0.62 / max(dot(vColor.rgb, vec3(0.299, 0.587, 0.114)), 0.05), 1.0, 2.0);
+      // Chasing bulbs (aStyle.y, the bulb's place in the chase; 0 for everything else): a band of them lit, stepping on.
+      if (vStyle.y > 0.0) gain *= 0.15 + 0.85 * step(fract(uTime * 1.6 - vStyle.y), 0.34);
+      // A shop's own lights (a sign's bulbs, a tower's name: aStyle.z, its hours class + 1, real/hours.ts) go out when it closes.
+      if (ch > 1.5 && vStyle.z > 0.5) gain *= openHours(vStyle.z - 1.0, vBid);
       sEmit = vColor.rgb * gain;
       albedo = vColor.rgb * 0.3;
     }
@@ -1260,9 +1388,45 @@ const surface = /* glsl */ `
       albedo = vColor.rgb * (0.78 + 0.4 * gn);
       sRough = 0.9;
     } else if (kindF < 11.5) {
-      // Grass: patchy lawn, blades up close.
-      float blades = mix(0.5, h2(floor(p * 9.0)), fine);
-      albedo = vColor.rgb * (0.7 + 0.45 * gn) * (0.8 + 0.4 * blades) * mix(vec3(1.0), vec3(1.15, 1.05, 0.7), smoothstep(0.55, 0.8, vnoise(p * 0.12)));
+      // Grass: a photograph of turf (assets/textures/grass.webp) tiled over the lawn at two scales so it doesn't
+      // repeat, its colour kept and tinted a little by the slab's own, the height in its alpha making the blades
+      // catch the light up close (grassBump). Until it loads, or where it isn't (a showroom without it), a plain lawn.
+      float lush = vnoise(p * 0.035) * 0.6 + vnoise(p * 0.11) * 0.4;
+      if (uGrassOn > 0.5) {
+        vec2 g1 = p / 1.7;
+        vec4 t1 = texture2D(tGrass, g1);
+        vec4 t2 = texture2D(tGrass, p / 6.1 + vec2(0.37, 0.61));
+        float macro = clamp(dot(t2.rgb, vec3(0.2126, 0.7152, 0.0722)) / 0.145, 0.6, 1.5);
+        float meanC = max(dot(vColor.rgb, vec3(0.3333)), 1e-3);
+        vec3 tint = mix(vec3(1.0), vColor.rgb / meanC, 0.35);
+        albedo = t1.rgb * mix(1.0, macro, 0.7) * tint * (0.82 + 0.3 * gn);
+        // Drier and greener patches across the lawn, subtly: mown turf is never one tone.
+        albedo = mix(albedo, albedo * vec3(1.18, 1.05, 0.7), smoothstep(0.55, 0.8, lush) * 0.5);
+        albedo *= mix(1.0, 0.8, smoothstep(0.45, 0.2, lush));
+        float bumpK = 1.0 - smoothstep(0.02, 0.09, max(fwW.x, fwW.y));
+        if (bumpK > 0.0) {
+          float e = 1.0 / 1024.0;
+          float hx = texture2D(tGrass, g1 + vec2(e, 0.0)).a - t1.a;
+          float hy = texture2D(tGrass, g1 + vec2(0.0, e)).a - t1.a;
+          grassBump = vec3(-hx, 0.0, -hy) * 22.0 * bumpK;
+        }
+      } else {
+        albedo = vColor.rgb * (0.7 + 0.45 * gn);
+      }
+      // Lawn tone (aStyle.x; the plants showroom sets it to compare): the photograph read too bright and vivid, so
+      // every lawn takes some saturation off and a tone and darkness on. 0 is the chosen one ("deep", the default),
+      // 1-5 the other candidates, 9 the old ungraded photograph.
+      if (vStyle.x < 8.5) {
+        float gv = vStyle.x;
+        float sat = 0.7; vec3 tone = vec3(0.9, 1.0, 0.9); float dk = 0.62;
+        if (gv > 0.5 && gv < 1.5) { sat = 0.65; tone = vec3(1.0); dk = 0.85; }
+        else if (gv > 1.5 && gv < 2.5) { sat = 0.55; tone = vec3(1.0, 0.95, 0.72); dk = 0.85; }
+        else if (gv > 2.5 && gv < 3.5) { sat = 0.7; tone = vec3(0.9, 1.0, 0.9); dk = 0.62; }
+        else if (gv > 3.5 && gv < 4.5) { sat = 0.5; tone = vec3(1.1, 1.0, 0.75); dk = 0.78; }
+        else if (gv > 4.5) { sat = 0.45; tone = vec3(0.9, 1.0, 0.95); dk = 0.8; }
+        float lum = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+        albedo = mix(vec3(lum), albedo, sat) * tone * dk;
+      }
       // The season: fresh in spring, deep in summer, going gold in autumn, straw in winter.
       if (uSeason < 0.5) albedo *= vec3(1.08, 1.12, 0.9);
       else if (uSeason < 1.5) albedo *= vec3(0.88, 1.02, 0.78);
@@ -1288,8 +1452,11 @@ const surface = /* glsl */ `
       // Puddles form once the ground is wet through (the same noise as ssr.ts, which reflects in them);
       // lawns soak most of it up.
       float pn = vnoise(p * 0.22) + 0.12 * vnoise(p * 1.9);
-      float puddle = smoothstep(0.62, 0.68, pn) * smoothstep(0.35, 0.9, uWet) * (kindF > 10.5 && kindF < 11.5 ? 0.25 : 1.0);
-      float wet = uWet * mix(0.6, 1.0, puddle);
+      // (Standing water gathers after the rain and shrinks as the ground dries: uPuddle. While it rains the
+      // whole ground is one wet sheet, and the rings on it are the reflection pass's, ssr.ts.)
+      float pedge = mix(0.8, 0.62, uPuddle);
+      float puddle = smoothstep(pedge, pedge + 0.06, pn) * smoothstep(0.0, 0.15, uPuddle) * (kindF > 10.5 && kindF < 11.5 ? 0.25 : 1.0);
+      float wet = uWet * mix(0.85, 1.0, puddle) * (kindF > 10.5 && kindF < 11.5 ? 0.7 : 1.0);
       albedo *= mix(1.0, 0.4, wet) * mix(1.0, 0.25, puddle);
       sRough = mix(mix(sRough, 0.14, wet), 0.02, puddle);
       // Reflections: the light pools further along the view direction, stretched toward the viewer
@@ -1298,14 +1465,23 @@ const surface = /* glsl */ `
       vec3 acc = vec3(0.0);
       for (int i = 1; i <= 5; i++) acc += lightAt(p + away * float(i) * 2.2) * (1.2 - float(i) * 0.18);
       float F = fresnel(clamp(-Vw.y, 0.0, 1.0));
-      sEmit += (acc * 0.09 * mix(0.4, 1.0, puddle) + uHorizon * 0.6) * mix(0.2, 1.0, F) * wet;
+      sEmit += (acc * 0.09 * mix(0.8, 1.0, puddle) + uHorizon * 0.6) * mix(0.45, 1.0, F) * wet;
     }
   }
   // Street light from the lightmap, sampled in front of the surface and fading with height.
   vec3 Lm = lightAt(vWPos.xz + Nw.xz * 0.6);
   float hf = groundKind ? 1.0 : exp(-max(vWPos.y - 0.2, 0.0) / 4.5) * 0.8;
-  // (A car's cabin is in the shade of its roof: a little of the street's light, through the windows.)
-  if (indoor) hf *= 0.35;
+  // (A car's cabin is in the shade of its roof: a little of the street's light, through the windows. It takes
+  // that light as one value for the whole cabin, from the lightmap under the car's centre and the road's height
+  // there: sampled per fragment, a lamp beside a pitched car (down a ramp) lit the floor and the seat sides in
+  // patches, and the height falloff followed each fragment's own height as the nose tipped.)
+  if (indoor) {
+    if (uMyLamps.x + uMyLamps.y + uMyLamps.z + uMyLamps.w > 0.0) {
+      Lm = lightAt(uMyCar.xz);
+      hf = exp(-max(uMyCar.y + 1.0 - 0.2, 0.0) / 4.5) * 0.8;
+    }
+    hf *= 0.35;
+  }
   sEmit += albedo * Lm * hf;
   // Big screens light what's in front of them in the colour of what they're showing (screenLight.ts).
   if (uScreenCount > 0) sEmit += albedo * screenLight(vWPos + Nw * 0.05, Nw, 1.0) * 0.3183;
@@ -1320,6 +1496,18 @@ const surface = /* glsl */ `
     vec3 ml = myLights(vWPos, Nw, groundKind);
     sEmit += albedo * ml;
     if (groundKind && uWet > 0.0) sEmit += ml * 0.1 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * uWet;
+  }
+  // The police beacon's red, on what's round it.
+  if (uBeacon.w > 0.0 && !indoor) {
+    vec3 bl = beaconLight(vWPos, Nw, groundKind);
+    sEmit += albedo * bl;
+    if (groundKind && uWet > 0.0) sEmit += bl * 0.1 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * uWet;
+  }
+  // Mack's flashlight.
+  if (uTorch.w > 0.0 && !indoor) {
+    vec3 tl = torchLight(vWPos, Nw);
+    sEmit += albedo * tl;
+    if (groundKind && uWet > 0.0) sEmit += tl * 0.1 * fresnel(clamp(-Vw.y, 0.0, 1.0)) * uWet;
   }
   // Fallen leaves (autumn) and petals (spring) on whatever lies flat (the ground, paving, the tops of things), not on
   // glass, paint, lights, water or the crowns themselves; piled along the ground slabs' edges.
@@ -1463,16 +1651,19 @@ export function cityMaterial(u: CityUniforms): THREE.MeshStandardMaterial {
         #endif`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${WIPER_GLSL}\n${common}\n${WATER_GLSL}\n${CAR_RAIN_GLSL}\n${WALL_RAIN_GLSL}`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n${surface}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>\n${BLACKOUT_PRELUDE}\n${surface.replace(/\buLamps\b/g, 'uLampsB').replace(/\buNeon\b/g, 'uNeonB').replace(/\buWindowLit\b/g, 'uWindowLitB')}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         // normalFoliage: a tree crown's leaf clusters catch the light (city surface: leafBump, world space).
         if (leafy > 0.5) normal = normalize(normal + (viewMatrix * vec4(leafBump, 0.0)).xyz);
+        if (dot(grassBump, grassBump) > 0.0) normal = normalize(normal + (viewMatrix * vec4(grassBump, 0.0)).xyz);
         if (waterN.y > 0.0) normal = normalize((viewMatrix * vec4(waterN, 0.0)).xyz);`)
       .replace('#include <opaque_fragment>', `
         // Never hand the post chain more than a bright highlight's worth of light (or a NaN).
         outgoingLight = clamp(outgoingLight, 0.0, 48.0);
         #include <opaque_fragment>
-        if (waterN.y > 0.0) gl_FragColor.a = ${WATER_ALPHA.toFixed(1)};`)
+        if (waterN.y > 0.0) gl_FragColor.a = ${WATER_ALPHA.toFixed(1)};
+        // Foliage marks itself for the reflection pass (ssr.ts): a crown's cut-out leaves have no surface to reflect in.
+        if (leafy > 0.5) gl_FragColor.a = 0.7;`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
         // Floor for the analytic (sun / moon) lights: a near-mirror GGX lobe on a point light peaks in the
         // tens of thousands, overflows the half-float target and blooms into a huge disc. Mirror-like

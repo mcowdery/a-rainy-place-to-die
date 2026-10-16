@@ -599,7 +599,7 @@ function buildSite(k: Kit): void {
     g.strokeRect(7, 7, 626, 242);
     text(g, '埋蔵文化財 調査中', 320, 70, `900 56px ${SANS}`, '#1a1a1a');
     text(g, '立入禁止', 320, 150, `900 70px ${SANS}`, '#c81818');
-    text(g, '東都都教育委員会', 320, 218, `bold 34px ${SANS}`, '#1a1a1a');
+    text(g, '東京都教育委員会', 320, 218, `bold 34px ${SANS}`, '#1a1a1a');
   }), 3.2, 1.28, 66, S.t0 - 0.06, y0 + 1.6, 'out', 1.2);
   for (const [u, t] of [[59, 51], [77.5, 51], [59, 67.5]] as const) {
     k.post(0x8a8e94, u, t, y0, y0 + 3, 0.05, 6);

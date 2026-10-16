@@ -2,7 +2,7 @@
 // the clock moved on from hour to hour, a shot at each with the share of windows lit by kind of building.
 //   node debug-shots/windowhours.mjs <out dir> [query] [spawn,spawn...] [hours: 18:30,21:00,00:30,03:30,06:30] [yaw:pitch]
 // The query can set the weather and the season (weather=rain, season=winter).
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/windowpeople/hours';
@@ -14,12 +14,12 @@ const [yaw, pitch] = (process.argv[6] ?? '0:14').split(':').map(Number);
 const mins = (h) => Number(h.split(':')[0]) * 60 + Number(h.split(':')[1]);
 const server = await shotServer({ server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 for (const spawn of spawns) {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
   page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 600)); });
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1${/weather=/.test(extra) ? '' : '&weather=clear'}&res=100&spawn=${spawn}&clock=${hours[0]}${extra}`);
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1${/weather=/.test(extra) ? '' : '&weather=clear'}&res=100&spawn=${spawn}&clock=${hours[0]}${extra}`);
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 400000, polling: 250 });
   await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });
   // (With ?debug=1 the page's __look is the car's, so the view is turned here: up a little from the spawn's own.)

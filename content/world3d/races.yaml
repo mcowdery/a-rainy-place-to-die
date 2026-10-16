@@ -1,4 +1,4 @@
-# Races in the city (format: src/poc3d/district/cityRace.ts): battles on the Tōto Expressway against a rival, set up
+# Races in the city (format: src/poc3d/district/cityRace.ts): battles on the Shuto Expressway against a rival, set up
 # by a racer at a PA (E on the host npc). A race runs along one expressway road from a start (metres along it) for
 # a length (metres) or laps of a loop; first to the line wins. Only the inner loop has traffic so far.
 races:

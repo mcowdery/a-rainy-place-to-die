@@ -111,7 +111,19 @@ export class MusicApp implements PhoneApp {
     const nc = button(`nm-pill${p.headphones && p.nc ? ' nm-lit' : ''}`, () => p.setNc(!p.nc), 'NC');
     nc.title = 'Noise cancelling';
     nc.disabled = !p.headphones;
-    card.append(text, wear, nc);
+    const top = h('div', 'nm-devtop');
+    top.append(text, wear, nc);
+    const vol = h('div', 'nm-vol');
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '100';
+    slider.value = String(Math.round(p.volume * 100));
+    slider.title = 'Volume';
+    slider.addEventListener('click', (e) => e.stopPropagation());
+    slider.addEventListener('input', () => p.setVolume(Number(slider.value) / 100));
+    vol.append(h('span', '', '🔈'), slider, h('span', '', '🔊'));
+    card.append(top, vol);
     return card;
   }
 
@@ -288,7 +300,10 @@ function injectStyle(): void {
   .nm-text span { font-size: 11px; color: #a09cab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .nm-text .nm-dev { display: flex; align-items: center; gap: 6px; overflow: visible; }
   .nm-cover { flex: none; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.86); font-weight: 700; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
-  .nm-device { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 12px; margin: 2px 0 8px; border-radius: 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); }
+  .nm-devtop { display: flex; align-items: center; gap: 8px; }
+  .nm-vol { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .nm-vol input { flex: 1; min-width: 0; accent-color: #e8612c; }
+  .nm-device { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; margin: 2px 0 8px; border-radius: 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); }
   .nm-root .nm-pill { flex: none; min-width: 40px; padding: 5px 10px; border-radius: 14px; border: 1px solid #5a5664; font-size: 11px; color: #cfcbd8; }
   .nm-root .nm-pill.nm-lit { background: #e8612c; border-color: #e8612c; color: #fff; }
   .nm-root .nm-row { flex: none; display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 4px; border-radius: 8px; }

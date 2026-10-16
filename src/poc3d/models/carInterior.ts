@@ -31,6 +31,9 @@ export type CabinStyle = 'sport' | 'eighties' | 'rotary' | 'turbo' | 'roadster' 
 
 export const CABIN_STYLE: Record<CarType, CabinStyle> = {
   hardtop: 'luxury',
+  coupe70: 'sport',
+  box70: 'saloon',
+  kei70: 'kei',
   sports: 'sport',
   hatch: 'eighties',
   rotary: 'rotary',
@@ -46,6 +49,8 @@ export const CABIN_STYLE: Record<CarType, CabinStyle> = {
   van: 'van',
   keitruck: 'truck',
   boxtruck: 'truck',
+  jeepney: 'truck',
+  tricycle: 'kei',
   police: 'police',
 };
 
@@ -75,6 +80,8 @@ interface StyleDef {
   readonly seats: 'bucket' | 'sport' | 'plain';
   /** White lace covers over the headrests and the seat backs' tops (taxis, saloons of a certain age). */
   readonly lace: boolean;
+  /** The lace covers' colour where not white. */
+  readonly laceColor?: number;
   readonly spokes: 2 | 3 | 4;
   /** The wheel's radius and its lean back from upright (rad): a sports car's upright, a van's nearly flat. */
   readonly wheelR: number;
@@ -130,7 +137,7 @@ const STYLES: Record<CabinStyle, StyleDef> = {
   },
   luxury: {
     trim: 0x2a2724, upper: 0x1d1b19, seat: 0x6e6a62, insert: 0x8a857a, liner: 0x9a958a, carpet: 0x2c2824, accent: 0x4a2814,
-    seats: 'plain', lace: true, spokes: 4, wheelR: 0.19, tilt: 0.45, rim: 0x3a2414,
+    seats: 'plain', lace: true, laceColor: 0x2c2926, spokes: 4, wheelR: 0.19, tilt: 0.45, rim: 0x3a2414,
     gauges: { face: '#0e0d0c', ink: '#f2ede2', glow: '#9fd0ff', needle: '#ff7a3a', layout: 'two', speedMax: JDM },
     shifter: 'auto', rear: true, charm: 0xc8a020,
   },
@@ -383,6 +390,12 @@ export class CabinMotion {
   /** The right hand up the rim from three o'clock (0) toward the top (1), and how far up this time (rad). */
   high = 0;
   spot = HIGH_SPOT;
+  /** The left hand over to the radio (0-1, from wherever it was): while a station or the volume is being worked, and a moment after. */
+  reach = 0;
+  /** The left hand on the ignition key (0 away, 1 on it), and the key's turn (0 off, 0.5 on, 1 start): given by the car. */
+  key = 0;
+  keyTurn = 0;
+  private tuning = 0;
   private settle = 0;
   private linger = 0;
   private alert = 0;
@@ -390,6 +403,11 @@ export class CabinMotion {
   private last = -1;
 
   constructor(readonly shifter: 'manual' | 'auto' | 'column') {}
+
+  /** The radio's been worked (a station, the volume, the tape): the left hand goes to it and stays a moment (each press holds it longer). */
+  touchRadio(): void {
+    this.tuning = RADIO_HOLD;
+  }
 
   advance(s: DriverInput, dt: number): void {
     // (Asked again within the frame: the cabin, and the driver sitting in it.)
@@ -444,6 +462,10 @@ export class CabinMotion {
     const yank = !!s.handbrake && manual;
     this.pull = toward(this.pull, yank ? 1 : 0, yank ? 6 : 3.2);
     this.pulled = yank && this.pull > 0.8;
+    // The radio: the left hand across to it, unless it's at a gear change or the handbrake (the radio waits).
+    this.tuning = Math.max(0, this.tuning - dt);
+    const busy = changing || yank || this.settle > 0;
+    this.reach = toward(this.reach, this.tuning > 0 && !busy ? 1 : 0, this.tuning > 0 && !busy ? RADIO_OVER : RADIO_BACK);
     // The right hand: up the rim while the left is away and nothing asks for both (a little differently each time).
     const away = this.hand > 0.5 && !changing && this.settle <= 0;
     const up = relaxed && away && !yank;
@@ -469,6 +491,10 @@ const HIGH_SPOT = 1.05;
 const FOOT_ACROSS = 3;
 const HAND_OVER = 3.6;
 const HAND_BACK = 2.8;
+/** The left hand stays at the radio this long after the last press (s), and goes to it and back at these rates (a second each, inverted). */
+const RADIO_HOLD = 0.9;
+const RADIO_OVER = 3.4;
+const RADIO_BACK = 2.6;
 
 /** A pedal: which, where it hinges (the car's frame) and its pad's middle from the hinge at rest. */
 export interface Pedal {
@@ -1053,7 +1079,31 @@ export class CarInterior {
       this.handbrake.position.set(L.side * 0.2, L.shifter.y - 0.02, L.seat.z - 0.12);
       this.group.add(this.handbrake);
     }
+    // The ignition key in the column's right side: its blade in the slot, its head out to turn.
+    {
+      const K = new Cab();
+      K.color(0xb8b8bd);
+      K.mb.beam([0, 0, 0], [-0.03, 0, 0], 0.004);
+      K.color(0x1a1a1c);
+      K.rbox([-0.04, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [0.005, 0.016, 0.011], 0.003);
+      this.ignition.add(K.build(material));
+      this.ignition.position.copy(this.ignitionAt());
+      this.group.add(this.ignition);
+    }
     this.group.visible = false;
+  }
+
+  private readonly ignition = new THREE.Group();
+
+  /** Where the ignition's slot is: on the column's right side, a little ahead of the wheel (this group's frame). */
+  private ignitionAt(): THREE.Vector3 {
+    const W = this.layout.wheel;
+    return W.c.clone().addScaledVector(W.axis, 0.13).addScaledVector(W.up, -0.012).add(new THREE.Vector3(-0.05, 0, 0));
+  }
+
+  /** Where his hand takes the key: its head, out from the slot (this group's frame). */
+  keyHead(out: THREE.Vector3): THREE.Vector3 {
+    return out.copy(this.ignitionAt()).add(new THREE.Vector3(-0.045, 0, 0));
   }
 
   /** Puts a picture in the rear-view mirror (race/driveCam.ts' RearMirror), or takes it away (null). */
@@ -1083,6 +1133,12 @@ export class CarInterior {
     return out.set(0, 0.021, 0.215).applyMatrix4(this.handbrake.matrix);
   }
 
+  /** Where the radio's middle knob is (this group's frame: the car's), for the hand that tunes it. */
+  radioKnob(out: THREE.Vector3): THREE.Vector3 {
+    const { lip, top } = this.layout.dash;
+    return out.set(0, top - 0.24 - 0.11, lip + 0.02);
+  }
+
   /** Where the gear lever's knob is now (this group's frame: the car's), for the hand that works it; null with none to hold. */
   knob(out: THREE.Vector3): THREE.Vector3 | null {
     if (!this.knobUp) return null;
@@ -1095,6 +1151,7 @@ export class CarInterior {
     if (!this.group.visible) return;
     dt = Math.min(dt, 0.05);
     const M = this.motion;
+    this.ignition.rotation.x = M.keyTurn * 0.95;
     M.advance({ ...s, speed: s.kmh / 3.6 }, dt);
     this.wheel.parent!.quaternion.setFromAxisAngle(this.layout.wheel.axis, -M.wheel);
     this.wheel.parent!.position.copy(this.layout.wheel.c).sub(this.layout.wheel.c.clone().applyQuaternion(this.wheel.parent!.quaternion));
@@ -1368,12 +1425,12 @@ function seats(cab: Cab, B: BodyShape, S: StyleDef, L: CockpitLayout): void {
       const hr = add(base, up, tall * 2 + 0.13);
       cab.color(0x2a2a2e);
       for (const s of [-1, 1]) cab.mb.beam(add(add(base, up, tall * 2 - 0.02), [s * 0.06, 0, 0]), add(hr, [s * 0.06, 0, 0]), 0.007);
-      cab.color(S.lace ? 0xeeeeea : S.seat);
+      cab.color(S.lace ? (S.laceColor ?? 0xeeeeea) : S.seat);
       cab.rbox(add(hr, up, 0.05), [1, 0, 0], up, fwd, [0.13, 0.09, 0.055], 0.04);
     }
     if (S.lace) {
       // The lace cover over the back's top.
-      cab.color(0xf2f2ee);
+      cab.color(S.laceColor ?? 0xf2f2ee);
       cab.rbox(add(add(base, up, tall * 1.72), fwd, 0.004), [1, 0, 0], up, fwd, [w + 0.006, tall * 0.3, 0.074], 0.036);
     }
   };
@@ -1387,6 +1444,16 @@ function seats(cab: Cab, B: BodyShape, S: StyleDef, L: CockpitLayout): void {
     for (const s of [-1, 1]) {
       const x = s * (B.halfW(B.wheelX[0]) - 0.16);
       cab.abox(x - 0.13, x + 0.13, L.floor, B.wheelR * 2 + 0.06, Math.max(L.back, rw - 0.36), rw + 0.36, 0.06);
+    }
+  }
+  // The front wheels' tubs, where the footwell reaches back over them (a long-bonnet saloon's wheels stand in it).
+  const fw = B.wheelX[1] - half;
+  const firewall = B.windscreen[1] + 0.03 - half;
+  if (fw - B.wheelR < firewall) {
+    cab.color(S.trim, 0.8);
+    for (const s of [-1, 1]) {
+      const x = s * (B.halfW(B.wheelX[1]) - 0.16);
+      cab.abox(x - 0.13, x + 0.13, L.floor, B.wheelR * 2 + 0.06, fw - 0.36, fw + 0.36, 0.06);
     }
   }
   if (!S.rear) {
@@ -1571,8 +1638,8 @@ function doors(cab: Cab, B: BodyShape, S: StyleDef, L: CockpitLayout): void {
       cab.color(0x18181a);
       cab.abox(x - s * 0.07, x - s * 0.01, arm + 0.001, arm + 0.006, zm - 0.04, zm + 0.06, 0.003);
     }
-    // The B-pillar's seat belt hanging down it (the passenger's; the driver's is on him).
-    if (s > 0) {
+    // The B-pillar's seat belt hanging down it (the passenger's; the driver's is on him). Only where the body has a pillar to hang it from.
+    if (s > 0 && B.pillars.length > 0) {
       cab.color(0x1c1c20);
       cab.mb.beam([x - s * 0.04, L.eye.y + 0.06, L.seat.z - 0.28], [x - s * 0.05, L.seat.y + 0.05, L.seat.z - 0.24], 0.012);
     }

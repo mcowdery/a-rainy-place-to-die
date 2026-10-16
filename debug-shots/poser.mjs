@@ -5,14 +5,14 @@
 // Shift-drag turns a limb about its own line with its hand or foot staying put; a click on a dot shows its part's
 // rings and dragging a ring turns that part; undo and redo step through it. Photographs each.
 //   node debug-shots/poser.mjs [out dir]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/poser';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 600)); });

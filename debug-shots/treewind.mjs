@@ -1,13 +1,13 @@
 // Trees in the wind: a street of them and the park, in a breeze and at a typhoon's strength, a few frames apart
 // (the same camera, so the frames can be flipped through). node debug-shots/treewind.mjs <out dir>
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/treewind';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 // [label, x, y, z, yaw, pitch]
 const SPOTS = [
   ['park', 2654.9, 1.7, 1459.7, 46, 4],
@@ -19,7 +19,7 @@ for (const [name, query] of [['breeze', 'wind=0.2'], ['typhoon', 'wind=1&season=
   page.on('console', (m) => {
     if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 400));
   });
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&clock=13:00&windDir=90&cam=2654.9,1.7,1459.7,46,4&${query}`, { timeout: 240000 });
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&clock=13:00&windDir=90&cam=2654.9,1.7,1459.7,46,4&${query}`, { timeout: 240000 });
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
   await page.evaluate(() => {
     document.getElementById('overlay').hidden = true;

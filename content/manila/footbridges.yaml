@@ -1,0 +1,21 @@
+# Pedestrian footbridges over Manilaya's avenues (src/poc3d/district/footbridges.ts): a covered deck with a stair down each
+# pavement. `row: n` / `col: n` is the avenue's grid line, `at` the span's place along it in cells from the map's
+# origin (x for a row, z for a column). The width and median are the avenue's. Sites are where no cross street or set
+# piece comes within the stairs' reach (tests/footbridges.test.ts checks), by the markets, the towers and the nightlife.
+footbridges:
+  # Bagumbago (the business district) and the west bank.
+  - { row: 8, at: 12.5 }
+  - { col: 10, at: 9.5 }
+  - { col: 19, at: 14.5 }
+  - { row: 14, at: 15.5 }
+  - { row: 17, at: 14.5 }
+  # Divisora bazaar and Binundo.
+  - { col: 26, at: 12.5 }
+  - { row: 13, at: 23.5 }
+  - { row: 13, at: 25.5 }
+  - { col: 26, at: 15.5 }
+  - { row: 17, at: 23.5 }
+  # The university belt, Poblado and Fort Centre.
+  - { col: 26, at: 5.5 }
+  - { col: 32, at: 12.5 }
+  - { col: 32, at: 7.5 }

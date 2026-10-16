@@ -66,7 +66,8 @@ the first 200s.
   an adult off the clock. Stays: eyes in the electric town.
 - **The informant.** Someone feeding Japan's Public Security police (公安, Kōan), or the Americans at the US
   base, about the triad, or about something stranger. They know more about the order's edges than they should.
-  A way into the state and foreign-power threads, and into Mack's father's base. Stays: a source who lies to
+  A way into the state and foreign-power threads, and (since Dom) into what the Americans know about a
+  mobster hiding in Tokyo. Stays: a source who lies to
   everyone, Mack included.
 - **The teacher** (already a story character: Kōpo Sakura 102, Mack's neighbour if he moves up the ladder).
   Her own adult life, never her students': a secret she's being squeezed for (a married colleague, a weekend job
@@ -78,8 +79,8 @@ the first 200s.
   has to trade. She's an adult now, and her past as an idol is never sexual. **Open:** is she also the idol on
   every screen, the one the user has in mind for later?
 - **Another detective.** Two ways:
-  - *His old partner* at the Tōto police, who carried his coffin. Now a detective, and good at it. Close to
-    finding out.
+  - *His old partner* at the Tokyo police, who carried his coffin. Now a detective, and good at it. Close to
+    finding out. (Mack is an ex-cop since 2026-10-12, so this one has a place now.)
   - *The rival agency on the posters*: 霧島探偵事務所's "人探し・浮気調査・秘密厳守" (missing persons, cheating
     spouses, discretion). A slicker operator who works for the rich, catching unfaithful spouses. The name
     stays; the old prototype character doesn't. Twist: his photographs of cheating spouses are what Cash One
@@ -89,7 +90,7 @@ the first 200s.
 ## More ideas (Claude's, for the fights and the maps to come)
 
 - **The ring.** An underground fight club under a pachinko hall, where the yakuza bet on men who fight for
-  their debts. Mack fights on foot, and wins too easily; someone notices what he is. Stays: a fighter who owes
+  their debts. Dom fights on foot, and wins too easily; someone notices what he is (it was Mack, while Mack was a machine). Stays: a fighter who owes
   him, and a reason to fear being seen.
 - **The container.** The triad brings people in through the container terminal. One of them, an adult woman
   who was promised a job, gets out and runs. A gunfight among the stacks and the gantry cranes. Immigration at

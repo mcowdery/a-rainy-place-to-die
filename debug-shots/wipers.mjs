@@ -2,7 +2,7 @@
 // car's windscreen from outside in front, and the traffic's at the crossing.
 // node debug-shots/wipers.mjs <out dir> [name] [query]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/wipers';
 const name = process.argv[3] ?? 'shot';
@@ -10,14 +10,14 @@ const extra = process.argv[4] ? `&${process.argv[4]}` : '';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => {
   if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 500));
 });
 await page.addInitScript(() => localStorage.setItem('citypop.driveView', 'cockpit'));
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=kaburo_crossing.view&weather=rain&rain=0.7&wet=1&res=100&clock=14:00${extra}`, { timeout: 240000 });
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=kaburo_crossing.view&weather=rain&rain=0.7&wet=1&res=100&clock=14:00${extra}`, { timeout: 240000 });
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => {
   document.getElementById('overlay').hidden = true;

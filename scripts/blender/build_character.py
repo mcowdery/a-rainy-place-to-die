@@ -59,6 +59,8 @@ Part settings:
                          draws eyebrows (see brow_mask)
   delete_uv, delete_where  faces to drop (see delete_faces)
   inflate                metres to push the part out along its normals
+  clear                  (glasses) metres to keep between the lenses and the face: the part is moved forward until no
+                         part of the face but the nose is in front of its rims (see clear_face)
   kind                   (clothes) the asset's kind if it isn't clothes ("hair": a second hair asset, say for its
                          fringe, with the rest cut away by delete_where)
   hem_cm                 (clothes) cut the garment off level at this height and show the skin below
@@ -171,6 +173,10 @@ def edit_pixels(px, ops):
       {"op": "smooth", "radius": px}           a box blur
       {"op": "alpha", "gain": g}               alpha times g (unlimited by masks)
       {"op": "bulge", "center": [cx, cy], "radius": r, "scale": k}  magnify round a point
+      {"op": "print", "base": "#rrggbb", "flowers": ["#rrggbb", ...], "leaf": "#rrggbb", "tile": px,
+       "count": n, "leaves": n, "size": [lo, hi], "seed": s, "contrast": c}  a hibiscus print (an aloha
+          shirt): flowers and leaves on the base colour, drawn on a tile of `tile` (a share of the width, or pixels) repeated over the
+          image, shaded by the luminance's variation round its median as colorize is (folds stay)
     """
     h, w = px.shape[:2]
     rgb = px[..., :3]
@@ -257,6 +263,11 @@ def edit_pixels(px, ops):
             ref = float(np.median(sel)) if sel.size else 0.5
             rel = (lum / max(ref, 1e-3)) ** float(op.get('contrast', 1.0))
             new = hex_rgb(op['color']) * rel[..., None]
+        elif kind == 'print':
+            sel = lum[(mask > 0.5) & (lum > 0.02)]
+            ref = float(np.median(sel)) if sel.size else 0.5
+            rel = (lum / max(ref, 1e-3)) ** float(op.get('contrast', 0.8))
+            new = print_pattern(h, w, op) * rel[..., None]
         elif kind == 'grade':
             new = lum[..., None] + (rgb - lum[..., None]) * float(op.get('saturation', 1.0))
             new = new * hex_rgb(op.get('gain', [1, 1, 1]))
@@ -268,6 +279,83 @@ def edit_pixels(px, ops):
         rgb = rgb * (1 - mask[..., None]) + np.clip(new, 0, 1) * mask[..., None]
     px[..., :3] = rgb
     return px
+
+
+def print_pattern(h, w, op):
+    """An (h, w, 3) hibiscus print in sRGB, from one tile of op['tile'] pixels drawn with wrap-around and repeated:
+    leaves (pointed, a darker vein down each) under five-petalled flowers (each petal shaded toward its tip, a dark
+    throat and a stamen), on the base colour."""
+    # (A tile of 1 or less is a share of the image's width: the print keeps its size on the garment at any resolution.)
+    t = float(op.get('tile', 0.22))
+    T = max(16, int(t * w if t <= 1 else t))
+    rng = np.random.default_rng(int(op.get('seed', 1)))
+    yy, xx = np.mgrid[0:T, 0:T].astype(np.float32)
+    img = np.empty((T, T, 3), dtype=np.float32)
+    img[...] = hex_rgb(op.get('base', '#1c2430'))
+
+    def offsets(cx, cy):
+        return (xx - cx + T / 2) % T - T / 2, (yy - cy + T / 2) % T - T / 2
+
+    leaf = np.array(hex_rgb(op.get('leaf', '#2c3a2e')), dtype=np.float32)
+    for _ in range(int(op.get('leaves', 7))):
+        dx, dy = offsets(*rng.uniform(0, T, 2))
+        a = rng.uniform(0, math.pi)
+        L = rng.uniform(0.16, 0.26) * T
+        u = dx * math.cos(a) + dy * math.sin(a)
+        v = -dx * math.sin(a) + dy * math.cos(a)
+        # Pointed at both ends: the width shrinks toward the tips.
+        half = 0.32 * L * np.sqrt(np.clip(1 - (u / L) ** 2, 0, 1))
+        m = (np.abs(u) < L) & (np.abs(v) < half)
+        img[m] = leaf * (0.85 + 0.15 * (u[m] / L))[:, None]
+        vein = m & (np.abs(v) < 0.04 * L)
+        img[vein] = leaf * 0.6
+    flowers = [np.array(hex_rgb(c), dtype=np.float32) for c in op.get('flowers', ['#8a4a32', '#b0956a'])]
+    lo, hi = op.get('size', [0.11, 0.18])
+    for k in range(int(op.get('count', 5))):
+        dx, dy = offsets(*rng.uniform(0, T, 2))
+        R = rng.uniform(lo, hi) * T
+        rot = rng.uniform(0, 2 * math.pi)
+        r = np.hypot(dx, dy)
+        th = np.arctan2(dy, dx) - rot
+        edge = R * (0.5 + 0.5 * np.abs(np.cos(2.5 * th)))
+        m = r < edge
+        col = flowers[k % len(flowers)]
+        img[m] = col * (0.7 + 0.3 * (r[m] / np.maximum(edge[m], 1e-3)))[:, None]
+        throat = r < 0.2 * R
+        img[throat] = col * 0.45
+        # The stamen: a short stroke out from the throat, a pale tip.
+        sa = rng.uniform(0, 2 * math.pi)
+        su = dx * math.cos(sa) + dy * math.sin(sa)
+        sv = -dx * math.sin(sa) + dy * math.cos(sa)
+        img[(su > 0) & (su < 0.45 * R) & (np.abs(sv) < 0.03 * R + 0.5)] = np.array(hex_rgb('#c8b890'), dtype=np.float32)
+    reps = (h // T + 1, w // T + 1, 1)
+    return np.tile(img, reps)[:h, :w]
+
+
+def clear_face(obj, body, margin):
+    """Moves a part fitted to the face (glasses) straight forward until nothing of the face is in front of its rims
+    by less than `margin`: glasses are fitted to MakeHuman's own face, and a heavier brow or higher cheekbones come
+    through them (the brow over the top of the frame, the cheek in front of the bottom of the lens). The nose, which
+    is meant to be in front of them, is left out (the middle 4 cm)."""
+    co, _ = world_verts(obj)
+    front = co[:, 1].min()
+    rims = co[co[:, 1] < front + 0.012]
+    x0, x1, z0, z1 = rims[:, 0].min(), rims[:, 0].max(), rims[:, 2].min() - 0.004, rims[:, 2].max() + 0.004
+    plane = float(np.median(rims[:, 1]))
+    bco, _ = world_verts(body)
+    cx = (x0 + x1) / 2
+    sel = (bco[:, 0] > x0) & (bco[:, 0] < x1) & (np.abs(bco[:, 0] - cx) > 0.02) & (bco[:, 2] > z0) & (bco[:, 2] < z1) & (bco[:, 1] < plane + 0.03)
+    if not sel.any():
+        return
+    # Facing -Y: the face is in front where its y is less than the rims'.
+    shift = plane - float(bco[sel, 1].min()) + margin
+    if shift <= 0:
+        return
+    local = obj.matrix_world.inverted().to_3x3() @ Vector((0, -shift, 0))
+    for v in obj.data.vertices:
+        v.co += local
+    obj.data.update()
+    print('clear_face: %s moved %.1f mm forward' % (obj.name, shift * 1000))
 
 
 _done_images = {}
@@ -1236,6 +1324,8 @@ def main():
             cut_hem(obj, part['hem_cm'] / 100)
         if 'delete_uv' in part or 'delete_where' in part:
             delete_faces(obj, part, L)
+        if 'clear' in part:
+            clear_face(obj, body, float(part['clear']))
         if 'inflate' in part:
             # Pushes the part out along its normals (more volume for a hair asset).
             me = obj.data

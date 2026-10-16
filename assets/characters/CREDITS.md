@@ -84,3 +84,12 @@ MakeHuman macros and targets.
 | Tee, jeans | `male_casualsuit06` (the tee recoloured black with its logo gone and its sleeves cut away under the jacket; the jeans dark indigo) | makehuman_system_assets | makehuman_system | CC0 |
 | Boots | `toigo_ankle_boots_male` (recoloured black) | shoes01 pack | MargaretToigo (MRT) | CC0 |
 | Leather jacket | shaped from the body and its grain normal map generated, for this project, in `scripts/blender/garments.py` (`jacket`) | this repository | this project | ours |
+
+## Mack's detective outfit (`mack_detective.glb`, and `mack_detective_open.glb`: the same, worn open)
+
+| What | Asset | Source | Author | Licence |
+| --- | --- | --- | --- | --- |
+| Suit, shirt, tie | `male_elegantsuit01` (recoloured charcoal, tie wine) | makehuman_system_assets | makehuman_system | CC0 |
+| Trench coat | modelled in bpy from Mack's own skin (`garments.py`, the `jacket` garment) | this project | | |
+| Hat | `fedora_cocked` (recoloured brown) | MPFB clothes assets | per the file header, explicitly released as CC0 in September 2020 | CC0 |
+| Shoes | `shoes04` | makehuman_system_assets | makehuman_system | CC0 |

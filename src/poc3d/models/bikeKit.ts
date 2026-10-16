@@ -64,6 +64,8 @@ export interface Bike {
       turn?: number;
       readonly fwd?: THREE.Vector3;
       readonly rod?: THREE.Vector3;
+      /** How far the hand is reaching for the radio's knob, fingers at it (0-1). */
+      dial?: number;
     };
     /** How far the rider leans forward (rad: a sports bike's tuck), and whether he wears a helmet on it. */
     readonly tuck?: number;
@@ -93,7 +95,7 @@ export const hex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
 
 /** A Japanese plate, invented: white, a green border and lettering (area and class on top, the kana and
  * number below). */
-export function plateTexture(top = '東都 400', kana = 'な', num = '12-34'): THREE.CanvasTexture {
+export function plateTexture(top = '東京 400', kana = 'な', num = '12-34'): THREE.CanvasTexture {
   return canvas(256, 128, (g) => {
     g.fillStyle = '#f4f4ee';
     g.fillRect(0, 0, 256, 128);

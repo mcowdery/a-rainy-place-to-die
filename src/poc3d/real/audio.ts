@@ -6,11 +6,11 @@
  *
  * - Rain: a bed of filtered noise (a distant hiss and a nearer body) whose level and brightness follow
  *   the rain, plus close patter (short random clicks, panned). Under a roof the bed is duller and a
- *   hollow drumming and drips join in; indoors (a shop, a basement) it's the rain through the walls: the hiss
+ *   hollow drumming joins in; indoors (a shop, a basement) it's the rain through the walls: the hiss
  *   gone, the body of it left, quiet.
  * - Cover: the outside is heard three ways at once (as it is, from under a roof, through walls) and going in
  *   or out crossfades between them over `COVER_FADE` (no filter is swept: the top of the sound fades out), the
- *   close drops, the drumming and the drips moving with the same fade.
+ *   close drops and the drumming moving with the same fade.
  * - Wind: band-passed noise following the gusts; a resonant howl on top in a gale.
  * - Thunder: a crack for close strikes, a long low roll for far ones, delayed by distance (340 m/s).
  * - Tyres and engines: for the nearest cars, a tyre hiss (loud on wet roads) and an engine whose pitch
@@ -24,6 +24,8 @@
 
 import type { Footwear, Surface } from '../district/footing';
 import { renderSplash, renderStep } from './stepSynth';
+import { engineVoice, jeepneyHornNotes, type ManilaFrame } from './manilaSound';
+import { engineTune, layersFor, loadLayers } from '../../race/engineSamples';
 
 const recordings = import.meta.glob('../../../assets/audio/*.{ogg,mp3,wav,m4a}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const recording = (name: string): string | null => Object.entries(recordings).find(([k]) => k.split('/').pop()!.replace(/\.\w+$/, '') === name)?.[1] ?? null;
@@ -36,6 +38,8 @@ export interface AudioFrame {
   readonly dt: number;
   /** 0-1 rain strength (0 when none). */
   readonly rain: number;
+  /** Rain's sound level (1 as built, 0 silent). */
+  readonly rainVol?: number;
   /** 0-1 wind strength and the current gust factor (~0.5-1.1). */
   readonly wind: number;
   readonly gust: number;
@@ -43,6 +47,10 @@ export interface AudioFrame {
   readonly cover: 'open' | 'roof' | 'enclosed';
   /** Riding the train. */
   readonly train: boolean;
+  /** 0-1 how near a train running outside is (an elevated line or the monorail overhead or along the street). */
+  readonly trainPass?: number;
+  /** The siren on your car's roof while its wail is on (district/siren.ts): where it is and how it's moving (m, m/s), so it's a sound in the world (panned, falling off with distance, Doppler); absent when off. */
+  readonly siren?: { readonly x: number; readonly y: number; readonly z: number; readonly vx: number; readonly vz: number } | null;
   /** 0-1 master volume. */
   readonly volume: number;
   /** Listener position and the direction it faces (yaw, radians: 0 looks -z). */
@@ -50,7 +58,7 @@ export interface AudioFrame {
   readonly z: number;
   readonly yaw: number;
   /** Nearest vehicles (position, velocity, speed, acceleration, bus), nearest first; how wet the road is 0-1. */
-  readonly cars: readonly { readonly x: number; readonly z: number; readonly vx: number; readonly vz: number; readonly speed: number; readonly acc: number; readonly bus: boolean }[];
+  readonly cars: readonly { readonly x: number; readonly z: number; readonly vx: number; readonly vz: number; readonly speed: number; readonly acc: number; readonly bus: boolean; readonly type?: string }[];
   readonly wet: number;
   /** How far inside a car's cabin the listener is (0 out in the open, 1 shut in): the world outside is muffled. */
   readonly cabin?: number;
@@ -64,6 +72,8 @@ export interface AudioFrame {
   /** Summer: the cicadas' daytime chorus (0-1, louder in a heat wave and among trees), and the higurashi at dusk. */
   readonly cicadas?: number;
   readonly higurashi?: number;
+  /** Manila's street sounds (real/manilaSound.ts `manilaFrame`): videoke, radios, vendors, roosters, dogs, a court, tin roofs, a typhoon. */
+  readonly manila?: ManilaFrame;
 }
 
 const TYRE_VOICES = 3;
@@ -152,14 +162,33 @@ export class CityAudio {
   private howlBand!: BiquadFilterNode;
   // Train rumble.
   private trainGain!: GainNode;
+  /** A train passing outside (a magnetic one: a whoosh, no clatter). */
+  private passGain!: GainNode;
+  /** The siren on your car's roof (a wail: see `start`). */
+  private sirenGain!: GainNode;
+  private sirenSoft!: BiquadFilterNode;
+  private sirenWail!: OscillatorNode;
+  private sirenAt!: PannerNode;
   // Tyres.
   // Cicadas: the aburazemi's sizzle, and the higurashi's calls at dusk.
   private cicadaGain!: GainNode;
   private higurashiDebt = 0;
-  private tyres: { gain: GainNode; pan: StereoPannerNode; band: BiquadFilterNode; engine: GainNode; osc: OscillatorNode[]; lp: BiquadFilterNode }[] = [];
+  /** A tropical city (cityConfig.ts): the insect chorus is crickets, and the dusk call a gecko's. */
+  tropical = false;
+  // Manila's street (built only when `tropical`): a videoke set, a far radio and a tin roof's patter, each a gain
+  // into the cover, and the timers of the one-off calls (a vendor, a rooster, a dog, a ball, a cheer).
+  private mGain: { videoke: GainNode; radio: GainNode; tin: GainNode } | null = null;
+  private tinBus: GainNode | null = null;
+  private tinDebt = 0;
+  private vk = { next: 0, bar: 0, chord: 0, pad: [] as OscillatorNode[], bass: null as OscillatorNode | null, voice: null as OscillatorNode | null, voiceGain: null as GainNode | null, lastHz: 440 };
+  private readonly mTimer = { vendor: 8, rooster: 5, dog: 12, court: 3, cheer: 20 };
+  private buzzLfo!: OscillatorNode;
+  private sizzleBand!: BiquadFilterNode;
+  private tyres: { gain: GainNode; pan: StereoPannerNode; band: BiquadFilterNode; engine: GainNode; osc: OscillatorNode[]; lp: BiquadFilterNode; smp: { src: AudioBufferSourceNode | null; gain: GainNode; lp: BiquadFilterNode } }[] = [];
+  /** The recorded engine the traffic's cars share (race/engineSamples.ts, the same voice as your own car's), and which voice it is. */
+  private trafficEngine = '';
   private patterDebt = 0;
   private roofDebt = 0;
-  private dripDebt = 0;
   /** Current levels, for diagnostics. */
   readonly levels = { bed: 0, patter: 0, roof: 0, wind: 0, tyres: 0 };
 
@@ -271,7 +300,7 @@ export class CityAudio {
     this.cicadaGain.connect(this.cover.input);
     const sizzleBand = ctx.createBiquadFilter();
     sizzleBand.type = 'bandpass';
-    sizzleBand.frequency.value = 4000;
+    sizzleBand.frequency.value = this.tropical ? 3300 : 4000;
     sizzleBand.Q.value = 1.2;
     // (Softened: the top taken off, so it sits back in the distance rather than in your ear.)
     const soften = ctx.createBiquadFilter();
@@ -280,18 +309,79 @@ export class CityAudio {
     const buzz = ctx.createGain();
     buzz.gain.value = 0.8;
     const buzzLfo = ctx.createOscillator();
-    buzzLfo.frequency.value = 52;
+    buzzLfo.frequency.value = this.tropical ? 21 : 52;
     const buzzDepth = ctx.createGain();
     buzzDepth.gain.value = 0.2;
     buzzLfo.connect(buzzDepth).connect(buzz.gain);
     buzzLfo.start();
+    this.buzzLfo = buzzLfo;
+    this.sizzleBand = sizzleBand;
     this.loop(this.noise, 2.1).connect(sizzleBand).connect(soften).connect(buzz).connect(this.cicadaGain);
+    if (this.tropical) this.buildManila();
     this.trainGain = ctx.createGain();
     this.trainGain.gain.value = 0;
     const trainLp = ctx.createBiquadFilter();
     trainLp.type = 'lowpass';
     trainLp.frequency.value = 220;
     this.loop(this.noise, 0.7).connect(trainLp).connect(this.trainGain).connect(this.master);
+    // A train passing outside, a magnetic one: no wheels on joints, so no clatter: a smooth low whoosh with a
+    // soft hiss over it and a faint electric hum, heard through the cover (a roof muffles it, a cabin shuts it out).
+    this.passGain = ctx.createGain();
+    this.passGain.gain.value = 0;
+    const roar = ctx.createBiquadFilter();
+    roar.type = 'lowpass';
+    roar.frequency.value = 200;
+    const hiss = ctx.createBiquadFilter();
+    hiss.type = 'bandpass';
+    hiss.frequency.value = 900;
+    hiss.Q.value = 0.4;
+    const hissGain = ctx.createGain();
+    hissGain.gain.value = 0.18;
+    const hum = ctx.createOscillator();
+    hum.type = 'sine';
+    hum.frequency.value = 310;
+    const humGain = ctx.createGain();
+    humGain.gain.value = 0.025;
+    hum.connect(humGain).connect(this.passGain);
+    hum.start();
+    this.loop(this.noise, 0.8).connect(roar).connect(this.passGain);
+    this.loop(this.noise, 1.1).connect(hiss).connect(hissGain).connect(this.passGain);
+    this.passGain.connect(this.cover.input);
+    // The siren from the glovebox: a wail, a sawtooth swept up and down between about 560 and 1160 Hz every four
+    // seconds (a triangle's sweep), through a band-pass and a low-pass so it's a horn's voice, not a buzz; out of
+    // doors, so the cover and the cabin's glass shape it.
+    this.sirenGain = ctx.createGain();
+    this.sirenGain.gain.value = 0;
+    const wail = ctx.createOscillator();
+    wail.type = 'sawtooth';
+    wail.frequency.value = 860;
+    const sweep = ctx.createOscillator();
+    sweep.type = 'triangle';
+    sweep.frequency.value = 0.25;
+    const sweepDepth = ctx.createGain();
+    sweepDepth.gain.value = 300;
+    sweep.connect(sweepDepth).connect(wail.frequency);
+    const sirenBand = ctx.createBiquadFilter();
+    sirenBand.type = 'bandpass';
+    sirenBand.frequency.value = 900;
+    sirenBand.Q.value = 0.6;
+    const sirenSoft = ctx.createBiquadFilter();
+    sirenSoft.type = 'lowpass';
+    sirenSoft.frequency.value = 2600;
+    this.sirenSoft = sirenSoft;
+    // A sound in the world: a panner at the car (HRTF, so it comes from where it is and behind is told from ahead),
+    // the inverse-distance fall of a point source (full within 7 m, a half at 13, a tenth at 60), into the cover.
+    const at = ctx.createPanner();
+    at.panningModel = 'HRTF';
+    at.distanceModel = 'inverse';
+    at.refDistance = 7;
+    at.rolloffFactor = 1.2;
+    at.maxDistance = 10000;
+    this.sirenAt = at;
+    this.sirenWail = wail;
+    wail.connect(sirenBand).connect(sirenSoft).connect(at).connect(this.sirenGain).connect(this.cover.input);
+    wail.start();
+    sweep.start();
     // Tyres: one voice per nearby car.
     for (let i = 0; i < TYRE_VOICES; i++) {
       const band = ctx.createBiquadFilter();
@@ -319,7 +409,14 @@ export class CityAudio {
         o.start();
       }
       lp.connect(engine).connect(pan);
-      this.tyres.push({ gain, pan, band, engine, osc, lp });
+      // The recorded engine beside it, when there is one: a loop played at the car's revs (below).
+      const sLp = ctx.createBiquadFilter();
+      sLp.type = 'lowpass';
+      sLp.frequency.value = 1200;
+      const sGain = ctx.createGain();
+      sGain.gain.value = 0;
+      sLp.connect(sGain).connect(pan);
+      this.tyres.push({ gain, pan, band, engine, osc, lp, smp: { src: null, gain: sGain, lp: sLp } });
     }
     void this.loadRecordings();
     // The steps most likely to come first (the street, walking, and its wet), rendered while the page is idle, so
@@ -368,6 +465,33 @@ export class CityAudio {
     s.loop = true;
     s.start(0, offset % buffer.duration);
     return s;
+  }
+
+  /** The traffic's recorded engine, built (again) when the voice in `engineTune` changes: one loop a car, each from its own place in it. */
+  private async setTrafficEngine(voice: string): Promise<void> {
+    const ctx = this.ctx!;
+    this.trafficEngine = voice;
+    for (const v of this.tyres) {
+      v.smp.src?.stop();
+      v.smp.src?.disconnect();
+      v.smp.src = null;
+    }
+    const layers = layersFor(engineTune.voice).layers;
+    if (!layers.length) return; // synth: the oscillators alone
+    try {
+      const [buffer] = await loadLayers(ctx, [layers[Math.min(1, layers.length - 1)]]);
+      if (this.trafficEngine !== voice) return;
+      for (const v of this.tyres) {
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.loop = true;
+        src.connect(v.smp.lp);
+        src.start(0, Math.random() * buffer.duration);
+        v.smp.src = src;
+      }
+    } catch {
+      /* files that won't load: the oscillators stand */
+    }
   }
 
   /** Recordings replace their synthesized layer when present. */
@@ -430,25 +554,6 @@ export class CityAudio {
     p.pan.value = pan;
     s.connect(g).connect(p).connect(bus);
     s.start();
-  }
-
-  /** A drip: a short falling sine plink. */
-  private drip(level: number): void {
-    const ctx = this.ctx!;
-    const t = ctx.currentTime;
-    const o = ctx.createOscillator();
-    const f = 900 + Math.random() * 1400;
-    o.frequency.setValueAtTime(f, t);
-    o.frequency.exponentialRampToValueAtTime(f * 0.45, t + 0.08);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(level, t + 0.004);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-    const p = ctx.createStereoPanner();
-    p.pan.value = Math.random() * 1.6 - 0.8;
-    o.connect(g).connect(p).connect(this.master);
-    o.start(t);
-    o.stop(t + 0.14);
   }
 
   /**
@@ -657,6 +762,47 @@ export class CityAudio {
     n.start(t, Math.random() * 3, dur + 0.05);
   }
 
+  /** Tropical: the cicadas' sizzle becomes a cricket chorus (a lower band, chirped slowly), and the call at dusk a gecko's. */
+  setTropical(on: boolean): void {
+    this.tropical = on;
+    if (!this.ctx) return;
+    this.buzzLfo.frequency.value = on ? 21 : 52;
+    this.sizzleBand.frequency.value = on ? 3300 : 4000;
+  }
+
+  /** A gecko's call: a few dry clicks, quick then slowing, "tuk-tuk-tuk ... tuk ... tuk", somewhere off on a wall. */
+  private geckoCall(level: number): void {
+    const ctx = this.ctx!;
+    const t0 = ctx.currentTime + 0.02;
+    const pn = ctx.createStereoPanner();
+    pn.pan.value = Math.random() * 1.6 - 0.8;
+    pn.connect(this.cover.input);
+    const n = 5 + Math.floor(Math.random() * 5);
+    let at = t0;
+    let gap = 0.13;
+    for (let i = 0; i < n; i++) {
+      const o = ctx.createOscillator();
+      o.type = 'square';
+      const f = 1500 + Math.random() * 300 - i * 25;
+      o.frequency.setValueAtTime(f, at);
+      o.frequency.exponentialRampToValueAtTime(f * 0.7, at + 0.07);
+      const g = ctx.createGain();
+      const a = level * 0.03 * (i < 2 ? 0.7 : 1);
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(a, at + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0005, at + 0.07);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1700;
+      bp.Q.value = 1.4;
+      o.connect(bp).connect(g).connect(pn);
+      o.start(at);
+      o.stop(at + 0.09);
+      at += gap;
+      gap *= 1.22;
+    }
+  }
+
   /** A higurashi's call: a clear, high, falling "kana-kana-kana", fading, somewhere off in the trees. */
   private higurashiCall(level: number): void {
     const ctx = this.ctx!;
@@ -727,6 +873,136 @@ export class CityAudio {
     }
   }
 
+  /**
+   * A payphone's earpiece (district/payphone.ts): Japan's call tones are one 400 Hz tone in three patterns, steady
+   * for the dial tone, a second on and two off with a 16 Hz flutter for ringing, half a second on and off for
+   * engaged. Thin and quiet, as through a small speaker held to the ear. null: silence. **Unheard**: written from
+   * the standard, never listened to.
+   */
+  private phoneLine: { stop: () => void } | null = null;
+  phoneTone(kind: 'dial' | 'ring' | 'busy' | null): void {
+    this.phoneLine?.stop();
+    this.phoneLine = null;
+    if (!this.ctx || !kind) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.03;
+    const o = ctx.createOscillator();
+    o.frequency.value = 400;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    const out = this.earpiece();
+    o.connect(g).connect(out);
+    const level = 0.06;
+    let flutter: OscillatorNode | null = null;
+    if (kind === 'dial') g.gain.linearRampToValueAtTime(level, t + 0.02);
+    else {
+      const [on, off] = kind === 'ring' ? [1, 2] : [0.5, 0.5];
+      for (let k = 0; k < 60; k++) {
+        const a = t + k * (on + off);
+        g.gain.setValueAtTime(0, a);
+        g.gain.linearRampToValueAtTime(level, a + 0.012);
+        g.gain.setValueAtTime(level, a + on - 0.012);
+        g.gain.linearRampToValueAtTime(0, a + on);
+      }
+      if (kind === 'ring') {
+        // The ringing tone's flutter: the 400 Hz tone's level wobbling at 16 Hz.
+        flutter = ctx.createOscillator();
+        flutter.frequency.value = 16;
+        const depth = ctx.createGain();
+        depth.gain.value = 0.5;
+        const am = ctx.createGain();
+        am.gain.value = 0.5;
+        flutter.connect(depth).connect(am.gain);
+        o.disconnect();
+        o.connect(am).connect(g);
+        flutter.start(t);
+      }
+    }
+    o.start(t);
+    this.phoneLine = {
+      stop: () => {
+        const e = ctx.currentTime;
+        g.gain.cancelScheduledValues(e);
+        g.gain.setValueAtTime(g.gain.value, e);
+        g.gain.linearRampToValueAtTime(0, e + 0.02);
+        o.stop(e + 0.05);
+        flutter?.stop(e + 0.05);
+      },
+    };
+  }
+
+  /** A key's tone as the earpiece plays it back (the standard pair for each key: a row's tone and a column's). */
+  phoneKey(key: string): void {
+    if (!this.ctx) return;
+    const i = '123456789*0#'.indexOf(key);
+    if (i < 0) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.01;
+    const out = this.earpiece();
+    for (const f of [[697, 770, 852, 941][Math.floor(i / 3)], [1209, 1336, 1477][i % 3]]) {
+      const o = ctx.createOscillator();
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.045, t + 0.008);
+      g.gain.setValueAtTime(0.045, t + 0.1);
+      g.gain.linearRampToValueAtTime(0, t + 0.115);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + 0.13);
+    }
+  }
+
+  /** A dial running back: `n` clicks, ten a second (a rotary phone sends a digit as that many breaks in the line). */
+  phonePulses(n: number): void {
+    if (!this.ctx) return;
+    for (let k = 0; k < n; k++) this.phoneClick(this.ctx.currentTime + 0.02 + k * 0.1, 0.05, 1800);
+  }
+
+  /** The hook going up or down, and a coin dropping into the box. */
+  phoneHook(): void {
+    if (this.ctx) this.phoneClick(this.ctx.currentTime + 0.01, 0.1, 900);
+  }
+
+  phoneCoin(): void {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime + 0.01;
+    this.phoneClick(t, 0.09, 2600);
+    this.phoneClick(t + 0.11, 0.12, 700);
+  }
+
+  /** A short click: a burst of noise through a narrow band. */
+  private phoneClick(t: number, level: number, f: number): void {
+    const ctx = this.ctx!;
+    const len = Math.floor(ctx.sampleRate * 0.03);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 2;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = f;
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.value = level;
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t);
+  }
+
+  /** A telephone's earpiece: the voice band only (300 to 3,400 Hz). */
+  private earpiece(): AudioNode {
+    const ctx = this.ctx!;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 300;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 3400;
+    hp.connect(lp).connect(this.master);
+    return hp;
+  }
+
   /** Thunder for a strike `distance` metres away; pan -1 (left) to 1 (right) from where the listener looks. */
   thunder(distance: number, panTo: number): void {
     if (!this.ctx) return;
@@ -787,6 +1063,409 @@ export class CityAudio {
     }
   }
 
+  // ---- Manila (real/manilaSound.ts holds the numbers; none of this has been heard) ----
+
+  /** A formant voice: a sawtooth gliding f0 -> f1 through parallel band-passes (the vowel), with a little vibrato. */
+  private formantVoice(out: AudioNode, t: number, f0: number, f1: number, dur: number, level: number, formants: readonly (readonly [number, number])[], vib = 0): void {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur * 0.85);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(level, t + Math.min(0.05, dur * 0.3));
+    g.gain.setValueAtTime(level, t + dur * 0.7);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    if (vib > 0) {
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 5.4 + Math.random();
+      const d = ctx.createGain();
+      d.gain.value = f1 * vib;
+      lfo.connect(d).connect(o.frequency);
+      lfo.start(t);
+      lfo.stop(t + dur + 0.05);
+    }
+    for (const [hz, q] of formants) {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = hz;
+      bp.Q.value = q;
+      o.connect(bp).connect(g);
+    }
+    g.connect(out);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+
+  /** A panned, softened bus into the cover for a one-off call heard `far` (0 near .. 1 far off). */
+  private callBus(far: number): AudioNode {
+    const ctx = this.ctx!;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 3400 - 2200 * far;
+    const p = ctx.createStereoPanner();
+    p.pan.value = Math.random() * 1.8 - 0.9;
+    lp.connect(p).connect(this.cover.input);
+    return lp;
+  }
+
+  /** A vendor's call, two notes rising ("ta-HO!", "bal-UT!"): short formant glides from some way off. */
+  private vendorCall(level: number): void {
+    const t = this.ctx!.currentTime + 0.05;
+    const out = this.callBus(0.6 + Math.random() * 0.3);
+    const base = 250 + Math.random() * 120;
+    const second = Math.random() < 0.5;
+    this.formantVoice(out, t, base, base * 1.04, 0.2, level * 0.05, [[second ? 600 : 700, 6], [1100, 6]]);
+    this.formantVoice(out, t + 0.24, base * 1.25, base * (second ? 1.9 : 1.7), 0.75, level * 0.07, [[second ? 380 : 750, 6], [second ? 800 : 1150, 6]], 0.015);
+  }
+
+  /** A fighting cock's crow: four glides, "ko-ke-kok-koooo", the last falling with a crack in it. */
+  private roosterCrow(level: number): void {
+    const t = this.ctx!.currentTime + 0.05;
+    const out = this.callBus(0.5 + Math.random() * 0.4);
+    const v = [[900, 5], [2100, 4]] as const;
+    const s = 0.9 + Math.random() * 0.2;
+    this.formantVoice(out, t, 520 * s, 760 * s, 0.17, level * 0.05, v);
+    this.formantVoice(out, t + 0.22, 780 * s, 700 * s, 0.28, level * 0.05, v);
+    this.formantVoice(out, t + 0.58, 700 * s, 960 * s, 0.3, level * 0.055, v);
+    this.formantVoice(out, t + 0.98, 940 * s, 480 * s, 0.85, level * 0.05, v, 0.05);
+  }
+
+  /** A dog barking off in the barangay: two to four barks, a sawtooth falling through a throat's formants and a breath of noise. */
+  private dogBark(level: number): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + 0.05;
+    const out = this.callBus(0.5 + Math.random() * 0.4);
+    const n = 2 + Math.floor(Math.random() * 3);
+    const pitch = 150 + Math.random() * 90;
+    for (let i = 0; i < n; i++) {
+      const at = t + i * (0.34 + Math.random() * 0.12);
+      this.formantVoice(out, at, pitch * 1.25, pitch * 0.8, 0.14, level * 0.06, [[650, 5], [1350, 4]]);
+      const s = ctx.createBufferSource();
+      s.buffer = this.noise;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1100;
+      bp.Q.value = 1;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(level * 0.03, at);
+      g.gain.exponentialRampToValueAtTime(0.0005, at + 0.1);
+      s.connect(bp).connect(g).connect(out);
+      s.start(at, Math.random() * 3, 0.12);
+    }
+  }
+
+  /** A basketball dribbled somewhere on a court: a run of dull bounces, about 2.4 a second, each a falling sine and a tick. */
+  private dribble(level: number): void {
+    const ctx = this.ctx!;
+    let t = ctx.currentTime + 0.05;
+    const out = this.callBus(0.2 + Math.random() * 0.3);
+    const n = 5 + Math.floor(Math.random() * 10);
+    for (let i = 0; i < n; i++) {
+      const o = ctx.createOscillator();
+      o.frequency.setValueAtTime(140, t);
+      o.frequency.exponentialRampToValueAtTime(62, t + 0.1);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(level * 0.16, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0005, t + 0.16);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + 0.18);
+      this.grain(out, level * 0.03, 0.9, 0);
+      t += 0.4 + (Math.random() - 0.5) * 0.04;
+    }
+  }
+
+  /** A crowd round a court: a swell of noise through two bands, a second and a half, a cheer. */
+  private crowdCheer(level: number): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + 0.05;
+    const out = this.callBus(0.5);
+    for (const [hz, q, a] of [[1000, 0.8, 1], [1900, 1, 0.6]] as const) {
+      const s = ctx.createBufferSource();
+      s.buffer = this.noise;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = hz;
+      bp.Q.value = q;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(level * 0.06 * a, t + 0.35);
+      g.gain.exponentialRampToValueAtTime(0.0005, t + 1.9);
+      s.connect(bp).connect(g).connect(out);
+      s.start(t, Math.random() * 2, 2);
+    }
+  }
+
+  /**
+   * A Baroque church bell tolling `at` (seconds after the first strike), `level` 0-1 (how near its church: the old
+   * town's loud, elsewhere far off), panned. A bell's partials aren't harmonics: hum, prime, a minor third, a fifth,
+   * the nominal an octave up, and higher still, the low ones ringing longest; the prime has a twin a hair off so it beats.
+   */
+  churchBell(at: readonly number[], level: number, pan = 0): void {
+    if (!this.ctx || level <= 0.01) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.05;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 700 + 2600 * level;
+    const p = ctx.createStereoPanner();
+    p.pan.value = Math.max(-0.8, Math.min(0.8, pan));
+    lp.connect(p).connect(this.cover.input);
+    const f0 = 196 * 2 ** (Math.floor(Math.random() * 6) / 12);
+    // [ratio to the prime, level, ring in seconds]
+    const partials: readonly (readonly [number, number, number])[] = [[0.5, 0.5, 7], [1, 1, 6], [1.0035, 0.7, 5.2], [1.19, 0.45, 4], [1.5, 0.35, 3.2], [2, 0.5, 3.6], [2.55, 0.18, 2], [3.3, 0.12, 1.4], [4.2, 0.08, 0.9]];
+    for (const [i, off] of at.entries()) {
+      const t = t0 + off;
+      const lean = 1 - 0.004 * (i % 2);
+      for (const [r, a, ring] of partials) {
+        const o = ctx.createOscillator();
+        o.frequency.value = f0 * r * lean;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(level * a * 0.09, t + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0002, t + ring);
+        o.connect(g).connect(lp);
+        o.start(t);
+        o.stop(t + ring + 0.05);
+      }
+      // The clapper's tick.
+      const s = ctx.createBufferSource();
+      s.buffer = this.noise;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1800;
+      bp.Q.value = 1.5;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(level * 0.1, t);
+      g.gain.exponentialRampToValueAtTime(0.0005, t + 0.06);
+      s.connect(bp).connect(g).connect(lp);
+      s.start(t, Math.random() * 3, 0.08);
+    }
+  }
+
+  /**
+   * A jeepney's musical horn: a short run of 3-5 pitched blasts (an air horn's reeds, a square and a sawtooth a hair
+   * apart), up or down a scale, the last longer, `distance` metres off, panned. `seed` picks the tune.
+   */
+  jeepneyHorn(distance: number, pan: number, seed = Math.floor(Math.random() * 1e9)): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.03;
+    const near = 1 / (1 + distance / 12);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1000 + 2400 * near;
+    const p = ctx.createStereoPanner();
+    p.pan.value = Math.max(-1, Math.min(1, pan));
+    lp.connect(p).connect(this.cover.input);
+    const tune = jeepneyHornNotes(seed);
+    tune.hz.forEach((hz, i) => {
+      const t = t0 + tune.at[i];
+      const len = tune.len[i];
+      for (const [type, mul] of [['square', 1], ['sawtooth', 1.006]] as const) {
+        const o = ctx.createOscillator();
+        o.type = type;
+        o.frequency.value = hz * mul;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.05 * near, t + 0.012);
+        g.gain.setValueAtTime(0.05 * near, t + len);
+        g.gain.linearRampToValueAtTime(0, t + len + 0.04);
+        o.connect(g).connect(lp);
+        o.start(t);
+        o.stop(t + len + 0.06);
+      }
+    });
+  }
+
+  /** The always-on parts of the street: a videoke set (chords and a wobbling voice), a far radio, rain on tin. */
+  private buildManila(): void {
+    const ctx = this.ctx!;
+    // Videoke, heard through a wall and a street: a band-pass and a low-pass over a pad of chords, a bass and a voice.
+    const vkOut = ctx.createGain();
+    vkOut.gain.value = 0;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = 900;
+    band.Q.value = 0.45;
+    const soft = ctx.createBiquadFilter();
+    soft.type = 'lowpass';
+    soft.frequency.value = 1800;
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = 0.35;
+    band.connect(soft).connect(vkOut).connect(pan).connect(this.cover.input);
+    const padMix = ctx.createGain();
+    padMix.gain.value = 0.3;
+    padMix.connect(band);
+    for (let i = 0; i < 3; i++) {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = 130 * (1 + i * 0.25);
+      o.connect(padMix);
+      o.start();
+      this.vk.pad.push(o);
+    }
+    const bass = ctx.createOscillator();
+    bass.frequency.value = 65;
+    const bassGain = ctx.createGain();
+    bassGain.gain.value = 0.35;
+    bass.connect(bassGain).connect(band);
+    bass.start();
+    this.vk.bass = bass;
+    const voice = ctx.createOscillator();
+    voice.type = 'sawtooth';
+    voice.frequency.value = 440;
+    const wob = ctx.createOscillator();
+    wob.frequency.value = 5.6;
+    const wobDepth = ctx.createGain();
+    wobDepth.gain.value = 9;
+    wob.connect(wobDepth).connect(voice.frequency);
+    wob.start();
+    const voiceGain = ctx.createGain();
+    voiceGain.gain.value = 0;
+    for (const [hz, q, a] of [[730, 5, 1], [1090, 5, 0.7], [2440, 4, 0.2]] as const) {
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = hz;
+      f.Q.value = q;
+      const fg = ctx.createGain();
+      fg.gain.value = a * 0.5;
+      voice.connect(f).connect(fg).connect(voiceGain);
+    }
+    voiceGain.connect(band);
+    voice.start();
+    this.vk.voice = voice;
+    this.vk.voiceGain = voiceGain;
+    // A radio left on, far off: murmur (noise in a speech band, swelling at a syllable's rate) over a faint tone.
+    const radio = ctx.createGain();
+    radio.gain.value = 0;
+    const rBand = ctx.createBiquadFilter();
+    rBand.type = 'bandpass';
+    rBand.frequency.value = 1100;
+    rBand.Q.value = 0.9;
+    const rAmp = ctx.createGain();
+    rAmp.gain.value = 0.5;
+    for (const [hz, depth] of [[3.3, 0.35], [0.4, 0.15]] as const) {
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = hz;
+      const d = ctx.createGain();
+      d.gain.value = depth;
+      lfo.connect(d).connect(rAmp.gain);
+      lfo.start();
+    }
+    const rLp = ctx.createBiquadFilter();
+    rLp.type = 'lowpass';
+    rLp.frequency.value = 2600;
+    const rPan = ctx.createStereoPanner();
+    rPan.pan.value = -0.4;
+    this.loop(this.noise, 1.7).connect(rBand).connect(rAmp).connect(rLp).connect(radio).connect(rPan).connect(this.cover.input);
+    const tone = ctx.createOscillator();
+    tone.type = 'triangle';
+    tone.frequency.value = 392;
+    const toneGain = ctx.createGain();
+    toneGain.gain.value = 0.05;
+    tone.connect(toneGain).connect(rLp);
+    tone.start();
+    // Rain on corrugated iron: a bed of ringing bands, and (see update) tinny grains over it.
+    const tin = ctx.createGain();
+    tin.gain.value = 0;
+    const t1 = ctx.createBiquadFilter();
+    t1.type = 'bandpass';
+    t1.frequency.value = 2400;
+    t1.Q.value = 9;
+    const t2 = ctx.createBiquadFilter();
+    t2.type = 'bandpass';
+    t2.frequency.value = 4100;
+    t2.Q.value = 7;
+    this.loop(this.noise, 0.9).connect(t1).connect(tin);
+    this.loop(this.noise, 2.6).connect(t2).connect(tin);
+    tin.connect(this.cover.input);
+    const tinBus = ctx.createGain();
+    const tb = ctx.createBiquadFilter();
+    tb.type = 'bandpass';
+    tb.frequency.value = 3000;
+    tb.Q.value = 4;
+    tinBus.connect(tb).connect(this.cover.input);
+    this.tinBus = tinBus;
+    this.mGain = { videoke: vkOut, radio, tin };
+  }
+
+  /** One bar of the videoke ballad at time t: the chord (I, vi, IV, V), its bass and a melody of one or two bars' phrases. */
+  private videokeBar(t: number): void {
+    const PROG: readonly (readonly [number, number, number, number])[] = [
+      [130.81, 164.81, 196, 65.41],
+      [110, 130.81, 164.81, 55],
+      [174.61, 220, 261.63, 87.31],
+      [196, 246.94, 293.66, 98],
+    ];
+    const SCALE = [392, 440, 523.25, 587.33, 659.25, 783.99];
+    const [a, b, c, root] = PROG[this.vk.chord % 4];
+    this.vk.chord++;
+    this.vk.pad.forEach((o, i) => o.frequency.setTargetAtTime([a, b, c][i], t, 0.12));
+    this.vk.bass!.frequency.setTargetAtTime(root, t, 0.05);
+    const beat = 0.9;
+    let idx = SCALE.findIndex((h) => h >= this.vk.lastHz);
+    if (idx < 0) idx = 2;
+    for (let i = 0; i < 4; ) {
+      const long = Math.random() < 0.45 ? 2 : 1;
+      const span = Math.min(long, 4 - i);
+      const dur = span * beat;
+      if (Math.random() >= 0.22) {
+        idx = Math.max(0, Math.min(SCALE.length - 1, idx + Math.floor(Math.random() * 5) - 2));
+        const hz = SCALE[idx];
+        const tn = t + i * beat;
+        this.vk.voice!.frequency.setTargetAtTime(hz * 0.94, tn - 0.05, 0.03);
+        this.vk.voice!.frequency.setTargetAtTime(hz, tn, 0.07);
+        this.vk.voiceGain!.gain.setTargetAtTime(0.55, tn, 0.05);
+        this.vk.voiceGain!.gain.setTargetAtTime(0, tn + dur * 0.88, 0.07);
+        this.vk.lastHz = hz;
+      }
+      i += span;
+    }
+  }
+
+  /** Manila's street, each frame: the videoke's schedule, the radio, tin roofs, and the one-off calls. */
+  private updateManila(f: AudioFrame, m: ManilaFrame, rain: number, set: (p: AudioParam, v: number, tc?: number) => void): void {
+    if (!this.mGain) return;
+    const ctx = this.ctx!;
+    const g = this.mGain;
+    set(g.videoke.gain, m.videoke * 0.034, 1.5);
+    set(g.radio.gain, m.radio * 0.03, 1.5);
+    set(g.tin.gain, m.tin * rain * 0.05, 0.8);
+    if (m.videoke > 0.02) {
+      const BAR = 3.6;
+      if (this.vk.next < ctx.currentTime - 1) this.vk.next = ctx.currentTime + 0.1;
+      while (this.vk.next < ctx.currentTime + 0.6) {
+        this.videokeBar(this.vk.next);
+        this.vk.next += BAR;
+      }
+    } else if (this.vk.voiceGain) this.vk.voiceGain.gain.setTargetAtTime(0, ctx.currentTime, 0.2);
+    // Tin's grains: a patter of rings on the iron, more in heavy rain.
+    this.tinDebt += m.tin * rain > 0.02 ? Math.min(60, 70 * m.tin * rain) * f.dt : 0;
+    while (this.tinDebt >= 1) {
+      this.tinDebt -= 1;
+      this.grain(this.tinBus!, 0.05 + Math.random() * 0.08, 1.2 + Math.random() * 1.3, Math.random() * 1.8 - 0.9);
+    }
+    // One-off calls: each on its own timer, which only runs down while its level is worth hearing.
+    const T = this.mTimer;
+    const tick = (key: keyof typeof T, level: number, every: number, fire: () => void): void => {
+      if (level < 0.04) return;
+      T[key] -= f.dt * (0.5 + level);
+      if (T[key] <= 0) {
+        T[key] = every * (0.6 + Math.random() * 0.9);
+        fire();
+      }
+    };
+    tick('vendor', m.vendor, 18, () => this.vendorCall(m.vendor));
+    tick('rooster', m.rooster, 11, () => this.roosterCrow(m.rooster));
+    tick('dog', m.dog, 26, () => this.dogBark(m.dog));
+    tick('court', m.court, 9, () => this.dribble(m.court));
+    tick('cheer', m.court, 40, () => this.crowdCheer(m.court));
+  }
+
   update(f: AudioFrame): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
@@ -795,7 +1474,7 @@ export class CityAudio {
     set(this.master.gain, f.volume * 0.9, 0.1);
     set(this.music.gain, f.volume, 0.1);
     // Where the listener is, eased: a change of place is one crossfade, and everything that depends on it (the
-    // muffling, the close drops, the drumming overhead, the drips) moves with it.
+    // muffling, the close drops, the drumming overhead) moves with it.
     const ramp = (v: number, to: number, secs: number): number => v + THREE_clamp(to - v, -f.dt / secs, f.dt / secs);
     const ease = (x: number): number => x * x * (3 - 2 * x);
     const enclosed = f.cover === 'enclosed' || f.train;
@@ -826,44 +1505,41 @@ export class CityAudio {
     set(this.ears.gains[1].gain, (worn - nc) * WORN_LEVEL, 0.03);
     set(this.ears.gains[2].gain, nc * NC_LEVEL, 0.03);
     const r = f.rain;
-    const bedLevel = r <= 0 ? 0 : 0.12 + 0.55 * r;
+    const rv = f.rainVol ?? 1;
+    const bedLevel = r <= 0 ? 0 : (0.12 + 0.55 * r) * rv;
     set(this.bedGain.gain, bedLevel);
     set(this.bedHissGain.gain, 0.5 + 0.5 * r);
     set(this.bedBodyGain.gain, 0.25 + 0.9 * r * r);
     set(this.bedHiss.frequency, 3200 - 1400 * r);
     this.levels.bed = bedLevel;
     // Patter: drops close by, more of them in heavy rain; none indoors, fewer under a roof.
-    const patterRate = r <= 0 ? 0 : (20 + 160 * r) * (open + 0.25 * roof) * (1 - cabin);
+    const patterRate = r <= 0 || rv <= 0 ? 0 : (20 + 160 * r) * (open + 0.25 * roof) * (1 - cabin) * Math.min(1, rv);
     this.patterDebt += patterRate * f.dt;
     this.levels.patter = patterRate;
     while (this.patterDebt >= 1) {
       this.patterDebt -= 1;
       this.grain(this.patterBus, 0.05 + Math.random() * 0.12 * (0.5 + r), 0.6 + Math.random() * 1.2, Math.random() * 1.8 - 0.9);
     }
-    // Roof drumming and drips under cover (a car's roof too).
+    // Roof drumming under cover (a car's roof too).
     const drum = Math.max(roof, ease(this.cabinT) * (1 - indoor) * (f.cabinRoof ?? 1));
     const drumRate = r > 0 ? (30 + 90 * r) * drum : 0;
-    set(this.roofGain.gain, r > 0 ? (0.6 + 0.6 * r) * drum : 0, 0.2);
+    set(this.roofGain.gain, r > 0 ? (0.6 + 0.6 * r) * drum * rv : 0, 0.2);
     this.levels.roof = drumRate;
     this.roofDebt += drumRate * f.dt;
     while (this.roofDebt >= 1) {
       this.roofDebt -= 1;
       this.grain(this.roofGain, 0.15 + Math.random() * 0.25, 0.3 + Math.random() * 0.35, Math.random() * 1.4 - 0.7);
     }
-    // (Drips off the roof's edge; indoors a few, faint, not aboard a train.)
-    this.dripDebt += r > 0 ? (1.4 * roof + (f.train ? 0 : 0.3 * indoor)) * f.dt : 0;
-    while (this.dripDebt >= 1) {
-      this.dripDebt -= 1;
-      this.drip(roof > indoor ? 0.08 : 0.03);
-    }
     // Wind: level and pitch with the gusts; the howl only in a gale. Low and soft, with no floor, so a
     // breeze is barely heard (not a constant hiss), and slow to follow the gusts, so it swells and ebbs
     // instead of fluttering with their quick wobble.
     const w = f.wind * f.gust;
-    const windLevel = w <= 0.01 ? 0 : 0.32 * w * w;
+    // (A typhoon, in Manila: louder wind, and a howl even in a moderate gust.)
+    const ty = f.manila?.typhoon ?? 0;
+    const windLevel = w <= 0.01 ? 0 : 0.32 * w * w * (1 + 0.9 * ty);
     set(this.windGain.gain, windLevel, 1.2);
     set(this.windBand.frequency, 160 + 420 * w, 1.5);
-    set(this.howlGain.gain, Math.max(0, w - 0.6) * 0.22, 1.2);
+    set(this.howlGain.gain, Math.max(0, w - 0.6) * 0.22 + 0.12 * ty * Math.min(1, w * 1.5), 1.2);
     set(this.howlBand.frequency, 340 + 420 * w + 40 * Math.sin(t * 0.4), 1);
     this.levels.wind = windLevel;
     // Cicadas: the chorus swells and ebbs; quiet in the rain (and, like the wind, shut out by the cover indoors).
@@ -875,17 +1551,51 @@ export class CityAudio {
     this.higurashiDebt += hig * f.dt * 0.12;
     if (this.higurashiDebt >= 1) {
       this.higurashiDebt = -Math.random() * 0.6;
-      this.higurashiCall(hig);
+      if (this.tropical) this.geckoCall(hig);
+      else this.higurashiCall(hig);
     }
+    // Manila's street (a tropical city only: `manila` is absent in Tokyo).
+    if (f.manila) this.updateManila(f, f.manila, r, set);
     // Train rumble.
-    set(this.trainGain.gain, f.train ? 0.5 + 0.15 * Math.sin(t * 9.5) : 0, 0.2);
+    // (Constant and low: the cars run on magnets, no joints to pulse, only a steady hush.)
+    set(this.trainGain.gain, f.train ? 0.14 : 0, 0.4);
+    set(this.passGain.gain, f.train ? 0 : (f.trainPass ?? 0) * 0.22, 0.6);
+    // The siren is a point source at the car: the listener's place and facing go to the panner, which pans it and
+    // lets it fall off with distance; the air takes its top off far away, and Doppler bends it past (not when you're
+    // in the car it's on: the same motion).
+    const sr = f.siren;
+    if (sr) {
+      const L = ctx.listener;
+      L.positionX.value = f.x;
+      L.positionY.value = 1.6;
+      L.positionZ.value = f.z;
+      L.forwardX.value = -Math.sin(f.yaw);
+      L.forwardY.value = 0;
+      L.forwardZ.value = -Math.cos(f.yaw);
+      L.upX.value = 0;
+      L.upY.value = 1;
+      L.upZ.value = 0;
+      this.sirenAt.positionX.value = sr.x;
+      this.sirenAt.positionY.value = sr.y;
+      this.sirenAt.positionZ.value = sr.z;
+      const dx = sr.x - f.x;
+      const dz = sr.z - f.z;
+      const d = Math.hypot(dx, dz);
+      const closing = (f.cabin ?? 0) > 0.5 || d < 0.5 ? 0 : -(sr.vx * dx + sr.vz * dz) / d;
+      set(this.sirenWail.detune, 1200 * Math.log2(343 / (343 - THREE_clamp(closing, -30, 30))), 0.08);
+      set(this.sirenSoft.frequency, Math.max(500, 3200 / (1 + d / 90)), 0.1);
+      // (Out of earshot it's off altogether.)
+      set(this.sirenGain.gain, d < 700 ? 0.15 : 0, 0.05);
+    } else set(this.sirenGain.gain, 0, 0.05);
     // Tyres on wet roads: louder close, panned by where the car is relative to the view.
     let tyreSum = 0;
+    if (this.trafficEngine !== engineTune.voice) void this.setTrafficEngine(engineTune.voice);
     this.tyres.forEach((v, i) => {
       const c = f.cars[i];
       if (!c) {
         set(v.gain.gain, 0);
         set(v.engine.gain, 0);
+        set(v.smp.gain.gain, 0);
         return;
       }
       const dx = c.x - f.x;
@@ -895,16 +1605,21 @@ export class CityAudio {
       // Tyre noise grows with speed, and a lot on a wet road.
       const level = (0.03 + 0.4 * f.wet) * near * Math.min(1, c.speed / 8);
       // Engine: revs from speed (a gear change every ~4 m/s) plus throttle; idle when standing.
-      const gearSpeed = c.speed % 4.5;
-      const revs = (c.bus ? 22 : 30) + gearSpeed * (c.bus ? 5 : 8) + Math.min(c.speed, 14) * 1.5;
-      const throttle = THREE_clamp(0.25 + c.acc * 0.45, 0.12, 1);
+      // (The voice by vehicle type: real/manilaSound.ts `engineVoice`, which is this formula for all but a tricycle.)
+      const ev = engineVoice(c.type, c.speed, c.acc, c.bus);
       // Doppler: closing speed along the line to the listener.
       const closing = d > 0.1 ? -(c.vx * dx + c.vz * dz) / d : 0;
       const doppler = 343 / (343 - THREE_clamp(closing, -30, 30));
-      set(v.osc[0].frequency, revs * doppler, 0.08);
-      set(v.osc[1].frequency, revs * 0.5 * doppler * 1.01, 0.08);
-      set(v.lp.frequency, 180 + 900 * throttle + c.speed * 20, 0.1);
-      set(v.engine.gain, (c.bus ? 0.16 : 0.1) * near * (0.35 + 0.65 * throttle), 0.1);
+      set(v.osc[0].frequency, ev.revs * doppler, 0.08);
+      set(v.osc[1].frequency, ev.revs * ev.sub * doppler, 0.08);
+      set(v.lp.frequency, ev.lp, 0.1);
+      // With a recording running, it carries the engine (the revs' pitch against the loop's, as the debug menu's engine
+      // pitch) and the oscillators only sit under it.
+      const rec = v.smp.src !== null;
+      set(v.engine.gain, ev.gain * near * (rec ? 0.2 : 1), 0.1);
+      if (v.smp.src) set(v.smp.src.playbackRate, Math.max(0.3, ((ev.revs * doppler) / 55) * engineTune.pitch), 0.08);
+      set(v.smp.lp.frequency, ev.lp * 2.5 + 500, 0.1);
+      set(v.smp.gain.gain, rec ? ev.gain * near * 1.6 * engineTune.traffic : 0, 0.1);
       tyreSum += level;
       set(v.gain.gain, level, 0.1);
       // Pan: how far right of the view the car is (yaw 0 looks toward -z; the right is then +x).

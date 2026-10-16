@@ -105,7 +105,7 @@ export const SALOONS: readonly Model[] = [
     price: 160000,
     blurb: 'The black ship: five metres of late-Showa saloon with a lazy straight six and lace on the seats. It wallows, it leans, it takes a while to stop, and nobody looks twice at it parked outside a mahjong parlour at three in the morning.',
     spec: { ...COUPE, mass: 1520, a: 1.38, b: 1.42, inertia: 1.25, power: 112000, maxDrive: 6600, brake: 0.88, drag: 0.78, rolling: 190, gripFront: 0.92, gripRear: 0.97, lock: 0.6, steerRate: 2.5, handbrakeGrip: 0.45, shift: [13, 24, 36, 999, 999] },
-    sound: { maxRpm: 5600, fire: 3, buzz: 0.12 },
+    sound: { maxRpm: 4200, fire: 3, buzz: 0.04 },
     paint: 0x0a0a0c,
   },
 ];

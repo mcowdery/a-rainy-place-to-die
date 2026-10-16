@@ -1,13 +1,13 @@
 // The bike on the race page's free drive (the practice lot's targets): first and third person, the shotgun,
 // riding and drifting. node debug-shots/racebike.mjs <out dir> [venue] [bike]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2];
 const venue = process.argv[3] ?? 'kurokami';
 const bike = process.argv[4] ?? 'cruiser';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 640 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 200)); });

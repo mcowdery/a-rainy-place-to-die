@@ -108,6 +108,8 @@ export class TravelMap {
       readonly mark?: (m: { x: number; z: number; label: string } | null) => void;
       /** The expressway's roads (centrelines, world x/z), drawn over the streets. */
       readonly expressway?: readonly { readonly x: ArrayLike<number>; readonly z: ArrayLike<number>; readonly closed: boolean }[];
+      /** What the street-siting rules placed (bus stops; payphones to come), shown on the debug map as small squares, named when zoomed in. */
+      readonly furniture?: () => readonly { readonly x: number; readonly z: number; readonly color: string; readonly label: string }[];
     } = { travel: true, lines: [] },
   ) {
     this.root = document.createElement('div');
@@ -309,7 +311,7 @@ export class TravelMap {
       for (const r of p.roads) g.fillRect(r.rect.x, r.rect.y, r.rect.w, r.rect.h);
       // Open ground: parks and playgrounds green, plazas paved, car parks and vacant lots dark.
       for (const o of p.open) {
-        g.fillStyle = o.kind === 'park' || o.kind === 'playground' ? '#1f4a2c' : o.kind === 'plaza' ? '#3a3a48' : '#1a1a24';
+        g.fillStyle = o.kind === 'park' || o.kind === 'playground' || o.kind === 'court' ? '#1f4a2c' : o.kind === 'plaza' ? '#3a3a48' : '#1a1a24';
         g.fillRect(o.rect.x, o.rect.y, o.rect.w, o.rect.h);
       }
       g.fillStyle = '#4a4860';
@@ -389,6 +391,15 @@ export class TravelMap {
     }
     g.font = "12px 'Consolas', monospace";
     g.textAlign = 'left';
+    for (const f of this.opts.travel ? (this.opts.furniture?.() ?? []) : []) {
+      const [x, y] = this.toScreen(f.x, f.z);
+      g.fillStyle = f.color;
+      g.fillRect(x - 3, y - 3, 6, 6);
+      if (this.zoom > this.fit * 5) {
+        g.fillStyle = '#d8ffe8';
+        g.fillText(f.label, x + 7, y + 4);
+      }
+    }
     for (const d of this.opts.travel ? this.dests : []) {
       const [x, y] = this.toScreen(d.x, d.z);
       g.fillStyle = d.group === 'Places' ? '#ff8ad8' : d.group === 'Expressway' ? '#2fe38a' : '#4fe3ff';

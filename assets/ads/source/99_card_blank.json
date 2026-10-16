@@ -1,0 +1,25 @@
+{
+  "file": "card_blank_v1.png",
+  "item": "card_blank",
+  "brand": null,
+  "copy": null,
+  "notes": "Card stock for the contacts: name and number are printed on by the game.",
+  "prompt": "top-down flat lay photograph, shot on 35mm film, soft even light, fine film grain, muted colours, true to life wear and patina, sharp focus, a single completely blank Japanese business card of plain off-white card stock, slightly yellowed, one corner softened and bent, a faint thumb smudge and a crease, lying flat and seen straight down from directly above, the card with its long side horizontal, centred and whole in the frame with a margin all round, isolated on a plain matte dark grey seamless background, nothing else in the picture, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1024,
+    768
+  ],
+  "steps": 12,
+  "seed": 663255841,
+  "studioJob": "3849f27b-cc79-4d09-a9dc-eb36e7c0aadc-u1",
+  "generated": "2026-10-12T09:35:50.246Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/99_card_blank.png",
+  "decided": "2026-10-12T09:55:09.124Z",
+  "batch": "carry_props_01",
+  "purpose": "Photographed-looking base pictures for what Mack carries in place of the phone (story/phone.md): the pager (ポケベル), the ring-bound notebook and the things tucked into it. Each is one object seen straight down on a plain ground, to be cut out and used as a surface the game draws on: every display, page, card and label is BLANK, because digits, handwriting and print are composited in the engine. Design reference: the mock-up at https://claude.ai/artifact/HmLoAUjpEfS679J4BH87pJ. Nothing here goes into the game without the user's approval.",
+  "use": "sign",
+  "district": null
+}

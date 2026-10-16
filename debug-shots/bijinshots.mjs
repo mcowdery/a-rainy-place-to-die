@@ -1,7 +1,7 @@
 // The women made by hand on the MakeHuman test page (humans.html, scripts/blender/human_bijin.py): their line-up,
 // then each one from the waist up and her face close, standing at ease, in the light asked for.
 //   node debug-shots/bijinshots.mjs <out dir> [studio|night|day] [rest|smile|talk|worry: what their faces are doing]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2];
 const light = process.argv[3] ?? 'studio';
@@ -9,7 +9,7 @@ const face = process.argv[4] ?? 'rest';
 const tag = face === 'rest' ? light : `${light}_${face}`;
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 const wait = (ms) => page.waitForTimeout(ms);

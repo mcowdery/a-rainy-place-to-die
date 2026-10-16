@@ -1,15 +1,15 @@
 // GPU time with the sky shown and hidden, and the triangles by group: node debug-shots/skycost.mjs [query]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const extra = process.argv[2] ?? '';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-frame-rate-limit', '--disable-gpu-vsync'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-frame-rate-limit', '--disable-gpu-vsync'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   for (const q of ['clock=23:00&weather=clear', 'clock=18:10&weather=clear', 'clock=18:10&weather=clear&skyColors=computed']) {
-    await page.goto(`${base}district.html?debug=1&diag=1&${q}&spawn=kaburo_crossing.view${extra ? '&' + extra : ''}`);
+    await page.goto(`${base}?debug=1&diag=1&${q}&spawn=kaburo_crossing.view${extra ? '&' + extra : ''}`);
     await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 180_000, polling: 500 });
     await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });
     await page.waitForTimeout(6000);

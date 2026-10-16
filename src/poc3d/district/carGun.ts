@@ -7,6 +7,7 @@ import type { FirstPersonRig } from '../models/firstPerson';
 import type { CityGunfire } from '../real/gunfire';
 import type { Driving } from './driving';
 import type { OwnCar } from './ownCar';
+import { FocusMeter } from './focusMeter';
 
 /**
  * Shooting from your car in the city, as on the race page (race/shooting.ts, race/main.ts): Mack's Type 54 from the
@@ -17,8 +18,8 @@ import type { OwnCar } from './ownCar';
  * (race/carDriver.ts).
  *
  * The right button aims: the view goes to his eyes, along an aim that holds its place in the world while the car
- * turns (district/driving.ts `startAim`), and the world slows to 30% while the focus lasts (2.5 s of it, refilling
- * over 6 s with the gun down; G turns that off). The left button fires: aimed, at what's under the crosshair; not
+ * turns (district/driving.ts `startAim`), (Shift + right button adds slow motion: the world at 30% while the focus lasts, 5 s of it, refilling
+ * over 6 s without it; a meter shows it). The left button fires: aimed, at what's under the crosshair; not
  * aimed, from the hip, with far more spread and never in slow motion. From the hip in the views on the car (his eyes,
  * the bonnet, the bumper) that's where you look; from the chase cameras (which look at your own car, from wherever
  * you've swung them) it's the way the camera looks past the car, level from his window, and at a car in a chase if
@@ -28,7 +29,7 @@ import type { OwnCar } from './ownCar';
  */
 
 /** Seconds of focus, and to refill it. */
-const FOCUS_SECS = 2.5;
+const FOCUS_SECS = 5;
 const FOCUS_REFILL = 6;
 /** How much the world slows at full focus. */
 const SLOW = 0.7;
@@ -55,23 +56,27 @@ export interface CarGunHost {
   rig(): FirstPersonRig | null;
   /** The mouse is the game's (captured), and nothing else has the screen (a scene, a menu). */
   live(): boolean;
+  /** The pistol is in his hand (the inventory's: unequipped, the car's gun can't be raised or fired). */
+  equipped(): boolean;
 }
 
 export class CarGun {
   /** The world's slow motion now (0-1), and what's left of the focus. */
   slow = 0;
   focus = 1;
-  /** Slow motion comes with the aim (G). */
-  slowAuto = true;
   /** The gun's out of a window (aimed, or just fired from the hip). */
   out = false;
   /** The window the aim's through (null: none: no line of fire). */
   side: Side | null = null;
+  /** Slow motion is on: the aim was raised with Shift held. It ends with the aim. */
   private slowOn = false;
+  private readonly meter: FocusMeter;
   private slowWas = 0;
   /** What the last shot met (for checks). */
   last: { what: string; dist: number; part: string | null } | null = null;
   private pulled = false;
+  /** Scripts (`raise(true)`, `fire()`) use the gun without the inventory's say-so; `lower` ends it. */
+  private forced = false;
   private hipT = 0;
   private blockedT = 0;
   /** Seconds since the gun was last out (he's still seen, putting it away and winding the window up, for a moment after). */
@@ -92,10 +97,11 @@ export class CarGun {
     this.note = el({ left: '50%', top: 'calc(50% + 34px)', transform: 'translateX(-50%)', letterSpacing: '0.12em', color: '#ffb0a0' });
     this.gun = el({ right: '18px', bottom: '64px', textAlign: 'right', lineHeight: '1.5' });
     this.veil = el({ inset: '0', zIndex: '15', background: 'radial-gradient(ellipse at center, rgba(120,150,255,0) 50%, rgba(40,60,140,0.55) 100%)', opacity: '0' });
+    this.meter = new FocusMeter();
     document.addEventListener('mousedown', (e) => {
       if (!this.ready()) return;
       host.gunfire.resume();
-      if (e.button === 2) this.raise();
+      if (e.button === 2) this.raise(false, e.shiftKey);
       if (e.button === 0) this.pulled = true;
     });
     document.addEventListener('mouseup', (e) => {
@@ -107,13 +113,16 @@ export class CarGun {
     window.addEventListener('keydown', (e) => {
       if (!this.ready() || e.repeat) return;
       if (e.code === 'KeyR') host.rig()?.reload();
-      if (e.code === 'KeyG') this.slowAuto = !this.slowAuto;
     });
   }
 
   /** At the wheel of your car, with the mouse: the gun's yours to use. */
   private ready(): boolean {
-    return !!this.host.seated() && !!this.host.rig() && this.host.live();
+    return !!this.host.seated() && !!this.host.rig() && this.host.live() && this.equipped();
+  }
+
+  private equipped(): boolean {
+    return this.forced || this.host.equipped();
   }
 
   /** He's to be seen at the wheel for the gun's sake: it's out, or only just put away. */
@@ -131,20 +140,23 @@ export class CarGun {
     return 1 - SLOW * this.slow;
   }
 
-  /** The gun up (`script`: without the mouse captured, for checks). */
-  raise(script = false): void {
+  /** The gun up (`script`: without the mouse captured, for checks; `slow`: Shift was held, so with slow motion). */
+  raise(script = false, slow = false): void {
+    if (script) this.forced = true;
     if (this.aiming || !(script ? this.host.seated() && this.host.rig() : this.ready())) return;
     this.host.driving.startAim();
-    if (this.slowAuto && this.focus > 0.25) this.slowOn = true;
+    if (slow && this.focus > 0.25) this.slowOn = true;
   }
 
   lower(): void {
+    this.forced = false;
     this.slowOn = false;
     this.host.driving.stopAim();
   }
 
   /** Pull the trigger (a click; scripts). */
   fire(): void {
+    this.forced = true;
     this.pulled = true;
   }
 
@@ -158,7 +170,7 @@ export class CarGun {
    * crosshair. Else (the chase cameras, from the hip): the way the camera looks past the car, level from his head,
    * or the chase car nearest that line.
    */
-  private target(eyes: boolean): THREE.Vector3 {
+  private target(eyes: boolean, cheap = false): THREE.Vector3 {
     const cam = this.host.camera;
     cam.updateMatrixWorld();
     const look = cam.getWorldDirection(new THREE.Vector3());
@@ -183,6 +195,8 @@ export class CarGun {
     }
     if (best) return best;
     const dir = new THREE.Vector3(Math.sin(yaw), -0.012, Math.cos(yaw)).normalize();
+    // (`cheap`: the reticle, every frame: a far point on the line, without marching the shot's whole way.)
+    if (cheap) return head.clone().addScaledVector(dir, 120);
     const met = G.pick(head, dir, 220, G.bodies, true);
     return met ? met.point : head.clone().addScaledVector(dir, 160);
   }
@@ -196,12 +210,20 @@ export class CarGun {
     const H = this.host;
     const seated = H.seated();
     const rig = H.rig();
+    // Put the pistol away (the inventory's key) and the gun comes down: no aim, no shot, no slow motion.
+    if (!this.equipped()) {
+      if (this.aiming) this.lower();
+      this.pulled = false;
+      this.hipT = 0;
+    }
     // The focus: drains while it slows the world, refills with the gun down.
-    if (this.aiming && this.slowOn) {
+    if (!H.seated()) this.slowOn = false;
+    if (this.slowOn) {
       this.focus = Math.max(0, this.focus - dt / FOCUS_SECS);
       if (this.focus <= 0) this.slowOn = false;
-    } else if (!this.aiming) this.focus = Math.min(1, this.focus + dt / FOCUS_REFILL);
-    this.slow += ((this.slowOn && this.aiming ? 1 : 0) - this.slow) * Math.min(1, dt * 7);
+    } else this.focus = Math.min(1, this.focus + dt / FOCUS_REFILL);
+    this.meter.update(!!H.seated(), this.slowOn, this.focus);
+    this.slow += ((this.slowOn ? 1 : 0) - this.slow) * Math.min(1, dt * 7);
     if (this.slow < 0.002) this.slow = 0;
     this.veil.style.display = this.slow > 0.01 ? 'block' : 'none';
     this.veil.style.opacity = (this.slow * 0.9).toFixed(3);
@@ -218,6 +240,7 @@ export class CarGun {
       this.pulled = false;
       this.out = false;
       this.side = null;
+      H.crosshair.place(null); // on foot the reticle is the view's centre: drop the chase camera's offset
       this.note.style.display = this.gun.style.display = 'none';
       return;
     }
@@ -258,8 +281,9 @@ export class CarGun {
     this.out = aiming || this.hipT > 0;
     this.sinceOut = this.out ? 0 : this.sinceOut + dt;
     if (!this.out) this.window = null;
-    // (From the cameras outside the car with the gun away he isn't drawn, nor posed.)
-    if (cockpit || this.shown) seated.update(H.own.sim, { raised: this.out, blocked: this.out && !this.side, window: this.window, aimPoint: this.aimAt, pov: cockpit ? 1 : 0, view: cockpit ? H.camera : null, throttle: pedals.throttle, brake: pedals.brake, calm: true }, gdt, dt);
+    // (From the cameras outside the car with the gun away he isn't drawn, nor posed; but he is for his hands at the
+    // police beacon, which you watch from outside as well, and to wind its window back up.)
+    if (cockpit || this.shown || H.own.siren.busy || seated.windowsDown) seated.update(H.own.sim, { raised: this.out, blocked: this.out && !this.side, window: this.window, aimPoint: this.aimAt, pov: cockpit ? 1 : 0, view: cockpit ? H.camera : null, throttle: pedals.throttle, brake: pedals.brake, calm: true }, gdt, dt);
     // His shots: from the muzzle at what's under the crosshair.
     for (let k = seated.newShots(); k > 0; k--) {
       const muzzle = rig.muzzle();
@@ -276,9 +300,9 @@ export class CarGun {
         if (pull && !H.gunfire.pick(muzzle, dir, 220, H.gunfire.bodies, true)?.body) dir.lerp(pull, ASSIST.pull).normalize();
       }
       const s = H.own.sim;
-      const spread = (rig.gun.spread ?? 0.006) * (1 + Math.abs(s.slide) * 2.5 + s.speed / 30) * (!aiming ? HIP : this.window === 'across' ? ACROSS : 1);
+      const spread = (rig.gun.spread ?? 0.006) * (1 + Math.abs(s.slide) * 2.5 + s.speed / 30) * (1 + rig.bloom * 1.5) * (!aiming ? HIP : this.window === 'across' ? ACROSS : 1);
       const vel = new THREE.Vector3(Math.sin(s.h) * s.u + Math.cos(s.h) * s.w, 0, Math.cos(s.h) * s.u - Math.sin(s.h) * s.w);
-      const met = H.gunfire.shot({ muzzle, dir, spread, sound: 'pistol', listener: H.camera.position, skipOwn: true, by: 'you', vel });
+      const met = H.gunfire.shot({ muzzle, dir, spread, sound: 'pistol', listener: H.camera.position, skipOwn: true, by: 'you', vel, mount: rig.muzzleMount() });
       this.last = met ? { what: met.what, dist: +met.distance.toFixed(1), part: (met.body?.object.userData.part as string | undefined) ?? null } : null;
       H.driving.kick(aiming ? 0.035 : 0);
       H.crosshair.fired();
@@ -286,16 +310,17 @@ export class CarGun {
     // (They're this module's to make: the rig's own shots along its bore are for on foot.)
     H.gunfire.sync(rig);
     const blocked = this.out && !this.side;
-    H.crosshair.update(this.out, aiming ? 1 : 0.35, dt, blocked);
-    const reloading = rig.reloading;
-    this.note.style.display = this.out && (blocked || reloading || this.window === 'across') ? 'block' : 'none';
-    this.note.textContent = blocked ? 'NO LINE OF FIRE' : reloading ? 'RELOADING' : 'THROUGH THE PASSENGER WINDOW';
-    // (No shot: said in red, larger, and it jumps when you pull the trigger anyway.)
-    Object.assign(this.note.style, blocked
-      ? { color: '#ff2b3a', fontSize: '15px', fontWeight: '800', top: 'calc(50% + 40px)', transform: `translateX(-50%) scale(${(1 + this.blockedT * 0.35).toFixed(3)})` }
-      : { color: '#ffb0a0', fontSize: '12px', fontWeight: '600', top: 'calc(50% + 34px)', transform: 'translateX(-50%)' });
-    const bars = Math.round(this.focus * 10);
-    this.gun.style.display = 'block';
-    this.gun.innerHTML = `${rig.gun.label ?? 'Pistol'} · ${reloading ? 'reloading…' : '▮'.repeat(rig.shells) + '▯'.repeat(Math.max(0, rig.gun.shells - rig.shells))}<br><span style="opacity:${aiming || this.focus < 1 ? 1 : 0.45}">${this.slowAuto ? `FOCUS ${'▮'.repeat(bars)}${'▯'.repeat(10 - bars)}` : 'FOCUS off'}</span><br><span style="opacity:.55;font-weight:400">RMB aim · LMB fire · R reload · G focus</span>`;
+    // From the chase cameras, which look at the car and not where the gun points, the reticle sits where a shot from
+    // the hip would land (so you can swing the view about and still see where you'd hit); out of view, there's none.
+    let show = this.out;
+    H.crosshair.place(null);
+    if (chase && !aiming && this.equipped() && H.live()) {
+      const p = this.target(false, true).project(H.camera);
+      if (p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1) {
+        H.crosshair.place((p.x * innerWidth) / 2, (-p.y * innerHeight) / 2);
+        show = true;
+      } else show = false;
+    }
+    H.crosshair.update(show, aiming ? 1 : 0.35, dt, blocked);
   }
 }

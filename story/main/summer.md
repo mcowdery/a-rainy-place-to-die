@@ -1,12 +1,12 @@
 # Summer: one hand (Proposed)
 
-**Lead:** the informant. **Districts:** Tōto Port, Ebisu-jima, Shiomi-jima, Denkō-chō, Sakuragaoka, the Wangan
+**Lead:** the informant. **Districts:** Tokyo Port, Ebisu-jima, Shiomi-jima, Denkō-chō, Sakuragaoka, the Wangan
 (plus spring's). **Reveal:** the Amakudari-kai: the yakuza, the triad and the bought police are paid by one hand.
 **Machine:** a car that drives itself, on the Wangan.
 
 A woman inside the triad's accounts has been feeding Public Security for years, and her handler has gone quiet.
 Through the port, the car meets and the festival, Mack follows the money she's been tracing until every rival in
-Tōto turns out to be paid from the same accounts. Then he has to get her, and the proof, across the bay alive.
+Tokyo turns out to be paid from the same accounts. Then he has to get her, and the proof, across the bay alive.
 
 | # | Chapter | Point of view | Where | Fight |
 |---|---|---|---|---|

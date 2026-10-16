@@ -31,6 +31,12 @@ export class BodyFacing {
   private readonly stand = new THREE.PerspectiveCamera();
   private readonly dir = new THREE.Vector3();
 
+  /** Turned to `yaw` now, whatever the view or the way he goes (an action that turns him: models/cover.ts). */
+  face(yaw: number): void {
+    this.yaw = yaw;
+    this.known = true;
+  }
+
   /** Turned to the view now. */
   snap(camera: THREE.Camera, pitch?: number): void {
     const f = camera.getWorldDirection(this.dir);
@@ -41,6 +47,10 @@ export class BodyFacing {
 
   private shots = -1;
   private hold = 0;
+  /** How much longer a shot keeps him turned to the view (s), for checks. */
+  get holdLeft(): number {
+    return this.hold;
+  }
   /**
    * How he should face this frame: in first person as the view; in third person the way he goes, unless he has a
    * gun up or has just fired (he turns to the shot and stays on it a moment). Fighting hand to hand or with a
@@ -95,7 +105,8 @@ export interface ThirdOffset {
 /** On foot, raising a gun (closer, more over the shoulder) and riding (behind the bike, higher). */
 export const THIRD: { foot: ThirdOffset; aim: ThirdOffset; ride: ThirdOffset } = {
   foot: { back: 2.3, side: 0.42, up: 0.12 },
-  aim: { back: 1.25, side: 0.5, up: 0.06 },
+  // (Raised gun: tight over the right shoulder, as in most third-person shooters; was back 1.25, side 0.5.)
+  aim: { back: 0.8, side: 0.6, up: 0.1 },
   ride: { back: 3.4, side: 0, up: 0.55 },
 };
 

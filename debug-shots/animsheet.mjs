@@ -4,7 +4,7 @@
 //   node debug-shots/animsheet.mjs <out dir> [character] [clips, comma separated | all] [frames a clip] [a take's .glb]
 //   e.g. node debug-shots/animsheet.mjs debug-shots/anims salaryman Walk_Loop,Idle_Talking_Loop 8
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2];
 const who = process.argv[3] ?? 'salaryman';
@@ -19,7 +19,7 @@ const W = 300;
 const H = 380;
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: W, height: H } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); });

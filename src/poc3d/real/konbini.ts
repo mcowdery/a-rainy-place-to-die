@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DECOR_PEOPLE } from './kit';
 import type { Rect } from '../../core/coords';
 import { hash } from '../../core/hash';
 import type { Building3 } from '../district/plan';
@@ -273,7 +274,7 @@ export function buildKonbini(b: Building3, city: THREE.Material, ghost: THREE.Ma
   Object.values(posterArt).forEach((url, i) => {
     const tex = loader.load(url);
     tex.colorSpace = THREE.SRGBColorSpace;
-    const poster = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 1.15), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(0.9, 0.9, 0.9) }));
+    const poster = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.85), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(0.9, 0.9, 0.9) }));
     const [px, pz] = toWorld(f, 11.0 + i * 1.3, 0.14);
     poster.position.set(px, 1.75, pz);
     poster.rotation.y = facing;
@@ -304,6 +305,7 @@ export function buildKonbini(b: Building3, city: THREE.Material, ghost: THREE.Ma
     const m = new THREE.Mesh(crowd, ghost);
     m.renderOrder = 2;
     group.add(m);
+    DECOR_PEOPLE.push(m);
   }
 
   let open = 0;

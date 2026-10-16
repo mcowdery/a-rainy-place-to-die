@@ -1,0 +1,30 @@
+{
+  "language": "English",
+  "voices": [
+    { "id": "gravel", "instruct": "A man in his early forties with a low, gravelly baritone. American English. Hardboiled detective narration: slow, dry, weary and understated, a little hoarse from cigarettes and no sleep. Close to the microphone, quiet, never theatrical." },
+    { "id": "dry", "instruct": "A man of about forty with a deep, smooth, quiet voice. American English. Flat and matter-of-fact, tired, with dry humour under it; he speaks slowly and lets each sentence fall away at the end. Intimate, late at night." },
+    { "id": "tokyo", "instruct": "A Japanese man in his early forties speaking fluent English with a light Japanese accent. A low, rough baritone, slow and weary: a detective thinking aloud late at night. Quiet, close to the microphone, understated." }
+  ],
+  "ref_text": "It had been raining for three days. The kind of rain that doesn't wash anything clean. I lit a cigarette, watched the neon bleed into the gutter, and waited for a phone that wasn't going to ring.",
+  "lines": [
+    { "id": "kaburo", "text": "Kaburo at three in the morning. Everybody awake is either selling something or paying for it." },
+    { "id": "monday", "text": "Monday again. I counted the bills twice. It didn't make them more." },
+    { "id": "booth", "text": "Booth seventeen. A reclining chair, a lamp, and a door that doesn't lock. Home." },
+    { "id": "client", "text": "She said her husband was missing. She didn't say she wanted him found." },
+    { "id": "question", "text": "You're asking the wrong question. Ask me who paid for the room." },
+    { "id": "megumi", "text": "Megumi. I still look for her face in every crowd. That's the job now. That was always the job." },
+    { "id": "gun", "text": "Put the gun down, kid. Nobody's paying you enough for this." }
+  ],
+  "tagged": {
+    "fish": [
+      { "id": "monday", "text": "[low, tired voice] Monday again. [sigh] I counted the bills twice. [pause] It didn't make them more." },
+      { "id": "megumi", "text": "[quiet, sad, almost whispering] Megumi. [pause] I still look for her face in every crowd. That's the job now. [pause] That was always the job." },
+      { "id": "gun", "text": "[calm, cold, threatening] Put the gun down, kid. [pause] Nobody's paying you enough for this." }
+    ],
+    "higgs": [
+      { "id": "monday", "text": "<|emotion:bitterness|><|prosody:speed_slow|><|prosody:pitch_low|>Monday again. <|sfx:sigh|>I counted the bills twice. <|prosody:pause|>It didn't make them more." },
+      { "id": "megumi", "text": "<|emotion:longing|><|prosody:speed_slow|><|prosody:pitch_low|>Megumi. <|prosody:pause|>I still look for her face in every crowd. That's the job now. <|prosody:pause|>That was always the job." },
+      { "id": "gun", "text": "<|emotion:determination|><|prosody:pitch_low|><|prosody:expressive_low|>Put the gun down, kid. <|prosody:pause|>Nobody's paying you enough for this." }
+    ]
+  }
+}

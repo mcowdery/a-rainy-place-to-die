@@ -14,12 +14,12 @@ import { TrafficSystem } from '../src/poc3d/real/traffic';
 import { District } from '../src/poc3d/district/world';
 import { localFrame, toWorld } from '../src/poc3d/real/localFrame';
 import { DISTRICT_ADS } from '../src/poc3d/models/ads';
-import { addDistrictAds, type AdPlacement } from '../src/poc3d/real/districtAds';
-import { MeshBuilder } from '../src/poc3d/real/meshBuilder';
+import type { AdPlacement } from '../src/poc3d/real/districtAds';
 import { tiers } from '../src/poc3d/real/buildings';
-import { SignBuilder } from '../src/poc3d/real/signs';
 import { INTERIORS, interiorFor } from '../src/poc3d/real/interiors';
 import { CAFE } from '../src/poc3d/real/maidCafe';
+import { doorOpen, toggleDoor } from '../src/poc3d/real/swingDoors';
+import { ROOMS } from '../src/poc3d/real/rougePlan';
 import { ZAKKYO } from '../src/poc3d/real/cashOne';
 import { HOSP } from '../src/poc3d/real/kasumi';
 import { REIEN, SITE } from '../src/poc3d/real/kasumiGrounds';
@@ -180,57 +180,79 @@ describe('3D stamps and atmosphere', () => {
 });
 
 describe('district ads', async () => {
-  const { addDistrictAds } = await import('../src/poc3d/real/districtAds');
+  const { addDistrictAds, BILLBOARDS, POSTERS } = await import('../src/poc3d/real/districtAds');
+  const { adBrand, AdSites, TILE } = await import('../src/poc3d/real/adSites');
+  const { Expressway, parseExpressway } = await import('../src/poc3d/district/expressway');
   const { styleFor, WIN } = await import('../src/poc3d/real/buildings');
   const { MeshBuilder } = await import('../src/poc3d/real/meshBuilder');
   const { SignBuilder } = await import('../src/poc3d/real/signs');
   const { DistrictModel } = await import('../src/poc3d/district/model');
-  const model = new DistrictModel(content.macro, 'neon', content.placed, 7);
-  const place = (mx: number, my: number) => {
-    const out: import('../src/poc3d/real/districtAds').AdPlacement[] = [];
-    addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), model.plan(mx, my)!.signs, model.detail(mx, my)!.props, out);
-    return out;
-  };
+  // Kaburo and the electric town beside it, with the expressway and the lines that pass them.
+  const model = new DistrictModel(content.macro, ['neon', 'electric'], content.placed, 7, content.zones, content.avenues);
+  const sources = { expressway: new Expressway(parseExpressway('expressway.yaml', content.expresswayText, [])!).roads, rails: content.rails };
+  const ads = new AdSites(model, sources);
+  const all = model.cells.flatMap(([mx, my]) => ads.sites(mx, my));
+  const boards = all.filter((s) => s.kind !== 'poster');
+  const posters = all.filter((s) => s.kind === 'poster');
+  const far = (a: (typeof all)[number], b: (typeof all)[number]): number => Math.hypot(a.c[0] - b.c[0], a.c[2] - b.c[2]);
 
-  it('fits the whole catalogue in the ad atlas', async () => {
-    const { BILLBOARDS, POSTERS } = await import('../src/poc3d/real/districtAds');
+  it('fits the whole catalogue in the ad atlas', () => {
     expect(BILLBOARDS.length).toBeLessThanOrEqual(36);
     expect(POSTERS.length).toBeLessThanOrEqual(48);
   });
 
-  it('is deterministic and places every kind somewhere', () => {
-    const cells = neonCells.slice(0, 20);
-    expect(cells.map(([x, y]) => place(x, y))).toEqual(cells.map(([x, y]) => place(x, y)));
-    const kinds = new Set(cells.flatMap(([x, y]) => place(x, y).map((p) => p.kind)));
-    expect([...kinds].sort()).toEqual(['poster', 'rooftop', 'wall']);
+  it('is the same whatever order the cells are asked for in, and builds what it sites', () => {
+    const again = new AdSites(model, sources);
+    const reversed = [...model.cells].reverse().flatMap(([mx, my]) => again.sites(mx, my));
+    const key = (s: (typeof all)[number]): string => `${s.kind} ${s.b.id} ${s.c.join(',')} ${s.n.join(',')} ${s.ad}`;
+    expect(reversed.map(key).sort()).toEqual(all.map(key).sort());
+    const out: AdPlacement[] = [];
+    for (const [mx, my] of model.cells) addDistrictAds(new SignBuilder(), new MeshBuilder(), ads.sites(mx, my), out);
+    expect(out.length).toBe(all.length);
+    expect(new Set(out.map((p) => p.kind))).toEqual(new Set(['rooftop', 'poster', ...(boards.some((s) => s.kind === 'wall' && !s.front) ? ['side'] : []), ...(boards.some((s) => s.kind === 'wall' && s.front) ? ['wall'] : [])]));
   });
 
-  it('hangs billboards on side walls that face a car park, playground or vacant lot', () => {
-    const sides: { p: import('../src/poc3d/real/districtAds').AdPlacement; open: Rect[] }[] = [];
-    for (const [mx, my] of neonCells) {
-      const plan = model.plan(mx, my)!;
-      const out: import('../src/poc3d/real/districtAds').AdPlacement[] = [];
-      addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), plan.signs, model.detail(mx, my)!.props, out, undefined, plan.open);
-      for (const p of out) if (p.kind === 'side') sides.push({ p, open: plan.open.filter((o) => o.kind !== 'plaza' && o.kind !== 'park').map((o) => o.rect) });
+  it('puts up a billboard only where it is seen, and never over windows', () => {
+    // A select few: the old rule hung one on every second or third mid-rise.
+    const buildings = model.cells.flatMap(([mx, my]) => model.plan(mx, my)!.buildings);
+    expect(boards.length).toBeGreaterThan(15);
+    expect(boards.length).toBeLessThan(buildings.length / 40);
+    for (const s of boards) {
+      expect(s.score).toBeGreaterThanOrEqual(1);
+      expect(styleFor(s.b).home).toBeFalsy();
+      if (s.kind === 'wall') expect(styleFor(s.b).type).toBe(WIN.blank);
+      // On a roof it stands above the parapet.
+      else expect(s.y0).toBeGreaterThan(s.b.h);
     }
-    expect(sides.length).toBeGreaterThan(5);
-    // Each faces into a lot: a few metres out along its normal is open ground.
-    for (const { p, open } of sides) {
-      const [x, z] = [p.x + p.nx * 3, p.z + p.nz * 3];
-      expect(open.some((r) => x > r.x - 0.5 && x < r.x + r.w + 0.5 && z > r.y - 0.5 && z < r.y + r.h + 0.5)).toBe(true);
+    // Each of the three kinds of viewer has some: drivers on the expressway, passengers on the lines, the street.
+    expect(new Set(boards.map((s) => s.view))).toEqual(new Set(['expressway', 'rail', 'street']));
+  });
+
+  it('keeps billboards apart, and the same brand out of sight of itself', () => {
+    for (let i = 0; i < boards.length; i++) for (let j = i + 1; j < boards.length; j++) expect(far(boards[i], boards[j])).toBeGreaterThanOrEqual(50);
+    for (const [list, size] of [[boards, TILE.billboard], [posters, TILE.poster]] as const) {
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (adBrand(list[i].ad) === adBrand(list[j].ad)) expect(far(list[i], list[j]), DISTRICT_ADS[list[i].ad].brand).toBeGreaterThan(size);
     }
   });
 
-  it('keeps facade billboards off balcony fronts and posters clear of vending machines', () => {
-    for (const [mx, my] of neonCells.slice(0, 20)) {
-      const buildings = model.buildings(mx, my);
+  it('puts posters only where people wait, clear of vending machines', () => {
+    expect(posters.length).toBeGreaterThan(20);
+    // (The old rule: one on every third shopfront, some 14 a cell.)
+    expect(posters.length).toBeLessThan(model.cells.length * 5);
+    for (const [mx, my] of model.cells) {
       const vending = model.detail(mx, my)!.props.filter((p) => p.kind === 'vending');
-      for (const p of place(mx, my)) {
-        if (p.kind === 'poster') expect(vending.every((v) => Math.hypot(v.x - p.x, v.z - p.z) >= 1.3)).toBe(true);
-        if (p.kind === 'wall') {
-          const b = buildings.find((q) => Math.abs(q.x - p.x) <= q.w / 2 + 0.01 && Math.abs(q.z - p.z) <= q.d / 2 + 0.01)!;
-          expect(styleFor(b).type).not.toBe(WIN.balcony);
-        }
+      for (const s of ads.sites(mx, my)) if (s.kind === 'poster') expect(vending.every((v) => Math.hypot(v.x - s.c[0], v.z - s.c[2]) >= 1.3)).toBe(true);
+    }
+  });
+
+  it('shows a zone the ads of its kinds, and the passing traffic the everyday ones', () => {
+    for (const s of all) {
+      const ad = DISTRICT_ADS[s.ad];
+      if (s.view === 'expressway' || s.view === 'rail') expect(['mainstream', 'food', 'loan']).toContain(ad.cat);
+      else {
+        // (A zone whose kinds have no ad in this format takes the everyday ones.)
+        const kinds = Object.keys(s.b.zone?.ads ?? {}).filter((c) => DISTRICT_ADS.some((a) => a.format === ad.format && a.cat === c));
+        expect(kinds.length ? kinds : ['mainstream', 'food', 'loan', 'lodging']).toContain(ad.cat);
       }
     }
   });
@@ -255,15 +277,6 @@ describe('Kaburo zones', () => {
     const crossing = stats('crossing');
     expect(alleys.h).toBeLessThan(crossing.h / 2);
     expect(alleys.n).toBeGreaterThan(crossing.n * 1.5);
-  });
-
-  it('fills the Love District with love hotel and adult ads only (where the build has them)', () => {
-    const out: AdPlacement[] = [];
-    for (const [mx, my] of inZone('love_district')) addDistrictAds(new SignBuilder(), new MeshBuilder(), model.buildings(mx, my), model.plan(mx, my)!.signs, model.detail(mx, my)!.props, out);
-    expect(out.length).toBeGreaterThan(20);
-    // Those ads' pictures are in adult/ (src/edition/demoArt.ts), so the standard build has none and the district takes
-    // whatever ads there are; only the uncensored build, with them, is themed.
-    if (DISTRICT_ADS.some((a) => a.cat === 'lovehotel' || a.cat === 'adult')) for (const a of out) expect(['lovehotel', 'adult']).toContain(DISTRICT_ADS[a.ad].cat);
   });
 
   it('rejects malformed zones', () => {
@@ -340,7 +353,7 @@ describe('Open ground and greenery', () => {
     expect(props.filter((q) => q.kind === 'tree').length / cells.length).toBeGreaterThan(8);
     expect(props.some((q) => q.kind === 'hedge')).toBe(true);
     for (const [mx, my] of cells) {
-      const blades = model.plan(mx, my)!.signs.filter((s) => s.vertical);
+      const blades = model.signs(mx, my).filter((s) => s.vertical);
       for (const t of model.detail(mx, my)!.props.filter((q) => q.kind === 'tree' && q.grate !== false)) {
         expect(blades.some((s) => Math.hypot(s.x - t.x, s.z - t.z) < 3.2)).toBe(false);
       }
@@ -1271,36 +1284,114 @@ describe('Interiors: Hotel Rouge', () => {
   };
 
   it('lets you walk in past the screen wall, to the room panel and into the back hall', () => {
-    expect(walk([[12, -2], [16, -1], [16, 2.6], [12, 2.6], [12, 6.5], [14.5, 8.5], [14.5, 10.6], [14.5, 12], [6, 12], [5, 12.2]], 0)).toBe(0);
+    expect(walk([[17, -2], [21, -1], [21, 2.6], [17, 2.6], [17, 6.5], [22.5, 9], [22.5, 14], [12, 14], [8.5, 14.6]], 0)).toBe(0);
   });
 
-  it('climbs the switchback to both floors and into a themed room on each', () => {
-    const up2 = walk([[12, 6.5], [14.5, 8.5], [14.5, 10.6], [14.4, 17], [19, 17], [20.1, 17], [20.1, 15.5], [19, 15.55], [15, 15.55], [14.4, 13], [14.4, 11.3], [6.15, 11.3], [6.15, 9.6], [6.15, 7.6]], 0);
-    expect(up2).toBe(5);
-    const up3 = walk([[6.15, 7.6], [6.15, 11.3], [14.4, 11.3], [14.4, 17], [19, 17], [20.1, 17], [20.1, 15.5], [19, 15.55], [15, 15.55], [14.4, 13], [14.4, 11.3], [11.9, 11.3], [11.9, 7.6]], 5);
-    expect(up3).toBe(10);
+  it('lets you walk in at the side doorway once its door is open, and through the couple in the court', () => {
+    // (The user, 2026-10-12: "won't let me walk in": the street's pocket there was shallower than the walker is wide.)
+    toggleDoor('hotel_rouge.side_door');
+    try {
+      expect(walk([[0.5, 13.5], [2.5, 13.5], [4.5, 13.5], [8, 14.2]], 0)).toBe(0);
+      expect(walk([[8, 14.2], [4.5, 13.5], [2.5, 13.5], [0.5, 13.5]], 0)).toBe(0);
+    } finally {
+      toggleDoor('hotel_rouge.side_door');
+    }
+    // Figures are scenery: the couple slipping in behind the screen wall doesn't block.
+    expect(district.blocked(...toWorld(f, 13.1, 2.5), 0.3, 0)).toBe(false);
   });
 
-  it('fences the well on the top floor, and keeps the taken rooms shut', () => {
+  it("opens each bath by its glass door: shut it's a wall, open you walk in to the shower", () => {
     district.setInterior('hotel_rouge', layout);
     try {
-      expect(district.blocked(...toWorld(f, 16.5, 17), 0.4, 10)).toBe(true);
-      expect(district.blocked(...toWorld(f, 17.75, 9.6), 0.4, 10)).toBe(true);
-      expect(district.blocked(...toWorld(f, 11.9, 9.6), 0.4, 5)).toBe(true);
+      for (const r of ROOMS.filter((q) => q.bathDoor)) {
+        const b = r.bathDoor!;
+        const node = district.nodes.find((n) => n.id === b.key);
+        expect(node?.swing, r.no).toBe(b.key);
+        const mid = toWorld(f, (b.gap[0] + b.gap[1]) / 2, (b.gap[2] + b.gap[3]) / 2);
+        expect(district.blocked(...mid, 0.3, r.floor), `${r.no} shut`).toBe(true);
+        toggleDoor(b.key);
+        expect(district.blocked(...mid, 0.3, r.floor), `${r.no} open`).toBe(false);
+        // Just inside the glass, in the shower end of the bath.
+        expect(district.blocked(...toWorld(f, b.gap[1] + 0.6, (b.gap[2] + b.gap[3]) / 2), 0.35, r.floor), `${r.no} inside`).toBe(false);
+        toggleDoor(b.key);
+      }
     } finally {
       district.setInterior('hotel_rouge', null);
     }
+  });
+
+  it('walls each door shut until it is opened, from the street and the corridor alike', () => {
+    // (Doorways are stamp rects: a shut one walls whoever is at it; open ones leave the interior's own walls.)
+    district.setInterior('hotel_rouge', layout);
+    try {
+      for (const [id, u, t, y] of [
+        ['hotel_rouge.door_201', 7.8, 12.35, 5], ['hotel_rouge.door_203', 26.1, 12.35, 5], ['hotel_rouge.door_205', 7.8, 14.95, 5], ['hotel_rouge.door_206', 16.9, 14.95, 5],
+        ['hotel_rouge.door_301', 7.8, 12.35, 10], ['hotel_rouge.door_302', 16.9, 12.35, 10], ['hotel_rouge.door_303', 26.1, 12.35, 10], ['hotel_rouge.door_306', 16.9, 14.95, 10],
+        ['hotel_rouge.door_housekeeping', 23.1, 17.85, 5], ['hotel_rouge.door_office', 23.1, 17.85, 10], ['hotel_rouge.door_laundry', 23.1, 17.85, 0],
+        ['hotel_rouge.door_101', 8.3, 16.95, 0], ['hotel_rouge.door_staff', 6.65, 12.35, 0], ['hotel_rouge.garage_door', 23.6, 7.6, 0], ['hotel_rouge.side_door', 3.15, 13.5, 0],
+      ] as const) {
+        expect(doorOpen(id), `${id} starts shut`).toBe(false);
+        expect(district.blocked(...toWorld(f, u, t), 0.3, y), `${id} shut`).toBe(true);
+        toggleDoor(id);
+        expect(district.blocked(...toWorld(f, u, t), 0.3, y), `${id} open`).toBe(false);
+        toggleDoor(id);
+      }
+    } finally {
+      district.setInterior('hotel_rouge', null);
+    }
+    // The side door has a node each side that work the one door.
+    const out = district.nodes.find((n) => n.id === 'hotel_rouge.side_door_out')!;
+    expect(out.swing).toBe('hotel_rouge.side_door');
+    // Every room has its door node, and a room's gap is the plan's.
+    for (const r of ROOMS) expect(district.nodes.find((n) => n.id === r.key)?.swing, r.no).toBe(r.key);
+  });
+
+  it('climbs the switchback to both floors and into rooms on each', () => {
+    const doors = ['hotel_rouge.door_201', 'hotel_rouge.door_302', 'hotel_rouge.door_305'];
+    for (const id of doors) if (!doorOpen(id)) toggleDoor(id);
+    const up = [[22.5, 17.1], [25.5, 17.1], [28, 17.1], [29.6, 17.1], [29.6, 15.6], [28, 15.65], [25.5, 15.65], [24, 15.65], [24, 13.65]] as [number, number][];
+    // (In a room, clear of the bath's glass corner east of the door's line.)
+    const up2 = walk([[17, 6.5], [22.5, 9], [22.5, 14], [22.5, 17.1], ...up.slice(1), [7.8, 13.65], [7.8, 11.5], [7.55, 9.8], [7.55, 8.0]], 0);
+    expect(up2).toBe(5);
+    const up3 = walk([[7.55, 8.0], [7.55, 9.8], [7.8, 11.5], [7.8, 13.65], [22.5, 13.65], [22.5, 17.1], ...up.slice(1), [16.9, 13.65], [16.9, 11.5], [16.65, 9.8], [16.65, 8.0]], 5);
+    expect(up3).toBe(10);
+    // And into a back room by its own door.
+    expect(walk([[16.65, 8.0], [16.65, 9.8], [16.9, 11.5], [16.9, 13.65], [7.8, 13.65], [7.8, 16.5], [7.8, 20.0]], 10)).toBe(10);
+    for (const id of doors) if (doorOpen(id)) toggleDoor(id);
+  });
+
+  it('fences the well on the top floor, and shuts every door at the start', () => {
+    district.setInterior('hotel_rouge', layout);
+    try {
+      expect(district.blocked(...toWorld(f, 29.0, 17.0), 0.4, 10)).toBe(true);
+      expect(district.blocked(...toWorld(f, 29.5, 15.6), 0.4, 10)).toBe(true);
+    } finally {
+      district.setInterior('hotel_rouge', null);
+    }
+    for (const r of ROOMS) expect(doorOpen(r.key), r.no).toBe(false);
     const suite = district.nodes.find((n) => n.id === 'hotel_rouge.room_303')!;
     expect(suite.through).toBe(false);
     expect(district.nodes.find((n) => n.id === 'hotel_rouge.entrance')!.through).toBe(true);
   });
 
+  it('hands the reflections only enclosed volumes to dry: the keep, not the porch or a viaduct', () => {
+    const [x, z] = toWorld(f, 17, -2);
+    const all = district.sheltersNear(x, z, 70, 24);
+    const dry = district.sheltersNear(x, z, 70, 24, true);
+    expect(all.some((s) => !s.enclosed)).toBe(true);
+    expect(dry.length).toBeGreaterThan(0);
+    expect(dry.every((s) => s.enclosed)).toBe(true);
+    // The court in front of the doors (under the porch's canopy) is in no enclosed volume: its ground stays wet.
+    const [cx, cz] = toWorld(f, 17, 2.5);
+    expect(dry.some((s) => cx > s.rect.x && cx < s.rect.x + s.rect.w && cz > s.rect.y && cz < s.rect.y + s.rect.h && 0.1 > s.y0 && 0.1 < s.y1)).toBe(false);
+  });
+
   it('keeps the rain out on every storey and up the stair, and lets it fall in the front court', () => {
-    for (const [u, t, y] of [[12, 7, 1.7], [6, 12, 1.7], [14.4, 11.3, 6.7], [11.9, 7.6, 11.7], [18, 17, 4], [20.1, 16.5, 9.2], [17, 15.5, 11.7], [20.5, 17.5, 14]] as const) {
+    for (const [u, t, y] of [[17, 7, 1.7], [8.5, 14.6, 1.7], [23, 13.65, 6.7], [16.9, 8, 11.7], [27, 16.5, 4], [29, 16.5, 9.2], [23, 16.4, 11.7], [30.4, 17.4, 14]] as const) {
       expect(district.shelterAt(...toWorld(f, u, t), y)?.enclosed, `${u}, ${t} at ${y}`).toBe(true);
     }
-    expect(district.sheltered(...toWorld(f, 16, 2.6), 1.7)).toBe(false);
-    expect(district.sheltered(...toWorld(f, 12, 10), 16)).toBe(false);
+    expect(district.sheltered(...toWorld(f, 21, 2.6), 1.7)).toBe(false);
+    expect(district.sheltered(...toWorld(f, 17, 14), 16)).toBe(false);
   });
 });
 

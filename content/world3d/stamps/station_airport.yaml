@@ -1,22 +1,22 @@
-# 東都空港駅 Tōto Airport Station (monorail): a station landmark built by real/station.ts, its street face 10 m from the
+# 東京空港駅 Tokyo Airport Station (monorail): a station landmark built by real/station.ts, its street face 10 m from the
 # line (see content/world3d/rail.yaml).
 id: station_airport
-name: 東都空港駅 Tōto Airport Station
+name: 東京空港駅 Tokyo Airport Station
 footprint: [60, 24]
 height: 16.6
 front: south
 landmark: station
-station: { jp: 東都空港, en: TŌTO AIRPORT, line: monorail }
+station: { jp: 東京空港, en: TOKYO AIRPORT, line: monorail }
 nodes:
   exit:
     kind: spawn
-    name: Tōto Airport Station
+    name: Tokyo Airport Station
     at: [30, 8]
     facing: north
     view: [20, 16]
   platform:
     kind: spawn
-    name: Tōto Airport Station (platform)
+    name: Tokyo Airport Station (platform)
     at: [44, 3.2]
     floor: 9.1
     facing: south

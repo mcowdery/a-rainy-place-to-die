@@ -34,7 +34,7 @@ describe('the elevated lines', () => {
     const codes = (id: string) => net.lines.find((l) => l.id === id)!.stops.map((s) => `${s.code} ${s.en}`);
     expect(codes('toto')).toEqual(['T01 GAKUENZAKA', 'T02 ASAGIRI', 'T03 TŌTO-CHŪŌ', 'T04 KABURO', 'T05 KASUMI-CHŌ']);
     expect(codes('kawabata')).toEqual(['K01 KABURO-HIGASHI', 'K02 DENKŌ-CHŌ', 'K03 KAWABATA']);
-    expect(codes('monorail')).toEqual(['M01 KASUMI-CHŌ', 'M02 TŌTO-KŌ', 'M03 TŌTO AIRPORT']);
+    expect(codes('monorail')).toEqual(['M01 KASUMI-CHŌ', 'M02 TOKYO PORT', 'M03 TOKYO AIRPORT']);
     for (const p of content.placed.filter((q) => q.stamp.landmark === 'station')) {
       const l = line(p.stamp.station?.line ?? 'toto');
       const st = railStation(l, p.id, p.stamp.station!, p.building.x, p.building.z);
@@ -95,6 +95,10 @@ describe('the elevated lines', () => {
         const { s } = l.path.project(x, z);
         const h = l.path.at(s);
         const road = under(h.x, h.z, Math.abs(h.hz) > Math.abs(h.hx));
+        if (road?.median) {
+          const lat = Math.abs(Math.abs(h.hz) > Math.abs(h.hx) ? x - Math.round(x / 128) * 128 : z - Math.round(z / 128) * 128);
+          expect(lat > road.medianHalf + 0.8 && lat < road.half, `${l.id} pier at ${x.toFixed(0)},${z.toFixed(0)} on a carriageway`).toBe(false);
+        }
         if (!road || road.median) continue;
         // Across the line from its centre: past the kerb.
         const [lx, lz] = leftOf(h);

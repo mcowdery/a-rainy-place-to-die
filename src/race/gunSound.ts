@@ -49,6 +49,8 @@ export class GunSound {
   shotgunVoice: 'a' | 'b' | 'synth' = 'a';
   private readonly foley = new Map<string, AudioBuffer>();
   private level = 1;
+  /** How loud the pistol's reload is against the rest of the gun's sound (1 as built; the debug menu's Reload sound). */
+  reloadLevel = 1;
   private echoAmount = 0.3;
   /** The recorded shots by `<voice>_<near|far>`, the last one played of each, and the buses they play into. */
   private readonly shots = new Map<string, AudioBuffer[]>();
@@ -58,6 +60,22 @@ export class GunSound {
   private slow = 0;
   /** Resolves once the recordings are decoded. */
   ready: Promise<void> = Promise.resolve();
+  /** The recordings' decoding, begun when the sound is made (not at the first click, which left the first shots to the synthesised report), and whether it's done. */
+  private loading: Promise<void> | null = null;
+  private loaded = false;
+
+  constructor() {
+    this.preload();
+  }
+
+  /** Fetch and decode the recordings now, with a context of their own (a buffer plays in any context). */
+  private preload(into?: BaseAudioContext): Promise<void> {
+    if (!this.loading) {
+      const ctx = into ?? (typeof OfflineAudioContext === 'undefined' ? null : new OfflineAudioContext(1, 1, 48000));
+      this.loading = (ctx ? this.load(ctx) : Promise.resolve()).then(() => void (this.loaded = true));
+    }
+    return this.loading;
+  }
 
   /** `into`: another context to play into (an offline one, for measuring); else the page's own, made on first use. */
   start(into?: BaseAudioContext): void {
@@ -113,7 +131,7 @@ export class GunSound {
     this.recordedWet.gain.value = this.echoAmount * RECORDED_WET;
     this.recorded.connect(this.recordedWet).connect(verb);
     this.out.gain.value = 0.8 * this.level;
-    this.ready = this.load(ctx);
+    this.ready = this.preload(ctx);
   }
 
   private async load(ctx: BaseAudioContext): Promise<void> {
@@ -233,6 +251,13 @@ export class GunSound {
 
   play(events: readonly ShotEvent[], listener: THREE.Vector3): void {
     if (!this.ctx) return;
+    // The recordings not decoded yet (the first moments of the page): wait for them rather than let the synthesised report stand in.
+    if (!this.loaded && this.loading && this.voice !== 'synth') {
+      const at = events.map((e) => ({ ...e, at: e.at.clone() }));
+      const from = listener.clone();
+      void this.loading.then(() => this.play(at, from));
+      return;
+    }
     for (const e of events) {
       const d = e.at.distanceTo(listener);
       const k = 1 / (1 + d / 12);
@@ -262,22 +287,23 @@ export class GunSound {
           if (!this.handle('click', 0.5)) this.noise(0.015, 'highpass', 2500, 0.3, 0.0005);
           break;
         case 'reload':
-          for (const t of [0, 0.35, 0.8]) this.noise(0.02, 'bandpass', 1800, 0.25, 0.001, false, t);
+          for (const t of [0, 0.35, 0.8]) this.noise(0.02, 'bandpass', 1800, 0.25 * this.reloadLevel, 0.001, false, t);
           break;
         case 'magazine':
           // His pistol's magazine changed (models/firstPerson.ts, 1.6 s): the catch and the empty one out, the
           // fresh one slapped home, the slide let go: recorded, each at its moment; else synthesised.
-          if (this.handle('mag_out', 0.45, 0.11)) {
-            this.handle('mag_in', 0.6, 0.9);
-            this.handle('slide', 0.6, 1.04);
+          const rl = this.reloadLevel;
+          if (this.handle('mag_out', 0.45 * rl, 0.11)) {
+            this.handle('mag_in', 0.6 * rl, 0.9);
+            this.handle('slide', 0.6 * rl, 1.04);
             break;
           }
-          this.noise(0.012, 'bandpass', 2600, 0.22, 0.0005, false, 0.13);
-          this.noise(0.03, 'bandpass', 900, 0.14, 0.002, false, 0.17);
-          this.noise(0.022, 'bandpass', 1500, 0.4, 0.0006, false, 0.93);
-          this.tone(210, 150, 0.04, 0.16, 'triangle', 0.001, this.out, 0.93);
-          this.noise(0.016, 'bandpass', 3100, 0.34, 0.0004, false, 1.06);
-          this.noise(0.02, 'bandpass', 1300, 0.3, 0.0006, false, 1.085);
+          this.noise(0.012, 'bandpass', 2600, 0.22 * rl, 0.0005, false, 0.13);
+          this.noise(0.03, 'bandpass', 900, 0.14 * rl, 0.002, false, 0.17);
+          this.noise(0.022, 'bandpass', 1500, 0.4 * rl, 0.0006, false, 0.93);
+          this.tone(210, 150, 0.04, 0.16 * rl, 'triangle', 0.001, this.out, 0.93);
+          this.noise(0.016, 'bandpass', 3100, 0.34 * rl, 0.0004, false, 1.06);
+          this.noise(0.02, 'bandpass', 1300, 0.3 * rl, 0.0006, false, 1.085);
           break;
         case 'ding':
           for (const [f, g] of [[880, 0.3], [2350, 0.14], [4120, 0.07]] as const) this.tone(f, f, 1.1, g * k, 'sine', 0.001);

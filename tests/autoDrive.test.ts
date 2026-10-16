@@ -15,7 +15,7 @@ import type { DrivenVehicle, TrafficSystem } from '../src/poc3d/real/traffic';
  * A little town: a north-south street down x = 0 and an east-west one along z = -128 (both on grid lines, 8 m
  * wide with 1.6 m pavements, so where they cross is a signal), and a side street along z = -60.
  */
-const street = (vertical: boolean, centre: number): RoadInfo => ({ vertical, centre, width: 8, sidewalk: 1.6, median: 0, avenue: false });
+const street = (vertical: boolean, centre: number): RoadInfo => ({ vertical, centre, width: 8, sidewalk: 1.6, median: 0, slip: 0, avenue: false });
 const town: RoadFinder = (x, z, vertical) => {
   if (vertical) return Math.abs(x) <= 4.5 ? street(true, 0) : null;
   if (Math.abs(z + 128) <= 4.5) return street(false, -128);
@@ -193,6 +193,9 @@ function trip(a: string, b: string, mode: AutoMode, turned = false): { car: OwnC
   const start = { x: from[0] + Math.cos(h) * 1.5 * (turned ? -1 : 1), z: from[1] - Math.sin(h) * 1.5 * (turned ? -1 : 1), h };
   const car = new OwnCar(new THREE.MeshBasicMaterial(), traffic, start, (x, z, r) => district.obstacle(x, z, r), null, () => [], true);
   Object.assign(car.parts, newParts());
+  // The key turned and the engine caught, as it is once you've got in (it gives no drive before).
+  car.setEngine(true);
+  for (let t = 0; t < 3; t += 0.5) car.idle(0.5, start.x, start.z);
   const route = nav.route(start.x, start.z, B.x, B.z, [Math.sin(h), Math.cos(h)])!;
   let clock = 0;
   const world: AutoWorld = { light: (gx, gy, ns) => signals.state(gx, gy, ns, clock), vehicles: () => [], solid: (x, z, r) => district.obstacle(x, z, r) };

@@ -1,0 +1,12 @@
+# Manila's elevated railway (format: content/world3d/rail.yaml, src/poc3d/district/rail.ts): the Tafto Line, the city's
+# raised light railway since the 80s, north to south up Tafto Avenue (col 15, the west bank; roads.yaml narrows the
+# avenue to 20 m under it, as Tōto's roads under its viaducts). Eight stations (stamps station_m_*.yaml).
+lines:
+  - id: tafto
+    name: Tafto Line
+    nameEn: TAFTO LINE
+    letter: T
+    color: '#d8b020'
+    kind: train
+    # (Its ends stop short of the junctions at rows 2 and 22.)
+    pts: [[15, 2.2], [15, 21.8]]

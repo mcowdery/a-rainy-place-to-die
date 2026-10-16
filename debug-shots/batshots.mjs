@@ -1,16 +1,16 @@
 // The baseball bat alone against white (whole, the maker's mark, the knob, the end, bloodied), and on its pegs
 // in the showroom.
 //   node debug-shots/batshots.mjs <out dir>
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2];
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1000, height: 640 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); });
-await page.goto(`${server.resolvedUrls.local[0]}models.html`);
+await page.goto(`${server.resolvedUrls.local[0]}models-mack.html`);
 await page.waitForTimeout(7000);
 await page.keyboard.press('KeyB');
 // On its pegs, labels and all.

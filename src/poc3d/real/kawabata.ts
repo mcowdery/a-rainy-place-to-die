@@ -14,7 +14,7 @@ import { EMIT, KIND, lin } from './meshBuilder';
  * with the kit landmarks (asagiri.ts), in the building's local frame (u along the street face, t inward):
  * - temple: 東光寺 Tōkō-ji (Sensō-ji-like): the thunder gate with its giant red lantern, the Nakamise street of
  *   little shops up to the second gate, the incense burner, the main hall under its sweeping roof, the pagoda.
- * - tv_tower: 東都タワー TŌTO TOWER (Tokyo Tower-like): a 250 m lattice tower in orange and white, two observation
+ * - tv_tower: 東京タワー TOKYO TOWER (Tokyo Tower-like): a 250 m lattice tower in orange and white, two observation
  *   decks, lit at night by lines that show through the haze (the city's compass).
  * - yakuza_house: 竜胆組 本家, the Rindō-gumi's family house: a plastered wall capped in black tile all round, the
  *   heavy gate with the crest's lanterns, black sedans and men in dark suits outside, a pine over the wall.
@@ -212,7 +212,7 @@ export const KAWABATA_BUILDERS: Record<KawabataKind, (k: Kit, id: string, part: 
     k.person(54, 76, -1, 0, { body: 'woman', pose: 'stand', color: [1.0, 0.85, 0.9], hair: 'bun' });
   },
 
-  // ---- 東都タワー TŌTO TOWER: four lattice legs rising from the corners of its base, tapering to a single mast;
+  // ---- 東京タワー TOKYO TOWER: four lattice legs rising from the corners of its base, tapering to a single mast;
   // braces across each face; the main deck at 110 m, the upper deck at 200 m, the antenna to 250 m; banded orange
   // and white. At night its outline glows (lines that show through the haze), the decks lit ----
   tv_tower(k, _id, _part, u) {
@@ -286,7 +286,7 @@ export const KAWABATA_BUILDERS: Record<KawabataKind, (k: Kit, id: string, part: 
     plate(k, 18, 2.4, 40, -0.1, 5, (g, W, H2) => {
       g.fillStyle = '#e04a1a';
       g.fillRect(0, 0, W, H2);
-      text(g, '東都タワー TŌTO TOWER', W / 2, H2 * 0.6, `bold ${Math.round(H2 * 0.5)}px 'Yu Gothic', sans-serif`, '#ffffff');
+      text(g, '東京タワー TOKYO TOWER', W / 2, H2 * 0.6, `bold ${Math.round(H2 * 0.5)}px 'Yu Gothic', sans-serif`, '#ffffff');
     });
     // The night outline: orange lines up the legs and round the decks, not fogged (they glow through the haze).
     for (const y of [110, 117, 200, 204]) {
@@ -427,11 +427,11 @@ export const KAWABATA_BUILDERS: Record<KawabataKind, (k: Kit, id: string, part: 
       k.box(0x6a4a32, u0 + 1.5, u1 - 1.5, t0 + 0.5, t1 - 0.5, -0.9, 1.3);
       // Shoji panes, softly lit (lamp emitters are x6 at night: one strip down the cabin bloomed into a bar).
       for (let uu = u0 + 2; uu + 1.2 <= u1 - 2; uu += 1.5) {
-        k.glow([0.2, 0.15, 0.08], uu, uu + 1.2, t1 - 0.52, t1 - 0.48, -0.4, 0.8, EMIT.lamp);
-        k.glow([0.2, 0.15, 0.08], uu, uu + 1.2, t0 + 0.48, t0 + 0.52, -0.4, 0.8, EMIT.lamp);
+        k.glow([0.08, 0.06, 0.03], uu, uu + 1.2, t1 - 0.52, t1 - 0.48, -0.4, 0.8, EMIT.lamp);
+        k.glow([0.08, 0.06, 0.03], uu, uu + 1.2, t0 + 0.48, t0 + 0.52, -0.4, 0.8, EMIT.lamp);
       }
       roof(k, u0 + 1.2, u1 - 1.2, t0 + 0.3, t1 - 0.3, 1.3, 0.8, 0.5, 0x2a2a2e);
-      for (let uu = u0 + 2; uu < u1 - 1.5; uu += 1.6) k.glow([2.2, 0.35, 0.2], uu - 0.2, uu + 0.2, t1 - 0.35, t1 - 0.05, 0.6, 1.1, EMIT.lamp);
+      for (let uu = u0 + 2; uu < u1 - 1.5; uu += 1.6) k.glow([0.5, 0.1, 0.06], uu - 0.2, uu + 0.2, t1 - 0.35, t1 - 0.05, 0.6, 1.1, EMIT.lamp);
       plate(k, 5, 0.9, (u0 + u1) / 2, t1 - 0.2, 1.8, (g, W, H) => {
         g.fillStyle = '#f4ecd8';
         g.fillRect(0, 0, W, H);

@@ -1,0 +1,80 @@
+{
+  "66490522": {
+    "name": "dom-italian-1-716526 (designed)",
+    "bench": "dom-italian-1-716526",
+    "text": "It had been raining for three days. The kind of rain that doesn't wash anything clean. I lit a cigarette, watched the neon bleed into the gutter, and waited for a phone that wasn't going to ring.",
+    "instruct": "A man in his forties with a deep, gravely voice. American english with an italian accent. Slow, weary, quiet."
+  },
+  "07eb693a": {
+    "name": "dom-accent-en-1 (designed)",
+    "bench": "dom-accent-en-1",
+    "text": "It had been raining for three days. The kind of rain that doesn't wash anything clean. I lit a cigarette, watched the neon bleed into the gutter, and waited for a phone that wasn't going to ring.",
+    "instruct": "An Italian man in his forties who speaks English with a strong Italian accent. A deep, gravelly voice. Slow, weary, quiet."
+  },
+  "1cd43ed5": {
+    "name": "dom-accent-en-2 (designed)",
+    "bench": "dom-accent-en-2",
+    "text": "It had been raining for three days. The kind of rain that doesn't wash anything clean. I lit a cigarette, watched the neon bleed into the gutter, and waited for a phone that wasn't going to ring.",
+    "instruct": "An Italian man in his forties who speaks English with a strong Italian accent. A deep, gravelly voice. Slow, weary, quiet."
+  },
+  "76e94439": {
+    "name": "dom-accent-it-1 (designed)",
+    "bench": "dom-accent-it-1",
+    "text": "It had been raining for three days. The kind of rain that doesn't wash anything clean. I lit a cigarette, watched the neon bleed into the gutter, and waited for a phone that wasn't going to ring.",
+    "instruct": "An Italian man in his forties with a deep, gravelly voice. Slow, weary, quiet."
+  },
+  "dcf3b5df": {
+    "name": "dom-accent-it-2 (designed)",
+    "bench": "dom-accent-it-2",
+    "text": "Pioveva da tre giorni. Quel tipo di pioggia che non lava via niente. Ho acceso una sigaretta, ho guardato il neon colare nel tombino, e ho aspettato un telefono che non avrebbe squillato.",
+    "instruct": "An Italian man in his forties with a deep, gravelly voice. Slow, weary, quiet."
+  },
+  "07bba1b9": {
+    "name": "dom-it-deep-100 (designed)",
+    "bench": "dom-it-deep-100",
+    "text": "Pioveva da tre giorni. Quel tipo di pioggia che non lava via niente. Ho acceso una sigaretta, ho guardato il neon colare nel tombino, e ho aspettato un telefono che non avrebbe squillato.",
+    "instruct": "An Italian man in his forties with an extremely deep, gravelly bass voice, rough and smoke-damaged. Slow, weary, quiet."
+  },
+  "4af4e262": {
+    "name": "dom-it-deep-101 (designed)",
+    "bench": "dom-it-deep-101",
+    "text": "Pioveva da tre giorni. Quel tipo di pioggia che non lava via niente. Ho acceso una sigaretta, ho guardato il neon colare nel tombino, e ho aspettato un telefono che non avrebbe squillato.",
+    "instruct": "An Italian man in his forties with an extremely deep, gravelly bass voice, rough and smoke-damaged. Slow, weary, quiet."
+  },
+  "458a32b5": {
+    "name": "dom-it-deep-102 (designed)",
+    "bench": "dom-it-deep-102",
+    "text": "Pioveva da tre giorni. Quel tipo di pioggia che non lava via niente. Ho acceso una sigaretta, ho guardato il neon colare nel tombino, e ho aspettato un telefono che non avrebbe squillato.",
+    "instruct": "An Italian man in his forties with an extremely deep, gravelly bass voice, rough and smoke-damaged. Slow, weary, quiet."
+  },
+  "eff0695f": {
+    "name": "dom-it-deep-103 (designed)",
+    "bench": "dom-it-deep-103",
+    "text": "Pioveva da tre giorni. Quel tipo di pioggia che non lava via niente. Ho acceso una sigaretta, ho guardato il neon colare nel tombino, e ho aspettato un telefono che non avrebbe squillato.",
+    "instruct": "An Italian man in his forties with an extremely deep, gravelly bass voice, rough and smoke-damaged. Slow, weary, quiet."
+  },
+  "ce7bc1bd": {
+    "name": "dom-it-deep-104 (designed)",
+    "bench": "dom-it-deep-104",
+    "text": "Pioveva da tre giorni. Quel tipo di pioggia che non lava via niente. Ho acceso una sigaretta, ho guardato il neon colare nel tombino, e ho aspettato un telefono che non avrebbe squillato.",
+    "instruct": "An Italian man in his forties with an extremely deep, gravelly bass voice, rough and smoke-damaged. Slow, weary, quiet."
+  },
+  "7c94c641": {
+    "name": "dom-it-deep-105 (designed)",
+    "bench": "dom-it-deep-105",
+    "text": "Pioveva da tre giorni. Quel tipo di pioggia che non lava via niente. Ho acceso una sigaretta, ho guardato il neon colare nel tombino, e ho aspettato un telefono che non avrebbe squillato.",
+    "instruct": "An Italian man in his forties with an extremely deep, gravelly bass voice, rough and smoke-damaged. Slow, weary, quiet."
+  },
+  "19a7f8d8": {
+    "name": "dom-italian-1-716524 (designed)",
+    "bench": "dom-italian-1-716524",
+    "text": "It had been raining for three days. The kind of rain that doesn't wash anything clean. I lit a cigarette, watched the neon bleed into the gutter, and waited for a phone that wasn't going to ring.",
+    "instruct": "A man in his forties with a deep, gravely voice. American english with an italian accent. Slow, weary, quiet."
+  },
+  "0431efb1": {
+    "name": "dom-italian-1-716525 (designed)",
+    "bench": "dom-italian-1-716525",
+    "text": "It had been raining for three days. The kind of rain that doesn't wash anything clean. I lit a cigarette, watched the neon bleed into the gutter, and waited for a phone that wasn't going to ring.",
+    "instruct": "A man in his forties with a deep, gravely voice. American english with an italian accent. Slow, weary, quiet."
+  }
+}

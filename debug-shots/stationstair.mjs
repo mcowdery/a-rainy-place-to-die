@@ -1,14 +1,14 @@
 // Kaburo Station's stair up to the upper concourse: from the F9 snapshot's place, on the stair, and from the top.
 // node debug-shots/stationstair.mjs <out dir> [query]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/stationstair';
 const extra = process.argv[3] ? `&${process.argv[3]}` : '';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => {
@@ -23,7 +23,7 @@ const views = (process.env.VIEWS ? JSON.parse(process.env.VIEWS) : [
   ['6_under_slab', '3349,1.7,1606,-90,35'],
 ]);
 const load = async (cam) => {
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&clock=22:00&cam=${cam}${extra}`, { timeout: 240000 });
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&clock=22:00&cam=${cam}${extra}`, { timeout: 240000 });
   await page.waitForFunction(() => /building/.test(document.getElementById('overlay')?.textContent ?? ''), null, { timeout: 240000, polling: 50 });
   await page.waitForFunction(() => window.__district && window.__scene && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 };

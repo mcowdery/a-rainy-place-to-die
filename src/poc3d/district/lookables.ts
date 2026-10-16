@@ -40,6 +40,14 @@ const SPECIES: Record<string, readonly Line[]> = {
   dogwood: ['Dogwood. The flowers look like paper.'],
   azalea: ['Azaleas, clipped to a pillow.'],
   box: ['Boxwood, trimmed to within an inch of its life.'],
+  coconut: ['A coconut palm. Everything on it is useful, and somebody always has a use for the nuts.', 'The fronds clatter in any wind at all.'],
+  royalPalm: ['Royal palms, planted in rows like soldiers on parade.', 'A royal palm, straight as a surveyor’s line.'],
+  banana: ['Banana plants, torn leaves and all. They grow back faster than you can cut them.'],
+  raintree: ['A rain tree, shade enough for a whole market to stand under.', 'The rain tree folds its leaves when the sky turns.'],
+  mango: ['A mango tree, dark and dense. Somebody’s grandmother planted it.'],
+  banyan: ['A balete, roots coming down out of the branches like something that could not wait for the ground.', 'The old people say a balete has a tenant. Nobody sits under it after dark.'],
+  flametree: ['A flame tree, the whole crown gone red. Every school yard has one.', 'Flame tree petals on the road, like someone spilled paint and walked on.'],
+  bougainvillea: ['Bougainvillea, magenta over every wall that will hold it.'],
 };
 
 const PROPS: Record<string, PropWords> = {
@@ -56,6 +64,19 @@ const PROPS: Record<string, PropWords> = {
     r: 1,
     look: ['Wires everywhere. The city keeps its nerves on the outside.', 'A utility pole, a dozen cables going who knows where.', 'Every pole has a laminated notice about something stuck to it.'],
     use: { label: 'Touch', lines: ['Concrete, rough, still holding the day’s damp.', 'Somebody has stuck a flyer here and someone else tore it half off.'], range: 2.2 },
+  },
+  // (Every one can be used: E at it picks up the handset, district/payphone.ts. These are for looking.)
+  payphone: {
+    label: 'payphone',
+    h: 1.25,
+    r: 0.8,
+    look: [
+      'A public phone. Ten yen buys three minutes of somebody.',
+      'A payphone. The cord’s been twisted by ten thousand hands.',
+      night('A phone with its light on, waiting for someone with a number to call.'),
+      rain('Rain running down it. Somebody’s card is still stuck in the slot of his memory.'),
+      'The numbers are worn off the keys he’d need most.',
+    ],
   },
   vending: {
     label: 'vending machine',

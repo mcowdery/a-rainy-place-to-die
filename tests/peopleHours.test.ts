@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HOURS, isOut, nightLife, outAt, RAIN, seasonsOf, span, whenOf } from '../src/poc3d/district/peopleHours';
+import { deadAt, HOURS, isOut, nightLife, outAt, RAIN, seasonsOf, span, streetAt, whenOf } from '../src/poc3d/district/peopleHours';
 import { OUTFITS } from '../src/poc3d/district/peopleMix';
 import { FIGURE_STRIDE, packFigures, type FigureSpec } from '../src/poc3d/real/people';
 
@@ -79,5 +79,24 @@ describe('when people are out', () => {
     expect(f[23]).toBe(2);
     expect(packFigures([base])[20]).toBe(-1);
     expect(packFigures([{ ...base, hours: 'day', fade: false }])[20]).toBe(-1);
+  });
+});
+
+describe('the dead hours', () => {
+  it('empties the streets from two to six, whatever hours people keep', () => {
+    expect(deadAt(1)).toBe(0);
+    expect(deadAt(1.5)).toBeGreaterThan(0);
+    expect(deadAt(1.5)).toBeLessThan(1);
+    for (const h of [2, 3.5, 5, 6, 26]) expect(deadAt(h)).toBe(1);
+    expect(deadAt(6.4)).toBeLessThan(1);
+    for (const h of [6.75, 7, 12, 23.9, 0.5]) expect(deadAt(h)).toBe(0);
+    for (const hours of HOURS) {
+      for (let h = 2; h <= 6; h += 0.25) {
+        expect(streetAt(hours, h)).toBe(0);
+        expect(isOut(hours, 0, h, 0)).toBe(false);
+      }
+      // Outside them, as before.
+      for (const h of [0, 1, 7, 13, 20]) expect(streetAt(hours, h)).toBe(outAt(hours, h));
+    }
   });
 });

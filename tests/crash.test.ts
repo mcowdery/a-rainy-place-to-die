@@ -16,6 +16,9 @@ type Probe = (x: number, z: number, r: number) => HitKind | null;
 function run(probe: Probe, kmh: number, secs = 3, steer = 0): OwnCar {
   const car = new OwnCar(new THREE.MeshBasicMaterial(), traffic, { x: 0, z: 0, h: 0 }, (x, z, r) => probe(x, z, r), null, () => [], true);
   Object.assign(car.parts, newParts());
+  // The key turned and the engine caught, as it is once you've got in (it gives no drive before).
+  car.setEngine(true);
+  for (let t = 0; t < 3; t += 0.5) car.idle(0.5, 0, 0);
   car.sim.u = kmh / 3.6;
   for (let t = 0; t < secs; t += 1 / 60) car.drive(1 / 60, { throttle: 0.3, brake: 0, steer, handbrake: false });
   return car;

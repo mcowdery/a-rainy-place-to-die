@@ -33,6 +33,8 @@ export interface ChaseHost extends ChaseWorld {
   /** A node's place, for a getaway's goal; and the GPS set to it (null: cleared). */
   node(id: string): { x: number; z: number; label: string } | null;
   gps(id: string | null): void;
+  /** The same for a place that isn't a node (a street race's next gate); null clears it. */
+  gpsAt?(goal: { x: number; z: number; label: string } | null): void;
   /** The street lamps (0 day, 1 night): the cars' lights. */
   lamps(): number;
   toast(text: string, seconds?: number): void;

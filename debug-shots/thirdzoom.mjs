@@ -1,6 +1,6 @@
 // The mouse wheel in third person (district, on foot): the default distance, wheeled out, wheeled in, and remembered.
 //   node debug-shots/thirdzoom.mjs <out dir> [query]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 import { writeGallery } from './gallery.mjs';
@@ -9,13 +9,13 @@ mkdirSync(out, { recursive: true });
 const extra = process.argv[3] ? `&${process.argv[3]}` : '';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300)); });
 await page.addInitScript(() => { try { if (!sessionStorage.getItem('once')) { sessionStorage.setItem('once', '1'); localStorage.setItem('citypop.thirdPerson', '1'); localStorage.removeItem('citypop.thirdZoom'); } } catch {} });
 const load = async () => {
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1${extra}`);
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1${extra}`);
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
   // A real click captures the mouse: the wheel only zooms while it's captured.
   await page.mouse.click(640, 360);

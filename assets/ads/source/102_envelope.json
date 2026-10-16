@@ -1,0 +1,25 @@
+{
+  "file": "envelope_v2.png",
+  "item": "envelope",
+  "brand": null,
+  "copy": null,
+  "notes": "What Cash One's Monday print comes in.",
+  "prompt": "top-down flat lay photograph, shot on 35mm film, soft directional light from the upper left, fine film grain, muted colours, true to life wear and patina, sharp focus, a single plain brown manila envelope of the size that holds a photograph, completely blank with no stamp and no address, its flap open, creased from a pocket, one corner bent, lying flat and seen straight down from directly above, the envelope with its long side horizontal, centred and whole in the frame with a wide margin all round, isolated on a plain matte mid-grey seamless background with a soft shadow, nothing else in the picture, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1024,
+    768
+  ],
+  "steps": 12,
+  "seed": 2123744761,
+  "studioJob": "f0098172-7d91-40f2-92a4-5f4a2efb94d2-u2",
+  "generated": "2026-10-12T09:40:47.417Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/102_envelope.png",
+  "decided": "2026-10-12T09:56:54.561Z",
+  "batch": "carry_props_01",
+  "purpose": "Photographed-looking base pictures for what Mack carries in place of the phone (story/phone.md): the pager (ポケベル), the ring-bound notebook and the things tucked into it. Each is one object seen straight down on a plain ground, to be cut out and used as a surface the game draws on: every display, page, card and label is BLANK, because digits, handwriting and print are composited in the engine. Design reference: the mock-up at https://claude.ai/artifact/HmLoAUjpEfS679J4BH87pJ. Nothing here goes into the game without the user's approval.",
+  "use": "sign",
+  "district": null
+}

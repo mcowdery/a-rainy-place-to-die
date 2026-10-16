@@ -1,3 +1,5 @@
+import './nav';
+import { installSnap } from '../../debug/snap';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -11,8 +13,13 @@ import { Poser } from './poser';
 import type { FigureShape } from '../real/mobShape';
 import { setShapedHeadScale } from '../real/mobShape';
 import { packFigures } from '../real/people';
+import { baseBody, type BaseBody } from '../real/mobRig';
 import { CrowdSmoke } from '../real/smoke';
-import { addFigure, characterMaterial, figureMesh, holdHands, GHOST_COLORS, GhostBuilder, ghostMaterial, MOB_LOOK_NAMES, setMobLook, setMobShape, type Body, type FigureSpec, type Hair, type MobLook, type MobShape, type Pose } from '../real/people';
+import { CITIES } from '../district/cityConfig';
+import { MEN_HAIR } from '../real/mobMenHairKinds';
+import { HAIR_GROUPS } from '../real/mobHairKinds';
+import { hairBlend, setHairBlend } from '../real/mobHair';
+import { addFigure, characterMaterial, figureMesh, holdHands, GHOST_COLORS, GhostBuilder, ghostMaterial, MOB_LOOK_NAMES, setMobLook, setMobShape, setSkinTone, type Body, type FigureSpec, type Hair, type MobLook, type MobShape, type Pose } from '../real/people';
 
 /**
  * The mob's showroom (mob.html): the city's passers-by (real/people.ts) on their own, apart from the model
@@ -29,6 +36,8 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const query = new URLSearchParams(location.search);
 
 const renderer = new THREE.WebGLRenderer({ antialias: false });
+// F9: a snapshot and a note for reporting an issue (debug/snap.ts, saved to debug-shots/).
+const snap = installSnap(renderer.domElement, 'mob');
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -63,6 +72,8 @@ scene.add(floor);
 const lamp = new THREE.DataTexture(new Float32Array([1, 0.78, 0.5, 1]), 1, 1, THREE.RGBAFormat, THREE.FloatType);
 lamp.needsUpdate = true;
 const light = { tLight: { value: lamp as THREE.Texture | null }, uLightRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uLightFade: { value: new THREE.Vector2(0, 0) }, uLightGain: { value: 0 } };
+// (Manila's page, mob-ph.html: the crowd's deeper tan there, a shader constant set before the material is built.)
+if (document.body.dataset.page === 'ph') setSkinTone(CITIES.manila.skin);
 // (The characters' page: the same material with their fingers' and toes' bones posed.)
 const ghost = document.body.dataset.page === 'characters' ? characterMaterial(light) : ghostMaterial(light);
 
@@ -82,7 +93,8 @@ const tags: [string, number, number, number][] = [];
 /** Characters built another way for a stage to compare: [the figure's name, the character it's of, what differs]. */
 const variants: [string, string, FigureShape][] = [];
 const items: Item[] = [];
-const DEFAULT_HAIR: Record<Body, Hair> = { man: 'short', woman: 'long', child: 'short', elder: 'short' };
+const DEFAULT_HAIR: Record<BaseBody, Hair> = { man: 'short', woman: 'long', child: 'short', elder: 'short' };
+const defaultHair = (b: Body): Hair => DEFAULT_HAIR[baseBody(b)];
 const tone = (i: number): FigureSpec['color'] => GHOST_COLORS[i % GHOST_COLORS.length];
 const DZ = 3.6;
 let row = 0;
@@ -100,10 +112,11 @@ const wall = (z: number): void => {
 // Each row is a stage of its own: looking at one, the others are put away ('everything' brings them all back).
 let stage = 0;
 const stageOf = { people: [] as number[], tags: [] as number[], items: [] as number[] };
-// Two pages share this file: mob.html (the crowd) and characters.html (named characters built on the crowd's bodies,
-// and the bare body they start from). A stage belongs to the page set when it ends; the other page's are not built.
-type Page = 'mob' | 'characters';
-const PAGE: Page = document.body.dataset.page === 'characters' ? 'characters' : 'mob';
+// Five pages share this file: mob.html (the crowd), hair.html (the women's detailed hair), men.html (the men's builds and hairstyles), women.html (the women's builds, the old, hair colours), characters.html (named characters built on the crowd's bodies,
+// and the bare body they start from) and mob-ph.html (Manila's Filipino outfits, in Manila's skin tone). A stage belongs
+// to the page set when it ends; the other pages' are not built.
+type Page = 'mob' | 'characters' | 'ph' | 'hair' | 'men' | 'women';
+const PAGE: Page = document.body.dataset.page === 'characters' ? 'characters' : document.body.dataset.page === 'ph' ? 'ph' : document.body.dataset.page === 'hair' ? 'hair' : document.body.dataset.page === 'men' ? 'men' : document.body.dataset.page === 'women' ? 'women' : 'mob';
 let stageFor: Page = 'mob';
 const stagePages: Page[] = [];
 const endStage = (): void => {
@@ -159,6 +172,84 @@ const hairRow = (name: string, kinds: [Body, Hair][]): void => {
   endStage();
 };
 hairRow("women's hair", [['woman', 'short'], ['woman', 'bob'], ['woman', 'long'], ['woman', 'ponytail'], ['woman', 'twin'], ['woman', 'bun'], ['woman', 'hat'], ['woman', 'cap']]);
+// The hair room (hair.html, 2026-10-10; the user: less anime, more detailed cuts on the women): every detailed cut a row a kind of hair
+// (real/mobHairKinds.ts), the anime cuts beside them to compare.
+stageFor = 'hair';
+HAIR_GROUPS.forEach(([group, cuts], i) => {
+  hairRow(group, cuts.map((c): [Body, Hair] => ['woman', c]));
+  // (The anime cuts they are the fine versions of stand right behind the first row.)
+  if (i === 0) hairRow('the old anime cuts, for comparison', [['woman', 'short'], ['woman', 'bob'], ['woman', 'long'], ['woman', 'ponytail'], ['woman', 'twin'], ['woman', 'bun']]);
+});
+// The men's room (men.html, 2026-10-10; the user: the boss's and the politician's 'fat' was the same model with a bigger belly; wanted
+// new male body types, other heights, and hairstyles): the man's builds (mobRig.ts `BUILDS`), and the men's cuts (mobMenHair.ts).
+stageFor = 'men';
+type Lined = [string, Partial<FigureSpec> & Pick<FigureSpec, 'body'>];
+const lineRow = (name: string, who: Lined[], yaws: number[], tagBodies = true): void => {
+  const z = rowZ();
+  wall(z);
+  const step = 1.05, gap = 1.5;
+  const w = yaws.length * step;
+  const x0 = -(who.length * w + (who.length - 1) * gap) / 2 + step / 2;
+  who.forEach(([label, spec], b) => {
+    yaws.forEach((yaw, i) => people.push({ x: x0 + b * (w + gap) + i * step, z, pose: 'stand', yaw, color: tone(b + 1), ...spec }));
+    const cx = x0 + b * (w + gap) + (w - step) / 2;
+    if (tagBodies) tags.push([label, cx, 2.35, z]);
+    items.push({ name: `${name}: ${label}`, at: new THREE.Vector3(cx, 1.0, z), size: 3.4, view: LEVEL, close: true });
+  });
+  const span = who.length * (w + gap);
+  items.push({ name, at: new THREE.Vector3(0, 1.05, z), size: span + 1, view: LEVEL });
+  for (const half of [-1, 1]) items.push({ name: `${name} (${half < 0 ? 'left' : 'right'} half)`, at: new THREE.Vector3((half * span) / 4, 1.05, z), size: span / 2 + 0.8, view: LEVEL });
+  endStage();
+};
+const MEN_YAWS = [0.35, Math.PI / 2, Math.PI - 0.35];
+const BUILD_NAMES: Lined[] = [['man (as it was)', { body: 'man' }], ['stout', { body: 'stout' }], ['portly', { body: 'portly' }], ['bulky', { body: 'bulky' }], ['lean', { body: 'lean' }], ['tall', { body: 'tall' }], ['short', { body: 'short' }]];
+lineRow('the builds, turned round', BUILD_NAMES, MEN_YAWS);
+lineRow('the builds in suits', BUILD_NAMES.map(([l, sp]): Lined => [l, { ...sp, outfit: 'suit', hair: 'short' }]), MEN_YAWS);
+lineRow('the builds with nothing on above the waist', BUILD_NAMES.map(([l, sp]): Lined => [l, { ...sp, outfit: 'shirtless', hair: 'none' }]), MEN_YAWS);
+lineRow('bosses and politicians', [
+  ['old boss (the man)', { body: 'man', outfit: 'boss', hair: 'short' }],
+  ['stout boss, comb-over', { body: 'stout', outfit: 'boss', hair: 'short' }],
+  ['stout boss, bald', { body: 'stout', outfit: 'boss', hair: 'none' }],
+  ['stout politician', { body: 'stout', outfit: 'boss', hair: 'cap' }],
+  ['portly boss', { body: 'portly', outfit: 'boss', hair: 'short' }],
+  ['portly politician', { body: 'portly', outfit: 'boss', hair: 'cap' }],
+], MEN_YAWS);
+lineRow('the builds in other clothes', [
+  ['stout, hard hat', { body: 'stout', outfit: 'work' }],
+  ['bulky, yakuza', { body: 'bulky', outfit: 'yakuza', hair: 'short' }],
+  ['lean, hoodie', { body: 'lean', outfit: 'hoodie', pose: 'pockets' }],
+  ['tall, office', { body: 'tall', outfit: 'office', hair: 'm_side_part' }],
+  ['short, otaku', { body: 'short', outfit: 'otaku' }],
+  ['portly, kimono', { body: 'portly', outfit: 'kimono', hair: 'none' }],
+  ['stout, shorts', { body: 'stout', outfit: 'shorts' }],
+  ['bulky, doorman', { body: 'bulky', outfit: 'doorman' }],
+], MEN_YAWS);
+lineRow('standing together, by height', [['tall', { body: 'tall', outfit: 'suit' }], ['lean', { body: 'lean', outfit: 'suit' }], ['bulky', { body: 'bulky', outfit: 'suit' }], ['man', { body: 'man', outfit: 'suit' }], ['portly', { body: 'portly', outfit: 'suit' }], ['stout', { body: 'stout', outfit: 'suit' }], ['short', { body: 'short', outfit: 'suit' }]].map(([l, sp]): Lined => [l as string, sp as Lined[1]]), [0.35], false);
+{
+  const cuts = MEN_HAIR.map((c): [Body, Hair] => ['man', c]);
+  hairRow("men's hair", cuts.slice(0, 8));
+  hairRow("men's hair, more", cuts.slice(8));
+}
+// The old, for the men's room: an elder man's three builds beside the usual one.
+lineRow('the old (men)', [['elder (as it was)', { body: 'elder' }], ['frail', { body: 'e_frail' }], ['stout', { body: 'e_stout' }], ['tall', { body: 'e_tall' }], ['frail, kimono', { body: 'e_frail', outfit: 'kimono', hair: 'none' }], ['stout, cap', { body: 'e_stout', hair: 'cap' }]], MEN_YAWS);
+// The women's room (women.html): the same for women (a build is a height, a weight and the size of her bust and her hips), the old, and hair colours.
+stageFor = 'women';
+const WOMEN: Lined[] = [['woman (as it was)', { body: 'woman' }], ['petite', { body: 'w_petite' }], ['slim', { body: 'w_slim' }], ['tall', { body: 'w_tall' }], ['curvy', { body: 'w_curvy' }], ['busty', { body: 'w_busty' }], ['pear', { body: 'w_pear' }], ['plump', { body: 'w_plump' }], ['heavy', { body: 'w_heavy' }], ['flat chest', { body: 'w_flat' }]];
+const long = (l: Lined[], extra: Partial<FigureSpec>): Lined[] => l.map(([n, sp]): Lined => [n, { hair: 'long', ...sp, ...extra }]);
+lineRow("the women's builds, turned round", long(WOMEN, {}), MEN_YAWS);
+lineRow("the women's builds in dresses", long(WOMEN, { outfit: 'dress' }), MEN_YAWS);
+lineRow("the women's builds at the office", long(WOMEN, { outfit: 'office', hair: 'bun' }), MEN_YAWS);
+lineRow("the women's builds in a mini skirt", long(WOMEN, { outfit: 'mini' }), MEN_YAWS);
+lineRow('the old (women)', [['elder (a man, as it was)', { body: 'elder' }], ['slight', { body: 'w_elder', hair: 'bun' }], ['plump', { body: 'w_elder_plump', hair: 'bun' }], ['slight, kimono', { body: 'w_elder', outfit: 'kimono', hair: 'bun' }], ['plump, apron', { body: 'w_elder_plump', outfit: 'apron', hair: 'short' }], ['plump, cardigan', { body: 'w_elder_plump', outfit: 'cardigan', hair: 'bob' }]], MEN_YAWS);
+// Hair colours: black and brown for most, grey for the old and some of the heavy middle-aged, a dyed brown or blonde only on the gangs and the night's trade
+// (hair colour is by the figure's own number: each of these is a different figure).
+const colourRow = (name: string, who: Partial<FigureSpec> & Pick<FigureSpec, 'body'>): void => lineRow(name, Array.from({ length: 12 }, (_, i): Lined => [`${i + 1}`, { ...who, color: tone(i * 5 + 1), phase: i * 0.37 }]), [0.35], false);
+colourRow('hair colours: everyday women', { body: 'woman', hair: 'long' });
+colourRow("hair colours: the night's trade and the gangs", { body: 'w_curvy', outfit: 'bodycon', hair: 'long' });
+colourRow('hair colours: yankees and mobsters', { body: 'man', outfit: 'chinpira', hair: 'short' });
+colourRow('hair colours: the old', { body: 'w_elder', hair: 'bun' });
+colourRow('hair colours: heavy middle-aged men', { body: 'portly', outfit: 'suit', hair: 'short' });
+stageFor = 'mob';
 hairRow("men's, children's and elders' hair", [['man', 'short'], ['man', 'hat'], ['man', 'cap'], ['man', 'none'], ['child', 'short'], ['child', 'twin'], ['child', 'cap'], ['elder', 'short'], ['elder', 'none']]);
 // Poses.
 {
@@ -273,7 +364,102 @@ const DRESSED_SHADY: Dressed[] = [
   ['drunk', { body: 'man', pose: 'stand', outfit: 'drunk' }],
   ['drunk', { body: 'man', pose: 'walk', outfit: 'drunk', hair: 'none', phase: 0.3 }],
 ];
-function outfitStage(title: string, DRESSED: Dressed[]): void {
+// Filipino outfits for Manila's crowd (2026-10-09), UNDER REVIEW: in no district's mix until the user approves them
+// (content/manila/PEOPLE-REVIEW.md says how to turn them on). The hair asked for picks a look, as for the shady ones
+// (vendor: 'hat' is the salakot; guard: bareheaded kinds carry the shotgun; trike driver: always a cap).
+const DRESSED_FILIPINO: Dressed[] = [
+  ['pinoy school', { body: 'woman', pose: 'stand', outfit: 'pinoy_school', hair: 'ponytail' }],
+  ['pinoy school', { body: 'woman', pose: 'walk', outfit: 'pinoy_school', hair: 'bob', phase: 0.3 }],
+  ['pinoy school', { body: 'man', pose: 'stand', outfit: 'pinoy_school' }],
+  ['pinoy school', { body: 'man', pose: 'walk', outfit: 'pinoy_school', phase: 0.6 }],
+  ['pinoy school', { body: 'child', pose: 'stand', outfit: 'pinoy_school', hair: 'twin' }],
+  ['pinoy school', { body: 'child', pose: 'walk', outfit: 'pinoy_school', hair: 'short', phase: 0.2 }],
+  ['baller', { body: 'man', pose: 'stand', outfit: 'baller' }],
+  ['baller', { body: 'man', pose: 'walk', outfit: 'baller', hair: 'none', phase: 0.4 }],
+  ['baller', { body: 'woman', pose: 'stand', outfit: 'baller', hair: 'ponytail' }],
+  ['barong', { body: 'man', pose: 'stand', outfit: 'barong' }],
+  ['barong', { body: 'man', pose: 'walk', outfit: 'barong', hair: 'none', phase: 0.3 }],
+  ['barong', { body: 'elder', pose: 'stand', outfit: 'barong', hair: 'none' }],
+  ['vendor', { body: 'man', pose: 'stand', outfit: 'vendor', hair: 'hat' }],
+  ['vendor', { body: 'woman', pose: 'stand', outfit: 'vendor', hair: 'hat' }],
+  ['vendor', { body: 'woman', pose: 'walk', outfit: 'vendor', hair: 'bun', phase: 0.5 }],
+  ['vendor', { body: 'elder', pose: 'stand', outfit: 'vendor', hair: 'hat' }],
+  ['jeepney crew', { body: 'man', pose: 'stand', outfit: 'jeep_crew', hair: 'none' }],
+  ['jeepney crew', { body: 'man', pose: 'pockets', outfit: 'jeep_crew', hair: 'cap' }],
+  ['jeepney crew', { body: 'man', pose: 'walk', outfit: 'jeep_crew', hair: 'short', phase: 0.7 }],
+  ['tricycle driver', { body: 'man', pose: 'stand', outfit: 'trike_driver', hair: 'cap' }],
+  ['tricycle driver', { body: 'man', pose: 'walk', outfit: 'trike_driver', hair: 'cap', phase: 0.2 }],
+  ['guard (pistol)', { body: 'man', pose: 'stand', outfit: 'guard', hair: 'short' }],
+  ['guard (shotgun)', { body: 'man', pose: 'stand', outfit: 'guard', hair: 'none' }],
+  ['guard (shotgun)', { body: 'man', pose: 'walk', outfit: 'guard', hair: 'none', phase: 0.5 }],
+  ['guard (pistol)', { body: 'woman', pose: 'stand', outfit: 'guard', hair: 'short' }],
+];
+// The period's everyday clothes and uniforms (2026-10-10), UNDER REVIEW: in the districts' mixes by place (district/peopleMix.ts,
+// content/world3d/zones/); the hair asked for picks the look (colours), as for the tight ones.
+const DRESSED_PERIOD: Dressed[] = [
+  ['cardigan', { body: 'woman', pose: 'stand', outfit: 'cardigan', hair: 'bob' }],
+  ['cardigan', { body: 'man', pose: 'pockets', outfit: 'cardigan' }],
+  ['cardigan', { body: 'elder', pose: 'stand', outfit: 'cardigan', hair: 'none' }],
+  ['power suit', { body: 'woman', pose: 'stand', outfit: 'powersuit', hair: 'long' }],
+  ['power suit', { body: 'woman', pose: 'walk', outfit: 'powersuit', hair: 'bob', phase: 0.4 }],
+  ['bomber', { body: 'man', pose: 'pockets', outfit: 'blouson', hair: 'long' }],
+  ['denim', { body: 'woman', pose: 'stand', outfit: 'blouson', hair: 'bun' }],
+  ['knit, bell-bottoms', { body: 'woman', pose: 'stand', outfit: 'knit', hair: 'long' }],
+  ['knit, bell-bottoms', { body: 'man', pose: 'walk', outfit: 'knit', phase: 0.3 }],
+  ['jinbei', { body: 'man', pose: 'stand', outfit: 'jinbei' }],
+  ['jinbei', { body: 'elder', pose: 'stand', outfit: 'jinbei', hair: 'none' }],
+  ['jinbei', { body: 'woman', pose: 'stand', outfit: 'jinbei', hair: 'bun' }],
+  ['cook', { body: 'man', pose: 'stand', outfit: 'chef' }],
+  ['cook', { body: 'woman', pose: 'stand', outfit: 'chef', hair: 'ponytail' }],
+  ['driver', { body: 'man', pose: 'stand', outfit: 'driver', hair: 'short' }],
+  ['conductor', { body: 'woman', pose: 'stand', outfit: 'driver', hair: 'bun' }],
+  ['doorman', { body: 'man', pose: 'stand', outfit: 'doorman', hair: 'short' }],
+  ['doorman', { body: 'man', pose: 'stand', outfit: 'doorman', hair: 'none' }],
+  ['trench', { body: 'man', pose: 'pockets', outfit: 'trench', hair: 'hat' }],
+  ['trench', { body: 'woman', pose: 'stand', outfit: 'trench', hair: 'long' }],
+  ['kappogi', { body: 'woman', pose: 'stand', outfit: 'kappogi', hair: 'bun' }],
+  ['kappogi', { body: 'elder', pose: 'stand', outfit: 'kappogi', hair: 'none' }],
+  ['coverall', { body: 'man', pose: 'stand', outfit: 'coverall', hair: 'cap' }],
+  ['coverall', { body: 'woman', pose: 'stand', outfit: 'coverall', hair: 'ponytail' }],
+  ['hanten', { body: 'man', pose: 'pockets', outfit: 'hanten' }],
+  ['hanten', { body: 'elder', pose: 'stand', outfit: 'hanten', hair: 'none' }],
+];
+// The fit in the stride (2026-10-10): each skirted or jacketed outfit at the two ends of a step, for the legs through the cloth and the shoulders.
+const FIT_OUTFITS = ['mini', 'maid', 'school', 'office', 'suit', 'dress', 'gown', 'nurse', 'yankee', 'kimono', 'yukata', 'cardigan', 'powersuit', 'qipao', 'bodycon', 'trench', 'kappogi', 'streetwalker', 'matsuri', 'blouson', 'doctor'] as const;
+const DRESSED_FIT: Dressed[] = FIT_OUTFITS.flatMap((o): Dressed[] => [0.25, 0.75].map((phase): Dressed => [o, { body: 'woman', pose: 'walk', outfit: o, hair: 'long', phase }]));
+// Skin-tight and revealing clothes (2026-10-10), UNDER REVIEW: women's on the nude body's form with the garment painted
+// on it (real/mobTight.ts), and a few of men's. Not in the demo. The hair asked for picks the look (colours: mobShape.ts `look`).
+const DRESSED_TIGHT: Dressed[] = [
+  ['leotard', { body: 'woman', pose: 'stand', outfit: 'leotard', hair: 'ponytail' }],
+  ['leotard', { body: 'woman', pose: 'walk', outfit: 'leotard', hair: 'bob', phase: 0.3 }],
+  ['leggings', { body: 'woman', pose: 'stand', outfit: 'leggings', hair: 'long' }],
+  ['leggings', { body: 'woman', pose: 'walk', outfit: 'leggings', hair: 'bun', phase: 0.6 }],
+  ['runner', { body: 'woman', pose: 'stand', outfit: 'runner', hair: 'ponytail' }],
+  ['runner', { body: 'woman', pose: 'walk', outfit: 'runner', hair: 'bob', phase: 0.2 }],
+  ['runner', { body: 'man', pose: 'stand', outfit: 'runner' }],
+  ['runner', { body: 'man', pose: 'walk', outfit: 'runner', phase: 0.5 }],
+  ['crop top', { body: 'woman', pose: 'stand', outfit: 'crop', hair: 'twin' }],
+  ['crop top', { body: 'woman', pose: 'phone', outfit: 'crop', hair: 'long' }],
+  ['club dress', { body: 'woman', pose: 'stand', outfit: 'bodycon', hair: 'long' }],
+  ['club dress', { body: 'woman', pose: 'talk', outfit: 'bodycon', hair: 'bob' }],
+  ['qipao', { body: 'woman', pose: 'stand', outfit: 'qipao', hair: 'bun' }],
+  ['qipao', { body: 'woman', pose: 'walk', outfit: 'qipao', hair: 'long', phase: 0.4 }],
+  ['bikini', { body: 'woman', pose: 'stand', outfit: 'bikini', hair: 'ponytail' }],
+  ['bikini', { body: 'woman', pose: 'stand', outfit: 'bikini', hair: 'long' }],
+  ['lingerie', { body: 'woman', pose: 'stand', outfit: 'lingerie', hair: 'long' }],
+  ['lingerie', { body: 'woman', pose: 'stand', outfit: 'lingerie', hair: 'bob' }],
+  ['streetwalker', { body: 'woman', pose: 'stand', outfit: 'streetwalker', hair: 'long' }],
+  ['streetwalker', { body: 'woman', pose: 'pockets', outfit: 'streetwalker', hair: 'bob' }],
+  ['streetwalker', { body: 'woman', pose: 'phone', outfit: 'streetwalker', hair: 'bun' }],
+  ['bunny', { body: 'woman', pose: 'stand', outfit: 'bunny', hair: 'long' }],
+  ['bunny', { body: 'woman', pose: 'stand', outfit: 'bunny', hair: 'ponytail' }],
+  ['catsuit', { body: 'woman', pose: 'stand', outfit: 'catsuit', hair: 'ponytail' }],
+  ['bare chest', { body: 'man', pose: 'pockets', outfit: 'shirtless' }],
+  ['swim trunks', { body: 'man', pose: 'stand', outfit: 'trunks' }],
+  ['matsuri', { body: 'man', pose: 'stand', outfit: 'matsuri' }],
+  ['matsuri', { body: 'woman', pose: 'stand', outfit: 'matsuri', hair: 'ponytail' }],
+];
+function outfitStage(title: string, DRESSED: Dressed[], single = false): void {
   const z = rowZ();
   wall(z);
   const zb = rowZ();
@@ -290,6 +476,14 @@ function outfitStage(title: string, DRESSED: Dressed[]): void {
   // What each wears on their feet, four at a time, from low down.
   for (let c = 0; c < DRESSED.length; c += 4) items.push({ name: `${title}: feet ${c / 4 + 1}: ${DRESSED.slice(c, c + 4).map(([n]) => n).join(', ')}`, at: new THREE.Vector3(x0 + (c + 1.5) * step, 0.22, z), size: 4 * step + 0.4, view: new THREE.Vector3(0.45, 0.22, 1).normalize(), close: true });
   for (const half of [-1, 1]) items.push({ name: `${title} (${half < 0 ? 'left' : 'right'} half)`, at: new THREE.Vector3((half * DRESSED.length * step) / 4, 1, z), size: (DRESSED.length * step) / 2 + 0.6, view: LEVEL });
+  // One at a time, close, from the front and the side (for a look at how a garment's edges are cut).
+  if (single) DRESSED.forEach(([name, sp], c) => {
+    for (const [side, view] of [['front', new THREE.Vector3(0.1, 0.03, 1)], ['side', new THREE.Vector3(1, 0.03, 0.02)], ['3/4', new THREE.Vector3(0.9, 0.05, 1)], ['back', new THREE.Vector3(-0.25, 0.05, -1)]] as const) items.push({ name: `${title}: one ${c + 1} ${name} ${side}`, at: new THREE.Vector3(x0 + c * step, sp.body === 'child' ? 0.7 : 1.0, z), size: 2.1, view: view.clone().normalize(), close: true });
+  });
+  // (And close on the hips, from the front, a little below and the three-quarters: how a garment lies over the form there.)
+  if (single) DRESSED.forEach(([name], c) => {
+    for (const [side, view] of [['front', new THREE.Vector3(0, 0.02, 1)], ['low', new THREE.Vector3(0.15, -0.45, 1)], ['3/4', new THREE.Vector3(0.8, 0.02, 1)]] as const) items.push({ name: `${title}: hips ${c + 1} ${name} ${side}`, at: new THREE.Vector3(x0 + c * step, 0.86, z), size: 0.62, view: view.clone().normalize(), close: true });
+  });
   endStage();
   wall(zb);
   DRESSED.forEach(([name, sp], c) => {
@@ -304,6 +498,11 @@ function outfitStage(title: string, DRESSED: Dressed[]): void {
 outfitStage('outfits', DRESSED_FIRST);
 outfitStage('new outfits', DRESSED_NEW);
 outfitStage('shady', DRESSED_SHADY);
+outfitStage('period clothes (under review)', DRESSED_PERIOD, true);
+outfitStage('fit in the stride', DRESSED_FIT, true);
+if (__EDITION__ !== 'demo') outfitStage('tight and revealing (under review)', DRESSED_TIGHT, true);
+stageFor = 'ph';
+outfitStage('filipino (under review)', DRESSED_FILIPINO);
 // ---- characters.html: the named characters, and the bare body they are built on ----
 stageFor = 'characters';
 // Posing one by hand (showroom/poser.ts): a stage of its own, the figure the poser's.
@@ -430,13 +629,13 @@ const pair = (a: Spec, b: Spec): void => {
 {
   const z = rowZ() - 5;
   wall(z);
-  const HAIRS: Record<Body, Hair[]> = { man: ['short', 'short', 'none', 'cap', 'hat', 'long'], woman: ['long', 'bob', 'ponytail', 'bun', 'short', 'twin', 'hat'], child: ['short', 'twin', 'cap'], elder: ['short', 'none', 'hat'] };
+  const HAIRS: Record<BaseBody, Hair[]> = { man: ['short', 'short', 'none', 'cap', 'hat', 'long'], woman: ['long', 'bob', 'ponytail', 'bun', 'short', 'twin', 'hat'], child: ['short', 'twin', 'cap'], elder: ['short', 'none', 'hat'] };
   const WEAR: FigureSpec['outfit'][] = ['plain', 'dress', 'long', 'suit', 'hoodie', 'otaku', 'school', 'office', 'plain', 'shorts', 'track'];
   for (let i = 0; i < 26; i++) {
     const body: Body = i % 9 === 8 ? 'elder' : i % 13 === 12 ? 'child' : i % 2 ? 'woman' : 'man';
     const dir = i % 2 ? 1 : -1;
     const lane = z + (i % 4) * 0.8 + (dir > 0 ? 0 : 0.4);
-    people.push({ x: -dir * 16 + (i % 5) * 0.37, z: lane, body, pose: 'walk', yaw: dir * (Math.PI / 2), hair: HAIRS[body][i % HAIRS[body].length], outfit: WEAR[(i * 5) % WEAR.length], color: tone(i * 3), phase: (i * 0.37) % 1, fade: true, seed: (i * 0.618) % 1, walk: { ex: dir * 32, ez: 0, speed: body === 'elder' ? 0.9 : 1.25 + (i % 3) * 0.12, gap: 1 + (i % 4) } });
+    people.push({ x: -dir * 16 + (i % 5) * 0.37, z: lane, body, pose: 'walk', yaw: dir * (Math.PI / 2), hair: HAIRS[baseBody(body)][i % HAIRS[baseBody(body)].length], outfit: WEAR[(i * 5) % WEAR.length], color: tone(i * 3), phase: (i * 0.37) % 1, fade: true, seed: (i * 0.618) % 1, walk: { ex: dir * 32, ez: 0, speed: body === 'elder' ? 0.9 : 1.25 + (i % 3) * 0.12, gap: 1 + (i % 4) } });
   }
   // People who walk together (a couple, a parent and child, two friends): one seed and one walk, so they come and go as one.
   const GROUPS: [number, number, Omit<Spec, 'x' | 'z' | 'pose'>, Omit<Spec, 'x' | 'z' | 'pose'>][] = [
@@ -572,6 +771,8 @@ const smokeTo = people.length;
 const HEADS = [1, 0.92, 0.85];
 const headSize = Number(query.get('head') ?? 0.92);
 setShapedHeadScale(headSize);
+// (The hair room's blend of strands into the cap, a toggle that builds the hair again: ?blend=1, the panel's buttons, U.)
+setHairBlend(Number(query.get('blend') ?? 0));
 // (The named characters, built with that head size, each a figure of its own in the material.)
 registerCharacters();
 for (const [name, of, shape] of variants) registerVariant(name, of, shape);
@@ -589,7 +790,7 @@ for (const shape of ['classic', 'shaped'] as MobShape[]) {
   setMobShape(shape);
   let triangles = 0;
   let vertices = 0;
-  const full = (s: Spec): FigureSpec => ({ yaw: 0, color: GHOST_COLORS[1], hair: DEFAULT_HAIR[s.body], long: false, phase: 0.25, side: 1, look: 0, fade: false, ...s });
+  const full = (s: Spec): FigureSpec => ({ yaw: 0, color: GHOST_COLORS[1], hair: defaultHair(s.body), long: false, phase: 0.25, side: 1, look: 0, fade: false, ...s });
   // (Those holding hands, placed for this generation's bodies.)
   const held = new Map<number, FigureSpec>();
   for (const [a, b] of holding) {
@@ -619,13 +820,13 @@ for (const shape of ['classic', 'shaped'] as MobShape[]) {
     scene.add(group);
     meshes[shape].push(group);
   }
-  const plain = (body: Body): number => figureMesh({ body, hair: DEFAULT_HAIR[body], long: false }).triangles;
+  const plain = (body: Body): number => figureMesh({ body, hair: defaultHair(body), long: false }).triangles;
   stats[shape] = { vertices, triangles, ms: performance.now() - t0, man: plain('man'), woman: plain('woman') };
 }
 // The emotes' row (measured and packed for the sculpted figures, the generation still set here).
 const emotes = new Emotes(ghost);
 {
-  const specs = people.slice(emoteFrom, emoteFrom + EMOTE_MARKS.length).map((s): FigureSpec => ({ yaw: 0, color: GHOST_COLORS[1], hair: DEFAULT_HAIR[s.body], long: false, phase: 0.25, side: 1, look: 0, fade: false, ...s }));
+  const specs = people.slice(emoteFrom, emoteFrom + EMOTE_MARKS.length).map((s): FigureSpec => ({ yaw: 0, color: GHOST_COLORS[1], hair: defaultHair(s.body), long: false, phase: 0.25, side: 1, look: 0, fade: false, ...s }));
   emotes.fill([packFigures(specs)], specs.length);
   emotes.row = emoteRow;
   scene.add(emotes.mesh, emotes.breath);
@@ -633,7 +834,7 @@ const emotes = new Emotes(ghost);
 // The smokers' cigarettes, embers and smoke (the sculpted figures', as the crowd's are in the city).
 const smoke = new CrowdSmoke(ghost);
 {
-  const specs = people.slice(smokeFrom, smokeTo).map((s): FigureSpec => ({ yaw: 0, color: GHOST_COLORS[1], hair: DEFAULT_HAIR[s.body], long: false, phase: 0.25, side: 1, look: 0, fade: false, ...s }));
+  const specs = people.slice(smokeFrom, smokeTo).map((s): FigureSpec => ({ yaw: 0, color: GHOST_COLORS[1], hair: defaultHair(s.body), long: false, phase: 0.25, side: 1, look: 0, fade: false, ...s }));
   smoke.fill([packFigures(specs, null, false)]);
   scene.add(smoke.mesh);
 }
@@ -814,6 +1015,11 @@ function renderPanel(): void {
   button('black skin, hair and shoes (C)', oneColor, set(() => (oneColor = !oneColor)));
   section('Look (K)');
   for (const l of MOB_LOOK_NAMES) button(l, look === l, set(() => (look = l)));
+  if (PAGE === 'hair') {
+    section('Strands into the cap (U)');
+    const BLENDS = ['as it was: strands over the cap', 'blended: strands grow out of the cap, its edge in points'];
+    BLENDS.forEach((name, level) => button(name, hairBlend() === level, () => reloadWithBlend(level)));
+  }
   section('Head size · sculpted figures');
   for (const k of HEADS) {
     button(k === 1 ? 'as it was (100%)' : `smaller (${Math.round(k * 100)}%)`, headSize === k, () => {
@@ -850,11 +1056,29 @@ function renderPanel(): void {
   for (const it of items) if (it.close) button(it.name, false, () => focus(it));
   const a = document.createElement('a');
   a.href = 'models.html';
-  a.textContent = '→ model showroom (cars, cast, props)';
+  a.textContent = '→ the showrooms (cars, plants, buildings, ...)';
   panel.appendChild(a);
   const other = document.createElement('a');
   other.href = PAGE === 'mob' ? 'characters.html' : 'mob.html';
   other.textContent = PAGE === 'mob' ? '→ characters (named, built on these bodies)' : "→ mob showroom (the crowd's bodies and outfits)";
+  if (PAGE === 'mob') {
+    const hairRoom = document.createElement('a');
+    hairRoom.href = 'hair.html';
+    hairRoom.textContent = "→ the hair room (women's detailed cuts)";
+    panel.appendChild(hairRoom);
+    const menRoom = document.createElement('a');
+    menRoom.href = 'men.html';
+    menRoom.textContent = "→ the men's room (builds, heights, hairstyles)";
+    panel.appendChild(menRoom);
+    const womenRoom = document.createElement('a');
+    womenRoom.href = 'women.html';
+    womenRoom.textContent = "→ the women's room (builds, the old, hair colours)";
+    panel.appendChild(womenRoom);
+    const ph = document.createElement('a');
+    ph.href = 'mob-ph.html';
+    ph.textContent = "→ Manila's people (the Filipino outfits)";
+    panel.appendChild(ph);
+  }
   panel.appendChild(other);
   // The figures modelled with MakeHuman (they used to stand here) have a page of their own.
   const humans = document.createElement('a');
@@ -868,6 +1092,13 @@ function renderPanel(): void {
   scenes.textContent = '→ scene editor (the rooms behind the windows)';
   scenes.style.display = 'block';
   panel.appendChild(scenes);
+}
+
+/** The hair room's strands blended into the cap or not: the hair is built again, so the page loads again with ?blend=. */
+function reloadWithBlend(level: number): void {
+  const q = new URLSearchParams(location.search);
+  q.set('blend', String(level));
+  location.search = q.toString();
 }
 
 /** The original look, on or off: everything black and see-through; off, back to solid and coloured. */
@@ -894,6 +1125,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyL') labelsOn = !labelsOn;
   else if (e.code === 'KeyX') wire = !wire;
   else if (e.code === 'KeyR') turntable = !turntable;
+  else if (e.code === 'KeyU' && PAGE === 'hair') reloadWithBlend((hairBlend() + 1) % 2);
   else return;
   apply();
 });
@@ -907,7 +1139,7 @@ window.addEventListener('resize', () => {
   labels.setSize(window.innerWidth, window.innerHeight);
 });
 
-focus(items.find((i) => i.name === query.get('view')) ?? items.find((i) => i.name === (PAGE === 'characters' ? CHARACTERS[0]?.name : 'woman turned round')) ?? (items.find((i) => i.name === 'all bodies') ?? items[0]), true);
+focus(items.find((i) => i.name === query.get('view')) ?? items.find((i) => i.name === (PAGE === 'characters' ? CHARACTERS[0]?.name : PAGE === 'ph' ? 'filipino (under review)' : PAGE === 'hair' ? HAIR_GROUPS[0][0] : PAGE === 'men' ? 'the builds, turned round' : PAGE === 'women' ? "the women's builds, turned round" : 'woman turned round')) ?? (items.find((i) => i.name === 'all bodies') ?? items[0]), true);
 
 const clock = new THREE.Clock();
 const fwd = new THREE.Vector3();
@@ -950,10 +1182,11 @@ renderer.setAnimationLoop(() => {
     poser.sync(ghost, look);
   }
   composer.render(dt);
+  snap.afterRender();
   labels.render(scene, camera);
   const S = stats.shaped, C = stats.classic;
   $('hud').textContent = [
-    `${PAGE === 'characters' ? 'CHARACTERS' : 'MOB SHOWROOM'} · ${gen === 'new' ? 'NEW figures (under review)' : gen === 'current' ? 'current figures (the district)' : 'both: new in front, current behind'} · ${mode} · look ${look}`,
+    `${PAGE === 'characters' ? 'CHARACTERS' : PAGE === 'ph' ? 'MOB SHOWROOM (MANILA)' : PAGE === 'hair' ? 'HAIR ROOM' : PAGE === 'men' ? "MEN'S ROOM" : PAGE === 'women' ? "WOMEN'S ROOM" : 'MOB SHOWROOM'} · ${gen === 'new' ? 'NEW figures (under review)' : gen === 'current' ? 'current figures (the district)' : 'both: new in front, current behind'} · ${mode} · look ${look}`,
     `triangles a figure (plain man / woman): new ${S.man} / ${S.woman}, current ${C.man} / ${C.woman} · built in ${S.ms.toFixed(0)} ms / ${C.ms.toFixed(0)} ms`,
     'left-drag orbit · right-drag pan · wheel zoom · WASD / Q E fly (Shift faster)',
     `M figures · 1 studio · 2 day · 3 night · K look · C one colour · G edges · N skin · T ${still ? 'still' : 'routine'} · L labels · X wireframe${wire ? ' (on)' : ''} · R turntable${turntable ? ' (on)' : ''}`,

@@ -261,8 +261,84 @@ function perf(server, req, res) {
   });
 }
 
+/**
+ * The showrooms' review buttons (src/poc3d/showroom/review.ts): GET /__review?room=<room> answers the room's verdicts;
+ * POST /__review { room, id, verdict, name } sets one ('approved', 'rejected' or 'undecided', which removes it) in
+ * debug-shots/review/<room>.json, which is the user's word on each candidate and what to read before building on one.
+ */
+function review(server, req, res) {
+  const json = (code, body) => {
+    res.statusCode = code;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
+  const dir = resolve(server.config.root, 'debug-shots', 'review');
+  const fileOf = (room) => resolve(dir, `${String(room).replace(/[^a-z0-9_-]/gi, '')}.json`);
+  const read = (f) => {
+    try {
+      return JSON.parse(readFileSync(f, 'utf8'));
+    } catch {
+      return {};
+    }
+  };
+  if (req.method === 'GET') {
+    const room = new URL(req.url, 'http://localhost').searchParams.get('room') ?? '';
+    return json(200, read(fileOf(room)));
+  }
+  if (req.method !== 'POST') return json(405, { error: 'GET or POST' });
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    try {
+      const { room, id, verdict, name } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      if (typeof room !== 'string' || !/^[a-z0-9_-]{1,60}$/i.test(room)) return json(400, { error: 'room?' });
+      if (typeof id !== 'string' || id.length > 200) return json(400, { error: 'id?' });
+      if (!['approved', 'rejected', 'undecided'].includes(verdict)) return json(400, { error: 'verdict?' });
+      mkdirSync(dir, { recursive: true });
+      const f = fileOf(room);
+      const all = read(f);
+      if (verdict === 'undecided') delete all[id];
+      else all[id] = { verdict, name: typeof name === 'string' ? name.slice(0, 200) : '', at: new Date().toISOString() };
+      writeFileSync(f, `${JSON.stringify(all, null, 2)}
+`);
+      json(200, all);
+    } catch (err) {
+      json(400, { error: String(err) });
+    }
+  });
+}
+
 /** The endpoints by path. A new one goes here. */
-export const ENDPOINTS = { '/__perf': perf, '/__shot': shot, '/__window': windowLab, '/__scene': scene, '/__anims': anims, '/__animcast': animCast };
+// The fight page's cover and roll sliders (src/poc3d/fight/main.ts): the values the user has set, in scripts/cover-tuning.json (in git: it's what
+// the defaults are made from), so they aren't only in one browser's storage.
+//   GET  /__tune                 the saved values ({} if none)
+//   POST /__tune { ...values }   keeps them (numbers only, the names models/cover.ts `Tuning` has)
+function tune(server, req, res) {
+  const json = (code, body) => {
+    res.statusCode = code;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
+  const file = resolve(server.config.root, 'scripts', 'cover-tuning.json');
+  if (req.method === 'GET') return json(200, existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {});
+  if (req.method !== 'POST') return json(405, { error: 'GET or POST' });
+  const chunks = [];
+  req.on('data', (c) => chunks.push(c));
+  req.on('end', () => {
+    try {
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      const keep = {};
+      for (const [k, v] of Object.entries(body)) if (/^[A-Za-z]{1,30}$/.test(k) && typeof v === 'number' && Number.isFinite(v)) keep[k] = Math.round(v * 1000) / 1000;
+      writeFileSync(file, `${JSON.stringify(keep, null, 2)}
+`);
+      json(200, keep);
+    } catch (err) {
+      json(400, { error: String(err) });
+    }
+  });
+}
+
+export const ENDPOINTS = { '/__perf': perf, '/__shot': shot, '/__window': windowLab, '/__scene': scene, '/__anims': anims, '/__animcast': animCast, '/__review': review, '/__tune': tune };
 
 // These endpoints write files, so a web page open in the same browser mustn't be able to drive them (a cross-site POST
 // to localhost, or a DNS-rebinding name that points at it). The game and the tools are on localhost; scripts send no

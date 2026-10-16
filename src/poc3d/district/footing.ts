@@ -59,6 +59,7 @@ const INDOOR: Readonly<Record<string, Floors>> = {
   // The Peak: a stone lobby, boards up in the penthouse.
   residence: { street: 'tile', above: 'wood' },
   net_cafe: 'carpet',
+  detective: { street: 'tile', above: 'wood' },
   love_hotel: 'carpet',
   members_club: 'carpet',
   biz_hotel: 'carpet',

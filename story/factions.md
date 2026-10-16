@@ -1,6 +1,6 @@
 # Factions
 
-The groups with power in Tōto. Each entry: what's in the world already, then what the story hasn't decided.
+The groups with power in Tokyo. Each entry: what's in the world already, then what the story hasn't decided.
 Behind all of them is the order ([mythos.md](mythos.md)); most of them don't know it.
 
 ## 竜胆組 The Rindō-gumi
@@ -12,6 +12,8 @@ with the crest's lanterns, a pine, black sedans, young men outside. Nodes: `rind
   real mind; the wakagashira. The old code: no drugs, no women sold; the festival stalls and the old town
   protected; the family's land under the Kasumi-chō redevelopment site.
 - **Proposed:** an old family being taken apart by a new one: Ryujin Kogyo, the Amakudari-kai's front.
+- **Enemies and allies by turns** (the user, 2026-10-16): Mack fights them at some points of the story and stands
+  with them at others. **Open:** which, when.
 
 ## 竜神興業 Ryujin Kogyo
 
@@ -31,19 +33,28 @@ Bay Hall and Tōto Dome. The idol manager (a story character) works for it. Node
 
 - **Open:** what's underneath: whose money, what the girls are asked to do.
 
-## 東都警視庁 The police
+## 警視庁 The police
 
-The Toto Metropolitan Police HQ in Asagiri (stone, flags, patrol cars), and in Kaburo's plan a kōban with wanted
+The Tokyo Metropolitan Police HQ in Asagiri (stone, flags, patrol cars), and in Kaburo's plan a kōban with wanted
 notices. Nodes: `police_hq.entrance`, `police_hq.officer`.
 
 Corrupt: officers are bought, cases buried. There are honest ones too.
 
-- **Open:** who in the police matters to the story, and whether the detective used to be one of them.
+**Never fought** (the user, 2026-10-16): Mack doesn't fight the police, bought or not, and the game has no wanted
+level. The bought ones work against him by other means.
+
+- **Mack was one of them** (the user's, 2026-10-12): an ex-cop, working as a detective. He answers to the force
+  now only through a kept licence, a *kyōryoku* 協力 cooperating-investigator's, and the police beacon that goes
+  with it (details in [cast/mc.md](cast/mc.md)). The honest officers know the licence; the bought ones can use
+  it against him.
+- **Open:** who in the police matters to the story: the men he served with, his old partner
+  ([side/pool.md](side/pool.md)), whoever closed his wife's case.
+- **Open:** what the police do about the dead hours ([mythos.md](mythos.md)).
 
 ## The states
 
 - **Japan's government** is untrustworthy: bought, compromised, covering up.
-- **China's and America's governments** play their own games in Tōto, at times as hostile foreign powers.
+- **China's and America's governments** play their own games in Tokyo, at times as hostile foreign powers.
 - In every one of them there are good people as well as bad.
 - All of them are puppets of the order, knowingly or not.
 
@@ -54,10 +65,14 @@ Corrupt: officers are bought, cases buried. There are honest ones too.
 - **African crews, backed by the triad.** In Kaburo's streets and clubs. **Open:** who they are and what they
   run.
 - There are good Chinese and good Africans in the story too, not only the ones doing harm.
+- **The American Mafia.** Not in Tokyo, but it's where Dom comes from ([cast/dom.md](cast/dom.md)), as its half-Italian, half-Ukrainian outside man: a New York
+  family, coming apart under the prosecutions of the eighties and nineties, whose "mad dog" he was. **Open:**
+  whether it reaches Tokyo: men sent after him, an old arrangement with a yakuza family that hides him, the
+  American state's interest in a witness or a fugitive.
 
 ## The racing scene
 
-Street racers on the mountain passes (Kurokami, Yūnagi) and the Tōto Expressway, meeting at night at Ebisu-jima
+Street racers on the mountain passes (Kurokami, Yūnagi) and the Shuto Expressway, meeting at night at Ebisu-jima
 PA. SPEED LAB by the port tunes their cars. Races so far: the C1 lap and the Wangan sprint, offered by the racer
 at the PA (`ebisu_pa.racer`); rivals on the passes (the red coupe in battles).
 

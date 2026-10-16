@@ -14,8 +14,11 @@ import { KIND, lin, type MeshBuilder } from '../real/meshBuilder';
  * - camphor (kusunoki 楠): a huge evergreen dome on a thick trunk, the shrine grove tree.
  * - dogwood (hanamizuki 花水木): a small rounded street tree for narrow pavements; 'dogwoodBloom' in May.
  * - azalea (tsutsuji 躑躅) mounds in flower and clipped box balls, for planting beds.
+ * The tropical set (Manila). APPENDED: the indexes are baked into vertex styles and the shader's groups (real/city.ts),
+ * where these all fall in the evergreen group, coloured by their vertices. Coconut palm (niyog), royal palm (the
+ * avenue palm), banana (saging), rain tree (an umbrella crown), mango (mangga) and bougainvillea shrubs.
  */
-export const TREE_SPECIES = ['zelkova', 'ginkgo', 'ginkgoGold', 'sakura', 'sakuraBloom', 'pine', 'camphor', 'dogwood', 'dogwoodBloom', 'azalea', 'box'] as const;
+export const TREE_SPECIES = ['zelkova', 'ginkgo', 'ginkgoGold', 'sakura', 'sakuraBloom', 'pine', 'camphor', 'dogwood', 'dogwoodBloom', 'azalea', 'box', 'coconut', 'royalPalm', 'banana', 'raintree', 'mango', 'bougainvillea', 'banyan', 'flametree'] as const;
 export type TreeSpecies = (typeof TREE_SPECIES)[number];
 
 export interface TreeSpec {
@@ -37,6 +40,7 @@ export interface TreeSpec {
 /** How far each species' crown reaches from its trunk at size 1 (for fitting trees to pavements). */
 export const TREE_REACH: Record<TreeSpecies, number> = {
   zelkova: 4.6, ginkgo: 2.3, ginkgoGold: 2.3, sakura: 5.4, sakuraBloom: 5.4, pine: 3.4, camphor: 5.6, dogwood: 1.7, dogwoodBloom: 1.7, azalea: 0.9, box: 0.6,
+  coconut: 3.4, royalPalm: 3.8, banana: 2.4, raintree: 7.4, mango: 3.9, bougainvillea: 1.3, banyan: 7.5, flametree: 5.2,
 };
 
 /** Height added to everything above the stem while one tree is built (see TreeSpec.lift). */
@@ -57,7 +61,21 @@ const GREENS: Record<string, readonly number[]> = {
   dogwoodBloom: [0x3e5a2e, 0x4a6a34],
   azalea: [0x2e4a26, 0x36522a],
   box: [0x2e4a26, 0x3a5a2a],
+  coconut: [0x4e8a2a, 0x5c9a32, 0x447a24],
+  royalPalm: [0x4e8a2e, 0x5a9636, 0x427a26],
+  banana: [0x5c9c2c, 0x6aaa34, 0x4e8e26, 0x7ab03a],
+  raintree: [0x4a8430, 0x568e36, 0x3e7428, 0x62983c],
+  mango: [0x1a3818, 0x20421c, 0x163214, 0x264a20],
+  banyan: [0x2a4a22, 0x34562a, 0x22401c, 0x3c6030],
+  flametree: [0x4e8a34, 0x5c9a3c, 0x447a2c, 0x6aa842],
+  bougainvillea: [0x2e5a24, 0x3a6a2a],
 };
+/** Flame tree (Delonix) blossom, and a mango's new growth (copper to lime). */
+const FLAME = [0xd8301a, 0xe8481c, 0xf06420, 0xc82418] as const;
+const MANGO_NEW = [0x9a5a2a, 0xa8742e, 0x8ea03a, 0xb08a34] as const;
+
+/** Bougainvillea's bracts: magentas, one orange. */
+export const BOUGAINVILLEA = [0xc8286e, 0xd8388a, 0xe05a9c, 0xb81e60, 0xe87a3a] as const;
 
 /** Flowering dogwood's bracts: three pinks (a tree is one of them; cream ones read as a pale ball under a lamp). */
 const DOGWOOD_BRACTS = [0xd98aa8, 0xe2a2ba, 0xcf7f9f] as const;
@@ -74,6 +92,12 @@ const DOGWOOD_BRACTS = [0xd98aa8, 0xe2a2ba, 0xcf7f9f] as const;
  */
 export const FOLIAGE_VARIANTS = ['puffs', 'tufts', 'cards', 'airy'] as const;
 let VARIANT = 3;
+/** Multiplier on a crown's leaf-card count (the lighter tropical crowns), and a dense crown (cards over a dark core) for the tree being built. */
+let CARD_K = 1;
+let DENSE = false;
+/** Bigger leaf cards, and whether crowns show twigs, for the tree being built (the flat tropical crowns: fewer, larger cards, no twigs). */
+let CARD_SZ = 1;
+let TWIGS = true;
 /** The variant for the foliage built from now on. */
 export function setFoliageVariant(v: number): void {
   VARIANT = v;
@@ -108,6 +132,7 @@ function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: 
   mb.color = lin(hex);
   y += LIFT;
   if (VARIANT === 0) return blob(mb, x, y, z, rx, ry, n);
+  const V = DENSE && VARIANT === 3 ? 2 : VARIANT;
   const r = rng(hash(Math.round(x * 16), Math.round(y * 16), Math.round(z * 16), 0x7f1a));
   const twig = (px: number, py: number, pz: number, t: number): void => {
     const style = mb.style;
@@ -118,7 +143,7 @@ function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: 
     mb.color = col;
     mb.style = style;
   };
-  if (VARIANT === 1) {
+  if (V === 1) {
     // Tufts: small uneven lumps in the mass's shell, each on its twig.
     const count = Math.max(5, Math.min(22, Math.round(5 + 5 * rx * ry)));
     for (let i = 0; i < count; i++) {
@@ -138,14 +163,14 @@ function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: 
   }
   // Leaf cards: clusters of leaves on cards facing out of the mass (lit as the mass's round surface), over a dark
   // core (cards) or on twigs alone (airy).
-  const airy = VARIANT === 3;
+  const airy = V === 3;
   if (!airy) blob(mb, x, y, z, rx * 0.72, ry * 0.72, n, 1);
-  const count = Math.max(8, Math.min(56, Math.round((airy ? 8 : 9) + (airy ? 11 : 12) * rx * ry)));
+  const count = Math.max(6, Math.min(56, Math.round(((airy ? 8 : 9) + (airy ? 11 : 12) * rx * ry) * CARD_K)));
   const style = mb.style;
   for (let i = 0; i < count; i++) {
     const [px, py, pz] = shellPoint(r, airy ? 0.3 : 0.6);
     const c: [number, number, number] = [x + px * rx, y + py * ry, z + pz * rx];
-    if (airy && i % 3 === 0) twig(c[0], c[1], c[2], Math.max(0.025, rx * 0.02));
+    if (airy && TWIGS && i % 3 === 0) twig(c[0], c[1], c[2], Math.max(0.025, rx * 0.02));
     // Outward, tipped at random; the card's plane across it, turned at random in its plane.
     const l = Math.hypot(px, py, pz) || 1;
     let nx = px / l + (r.float() - 0.5) * 0.9;
@@ -169,10 +194,10 @@ function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: 
     const t = r.float() * Math.PI;
     const ct = Math.cos(t);
     const st = Math.sin(t);
-    const size = Math.max(0.5, Math.min(rx, ry * 1.4) * (0.42 + 0.22 * r.float()));
+    const size = Math.max(0.5, Math.min(rx, ry * 1.4) * (0.42 + 0.22 * r.float())) * CARD_SZ;
     const R: [number, number, number] = [(ax * ct + bx * st) * size, (ay * ct + by * st) * size, (az * ct + bz * st) * size];
     const U: [number, number, number] = [(bx * ct - ax * st) * size, (by * ct - ay * st) * size, (bz * ct - az * st) * size];
-    mb.style = [FOLIAGE_TAG + SPECIES, 2, VARIANT, 0];
+    mb.style = [FOLIAGE_TAG + SPECIES, 2, V, 0];
     mb.card(c, R, U, [px / l, py / l, pz / l], 1 + r.float());
   }
   mb.style = style;
@@ -185,6 +210,8 @@ function mass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: 
 export function shrubMass(mb: MeshBuilder, x: number, y: number, z: number, rx: number, ry: number, hex: number, species: TreeSpecies, n = 5): void {
   const was = SPECIES;
   SPECIES = TREE_SPECIES.indexOf(species);
+  // (Bougainvillea hedges and pots flower magenta whatever green the caller gave.)
+  if (species === 'bougainvillea') hex = BOUGAINVILLEA[hash(Math.round(x * 8), Math.round(z * 8), 0xb06a) % BOUGAINVILLEA.length];
   const lift = LIFT;
   LIFT = 0;
   const kind = mb.kind;
@@ -216,6 +243,54 @@ function limb(mb: MeshBuilder, a: C3, b: C3, t: number, hex: number): void {
 }
 
 /**
+ * A palm frond or banana leaf: a strip from (ox, oy, oz) outward along `ang`, rising by `up` and drooping by
+ * `droop` (fractions of its length), notched along both edges so it reads as pinnate or torn. Two-sided (poly4 in
+ * both windings: the city material culls back faces), tagged as foliage of the tree being built.
+ */
+function frond(mb: MeshBuilder, ox: number, oy: number, oz: number, ang: number, len: number, up: number, droop: number, wid: number, hex: number, notch = 0.4): void {
+  mb.color = lin(hex);
+  const style = mb.style;
+  mb.style = [FOLIAGE_TAG + SPECIES, 0, VARIANT, 0];
+  const dx = Math.cos(ang);
+  const dz = Math.sin(ang);
+  const px = -dz;
+  const pz = dx;
+  const N = 5;
+  const prof = [0.35, 1, notch + 0.1, 0.95, notch, 0.55];
+  let prev: [C3, C3] | null = null;
+  for (let i = 0; i <= N; i++) {
+    const s = i / N;
+    const w = i === N ? 0.04 * wid : wid * prof[i] * (1 - s * 0.45);
+    const cx = ox + dx * len * s;
+    const cz = oz + dz * len * s;
+    const cy = oy + len * (up * s - droop * s * s) + LIFT;
+    const lift = 0.14 * w;
+    const L: C3 = [cx + px * w, cy + lift, cz + pz * w];
+    const R: C3 = [cx - px * w, cy + lift, cz - pz * w];
+    if (prev) {
+      mb.poly4(prev[0], prev[1], R, L);
+      mb.poly4(L, R, prev[1], prev[0]);
+    }
+    prev = [L, R];
+  }
+  mb.style = style;
+}
+
+/** A tropical tree's trunk as a run of beams along a bend: lateral offset (y/H)^2 * bend toward `ang`. Returns the top. */
+function bentTrunk(mb: MeshBuilder, x: number, z: number, H: number, ang: number, bend: number, r0: number, r1: number, hex: number, segs = 7): C3 {
+  mb.color = lin(hex);
+  let prev: C3 = [x, 0, z];
+  for (let i = 1; i <= segs; i++) {
+    const f = i / segs;
+    const off = f * f * bend;
+    const p: C3 = [x + Math.cos(ang) * off, f * H, z + Math.sin(ang) * off];
+    mb.beam([prev[0], prev[1] + LIFT, prev[2]], [p[0], p[1] + LIFT, p[2]], r0 + (r1 - r0) * f);
+    prev = p;
+  }
+  return prev;
+}
+
+/**
  * Where trees are built, for whoever's listening (the district collects the landmarks' trees this way, for the
  * petals and leaves that fall under them): a tree's foot, its species and how far its crown reaches.
  */
@@ -229,6 +304,10 @@ export function addTree(mb: MeshBuilder, t: TreeSpec): void {
   const k = t.size ?? 1;
   sink?.({ x: t.x + (t.lean?.[0] ?? 0), z: t.z + (t.lean?.[1] ?? 0), species: t.species, reach: TREE_REACH[t.species] * k });
   SPECIES = TREE_SPECIES.indexOf(t.species);
+  CARD_K = t.species === 'raintree' ? 0.7 : t.species === 'flametree' ? 0.7 : t.species === 'banyan' ? 0.4 : t.species === 'mango' ? 0.45 : 1;
+  CARD_SZ = t.species === 'raintree' ? 1.8 : t.species === 'flametree' ? 1.7 : t.species === 'banyan' ? 1.4 : t.species === 'mango' ? 1.3 : 1;
+  TWIGS = t.species !== 'raintree' && t.species !== 'flametree';
+  DENSE = t.species === 'mango' || t.species === 'banyan';
   const v0 = mb.vertexCount;
   const rnd = rng(hash(t.seed ?? 0, Math.round(t.x * 8), Math.round(t.z * 8), 0x7ee5));
   // The crown's trunk stands at (x, z), lifted; a stem leans to it from the foot.
@@ -367,8 +446,129 @@ export function addTree(mb: MeshBuilder, t: TreeSpec): void {
       mass(mb, x, 0.6 * k, z, 0.6 * k, 0.55 * k, g(), 6);
       break;
     }
+    case 'coconut': {
+      // A tall slender trunk leaning and curving (bend (y/H)^2), a collar of drooping pinnate fronds, a few nuts.
+      const H = (8.5 + rnd.float() * 2.5) * k;
+      const lean = rnd.float() * Math.PI * 2;
+      const top = bentTrunk(mb, x, z, H, lean, (1.4 + rnd.float() * 1.4) * k, 0.2 * k, 0.11 * k, 0x8c7c66, 7);
+      around(10, (a, i) => {
+        const high = i % 3 === 0;
+        frond(mb, top[0], top[1], top[2], a, (high ? 2.6 : 3.5) * k, high ? 1.5 : 0.7, high ? 1.0 : 1.5, 0.55 * k, g());
+      });
+      mb.color = lin(0x5a6a2a);
+      for (let i = 0; i < 3; i++) {
+        const a = i * 2.1 + rnd.float();
+        mb.lathe(top[0] + Math.cos(a) * 0.22 * k, top[2] + Math.sin(a) * 0.22 * k, [[top[1] + LIFT - 0.5 * k, 0.04], [top[1] + LIFT - 0.3 * k, 0.17 * k], [top[1] + LIFT - 0.05, 0.12 * k]], 5);
+      }
+      break;
+    }
+    case 'royalPalm': {
+      // A straight pale smooth column swelling a little low down, a green crownshaft, an upright-spreading crown.
+      const H = (11 + rnd.float() * 2.5) * k;
+      mb.color = lin(0xb8b0a2);
+      mb.lathe(x, z, [[LIFT, 0.42 * k], [LIFT + H * 0.25, 0.4 * k], [LIFT + H * 0.5, 0.3 * k], [LIFT + H, 0.26 * k]], 6);
+      mb.color = lin(0x6f9a46);
+      mb.lathe(x, z, [[LIFT + H, 0.27 * k], [LIFT + H + 1.5 * k, 0.24 * k], [LIFT + H + 1.7 * k, 0.12 * k]], 6);
+      const top = H + 1.5 * k;
+      around(12, (a, i) => {
+        const high = i % 3 === 0;
+        frond(mb, x, top, z, a, (high ? 3.2 : 4.0) * k, high ? 2.4 : 1.2, high ? 0.9 : 1.6, 0.6 * k, g());
+      });
+      break;
+    }
+    case 'banana': {
+      // A short pale pseudo-stem and broad paddle leaves, torn, arching out; a green hand of fruit.
+      const H = (2.2 + rnd.float() * 0.8) * k;
+      mb.color = lin(0x9ab05a);
+      mb.lathe(x, z, [[LIFT, 0.2 * k], [LIFT + H, 0.13 * k]], 6);
+      around(8, (a, i) => {
+        const high = i % 2 === 0;
+        frond(mb, x, H, z, a, (high ? 2.0 : 2.8) * k, high ? 1.7 : 0.9, high ? 0.9 : 1.5, 0.78 * k, g(), 0.55);
+      });
+      mb.color = lin(0x7a9a38);
+      mb.lathe(x + 0.25 * k, z, [[LIFT + H - 0.7 * k, 0.03], [LIFT + H - 0.4 * k, 0.16 * k], [LIFT + H - 0.05, 0.06]], 5);
+      break;
+    }
+    case 'raintree': {
+      // Samanea: a thick short trunk forking low into heavy limbs that lean far out and barely rise, under a very
+      // wide, flat, shallow umbrella of small feathery leaflets, far wider than it is tall.
+      const fork = 2.6 * k;
+      trunk(mb, x, z, 0, fork + 0.5 * k, 0.55 * k, 0.4 * k, 0x4e4034);
+      around(3, (a) => {
+        const reach = (4.8 + rnd.float() * 0.8) * k;
+        const mid: C3 = [x + Math.cos(a) * reach * 0.5, (fork + 1.6) * k, z + Math.sin(a) * reach * 0.5];
+        const end: C3 = [x + Math.cos(a) * reach, (fork + 3.0 + rnd.float() * 0.5) * k, z + Math.sin(a) * reach];
+        limb(mb, [x, fork, z], mid, 0.26 * k, 0x4e4034);
+        limb(mb, mid, end, 0.17 * k, 0x4e4034);
+        mass(mb, end[0], end[1] + 0.5 * k, end[2], 4.0 * k, 0.9 * k, g());
+        mass(mb, mid[0] + Math.cos(a + 0.9) * 1.2 * k, mid[1] + 2.3 * k, mid[2] + Math.sin(a + 0.9) * 1.2 * k, 3.2 * k, 0.8 * k, g());
+      });
+      mass(mb, x, (fork + 4.4) * k, z, 3.8 * k, 0.9 * k, g());
+      break;
+    }
+    case 'mango': {
+      // A tall, dense, dark dome on a thick trunk (cards over a dark core: little sky through it), glossy deep
+      // green, its new growth lighter and coppery at the tips.
+      trunk(mb, x, z, 0, 3.0 * k, 0.45 * k, 0.32 * k, 0x3e3228);
+      around(4, (a) => mass(mb, x + Math.cos(a) * 1.7 * k, (5.0 + rnd.float() * 0.6) * k, z + Math.sin(a) * 1.7 * k, 2.4 * k, 2.2 * k, g()));
+      mass(mb, x, 7.3 * k, z, 2.6 * k, 2.1 * k, g());
+      around(3, (a) => mass(mb, x + Math.cos(a) * 2.5 * k, (6.0 + rnd.float() * 2.0) * k, z + Math.sin(a) * 2.5 * k, 0.8 * k, 0.6 * k, rnd.pick(MANGO_NEW), 4));
+      break;
+    }
+    case 'banyan': {
+      // Balete, a strangler fig: a huge wide crown on a trunk flaring into buttress roots, aerial roots hanging
+      // from the crown to the ground, some thickened into pillars.
+      mb.color = lin(0x5a5046);
+      mb.lathe(x, z, [[LIFT, 1.5 * k], [LIFT + 0.9 * k, 0.85 * k], [LIFT + 3.6 * k, 0.8 * k]], 6);
+      around(5, (a) => {
+        mb.color = lin(0x5a5046);
+        mb.beam([x + Math.cos(a) * 0.6 * k, 2.4 * k + LIFT, z + Math.sin(a) * 0.6 * k], [x + Math.cos(a) * 1.8 * k, LIFT, z + Math.sin(a) * 1.8 * k], 0.22 * k);
+      });
+      around(5, (a) => {
+        const reach = (3.8 + rnd.float() * 0.8) * k;
+        const top: C3 = [x + Math.cos(a) * reach, (7.2 + rnd.float() * 0.8) * k, z + Math.sin(a) * reach];
+        limb(mb, [x, 3.2 * k, z], top, 0.3 * k, 0x5a5046);
+        mass(mb, top[0], top[1] + 0.3 * k, top[2], 3.4 * k, 1.6 * k, g());
+        const rr = reach * (0.55 + 0.35 * rnd.float());
+        const rx2 = x + Math.cos(a) * rr;
+        const rz2 = z + Math.sin(a) * rr;
+        limb(mb, [rx2, 5.6 * k, rz2], [rx2 + (rnd.float() - 0.5) * 0.4, 0, rz2 + (rnd.float() - 0.5) * 0.4], rnd.chance(0.5) ? 0.22 * k : 0.07 * k, 0x6a5a48);
+        limb(mb, [rx2 + 0.7 * k, 5.2 * k, rz2 + 0.5 * k], [rx2 + 0.8 * k, 1.2 * k, rz2 + 0.6 * k], 0.05 * k, 0x6a5a48);
+      });
+      mass(mb, x, 9.2 * k, z, 4.2 * k, 1.8 * k, g());
+      break;
+    }
+    case 'flametree': {
+      // Flamboyant (Delonix): a short trunk, a few limbs spreading wide, a flat feathery crown of fern green under
+      // clusters of red-orange blossom, a drift of petals beneath.
+      const fork = 2.3 * k;
+      trunk(mb, x, z, 0, fork + 0.4 * k, 0.38 * k, 0.28 * k, 0x5a4a3c);
+      around(3, (a) => {
+        const reach = (3.9 + rnd.float() * 0.6) * k;
+        const end: C3 = [x + Math.cos(a) * reach, (fork + 3.0 + rnd.float() * 0.6) * k, z + Math.sin(a) * reach];
+        limb(mb, [x, fork, z], end, 0.2 * k, 0x5a4a3c);
+        mass(mb, end[0], end[1] + 0.2 * k, end[2], 3.2 * k, 0.8 * k, g());
+        mass(mb, end[0] - Math.cos(a) * 0.5 * k, end[1] + 0.8 * k, end[2] - Math.sin(a) * 0.5 * k, 2.4 * k, 0.8 * k, rnd.pick(FLAME), 4);
+      });
+      mass(mb, x, (fork + 3.6) * k, z, 3.0 * k, 0.7 * k, g());
+      mass(mb, x + 0.6 * k, (fork + 4.2) * k, z - 0.4 * k, 2.4 * k, 0.8 * k, rnd.pick(FLAME), 4);
+      mb.color = lin(0xc83a1c);
+      mb.lathe(t.x, t.z, [[0.01, 0.2], [0.03, 3.0 * k]], 9);
+      break;
+    }
+    case 'bougainvillea': {
+      // A sprawling shrub: a green core under heaps of magenta bracts.
+      mass(mb, x, 0.7 * k, z, 0.9 * k, 0.65 * k, g());
+      around(3, (a) => mass(mb, x + Math.cos(a) * 0.55 * k, (0.8 + rnd.float() * 0.4) * k, z + Math.sin(a) * 0.55 * k, 0.65 * k, 0.5 * k, rnd.pick(BOUGAINVILLEA)));
+      mass(mb, x, 1.3 * k, z, 0.6 * k, 0.4 * k, rnd.pick(BOUGAINVILLEA));
+      break;
+    }
   }
   LIFT = 0;
+  CARD_K = 1;
+  CARD_SZ = 1;
+  TWIGS = true;
+  DENSE = false;
   mb.kind = KIND.plain;
   // Everything but the grate and the fallen leaves sways in the wind (real/city.ts), the more the higher up.
   mb.sway(v0);

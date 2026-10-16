@@ -1,7 +1,7 @@
 """A shape from the Pixal3D worker given its own picture as colour, laid on through the camera the worker returned.
 
   "<blender.exe>" -b --python scripts/blender/project_picture.py -- <mesh.glb> <camera.json> <cutout.png> <out.glb>
-        [--tris 30000] [--voxel 0.004] [--tex 2048] [--arms-out 0.17] [--cut-x 0.15] [--cut-arms 0.125] [--carve 4] [--normal 0] [--close 1] [--smooth 1] [--surface wrapped.glb] [--view <yaw>:<picture> ...]
+        [--tris 30000] [--voxel 0.004] [--tex 2048] [--arms-out 0.17] [--cut-x 0.15] [--cut-arms 0.125] [--carve 4] [--normal 0] [--close 1] [--smooth 1] [--surface wrapped.glb] [--view <yaw>:<picture> ...] [--exact-views 1]
 
 `mesh.glb`, `camera.json` and `cutout.png` are what scripts/props/mesh_endpoint.mjs --engine pixal3d writes (the mesh
 is best put through scripts/blender/orient_faces.py first). Pixal3D builds the mesh in the picture's own camera frame
@@ -55,6 +55,10 @@ ARMS_OUT = float(opt['arms-out']) if 'arms-out' in opt else None
 CUT_X = float(opt['cut-x']) if 'cut-x' in opt else None
 CUT_ARMS = float(opt['cut-arms']) if 'cut-arms' in opt else None
 CARVE = int(opt.get('carve', 4))
+# `--exact-views 1`: the --view pictures were framed as the front was (the same square, the same distance and field of
+# view: a multi-view job's own views, cut with its one frame), so each one's camera is the front's turned round the
+# vertical exactly, and no outline matching (which a crop at the frame's edge throws off: Mack's orbit, 2026-10-14).
+EXACT_VIEWS = opt.get('exact-views', '0') == '1'
 FACE_PIC = os.path.abspath(opt['face']) if 'face' in opt else None  # `--face head_cutout.png --face-camera head_camera.json --face-transform head_on_body.json`: a close-up of the head, its own camera
 FACE_CAM = json.load(open(os.path.abspath(opt['face-camera']), encoding='utf8')) if 'face-camera' in opt else None
 FACE_XF = json.load(open(os.path.abspath(opt['face-transform']), encoding='utf8')) if 'face-transform' in opt else None
@@ -442,7 +446,7 @@ def load_view(path):
 views = [{'yaw': 0.0, 'pix': load_view(picture_file), 'exact': True}]
 for item in extra_views:
     yaw, path = item.split(':', 1)
-    views.append({'yaw': float(yaw), 'pix': load_view(os.path.abspath(path)), 'exact': False})
+    views.append({'yaw': float(yaw), 'pix': load_view(os.path.abspath(path)), 'exact': EXACT_VIEWS})
 if FACE_PIC:
     views.append({'yaw': 0.0, 'pix': load_view(FACE_PIC), 'exact': False, 'own': True})
 

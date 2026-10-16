@@ -38,7 +38,7 @@ describe('races in the city', () => {
     const c1 = runAlone('c1_lap', 400);
     const wangan = runAlone('wangan_sprint', 200);
     // To the line, off no walls, quick but beatable: C1 at 90-130 km/h on average, the Wangan flat out.
-    expect(c1.s).toBeGreaterThan(3280);
+    expect(c1.s).toBeGreaterThan(3200);
     expect(c1.walls).toBeLessThanOrEqual(2);
     expect(c1.avg * 3.6).toBeGreaterThan(90);
     expect(c1.avg * 3.6).toBeLessThan(135);

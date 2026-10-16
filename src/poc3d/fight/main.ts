@@ -1,3 +1,4 @@
+import '../showroom/nav';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -13,6 +14,7 @@ import { installSnap } from '../../debug/snap';
 import { GORE_LEVELS, STANCES } from '../models/melee';
 import { FightMode, KILL_CHANCES, type Hand } from './fightMode';
 import { buildWeaponRack } from './weaponRack';
+import { DEFAULT_TUNING, type Obstacle, type Tuning } from '../models/cover';
 
 /**
  * The fight test (fight.html): a yard for trying the melee (models/brawl.ts) as Mack in first person, apart from
@@ -29,7 +31,18 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const query = new URLSearchParams(location.search);
 
 const renderer = new THREE.WebGLRenderer({ antialias: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+// How much of the window's resolution the picture is drawn at (the panel's Resolution row, or `?scale=0.75`; kept in localStorage): the
+// page draws an HDR, 4x multisampled, bloomed picture, so the cost goes with the window's pixels, and an ultrawide has ten times a
+// 960x540's (measured: debug-shots/coverscale.mjs, debug-performance.md).
+let renderScale = 1;
+try {
+  renderScale = Number(new URLSearchParams(location.search).get('scale') ?? localStorage.getItem('rainyplace.fightScale') ?? 1) || 1;
+} catch {
+  /* no storage */
+}
+renderScale = Math.max(0.25, Math.min(1, renderScale));
+const pixelRatio = (): number => Math.min(window.devicePixelRatio, 1.5) * renderScale;
+renderer.setPixelRatio(pixelRatio());
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
@@ -97,6 +110,29 @@ wall(YARD + WALL_T * 2, WALL_T, 0, -(YARD + WALL_T) / 2);
 wall(WALL_T, YARD, -(YARD + WALL_T) / 2, 0);
 wall(WALL_T, YARD, (YARD + WALL_T) / 2, 0);
 
+// What's solid in the yard: its three walls and some crates, to hide behind, vault and walk round (models/cover.ts: Space
+// is cover, a vault or a roll here, not a jump). The thugs walk through them, as they do the walls.
+const crateMat = new THREE.MeshStandardMaterial({ color: 0x6b5a45, roughness: 0.85 });
+const OBSTACLES: Obstacle[] = [
+  { x0: -YARD / 2 - WALL_T * 2, x1: YARD / 2 + WALL_T * 2, z0: -YARD / 2 - WALL_T * 2, z1: -YARD / 2, h: WALL_H },
+  { x0: -YARD / 2 - WALL_T * 2, x1: -YARD / 2, z0: -YARD / 2, z1: YARD / 2, h: WALL_H },
+  { x0: YARD / 2, x1: YARD / 2 + WALL_T * 2, z0: -YARD / 2, z1: YARD / 2, h: WALL_H },
+];
+/** Crates and a low wall to try it on: [x0, x1, z0, z1, height]. */
+const CRATES: readonly (readonly [number, number, number, number, number])[] = [
+  [-3.2, -0.6, -6.4, -5.8, 0.9], // a low wall: crouch behind it, or W + Space over it
+  [2, 4, -4.6, -4, 1.1], // a crate to vault
+  [-7.2, -5.6, -3, -1.8, 1.4], // too high to vault, low enough to crouch behind
+  [4.6, 7, -2.2, -1.4, 2.2], // a high block: stand against it
+];
+for (const [x0, x1, z0, z1, h] of CRATES) {
+  OBSTACLES.push({ x0, x1, z0, z1, h });
+  const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, h, z1 - z0), crateMat);
+  m.position.set((x0 + x1) / 2, h / 2, (z0 + z1) / 2);
+  m.castShadow = m.receiveShadow = true;
+  scene.add(m);
+}
+
 const pmrem = new THREE.PMREMGenerator(renderer);
 const charEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 setCharacterEnvironment(charEnv);
@@ -109,6 +145,36 @@ scene.add(weaponRack);
 
 // Mack in first person, in the yard facing its north wall.
 const fp = new FightMode(scene, camera, renderer.domElement, controls, charEnv, () => 0);
+fp.setObstacles(OBSTACLES);
+// The roll's feel, kept between visits (the panel's sliders: models/cover.ts `Tuning`).
+const TUNE_KEY = 'rainyplace.coverTune';
+try {
+  Object.assign(fp.tuning, JSON.parse(localStorage.getItem(TUNE_KEY) ?? '{}'));
+} catch {
+  /* no storage, or not ours */
+}
+let tuneSent = 0;
+const saveTune = (): void => {
+  try {
+    localStorage.setItem(TUNE_KEY, JSON.stringify(fp.tuning));
+  } catch {
+    /* no storage */
+  }
+  // Also to the dev server's file (scripts/cover-tuning.json, through /__tune), a moment after the last move of a slider, so the values
+  // are somewhere that can be read and made the defaults.
+  window.clearTimeout(tuneSent);
+  tuneSent = window.setTimeout(() => void fetch('/__tune', { method: 'POST', body: JSON.stringify(fp.tuning) }).catch(() => undefined), 300);
+};
+// What's in that file is the truth where there's a dev server (the browser's storage is only this browser's): taken up when the page opens.
+void fetch('/__tune')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((saved: Partial<Tuning> | null) => {
+    if (saved && typeof saved === 'object' && Object.keys(saved).length) {
+      Object.assign(fp.tuning, saved);
+      renderPanel();
+    }
+  })
+  .catch(() => undefined);
 const enterFp = (): Promise<void> => fp.enter(0, 3, 0);
 (window as unknown as { __fp: unknown }).__fp = fp.script();
 // For scripted shots that add to the scene (a wall of their own).
@@ -160,6 +226,20 @@ composer.addPass(new OutputPass());
 const censor = new CensorPass();
 composer.addPass(censor);
 
+const SCALES = [1, 0.75, 0.5];
+/** The picture at a share of the window's resolution (the page is as sharp as it is smooth). */
+function setScale(k: number): void {
+  renderScale = k;
+  try {
+    localStorage.setItem('rainyplace.fightScale', String(k));
+  } catch {
+    /* no storage */
+  }
+  renderer.setPixelRatio(pixelRatio());
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setPixelRatio(pixelRatio());
+  composer.setSize(window.innerWidth, window.innerHeight);
+}
 const HANDS: readonly (readonly [Hand, string])[] = [['gun', 'guns (1)'], ['fists', 'fists (2)'], ['katana', 'katana (3)'], ['bat', 'bat (4)']];
 function renderPanel(): void {
   const panel = $('panel');
@@ -208,8 +288,44 @@ function renderPanel(): void {
     section('Kill-move chance (U)');
     for (const k of KILL_CHANCES) button(`${Math.round(k * 100)}%`, Math.abs(b.killChance - k) < 1e-3, () => (b.killChance = k));
   }
+  section('Roll (Esc frees the mouse for these)');
+  // (The sliders change nothing the panel redraws on, so a drag isn't cut off by a redraw.)
+  const slider = (label: string, key: keyof Tuning, min: number, max: number, step: number, unit: string): void => {
+    // (The name and its value on a line, the slider under it: the panel is narrow.)
+    const wrap = document.createElement('label');
+    Object.assign(wrap.style, { display: 'flex', flexWrap: 'wrap', alignItems: 'center', flex: '1 1 100%', margin: '2px 0 4px' });
+    const name = document.createElement('span');
+    name.textContent = label;
+    name.style.flex = '1';
+    const val = document.createElement('span');
+    val.style.color = '#ffb0e0';
+    const input = document.createElement('input');
+    Object.assign(input, { type: 'range', min: String(min), max: String(max), step: String(step), value: String(fp.tuning[key]) });
+    input.style.flex = '1 1 100%';
+    const show = (): void => void (val.textContent = `${fp.tuning[key].toFixed(2)}${unit}`);
+    show();
+    input.oninput = () => {
+      fp.tuning[key] = Number(input.value);
+      show();
+      saveTune();
+    };
+    wrap.append(name, val, input);
+    row.appendChild(wrap);
+  };
+  slider('speed', 'rollSpeed', 0.6, 2.5, 0.05, '×');
+  slider('skip, standing', 'rollLeadStill', 0, 0.6, 0.02, ' s');
+  slider('skip, running', 'rollLeadRun', 0, 0.6, 0.02, ' s');
+  slider('distance', 'rollDistance', 0.3, 1.2, 0.05, '×');
+  slider('hands free after', 'recover', 0, 1.5, 0.05, ' s');
+  button('reset the roll', false, () => {
+    Object.assign(fp.tuning, DEFAULT_TUNING);
+    saveTune();
+    renderPanel();
+  });
   section('Lighting');
   for (const m of MODES) button(m, mode === m, () => applyMode(m));
+  section('Resolution (less is smoother)');
+  for (const k of SCALES) button(`${Math.round(k * 100)}%`, Math.abs(renderScale - k) < 0.01, () => setScale(k));
   section('View');
   button(fp.active ? 'orbit the yard (V)' : 'Mack, first person (V)', fp.active, () => (fp.active ? fp.exit() : void enterFp()));
   button(fp.third ? 'third person (Q)' : 'first person (Q)', fp.third, () => (fp.third = !fp.third));
@@ -223,7 +339,7 @@ function renderPanel(): void {
   button('→ the model showroom', false, () => (location.href = 'models.html'));
 }
 /** What the panel shows, to redraw it when a key changes any of it. */
-const panelState = (): string => [fp.active, fp.third, fp.hand, fp.autoStance, fp.brawl.melee.stance, fp.brawl.melee.oneHand, fp.brawl.melee.style, fp.brawl.gore.level, fp.brawl.killChance, mode].join('|');
+const panelState = (): string => [fp.active, fp.third, fp.hand, fp.autoStance, fp.brawl.melee.stance, fp.brawl.melee.oneHand, fp.brawl.melee.style, fp.brawl.gore.level, fp.brawl.killChance, mode, renderScale].join('|');
 let panelShown = '';
 
 applyMode(MODES.find((m) => m === query.get('light')) ?? 'studio');
@@ -261,8 +377,18 @@ const snap = installSnap(renderer.domElement, 'fight', () => ({
 }));
 
 const clock = new THREE.Clock();
+/** The last sixty frames' times (ms, as the clock saw them, before the step is capped): the HUD's last line says how smooth it is. */
+const frames: number[] = [];
+const frameLine = (): string => {
+  if (frames.length < 10) return '';
+  const mean = frames.reduce((a, b) => a + b, 0) / frames.length;
+  return `\nframe ${mean.toFixed(1)} ms (${Math.round(1000 / mean)} fps), worst ${Math.max(...frames).toFixed(0)} ms · ${window.innerWidth}x${window.innerHeight} at ${Math.round(renderScale * 100)}%`;
+};
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.1);
+  const raw = clock.getDelta();
+  frames.push(raw * 1000);
+  if (frames.length > 60) frames.shift();
+  const dt = Math.min(raw, 0.1);
   wasActive = fp.active;
   if (fp.active) fp.update(dt);
   else controls.update();
@@ -274,7 +400,8 @@ renderer.setAnimationLoop(() => {
     panelShown = panelState();
     renderPanel();
   }
-  $('hud').textContent = fp.active
-    ? fp.hud()
-    : `FIGHT TEST · orbiting, the fight paused · ${mode} lighting\nleft-drag orbit · right-drag pan · wheel zoom · V back into first person`;
+  $('hud').textContent =
+    (fp.active
+      ? fp.hud()
+      : `FIGHT TEST · orbiting, the fight paused · ${mode} lighting\nleft-drag orbit · right-drag pan · wheel zoom · V back into first person`) + frameLine();
 });

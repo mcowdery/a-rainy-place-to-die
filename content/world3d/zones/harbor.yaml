@@ -1,10 +1,10 @@
-# 東都港 Tōto Port, along the coast south of Kasumi-chō (format: src/poc3d/district/zones.ts; the whole-city plan:
+# 東京港 Tokyo Port, along the coast south of Kasumi-chō (format: src/poc3d/district/zones.ts; the whole-city plan:
 # docs/city-plan.md). Warehouses on big blocks along wide truck roads; the container terminal to the west; a strip
 # of warehouse nightlife (the disco's street); harbour towers by the water; the fish market's streets by the river
 # mouth. The harbour front avenue (Kaigan-dōri) runs along its north edge. Generated only where this map paints
 # (onlyZoned): the bay's islands come with their set pieces.
 district: harbor
-area: Tōto Port
+area: Tokyo Port
 origin: [6, 18]
 map:
   - .CCCCCCCWWWWWWWWWNNNNTTTTTFFFFF
@@ -16,14 +16,14 @@ zones:
   C:
     id: port_terminal
     name: Container terminal
-    people: { work: 6, plain: 2 }
+    people: { work: 6, plain: 2, coverall: 2, shirtless: 0.5 }
     plan:
       yardCover: 0.85
       floors: [[3, 4, 70], [5, 6, 30]]
       signChance: 0.15
       open: { parking: 0.2 }
     signs:
-      words: [東都港コンテナターミナル, 税関, GATE, TRUCK, 港運, 検疫]
+      words: [東京港コンテナターミナル, 税関, GATE, TRUCK, 港運, 検疫]
       colors: ['#ffffff', '#ffe45f']
     ads: { street: 1 }
     look:
@@ -38,7 +38,7 @@ zones:
   W:
     id: port_warehouses
     name: Warehouse district
-    people: { work: 5, plain: 3, long: 1 }
+    people: { work: 5, plain: 3, long: 1, coverall: 1.5, shirtless: 0.4 }
     plan:
       yardCover: 0.12
       floors: [[3, 4, 60], [5, 7, 30], [9, 12, 10]]
@@ -87,7 +87,7 @@ zones:
       streetTrees: 0.8
       hedges: 0.5
     signs:
-      words: [HARBOUR TOWER, 東都ベイ, RESIDENCE, HOTEL, CAFE]
+      words: [HARBOUR TOWER, 東京ベイ, RESIDENCE, HOTEL, CAFE]
       colors: ['#ffffff', '#4fe3ff']
     ads: { mainstream: 3, food: 1 }
     look:
@@ -103,7 +103,7 @@ zones:
     id: port_fish_market
     name: Fish market streets
     night: 0.3
-    people: { work: 4, plain: 4, long: 1 }
+    people: { work: 4, plain: 4, long: 1, coverall: 1, hanten: 0.4, chef: 0.2 }
     plan:
       floors: [[2, 3, 70], [4, 5, 30]]
       lotW: [8, 16]
@@ -114,7 +114,7 @@ zones:
       verticalSign: 0.4
       open: { parking: 0.1 }
     signs:
-      words: [鮮魚, 寿司, 海鮮丼, 刃物, 乾物, 市場食堂, 仲卸, 氷, 鰹節, 東都市場]
+      words: [鮮魚, 寿司, 海鮮丼, 刃物, 乾物, 市場食堂, 仲卸, 氷, 鰹節, 東京市場]
       colors: ['#ffe45f', '#ff4f4f', '#ffffff', '#4fe3ff']
     ads: { food: 5, street: 2 }
     look:

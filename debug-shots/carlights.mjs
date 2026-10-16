@@ -1,14 +1,14 @@
 // Your car's lights in the city at night: the dipped beam, braking, reversing, the main beam, off, the cockpit's
 // view of the road, and up on the expressway. node debug-shots/carlights.mjs <out dir> [query]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/carlights';
 const extra = process.argv[3] ? `&${process.argv[3]}` : '';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 640 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => {
@@ -18,7 +18,7 @@ await page.addInitScript(() => {
   localStorage.setItem('citypop.driveView', 'chase');
   localStorage.setItem('citypop.carLights', 'auto');
 });
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=city_garage.front&car=home&clock=23:30&weather=clear${extra}`);
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=city_garage.front&car=home&clock=23:30&weather=clear${extra}`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => {
   document.getElementById('overlay').hidden = true;

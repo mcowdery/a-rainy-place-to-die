@@ -1,6 +1,6 @@
 // The mob's emotes (real/emotes.ts): the showroom's row, the atlas, and the city with them held up, then what they cost.
 //   node debug-shots/emotes.mjs [out dir] [parts: show,city,perf] [city query] [spawn]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync, writeFileSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/emotes';
@@ -11,7 +11,7 @@ const spawn = process.argv[5] ?? 'kaburo_crossing.view';
 // (No hot reload: others' edits mustn't reload the page mid-shot.)
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const warned = new Map();
 const watch = (page) => {
   page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
@@ -120,7 +120,7 @@ if (parts.includes('city') || parts.includes('perf')) {
   for (const time of parts.includes('city') ? ['day', 'night'] : ['day']) {
     const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
     watch(page);
-    await page.goto(`${server.resolvedUrls.local[0]}district.html?diag=1${extra}&time=${time}${time === 'night' ? '&season=winter' : ''}&weather=clear&res=100&spawn=${spawn}`, { timeout: 240000 });
+    await page.goto(`${server.resolvedUrls.local[0]}?diag=1${extra}&time=${time}${time === 'night' ? '&season=winter' : ''}&weather=clear&res=100&spawn=${spawn}`, { timeout: 240000 });
     await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
     await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
     // (The frames start a while after the overlay says so: wait for the crowd.)

@@ -4,43 +4,52 @@ import type { Building3 } from '../district/plan';
 import { WIN } from './buildings';
 import type { CityUniforms } from './city';
 import type { Light } from './lightmap';
-import { localBox, localFrame, localRect, localYaw, toWorld } from './localFrame';
+import { localBox, localFrame, localRect, localYaw, toLocal, toWorld } from './localFrame';
 import { EMIT, KIND, lin, MeshBuilder } from './meshBuilder';
+import { FOOTPRINT, FRONT_DOOR, HOTEL, KEEP as PLAN_KEEP, SIDE_DOOR } from './rougePlan';
 import { addFigure, GhostBuilder } from './people';
+import { DECOR_PEOPLE } from './kit';
 
 /**
  * Hotel Rouge (ホテル ルージュ): the Love District's flagship, a castle love hotel in the Japanese way. A
  * pastel keep with round corner towers under red conical roofs, battlements outlined in pink neon, a tall
  * central donjon with a flag, a big HOTEL ROUGE neon sign, and at street level a discreet entrance: a
  * canopy over tinted doors hidden behind a screen wall, a lit rate board with the vacancy light, and a
- * car entrance behind a strip curtain. A plain side door on the west wall is the hidden way in.
+ * car entrance behind a strip curtain. A plain doorway on the west wall is the hidden way in (you walk in).
  * Local frame (localFrame.ts): u along the 24 m front, t inward over 21 m. You can walk into the front
- * court and on through the doors (the interior, rougeInterior.ts); E at the side door lets you into the back.
+ * court and on through the doors (the interior, rougeInterior.ts), or in at the side doorway to the back hall.
  */
-export const LOVE_HOTEL = { fw: 24, depth: 21 } as const;
+export const LOVE_HOTEL = { fw: FOOTPRINT.w, depth: FOOTPRINT.d } as const;
 
-const KEEP = { u0: 3, u1: 21, t0: 4, t1: 18, h: 15 } as const;
-const TOWERS: readonly (readonly [number, number])[] = [[3, 4], [21, 4], [3, 18], [21, 18]];
+const KEEP = PLAN_KEEP;
+/** The front doors' centre: the court's features (porch, sign, rate board) stand on it. */
+const CX = (FRONT_DOOR[0] + FRONT_DOOR[1]) / 2;
+const TOWERS: readonly (readonly [number, number])[] = [[KEEP.u0, KEEP.t0], [KEEP.u1, KEEP.t0], [KEEP.u0, KEEP.t1], [KEEP.u1, KEEP.t1]];
 const TOWER_R = 2.2;
 const TOWER_H = 19;
-const DONJON = { u: 12, t: 11, r: 3.0, h: 23 } as const;
-const COUPLE: readonly (readonly [number, number])[] = [[8.1, 2.2], [8.1, 2.85]];
+const DONJON = { u: (KEEP.u0 + KEEP.u1) / 2, t: (KEEP.t0 + KEEP.t1) / 2, r: 3.0, h: 23 } as const;
+/** The front doors' opening in the keep's wall (its height; the side doorway's is 2.2). */
+const DOOR_H = 2.95;
+const COUPLE: readonly (readonly [number, number])[] = [[CX - 3.9, 2.2], [CX - 3.9, 2.85]];
 
-/** Collision: the keep, the towers, the screen wall and planters, porch columns, rate board, the couple. */
+/** Collision: the keep, the towers, the screen wall and planters, porch columns, rate board (not the couple: figures are scenery, you walk through them). */
 export function loveHotelColliders(b: Building3): Rect[] {
   const f = localFrame(b);
   const R = (u0: number, u1: number, t0: number, t1: number): Rect => localRect(f, u0, u1, t0, t1);
   return [
     // The keep, but for a pocket at the front doors: you walk in (the interior takes over, rougeInterior.ts).
-    R(KEEP.u0, 10.5, KEEP.t0, KEEP.t1),
-    R(13.5, KEEP.u1, KEEP.t0, KEEP.t1),
-    R(10.5, 13.5, KEEP.t0 + 1.0, KEEP.t1),
+    // (with a second pocket in the west wall, the side doorway: you walk in there too.)
+    R(KEEP.u0, FRONT_DOOR[0], KEEP.t0, SIDE_DOOR[0]),
+    R(KEEP.u0, FRONT_DOOR[0], SIDE_DOOR[1], KEEP.t1),
+    // (1 m deep, like the front's: the walker's own radius must get past the wall's inner face before the interior takes over.)
+    R(KEEP.u0 + 1.0, FRONT_DOOR[0], SIDE_DOOR[0], SIDE_DOOR[1]),
+    R(FRONT_DOOR[1], KEEP.u1, KEEP.t0, KEEP.t1),
+    R(FRONT_DOOR[0], FRONT_DOOR[1], KEEP.t0 + 1.0, KEEP.t1),
     ...TOWERS.map(([u, t]) => R(u - TOWER_R, u + TOWER_R, t - TOWER_R, t + TOWER_R)),
-    R(9.0, 15.0, 0.9, 1.4),
-    R(9.05, 9.35, 1.65, 1.95),
-    R(14.65, 14.95, 1.65, 1.95),
-    R(6.0, 8.0, 3.6, 4.0),
-    ...COUPLE.map(([u, t]) => R(u - 0.3, u + 0.3, t - 0.3, t + 0.3)),
+    R(CX - 3.0, CX + 3.0, 0.9, 1.4),
+    R(CX - 2.95, CX - 2.65, 1.65, 1.95),
+    R(CX + 2.65, CX + 2.95, 1.65, 1.95),
+    R(CX - 6.0, CX - 4.0, 3.6, 4.0),
   ];
 }
 
@@ -52,12 +61,12 @@ export function loveHotelLights(b: Building3): Light[] {
     return { x, z, r, color, i };
   };
   return [
-    L(12, 2.5, 6, [1.0, 0.55, 0.62], 0.9),
-    L(12, -4, 14, [1.0, 0.35, 0.7], 0.55),
-    L(3, 0.8, 5, [1.0, 0.4, 0.7], 0.45),
-    L(21, 0.8, 5, [1.0, 0.4, 0.7], 0.45),
-    L(17.5, 2.5, 4, [0.6, 0.5, 1.0], 0.4),
-    L(1.8, 12, 3, [1.0, 0.75, 0.5], 0.35),
+    L(CX, 2.5, 6, [1.0, 0.55, 0.62], 0.9),
+    L(CX, -4, 14, [1.0, 0.35, 0.7], 0.55),
+    L(KEEP.u0, 0.8, 5, [1.0, 0.4, 0.7], 0.45),
+    L(KEEP.u1, 0.8, 5, [1.0, 0.4, 0.7], 0.45),
+    L(26.4, 2.5, 4, [0.6, 0.5, 1.0], 0.4),
+    L(1.8, (SIDE_DOOR[0] + SIDE_DOOR[1]) / 2, 3, [1.0, 0.75, 0.5], 0.35),
   ];
 }
 
@@ -82,19 +91,21 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
   mb.flags = 0;
   mb.style = [0, 0, 0, 0];
   mb.frontNormal = null;
+  /** The court's features were laid out centred on u 12; `off` moves them to the doors' centre (and the garage gate). */
+  let off = 0;
   const box = (hex: number, u0: number, u1: number, t0: number, t1: number, y0: number, y1: number): void => {
     mb.kind = KIND.plain;
     mb.color = lin(hex);
-    localBox(mb, f, u0, u1, t0, t1, y0, y1);
+    localBox(mb, f, u0 + off, u1 + off, t0, t1, y0, y1);
   };
   const glow = (ch: number, rgb: [number, number, number], u0: number, u1: number, t0: number, t1: number, y0: number, y1: number): void => {
     mb.kind = KIND.emit;
     mb.style = [ch, 0, 0, 0];
     mb.color = rgb;
-    localBox(mb, f, u0, u1, t0, t1, y0, y1);
+    localBox(mb, f, u0 + off, u1 + off, t0, t1, y0, y1);
     mb.style = [0, 0, 0, 0];
   };
-  const W = (uu: number, t: number): [number, number] => toWorld(f, uu, t);
+  const W = (uu: number, t: number): [number, number] => toWorld(f, uu + off, t);
   const round = (hex: number, uu: number, t: number, rings: readonly (readonly [number, number])[], n = 18, ch = -1): void => {
     const [x, z] = W(uu, t);
     if (ch >= 0) {
@@ -109,16 +120,41 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
     mb.style = [0, 0, 0, 0];
   };
 
-  // The keep: pastel walls with small windows (the city shader draws them), cornice bands, battlements.
+  // The keep: pastel walls with small windows (the city shader draws them), cornice bands, battlements. A shell of four
+  // faces and a roof, not a box: the front doors and the side doorway are real openings in it (the interior shows
+  // through them from the street, rougeInterior.ts, and the street from inside), and nothing of it crosses the inside
+  // (a cornice that was one slab right across the keep was a black ceiling over the stair, seen from the flight below).
   const floors = Math.max(0, Math.floor((KEEP.h - 4.2 - 0.5) / 3));
   mb.kind = KIND.wall;
   mb.color = lin(PINK_WALL);
   mb.flags = 8 + 3 * 16;
   mb.style = [3.2, 0.35, 1.1, WIN.small + 8 * floors];
-  localBox(mb, f, KEEP.u0, KEEP.u1, KEEP.t0, KEEP.t1, 0, KEEP.h);
+  /** One piece of a wall face, from its left end to its right as seen from outside; `at` is how far along the whole face (`width`) it starts, so the window grid runs on across the pieces. */
+  const face = (ua: number, ta: number, ub: number, tb: number, y0: number, y1: number, at: number, width: number): void => {
+    const [xa, za] = toWorld(f, ua, ta);
+    const [xb, zb] = toWorld(f, ub, tb);
+    mb.quad([xa, y0, za], [xb - xa, 0, zb - za], [0, y1 - y0, 0], KIND.wall, at, width);
+  };
+  const KW = KEEP.u1 - KEEP.u0;
+  const KD = KEEP.t1 - KEEP.t0;
+  face(KEEP.u0, KEEP.t0, FRONT_DOOR[0], KEEP.t0, 0, KEEP.h, 0, KW);
+  face(FRONT_DOOR[0], KEEP.t0, FRONT_DOOR[1], KEEP.t0, DOOR_H, KEEP.h, FRONT_DOOR[0] - KEEP.u0, KW);
+  face(FRONT_DOOR[1], KEEP.t0, KEEP.u1, KEEP.t0, 0, KEEP.h, FRONT_DOOR[1] - KEEP.u0, KW);
+  face(KEEP.u1, KEEP.t0, KEEP.u1, KEEP.t1, 0, KEEP.h, 0, KD);
+  face(KEEP.u1, KEEP.t1, KEEP.u0, KEEP.t1, 0, KEEP.h, 0, KW);
+  face(KEEP.u0, KEEP.t1, KEEP.u0, SIDE_DOOR[1], 0, KEEP.h, 0, KD);
+  face(KEEP.u0, SIDE_DOOR[1], KEEP.u0, SIDE_DOOR[0], 2.2, KEEP.h, KEEP.t1 - SIDE_DOOR[1], KD);
+  face(KEEP.u0, SIDE_DOOR[0], KEEP.u0, KEEP.t0, 0, KEEP.h, KEEP.t1 - SIDE_DOOR[0], KD);
+  const [rx, rz] = toWorld(f, KEEP.u0, KEEP.t0);
+  mb.quad([rx, KEEP.h, rz], [f.r[0] * KW, 0, f.r[2] * KW], [-f.n[0] * KD, 0, -f.n[2] * KD], KIND.roof);
   mb.flags = 0;
   mb.style = [0, 0, 0, 0];
-  for (const y of [4.2, 9.6]) box(TRIM, KEEP.u0 - 0.15, KEEP.u1 + 0.15, KEEP.t0 - 0.15, KEEP.t1 + 0.15, y, y + 0.25);
+  for (const y of [4.2, 9.6]) {
+    box(TRIM, KEEP.u0 - 0.15, KEEP.u1 + 0.15, KEEP.t0 - 0.15, KEEP.t0, y, y + 0.25);
+    box(TRIM, KEEP.u0 - 0.15, KEEP.u1 + 0.15, KEEP.t1, KEEP.t1 + 0.15, y, y + 0.25);
+    box(TRIM, KEEP.u0 - 0.15, KEEP.u0, KEEP.t0, KEEP.t1, y, y + 0.25);
+    box(TRIM, KEEP.u1, KEEP.u1 + 0.15, KEEP.t0, KEEP.t1, y, y + 0.25);
+  }
   const wallRing = (y0: number, y1: number, th: number): void => {
     box(TRIM, KEEP.u0, KEEP.u1, KEEP.t0, KEEP.t0 + th, y0, y1);
     box(TRIM, KEEP.u0, KEEP.u1, KEEP.t1 - th, KEEP.t1, y0, y1);
@@ -139,9 +175,28 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
   glow(EMIT.neon, NEON, KEEP.u0 - 0.08, KEEP.u0, KEEP.t0, KEEP.t1, KEEP.h + 0.4, KEEP.h + 0.5);
   glow(EMIT.neon, NEON, KEEP.u1, KEEP.u1 + 0.08, KEEP.t0, KEEP.t1, KEEP.h + 0.4, KEEP.h + 0.5);
 
-  // Corner towers: cream drums with window slits (some lit pink), a trim ring, a neon ring, a red cone.
+  // Corner towers: cream drums with window slits (some lit pink), a trim ring, a neon ring, a red cone. Up to the
+  // keep's roof a drum is only the three quarters outside the keep: the fourth would stand in the corner rooms.
+  const inKeep = (x: number, z: number): boolean => {
+    const [lu, lt] = toLocal(f, x, z);
+    return lu > KEEP.u0 + 0.01 && lu < KEEP.u1 - 0.01 && lt > KEEP.t0 + 0.01 && lt < KEEP.t1 - 0.01;
+  };
+  const drum = (tu: number, tt: number, y0: number, y1: number, n = 20): void => {
+    const [cx, cz] = W(tu, tt);
+    mb.kind = KIND.plain;
+    mb.color = lin(CREAM);
+    for (let i = 0; i < n; i++) {
+      const a0 = (i / n) * Math.PI * 2;
+      const a1 = ((i + 1) / n) * Math.PI * 2;
+      const am = (a0 + a1) / 2;
+      if (inKeep(cx + Math.cos(am) * TOWER_R, cz + Math.sin(am) * TOWER_R)) continue;
+      const p = (a: number, y: number): [number, number, number] => [cx + Math.cos(a) * TOWER_R, y, cz + Math.sin(a) * TOWER_R];
+      mb.poly4(p(a1, y0), p(a0, y0), p(a0, y1), p(a1, y1));
+    }
+  };
   for (const [tu, tt] of TOWERS) {
-    round(CREAM, tu, tt, [[0, TOWER_R], [TOWER_H, TOWER_R]]);
+    drum(tu, tt, 0, KEEP.h);
+    round(CREAM, tu, tt, [[KEEP.h, TOWER_R], [TOWER_H, TOWER_R]], 20);
     round(TRIM, tu, tt, [[TOWER_H - 0.3, TOWER_R + 0.12], [TOWER_H, TOWER_R + 0.12]]);
     round(0, tu, tt, [[TOWER_H - 0.62, TOWER_R + 0.06], [TOWER_H - 0.5, TOWER_R + 0.06]], 20, EMIT.neon);
     round(ROOF, tu, tt, [[TOWER_H, TOWER_R + 0.5], [TOWER_H + 0.4, TOWER_R + 0.3], [TOWER_H + 5.5, 0.03]], 18);
@@ -151,6 +206,7 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
       for (const [du, dt] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
         const cu = tu + du * TOWER_R;
         const ct = tt + dt * TOWER_R;
+        if (inKeep(...W(cu, ct))) continue;
         const lit = (Math.round(tu + tt * 3 + y) + du + dt) % 3 === 0;
         const hu = du === 0 ? 0.2 : 0.06;
         const ht = dt === 0 ? 0.2 : 0.06;
@@ -181,6 +237,7 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
 
   // Street level: the porch (canopy on two columns, tinted doors in a lit frame), the screen wall with
   // planters, the rate board, the car entrance behind its strip curtain, and the side door.
+  off = CX - 12;
   box(TRIM, 9.0, 15.0, 1.6, KEEP.t0, 3.3, 3.6);
   glow(EMIT.always, [1.2, 0.7, 0.75], 9.4, 14.6, 1.8, 3.8, 3.27, 3.3);
   for (const cu of [9.2, 14.8]) {
@@ -189,10 +246,10 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
     const [x, z] = W(cu, 1.8);
     mb.cylinder(x, z, 0, 3.3, 0.15, 10);
   }
-  box(0x1a1418, 10.5, 13.5, KEEP.t0 - 0.06, KEEP.t0, 0, 2.8);
-  glow(EMIT.always, [1.3, 0.85, 0.45], 10.35, 10.5, KEEP.t0 - 0.08, KEEP.t0, 0, 2.95);
-  glow(EMIT.always, [1.3, 0.85, 0.45], 13.5, 13.65, KEEP.t0 - 0.08, KEEP.t0, 0, 2.95);
-  glow(EMIT.always, [1.3, 0.85, 0.45], 10.35, 13.65, KEEP.t0 - 0.08, KEEP.t0, 2.8, 2.95);
+  // The doorway's lit frame (the doors themselves are the interior's sliding glass, seen through the opening).
+  glow(EMIT.always, [1.3, 0.85, 0.45], 10.35, 10.5, KEEP.t0 - 0.08, KEEP.t0, 0, DOOR_H + 0.15);
+  glow(EMIT.always, [1.3, 0.85, 0.45], 13.5, 13.65, KEEP.t0 - 0.08, KEEP.t0, 0, DOOR_H + 0.15);
+  glow(EMIT.always, [1.3, 0.85, 0.45], 10.35, 13.65, KEEP.t0 - 0.08, KEEP.t0, DOOR_H, DOOR_H + 0.15);
   box(0xd8a0b0, 9.6, 14.4, 1.0, 1.3, 0, 2.1);
   box(TRIM, 9.5, 14.5, 0.95, 1.35, 2.1, 2.22);
   for (const pu of [9.0, 14.4]) {
@@ -200,12 +257,17 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
     round(0x2e5a34, pu + 0.3, 1.15, [[0.55, 0.05], [0.8, 0.42], [1.3, 0.38], [1.6, 0.05]], 8);
   }
   box(0x2a1a22, 6.0, 8.0, 3.6, KEEP.t0, 0.3, 3.1);
+  off = 8.9;
   box(0x141016, 16.3, 18.8, KEEP.t0 - 0.05, KEEP.t0, 0, 2.8);
   for (let s = 16.4; s < 18.7; s += 0.2) box(0xe06090, s, s + 0.14, KEEP.t0 - 0.12, KEEP.t0 - 0.08, 0.35, 2.7);
   box(TRIM, 16.1, 19.0, KEEP.t0 - 0.12, KEEP.t0, 2.8, 3.0);
   glow(EMIT.always, [0.3, 0.45, 1.3], 17.2, 17.9, KEEP.t0 - 0.1, KEEP.t0, 3.1, 3.8);
-  box(0x3a3236, KEEP.u0 - 0.06, KEEP.u0, 11.5, 12.5, 0, 2.2);
-  glow(EMIT.lamp, [0.25, 0.16, 0.08], KEEP.u0 - 0.25, KEEP.u0, 11.9, 12.1, 2.4, 2.6);
+  off = 0;
+  // The side doorway: an opening under a frame (its door is the interior's, and swings), a warm lamp over it.
+  box(0x5a4a3a, KEEP.u0 - 0.08, KEEP.u0, SIDE_DOOR[0] - 0.07, SIDE_DOOR[0], 0, 2.27);
+  box(0x5a4a3a, KEEP.u0 - 0.08, KEEP.u0, SIDE_DOOR[1], SIDE_DOOR[1] + 0.07, 0, 2.27);
+  box(0x5a4a3a, KEEP.u0 - 0.08, KEEP.u0, SIDE_DOOR[0] - 0.07, SIDE_DOOR[1] + 0.07, 2.2, 2.27);
+  glow(EMIT.lamp, [0.25, 0.16, 0.08], KEEP.u0 - 0.25, KEEP.u0, (SIDE_DOOR[0] + SIDE_DOOR[1]) / 2 - 0.1, (SIDE_DOOR[0] + SIDE_DOOR[1]) / 2 + 0.1, 2.4, 2.6);
 
   const mesh = new THREE.Mesh(mb.build()!, city);
   mesh.castShadow = mesh.receiveShadow = true;
@@ -248,12 +310,12 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
     g.fillText(text, x, y);
   };
   plane(canvas(1320, 340, (g) => {
-    neonText(g, 'HOTEL ROUGE', 660, 150, "italic bold 170px 'Georgia', 'Times New Roman', serif", '#ff4fa8');
-    neonText(g, 'ホテル ルージュ', 660, 290, "bold 64px 'Yu Gothic', 'Meiryo', sans-serif", '#ffb0dc');
-  }), 13.2, 3.4, 12, KEEP.t0 - 0.06, 11.9, true);
+    neonText(g, HOTEL.en.toUpperCase(), 660, 150, "italic bold 170px 'Georgia', 'Times New Roman', serif", '#ff4fa8');
+    neonText(g, HOTEL.jp, 660, 290, "bold 64px 'Yu Gothic', 'Meiryo', sans-serif", '#ffb0dc');
+  }), 13.2, 3.4, 12 + (CX - 12), KEEP.t0 - 0.06, 11.9, true);
   plane(canvas(130, 700, (g) => {
     ['ホ', 'テ', 'ル'].forEach((ch, i) => neonText(g, ch, 65, 130 + i * 220, "bold 120px 'Yu Gothic', 'Meiryo', sans-serif", '#ff4fa8'));
-  }), 1.3, 7, 3, 4 - TOWER_R - 0.1, 12.5, true);
+  }), 1.3, 7, KEEP.u0, KEEP.t0 - TOWER_R - 0.1, 12.5, true);
   plane(canvas(300, 420, (g) => {
     g.fillStyle = '#1c0c16';
     g.fillRect(0, 0, 300, 420);
@@ -263,7 +325,7 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
     g.fillStyle = '#ffd8ec';
     g.textAlign = 'center';
     g.font = "italic bold 44px 'Georgia', serif";
-    g.fillText('ROUGE', 150, 70);
+    g.fillText(HOTEL.short, 150, 70);
     g.font = "bold 34px 'Yu Gothic', 'Meiryo', sans-serif";
     g.fillText('休憩  ¥4,800〜', 150, 150);
     g.fillText('宿泊  ¥8,800〜', 150, 205);
@@ -274,7 +336,7 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
     g.fillStyle = '#ffffff';
     g.font = "bold 52px 'Yu Gothic', 'Meiryo', sans-serif";
     g.fillText('空室', 150, 360);
-  }), 1.9, 2.66, 7, 3.58, 1.7, false);
+  }), 1.9, 2.66, 7 + (CX - 12), 3.58, 1.7, false);
   plane(canvas(480, 90, (g) => {
     g.fillStyle = '#2a1a22';
     g.fillRect(0, 0, 480, 90);
@@ -282,8 +344,8 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.font = "italic bold 54px 'Georgia', serif";
-    g.fillText('Hotel Rouge', 240, 48);
-  }), 2.4, 0.45, 12, 0.98, 1.55, false);
+    g.fillText(HOTEL.en, 240, 48);
+  }), 2.4, 0.45, 12 + (CX - 12), 0.98, 1.55, false);
 
   // A couple slipping in behind the screen wall.
   const people = new GhostBuilder();
@@ -308,6 +370,7 @@ export function buildLoveHotel(b: Building3, city: THREE.Material, ghost: THREE.
     const m = new THREE.Mesh(crowd, ghost);
     m.renderOrder = 2;
     group.add(m);
+    DECOR_PEOPLE.push(m);
   }
 
   return {

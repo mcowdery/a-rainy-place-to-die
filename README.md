@@ -10,14 +10,14 @@ Requires Node 22 or newer.
 
 ```
 npm ci
-npm run dev        # then open http://localhost:5173/district.html
+npm run dev        # then open http://localhost:5173/
 ```
 
 | Page | What it is |
 |---|---|
-| `district.html` | the city: walk, drive, ride |
+| `index.html` | the city: walk, drive, ride |
 | `race.html`, `garage.html` | racing venues and your cars |
-| `models.html`, `mob.html`, `characters.html`, `scenes.html` | showrooms for cars, passers-by, cast and the rooms behind windows |
+| `models.html` (index), `models-*.html`, `mob.html`, `mob-ph.html`, `characters.html`, `scenes.html` | showrooms: a page a room for cars, Mack's gear, plants, buildings, transit (Tokyo) and Manila's vehicles, plants, boats and buildings, then passers-by, cast and the rooms behind windows |
 | `fight.html`, `figures.html`, `humans.html`, `anims.html` | test areas for melee, generated figures, the crowd and animations (dev only) |
 
 In the city: `M` the map, `` ` `` the debug menu, `F` flies, `Space` jumps. URL parameters (`?time=night&weather=rain&spawn=<node>`) are listed in [CLAUDE.md](CLAUDE.md).

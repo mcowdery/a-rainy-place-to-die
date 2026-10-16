@@ -1,3 +1,4 @@
+import './nav';
 import { edition } from '@edition';
 import { addKey, adjustHold, castChoices, clone, cm, copyHoldEverywhere, copyPose, deg, emptyScene, HANDLE_PART, holdCorners, holdTurnAt, holdTurnLead, itemAtDepth, itemBox, itemParams, itemWith, moveKey, nudgeItem, onHold, outfitsFor, PART_BONES, PART_LABEL, poseAt, ringAngle, ringPoints, ringSlide, setFigDepth, turned, type RingPoint, removeHoldEverywhere, removeKey, resetHold, sceneKeys, setSceneKeys, undress, undressed, withHeels, type KeyPose, type SceneDoc } from '../real/sceneEdit';
 import { adultOnly, isBuiltIn, placeFor, SCENE_ID, sceneFileFor, sceneText, type ScenePlace } from '../real/sceneFiles';
@@ -1521,7 +1522,7 @@ function renderSide(): void {
     : entry.place === 'builtin' || (entry.overrides && entry.place !== place)
       ? `built in (windowScenes.ts): an edited copy is saved as ${place === 'adult' ? 'adult/content/windows' : 'content/world3d/windows'}/${doc.id}.json${place === 'adult' ? ' (adult: the uncensored edition\'s own version of it; the others keep the built-in scene)' : ''}`
     : `${entry.place === 'adult' ? 'adult/content/windows' : 'content/world3d/windows'}/${doc.id}.json${entry.overrides ? ' (an edited copy of the built-in scene)' : ''}`;
-  const city = isWindowScene(s) ? `district.html?debug=1&clock=23:00&vignette=${doc.id}` : 'district.html?debug=1&clock=23:00&windowVice=4&spawn=hotel_rouge.front';
+  const city = isWindowScene(s) ? `./?debug=1&clock=23:00&vignette=${doc.id}` : './?debug=1&clock=23:00&windowVice=4&spawn=hotel_rouge.front';
   side.append(
     el('h3', {}, 'File'),
     el('div', { className: 'hint' }, where),

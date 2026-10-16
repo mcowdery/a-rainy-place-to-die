@@ -1,7 +1,7 @@
 // The people following Mack: standing behind him, walking, running, round a corner, in his car's seats from the
 // cockpit and from outside, and out of it again.
 //   node debug-shots/followers.mjs <out dir> [query]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 import { writeGallery } from './gallery.mjs';
@@ -10,12 +10,12 @@ mkdirSync(out, { recursive: true });
 const extra = process.argv[3] ? `&${process.argv[3]}` : '';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 300)); });
 await page.addInitScript(() => { try { localStorage.setItem('citypop.thirdPerson', '0'); localStorage.setItem('citypop.driveView', 'cockpit'); } catch {} });
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&time=day&weather=clear&spawn=city_garage.front&car=home&flags=following_koharu,following_detective${extra}`);
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&time=day&weather=clear&spawn=city_garage.front&car=home&flags=following_koharu,following_detective${extra}`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
 await page.waitForTimeout(4000);

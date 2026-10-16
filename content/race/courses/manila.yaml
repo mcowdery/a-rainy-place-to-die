@@ -1,9 +1,9 @@
-# マニラ湾 Manila Bay Street Circuit (format: src/race/course.ts, kind circuit). A street circuit abroad: the
+# マニラヤ湾 Manilaya Bay Street Circuit (format: src/race/course.ts, kind circuit). A street circuit abroad: the
 # start straight is the bayside boulevard (palms, the sea wall, the sun setting over the bay), then the course
 # turns inland through the city's streets (tight corners between concrete walls, shopfronts, jeepneys parked out
 # of the way) and back down to the bay. Raced in laps against a field (race/circuit.ts); free drive to learn it.
 # World x east, z south, metres; the bay to the south.
-name: マニラ湾 Manila Bay Street Circuit
+name: マニラヤ湾 Manilaya Bay Street Circuit
 blurb: A street circuit on the bay at sunset. The long boulevard by the sea wall, then the city's corners between the walls. Three laps against four rivals.
 kind: circuit
 atmosphere:

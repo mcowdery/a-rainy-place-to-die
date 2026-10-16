@@ -1,3 +1,5 @@
+import '../showroom/nav';
+import { installSnap } from '../../debug/snap';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -13,6 +15,7 @@ import { Character, setCharacterEnvironment } from '../models/characters';
 import { cityMaterial, cityUniforms } from '../real/city';
 import { KIND, lin, MeshBuilder } from '../real/meshBuilder';
 import { addFigure, GHOST_COLORS, GhostBuilder, ghostMaterial, registerMobModel, setMobLook, type FigureSpec } from '../real/people';
+import { DEAD_LAMPS, DeadHours, POSSESSED } from './fallen';
 import { convertedDocs, CROWD, FAMILIES, shuffled, type Human } from './figures';
 
 /**
@@ -21,8 +24,11 @@ import { convertedDocs, CROWD, FAMILIES, shuffled, type Human } from './figures'
  *
  * - **The street**: the generated crowd walking both ways along a street and standing about, as the mob does.
  * - **A line-up for each family**: the cast (the salaryman, the maid, Julie), women, men, students, children.
- * - **As Mack** (V): first person on that street, among them, with the fight page's fight (fight/fightMode.ts):
- *   the people who come at you are drawn from the figures here (the panel's Enemies).
+ * - **The dead hours** (humans/fallen.ts): a night street with the fallen things that start from a MakeHuman body:
+ *   the possessed (the crowd made over), shades (stretched, faceless, smoking at the edges; in first person they
+ *   stalk you), a giant. Shown at night.
+ * - **As Mack** (V): first person on that street (or the dead hours', from there), among them, with the fight page's
+ *   fight (fight/fightMode.ts): the people who come at you are drawn from the figures here (the panel's Enemies).
  *
  * How they're drawn (K, the panel's Look): **as built**, the default: the textured models, the look of the salaryman
  * and the maid; or converted for the mob's material (what mob.html used to show), in **the mob's colours** or
@@ -41,6 +47,8 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const query = new URLSearchParams(location.search);
 
 const renderer = new THREE.WebGLRenderer({ antialias: false });
+// F9: a snapshot and a note for reporting an issue (debug/snap.ts, saved to debug-shots/).
+const snap = installSnap(renderer.domElement, 'humans');
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -79,9 +87,8 @@ key.shadow.bias = -0.0003;
 key.shadow.normalBias = 0.02;
 const KEY_FROM = new THREE.Vector3(14, 30, 22);
 const street = [new THREE.PointLight(0xffc98a, 0, 34, 1.6), new THREE.PointLight(0xffc98a, 0, 34, 1.6), new THREE.PointLight(0x9ac8ff, 0, 34, 1.6)];
-street[0].position.set(-11, 5.5, -3);
-street[1].position.set(9, 5.5, 1);
-street[2].position.set(0, 5, 6);
+// (Where they stand on the street; on the dead hours' street they're moved onto its lamps, which stand the same.)
+street.forEach((p, i) => p.position.copy(DEAD_LAMPS[i]));
 scene.add(hemi, key, key.target, ...street);
 
 const cityU = cityUniforms();
@@ -222,6 +229,18 @@ const streetStage = newStage('the street', new THREE.Vector3(0, 0, 0));
   items.push({ name: 'the street, as you walk it', stage: st, at: new THREE.Vector3(0, 1.4, -0.5), size: 8, view: new THREE.Vector3(0.9, 0.02, 0.42).normalize() });
   items.push({ name: 'the street, close', stage: st, at: new THREE.Vector3(-2, 1.1, -1.5), size: 7, view: new THREE.Vector3(0.15, 0.1, 1).normalize(), close: true });
 }
+// The dead hours: a street of its own south of the rest, its people loaded and moved by humans/fallen.ts.
+const deadStage = newStage('the dead hours', new THREE.Vector3(0, 0, 40));
+const dead = new DeadHours(deadStage.group, deadStage.backdrop, deadStage.centre, document.body);
+items.push({ name: 'the dead hours', stage: deadStage, at: new THREE.Vector3(0, 1.2, 40), size: 30, view: new THREE.Vector3(0, 0.3, 1).normalize() });
+items.push({ name: 'the dead hours, as you walk it', stage: deadStage, at: new THREE.Vector3(0, 1.5, 40), size: 9, view: new THREE.Vector3(0.85, 0.03, 0.5).normalize() });
+items.push({ name: 'the dead hours: the possessed at the wall', stage: deadStage, at: new THREE.Vector3(-12.5, 1.3, 35.2), size: 7, view: new THREE.Vector3(0.1, 0.12, 1).normalize(), close: true });
+items.push({ name: 'the dead hours: shades', stage: deadStage, at: new THREE.Vector3(1, 1.6, 38), size: 18, view: new THREE.Vector3(0.1, 0.08, 1).normalize(), close: true });
+items.push({ name: 'the dead hours: the hat man', stage: deadStage, at: new THREE.Vector3(-6, 1.2, 33), size: 3.2, view: new THREE.Vector3(0.05, 0.05, 1).normalize(), close: true });
+items.push({ name: 'the dead hours: the woman', stage: deadStage, at: new THREE.Vector3(9, 1.2, 42.4), size: 3, view: new THREE.Vector3(0.15, 0.05, 1).normalize(), close: true });
+items.push({ name: 'the dead hours: the bare one', stage: deadStage, at: new THREE.Vector3(19.5, 1.2, 39), size: 3.2, view: new THREE.Vector3(-1, 0.05, 0.25).normalize(), close: true });
+items.push({ name: 'the dead hours: a possessed face', stage: deadStage, at: new THREE.Vector3(-3, 1.42, 40.6), size: 0.7, view: new THREE.Vector3(0.3, 0.05, 1).normalize(), close: true });
+items.push({ name: 'the dead hours: the giant', stage: deadStage, at: new THREE.Vector3(-18.5, 2.2, 37.6), size: 6, view: new THREE.Vector3(0.6, 0.15, 1).normalize(), close: true });
 // A line-up for each family, in rows facing you (orbit round for their backs), on ground of their own behind the street.
 const UP = new THREE.Vector3(0, 0.3, 1).normalize();
 const ABOVE = new THREE.Vector3(0, 0.62, 1).normalize();
@@ -331,8 +350,11 @@ type Face = 'rest' | 'smile' | 'talk' | 'worry';
 const FACES: readonly (readonly [Face, string])[] = [['rest', 'at rest'], ['smile', 'smiling'], ['talk', 'talking'], ['worry', 'worried']];
 const FACE_MIX: Record<Face, Readonly<Record<string, number>> | null> = { rest: null, smile: { smile: 1 }, talk: { smile: 0.25 }, worry: { brow_sad: 0.9, squint: 0.2 } };
 let face: Face = (FACES.find(([f]) => f === query.get('face'))?.[0] ?? 'rest') as Face;
+/** What the enemies' faces hold at rest (scripts/blender/enemy_figures.py builds each a scowl or a sneer): a face at
+ * rest reads as calm whatever its bones. (A model has only its own: the other is ignored.) */
+const ENEMY_FACE: Readonly<Record<string, number>> = { scowl: 0.85, sneer: 0.85 };
 function wearFace(c: Character): void {
-  c.express(FACE_MIX[face]);
+  c.express(FACE_MIX[face] ?? (/^(rk|cp)_/.test(c.name) ? ENEMY_FACE : null));
   c.talking = face === 'talk';
 }
 function setFace(f: Face): void {
@@ -348,6 +370,10 @@ function setMotion(m: Motion): void {
 function askFor(st: Stage): void {
   if (st.asked) return;
   st.asked = true;
+  if (st === deadStage) {
+    dead.load();
+    return;
+  }
   st.people.forEach((p, i) => {
     if (!p.human.textured) return;
     waiting++;
@@ -415,31 +441,38 @@ function convert(): Promise<void> {
 class StreetFight extends FightMode {
   /** The passers-by: not walls (a wall slam wants a wall). */
   protected override notWalls(): THREE.Object3D[] {
-    return [...super.notWalls(), streetStage.group];
+    return [...super.notWalls(), streetStage.group, deadStage.group];
   }
 }
 const fp = new StreetFight(scene, camera, renderer.domElement, controls, charEnv, () => 0);
+// The dead hours' fallen come for you through the fight: a possessed (or the giant) turns into one of its fighters
+// where it stands, and a shade's touch hurts.
+dead.join = (name, x, z, yaw, opts) => fp.brawl.join(name, x, z, yaw, opts);
+dead.hurt = (damage, what) => fp.brawl.hurt(damage, what);
 (window as unknown as { __fp: unknown }).__fp = fp.script();
 (window as unknown as { __lab: unknown }).__lab = { THREE, scene, env: charEnv };
 
 /** Who comes at you: the fight page's salaryman, or the men, the women or both from the crowd here (adults only). */
-type Enemies = 'salaryman' | 'men' | 'women' | 'everyone';
-const ENEMIES: readonly (readonly [Enemies, string])[] = [['salaryman', 'the salaryman'], ['men', 'men'], ['women', 'women'], ['everyone', 'men and women']];
+// (Not the shades: they aren't fought. Their touch hurts, and looking at them keeps them off: humans/fallen.ts.)
+type Enemies = 'salaryman' | 'men' | 'women' | 'everyone' | 'possessed';
+const ENEMIES: readonly (readonly [Enemies, string])[] = [['salaryman', 'the salaryman'], ['men', 'men'], ['women', 'women'], ['everyone', 'men and women'], ['possessed', 'the possessed']];
 const fighters = (who: Enemies): Human[] => {
+  if (who === 'possessed') return [...POSSESSED];
   if (who === 'salaryman') return FAMILIES.flatMap((f) => f.humans).filter((h) => h.name === 'salaryman');
   const adults = FAMILIES.filter((f) => f.key === 'mm' || f.key === 'mw').flatMap((f) => f.humans).filter((h) => h.textured);
   return adults.filter((h) => who === 'everyone' || h.male === (who === 'men'));
 };
 let enemies: Enemies = 'salaryman';
 let deals = 0;
-/** Sets who you fight (picked again, other faces from the same set); a group there already is replaced. */
-function setEnemies(who: Enemies): void {
+/** Sets who you fight (picked again, other faces from the same set); a group there already is replaced, unless
+ * `respawn` is false (the dead hours' street starting over: nobody fights until they come for you). */
+function setEnemies(who: Enemies, respawn = true): void {
   const pool = shuffled(fighters(who), ++deals);
   if (pool.length === 0) return;
   enemies = who;
   const had = fp.brawl.thugs.filter((t) => t.root.visible && t.tier === 'mook').length;
   fp.brawl.setCast(pool.map((h) => h.name), (pool.find((h) => h.male) ?? pool[0]).name);
-  if (had > 0 && fp.active) fp.spawn(had);
+  if (respawn && had > 0 && fp.active) fp.spawn(had);
 }
 
 // ---- Settings ----
@@ -462,7 +495,11 @@ const apply = (): void => {
   hemi.intensity = L.hi;
   key.color.setHex(L.kc);
   key.intensity = L.ki;
-  for (const p of street) p.intensity = L.pts;
+  street.forEach((p, i) => {
+    p.intensity = L.pts;
+    p.position.copy(DEAD_LAMPS[i]);
+    if (current === deadStage) p.position.add(deadStage.centre);
+  });
   renderer.toneMappingExposure = L.exp;
   key.target.position.copy(current.centre);
   key.position.copy(current.centre).add(KEY_FROM);
@@ -508,6 +545,8 @@ let glide: { t0: number; from: THREE.Vector3; to: THREE.Vector3; camFrom: THREE.
 let viewed: Item = items[0];
 const focus = (it: Item, now = false): void => {
   viewed = it;
+  // (The dead hours are a night's: shown at night on the way in, the lighting free to change after.)
+  if (it.stage === deadStage && current !== deadStage) mode = 'night';
   current = it.stage;
   apply();
   // Far enough to take in `size` metres across.
@@ -526,15 +565,28 @@ const focus = (it: Item, now = false): void => {
   return !!it;
 };
 
-/** Into first person on the street (its south side, facing the wall), or back out to the view you had. */
+/** Into first person on the street (its south side, facing the wall; the dead hours' street from there), or back out
+ * to the view you had. */
+let fpStage: Stage = streetStage;
+/** Gone down on the dead hours' street: it starts over (the fallen home, you where you came in) once the frame's done. */
+let deadDown = false;
 const enterFp = async (): Promise<void> => {
-  current = streetStage;
+  fpStage = current === deadStage ? deadStage : streetStage;
+  current = fpStage;
+  // (On the dead hours' street the fight is the possessed's: those who come for you, and whoever comes on after you go down.)
+  if (fpStage === deadStage) setEnemies('possessed', false);
+  fp.brawl.afterDown = fpStage === deadStage ? () => (deadDown = true) : null;
   apply();
-  await fp.enter(0, 5.2, 0);
+  await fp.enter(fpStage.centre.x, fpStage.centre.z + 5.2, 0);
 };
 const leaveFp = (): void => {
   fp.exit();
-  focus(viewed.stage === streetStage ? viewed : items[0], true);
+  fp.brawl.afterDown = null;
+  deadDown = false;
+  dead.reset();
+  // (The ones who came for you are put away: dealt again from the same set.)
+  if (fpStage === deadStage) setEnemies(enemies, false);
+  focus(viewed.stage === fpStage ? viewed : items[0], true);
 };
 const inFight = (fn: () => void): void => {
   if (fp.active) fn();
@@ -582,8 +634,15 @@ function renderPanel(): void {
     });
   }
   section('As Mack (V)');
-  button(fp.active ? 'back to orbiting (V)' : 'walk the street, first person (V)', fp.active, () => (fp.active ? leaveFp() : void enterFp()));
+  button(fp.active ? 'back to orbiting (V)' : current === deadStage ? "walk the dead hours' street, first person (V)" : 'walk the street, first person (V)', fp.active, () => (fp.active ? leaveFp() : void enterFp()));
   if (fp.active) button(fp.third ? 'third person (Q)' : 'first person (Q)', fp.third, () => (fp.third = !fp.third));
+  if (current === deadStage) {
+    section('The dead hours');
+    button(dead.stalk ? 'shades stalk you (first person)' : 'shades stand still', dead.stalk, () => {
+      dead.stalk = !dead.stalk;
+      renderPanel();
+    });
+  }
   section('Enemies');
   for (const [who, text] of ENEMIES) if (fighters(who).length > 0) button(text, enemies === who, () => setEnemies(who));
   section('In hand');
@@ -623,7 +682,7 @@ function renderPanel(): void {
   button('→ the fight test', false, () => (location.href = 'fight.html'));
 }
 /** What the panel shows that keys change, to redraw it when one does. */
-const panelState = (): string => [fp.active, fp.third, fp.hand, enemies, look, motion, face, mode, labelsOn, viewed.name].join('|');
+const panelState = (): string => [fp.active, fp.third, fp.hand, enemies, look, motion, face, mode, labelsOn, viewed.name, current.name, dead.stalk].join('|');
 let panelShown = '';
 
 const keys = new Set<string>();
@@ -675,6 +734,7 @@ if (query.get('fp') === '1') {
     apply();
   },
   enemies: setEnemies,
+  dead,
   motion: setMotion,
   face: setFace,
 };
@@ -700,15 +760,25 @@ renderer.setAnimationLoop(() => {
       }
       p.c.update(dt);
     }
+    if (current === deadStage) {
+      dead.update(dt, camera, fp.active);
+      deadStage.triangles = dead.triangles;
+    }
   }
   wasActive = fp.active;
   if (fp.active) {
-    // (First person is always the street's.)
-    if (current !== streetStage) {
-      current = streetStage;
+    // (First person is on the street it was entered from.)
+    if (current !== fpStage) {
+      current = fpStage;
       apply();
     }
     fp.update(dt);
+    if (deadDown) {
+      deadDown = false;
+      setEnemies('possessed', false);
+      dead.reset();
+      void fp.enter(deadStage.centre.x, deadStage.centre.z + 5.2, 0);
+    }
   } else {
     const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 12 : 3.5) * dt;
     camera.getWorldDirection(fwd);
@@ -741,18 +811,29 @@ renderer.setAnimationLoop(() => {
   censor.track(fp.body, camera);
   renderer.info.reset();
   composer.render(dt);
+  snap.afterRender();
   drawn = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
   labels.render(scene, camera);
   if (panelState() !== panelShown) {
     panelShown = panelState();
     renderPanel();
   }
-  const there = current.people.filter((p) => (look === 'original' ? p.c : p.human.converted)).length;
-  // (The nude body types were never built textured, and the cast never converted.)
-  const missing = current.people.some((p) => (look === 'original' ? p.human.textured : p.human.converted)) ? '' : look === 'original' ? " · these exist only converted: K for the mob's looks" : ' · these exist only as built: K';
+  const there = current === deadStage ? (look === 'original' ? dead.loaded : 0) : current.people.filter((p) => (look === 'original' ? p.c : p.human.converted)).length;
+  // (The nude body types were never built textured, and the cast never converted; the dead hours are as built only.)
+  const missing =
+    current === deadStage
+      ? look === 'original'
+        ? ` · ${dead.status()}`
+        : ' · these exist only as built: K'
+      : current.people.some((p) => (look === 'original' ? p.human.textured : p.human.converted))
+        ? ''
+        : look === 'original'
+          ? " · these exist only converted: K for the mob's looks"
+          : ' · these exist only as built: K';
+  const loadingMore = waiting + (current === deadStage ? dead.waiting : 0);
   const status = [
     `MAKEHUMAN TEST · ${current.name} · ${LOOKS.find(([l]) => l === look)![1]}${look === 'original' ? ` · moving by ${MOTIONS.find(([m]) => m === motion)![1]}` : ''} · ${mode}`,
-    `${there} figures${missing}${look === 'original' ? ` · ${Math.round(current.triangles / 1000)}k triangles in them` : ''}${waiting > 0 ? ` · loading ${waiting} more` : ''}${look !== 'original' && !ghost ? ' · converting…' : ''} · a frame: ${drawn.calls} draw calls, ${(drawn.triangles / 1e6).toFixed(2)}M triangles (shadows too), ${frameMs.toFixed(1)} ms`,
+    `${there} figures${missing}${look === 'original' ? ` · ${Math.round(current.triangles / 1000)}k triangles in them` : ''}${loadingMore > 0 ? ` · loading ${loadingMore} more` : ''}${look !== 'original' && !ghost ? ' · converting…' : ''} · a frame: ${drawn.calls} draw calls, ${(drawn.triangles / 1e6).toFixed(2)}M triangles (shadows too), ${frameMs.toFixed(1)} ms`,
   ];
   $('hud').textContent = fp.active
     ? `${status.join('\n')}\n${fp.hud()}`

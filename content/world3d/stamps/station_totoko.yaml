@@ -1,22 +1,22 @@
-# 東都港駅 Tōto-kō Station (monorail): a station landmark built by real/station.ts, its street face 10 m from the
+# 東京港駅 Tokyo Port Station (monorail): a station landmark built by real/station.ts, its street face 10 m from the
 # line (see content/world3d/rail.yaml).
 id: station_totoko
-name: 東都港駅 Tōto-kō Station
+name: 東京港駅 Tokyo Port Station
 footprint: [60, 24]
 height: 16.6
 front: south
 landmark: station
-station: { jp: 東都港, en: TŌTO-KŌ, line: monorail }
+station: { jp: 東京港, en: TOKYO PORT, line: monorail }
 nodes:
   exit:
     kind: spawn
-    name: Tōto-kō Station
+    name: Tokyo Port Station
     at: [30, 8]
     facing: north
     view: [20, 16]
   platform:
     kind: spawn
-    name: Tōto-kō Station (platform)
+    name: Tokyo Port Station (platform)
     at: [44, 3.2]
     floor: 9.1
     facing: south

@@ -3,7 +3,7 @@
 # (hotels, car parks, cargo sheds round the terminal); its south half is the airfield, drawn by real/airport.ts and
 # fenced off (not painted here, so it isn't generated).
 district: harbor
-area: 羽根島 Hanejima (Tōto Airport)
+area: 羽根島 Hanejima (Tokyo Airport)
 origin: [4, 23]
 map:
   - CCHHHHCC

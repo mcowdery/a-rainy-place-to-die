@@ -40,6 +40,8 @@ export interface HandHold {
   readonly wrap?: { readonly a: THREE.Vector3; readonly b: THREE.Vector3; readonly r: number; readonly rx?: number };
   /** The index finger rests on the trigger instead of closing with the rest. */
   readonly trigger?: boolean;
+  /** The index finger points (a button pressed) and the other fingers fold, without a rod to close on. */
+  readonly point?: boolean;
   /**
    * Where the hold lies in the hand: metres along it from the wrist, and off the palm. A gun's grip fills the
    * palm (the default); something thin (a steering wheel's rim) sits at the fingers' roots.

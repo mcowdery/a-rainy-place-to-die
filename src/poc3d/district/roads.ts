@@ -15,6 +15,8 @@ export interface EdgeSpec {
   readonly width: number;
   /** Raised central strip (m, 0 for none). */
   readonly median: number;
+  /** Metres of the width kept as a lane of its own along the kerbs (expressway.yaml `slipLane`): the traffic's lanes stay inside it. */
+  readonly slip?: number;
   readonly name: string;
   /** A street bridge carries this edge's road on over the water beyond it (a river bank leaves it whole). */
   readonly bridge?: boolean;

@@ -333,6 +333,20 @@ export class MeshBuilder {
     this.ni += 6;
   }
 
+  /** A triangle with per-vertex normals, wound as given (a loaded model's faces: models/payphone.ts). */
+  tri(p0: V3, p1: V3, p2: V3, n0: V3, n1: V3, n2: V3): void {
+    this.grow(3, 3);
+    const s = this.nv;
+    this.vert(p0[0], p0[1], p0[2], n0, 0, p0[1], 0, this.kind);
+    this.vert(p1[0], p1[1], p1[2], n1, 0, p1[1], 0, this.kind);
+    this.vert(p2[0], p2[1], p2[2], n2, 0, p2[1], 0, this.kind);
+    const I = this.idx;
+    I[this.ni] = s;
+    I[this.ni + 1] = s + 1;
+    I[this.ni + 2] = s + 2;
+    this.ni += 3;
+  }
+
   /** A general quad p0 -> p1 -> p2 -> p3 (counter-clockwise seen from the front). */
   poly4(p0: V3, p1: V3, p2: V3, p3: V3): void {
     this.grow(4, 6);

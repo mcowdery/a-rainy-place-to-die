@@ -9,31 +9,39 @@ import { hash } from '../../core/hash';
  * can't wear (a man in a maid's dress, a child in a suit) falls back to its everyday clothes. Pure, and
  * deterministic by seed (the chunk workers dress the crowds with it).
  */
-// (The later ones are the sculpted generation's, real/mobShape.ts; the classic templates draw each as the nearest of
+// (The Filipino ones, for Manila, are UNDER REVIEW in the mob showroom (mob.html) and in no mix yet: content/manila/PEOPLE-REVIEW.md
+// says how to turn them on once approved. The later ones are the sculpted generation's, real/mobShape.ts; the classic templates draw each as the nearest of
 // the first ten, people.ts CLASSIC_OUTFIT. Shorts and the down jacket keep to their seasons (district/peopleHours.ts);
 // nurses and doctors are in no mix yet: they want a place. `nude` is a woman's or a man's body with nothing over it,
 // barefoot, and `nude_heels` a woman's in high heels (a cabaret's dancer behind its door), for the rooms of adult
 // scenes (real/windowScenes.ts): never in a mix, and pickOutfit never gives either, so nobody in the street's crowd
 // can wear them.)
-export const OUTFITS = ['plain', 'long', 'suit', 'maid', 'school', 'kimono', 'yukata', 'work', 'police', 'otaku', 'dress', 'mini', 'gown', 'shorts', 'hoodie', 'office', 'track', 'nurse', 'doctor', 'apron', 'puffer', 'gym', 'yakuza', 'chinpira', 'bosozoku', 'boss', 'hood', 'yankee', 'drunk', 'irezumi', 'nude', 'nude_heels'] as const;
+export const OUTFITS = ['plain', 'long', 'suit', 'maid', 'school', 'kimono', 'yukata', 'work', 'police', 'otaku', 'dress', 'mini', 'gown', 'shorts', 'hoodie', 'office', 'track', 'nurse', 'doctor', 'apron', 'puffer', 'gym', 'yakuza', 'chinpira', 'bosozoku', 'boss', 'hood', 'yankee', 'drunk', 'irezumi', 'pinoy_school', 'baller', 'barong', 'vendor', 'jeep_crew', 'trike_driver', 'guard', 'cardigan', 'powersuit', 'blouson', 'knit', 'jinbei', 'chef', 'driver', 'doorman', 'trench', 'kappogi', 'coverall', 'hanten', 'leotard', 'leggings', 'runner', 'bikini', 'lingerie', 'streetwalker', 'bunny', 'bodycon', 'catsuit', 'crop', 'qipao', 'shirtless', 'trunks', 'matsuri', 'nude', 'nude_heels'] as const;
 export type Outfit = (typeof OUTFITS)[number];
 /** Nothing on (barefoot, or a woman in heels): only ever in a room of an adult scene. */
 export const isBare = (o: unknown): boolean => o === 'nude' || o === 'nude_heels';
+/**
+ * The clothes that show the most (underwear, a bunny's costume, a bikini, a catsuit, a bare midriff and a club dress
+ * that clings): left out of the demo's crowds, as its revealing ads are (`DEMO_HIDDEN_ART`). The standard and the
+ * uncensored builds have them. (A leotard, leggings, a runner's kit and a qipao show less and stay.)
+ */
+export const SUGGESTIVE: ReadonlySet<Outfit> = new Set<Outfit>(['lingerie', 'streetwalker', 'bunny', 'bikini', 'catsuit', 'crop', 'bodycon', 'leotard']);
 export type PeopleMix = Readonly<Partial<Record<Outfit, number>>>;
 
 /** Anywhere without a mix of its own. */
-export const CITY_PEOPLE: PeopleMix = { plain: 6, long: 3, suit: 2, school: 0.5, otaku: 1, police: 0.06, dress: 1, hoodie: 1, office: 1, shorts: 1.2, puffer: 1.5, hood: 0.1, chinpira: 0.1, drunk: 0.1 };
+export const CITY_PEOPLE: PeopleMix = { plain: 6, long: 3, suit: 2, school: 0.5, otaku: 1, police: 0.06, dress: 1, hoodie: 1, office: 1, shorts: 1.2, puffer: 1.5, hood: 0.1, chinpira: 0.1, drunk: 0.1, cardigan: 0.8, blouson: 0.8, knit: 0.8, trench: 0.5, leggings: 0.5, runner: 0.3, powersuit: 0.2, jinbei: 0.3, hanten: 0.3, kappogi: 0.2, chef: 0.2, coverall: 0.2 };
 
 export const DISTRICT_PEOPLE: Readonly<Record<string, PeopleMix>> = {
   // Kaburo: going out, the hosts and the salarymen on their way home.
-  neon: { plain: 5, long: 4, suit: 3, maid: 0.2, kimono: 0.2, otaku: 0.8, police: 0.12, dress: 1, mini: 0.8, gown: 0.5, hoodie: 0.6, office: 1, apron: 0.3, shorts: 0.8, puffer: 1, yakuza: 0.35, chinpira: 0.5, hood: 0.3, drunk: 0.5, yankee: 0.2, bosozoku: 0.1, boss: 0.15 },
+  // (The period's clothes, and after dark the night's: bodycon dresses and qipao on the club-goers, a few who work the streets. Where the night is alive, its zones add more.)
+  neon: { plain: 5, long: 4, suit: 3, maid: 0.2, kimono: 0.2, otaku: 0.8, police: 0.12, dress: 1, mini: 0.8, gown: 0.5, hoodie: 0.6, office: 1, apron: 0.3, shorts: 0.8, puffer: 1, yakuza: 0.35, chinpira: 0.5, hood: 0.3, drunk: 0.5, yankee: 0.2, bosozoku: 0.1, boss: 0.15, cardigan: 0.6, blouson: 0.8, knit: 0.8, trench: 0.6, leggings: 0.5, powersuit: 0.3, bodycon: 0.4, crop: 0.3, qipao: 0.15, runner: 0.2, streetwalker: 0.15, bunny: 0.1, doorman: 0.2, chef: 0.3, kappogi: 0.2, coverall: 0.1 },
   // Asagiri: the offices.
-  tower: { suit: 6, plain: 3, long: 2, police: 0.1, office: 3, dress: 0.5, puffer: 0.6, boss: 0.25 },
-  residential: { plain: 6, long: 2, school: 2, suit: 1.5, dress: 1, hoodie: 1, apron: 0.3, track: 0.3, shorts: 1, puffer: 1.2, yankee: 0.25 },
-  oldtown: { plain: 5, long: 2, kimono: 1, yukata: 0.6, suit: 0.5, school: 0.5, police: 0.06, apron: 0.4, dress: 0.5, shorts: 0.6, puffer: 1, chinpira: 0.3, irezumi: 0.15, yakuza: 0.15, drunk: 0.2 },
-  campus: { school: 5, plain: 3, long: 1, otaku: 2, hoodie: 1.5, track: 1, gym: 0.5, shorts: 0.8, puffer: 1 },
-  electric: { plain: 6, suit: 1, maid: 0.6, school: 1, otaku: 3, hoodie: 1.5, apron: 0.3, shorts: 0.8, puffer: 1, hood: 0.2, yankee: 0.3, chinpira: 0.2 },
-  harbor: { plain: 5, long: 1.5, suit: 1, work: 3, hoodie: 0.6, puffer: 0.8, chinpira: 0.4, irezumi: 0.3, hood: 0.4, bosozoku: 0.3, yakuza: 0.2 },
+  tower: { suit: 6, plain: 3, long: 2, police: 0.1, office: 3, dress: 0.5, puffer: 0.6, boss: 0.25, powersuit: 2, cardigan: 1, trench: 1.2, knit: 0.5, driver: 0.3, doorman: 0.3, runner: 0.3, leggings: 0.3 },
+  residential: { plain: 6, long: 2, school: 2, suit: 1.5, dress: 1, hoodie: 1, apron: 0.3, track: 0.3, shorts: 1, puffer: 1.2, yankee: 0.25, cardigan: 1.5, knit: 1.2, blouson: 1.5, hanten: 0.6, jinbei: 0.5, leggings: 1, runner: 0.6, kappogi: 0.4, trench: 0.5, coverall: 0.2 },
+  oldtown: { plain: 5, long: 2, kimono: 1, yukata: 0.6, suit: 0.5, school: 0.5, police: 0.06, apron: 0.4, dress: 0.5, shorts: 0.6, puffer: 1, chinpira: 0.3, irezumi: 0.15, yakuza: 0.15, drunk: 0.2, jinbei: 1, hanten: 1, kappogi: 1, chef: 0.6, cardigan: 1, knit: 0.6, qipao: 0.2, matsuri: 0.3, shirtless: 0.15 },
+  campus: { school: 5, plain: 3, long: 1, otaku: 2, hoodie: 1.5, track: 1, gym: 0.5, shorts: 0.8, puffer: 1, blouson: 1.5, knit: 1, runner: 1.2, leggings: 1.2, leotard: 0.4, cardigan: 0.8 },
+  electric: { plain: 6, suit: 1, maid: 0.6, school: 1, otaku: 3, hoodie: 1.5, apron: 0.3, shorts: 0.8, puffer: 1, hood: 0.2, yankee: 0.3, chinpira: 0.2, blouson: 1, knit: 0.8, leggings: 0.5, crop: 0.3, coverall: 0.3, runner: 0.2 },
+  harbor: { plain: 5, long: 1.5, suit: 1, work: 3, hoodie: 0.6, puffer: 0.8, chinpira: 0.4, irezumi: 0.3, hood: 0.4, bosozoku: 0.3, yakuza: 0.2, coverall: 2, shirtless: 0.6, blouson: 1, hanten: 0.6, jinbei: 0.3, chef: 0.2 },
 };
 
 /** The mix for a cell planned with `style` in district `kind`: the zone's, else the district's, else the city's. */
@@ -43,7 +51,7 @@ export function peopleMixFor(style: { readonly people?: PeopleMix }, kind: strin
 
 /** An outfit by the mix's weights from those `allowed`, from the seed. */
 export function pickOutfit(mix: PeopleMix, seed: number, allowed: (o: Outfit) => boolean): Outfit {
-  const entries = OUTFITS.filter((o) => (mix[o] ?? 0) > 0 && !isBare(o) && allowed(o));
+  const entries = OUTFITS.filter((o) => (mix[o] ?? 0) > 0 && !isBare(o) && allowed(o) && !(__EDITION__ === 'demo' && SUGGESTIVE.has(o)));
   const total = entries.reduce((a, o) => a + mix[o]!, 0);
   if (total <= 0) return 'plain';
   let x = (hash(seed, 0x0f7) / 4294967296) * total;
@@ -65,7 +73,7 @@ export const SMOKES = ['cigarette', 'cigar'] as const;
 export type Smoke = (typeof SMOKES)[number];
 
 /** Who never smokes in the street: the young, and those at work in a uniform that forbids it. */
-const NO_SMOKE: ReadonlySet<Outfit> = new Set<Outfit>(['school', 'track', 'gym', 'yankee', 'nurse', 'doctor', 'police', 'maid', 'apron', 'otaku', 'nude', 'nude_heels']);
+const NO_SMOKE: ReadonlySet<Outfit> = new Set<Outfit>(['school', 'track', 'gym', 'yankee', 'nurse', 'doctor', 'police', 'maid', 'apron', 'otaku', 'pinoy_school', 'leotard', 'runner', 'bikini', 'trunks', 'nude', 'nude_heels']);
 /** The share of each kind of person with one lit, standing about and walking along: [standing, walking]. */
 const SMOKE_SHARE: Readonly<Partial<Record<Outfit, readonly [number, number]>>> = {
   suit: [0.46, 0.17],
@@ -78,6 +86,13 @@ const SMOKE_SHARE: Readonly<Partial<Record<Outfit, readonly [number, number]>>> 
   hood: [0.45, 0.2],
   boss: [0.65, 0.35],
   drunk: [0.35, 0.12],
+  // (The night's trade smokes in a doorway; a cook on his break, a doorman, a driver, a labourer.)
+  streetwalker: [0.9, 0.4],
+  lingerie: [0.5, 0.2],
+  chef: [0.4, 0.1],
+  doorman: [0.35, 0.1],
+  driver: [0.35, 0.1],
+  coverall: [0.45, 0.2],
 };
 const SMOKE_MEN: readonly [number, number] = [0.38, 0.14];
 /** Women smoked far less, and seldom in the street; the nightlife's more than most. */

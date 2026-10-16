@@ -20,7 +20,11 @@ In a character definition ("garments": [...]):
   {"type": "haircut", "color": "#16130f", "hairline": [...], "volume": {...}, "cards": {...}, ...}
       a short cut combed back, in place of a hair asset: a shell from the scalp, thicker where the
       hair is longer, with a strand texture along its flow, and short alpha cards along the same flow
-      to break up its edges (see build_haircut)
+      to break up its edges (see build_haircut); with "curl": {...} a punch perm instead: the shell's maps are
+      tight curls (see curl_maps), with no cards
+  {"type": "chain", "color": "#b08a3e", ...}
+      a neck chain lying on whatever is worn (a gold chain): a tube round the base of the neck, lower at the
+      front; drop (metres it hangs at the front below the back), radius, back_up, roughness (see build_chain)
   {"type": "jacket", "over": ["<asset>", ...], "color": "#151313", ...}
       a leather rider jacket shaped from the skin itself (made by prepare(), before the clothes mask
       the body; see prepare_jacket): worn open, a stand collar, zips, a turned-in lip on its edges,
@@ -28,7 +32,12 @@ In a character definition ("garments": [...]):
       open_top, open_bottom (half-widths of the opening), collar, zip, thickness, min_off, gap,
       smooth, radial (how much the torso goes out from its axis rather than along the skin's
       normals), drape_below, drape_slope (see drape), smooth_after, decimate, roughness,
-      specular, grain, grain_tile, zip_color, zip_top; debug_colors paints the turned-in lip red
+      specular, grain, grain_tile, zip_color, zip_top; skirt_hem (metres from the pelvis bone: with it, the
+      jacket stops at `hem` above the crotch and a skirt hangs on down to there, flaring skirt_flare a metre,
+      skirt_rows, skirt_gap (half-width left open at the front), skirt_fold: a long coat, see coat_skirt;
+      open_len closes the front below that length), belt (a band at belt_z above the pelvis, belt_w, belt_gap,
+      belt_off, belt_color: see coat_belt, and with it coat_trim: lapels, the double-breasted panel and its
+      buttons, epaulettes, cuff straps, a buckle); debug_colors paints the turned-in lip red
       and the collar blue and prints the faces per material
 Everything is single-sided with double-sided materials; only the hair cards, the haircut and the jacket have a texture.
 """
@@ -806,6 +815,44 @@ def hair_shell_maps(tmpdir, color, size=256, seed=3, sheen=0.7):
     return out
 
 
+def curl_maps(tmpdir, color, size=256, seed=3, count=150, radius=(9, 14), sheen=0.75):
+    """Tileable maps for a punch perm: tight curls packed over the scalp, each a small dome with a dark gap round it,
+    as a colour and a tangent-space normal map (strong, so they read under the game's lights)."""
+    import os
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[0:size, 0:size].astype(np.float32)
+    h = np.zeros((size, size), dtype=np.float32)
+    for _ in range(int(count)):
+        cx, cy = rng.uniform(0, size, 2)
+        r = rng.uniform(*radius)
+        dx = (xx - cx + size / 2) % size - size / 2
+        dy = (yy - cy + size / 2) % size - size / 2
+        d = np.hypot(dx, dy) / r
+        # A curl is a ring more than a dome: brightest a little in from its edge.
+        dome = np.clip(1 - d * d, 0, 1) ** 0.5 * (0.75 + 0.25 * np.sin(np.clip(d, 0, 1) * math.pi))
+        h = np.maximum(h, dome)
+    h += 0.08 * rng.random((size, size)).astype(np.float32)
+    h = (h - h.min()) / (h.max() - h.min())
+    col = np.array(hex_rgb(color)[:3], dtype=np.float32)
+    rgb = col[None, None, :] * (0.3 + sheen * h[..., None] ** 1.3)
+    srgb = np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * np.power(np.maximum(rgb, 0), 1 / 2.4) - 0.055)
+    gx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 2.5
+    gy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 2.5
+    n = np.stack([-gx, -gy, np.ones_like(h)], axis=2)
+    n /= np.linalg.norm(n, axis=2, keepdims=True)
+    out = []
+    for nm, px, colour in (('curl_color', srgb, True), ('curl_normal', n * 0.5 + 0.5, False)):
+        img = bpy.data.images.new(nm, size, size, alpha=False)
+        if not colour:
+            img.colorspace_settings.name = 'Non-Color'
+        img.pixels.foreach_set(np.concatenate([px, np.ones((size, size, 1), np.float32)], axis=2).astype(np.float32).ravel())
+        img.filepath_raw = os.path.join(tmpdir or '.', nm + '.png')
+        img.file_format = 'PNG'
+        img.save()
+        out.append(img)
+    return out
+
+
 def build_haircut(g, name, rig, body, meshes, L, tmpdir):
     """A short haircut combed back (see above). Settings:
       "color", "roughness", "specular", "normal" (the strand normal map's strength), "sheen", "seed"
@@ -920,6 +967,16 @@ def build_haircut(g, name, rig, body, meshes, L, tmpdir):
         if h < floor:
             v.co = mwi @ (p + sn * (floor - h))
     bm.normal_update()
+    # A perm's outline isn't a smooth shell: each vertex pushed out a little at random, once smoothed (the curls'
+    # lumps at the mesh's own scale; the texture has the curls themselves).
+    curl_g = g.get('curl')
+    if curl_g is not None and curl_g.get('lumps', 0) > 0:
+        bump = rng.uniform(0, curl_g['lumps'], len(bm.verts))
+        bump = np.array([0.5 * bump[i] + 0.5 * (bump[nbrs[i]].mean() if nbrs[i] else bump[i]) for i in range(len(bump))])
+        for i, v in enumerate(bm.verts):
+            if not edge[i]:
+                v.co += v.normal * bump[i]
+        bm.normal_update()
 
     # The flow: away from a pole just above the forehead, over the crown and down the back and sides.
     pole_el = math.radians(g.get('pole', 45))
@@ -940,7 +997,12 @@ def build_haircut(g, name, rig, body, meshes, L, tmpdir):
     bm.free()
     me = sh.data
     me.materials.clear()
-    col_img, nrm_img = hair_shell_maps(tmpdir, g.get('color', '#16130f'), seed=int(g.get('seed', 11)), sheen=g.get('sheen', 0.7))
+    curl = g.get('curl')
+    if curl is not None:
+        # A punch perm: curls, not strands combed back (and no cards: build() leaves them out).
+        col_img, nrm_img = curl_maps(tmpdir, g.get('color', '#16130f'), seed=int(g.get('seed', 11)), count=curl.get('count', 150), radius=curl.get('radius', (9, 14)), sheen=g.get('sheen', 0.75))
+    else:
+        col_img, nrm_img = hair_shell_maps(tmpdir, g.get('color', '#16130f'), seed=int(g.get('seed', 11)), sheen=g.get('sheen', 0.7))
     mat = material(name + '.haircut', g.get('color', '#16130f'), g.get('roughness', 0.5))
     nt = mat.node_tree
     bsdf = next(nd for nd in nt.nodes if nd.type == 'BSDF_PRINCIPLED')
@@ -962,7 +1024,7 @@ def build_haircut(g, name, rig, body, meshes, L, tmpdir):
 
     # Cards over it along the same flow: roots anywhere on the hair, each running back for a few
     # centimetres just above the shell, stopping at the hairline.
-    cd = g.get('cards', {})
+    cd = g.get('cards', {}) if curl is None else None
     if cd is not None:
         shell = Surface([sh])
         hexc = g.get('card_color', g.get('color', '#16130f')).lstrip('#')
@@ -1168,6 +1230,362 @@ def drape(pos, top_z, hem_z, slope, half_w=0.21, dz=0.01, sectors=64):
     return out
 
 
+def fnorm(f):
+    """A new face's normal (a face made by bm.faces.new has none until it's worked out)."""
+    f.normal_update()
+    return f.normal
+
+
+def coat_skirt(bm, g, hem_z, hip_z):
+    """A long coat's skirt: the jacket stops at `hem_z` (above the crotch, so one ring round the hips) and the
+    skirt hangs from that edge down to hip_z + skirt_hem, the ring's points flared out from the body's axis
+    (`skirt_flare` per metre) and brought to one level, so it bridges the legs. Open where the jacket is open
+    at the front. Each new point takes the skin weights of the point above it. Returns the skirt's faces."""
+    dl = bm.verts.layers.deform.active
+    edges = [e for e in bm.edges if e.is_boundary and all(v.co.z < hem_z + 0.06 and abs(v.co.x) < 0.3 for v in e.verts)]
+    adj = {}
+    for e in edges:
+        a, b = e.verts
+        adj.setdefault(a, []).append(b)
+        adj.setdefault(b, []).append(a)
+    if not adj:
+        return []
+    # The longest chain of those edges, from one end (or, closed, anywhere).
+    best = []
+    seen = set()
+    for start in [v for v in adj if len(adj[v]) == 1] + list(adj):
+        if start in seen:
+            continue
+        chain, prev, cur = [start], None, start
+        while True:
+            nxt = [n for n in adj[cur] if n is not prev and n not in chain]
+            if not nxt:
+                break
+            prev, cur = cur, nxt[0]
+            chain.append(cur)
+        seen.update(chain)
+        if len(chain) > len(best):
+            best = chain
+    chain = best
+    closed = len(adj[chain[0]]) == 2 and chain[0] in adj[chain[-1]] and len(chain) > 2
+    cx = 0.5 * (min(v.co.x for v in chain) + max(v.co.x for v in chain))
+    cy = 0.5 * (min(v.co.y for v in chain) + max(v.co.y for v in chain))
+    hem_final = hip_z + g.get('skirt_hem', -0.5)
+    rows, flare = g.get('skirt_rows', 10), g.get('skirt_flare', 0.12)
+    gap, fold = g.get('skirt_gap', 0.0), g.get('skirt_fold', 0.0)
+    prev_row = chain
+    made = []
+    for r in range(1, rows + 1):
+        t = r / rows
+        row = []
+        for v in chain:
+            k = 1 + flare * t * (hem_z - hem_final)
+            dx, dy = v.co.x - cx, v.co.y - cy
+            rr = max(math.hypot(dx, dy), 1e-6)
+            k += g.get('skirt_out', 0.0) * math.sqrt(t) / rr
+            if fold:
+                ang = math.atan2(dy, dx)
+                k += fold * t * math.sin(ang * 9 + 1.3) * (1 + 0.5 * math.sin(ang * 4))
+            nv = bm.verts.new(Vector((cx + dx * k, cy + dy * k, v.co.z + (hem_final - v.co.z) * t)))
+            if dl is not None:
+                for kk, w in v[dl].items():
+                    nv[dl][kk] = w
+            row.append(nv)
+        n = len(chain)
+        for i in range(n if closed else n - 1):
+            a, b = prev_row[i], prev_row[(i + 1) % n]
+            if gap and chain[i].co.y < cy and chain[(i + 1) % n].co.y < cy and abs(chain[i].co.x - cx) < gap and abs(chain[(i + 1) % n].co.x - cx) < gap:
+                continue  # the front hangs open below the hips, so the legs have room to swing
+            c, d = row[(i + 1) % n], row[i]
+            try:
+                f = bm.faces.new((a, b, c, d))
+            except ValueError:
+                continue
+            f.material_index = 0
+            made.append(f)
+        prev_row = row
+    for f in made:
+        ctr = f.calc_center_median()
+        if (fnorm(f).x * (ctr.x - cx) + fnorm(f).y * (ctr.y - cy)) < 0:
+            f.normal_flip()
+    return made
+
+
+def coat_belt(bm, g, rig, mat):
+    """A belt round the coat at the waist: a band a little proud of the coat's surface, all round but the front
+    opening. Takes the skin weights of the coat point nearest to it."""
+    dl = bm.verts.layers.deform.active
+    z = bone_head(rig, 'pelvis')[2] + g.get('belt_z', 0.14)
+    half = g.get('belt_w', 0.025)
+    near = [v for v in bm.verts if abs(v.co.z - z) < 0.03 and abs(v.co.x) < 0.3]
+    if not near:
+        return
+    cx = 0.5 * (min(v.co.x for v in near) + max(v.co.x for v in near))
+    cy = 0.5 * (min(v.co.y for v in near) + max(v.co.y for v in near))
+    sectors = g.get('belt_sectors', 96)
+    R = np.full(sectors, -1.0)
+    src = [None] * sectors
+    for v in near:
+        th = math.atan2(v.co.y - cy, v.co.x - cx)
+        i = int((th + math.pi) / (2 * math.pi) * sectors) % sectors
+        r = math.hypot(v.co.x - cx, v.co.y - cy)
+        if r > R[i]:
+            R[i], src[i] = r, v
+    # The coat's points are sparse: take each sector's reach from its neighbours too, so the band clears the cloth.
+    R0, S0 = R.copy(), list(src)
+    for i in range(sectors):
+        for d in (-3, -2, -1, 1, 2, 3):
+            j = (i + d) % sectors
+            if R0[j] > R[i]:
+                R[i], src[i] = R0[j], S0[j]
+    R1, S1 = R.copy(), list(src)
+    for i in range(sectors):
+        win = [R1[(i + dd) % sectors] for dd in range(-5, 6) if R1[(i + dd) % sectors] > 0]
+        if win and R1[i] > 0:
+            R[i] = max(sum(win) / len(win), R1[i] - 0.004)
+    gap = g.get('belt_gap', 0.13)
+    off = g.get('belt_off', 0.02)
+    ring = []
+    for i in range(sectors):
+        th = (i + 0.5) / sectors * 2 * math.pi - math.pi
+        if R[i] < 0:
+            ring.append(None)
+            continue
+        x, y = cx + math.cos(th) * R[i], cy + math.sin(th) * R[i]
+        if y < cy and abs(x - cx) < gap:
+            ring.append(None)  # the opening at the front
+            continue
+        ring.append((th, R[i] + off, src[i]))
+    made = []
+    for i in range(sectors):
+        a, b = ring[i], ring[(i + 1) % sectors]
+        if a is None or b is None:
+            continue
+        quad = []
+        for (th, r, sv), dz in ((a, -half), (b, -half), (b, half), (a, half)):
+            nv = bm.verts.new(Vector((cx + math.cos(th) * r, cy + math.sin(th) * r, z + dz)))
+            if dl is not None:
+                for kk, w in sv[dl].items():
+                    nv[dl][kk] = w
+            quad.append(nv)
+        try:
+            f = bm.faces.new(quad)
+        except ValueError:
+            continue
+        f.material_index = mat
+        ctr = f.calc_center_median()
+        if (fnorm(f).x * (ctr.x - cx) + fnorm(f).y * (ctr.y - cy)) < 0:
+            f.normal_flip()
+        made.append(f)
+    return made
+
+
+def coat_trim(bm, g, rig, neck_z, hip_z, trim_mat, btn_mat):
+    """What makes it a trench coat: wide notched lapels, the double-breasted front's overlapping panel with its
+    two columns of buttons, epaulettes, straps at the cuffs, a buckle and the belt's loose end. Each is a patch laid
+    on the coat's surface by casting a ray at it (one patch of faces, subdivided, every point put on the cloth and
+    a little proud of it), skinned like the cloth under it."""
+    import bmesh
+    dl = bm.verts.layers.deform.active
+    # Which points are the cloth's already: new points can fill gaps left by deleted ones, so a point's index doesn't say.
+    lay = bm.verts.layers.int.new('cloth')
+    for v in bm.verts:
+        v[lay] = 1
+    orig_pts = [(v.co.copy(), dict(v[dl].items()) if dl is not None else {}) for v in bm.verts]
+    # The skin weights of the cloth's points, found by the nearest of them (a face's index in the BVH tree isn't a
+    # face's index in the bmesh).
+    from mathutils import kdtree
+    kd = kdtree.KDTree(len(orig_pts))
+    for i, (co, _) in enumerate(orig_pts):
+        kd.insert(co, i)
+    kd.balance()
+    tree = BVHTree.FromBMesh(bm)
+    belt_z = bone_head(rig, 'pelvis')[2] + g.get('belt_z', 0.14)
+    open_len = g.get('open_len', 0.27)
+
+    def weights(nv, p):
+        if dl is None:
+            return
+        _, i, _ = kd.find(p)
+        for k, w in orig_pts[i][1].items():
+            nv[dl][k] = w
+
+    def cast(o, d):
+        loc, nrm, idx, _ = tree.ray_cast(o, d)
+        if loc is None:
+            return None, None
+        if d.y > 0.5 and loc.y > 0.0:
+            return None, None  # a ray from the front that went through the opening and hit the cloth's inside at the back
+        nrm = nrm.normalized()
+        return loc, (nrm if nrm.dot(d) < 0 else -nrm)
+
+    def patch(corners, d, off, mat, cuts=3):
+        vs = [bm.verts.new(c) for c in corners]
+        f = bm.faces.new(vs)
+        if len(vs) == 4:
+            bmesh.ops.subdivide_edges(bm, edges=list(f.edges), cuts=cuts, use_grid_fill=True)
+        else:
+            tri = bmesh.ops.triangulate(bm, faces=[f])['faces']
+            bmesh.ops.subdivide_edges(bm, edges=list({e for t in tri for e in t.edges}), cuts=cuts)
+        mine = [v for v in bm.verts if v[lay] == 0]
+        bad = []
+        for v in mine:
+            loc, nrm = cast(v.co - d * 3.0, d)
+            if loc is None:
+                bad.append(v)
+                continue
+            v.co = loc + nrm * off
+            weights(v, loc)
+        if bad:
+            bmesh.ops.delete(bm, geom=bad, context='VERTS')
+        for v in mine:
+            if v.is_valid:
+                v[lay] = 1
+        for v in mine:
+            if v.is_valid:
+                for fc in v.link_faces:
+                    fc.material_index = mat
+        bm.normal_update()
+        for v in mine:
+            if v.is_valid:
+                for fc in v.link_faces:
+                    if fc.normal.dot(d) > 0:
+                        fc.normal_flip()
+
+    def button(p, d, r=0.0115, h=0.006):
+        loc, nrm = cast(p - d * 3.0, d)
+        if loc is None:
+            return
+        c = loc + nrm * 0.004
+        u = nrm.cross(Vector((0, 0, 1)))
+        if u.length < 1e-3:
+            u = nrm.cross(Vector((1, 0, 0)))
+        u.normalize()
+        w = nrm.cross(u)
+        ring = [bm.verts.new(c + (u * math.cos(i / 8 * 2 * math.pi) + w * math.sin(i / 8 * 2 * math.pi)) * r) for i in range(8)]
+        top = bm.verts.new(c + nrm * h)
+        for nv in ring + [top]:
+            weights(nv, loc)
+            nv[lay] = 1
+        for i in range(8):
+            f = bm.faces.new((ring[i], ring[(i + 1) % 8], top))
+            f.material_index = btn_mat
+            if fnorm(f).dot(nrm) < 0:
+                f.normal_flip()
+
+    def buckle(x, z, hw=0.034, hh=0.03):
+        """A buckle standing proud of the belt at (x, z) on the front: a dark frame round a lighter plate."""
+        loc, nrm = cast(Vector((x, -4.0, z)), Vector((0, 1, 0)))
+        if loc is None:
+            return
+        c = loc + nrm * 0.03
+        r = nrm.cross(Vector((0, 0, 1)))
+        r.normalize()
+        for k, (a, b, mat, lift) in enumerate(((hw, hh, btn_mat, 0.0), (hw * 0.62, hh * 0.62, trim_mat, 0.004))):
+            vs = [bm.verts.new(c + nrm * lift + r * sx * a + Vector((0, 0, 1)) * sz * b) for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+            for nv in vs:
+                weights(nv, loc)
+                nv[lay] = 1
+            f = bm.faces.new(vs)
+            f.material_index = mat
+            if fnorm(f).dot(nrm) < 0:
+                f.normal_flip()
+
+    front, down = Vector((0, 1, 0)), Vector((0, 0, -1))
+    z0 = neck_z - 0.05  # where the neckline reaches the chest at the front
+    unb = bool(g.get('unbuckled'))  # worn open, the belt hanging free
+    w_top, w_bot = g.get('open_top', 0.035), g.get('open_bottom', 0.075)
+    end_z = neck_z - g['open_len'] if g.get('open_len') else hip_z
+
+    def x_edge(z):
+        """Half-width of the opening at height z."""
+        return w_top + (w_bot - w_top) * min(max((neck_z - z) / (neck_z - end_z), 0.0), 1.0)
+
+    # Lapels: from the neckline down along the edge of the opening, wide at the chest.
+    length = 0.3 if unb else 0.22
+    za, ze = z0 - 0.01, z0 - length
+    xa, xe = x_edge(za) + 0.015, x_edge(ze) + 0.015
+    for s in (1, -1):
+        patch([Vector((s * x, -1, z)) for x, z in ((xa, za), (xa + 0.075, z0 - 0.085), (xe + 0.135, ze + 0.06), (xe, ze))], front, 0.011, trim_mat, 8)
+    if not unb:
+        # The overlapping front panel of the double-breasted front.
+        patch([Vector((x, -1, z)) for x, z in ((-0.12, end_z), (0.03, end_z), (0.03, hip_z), (-0.12, hip_z))], front, 0.008, 0, 14)
+    for z in (neck_z - 0.31, neck_z - 0.43, belt_z - 0.1):
+        for s in (1, -1):
+            x = s * (x_edge(z) + 0.045) if unb else (-0.075 if s < 0 else 0.075)
+            button(Vector((x, -1, z)), front)
+    # Epaulettes, with a button at the neck end.
+    for s in (1, -1):
+        patch([Vector((s * 0.105, -0.04, 2.4)), Vector((s * 0.215, -0.04, 2.4)), Vector((s * 0.215, 0.04, 2.4)), Vector((s * 0.105, 0.04, 2.4))], down, 0.014, trim_mat, 6)
+        button(Vector((s * 0.125, 0.0, 2.4)), down, 0.009, 0.005)
+    # The belt: buckled at the front, or its two ends hanging free.
+    if unb:
+        ex = x_edge(belt_z) + 0.02
+        for s in (1, -1):
+            patch([Vector((s * x, -1, belt_z + dz)) for x, dz in ((ex, 0.025), (ex + 0.05, 0.025), (ex + 0.07, -0.26), (ex + 0.02, -0.26))], front, 0.03, trim_mat, 5)
+        buckle(ex + 0.025, belt_z - 0.02, 0.025, 0.03)
+    else:
+        buckle(0.0, belt_z)
+        patch([Vector((x, -1, belt_z + dz)) for x, dz in ((0.04, 0.02), (0.085, 0.02), (0.105, -0.22), (0.06, -0.22))], front, 0.03, trim_mat, 5)
+    # Straps round the cuffs.
+    for sd in 'lr':
+        elbow, wrist = Vector(bone_head(rig, 'lowerarm_' + sd)), Vector(bone_head(rig, 'hand_' + sd))
+        ax = (wrist - elbow).normalized()
+        p0 = wrist - ax * (g.get('cuff_back', 0.02) + 0.075)
+        side = 1 if wrist.x > 0 else -1
+        near = [(co, wt) for co, wt in orig_pts if co.x * side > 0.25 and abs((co - p0).dot(ax)) < 0.04
+                and ((co - p0) - ax * (co - p0).dot(ax)).length < 0.15]
+        if len(near) < 6:
+            continue
+        u = ax.cross(Vector((0, 0, 1)))
+        u.normalize()
+        w = ax.cross(u)
+        # The sleeve's middle: the middle of the box its points make across the arm.
+        us = [(co - p0).dot(u) for co, _ in near]
+        ws = [(co - p0).dot(w) for co, _ in near]
+        c = p0 + u * (0.5 * (min(us) + max(us))) + w * (0.5 * (min(ws) + max(ws)))
+        sectors = 24
+        R = [-1.0] * sectors
+        srcs = [None] * sectors
+        for co, wt in near:
+            r = (co - c) - ax * (co - c).dot(ax)
+            i = int((math.atan2(r.dot(w), r.dot(u)) + math.pi) / (2 * math.pi) * sectors) % sectors
+            if r.length > R[i]:
+                R[i], srcs[i] = r.length, wt
+        reach = sorted(r_ for r_ in R if r_ > 0)[len([r_ for r_ in R if r_ > 0]) // 2]
+        R = [reach] * sectors  # a sleeve is round: one radius, so the strap is a clean ring
+        near_w = next(w_ for _, w_ in near)
+        srcs = [None] * sectors
+        for co, wt in near:
+            r = (co - c) - ax * (co - c).dot(ax)
+            i = int((math.atan2(r.dot(w), r.dot(u)) + math.pi) / (2 * math.pi) * sectors) % sectors
+            srcs[i] = wt
+        for i in range(sectors):
+            if srcs[i] is None:
+                srcs[i] = near_w
+        ang = [(i + 0.5) / sectors * 2 * math.pi - math.pi for i in range(sectors)]
+        for i in range(sectors):
+            j = (i + 1) % sectors
+            if srcs[i] is None or srcs[j] is None:
+                continue
+            quad = []
+            for k, dz in ((i, -0.022), (j, -0.022), (j, 0.022), (i, 0.022)):
+                nv = bm.verts.new(c + (u * math.cos(ang[k]) + w * math.sin(ang[k])) * (R[k] + 0.006) + ax * dz)
+                if dl is not None:
+                    for kk, wt in srcs[k].items():
+                        nv[dl][kk] = wt
+                quad.append(nv)
+            try:
+                f = bm.faces.new(quad)
+            except ValueError:
+                continue
+            f.material_index = trim_mat
+            m = f.calc_center_median()
+            if fnorm(f).dot((m - c) - ax * (m - c).dot(ax)) < 0:
+                f.normal_flip()
+    bm.normal_update()
+
+
 def prepare_jacket(g, name, rig, basemesh):
     import bmesh
     planes = jacket_planes(g, rig)
@@ -1219,12 +1637,14 @@ def prepare_jacket(g, name, rig, basemesh):
     neck_z, hem_z = planes['neck'][0][2], planes['hem'][0][2]
     w_top, w_bot = g.get('open_top', 0.035), g.get('open_bottom', 0.075)
 
+    end_z = neck_z - g['open_len'] if g.get('open_len') else hem_z  # where the opening closes
+
     def half_open(z):
-        t = np.clip((neck_z - z) / (neck_z - hem_z), 0, 1)
+        t = np.clip((neck_z - z) / (neck_z - end_z), 0, 1)
         return w_top + (w_bot - w_top) * t
     front = [f for f in bm.faces if f.calc_center_median().y < -0.03 and abs(f.calc_center_median().x) < 0.2]
     for s in (1, -1):
-        t = Vector((s * (w_bot - w_top), 0, hem_z - neck_z))
+        t = Vector((s * (w_bot - w_top), 0, end_z - neck_z))
         n = Vector((t.z, 0, -t.x)).normalized()
         geom = list({e for f in front for e in f.edges}) + list({v for f in front for v in f.verts}) + front
         bmesh.ops.bisect_plane(bm, geom=geom, plane_co=Vector((s * w_top, 0, neck_z)), plane_no=n)
@@ -1296,6 +1716,9 @@ def prepare_jacket(g, name, rig, basemesh):
     bm.from_mesh(jac.data)
     bm.normal_update()
     neck = bone_head(rig, 'neck_01')
+    if g.get('skirt_hem') is not None:
+        coat_skirt(bm, g, hem_z, bone_head(rig, 'pelvis')[2])
+        bm.normal_update()
 
     def boundary(pred):
         return [e for e in bm.edges if e.is_boundary and pred(e)]
@@ -1348,6 +1771,11 @@ def prepare_jacket(g, name, rig, basemesh):
     bm.normal_update()
     lip = g.get('thickness', 0.006)
     extrude(boundary(lambda e: True), lambda s: s.co - s.normal * lip, 2 if g.get('debug_colors') else 0)
+    belt_mat = 4 if g.get('debug_colors') else 2
+    if g.get('belt'):
+        coat_belt(bm, g, rig, belt_mat)
+        if not g.get('no_trim'):
+            coat_trim(bm, g, rig, neck_z, bone_head(rig, 'pelvis')[2] + g.get('hem', 0.0), belt_mat, belt_mat + 1)
     bm.to_mesh(jac.data)
     bm.free()
 
@@ -1363,12 +1791,18 @@ def prepare_jacket(g, name, rig, basemesh):
         # Checking what's what: the lip red, the collar blue.
         jac.data.materials.append(material(name + '.dbg_lip', '#ff0000', 0.5))
         jac.data.materials.append(material(name + '.dbg_collar', '#0040ff', 0.5))
+    if g.get('belt'):
+        jac.data.materials.append(material(name + '.belt', g.get('belt_color', '#5a4a33'), g.get('roughness', 0.8)))
+        jac.data.materials.append(material(name + '.buttons', g.get('button_color', '#2a2018'), 0.4))
     jac.data.polygons.foreach_set('material_index', mat_idx)
     box_uvs(jac.data, g.get('grain_tile', 0.06))
     if g.get('debug_colors'):
         idx = np.zeros(len(jac.data.polygons), dtype=int)
         jac.data.polygons.foreach_get('material_index', idx)
         print('JACKET_DEBUG faces by material', np.bincount(idx).tolist(), 'zips', len(zips), 'neckline', len(neckline))
+    if g.get('smooth_shade'):
+        for pl in jac.data.polygons:
+            pl.use_smooth = True
     jac.data.update()
     skin_to(jac, rig)
     return jac
@@ -1385,6 +1819,60 @@ def prepare(gs, name, rig, basemesh, tmpdir=None):
     return out
 
 
+def build_chain(g, name, rig, body, meshes):
+    """A neck chain (see the header): a closed tube laid on the outermost of what's worn round the base of the neck,
+    the back higher than the front by `drop`; weighted from the body."""
+    surf = Surface([m for m in meshes if m.type == 'MESH'] + [body])
+    c = Vector(bone_head(rig, 'neck_01'))
+    drop = g.get('drop', 0.07)
+    back_up = g.get('back_up', 0.01)
+    r = g.get('radius', 0.0035)
+    pts = []
+    n = 72
+    for i in range(n):
+        a = 2 * math.pi * i / n
+        d = Vector((math.sin(a), -math.cos(a), 0))
+        # Front (a = 0, -Y) lowest; the back a little above the neck's base.
+        z = c.z + back_up - drop * (0.5 + 0.5 * math.cos(a)) ** 1.5
+        o = Vector((c.x, c.y, z))
+        hit, nr = surf.cast(o + d * 0.35, -d, 0.5)
+        if hit is None:
+            continue
+        pts.append(hit + nr * (r + 0.0015))
+    if len(pts) < 12:
+        raise SystemExit('chain: nothing to lie on round the neck')
+    me = bpy.data.meshes.new(name + '.chain')
+    verts, faces = [], []
+    sides = 6
+    m = len(pts)
+    for i, p in enumerate(pts):
+        t = (pts[(i + 1) % m] - pts[i - 1]).normalized()
+        u = t.cross(Vector((0, 0, 1)))
+        if u.length < 1e-4:
+            u = t.cross(Vector((1, 0, 0)))
+        u.normalize()
+        v = t.cross(u).normalized()
+        for k in range(sides):
+            a = 2 * math.pi * k / sides
+            verts.append(p + (u * math.cos(a) + v * math.sin(a)) * r)
+    for i in range(m):
+        j = (i + 1) % m
+        for k in range(sides):
+            k2 = (k + 1) % sides
+            faces.append((i * sides + k, j * sides + k, j * sides + k2, i * sides + k2))
+    me.from_pydata([tuple(x) for x in verts], [], faces)
+    me.update()
+    obj = bpy.data.objects.new(name + '.chain', me)
+    bpy.context.scene.collection.objects.link(obj)
+    mat = material(name + '.chain', g.get('color', '#b08a3e'), g.get('roughness', 0.3))
+    bsdf = next(nd for nd in mat.node_tree.nodes if nd.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs['Metallic'].default_value = 1.0
+    me.materials.append(mat)
+    me.polygons.foreach_set('use_smooth', [True] * len(me.polygons))
+    transfer_weights(obj, [body], rig)
+    return obj
+
+
 def build(g, name, rig, body, meshes, L=None, tmpdir=None):
     if g['type'] == 'jacket':
         return []  # made in prepare()
@@ -1396,4 +1884,6 @@ def build(g, name, rig, body, meshes, L=None, tmpdir=None):
         return [build_hair_cards(g, name, rig, body, meshes, L, tmpdir)]
     if g['type'] == 'haircut':
         return build_haircut(g, name, rig, body, meshes, L, tmpdir)
+    if g['type'] == 'chain':
+        return [build_chain(g, name, rig, body, meshes)]
     raise SystemExit('Unknown garment ' + g['type'])

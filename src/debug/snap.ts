@@ -10,6 +10,8 @@
 export interface Snap {
   /** Call right after the frame renders (the canvas is only readable then). */
   afterRender(): void;
+  /** True while the note box is open (the pointer is released for it, which mustn't open the pause menu). */
+  readonly asking: boolean;
 }
 
 export function installSnap(canvas: HTMLCanvasElement, page: string, state: () => Record<string, unknown> = () => ({})): Snap {
@@ -107,6 +109,9 @@ export function installSnap(canvas: HTMLCanvasElement, page: string, state: () =
   };
 
   return {
+    get asking(): boolean {
+      return busy;
+    },
     afterRender(): void {
       if (!want) return;
       want = false;

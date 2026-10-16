@@ -1,16 +1,16 @@
 // Headroom for the people in the windows (city.ts, windowAtlas.ts): how many texture units the city's programs use of
 // the GPU's limit, the textures' sizes, and how long the atlases took to build at startup.
 //   node debug-shots/windowheadroom.mjs [query]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const extra = process.argv[2] ? `&${process.argv[2]}` : '&clock=20:30';
 const server = await shotServer({ server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' }, { gpu: 'exclusive' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 const t0 = Date.now();
-await page.goto(`${server.resolvedUrls.local[0]}district.html?diag=1&weather=clear&res=100${extra}`);
+await page.goto(`${server.resolvedUrls.local[0]}?diag=1&weather=clear&res=100${extra}`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 600000, polling: 250 });
 console.log('page ready (s)', ((Date.now() - t0) / 1000).toFixed(1));
 await page.waitForTimeout(4000);

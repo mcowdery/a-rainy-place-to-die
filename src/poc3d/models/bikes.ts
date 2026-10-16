@@ -24,8 +24,14 @@ export function addBike(mb: MeshBuilder, spec: VehicleSpec & { type: BikeType },
   const CHROME: V3 = [0.82, 0.83, 0.86];
   const METAL: V3 = [0.05, 0.05, 0.055];
 
+  /** From a street spacing (0.1) the shapes are coarser, as the cars' are. */
+  const lod = (spec.detail ?? 0.05) >= 0.1;
   /** Smooth ellipsoid in the bike frame. */
   const blob = (cx: number, cy: number, cz: number, rx: number, ry: number, rz: number, seg = 10, lat = 6): void => {
+    if (lod) {
+      seg = Math.max(5, seg >> 1);
+      lat = Math.max(3, lat >> 1);
+    }
     const pt = (i: number, k: number): { p: V3; n: V3 } => {
       const ph = -Math.PI / 2 + (k / lat) * Math.PI;
       const t = (i / seg) * Math.PI * 2;
@@ -43,6 +49,7 @@ export function addBike(mb: MeshBuilder, spec: VehicleSpec & { type: BikeType },
   };
   /** Smooth tube between two points in the bike frame (open ends). */
   const tube = (a: V3, b: V3, r: number, seg = 7): void => {
+    if (lod) seg = 4;
     const d: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     const L = Math.hypot(...d) || 1e-4;
     const dn: V3 = [d[0] / L, d[1] / L, d[2] / L];
@@ -81,6 +88,7 @@ export function addBike(mb: MeshBuilder, spec: VehicleSpec & { type: BikeType },
     mb.style = [emit < 0 ? 0 : emit, 0, 0, 0];
   };
   const wheels = (xs: readonly number[], r: number, w: number, rims: 'alloy' | 'steel'): void => {
+    if (spec.wheels === false) return;
     for (const wx of xs) {
       wheel(mb, P, N, wx, r, w / 2, w / 2, 1, rims);
       wheel(mb, P, N, wx, r, w / 2, -w / 2, -1, rims);

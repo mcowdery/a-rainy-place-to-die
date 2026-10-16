@@ -1,0 +1,13 @@
+{
+  "base": "dom.json",
+  "name": "dom_nude",
+  "out": "assets/characters/dom_nude.glb",
+  "preview": "assets/characters/previews/dom_nude.png",
+  "clothes": [],
+  "body": {
+    "decimate": 0.8
+  },
+  "without": [
+    "jacket"
+  ]
+}

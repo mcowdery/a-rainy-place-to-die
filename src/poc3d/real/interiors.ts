@@ -33,6 +33,10 @@ export interface Interior {
   contains(x: number, z: number, y: number): boolean;
   /** Escalators: the horizontal velocity (world x, z) carrying a walker at a point on a level, or null. */
   carry?(x: number, z: number, level: number): [number, number] | null;
+  /** Moving parts (a door swinging, water drifting, doors that open as you come), stepped each frame while the interior is drawn (you're inside, or it shows from the street); `cam` is the camera's position. */
+  tick?(dt: number, cam: THREE.Vector3): void;
+  /** Called while the interior is hidden: let go of anything it lends the scene (the lamps' light on a body). */
+  off?(): void;
 }
 
 type R4 = readonly [number, number, number, number];
@@ -267,9 +271,10 @@ export function sentoInterior(b: Building3, city: THREE.Material, ghost: THREE.M
  * Interiors by landmark kind: the builder (a generator, so a big interior can be built a slice per frame), the
  * layout alone (collision and floors, also for tests), how near to start building it (m from the centre), and
  * which named part of the exterior it replaces (the whole exterior if none; `keep` leaves the exterior: a flat inside
- * its block, real/homes.ts).
+ * its block, real/homes.ts). `open`: the exterior's doorways are real openings (Hotel Rouge), so the interior is drawn
+ * from the street too, whenever you're within `seen` metres, and you look in through the doors and walk in with no switch.
  */
-export const INTERIORS: Readonly<Record<string, { build: (b: Building3, city: THREE.Material, ghost: THREE.Material) => Generator<void, Interior>; layout: (b: Building3) => Omit<Interior, 'group'>; range: number; hides?: string; keep?: boolean }>> = {
+export const INTERIORS: Readonly<Record<string, { build: (b: Building3, city: THREE.Material, ghost: THREE.Material) => Generator<void, Interior>; layout: (b: Building3) => Omit<Interior, 'group'>; range: number; hides?: string; keep?: boolean; open?: boolean; seen?: number }>> = {
   sento: {
     *build(b, city, ghost) {
       return sentoInterior(b, city, ghost);
@@ -279,7 +284,7 @@ export const INTERIORS: Readonly<Record<string, { build: (b: Building3, city: TH
   },
   dept_store: { build: deptInterior, layout: deptLayout, range: 120 },
   residence: { build: penthouseInterior, layout: penthouseLayout, range: 60, hides: 'crown' },
-  love_hotel: { build: rougeInterior, layout: rougeLayout, range: 60 },
+  love_hotel: { build: rougeInterior, layout: rougeLayout, range: 70, keep: true, open: true, seen: 55 },
   maid_cafe: { build: maidCafeInterior, layout: maidCafeLayout, range: 50, hides: 'shell' },
   zakkyo: { build: zakkyoInterior, layout: zakkyoLayout, range: 50, hides: 'shell' },
   hospital: { build: hospitalInterior, layout: hospitalLayout, range: 110, hides: 'shell' },

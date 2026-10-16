@@ -33,6 +33,13 @@ export function registerCharacters(files: Readonly<Record<string, string>>): voi
   for (const [name, url] of Object.entries(files)) EXTRA.set(name, url);
 }
 
+/** Something done to a model once as it loads, before any copy is made (its materials are shared by every copy): another
+ * look for the same file under another name, say (the MakeHuman test page's possessed, humans/fallen.ts). */
+const PREPARE = new Map<string, (model: THREE.Group) => void>();
+export function prepareCharacter(name: string, fn: (model: THREE.Group) => void): void {
+  PREPARE.set(name, fn);
+}
+
 const loader = new GLTFLoader();
 const cache = new Map<string, Promise<THREE.Group>>();
 let envMap: THREE.Texture | null = null;
@@ -77,6 +84,7 @@ function source(name: string): Promise<THREE.Group> {
         }
       });
       if (isFaceless(name)) shadowFace(g.scene);
+      PREPARE.get(name)?.(g.scene);
       return g.scene;
     });
     cache.set(name, p);

@@ -3,7 +3,7 @@ import { Character, registerCharacters } from '../models/characters';
 
 /**
  * A figure under trial, walking in the city so it can be judged where it would be seen: in the city's light, at
- * the city's distances, beside the crowd. Dev server only (`district.html?figure=<a .glb's path>`, e.g. a generated
+ * the city's distances, beside the crowd. Dev server only (`./?figure=<a .glb's path>`, e.g. a generated
  * figure given the cast's skeleton by scripts/blender/rig_figure.py, kept under debug-shots/): it isn't one of the
  * builds' files and nothing here is in a build (main.ts asks for this module on the dev server alone).
  *

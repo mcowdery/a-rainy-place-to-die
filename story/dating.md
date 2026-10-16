@@ -18,8 +18,8 @@ leads is too dangerous, and he knows it.
    the arcade, a yatai by the river. Dates cost money (and Mondays come round).
 3. **The night.** A love hotel (Hotel Rouge's themed rooms), her place, his car. The standard edition fades
    and picks up in the morning; the uncensored edition has the scene, written in Cursor (Grok) from a brief.
-4. **After.** The morning, and a choice: she may want more. Mack leaves before breakfast. A text or two on
-   KAIWA afterwards; then the story ends, or comes back once, later.
+4. **After.** The morning, and a choice: she may want more. Mack leaves before breakfast. A page or a
+   message on the office machine afterwards; then the story ends, or comes back once, later.
 
 Each one is a short story with one small human truth in it (a lonely nurse between shifts, an office worker
 after her divorce, a bartender who's heard every line), not just a conquest.
@@ -63,7 +63,7 @@ Spring's, decided (the other seasons' to come):
 - *Gakuenzaka:* a postgraduate (late twenties) who studies the city's history and corrects his.
 
 Summer's, **Proposed:**
-- *Tōto Port:* a crane operator at the container terminal who's never once been impressed; the singer who
+- *Tokyo Port:* a crane operator at the container terminal who's never once been impressed; the singer who
   headlines at JULIET BAYSIDE.
 - *Ebisu-jima:* a racer from the PA meets: the date is a race, and she wins.
 - *Shiomi-jima:* the weather presenter at Tōto TV, recognised everywhere and lonely; a lifeguard at the

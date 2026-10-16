@@ -29,7 +29,7 @@ On foot: the firm's hired muscle, sent to finish the cover-up, in her club's nar
 
 ## What it adds
 
-The law: the circle's money is protected by the best lawyers in Tōto, and its victims are paid to be silent.
+The law: the circle's money is protected by the best lawyers in Tokyo, and its victims are paid to be silent.
 
 ## Who stays
 

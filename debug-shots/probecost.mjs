@@ -1,14 +1,14 @@
 // What one collision probe costs in the city, by part (microseconds a call, 4000 calls on a street): the chase cars
 // make ~50 a frame each. node debug-shots/probecost.mjs [spawn]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const spawn = process.argv[2] ?? 'city_garage.front';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' }, { gpu: 'exclusive' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 640 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
-await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=${spawn}&car=home&clock=14:00&weather=clear`);
+await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=${spawn}&car=home&clock=14:00&weather=clear`);
 await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
 await page.evaluate(() => (document.getElementById('overlay').hidden = true));
 await page.waitForFunction(() => typeof window.__drive === 'function' && window.__chase, null, { timeout: 60000 });

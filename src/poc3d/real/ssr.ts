@@ -12,11 +12,20 @@ import { WATER_GLSL } from './waterGlsl';
  * added onto the scene image in place, so the scene target (and its depth) stays where later passes
  * expect it. Puddles use the same noise as the ground shader in city.ts, so they line up.
  *
+ * Indoor floors stay dry: the enclosed volumes near the camera (interiors, district.sheltersNear with enclosedOnly)
+ * are handed in, and a floor pixel inside one gets no wet look, whether you stand in it or look into it from the
+ * street. Only the enclosed ones: at first every covered volume was handed in, the rain's own list, and the road under
+ * the rail viaduct, a station's canopy and every porch lost their sheen while their puddles kept theirs (the user,
+ * 2026-10-12: "the ground that isn't puddles is no longer wet").
+ *
  * Open water (a pond, the river, the bay) reflects whatever the weather: its shaders mark their pixels in the
  * scene's alpha and already show the sky in their ripples (waterGlsl.ts); here the same ripple's ray is marched,
  * and where it hits, what's there takes the sky's place (so a hit adds the difference, which may darken: a tree
  * in the water is darker than the sky it hides). Rain rings break the reflections up.
  */
+/** How many covered volumes the pass takes (the nearest to the camera). */
+const SHELTERS = 24;
+
 const vertex = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 
 const fragment = /* glsl */ `
@@ -32,12 +41,16 @@ const fragment = /* glsl */ `
   uniform float uFar;
   uniform float uWet;
   uniform float uRain;
+  uniform float uPuddle;
   uniform float uTime;
   uniform float uWater;
   uniform float uWaterTime;
   uniform vec3 uWaterWind;
   uniform vec3 uHorizon;
   uniform vec3 uZenith;
+  uniform vec4 uShelter[${SHELTERS}];
+  uniform vec2 uShelterY[${SHELTERS}];
+  uniform int uShelters;
   varying vec2 vUv;
   ${WATER_GLSL}
 
@@ -56,7 +69,7 @@ const fragment = /* glsl */ `
     float d = texture2D(tDepth, uv).x;
     return -perspectiveDepthToViewZ(d, uNear, uFar);
   }
-  // Rain rings in the puddles: each cell drops a ring now and then; returns the slope it adds.
+  // Rain rings on the wet ground: each cell drops a ring now and then; returns the slope it adds.
   vec2 ripples(vec2 p) {
     vec2 acc = vec2(0.0);
     for (int layer = 0; layer < 2; layer++) {
@@ -124,8 +137,28 @@ const fragment = /* glsl */ `
   void main() {
     float d = texture2D(tDepth, vUv).x;
     // Open water marks itself in the scene's alpha (waterGlsl.ts); it reflects wet or dry.
-    bool water = uWater > 0.5 && texture2D(tColor, vUv).a < 0.5;
+    float sceneA = texture2D(tColor, vUv).a;
+    bool water = uWater > 0.5 && sceneA < 0.5;
     if (d >= 0.999999 || (uWet <= 0.0 && !water)) { gl_FragColor = vec4(0.0); return; }
+    // A tree's crown (the city shader writes 0.7 into its alpha): leaves cut out of cards, no surface to reflect in.
+    // (Their depth jumps from pixel to pixel, which made the "ground" under a leaf flicker in and out and the
+    // reflection speckle it with bright dots.)
+    // (The scene is multisampled: at a crown's ragged edge and through its gaps a pixel averages leaf and what's
+    // behind, so anything a little short of fully opaque is skipped too.)
+    if (sceneA > 0.5 && sceneA < 0.99) { gl_FragColor = vec4(0.0); return; }
+    // What shows through a crown's gaps (a wall, a lit shopfront behind the tree) is opaque, but its neighbours are
+    // leaves metres nearer: the normal worked out from them below is noise, some of it "facing up", and those pixels
+    // reflected the shopfront as bright dots all over the leaves, in its colours. So a pixel with a leaf beside it
+    // is skipped as well. (By the leaves' mark, never by the depth: two tests of the depth's own smoothness, one of
+    // normals and one of its bend, each cleared the dots on the pod and dried the whole street on the user's
+    // GTX 1070 Ti at 80% resolution, for a reason not found. Everything else opaque writes exactly 1, so this can
+    // only ever skip a pixel that touches a crown or the water's edge.)
+    if (!water) {
+      float nearA = min(min(texture2D(tColor, vUv + vec2(uTexel.x, 0.0)).a, texture2D(tColor, vUv - vec2(uTexel.x, 0.0)).a),
+                        min(texture2D(tColor, vUv + vec2(0.0, uTexel.y)).a, texture2D(tColor, vUv - vec2(0.0, uTexel.y)).a));
+      nearA = min(nearA, min(texture2D(tColor, vUv + uTexel).a, texture2D(tColor, vUv - uTexel).a));
+      if (nearA < 0.997) { gl_FragColor = vec4(0.0); return; }
+    }
     vec3 p = viewPos(vUv);
     vec3 px = viewPos(vUv + vec2(uTexel.x, 0.0)) - p;
     vec3 py = viewPos(vUv + vec2(0.0, uTexel.y)) - p;
@@ -136,10 +169,20 @@ const fragment = /* glsl */ `
     vec3 nW = normalize(mat3(uInvView) * nV);
     if (nW.y < 0.9) { gl_FragColor = vec4(0.0); return; }
     vec3 wp = (uInvView * vec4(p, 1.0)).xyz;
-    // Same puddles as the ground shader.
+    // Indoors the floor is dry (open water is never indoors).
+    if (!water) {
+      for (int i = 0; i < ${SHELTERS}; i++) {
+        if (i >= uShelters) break;
+        vec4 r = uShelter[i];
+        if (wp.x > r.x && wp.x < r.z && wp.z > r.y && wp.z < r.w && wp.y > uShelterY[i].x && wp.y < uShelterY[i].y) { gl_FragColor = vec4(0.0); return; }
+      }
+    }
+    // Same puddles as the ground shader: standing water gathers after the rain and shrinks as the ground dries
+    // (uPuddle); while it rains the whole street is one wet sheet.
     float pn = vnoise(wp.xz * 0.22) + 0.12 * vnoise(wp.xz * 1.9);
-    float puddle = smoothstep(0.62, 0.68, pn) * smoothstep(0.35, 0.9, uWet);
-    float wet = uWet * (0.22 + 0.78 * puddle);
+    float pedge = mix(0.8, 0.62, uPuddle);
+    float puddle = smoothstep(pedge, pedge + 0.06, pn) * smoothstep(0.0, 0.15, uPuddle);
+    float wet = uWet * (0.85 + 0.15 * puddle);
     // Flat water, rippled by the rain in the puddles.
     vec3 n = vec3(0.0, 1.0, 0.0);
     vec3 cam = uInvView[3].xyz;
@@ -156,8 +199,9 @@ const fragment = /* glsl */ `
       s += toCam * wavelet * (0.018 + 0.04 * smoothstep(0.05, 0.6, foot)) * (0.6 + 0.4 * min(uWaterWind.z, 1.4));
       if (uRain > 0.0) s += ripples(wp.xz) * 0.6;
       n = waterNormal(s);
-    } else if (uRain > 0.0 && puddle > 0.0) {
-      vec2 s = ripples(wp.xz) * puddle;
+    } else if (uRain > 0.0) {
+      // Rings over the whole wet street while it rains.
+      vec2 s = ripples(wp.xz) * smoothstep(0.35, 0.9, uWet);
       n = normalize(vec3(-s.x, 1.0, -s.y));
     }
     vec3 vd = normalize(wp - cam);
@@ -196,7 +240,17 @@ const fragment = /* glsl */ `
       prevT = t;
       t = t * 1.13 + 0.35;
     }
-    if (hitUv.x < 0.0) { gl_FragColor = vec4(0.0); return; }
+    if (hitUv.x < 0.0) {
+      // Missed. A ray thrown steeply up (looking down at the street, or a ring tilting it) leaves the top of the
+      // picture: what it would have shown isn't on screen, and without this the ground there looked dry. Show the
+      // sky and the city's glow in it instead, at least a little reflective, so the sheen and the rings' tilting of
+      // it read; the low rays that missed far away stay empty.
+      if (!water && rW.y > 0.25) {
+        vec3 sky = mix(uHorizon * 1.3, uZenith * 0.5, smoothstep(0.2, 0.9, rW.y));
+        gl_FragColor = vec4(sky * max(F, 0.1) * wet * smoothstep(0.25, 0.5, rW.y), 1.0);
+      } else gl_FragColor = vec4(0.0);
+      return;
+    }
     // Fade toward the screen edges and with distance travelled.
     vec2 e = smoothstep(0.0, 0.08, hitUv) * smoothstep(0.0, 0.08, 1.0 - hitUv);
     // (Water carries a reflection much further than a wet street: the far bank's lights, a tower across the bay.)
@@ -212,6 +266,10 @@ export class SsrPass extends Pass {
   /** Ground wetness 0-1 and rain 0-1 (ripples). */
   wet = 0;
   rain = 0;
+  /** How much standing water there is (0-1: the city's uPuddle). */
+  puddling = 0;
+  /** The city shader's clock (its uTime), so the rings here and the ground's own are the same rings; its own time otherwise. */
+  clock: { value: number } | null = null;
   private readonly mat: THREE.ShaderMaterial;
   private readonly add: THREE.ShaderMaterial;
   private readonly quad = new FullScreenQuad();
@@ -236,12 +294,16 @@ export class SsrPass extends Pass {
         uFar: { value: camera.far },
         uWet: { value: 0 },
         uRain: { value: 0 },
+        uPuddle: { value: 0 },
         uTime: { value: 0 },
         uWater: { value: 0 },
         uWaterTime: { value: 0 },
         uWaterWind: { value: new THREE.Vector3(1, 0, 0) },
         uHorizon: { value: new THREE.Color() },
         uZenith: { value: new THREE.Color() },
+        uShelter: { value: Array.from({ length: SHELTERS }, () => new THREE.Vector4()) },
+        uShelterY: { value: Array.from({ length: SHELTERS }, () => new THREE.Vector2()) },
+        uShelters: { value: 0 },
       },
       vertexShader: vertex,
       fragmentShader: fragment,
@@ -273,6 +335,18 @@ export class SsrPass extends Pass {
     this.water = true;
   }
 
+  /** The enclosed volumes near the camera (rects in world x, z with y0..y1 above the ground): dry floors. */
+  setShelters(list: readonly { rect: { x: number; y: number; w: number; h: number }; y0: number; y1: number }[]): void {
+    const u = this.mat.uniforms;
+    const n = Math.min(SHELTERS, list.length);
+    for (let i = 0; i < n; i++) {
+      const s = list[i];
+      (u.uShelter.value as THREE.Vector4[])[i].set(s.rect.x, s.rect.y, s.rect.x + s.rect.w, s.rect.y + s.rect.h);
+      (u.uShelterY.value as THREE.Vector2[])[i].set(s.y0, s.y1);
+    }
+    u.uShelters.value = n;
+  }
+
   render(renderer: THREE.WebGLRenderer, _writeBuffer: THREE.WebGLRenderTarget, readBuffer: THREE.WebGLRenderTarget): void {
     const now = performance.now();
     this.time += Math.min((now - this.last) / 1000, 0.1);
@@ -292,7 +366,8 @@ export class SsrPass extends Pass {
     (u.uTexel.value as THREE.Vector2).set(1 / readBuffer.width, 1 / readBuffer.height);
     u.uWet.value = this.wet;
     u.uRain.value = this.rain;
-    u.uTime.value = this.time;
+    u.uPuddle.value = this.puddling;
+    u.uTime.value = this.clock ? this.clock.value : this.time;
     this.quad.material = this.mat;
     renderer.setRenderTarget(this.target);
     this.quad.render(renderer);

@@ -1,3 +1,5 @@
+import '../showroom/nav';
+import { installSnap } from '../../debug/snap';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -28,6 +30,8 @@ const LOOKS: Record<Light, { bg: number; hemi: [number, number, number]; sun: [n
 };
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
+// F9: a snapshot and a note for reporting an issue (debug/snap.ts, saved to debug-shots/).
+const snap = installSnap(renderer.domElement, 'figures');
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -157,6 +161,7 @@ renderer.setAnimationLoop(() => {
   if (character && !paused) character.update(dt);
   controls.update();
   renderer.render(scene, camera);
+  snap.afterRender();
   hud.textContent = `${current.replace('/debug-shots/props/', '') || '(none)'}\n${clip} · ${light} · ${dist} m from her · ${camera.fov} degree lens`;
 });
 addEventListener('keydown', (e: KeyboardEvent) => {

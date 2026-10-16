@@ -165,6 +165,11 @@ const BURNOUT_HOLD = 0.25;
 const BURNOUT_SPEED = 6;
 const LIT_SPEED = 16;
 const LIT_HOLD = 0.35;
+/** A slammed throttle at a standstill or against backward momentum: how long the rears chirp (s) and how hard (0-1). */
+const LAUNCH_T = 1.5;
+const LAUNCH_SPIN = 1;
+/** How much of the rears' sideways grip a launch takes (the tail steps out a little). */
+const LAUNCH_LOOSE = 0.4;
 const DONUT_GRACE = 0.5;
 /** What spinning rears push with (a share of their grip), and how hard they walk sideways in a burnout as you steer. */
 const LIT_PUSH = 0.8;
@@ -223,7 +228,8 @@ export class Car {
   handbrake = false;
   /** Impact speed this step (m/s): a knock. */
   bump = 0;
-  private acc = 0;
+  private slam = 0;
+  private prevThrottle = 0;
   /** The throttle as the engine sees it (a keyboard's 0/1 ramped), and time since the handbrake (s). */
   private throttle = 0;
   private sinceHandbrake = 99;
@@ -298,14 +304,20 @@ export class Car {
     this.y = ground.height(x, z);
   }
 
-  /** Advance by dt seconds (in fixed steps; any remainder carries over). */
+  /**
+   * Advance by dt seconds, in equal substeps no longer than STEP: the car moves exactly its speed times the frame's
+   * time, so the drawn motion is as even as the frames. (An accumulator of fixed steps with the remainder carried
+   * over was tried first: at a frame rate that isn't a multiple of 120 Hz the frames took one step and two by
+   * turns, the car moved twice as far in one frame as the next, and in the chase camera, pinned to the car, the
+   * world shook past it; a step of 1/120 or 1/60 s is unchanged, so the tests are.)
+   */
   update(dt: number, c: Controls, ground: Ground = FLAT): void {
     this.bump = 0;
-    this.acc += Math.min(dt, 0.1);
-    while (this.acc >= STEP) {
-      this.acc -= STEP;
-      this.step(STEP, c, ground);
-    }
+    dt = Math.min(dt, 0.1);
+    if (dt <= 0) return;
+    const n = Math.max(1, Math.ceil(dt / STEP - 1e-6));
+    const h = dt / n;
+    for (let i = 0; i < n; i++) this.step(h, c, ground);
   }
 
   private step(dt: number, c: Controls, ground: Ground): void {
@@ -454,6 +466,17 @@ export class Car {
     const alight = lit && drive > 0;
     const spinning = Math.abs(Fxr) > cap || alight;
     this.spin = alight ? 1 : Math.max(0, Math.min(1, (Math.abs(Fxr) - cap) / (0.3 * cap + 1)));
+    // Slamming the throttle from a standstill, or on top of backwards momentum (out of a U-turn), breaks the rears
+    // loose for a moment: a chirp and a puff of smoke, not a spin (the forces are left alone).
+    if (c.throttle > 0.85 && this.prevThrottle < 0.45 && !S.twoWheels && u < 7 && u > -16) this.slam = LAUNCH_T;
+    this.prevThrottle = c.throttle;
+    let launch = 0;
+    if (this.slam > 0) {
+      this.slam = c.throttle > 0.6 ? this.slam - dt : 0;
+      // Full for the first half, then easing off as it gains speed (out to 12 m/s forward).
+      launch = Math.min(1, (this.slam / LAUNCH_T) * 2) * (u < 0 ? 1 : Math.max(0, 1 - u / 12));
+      this.spin = Math.max(this.spin, LAUNCH_SPIN * launch);
+    }
     Fxr = Math.max(-cap, Math.min(cap, Fxr));
     // (A spinning tyre pushes less than one that bites, and with the wheel over less again: the car goes round, not off.)
     if (alight) Fxr = Math.min(Fxr, cap * (LIT_PUSH - LIT_TURN * Math.abs(c.steer)));
@@ -464,7 +487,7 @@ export class Car {
     const ellipse = (F: number, D: number): number => D * Math.sqrt(Math.max(0, 1 - (F / (D * 1.35)) ** 2));
     // (Lit up, the rears have little sideways grip left: the tail goes round. In a J-turn the tyres let the car
     // carry on the way it was going while it comes round.)
-    const latR = ellipse(Fxr, Dr) * (alight ? LIT_SIDE : spinning ? 0.5 + 0.25 * (S.lsd ?? 0) : 1) * (jturn ? J_GRIP : 1);
+    const latR = ellipse(Fxr, Dr) * (1 - (this.sinceHandbrake > 1.5 ? LAUNCH_LOOSE * launch : 0)) * (alight ? LIT_SIDE : spinning ? 0.5 + 0.25 * (S.lsd ?? 0) : 1) * (jturn ? J_GRIP : 1);
     const latF = ellipse(Fxf, Df) * (jturn ? J_GRIP : 1);
     const curve = (alpha: number): number => Math.sin(S.C * Math.atan(S.B * alpha));
     let Fyf = 0;

@@ -12,13 +12,13 @@ How the writing reads, and what each way of telling a scene can hold.
 - English dialogue with Japanese where it's natural: forms of address (-san, senpai, oyaji, mama for a bar's
   owner), exclamations (Ara), the names of places, food and things (oden, keep bottle, apāto). No glossary in the text;
   the context carries it.
-- Signs, menus and the phone's official accounts can be in Japanese with English beside it (KAIWAへようこそ!
-  Welcome to KAIWA.).
+- Signs, menus and the pager's service can be in Japanese with English beside it (the old KAIWAへようこそ! Welcome to
+  KAIWA. was the phone's; its replacement is **Open**).
 - Captions are present tense, second person, spare: "The rain stops. Somewhere above, a window closes."
 
 ## Grounded
 
-Everything leans grounded in reality. The exceptions come from two places only: **technology** (Mack's body, the
+Everything leans grounded in reality. The exceptions come from two places only: **technology** (the order's
 machines, the Beast) and the **Christian supernatural** (demons, angels, the Nephilim, fallen ones). Anything
 supernatural has to work by the Christian framework: the occult (fortune telling, a séance, a curse) can be real
 if what's really behind it is demonic, but the story prefers the grounded explanation: a fortune teller is
@@ -27,13 +27,18 @@ usually a fraud, a strange coincidence usually has a human cause.
 The Christian themes stay subtle: hinted at, never explicit, left for the reader to interpret that way. They
 become more explicit only where the order is involved, and at the very end.
 
+**The dead hours** (2 to 6 in the morning; [mythos.md](mythos.md)) are the standing exception since 2026-10-12:
+monsters and robots in empty streets, every night, and the whole city knows to stay in. By day the rule above
+holds as before. **Proposed:** they still come from the same two places (the machines are technology, the
+monsters and the "aliens" are the fallen), so nothing new is let in.
+
 ## The ways a scene can play
 
 | Way | What the player sees | Good for | Made with |
 |---|---|---|---|
 | **VN with stills** | A still, letterboxed over the dimmed city, bubbles over it, choices, hotspots on the picture | Key moments, faces, places the 3D city can't show (a room's detail, a close-up) | Stills from Krea Studio, then the VN export |
 | **VN without stills** | The paused city between cinematic bars, the same bubbles and choices | Most conversations: at a door, with an npc in the street | Text only, no art |
-| **Phone (KAIWA)** | Messages arriving in the city while you walk; photos, videos, stickers, your replies | Keeping threads alive between scenes, people you haven't met, the time between chapters | `content/phone/<contact>.yaml` |
+| **Pager and telephone** (was the KAIWA messenger: [phone.md](phone.md)) | A page arriving in the city while you walk; the call at a payphone, the machine's tape, prints and tapes, your replies | Keeping threads alive between scenes, people you haven't met, the time between chapters | `content/phone/<contact>.yaml` (to be reworked) |
 | **Choreographed scene** | (Not built yet.) Figures moving in the real city, the camera directed | Chases, arrivals, a crowd at the Dome | Later |
 
 A scene starts where the player uses a world node: talking to an **npc**, a story **door** (a door that isn't a

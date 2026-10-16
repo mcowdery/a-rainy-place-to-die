@@ -1,6 +1,6 @@
 // Mack standing at rest with his hands free (and walking, and running): the whole of him from four sides and each
 // hand up close. node debug-shots/restpose.mjs <outdir> [outfit]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 import { writeGallery } from './gallery.mjs';
@@ -8,10 +8,10 @@ const out = process.argv[2] ?? 'debug-shots/restpose';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
-await page.goto(`${server.resolvedUrls.local[0]}models.html?fp=1`, { timeout: 240000 });
+await page.goto(`${server.resolvedUrls.local[0]}models-mack.html?fp=1`, { timeout: 240000 });
 await page.waitForFunction(() => window.__fp && window.__fp.rig(), null, { timeout: 120000, polling: 250 });
 await page.evaluate(() => { document.getElementById('panel').style.display = 'none'; __fp.armed(false); __fp.look(0, 0); __fp.third(true); });
 if (process.argv[3]) await page.evaluate((o) => __fp.wear(o), process.argv[3]);

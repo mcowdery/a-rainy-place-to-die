@@ -28,4 +28,4 @@ export const DEMO_HIDDEN_ART: ReadonlySet<string> = new Set([
  * the same), in adult/assets/characters/ (uncensored.ts globs it; the wardrobe offers only the outfits whose model is
  * there). The demo's glob (demo.ts) excludes the same files; tests/edition.test.ts checks.
  */
-export const DEMO_HIDDEN_CHARACTERS: ReadonlySet<string> = new Set(['mack_nude']);
+export const DEMO_HIDDEN_CHARACTERS: ReadonlySet<string> = new Set(['dom_nude']);

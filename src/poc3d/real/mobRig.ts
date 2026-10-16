@@ -4,11 +4,36 @@
  * (people.ts) and the shaped generation under review (real/mobShape.ts).
  */
 
+import type { DetailedHair } from './mobHairKinds';
+import type { MenHair } from './mobMenHairKinds';
+
 export type V3 = [number, number, number];
 
-export type Body = 'man' | 'woman' | 'child' | 'elder';
-/** 'bob', 'ponytail' and 'twin' (twin tails) are the shaped generation's; the classic one draws them short or long. */
-export type Hair = 'short' | 'long' | 'bun' | 'hat' | 'cap' | 'none' | 'bob' | 'ponytail' | 'twin';
+/**
+ * The other builds (2026-10-10, real/mobShape.ts): bodies of their own height, weight and shape, each with its own joints and
+ * proportions, that behave as one of the four `BaseBody`s for everything else (`baseBody`: its outfits, hair, posing). The man's
+ * (`Build`: stout, portly, bulky, lean, tall, short), the woman's (`WomanBuild`: with her bust and hips each their own size), and
+ * the old (`OldBuild`: the elder man's three, and an elder woman's two; the base elder is a man).
+ */
+export type BaseBody = 'man' | 'woman' | 'child' | 'elder';
+export type Build = 'stout' | 'portly' | 'lean' | 'tall' | 'short' | 'bulky';
+export type WomanBuild = 'w_petite' | 'w_slim' | 'w_tall' | 'w_curvy' | 'w_busty' | 'w_pear' | 'w_plump' | 'w_heavy' | 'w_flat';
+export type OldBuild = 'e_frail' | 'e_stout' | 'e_tall' | 'w_elder' | 'w_elder_plump';
+export const BUILDS: readonly Build[] = ['stout', 'portly', 'lean', 'tall', 'short', 'bulky'];
+export const WOMAN_BUILDS: readonly WomanBuild[] = ['w_petite', 'w_slim', 'w_tall', 'w_curvy', 'w_busty', 'w_pear', 'w_plump', 'w_heavy', 'w_flat'];
+export const OLD_BUILDS: readonly OldBuild[] = ['e_frail', 'e_stout', 'e_tall', 'w_elder', 'w_elder_plump'];
+export type Body = BaseBody | Build | WomanBuild | OldBuild;
+/** Every body, in the order of the joints' rows: the old ones last, so `oldGlsl` is a range. */
+export const ALL_BODIES: readonly Body[] = ['man', 'woman', 'child', 'elder', ...BUILDS, ...WOMAN_BUILDS, ...OLD_BUILDS];
+export const isBuild = (b: Body): b is Build | WomanBuild | OldBuild => ALL_BODIES.indexOf(b) >= 4;
+/** What a body behaves as (its outfits, hair, posing). */
+export const baseBody = (b: Body): BaseBody => (b === 'man' || b === 'woman' || b === 'child' || b === 'elder' ? b : (BUILDS as readonly string[]).includes(b) ? 'man' : (WOMAN_BUILDS as readonly string[]).includes(b) || b === 'w_elder' || b === 'w_elder_plump' ? 'woman' : 'elder');
+/** Whether a body is old: it stoops, and its hair is grey. */
+export const isOld = (b: Body): boolean => b === 'elder' || (OLD_BUILDS as readonly string[]).includes(b);
+/** GLSL: whether the body whose row is `v` (an int) is old. */
+export const oldGlsl = (v: string): string => `(${v} == 3 || (${v} >= ${ALL_BODIES.indexOf(OLD_BUILDS[0])} && ${v} < ${ALL_BODIES.length}))`;
+/** 'bob', 'ponytail' and 'twin' (twin tails) are the shaped generation's; the classic one draws them short or long. The detailed women's cuts (mobHairKinds.ts) are the shaped generation's too. */
+export type Hair = 'short' | 'long' | 'bun' | 'hat' | 'cap' | 'none' | 'bob' | 'ponytail' | 'twin' | DetailedHair | MenHair;
 
 // ---- Templates ----
 
@@ -245,6 +270,30 @@ export const PROPORTIONS: Record<Body, Proportions> = {
   woman: { ys: 0.93, torso: scaleRows(WOMAN_TORSO, 0.93, 1), leg: 0.95, arm: 0.84, hipX: 0.088, shoulderX: 0.165, elbowX: 0.19, wristX: 0.205, head: 0.94 },
   child: { ys: 0.6, torso: scaleRows(MAN_TORSO, 0.6, 0.64), leg: 0.66, arm: 0.64, hipX: 0.058, shoulderX: 0.12, elbowX: 0.135, wristX: 0.145, head: 0.8 },
   elder: { ys: 0.95, torso: scaleRows(MAN_TORSO, 0.95, 0.95), leg: 0.92, arm: 0.92, hipX: 0.088, shoulderX: 0.18, elbowX: 0.205, wristX: 0.222, head: 0.96 },
+  // The man's builds. A fat man's legs stand wider apart and his arms hang further out, round a belly; a lean one's closer.
+  // ys: 1.72 m times it (stout 1.65, portly 1.67, lean 1.77, tall 1.87, short 1.55, bulky 1.80).
+  stout: { ys: 0.96, torso: scaleRows(MAN_TORSO, 0.96, 1.25), leg: 1.4, arm: 1.45, hipX: 0.14, shoulderX: 0.222, elbowX: 0.31, wristX: 0.335, head: 1.04 },
+  portly: { ys: 0.97, torso: scaleRows(MAN_TORSO, 0.97, 1.1), leg: 1.1, arm: 1.12, hipX: 0.1, shoulderX: 0.2, elbowX: 0.235, wristX: 0.258, head: 1.02 },
+  lean: { ys: 1.03, torso: scaleRows(MAN_TORSO, 1.03, 0.88), leg: 0.86, arm: 0.84, hipX: 0.082, shoulderX: 0.172, elbowX: 0.192, wristX: 0.208, head: 0.98 },
+  tall: { ys: 1.09, torso: scaleRows(MAN_TORSO, 1.09, 0.96), leg: 0.96, arm: 0.95, hipX: 0.09, shoulderX: 0.188, elbowX: 0.21, wristX: 0.228, head: 0.97 },
+  short: { ys: 0.9, torso: scaleRows(MAN_TORSO, 0.9, 1.02), leg: 1.02, arm: 1.0, hipX: 0.092, shoulderX: 0.19, elbowX: 0.215, wristX: 0.235, head: 1.06 },
+  bulky: { ys: 1.05, torso: scaleRows(MAN_TORSO, 1.05, 1.22), leg: 1.25, arm: 1.2, hipX: 0.108, shoulderX: 0.258, elbowX: 0.3, wristX: 0.318, head: 1.0 },
+  // The woman's builds (the bust and the hips are each their own size: mobShape.ts BUILD_FIGURE).
+  w_petite: { ys: 0.86, torso: scaleRows(WOMAN_TORSO, 0.86, 1), leg: 0.9, arm: 0.8, hipX: 0.082, shoulderX: 0.155, elbowX: 0.178, wristX: 0.192, head: 0.96 },
+  w_slim: { ys: 0.95, torso: scaleRows(WOMAN_TORSO, 0.95, 1), leg: 0.88, arm: 0.76, hipX: 0.084, shoulderX: 0.158, elbowX: 0.181, wristX: 0.196, head: 0.94 },
+  w_tall: { ys: 1.0, torso: scaleRows(WOMAN_TORSO, 1.0, 1), leg: 0.95, arm: 0.84, hipX: 0.09, shoulderX: 0.17, elbowX: 0.195, wristX: 0.21, head: 0.92 },
+  w_curvy: { ys: 0.94, torso: scaleRows(WOMAN_TORSO, 0.94, 1), leg: 1.0, arm: 0.86, hipX: 0.095, shoulderX: 0.168, elbowX: 0.194, wristX: 0.21, head: 0.94 },
+  w_busty: { ys: 0.94, torso: scaleRows(WOMAN_TORSO, 0.94, 1), leg: 0.95, arm: 0.86, hipX: 0.09, shoulderX: 0.168, elbowX: 0.194, wristX: 0.21, head: 0.94 },
+  w_pear: { ys: 0.93, torso: scaleRows(WOMAN_TORSO, 0.93, 1), leg: 1.02, arm: 0.8, hipX: 0.1, shoulderX: 0.16, elbowX: 0.185, wristX: 0.2, head: 0.94 },
+  w_plump: { ys: 0.92, torso: scaleRows(WOMAN_TORSO, 0.92, 1.2), leg: 1.12, arm: 1.0, hipX: 0.105, shoulderX: 0.18, elbowX: 0.215, wristX: 0.235, head: 0.96 },
+  w_flat: { ys: 0.93, torso: scaleRows(WOMAN_TORSO, 0.93, 1), leg: 0.92, arm: 0.8, hipX: 0.086, shoulderX: 0.162, elbowX: 0.186, wristX: 0.2, head: 0.94 },
+  w_heavy: { ys: 0.92, torso: scaleRows(WOMAN_TORSO, 0.92, 1.45), leg: 1.3, arm: 1.18, hipX: 0.12, shoulderX: 0.195, elbowX: 0.275, wristX: 0.3, head: 1.0 },
+  // The old: an elder man's three (frail, stout, tall) and an elder woman's two (slight, plump).
+  e_frail: { ys: 0.92, torso: scaleRows(MAN_TORSO, 0.92, 0.88), leg: 0.8, arm: 0.78, hipX: 0.082, shoulderX: 0.165, elbowX: 0.188, wristX: 0.204, head: 0.98 },
+  e_stout: { ys: 0.94, torso: scaleRows(MAN_TORSO, 0.94, 1.2), leg: 1.2, arm: 1.2, hipX: 0.115, shoulderX: 0.2, elbowX: 0.27, wristX: 0.295, head: 1.02 },
+  e_tall: { ys: 1.02, torso: scaleRows(MAN_TORSO, 1.02, 0.92), leg: 0.9, arm: 0.86, hipX: 0.088, shoulderX: 0.176, elbowX: 0.2, wristX: 0.216, head: 0.97 },
+  w_elder: { ys: 0.88, torso: scaleRows(WOMAN_TORSO, 0.88, 0.95), leg: 0.9, arm: 0.78, hipX: 0.085, shoulderX: 0.155, elbowX: 0.178, wristX: 0.192, head: 0.95 },
+  w_elder_plump: { ys: 0.89, torso: scaleRows(WOMAN_TORSO, 0.89, 1.2), leg: 1.1, arm: 0.98, hipX: 0.1, shoulderX: 0.172, elbowX: 0.205, wristX: 0.225, head: 0.97 },
 };
 
 /** A body's joints (one per bone, the root at the feet) and its bind pose's arm angle away from the body. */

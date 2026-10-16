@@ -18,7 +18,7 @@ const urlOf = (station: string, file: string): string | null => files[`../../../
 export const trackUrl = urlOf;
 
 /** The stations whose music this build has (content/radio/stations.yaml; tests/radio.test.ts checks the file). */
-export function loadStations(): Station[] {
+export function loadStations(city = 'toto'): Station[] {
   const errors: string[] = [];
   let durations: Record<string, number> = {};
   try {
@@ -28,7 +28,7 @@ export function loadStations(): Station[] {
   }
   const stations = parseStations('content/radio/stations.yaml', stationsText, durations, errors);
   for (const e of errors) console.error(e);
-  return onAir(stations, (s, f) => urlOf(s, f) !== null);
+  return onAir(stations.filter((s) => (s.cities ?? ['toto']).includes(city)), (s, f) => urlOf(s, f) !== null);
 }
 
 /** What the radio can be tuned to besides a station's id. */
@@ -36,6 +36,16 @@ export const OFF = 'off';
 export const TAPE = 'tape';
 
 const KEY = 'rainyplace.radio';
+const VOLUME_KEY = 'rainyplace.radioVolume';
+function readVolume(): number {
+  try {
+    const v = Number(localStorage.getItem(VOLUME_KEY));
+    if (localStorage.getItem(VOLUME_KEY) !== null && Number.isFinite(v)) return Math.min(1, Math.max(0, v));
+  } catch {
+    /* no storage */
+  }
+  return 0.7;
+}
 /** The crackle on changing station (seconds), and how long after going quiet the stream is stopped. */
 const BURST = 0.28;
 const STOP_AFTER = 0.4;
@@ -55,6 +65,12 @@ export interface RadioFrame {
   readonly level: number;
   /** Someone else's radio (a taxi driver's): this station whatever yours is tuned to. */
   readonly station?: string;
+  /** Heard from outside, out of the car's speakers: -1 (left) to 1 (right) from where you face, and 0-1 how far off
+   * and shut away it is (a car's body and the distance take the top off). Absent: at the wheel, as it is in the cabin. */
+  readonly away?: { readonly pan: number; readonly far: number };
+  /** Heard inside a cabin (the cockpit view, a taxi's back seat): the car stereo's own tone, band-limited, with the
+   * cabin's short early reflections round it. */
+  readonly cab?: boolean;
 }
 
 export class Radio {
@@ -69,6 +85,11 @@ export class Radio {
   private ctx: AudioContext | null = null;
   private gain!: GainNode;
   private hiss!: GainNode;
+  private away!: BiquadFilterNode;
+  private hp!: BiquadFilterNode;
+  private lp!: BiquadFilterNode;
+  private room!: GainNode;
+  private pan!: StereoPannerNode;
   /** What the element holds ('<station>/<file>', 'tape/<index>'), and whether it's still loading. */
   private playing = '';
   private loading = false;
@@ -118,7 +139,29 @@ export class Radio {
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
     lp.frequency.value = 11000;
-    ctx.createMediaElementSource(this.el).connect(hp).connect(boom).connect(lp).connect(this.gain).connect(out);
+    // Heard from outside the car: a low-pass that closes with distance, and a pan toward the car.
+    this.away = ctx.createBiquadFilter();
+    this.away.type = 'lowpass';
+    this.away.frequency.value = 22000;
+    this.away.Q.value = 0.5;
+    this.pan = ctx.createStereoPanner();
+    this.hp = hp;
+    this.lp = lp;
+    ctx.createMediaElementSource(this.el).connect(hp).connect(boom).connect(lp).connect(this.away).connect(this.pan).connect(this.gain).connect(out);
+    // The cabin: two short reflections off the glass and the trim (a few metres of path, dulled), mixed in only inside.
+    this.room = ctx.createGain();
+    this.room.gain.value = 0;
+    for (const [time, tone, level] of [[0.0065, 3200, 1], [0.0133, 2200, 0.6]] as const) {
+      const delay = ctx.createDelay(0.05);
+      delay.delayTime.value = time;
+      const dull = ctx.createBiquadFilter();
+      dull.type = 'lowpass';
+      dull.frequency.value = tone;
+      const g = ctx.createGain();
+      g.gain.value = level;
+      lp.connect(delay).connect(dull).connect(g).connect(this.room);
+    }
+    this.room.connect(this.pan);
     // Between stations: a second of noise, looped, through a band.
     const noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noise.getChannelData(0);
@@ -145,6 +188,21 @@ export class Radio {
   step(dir: 1 | -1): void {
     const dial = this.dial();
     this.tune(dial[(Math.max(0, dial.indexOf(this.tuned)) + dir + dial.length) % dial.length]);
+  }
+
+  /** The car stereo's own volume knob, 0-1 in ten steps (on top of the debug menu's music level). */
+  volume = readVolume();
+
+  /** Turns the knob one step and shows it. */
+  turn(dir: 1 | -1): void {
+    this.volume = Math.min(1, Math.max(0, Math.round((this.volume + dir * 0.1) * 10) / 10));
+    try {
+      localStorage.setItem(VOLUME_KEY, String(this.volume));
+    } catch {
+      /* no storage */
+    }
+    const n = Math.round(this.volume * 10);
+    this.onReadout?.({ top: `VOLUME ${'▮'.repeat(n)}${'▯'.repeat(10 - n)} ${n}`, bottom: '' });
   }
 
   tune(to: string): void {
@@ -213,8 +271,17 @@ export class Radio {
     this.last = tuned;
     this.burst = Math.max(0, this.burst - f.dt);
     const t = ctx.currentTime;
-    this.gain.gain.setTargetAtTime(on ? f.level * (this.burst > 0 ? 0.15 : 1) : 0, t, 0.07);
-    this.hiss.gain.setTargetAtTime(on && this.burst > 0 ? f.level * 0.09 : 0, t, 0.02);
+    // (The knob is the stereo's: a taxi driver's radio isn't on yours.)
+    const level = f.level * (f.station ? 1 : this.volume / 0.7);
+    this.gain.gain.setTargetAtTime(on ? level * (this.burst > 0 ? 0.15 : 1) : 0, t, 0.07);
+    this.hiss.gain.setTargetAtTime(on && this.burst > 0 ? level * 0.09 : 0, t, 0.02);
+    const far = f.away?.far ?? 0;
+    this.away.frequency.setTargetAtTime(f.away ? 7000 - 5800 * far : 22000, t, 0.15);
+    this.pan.pan.setTargetAtTime(f.away ? f.away.pan * 0.7 : 0, t, 0.1);
+    // A car stereo's small speakers: the bottom and the very top off, and the cabin round it.
+    this.hp.frequency.setTargetAtTime(f.cab ? 100 : 55, t, 0.15);
+    this.lp.frequency.setTargetAtTime(f.cab ? 7500 : 11000, t, 0.15);
+    this.room.gain.setTargetAtTime(f.cab ? 0.3 : 0, t, 0.15);
     if (!on) {
       this.heard = false;
       this.quiet += f.dt;
@@ -224,7 +291,7 @@ export class Radio {
     this.quiet = 0;
     if (!this.heard) {
       this.heard = true;
-      this.announce(tuned);
+      if (!f.away) this.announce(tuned);
     }
     if (tuned === TAPE) {
       const tape = this.tape;

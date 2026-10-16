@@ -96,7 +96,7 @@ function materials(env: THREE.Texture | null, look: SportLook) {
     head: std({ color: 0xf0eee6, emissive: new THREE.Color(1, 0.96, 0.86), emissiveIntensity: 0.25, roughness: 0.1 }),
     tail: std({ color: 0x5a0606, emissive: new THREE.Color(1, 0.05, 0.03), emissiveIntensity: 0.15, roughness: 0.2 }),
     amber: std({ color: 0xd07010, emissive: new THREE.Color(1, 0.45, 0.05), emissiveIntensity: 0.1, roughness: 0.2 }),
-    plate: std({ map: plateTexture('東都 900', 'ほ', '9-01'), roughness: 0.5 }),
+    plate: std({ map: plateTexture('東京 900', 'ほ', '9-01'), roughness: 0.5 }),
   };
 }
 type Mats = ReturnType<typeof materials>;

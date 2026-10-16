@@ -1,6 +1,9 @@
 import { hash, rng } from '../../core/hash';
 import { EMIT, KIND, lin, type MeshBuilder } from './meshBuilder';
 import type { Prop } from './props';
+import { treeSet } from '../district/cityConfig';
+import { addManilaProp } from './manilaStreet';
+import type { VehicleSigns } from '../models/vehicles';
 import { FOLIAGE_TAG, foliageVariant, shrubMass, TREE_SPECIES } from '../models/trees';
 
 /**
@@ -16,7 +19,7 @@ const SHRUB = [0x2e4a26, 0x3e5a2e, 0x4a6a34, 0x36522a, 0x2a4a2e];
 const POTS = [0xa0522d, 0xb8663a, 0x2a4a6a, 0xd8d4c8, 0x3a3a3a, 0x8a6a3a];
 const PLAY = [0xc83a2a, 0x2a6ac8, 0xe0b020, 0x2a9a5a];
 
-export function addDressing(mb: MeshBuilder, p: Prop): void {
+export function addDressing(mb: MeshBuilder, p: Prop, signs?: VehicleSigns): void {
   const r: C3 = [p.nz, 0, -p.nx];
   const n: C3 = [p.nx, 0, p.nz];
   const o: C3 = [p.x, 0, p.z];
@@ -39,7 +42,7 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
       // its top so its edges aren't a box's.
       const hex = rnd.pick(SHRUB);
       const flowering = !park && rnd.chance(0.5);
-      const sp = flowering ? 'azalea' : 'box';
+      const sp = flowering ? treeSet().shrubs.hedgeFlower : treeSet().shrubs.hedgePlain;
       const top = base + (park ? 0.8 : 0.45);
       mb.color = lin(hex);
       mb.style = [FOLIAGE_TAG + TREE_SPECIES.indexOf(sp), 0, foliageVariant(), 0];
@@ -61,8 +64,8 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
         mb.lathe(c[0], c[2], [[0, pr * 0.75], [ph, pr]], 5);
         const leaf = pr * (1.3 + rnd.float());
         // A tall plant (an upright clump) or a round bush spilling over the pot.
-        if (rnd.chance(0.25)) shrubMass(mb, c[0], ph + 0.62, c[2], leaf * 0.7, 0.62, rnd.pick(SHRUB), 'camphor', 5);
-        else shrubMass(mb, c[0], ph + leaf * 0.55, c[2], leaf, leaf * 0.65, rnd.pick(SHRUB), rnd.chance(0.3) ? 'azalea' : 'box', 5);
+        if (rnd.chance(0.25)) shrubMass(mb, c[0], ph + 0.62, c[2], leaf * 0.7, 0.62, rnd.pick(SHRUB), treeSet().shrubs.potTall, 5);
+        else shrubMass(mb, c[0], ph + leaf * 0.55, c[2], leaf, leaf * 0.65, rnd.pick(SHRUB), rnd.chance(0.3) ? treeSet().shrubs.potRound : treeSet().shrubs.potRoundAlt, 5);
       }
       break;
     }
@@ -79,7 +82,7 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
         const sx = p.x + (rnd.float() - 0.5) * (s - 0.9);
         const sz = p.z + (rnd.float() - 0.5) * (s - 0.9);
         const rr = 0.35 + rnd.float() * 0.3;
-        shrubMass(mb, sx, 0.7 + rr * 0.8, sz, rr * 1.05, rr * 0.85, rnd.pick(SHRUB), i === 0 ? 'azalea' : 'box', 6);
+        shrubMass(mb, sx, 0.7 + rr * 0.8, sz, rr * 1.05, rr * 0.85, rnd.pick(SHRUB), i === 0 ? treeSet().shrubs.planterFirst : treeSet().shrubs.planterRest, 6);
       }
       break;
     }
@@ -188,6 +191,26 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
     case 'wheelstop': {
       mb.color = lin(0xb8b4a8);
       mb.frameBox(o, r, n, -half, half, 0, 0.12, -0.1, 0.1);
+      break;
+    }
+    case 'hoop': {
+      // A basketball goal at a court's end: a steel post behind the baseline, a boom out over the court, the backboard
+      // and the rim (n points into the court).
+      mb.color = lin(0x4a5058);
+      mb.beam(at(0, -0.5), at(0, -0.5, 3.1), 0.08);
+      mb.beam(at(0, -0.5, 3.1), at(0, 0.3, 3.1), 0.06);
+      mb.beam(at(0, -0.5, 1.2), at(0, 0.3, 3.0), 0.04);
+      mb.color = lin(0xe6e6de);
+      mb.frameBox(o, r, n, -0.9, 0.9, 2.95, 4.0, 0.3, 0.36);
+      mb.color = lin(0xd05a1c);
+      const rim = 0.23;
+      const ry = 3.05;
+      for (const [a, b] of [[-1, -1, 1, -1], [1, -1, 1, 1], [1, 1, -1, 1], [-1, 1, -1, -1]].map(([a0, b0, a1, b1]) => [[a0, b0], [a1, b1]])) mb.beam(at(a[0] * rim, 0.5 + a[1] * rim, ry), at(b[0] * rim, 0.5 + b[1] * rim, ry), 0.02);
+      mb.color = lin(0xe8e8e0);
+      mb.beam(at(-rim, 0.5 - rim, ry), at(-rim * 0.6, 0.5, ry - 0.4), 0.008);
+      mb.beam(at(rim, 0.5 - rim, ry), at(rim * 0.6, 0.5, ry - 0.4), 0.008);
+      mb.beam(at(-rim, 0.5 + rim, ry), at(-rim * 0.6, 0.5, ry - 0.4), 0.008);
+      mb.beam(at(rim, 0.5 + rim, ry), at(rim * 0.6, 0.5, ry - 0.4), 0.008);
       break;
     }
     case 'swing': {
@@ -310,33 +333,36 @@ export function addDressing(mb: MeshBuilder, p: Prop): void {
       // at the front, a seat and handlebars; a pastel or silver frame.
       const frame = lin(rnd.pick([0xc8ccd0, 0xe8c8d0, 0xa8c8e0, 0xd8d8c0, 0x2a2a2e, 0x8a2a2a]));
       const R = 0.33;
+      // Parked on the pavement, which stands 0.15 m above the road.
+      const L = 0.15;
       const wheel = (out: number): void => {
         mb.color = lin(0x1a1a1a);
-        const c = at(0, out, R);
+        const c = at(0, out, L + R);
         const k = 10;
         for (let i = 0; i < k; i++) {
           const a0 = (i / k) * Math.PI * 2;
           const a1 = ((i + 1) / k) * Math.PI * 2;
-          mb.beam([c[0] + n[0] * Math.cos(a0) * R, R + Math.sin(a0) * R, c[2] + n[2] * Math.cos(a0) * R], [c[0] + n[0] * Math.cos(a1) * R, R + Math.sin(a1) * R, c[2] + n[2] * Math.cos(a1) * R], 0.035);
+          mb.beam([c[0] + n[0] * Math.cos(a0) * R, L + R + Math.sin(a0) * R, c[2] + n[2] * Math.cos(a0) * R], [c[0] + n[0] * Math.cos(a1) * R, L + R + Math.sin(a1) * R, c[2] + n[2] * Math.cos(a1) * R], 0.035);
         }
       };
       wheel(-0.55);
       wheel(0.55);
       mb.color = frame;
-      const P = (out: number, y: number): C3 => at(0, out, y);
+      const P = (out: number, y: number): C3 => at(0, out, L + y);
       mb.beam(P(0.55, R), P(0.05, 0.42), 0.03);
       mb.beam(P(0.05, 0.42), P(-0.4, 0.95), 0.03);
       mb.beam(P(0.25, 0.85), P(0.05, 0.42), 0.03);
       mb.beam(P(0.25, 0.85), P(0.55, R), 0.025);
       mb.beam(P(-0.4, 0.95), P(-0.55, R), 0.03);
       mb.color = lin(0x2a2a2a);
-      mb.beam(at(-0.22, -0.42, 1.02), at(0.22, -0.42, 1.02), 0.02);
-      mb.frameBox(o, r, n, -0.09, 0.09, 0.9, 0.95, 0.15, 0.4);
+      mb.beam(at(-0.22, -0.42, L + 1.02), at(0.22, -0.42, L + 1.02), 0.02);
+      mb.frameBox(o, r, n, -0.09, 0.09, L + 0.9, L + 0.95, 0.15, 0.4);
       mb.color = lin(0x9aa0a6);
-      mb.frameBox(o, r, n, -0.18, 0.18, 0.72, 0.98, -0.85, -0.55);
+      mb.frameBox(o, r, n, -0.18, 0.18, L + 0.72, L + 0.98, -0.85, -0.55);
       break;
     }
     default:
+      addManilaProp(mb, p, signs);
       break;
   }
   mb.kind = KIND.plain;

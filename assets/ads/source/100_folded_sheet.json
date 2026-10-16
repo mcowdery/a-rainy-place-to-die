@@ -1,0 +1,25 @@
+{
+  "file": "folded_sheet_v1.png",
+  "item": "folded_sheet",
+  "brand": null,
+  "copy": null,
+  "notes": "The pocket atlas page: the map itself is drawn by the game, so the sheet is blank.",
+  "prompt": "top-down flat lay photograph, shot on 35mm film, soft even light, fine film grain, muted colours, true to life wear and patina, sharp focus, a single sheet of thin off-white map paper that has been folded in four and opened out flat again, completely blank, the two fold creases crossing in the middle worn soft and slightly grey, rubbed corners, a small tear at one fold, lying flat and seen straight down from directly above, the sheet with its long side horizontal, centred and whole in the frame with a narrow margin all round, isolated on a plain matte dark grey seamless background, nothing else in the picture, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1216,
+    832
+  ],
+  "steps": 12,
+  "seed": 1196711597,
+  "studioJob": "dfe75f64-1447-4dfb-8d78-f5d0ecc72def-u1",
+  "generated": "2026-10-12T09:37:06.653Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/100_folded_sheet.png",
+  "decided": "2026-10-12T09:55:12.130Z",
+  "batch": "carry_props_01",
+  "purpose": "Photographed-looking base pictures for what Mack carries in place of the phone (story/phone.md): the pager (ポケベル), the ring-bound notebook and the things tucked into it. Each is one object seen straight down on a plain ground, to be cut out and used as a surface the game draws on: every display, page, card and label is BLANK, because digits, handwriting and print are composited in the engine. Design reference: the mock-up at https://claude.ai/artifact/HmLoAUjpEfS679J4BH87pJ. Nothing here goes into the game without the user's approval.",
+  "use": "sign",
+  "district": null
+}

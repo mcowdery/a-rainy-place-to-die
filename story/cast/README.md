@@ -9,14 +9,18 @@ The story needs a lot of interesting characters beyond Mack: the story character
 along the way who stay in his life afterwards (allies, informants, friends, debts). Each story should leave at
 least one person behind who can come back.
 
-## The detective
+## The two main characters
 
-[mc.md](mc.md): **Mack** (Daniel McAllister, proposed), an American, the MC and the thread through every season's story.
+- [mc.md](mc.md): **Mack** (真壁 Makabe), Japanese, an ex-cop and a detective; the thread through every season's
+  story.
+- [dom.md](dom.md): **Dom** (Dominic "Mad Dom" Wilks), a half-Italian, half-Ukrainian mobster hiding in Tokyo; the unbeatable
+  one, and not fully human. Mack becomes his "manager", and he Mack's "mad dog".
 
 ## Close to Mack
 
 | Character | File |
 |---|---|
+| Dom, his partner | [dom.md](dom.md) |
 | Michael, who freed him | [michael.md](michael.md) |
 | Koharu | [the opening](../main/spring/01-osananajimi.md) (her arc) and [his thread](../threads/the-detective.md) |
 | Kuroneko's mama | [minor.md](minor.md) |

@@ -55,7 +55,7 @@ zones:
     id: kawabata_riverside
     name: Kawabata riverside
     night: 0.5
-    people: { plain: 5, long: 2, kimono: 1, yukata: 1.5 }
+    people: { plain: 5, long: 2, kimono: 1, yukata: 1.5, jinbei: 1, hanten: 0.6, kappogi: 0.6, matsuri: 0.4 }
     plan:
       floors: [[2, 3, 60], [4, 6, 40]]
       lotW: [6, 12]
@@ -79,7 +79,7 @@ zones:
   T:
     id: kawabata_temple
     name: Tōkō-ji (the temple quarter)
-    people: { kimono: 3, plain: 4, long: 2, yukata: 1 }
+    people: { kimono: 3, plain: 4, long: 2, yukata: 1, kappogi: 0.5, hanten: 0.5, jinbei: 0.4 }
     plan:
       floors: [[2, 2, 50], [3, 4, 50]]
       lotW: [5, 9]
@@ -104,7 +104,7 @@ zones:
     id: kawabata_nakamise
     name: Kawabata shopping streets
     night: 0.3
-    people: { plain: 5, kimono: 1.5, long: 2 }
+    people: { plain: 5, kimono: 1.5, long: 2, cardigan: 0.6, knit: 0.5, hanten: 0.4 }
     plan:
       floors: [[2, 3, 60], [4, 5, 40]]
       lotW: [4, 8]
@@ -129,7 +129,7 @@ zones:
 
   S:
     id: kawabata_avenue
-    name: Kawabata (Tōto-ōdōri)
+    name: Kawabata (Tokyo-ōdōri)
     plan:
       floors: [[4, 7, 60], [8, 11, 40]]
       lotW: [8, 16]
@@ -149,14 +149,14 @@ zones:
 
   K:
     id: kawabata_tower
-    name: Tōto Tower plaza
+    name: Tokyo Tower plaza
     plan:
       floors: [[3, 5, 60], [6, 9, 40]]
       lotW: [10, 20]
       signChance: 0.6
       streetTrees: 0.8
     signs:
-      words: [TŌTO TOWER, 東都タワー, 土産, CAFE, 蝋人形館, 水族館]
+      words: [TOKYO TOWER, 東京タワー, 土産, CAFE, 蝋人形館, 水族館]
       colors: ['#ffffff', '#ffe45f', '#ff4f4f']
     ads: { fun: 2, mainstream: 2, food: 2 }
     look:

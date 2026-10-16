@@ -51,12 +51,24 @@ interface Flash {
   readonly at: THREE.Vector3;
   readonly dir: THREE.Vector3;
   readonly vel: THREE.Vector3;
+  /** The gun it was fired from, while that moves (a car's): its parts are the gun's children, so they ride with it exactly as it's drawn. */
+  mount: FlashMount | null;
+  /** The bore in the mount's frame. */
+  readonly dirLocal: THREE.Vector3;
   t: number;
   size: number;
   from: number;
   flip: number;
 }
 
+/** A gun a flash can ride on: the object that carries it and the muzzle in that object's frame. */
+export interface FlashMount {
+  readonly node: THREE.Object3D;
+  readonly local: THREE.Vector3;
+}
+
+const _inv = new THREE.Matrix4();
+const _m = new THREE.Matrix4();
 const _up = new THREE.Vector3();
 const _n = new THREE.Vector3();
 const _to = new THREE.Vector3();
@@ -100,7 +112,7 @@ export class MuzzleFlashes {
       side.visible = front.visible = glow.visible = false;
       side.renderOrder = front.renderOrder = glow.renderOrder = 7;
       this.group.add(glow, side, front);
-      this.list.push({ side, front, glow, at: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), vel: new THREE.Vector3(), t: 99, size: 1, from: FIRST, flip: 1 });
+      this.list.push({ side, front, glow, at: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), vel: new THREE.Vector3(), mount: null, dirLocal: new THREE.Vector3(0, 0, 1), t: 99, size: 1, from: FIRST, flip: 1 });
     }
     for (const which of ['side', 'front'] as const) {
       const url = urlOf(which);
@@ -115,7 +127,7 @@ export class MuzzleFlashes {
   }
 
   /** A shot at `at` along `dir`: `size` 1 a pistol's, more for a shotgun; `vel` the shooter's own velocity (m/s). */
-  fire(at: THREE.Vector3, dir: THREE.Vector3, size = 1, vel?: THREE.Vector3): void {
+  fire(at: THREE.Vector3, dir: THREE.Vector3, size = 1, vel?: THREE.Vector3, mount?: FlashMount): void {
     const f = this.list[this.next];
     this.next = (this.next + 1) % this.list.length;
     f.t = 0;
@@ -126,8 +138,17 @@ export class MuzzleFlashes {
     f.front.material.rotation = (Math.random() - 0.5) * 1.2;
     if (vel) f.vel.copy(vel);
     else f.vel.set(0, 0, 0);
+    this.release(f);
     f.at.copy(at);
     f.dir.copy(dir).normalize();
+    if (mount) {
+      // Its parts hang on the gun from now: where the gun is drawn is where the flash is, whatever the order of the frame.
+      f.mount = mount;
+      mount.node.updateWorldMatrix(true, false);
+      _inv.copy(mount.node.matrixWorld).invert();
+      f.dirLocal.copy(f.dir).transformDirection(_inv);
+      mount.node.add(f.glow, f.side, f.front);
+    }
     this.newest = f;
     this.dir.copy(f.dir);
     this.pose(f);
@@ -139,8 +160,13 @@ export class MuzzleFlashes {
     for (const f of this.list) {
       if (f.t > GLOW_LIFE) continue;
       f.t += dt;
-      f.at.addScaledVector(f.vel, dt);
+      if (f.mount) {
+        const M = f.mount.node.matrixWorld;
+        f.at.copy(f.mount.local).applyMatrix4(M);
+        f.dir.copy(f.dirLocal).transformDirection(M);
+      } else f.at.addScaledVector(f.vel, dt);
       this.pose(f);
+      if (f.t > GLOW_LIFE) this.release(f);
     }
     const n = this.newest;
     this.strength = n && n.t < GLOW_LIFE ? (1 - n.t / GLOW_LIFE) ** 2 * this.dark * Math.min(1.3, n.size) : 0;
@@ -152,6 +178,29 @@ export class MuzzleFlashes {
     for (const f of this.list) if (f.t > GLOW_LIFE) f.side.visible = f.front.visible = f.glow.visible = on;
   }
 
+  /** A flash that's over (or about to be fired again) goes back to the shared group. */
+  private release(f: Flash): void {
+    if (!f.mount) return;
+    f.mount = null;
+    this.group.add(f.glow, f.side, f.front);
+  }
+
+  /** Its parts' world poses, said in the gun's frame (they're the gun's children). */
+  private localize(f: Flash): void {
+    if (!f.mount) return;
+    const M = f.mount.node.matrixWorld;
+    _inv.copy(M).invert();
+    const s = 1 / (M.getMaxScaleOnAxis() || 1);
+    f.glow.position.applyMatrix4(_inv);
+    f.glow.scale.multiplyScalar(s);
+    f.front.position.applyMatrix4(_inv);
+    f.front.scale.multiplyScalar(s);
+    if (f.side.visible) {
+      _m.copy(f.side.matrix);
+      f.side.matrix.multiplyMatrices(_inv, _m);
+    }
+  }
+
   private pose(f: Flash): void {
     const hot = f.t < LIFE;
     f.side.visible = f.front.visible = hot;
@@ -160,7 +209,10 @@ export class MuzzleFlashes {
     f.glow.position.copy(f.at).addScaledVector(f.dir, 0.1);
     f.glow.scale.setScalar(0.6 * f.size * (1 + 0.5 * g));
     f.glow.material.opacity = 0.3 * this.dark * (1 - g) * (1 - g);
-    if (!hot) return;
+    if (!hot) {
+      this.localize(f);
+      return;
+    }
     // Its frame of the footage.
     const frame = Math.min(LAST, Math.floor(f.from + (f.t / LIFE) * (LAST + 1 - f.from)));
     const u = (frame % COLS) / COLS;
@@ -193,5 +245,6 @@ export class MuzzleFlashes {
     f.front.position.copy(f.at).addScaledVector(f.dir, 0.03);
     f.front.scale.setScalar(CELL * 0.85 * f.size);
     f.front.material.color.setScalar(lit * wf);
+    this.localize(f);
   }
 }

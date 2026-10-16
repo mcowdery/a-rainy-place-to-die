@@ -1,7 +1,7 @@
 // The water: the park's pond (the user's F9 spot), the river from its west bank, the bay from the port's
 // seawall; by day and at night. node debug-shots/water.mjs <out dir> [name] [query]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/water';
 const name = process.argv[3] ?? 'shot';
@@ -9,7 +9,7 @@ const extra = process.argv[4] ? `&${process.argv[4]}` : '';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 // [label, x, y, z, yaw, pitch]
 const SPOTS = [
   ['pond', 2654.9, 1.7, 1459.7, 46, -8],
@@ -26,7 +26,7 @@ for (const [when, clock] of [['day', '13:00'], ['night', '21:00']].filter(([w]) 
   page.on('console', (m) => {
     if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 400));
   });
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&weather=clear&clock=${clock}&cam=2654.9,1.7,1459.7,46,-8${extra}`, { timeout: 240000 });
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&weather=clear&clock=${clock}&cam=2654.9,1.7,1459.7,46,-8${extra}`, { timeout: 240000 });
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
   await page.evaluate(() => {
     document.getElementById('overlay').hidden = true;

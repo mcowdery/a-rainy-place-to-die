@@ -1,0 +1,10 @@
+# The marshal of Manilaya's street races: a stall on the pavement with a clipboard and a flask of coffee. E on the marshal
+# offers the races (streetraces.yaml, district/streetRace.ts).
+id: race_start
+name: Race Marshal's Stall
+footprint: [14, 10]
+height: 4
+front: south
+nodes:
+  front: { kind: spawn, name: Race marshal (street races), at: [7, 5], facing: south, view: [180, 4] }
+  marshal: { kind: npc, name: Race marshal, at: [5, 3], figure: { body: man, pose: pockets, color: '#e8c070' } }

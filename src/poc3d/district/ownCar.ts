@@ -1,4 +1,5 @@
 import { Terrain } from './terrain';
+import { Siren } from './siren';
 import * as THREE from 'three';
 import { wheelLayout } from '../models/vehicles';
 import { model, tunedSpec } from '../../race/catalog';
@@ -73,6 +74,15 @@ export const CITY_ASSISTS: Assists = { ...ROAD_ASSISTS, maxSlide: (38 * Math.PI)
 
 const SAVE_KEY = 'rainyplace.city.car';
 const BIKE_SAVE_KEY = 'rainyplace.city.bike';
+/** A tank is about 150 km of driving (a little more at a steady throttle) and 100 minutes of idling. */
+const FUEL_PER_M = 1 / 150000 / 0.75;
+const FUEL_IDLE = 1 / 6000;
+/** The key turned: seconds to crank and catch (CATCH of it cranking), and for the revs to fall when it stops. */
+const START_T = 1.5;
+const CATCH = 0.55;
+const STOP_T = 1;
+/** How far off a parked, running engine is heard (m). */
+const IDLE_HEARD = 40;
 /** The car's centre line is probed with small circles (what can stop it), its sides with more (drive through). */
 const CL = 0.35;
 const SIDE = 0.55;
@@ -105,6 +115,8 @@ export class OwnCar {
   readonly ground: Ground;
   name: string;
   readonly sound = new CarSound();
+  /** The beacon from his glovebox (district/siren.ts), on the roof while it's on; a bike has none. */
+  readonly siren = new Siren();
   private saveT = 0;
   /** Damage by part (0 whole to 100 gone), and which owned car this is (for keeping it). */
   readonly parts: Parts;
@@ -137,11 +149,22 @@ export class OwnCar {
   private readonly hl: number;
   private readonly hw: number;
   private readonly saveKey: string;
+  private readonly fuelKey: string;
   /** A bike's drawing each frame (the page's: race/bikeRide.ts), called from `pose`. */
   onPose: ((dt: number) => void) | null = null;
   private reshape = true;
   private unsaved = false;
+  /** Whether crashes cost the car anything (the debug menu's Car section; off by default in the shared build). */
+  damageOn = true;
   private keptT = 0;
+  /** The engine's running: it stays so when you get out, until you turn it off (K at the wheel) or the tank runs dry. */
+  engineOn = false;
+  /** Whether the tank empties (the debug menu's Car section; off by default). */
+  fuelOn = false;
+  /** The tank, 0 empty to 1 full; only spent while `fuelOn`. */
+  fuel = 1;
+  /** Told when the engine stops by itself (the tank ran dry). */
+  onStall: (() => void) | null = null;
 
   constructor(
     material: THREE.Material,
@@ -158,6 +181,13 @@ export class OwnCar {
     this.bike = bike;
     // (The cruiser keeps the first bike's key; the others their own.)
     this.saveKey = !bike ? SAVE_KEY : bike === 'cruiser' ? BIKE_SAVE_KEY : `${BIKE_SAVE_KEY}.${bike}`;
+    this.fuelKey = `${this.saveKey}.fuel`;
+    try {
+      const f = parseFloat(localStorage.getItem(this.fuelKey) ?? '');
+      if (f >= 0 && f <= 1) this.fuel = f;
+    } catch {
+      /* a full tank */
+    }
     const height = (x: number, z: number): number => this.ex?.at(x, z, this.sim.y)?.height ?? this.terrain.height(x, z);
     const tuning = loadTuning();
     if (bike) {
@@ -223,6 +253,7 @@ export class OwnCar {
     // Left up on the expressway: back up there (its height at that spot).
     this.sim.y = this.ex?.at(at.x, at.z, y0)?.height ?? this.sim.y;
     this.vehicle = traffic.addOwn(this.view.obj, this.hl + 0.05, this.hw * 2, this.name, at.x, at.z, Math.sin(at.h), Math.cos(at.h));
+    if (!bike) this.siren.fit(this.view.obj, this.view.type);
     this.sync();
     // Smoke: grey puffs from under the bonnet of a car with a smashed front, and off the rear tyres when they
     // spin or slide (a burnout, a donut, a drift).
@@ -295,6 +326,7 @@ export class OwnCar {
     this.reshape = true;
     this.pose(0);
     this.roof = THREE.MathUtils.clamp(new THREE.Box3().setFromObject(next.body).max.y - obj.position.y, 1.1, 2.2);
+    this.siren.fit(obj, next.type);
   }
 
   /** Its cabin (models/carInterior.ts), for the cockpit view: fitted the first time it's asked for; a bike has none. */
@@ -414,7 +446,8 @@ export class OwnCar {
     const water = weatherBefore(this.sim, this.weather, tyreGrip(P), this.wheelAlong[1], this.wheelAlong[0]);
     c = wasTotaled
       ? { throttle: 0, brake: 0.6, steer: c.steer, handbrake: c.handbrake }
-      : { ...c, throttle: c.throttle * powerLeft(P), steer: Math.max(-1, Math.min(1, c.steer + tyrePull(P))) };
+      : { ...c, throttle: this.engineOn && this.startT >= START_T ? c.throttle * powerLeft(P) : 0, steer: Math.max(-1, Math.min(1, c.steer + tyrePull(P))) };
+    this.burn(dt, c.throttle);
     this.braking = (c.brake > 0 && this.sim.u > 0.5) || (c.throttle > 0 && this.sim.u < -0.5);
     this.contact = null;
     this.sim.update(dt, c, this.ground);
@@ -442,8 +475,178 @@ export class OwnCar {
     this.sync();
     this.saveT += dt;
     if (this.saveT > 5) this.save();
-    this.sound.update(dt, { rev: this.sim.rev, gear: this.sim.gear, throttle: c.throttle, speed: this.sim.speed, slide: this.sim.slide, spin: this.sim.spin, bump: this.knock, boost: this.sim.boost, turbo: !!this.sim.spec.turbo });
+    this.tickEngine(dt);
+    this.sound.update(dt, { rev: this.revOf(this.engineRpm(900 + this.sim.rev * (this.sound.redline - 900))), gear: this.sim.gear, throttle: c.throttle, speed: this.sim.speed, slide: this.sim.slide, spin: this.sim.spin, bump: this.knock, boost: this.sim.boost, turbo: !!this.sim.spec.turbo });
+    this.sound.setVolume(this.sounding ? 1 : 0);
   }
+
+  /** Start or stop the engine (a totalled car or an empty tank won't start). Returns whether it's running. */
+  setEngine(on: boolean): boolean {
+    if (on) {
+      if (this.engineOn || this.pending === 'start') return true;
+      if (this.totaled || (this.fuelOn && this.fuel <= 0)) return false;
+      // His hand goes to the key first (a bike has none to show).
+      if (this.bike) this.begin('start');
+      else this.pending = 'start';
+      return true;
+    }
+    if (this.pending === 'start') this.pending = null;
+    else if (this.engineOn && this.pending !== 'stop') {
+      if (this.bike || this.totaled) this.begin('stop');
+      else this.pending = 'stop';
+    }
+    this.sound.setVolume(this.sounding ? 1 : 0);
+    return this.engineOn;
+  }
+
+  /** The key's turned: it cranks, catches with a flare of revs and settles to its idle; or it dies. */
+  private begin(what: 'start' | 'stop'): void {
+    this.pending = null;
+    if (what === 'start') {
+      this.engineOn = true;
+      this.startT = 0;
+      this.stopT = Infinity;
+      this.keyHold = START_T * CATCH + 0.4;
+    } else {
+      this.shutDown();
+      this.keyHold = 0.45;
+    }
+  }
+
+  /** His hand on the ignition key (0 away, 1 on it) and the key's turn (0 off, 0.5 on, 1 start), for the cabin and the driver. */
+  keyHand = 0;
+  keyTurn = 0;
+  private pending: 'start' | 'stop' | null = null;
+  private keyHold = 0;
+
+  private tickKey(dt: number): void {
+    const toward = (cur: number, to: number, rate: number): number => cur + Math.max(-rate * dt, Math.min(rate * dt, to - cur));
+    if (this.pending) {
+      this.keyHand = toward(this.keyHand, 1, 1 / 0.4);
+      if (this.keyHand >= 1) this.begin(this.pending);
+    } else {
+      this.keyHold = Math.max(0, this.keyHold - dt);
+      this.keyHand = toward(this.keyHand, this.keyHold > 0 ? 1 : 0, 1 / 0.45);
+    }
+    // Off, to on, to start while it cranks, and back to on when it catches.
+    const cranking = this.engineOn && this.startT < START_T * CATCH;
+    const to = cranking ? 1 : this.engineOn ? 0.5 : this.stopT < STOP_T ? 0.5 * Math.max(0, 1 - this.stopT / 0.3) : 0;
+    this.keyTurn = toward(this.keyTurn, to, cranking ? 3 : 4);
+  }
+
+  /** Running, or still winding down. */
+  get sounding(): boolean {
+    return this.engineOn || this.stopT < STOP_T;
+  }
+
+  /** Cranking over, before it catches (the lamps dip, the dash is dead). */
+  get cranking(): boolean {
+    return this.startT < START_T * CATCH;
+  }
+
+  /** The engine stopped: the revs fall away and it shudders as it dies. */
+  private shutDown(): void {
+    this.engineOn = false;
+    this.startT = Infinity;
+    this.stopT = 0;
+    this.stopFrom = this.rpmNow;
+  }
+
+  private tickEngine(dt: number): void {
+    if (this.startT < START_T) this.startT += dt;
+    if (this.stopT < STOP_T) this.stopT += dt;
+    this.shakeClock += dt;
+    this.tickKey(dt);
+  }
+
+  /** Revs as a fraction of the way from 900 rpm to the redline (below 0 under idle). */
+  private revOf(rpm: number): number {
+    return (rpm - 900) / (this.sound.redline - 900);
+  }
+
+  /**
+   * The revs the engine shows (the sound, and the dash's tach through Driving): `base` when running; cranking
+   * slow and lumpy, then catching with a flare; falling away to nothing as it stops; nothing when off.
+   */
+  engineRpm(base: number): number {
+    let rpm = 0;
+    if (this.stopT < STOP_T) rpm = this.stopFrom * (1 - this.stopT / STOP_T) ** 1.6;
+    else if (this.engineOn && this.startT < START_T) {
+      const u = this.startT / START_T;
+      if (u < CATCH) rpm = 230 * (1 + 0.35 * Math.sin(this.startT * 38));
+      else {
+        const k = (u - CATCH) / (1 - CATCH);
+        rpm = 230 + (base - 230) * Math.min(1, k * 4) + 1100 * Math.sin(Math.PI * k) ** 1.5;
+      }
+    } else if (this.engineOn) rpm = base;
+    this.rpmNow = rpm;
+    return rpm;
+  }
+
+  /** How hard the body shakes (m, as a bob) from the engine starting, stopping or just running. */
+  private shudder(): number {
+    if (this.stopT < STOP_T) {
+      const k = this.stopT / STOP_T;
+      return 0.004 * (1 - k) + (k > 0.55 && k < 0.85 ? 0.014 * Math.sin(((k - 0.55) / 0.3) * Math.PI) : 0);
+    }
+    if (!this.engineOn) return 0;
+    if (this.startT < START_T) {
+      const u = this.startT / START_T;
+      return u < CATCH ? 0.008 : 0.016 * (1 - (u - CATCH) / (1 - CATCH)) + 0.0015;
+    }
+    return Math.abs(this.sim.u) < 1 ? 0.0015 : 0;
+  }
+  private startT = Infinity;
+  private stopT = Infinity;
+  private stopFrom = 0;
+  private rpmNow = 0;
+  private shakeClock = 0;
+
+  /** The tank empties with the miles and a little with the idling; run dry, the engine stops. */
+  private burn(dt: number, throttle: number): void {
+    if (!this.fuelOn || !this.engineOn) return;
+    this.fuel = Math.max(0, this.fuel - dt * FUEL_IDLE - Math.abs(this.sim.u) * dt * (0.5 + throttle) * FUEL_PER_M);
+    if (this.fuel <= 0) {
+      this.shutDown();
+      this.onStall?.();
+    }
+  }
+
+  /** Fill the tank. */
+  refuel(): void {
+    this.fuel = 1;
+    this.saveFuel();
+  }
+
+  private saveFuel(): void {
+    try {
+      localStorage.setItem(this.fuelKey, String(Math.round(this.fuel * 1000) / 1000));
+    } catch {
+      /* this session only */
+    }
+  }
+
+  /**
+   * Out of the car: a running engine ticks over, heard by how far the listener is (it keeps burning a little);
+   * a stopped one is silent.
+   */
+  idle(dt: number, listenerX: number, listenerZ: number): void {
+    if (dt <= 0) return;
+    this.tickEngine(dt);
+    if (this.sounding) {
+      this.burn(dt, 0);
+      this.sound.update(dt, { rev: this.revOf(this.engineRpm(900)), gear: 1, throttle: 0, speed: 0, slide: 0, spin: 0, bump: 0 });
+    }
+    const d = Math.hypot(this.sim.x - listenerX, this.sim.z - listenerZ);
+    const near = this.sounding ? Math.max(0, 1 - d / IDLE_HEARD) ** 2 * 0.45 : 0;
+    this.sound.setVolume(near);
+    this.fuelSaveT += dt;
+    if (this.fuelSaveT > 5 && this.fuelOn) {
+      this.fuelSaveT = 0;
+      this.saveFuel();
+    }
+  }
+  private fuelSaveT = 0;
 
   /**
    * A wall met at an angle (under ~45 degrees) turns the car along it, so you slide down the wall keeping your
@@ -480,7 +683,7 @@ export class OwnCar {
   /** Damage `d` to the parts by their shares: kept, shown on the car, and listed for the HUD. */
   private take(shares: Partial<Parts>, d: number): void {
     // (A bike takes no damage yet.)
-    if (d <= 0 || this.bike) return;
+    if (d <= 0 || this.bike || !this.damageOn) return;
     for (const [k, v] of Object.entries(shares) as [Section, number][]) {
       const before = this.parts[k];
       this.parts[k] = Math.min(WRECKED, before + d * v);
@@ -560,6 +763,13 @@ export class OwnCar {
     }
     poseCar(this.view, this.sim, this.ground);
     turnWheels(this.view, this.sim, dt);
+    // The engine shaking the body as it starts, runs and dies.
+    const shake = this.shudder();
+    if (shake > 0) {
+      const t = this.shakeClock;
+      this.view.obj.position.y += shake * (Math.sin(t * 97) * 0.6 + Math.sin(t * 61 + 1.3) * 0.4);
+      this.view.obj.rotateZ(shake * 0.35 * Math.sin(t * 73 + 0.5));
+    }
     const P = this.parts;
     this.dents?.tyres(P);
     if (this.reshape) {
@@ -682,14 +892,19 @@ export class OwnCar {
     }
   }
 
-  /** Stop the engine (getting out): its sound fades to nothing. */
+  /** Getting out: the car stops where it is. A running engine carries on idling (`idle`); a stopped one is silent. */
   park(): void {
     this.sim.u = this.sim.w = this.sim.r = 0;
     this.sim.spin = 0;
     this.braking = false;
+    // Out before the key was turned: it wasn't.
+    this.pending = null;
+    this.keyHold = 0;
+    this.keyHand = 0;
     this.sync();
-    this.sound.setVolume(0);
+    if (!this.engineOn) this.sound.setVolume(0);
     this.save();
+    this.saveFuel();
   }
 
   /** Put the car at (x, z) facing h (for checks, and fetching it). */

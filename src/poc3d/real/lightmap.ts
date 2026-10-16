@@ -16,6 +16,9 @@ export interface Light {
   readonly i: number;
   /** Shopfront spill: from the facade segment (x, z) + t * (dx, dz), t in [0, 1], out along (nx, nz) for depth m. */
   readonly band?: { readonly dx: number; readonly dz: number; readonly nx: number; readonly nz: number; readonly depth: number };
+  /** A shop's or a sign's: lit only while it's open (real/hours.ts class and seed); absent, always. */
+  readonly hours?: number;
+  readonly seed?: number;
 }
 
 /** Lightmap resolution: pixels per metre. */

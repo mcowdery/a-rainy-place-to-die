@@ -4,8 +4,9 @@ import { DistrictModel } from '../src/poc3d/district/model';
 import { CELL, DISTRICTS3 } from '../src/poc3d/district/plan';
 import { isBare, OUTFITS, smokeOf } from '../src/poc3d/district/peopleMix';
 import { railReserved } from '../src/poc3d/district/rail';
-import { buildShaped } from '../src/poc3d/real/mobShape';
+import { buildShaped, NUDE_FORM } from '../src/poc3d/real/mobShape';
 import { scrambleKeys, Signals } from '../src/poc3d/district/traffic';
+import { baseBody, type BaseBody } from '../src/poc3d/real/mobRig';
 import { addFigure, addUmbrella, cellCrowd, handAt, holdHands, footingOf, FIGURE_STRIDE, GHOST_COLORS, GhostBuilder, figureMesh, packFigures, outfitOf, posedFigure, setMobShape, smokerJoints, smokerReach, templateIndex, TEMPLATE_COUNT, umbrellaIndex, type Body, type FigureSpec, type Hair, type Pose } from '../src/poc3d/real/people';
 
 const spec = (body: Body, pose: Pose, extra: Partial<FigureSpec> = {}): FigureSpec => ({
@@ -39,14 +40,14 @@ describe('mob figures', () => {
   // (The classic templates: the sculpted ones, the city's now, have their own tests below.)
   beforeAll(() => setMobShape('classic'));
   it('stand on the floor at believable heights', () => {
-    const heights: Record<Body, [number, number]> = { man: [1.66, 1.78], woman: [1.54, 1.66], child: [1.0, 1.2], elder: [1.55, 1.7] };
+    const heights: Record<BaseBody, [number, number]> = { man: [1.66, 1.78], woman: [1.54, 1.66], child: [1.0, 1.2], elder: [1.55, 1.7] };
     for (const body of Object.keys(heights) as Body[]) {
       // On the pavement, 0.15 m above the road.
       const b = bounds(spec(body, 'stand', { hair: 'none' }));
       expect(b.lo - 0.15).toBeGreaterThan(-0.01);
       expect(b.lo - 0.15).toBeLessThan(0.03);
-      expect(b.hi - 0.15).toBeGreaterThan(heights[body][0]);
-      expect(b.hi - 0.15).toBeLessThan(heights[body][1]);
+      expect(b.hi - 0.15).toBeGreaterThan(heights[baseBody(body)][0]);
+      expect(b.hi - 0.15).toBeLessThan(heights[baseBody(body)][1]);
     }
   });
 
@@ -179,13 +180,13 @@ describe('shaped mob figures', () => {
   const HAIRS: Hair[] = ['short', 'long', 'bun', 'hat', 'cap', 'none', 'bob', 'ponytail', 'twin'];
 
   it('stand on the floor at the same heights', () => {
-    const heights: Record<Body, [number, number]> = { man: [1.66, 1.78], woman: [1.54, 1.66], child: [1.0, 1.2], elder: [1.55, 1.7] };
+    const heights: Record<BaseBody, [number, number]> = { man: [1.66, 1.78], woman: [1.54, 1.66], child: [1.0, 1.2], elder: [1.55, 1.7] };
     for (const body of BODIES) {
       const b = bounds(spec(body, 'stand', { hair: 'none' }));
       expect(b.lo - 0.15).toBeGreaterThan(-0.01);
       expect(b.lo - 0.15).toBeLessThan(0.03);
-      expect(b.hi - 0.15).toBeGreaterThan(heights[body][0]);
-      expect(b.hi - 0.15).toBeLessThan(heights[body][1]);
+      expect(b.hi - 0.15).toBeGreaterThan(heights[baseBody(body)][0]);
+      expect(b.hi - 0.15).toBeLessThan(heights[baseBody(body)][1]);
     }
   });
 
@@ -249,12 +250,15 @@ describe('shaped mob figures', () => {
           for (const pose of ['stand', 'walk', 'wave', 'sit'] as Pose[]) expect(bounds(spec(body, pose, { hair, outfit })).r).toBeLessThan(1.0);
           // (A body with nothing on is never in a crowd, and a woman's has more points across the chest: a bound of its own.)
           const triangles = figureMesh({ body, hair, long: false, outfit }).triangles;
+          // (The clothes painted on a woman's nude form carry its points and the cuts along their edges: a bound between.)
           if (isBare(outfit)) expect(triangles).toBeLessThan(9000);
+          else if (body === 'woman' && NUDE_FORM.includes(outfit)) expect(triangles).toBeLessThan(20000);
           else most = Math.max(most, triangles);
         }
       }
     }
-    expect(most).toBeLessThan(5100);
+    // (The festival's happi over a woman's wrapped chest is the largest of the rest.)
+    expect(most).toBeLessThan(5600);
     // An everyday figure: a little over twice the classic one's triangles, no more.
     expect(figureMesh({ body: 'man', hair: 'short', long: false }).triangles).toBeLessThan(2800);
     // (A woman's hips and legs are one surface, finer round the back of the hips and through the thighs.)
@@ -316,9 +320,9 @@ describe('street crowds', () => {
           for (const f of cellCrowd(plan, model.detail(mx, my)!, model.plazas(mx, my))) {
             const o = outfitOf(f);
             t[o] = (t[o] ?? 0) + 1;
-            if (o === 'maid') expect(f.body).toBe('woman');
+            if (o === 'maid') expect(baseBody(f.body)).toBe('woman');
             if (f.body === 'child') expect(['plain', 'school', 'yukata', 'otaku', 'hoodie', 'track', 'gym']).toContain(o);
-            if (o === 'work' || o === 'police') expect(['man', 'woman']).toContain(f.body);
+            if (o === 'work' || o === 'police') expect(['man', 'woman']).toContain(baseBody(f.body));
           }
         }
       }
@@ -378,6 +382,8 @@ describe('street crowds', () => {
         if (!g) continue;
         crossers++;
         const w = f.walk!;
+        // Across at a walk, never a run (the shader runs anyone over 1.9 m/s).
+        expect(w.speed).toBeLessThan(1.6);
         const gx = Math.round(f.x / CELL), gy = Math.round(f.z / CELL);
         const alongNS = Math.abs(w.ez) > Math.abs(w.ex);
         const go = g.at + g.wait + 0.3;

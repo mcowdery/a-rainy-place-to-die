@@ -1,0 +1,28 @@
+{
+  "file": "megumi_kamakura_v2.png",
+  "item": "megumi_kamakura",
+  "brand": null,
+  "copy": null,
+  "notes": "The one the placeholder is captioned for: 恵 · 鎌倉.",
+  "prompt": "candid 35mm colour snapshot print, late 1980s Japan, natural overcast daylight, soft film grain, slightly faded colours, a photograph taken by her husband, ohwx kimoto, a Japanese woman in her mid thirties on a windy beach on a grey day, a beige trench coat over a dark sweater, her dark shoulder-length hair blown across her face, one hand holding it back, laughing at the camera, the grey sea and a line of surf behind her, vertical composition, head and shoulders, her face in the upper middle of the frame, no text, no lettering, no logos, no watermark",
+  "lora": {
+    "trigger": "ohwx kimoto",
+    "scale": 0.85
+  },
+  "model": "krea-2-turbo",
+  "size": [
+    768,
+    1024
+  ],
+  "steps": 12,
+  "seed": 1735931365,
+  "studioJob": "5aa26034-dd11-446d-a36f-7098ff47fabe-u1",
+  "generated": "2026-10-12T10:17:43.665Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/107_megumi_kamakura.png",
+  "decided": "2026-10-12T10:44:43.721Z",
+  "batch": "megumi_print_01",
+  "purpose": "The photograph of Megumi that Mack keeps in his notebook (story/phone.md, story/cast/mc.md): a small colour print tucked into the binder's pocket, where the phone's wallpaper used to be. The user asked for it, 2026-10-12. Megumi has no face of her own yet: these use the Kimoto face, which stood in for her in the phone wallpapers and belongs to no other character (Julie and Koharu are people in the story). She is Mack's wife, a newspaper crime reporter in her mid thirties. A snapshot he took, not a portrait. Nothing goes into the game without the user's approval.",
+  "use": "poster",
+  "district": null
+}

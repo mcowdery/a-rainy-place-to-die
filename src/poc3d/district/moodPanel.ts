@@ -2,7 +2,9 @@ import { BLUSH_LOOKS, EMOTE_LOOKS, HEART_LOOKS, STAR_LOOKS, type EmoteLooks } fr
 import { MOB_LOOK_NAMES, type MobLook } from '../real/people';
 import { GRADE_NAMES, type GradeName } from '../real/grade';
 import { SKY_LOOKS, type SkyLook } from './atmosphere';
+import { era } from './era';
 import { MOON_SHAPES, type MoonShape } from '../real/sky';
+import { ENGINE_VOICES, type EngineVoice } from '../../race/engineSamples';
 import { DEFAULT_GUN_VOICE, GUN_VOICES, type GunVoice } from '../../race/gunVoices';
 
 /**
@@ -55,6 +57,10 @@ export interface MoodSettings {
   mobShadows: boolean;
   /** People show emotes now and then (anime's symbols at the head: real/emotes.ts). */
   mobEmotes: boolean;
+  /** The people in the streets are drawn at all (off: nobody shows, for looking at the city alone). */
+  showPeople: boolean;
+  /** The animals are about (off: none, and none are added). */
+  showFauna: boolean;
   /** How many of the street's smokers have one lit (0 none, 1 as the period was: real/smoke.ts). */
   smoking: number;
   /** How the emotes' blush, hearts and stars are drawn (real/emotes.ts EmoteLooks). */
@@ -69,11 +75,28 @@ export interface MoodSettings {
   carRoof: number;
   /** Footsteps' level against the rest (1 as built). */
   steps: number;
+  /** Rain's sound level against the rest (1 as built). */
+  rainVol: number;
   /** The pistol's shot (race/gunVoices.ts: a set of recordings, or the synthesised one), the guns' level against the rest (1 as built), and how much street echo a recorded shot gets. */
   gun: GunVoice;
   shotgun: 'a' | 'b' | 'synth';
   guns: number;
   gunEcho: number;
+  /** How loud the pistol's reload is (1 as built). */
+  reloadSound: number;
+  /** The car's sound (race/engineSamples.ts `engineTune`, 1 as built): the engine's voice, all the car's sounds, the engine alone, its brightness and pitch, how closely the pitch follows the revs, the synthesised note under the recording, tyres, wind, turbo whistle. */
+  engineVoice: EngineVoice;
+  carSound: number;
+  engineLevel: number;
+  engineTone: number;
+  enginePitch: number;
+  engineCurve: number;
+  engineSynth: number;
+  tyreLevel: number;
+  windNoise: number;
+  whistleLevel: number;
+  /** The traffic's recorded engines (real/audio.ts), 1 as built. */
+  trafficEngines: number;
   /** The car radio's level (real/radio.ts; 0 silences it). */
   music: number;
   /** Render resolution: auto (lowered while frames are slow, raised again when there's room) or a fixed share. */
@@ -126,7 +149,7 @@ export const SKY_COLOR_MODE: Record<SkyColors, { sky: number; light: number; tin
 export const RESOLUTIONS = ['auto', '100', '85', '70', '55'] as const;
 export type Resolution = (typeof RESOLUTIONS)[number];
 
-export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, windowFolk: 1, windowVice: 1, windowPeople: true, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, carDamp: 0.5, carRoof: 1, steps: 1, gun: DEFAULT_GUN_VOICE, shotgun: 'a', guns: 1, gunEcho: 0.3, music: 0.5, resolution: 'auto', mirror: 'all', quality: 'high', mob: 'ghost', mobShadows: true, mobEmotes: true, smoking: 1, mobBlush: EMOTE_LOOKS.blush, mobHearts: EMOTE_LOOKS.hearts, mobStars: EMOTE_LOOKS.stars, sky: 'deep', skyColors: 'painted', moonShape: 'calendar' };
+export const MOOD_DEFAULTS: MoodSettings = { rain: null, wind: 0, windDir: 70, lightning: 'auto', fog: 1, moon: 1, darkness: 0.08, wetness: null, screenGlow: 0.1, windowFolk: 1, windowVice: 1, windowPeople: true, showPeople: true, showFauna: true, dof: 0, focus: null, shadows: 8, grade: 'neutral', cycle: false, volume: 0.7, carDamp: 0.5, carRoof: 1, steps: 1, rainVol: 1, gun: DEFAULT_GUN_VOICE, shotgun: 'a', guns: 1, gunEcho: 0.3, reloadSound: 1, engineVoice: 'honda', carSound: 1, engineLevel: 1, engineTone: 1, enginePitch: 0.65, engineCurve: 0.8, engineSynth: 1, tyreLevel: 2.01, windNoise: 1, whistleLevel: 1, trafficEngines: 1, music: 0.5, resolution: 'auto', mirror: 'all', quality: 'high', mob: 'ghost', mobShadows: true, mobEmotes: true, smoking: 1, mobBlush: EMOTE_LOOKS.blush, mobHearts: EMOTE_LOOKS.hearts, mobStars: EMOTE_LOOKS.stars, sky: 'deep', skyColors: 'painted', moonShape: 'calendar' };
 const SHADOW_COUNTS = [0, 2, 4, 8];
 const SAVED_KEY = 'rainyplace.district.mood';
 
@@ -162,8 +185,22 @@ function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettin
   m.carDamp = num('carDamp', 0, 1) ?? m.carDamp;
   m.carRoof = num('carRoof', 0, 2) ?? m.carRoof;
   m.steps = num('steps', 0, 2) ?? m.steps;
+  m.rainVol = num('rainVol', 0, 2) ?? m.rainVol;
   m.guns = num('guns', 0, 2) ?? m.guns;
   m.gunEcho = num('gunEcho', 0, 1) ?? m.gunEcho;
+  m.reloadSound = num('reloadSound', 0, 3) ?? m.reloadSound;
+  const ev = params.get('engine');
+  if (ev && (ENGINE_VOICES as readonly string[]).includes(ev)) m.engineVoice = ev as EngineVoice;
+  m.carSound = num('carSound', 0, 2) ?? m.carSound;
+  m.engineLevel = num('engineLevel', 0, 3) ?? m.engineLevel;
+  m.engineTone = num('engineTone', 0.3, 2.5) ?? m.engineTone;
+  m.enginePitch = num('enginePitch', 0.4, 1.8) ?? m.enginePitch;
+  m.engineCurve = num('engineCurve', 0.3, 1.2) ?? m.engineCurve;
+  m.engineSynth = num('engineSynth', 0, 3) ?? m.engineSynth;
+  m.tyreLevel = num('tyreLevel', 0, 3) ?? m.tyreLevel;
+  m.windNoise = num('windNoise', 0, 3) ?? m.windNoise;
+  m.whistleLevel = num('whistleLevel', 0, 3) ?? m.whistleLevel;
+  m.trafficEngines = num('trafficEngines', 0, 4) ?? m.trafficEngines;
   const gv = params.get('gun') as GunVoice | null;
   if (gv && GUN_VOICES.includes(gv)) m.gun = gv;
   const sv = params.get('shotgun');
@@ -178,12 +215,18 @@ function moodFromParams(params: URLSearchParams, base: MoodSettings): MoodSettin
   m.smoking = num('smoking', 0, 1) ?? m.smoking;
   const em = params.get('emotes');
   if (em === '1' || em === '0') m.mobEmotes = em === '1';
+  const sp = params.get('people');
+  if (sp === '1' || sp === '0') m.showPeople = sp === '1';
+  const sf = params.get('animals');
+  if (sf === '1' || sf === '0') m.showFauna = sf === '1';
   const bl = params.get('blush') as EmoteLooks['blush'] | null;
   if (bl && BLUSH_LOOKS.includes(bl)) m.mobBlush = bl;
   const he = params.get('hearts') as EmoteLooks['hearts'] | null;
   if (he && HEART_LOOKS.includes(he)) m.mobHearts = he;
   const st = params.get('stars') as EmoteLooks['stars'] | null;
   if (st && STAR_LOOKS.includes(st)) m.mobStars = st;
+  // (An older year starts in its own film's grade; `?grade=` overrides it. district/era.ts.)
+  m.grade = era().grade;
   const g = params.get('grade') as GradeName | null;
   if (g && GRADE_NAMES.includes(g)) m.grade = g;
   const mi = params.get('mirror');
@@ -228,14 +271,29 @@ function moodParams(m: MoodSettings, base: MoodSettings, into = new URLSearchPar
   set('carDamp', f(m.carDamp), f(base.carDamp));
   set('carRoof', f(m.carRoof), f(base.carRoof));
   set('steps', f(m.steps), f(base.steps));
+  set('rainVol', f(m.rainVol), f(base.rainVol));
   set('gun', m.gun, base.gun);
   set('shotgun', m.shotgun, base.shotgun);
   set('guns', f(m.guns), f(base.guns));
   set('gunEcho', f(m.gunEcho), f(base.gunEcho));
+  set('reloadSound', f(m.reloadSound), f(base.reloadSound));
+  set('engine', m.engineVoice, base.engineVoice);
+  set('carSound', f(m.carSound), f(base.carSound));
+  set('engineLevel', f(m.engineLevel), f(base.engineLevel));
+  set('engineTone', f(m.engineTone), f(base.engineTone));
+  set('enginePitch', f(m.enginePitch), f(base.enginePitch));
+  set('engineCurve', f(m.engineCurve), f(base.engineCurve));
+  set('engineSynth', f(m.engineSynth), f(base.engineSynth));
+  set('tyreLevel', f(m.tyreLevel), f(base.tyreLevel));
+  set('windNoise', f(m.windNoise), f(base.windNoise));
+  set('whistleLevel', f(m.whistleLevel), f(base.whistleLevel));
+  set('trafficEngines', f(m.trafficEngines), f(base.trafficEngines));
   set('music', f(m.music), f(base.music));
   set('cycle', m.cycle ? '1' : '0', base.cycle ? '1' : '0');
   set('mobShadows', m.mobShadows ? '1' : '0', base.mobShadows ? '1' : '0');
   set('emotes', m.mobEmotes ? '1' : '0', base.mobEmotes ? '1' : '0');
+  set('people', m.showPeople ? '1' : '0', base.showPeople ? '1' : '0');
+  set('animals', m.showFauna ? '1' : '0', base.showFauna ? '1' : '0');
   set('smoking', f(m.smoking), f(base.smoking));
   set('blush', m.mobBlush, base.mobBlush);
   set('hearts', m.mobHearts, base.mobHearts);
@@ -319,7 +377,9 @@ export class MoodPanel {
     // The crowd in the streets: the mob's look (ghost: all black and see-through; color: the figures in their
     // colours, lit by the scene), whether people cast shadows, whether they show emotes and how those are drawn.
     this.into = this.groups.crowd;
-    this.choice('mob', 'Look', MOB_LOOK_NAMES, () => s.mob, (v) => (s.mob = v as MobLook));
+    this.choice('showPeople', 'People', ['on', 'off'], () => (s.showPeople ? 'on' : 'off'), (v) => (s.showPeople = v === 'on'));
+    this.choice('showFauna', 'Animals', ['on', 'off'], () => (s.showFauna ? 'on' : 'off'), (v) => (s.showFauna = v === 'on'));
+    this.choice('mob', 'Look',MOB_LOOK_NAMES, () => s.mob, (v) => (s.mob = v as MobLook));
     this.choice('mobShadows', 'Shadows they cast', ['off', 'on'], () => (s.mobShadows ? 'on' : 'off'), (v) => (s.mobShadows = v === 'on'));
     this.slider('smoking', 'Smoking', 0, 1, 0.05, () => s.smoking, (v) => (s.smoking = v), (v) => (v < 0.03 ? 'nobody' : v > 0.97 ? 'as it was (late Showa)' : `${Math.round(v * 100)}% of them`));
     this.choice('emotes', 'Emotes', ['off', 'on'], () => (s.mobEmotes ? 'on' : 'off'), (v) => (s.mobEmotes = v === 'on'));
@@ -329,7 +389,7 @@ export class MoodPanel {
 
     // The rooms behind the windows (real/windowScenes.ts).
     this.into = this.groups.windows;
-    this.choice('windowPeople', 'People in windows', ['off', 'on'], () => (s.windowPeople ? 'on' : 'off'), (v) => (s.windowPeople = v === 'on'));
+    this.choice('windowPeople', 'Window scenes (people and furniture)', ['off', 'on'], () => (s.windowPeople ? 'on' : 'off'), (v) => (s.windowPeople = v === 'on'));
     this.slider('windowFolk', 'How many', 0, 3, 0.05, () => s.windowFolk, (v) => (s.windowFolk = v), (v) => (v < 0.03 ? 'none' : `x${v.toFixed(2)}`));
     this.slider('windowVice', 'Vice (and shady shops)', 0, 4, 0.05, () => s.windowVice, (v) => (s.windowVice = v), (v) => (v < 0.03 ? 'none' : `x${v.toFixed(2)}`));
     this.note('Off: the rooms stay lit and furnished, with nobody in them. The shady shops at street level follow Vice alone.');
@@ -339,11 +399,24 @@ export class MoodPanel {
     this.into = this.groups.sound;
     this.slider('volume', 'Sound', 0, 1, 0.01, () => s.volume, (v) => (s.volume = v), (v) => (v < 0.01 ? 'muted' : pct(v)));
     this.slider('music', 'Music (radio, phone)', 0, 1, 0.01, () => s.music, (v) => (s.music = v), (v) => (v < 0.01 ? 'silent' : pct(v)));
+    this.slider('rainVol', 'Rain', 0, 2, 0.01, () => s.rainVol, (v) => (s.rainVol = v), (v) => (v < 0.01 ? 'off' : pct(v)));
     this.slider('steps', 'Footsteps', 0, 2, 0.01, () => s.steps, (v) => (s.steps = v), (v) => (v < 0.01 ? 'off' : pct(v)));
     this.choice('gun', 'Pistol shot', GUN_VOICES, () => s.gun, (v) => (s.gun = v as GunVoice));
     this.choice('shotgun', 'Shotgun shot', ['a', 'b', 'synth'], () => s.shotgun, (v) => (s.shotgun = v as MoodSettings['shotgun']));
     this.slider('guns', 'Gunshots', 0, 2, 0.01, () => s.guns, (v) => (s.guns = v), (v) => (v < 0.01 ? 'off' : pct(v)));
+    this.slider('reloadSound', 'Reload sound', 0, 3, 0.01, () => s.reloadSound, (v) => (s.reloadSound = v), (v) => (v < 0.01 ? 'off' : pct(v)));
     this.slider('gunEcho', 'Gunshot echo', 0, 1, 0.01, () => s.gunEcho, (v) => (s.gunEcho = v), (v) => (v < 0.01 ? 'dry' : pct(v)));
+    this.choice('engine', 'Engine voice', ENGINE_VOICES, () => s.engineVoice, (v) => (s.engineVoice = v as EngineVoice));
+    this.slider('carSound', 'Car sounds (all)', 0, 2, 0.01, () => s.carSound, (v) => (s.carSound = v), (v) => (v < 0.01 ? 'off' : pct(v)));
+    this.slider('engineLevel', 'Engine level', 0, 3, 0.01, () => s.engineLevel, (v) => (s.engineLevel = v), (v) => (v < 0.01 ? 'off' : pct(v)));
+    this.slider('engineTone', 'Engine brightness', 0.3, 2.5, 0.01, () => s.engineTone, (v) => (s.engineTone = v), (v) => `x${v.toFixed(2)}`);
+    this.slider('enginePitch', 'Engine pitch', 0.4, 1.8, 0.01, () => s.enginePitch, (v) => (s.enginePitch = v), (v) => `x${v.toFixed(2)}`);
+    this.slider('engineCurve', 'Pitch follows revs', 0.3, 1.2, 0.01, () => s.engineCurve, (v) => (s.engineCurve = v), (v) => (v < 0.5 ? `${v.toFixed(2)} (flat)` : v.toFixed(2)));
+    this.slider('engineSynth', 'Synth under the recording', 0, 3, 0.01, () => s.engineSynth, (v) => (s.engineSynth = v), (v) => (v < 0.01 ? 'off' : pct(v)));
+    this.slider('tyreLevel', 'Tyre squeal', 0, 3, 0.01, () => s.tyreLevel, (v) => (s.tyreLevel = v), (v) => (v < 0.01 ? 'off' : pct(v)));
+    this.slider('windNoise', 'Wind at speed', 0, 3, 0.01, () => s.windNoise, (v) => (s.windNoise = v), (v) => (v < 0.01 ? 'off' : pct(v)));
+    this.slider('whistleLevel', 'Turbo whistle', 0, 3, 0.01, () => s.whistleLevel, (v) => (s.whistleLevel = v), (v) => (v < 0.01 ? 'off' : pct(v)));
+    this.slider('trafficEngines', 'Traffic engines', 0, 4, 0.01, () => s.trafficEngines, (v) => (s.trafficEngines = v), (v) => (v < 0.01 ? 'off' : pct(v)));
     this.slider('carDamp', 'In-car damping', 0, 1, 0.01, () => s.carDamp, (v) => (s.carDamp = v), (v) => (v < 0.01 ? 'none (as outside)' : pct(v)));
     this.slider('carRoof', 'Rain on car roof', 0, 2, 0.01, () => s.carRoof, (v) => (s.carRoof = v), (v) => (v < 0.01 ? 'off' : pct(v)));
 

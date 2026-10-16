@@ -1,16 +1,13 @@
-import type { PhoneApp } from '../../phone/ui';
 import { listSaves, type SaveGame, type Slot } from '../../save/save';
 
 /**
- * セーブ, the phone's save app: the autosave and three slots, each with where and when it was saved and how long
- * played; Save writes the game now into a slot (the autosave is kept by the game itself), Load reopens the city
- * from one. A second tap confirms anything that would overwrite or leave the game.
+ * セーブ, the save panel: the autosave and three slots, each with where and when it was saved and how long played;
+ * Save writes the game now into a slot (the autosave is kept by the game itself), Load reopens the city from one. A
+ * second click confirms anything that would overwrite or leave the game. It is a page of the pause menu
+ * (startScreen.ts `PauseMenu`, Esc): saving is the game's, not something he does in the world with anything he carries
+ * (the user, 2026-10-13; it was the phone's セーブ app, and the notebook's diary in the mock-up).
  */
-export class SaveApp implements PhoneApp {
-  readonly id = 'save';
-  readonly name = 'セーブ';
-  readonly icon = '💾';
-  readonly color = '#5a4ad0';
+export class SavePanel {
   private list: HTMLDivElement | null = null;
   private armed: string | null = null;
   /** Why the last save didn't happen (shown under its slot), and which slot. */
@@ -22,17 +19,12 @@ export class SaveApp implements PhoneApp {
     private readonly load: (slot: Slot) => void,
   ) {}
 
-  show(screen: HTMLElement): void {
+  /** Draws the slots into `page`. */
+  show(page: HTMLElement): void {
     injectStyle();
-    const root = document.createElement('div');
-    root.className = 'sv-root';
-    const head = document.createElement('div');
-    head.className = 'sv-head';
-    head.innerHTML = '<b>セーブ</b><span>Save and load</span>';
     const list = document.createElement('div');
     list.className = 'sv-list';
-    root.append(head, list);
-    screen.append(root);
+    page.append(list);
     this.list = list;
     this.armed = null;
     this.problem = null;
@@ -90,12 +82,6 @@ export class SaveApp implements PhoneApp {
     }
   }
 
-  back(): boolean {
-    if (!this.armed) return false;
-    this.armed = null;
-    this.render();
-    return true;
-  }
 }
 
 function describe(s: SaveGame): string {
@@ -112,19 +98,19 @@ function injectStyle(): void {
   styled = true;
   const s = document.createElement('style');
   s.textContent = `
-  .sv-root { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #0c0c14; color: #e8e6f0; }
-  .sv-head { display: flex; flex-direction: column; gap: 2px; padding: 16px 16px 12px; background: #2a2360; }
-  .sv-head b { font: 700 18px 'Yu Gothic', system-ui, sans-serif; }
-  .sv-head span { font-size: 12px; color: #b8b0e8; }
-  .sv-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px; }
-  .sv-slot { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #16161f; border: 1px solid #2a2a3a; border-radius: 10px; }
+  .sv-list { display: flex; flex-direction: column; gap: 10px; }
+  .sv-slot { display: flex; align-items: center; gap: 14px; padding: 12px 14px; background: rgba(20,14,14,.7); border: 1px solid #3a2a2a; }
   .sv-info { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .sv-info b { font-size: 14px; }
-  .sv-info span { font-size: 11px; color: #9a98b0; overflow-wrap: anywhere; }
-  .sv-actions { display: flex; flex-direction: column; gap: 6px; }
-  .sv-btn { font: 600 12px system-ui, sans-serif; padding: 7px 12px; border-radius: 8px; border: 1px solid #5a4ad0; background: #2a2360; color: #fff; cursor: pointer; white-space: nowrap; }
-  .sv-btn.armed { background: #d04a6a; border-color: #ff8aa8; }
-  .sv-btn:disabled { opacity: 0.35; cursor: default; }
+  .sv-info b { font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: #e6dfd6; }
+  .sv-info span { font-size: 12px; color: #a39b92; overflow-wrap: anywhere; font-family: Consolas, 'Cascadia Mono', monospace; }
+  .sv-actions { display: flex; gap: 8px; }
+  /* (The pause menu's own button style, a big skewed numbered bar, is for its menu: these are small and plain.) */
+  .noir .sv-btn { display: inline-block; width: auto; margin: 0; padding: 8px 14px; transform: none; counter-increment: none; font: 700 12px 'Segoe UI', sans-serif; letter-spacing: .14em;
+    text-transform: uppercase; border: 1px solid #6a4040; background: transparent; color: #d8d0c6; cursor: pointer; white-space: nowrap; transition: none; }
+  .noir .sv-btn::before { content: none; }
+  .noir .sv-btn:hover:not(:disabled), .noir .sv-btn:focus-visible { padding: 8px 14px; border: 1px solid #c01822; background: #3a0a0e; color: #fff; }
+  .noir .sv-btn.armed, .noir .sv-btn.armed:hover { background: #8e1118; border-color: #d0303a; color: #fff; }
+  .noir .sv-btn:disabled { opacity: .3; cursor: default; background: transparent; padding: 8px 14px; }
   `;
   document.head.append(s);
 }

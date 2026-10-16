@@ -2,7 +2,7 @@
 // (the wheel and his hands, the passenger side, the back and the mirror), the bonnet, chase and far views.
 // node debug-shots/cockpit.mjs <out dir> [types=sports,hatch,...] [venue]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/cockpit';
 const types = (process.argv[3] ?? 'sports,hatch,rotary,awd,roadster').split(',');
@@ -12,7 +12,7 @@ const outfit = process.argv[5] ?? 'suit_cream';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 for (const type of types) {
   const page = await browser.newPage({ viewport: { width: 1100, height: 640 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));

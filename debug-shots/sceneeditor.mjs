@@ -8,7 +8,7 @@
 // A held thing:  <scene id>[@<pose>]:hold:<figure>.<hold>[:dx,dy][:angle][:wheel ticks][:undress]   takes hold of it, drags
 // it dx, dy metres, turns it to an angle by its round handle, sizes it by the wheel (and with `undress`, presses the
 // figure's undress button); photographed, never saved. e.g.  v_den_pour@1:hold:1.0:0.05,0.1:45:3
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/sceneeditor';
@@ -18,7 +18,7 @@ const jobs = process.argv.slice(4);
 const server = await shotServer({ mode, server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const browser = await launchBrowser({ channel: 'msedge', headless: true });
 const page = await browser.newPage({ viewport: { width: 1720, height: 1000 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.type() === 'error' && !/404|favicon/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 400)); });

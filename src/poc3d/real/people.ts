@@ -8,8 +8,13 @@ import { toGeometry, type RawGeometry } from './rawGeometry';
 import { CITY_PEOPLE, DISTRICT_PEOPLE, OUTFITS, pickOutfit, smokeOf, SMOKES, type Outfit, type PeopleMix, type Smoke } from '../district/peopleMix';
 import { HOURS, HOURS_GLSL, MANNERS, nightLife, seasonsOf, whenOf, type Hours, type Manner } from '../district/peopleHours';
 
-import { ALL_BONES, blend, BONES, DIGIT_BONES, SPINE_BONES, TOE_BONES, digitParent, FOOT_L, FOOT_LEVEL, FOOT_R, ARM_L, ARM_R, FORE_L, FORE_R, HEAD, one, PARENT, PELVIS, pivotsOf, PROPORTIONS, ROOT, scaleRows, SHIN_L, SHIN_R, SPINE, TemplateBuilder, THIGH_L, THIGH_R, type Body, type Hair, type Row, type Template, type V3, type Weight } from './mobRig';
+import { ALL_BODIES, baseBody, isBuild, isOld, oldGlsl, ALL_BONES, blend, BONES, DIGIT_BONES, SPINE_BONES, TOE_BONES, digitParent, FOOT_L, FOOT_LEVEL, FOOT_R, ARM_L, ARM_R, FORE_L, FORE_R, HEAD, one, PARENT, PELVIS, pivotsOf, PROPORTIONS, ROOT, scaleRows, SHIN_L, SHIN_R, SPINE, TemplateBuilder, THIGH_L, THIGH_R, type Body, type Hair, type Row, type Template, type V3, type Weight } from './mobRig';
 import { buildShaped, isTeen, shapedVariant, TEEN_SCALE } from './mobShape';
+import { DETAILED_HAIR, detailedClassic, isDetailed } from './mobHairKinds';
+import { isMenHair, MEN_HAIR } from './mobMenHairKinds';
+import { HAIR_GROUPS } from './mobHairKinds';
+import { WOMEN_CUT_GROUPS, WOMEN_DETAILED_SHARE, type Age } from '../district/peopleDemographics';
+import { ageOf, buildFor, hairTone, menCutFor, nightTradeHere, womenGroupKey } from '../district/peopleDemoPick';
 import { EMOTE_GLSL, EMOTE_REACH, emoteUniforms, FACE_MARK, FACE_MARK_GLSL, FACE_VERTEX_GLSL, flushGlsl } from './emoteGlsl';
 import { modelTemplate, type MobModelDoc } from './mobModels';
 
@@ -52,6 +57,8 @@ export interface FigureSpec {
   /** Linear colour; bright colours are darkened to the mob's shades. */
   readonly color: V3;
   readonly hair: Hair;
+  /** Its hair's colour (peopleDemographics.ts `hairTone`): 0 as the material picks, 1 black, 2 brown, 3 grey, 4 white, 5 dyed brown, 6 dyed blonde, 7 an old person's dark dye. */
+  readonly hairTone?: number;
   /** A skirt (women) or a long coat (men): the 'long' outfit when `outfit` isn't given. */
   readonly long: boolean;
   /** What they wear (district/peopleMix.ts); else everyday clothes, or 'long' with `long`. */
@@ -326,8 +333,20 @@ const CASE: readonly Row[] = [
 /** White garments (apron, collar, shirt, obi) are lighter shades of the figure's dark: still dark, readable. */
 const WHITE = 3.6;
 
+/** The outfits built as a teen (a school's, a gang's): a man's other builds don't wear them. */
+const TEEN_OUTFITS_OF_MEN: readonly Outfit[] = ['school', 'pinoy_school', 'track', 'gym', 'yankee'];
+
+/** What an old woman wears (the rest of the woman's outfits, the night's and the young's, are not hers). */
+const ELDER_WOMAN_WEARS: readonly Outfit[] = ['plain', 'long', 'kimono', 'yukata', 'puffer', 'dress', 'apron', 'cardigan', 'knit', 'hanten', 'jinbei', 'blouson', 'trench', 'suit'];
+
 /** Which outfits a body wears (others fall back to everyday clothes). */
-const wears = (b: Body, o: Outfit): boolean => {
+const wears = (body: Body, o: Outfit): boolean => {
+  // (A build is a man, but never a schoolboy or a track-suited teen, nor bare: those are slight bodies.)
+  if (isBuild(body)) {
+    if (TEEN_OUTFITS_OF_MEN.includes(o) || o === 'nude' || o === 'nude_heels') return false;
+    if ((body === 'w_elder' || body === 'w_elder_plump') && !ELDER_WOMAN_WEARS.includes(o)) return false;
+  }
+  const b = baseBody(body);
   switch (o) {
     case 'plain':
     case 'yukata':
@@ -342,10 +361,39 @@ const wears = (b: Body, o: Outfit): boolean => {
     // gives it, so nobody in the street does.)
     case 'nude':
       return b === 'woman' || b === 'man';
+    // (Skin-tight and revealing clothes, on the nude body's form: women's; a runner, a matsuri's happi and a bather's
+    // trunks or bare chest are a man's too. Adults only: never a child, an elder or a teen.)
+    // (The period's everyday clothes, the 80s career woman's power suit, and uniforms: who wears them.)
+    case 'powersuit':
+      return b === 'woman';
+    case 'driver':
+    case 'trench':
+    case 'coverall':
+      return b === 'man' || b === 'woman';
+    case 'doorman':
+      return b === 'man';
+    case 'leotard':
+    case 'leggings':
+    case 'bikini':
+    case 'lingerie':
+    case 'streetwalker':
+    case 'bunny':
+    case 'bodycon':
+    case 'catsuit':
+    case 'crop':
+    case 'qipao':
+      return b === 'woman';
+    case 'runner':
+    case 'matsuri':
+      return b === 'woman' || b === 'man';
+    case 'shirtless':
+    case 'trunks':
+      return b === 'man';
     // (The same in high heels: a woman's.)
     case 'nude_heels':
       return b === 'woman';
     case 'school':
+    case 'pinoy_school':
     case 'otaku':
     case 'shorts':
     case 'hoodie':
@@ -355,6 +403,8 @@ const wears = (b: Body, o: Outfit): boolean => {
       return b !== 'elder';
     case 'work':
     case 'police':
+    case 'baller':
+    case 'guard':
     case 'office':
     case 'nurse':
     case 'doctor':
@@ -364,10 +414,13 @@ const wears = (b: Body, o: Outfit): boolean => {
       return b === 'man' || b === 'woman';
     case 'yakuza':
     case 'boss':
+    case 'barong':
       return b === 'man' || b === 'elder';
     case 'chinpira':
     case 'irezumi':
     case 'drunk':
+    case 'jeep_crew':
+    case 'trike_driver':
       return b === 'man';
     default:
       return b !== 'child';
@@ -396,9 +449,11 @@ export const getMobShape = (): MobShape => mobShape;
 
 /** The hair kinds only the shaped generation has, as the classic one draws them. */
 const CLASSIC_HAIR: Partial<Record<Hair, Hair>> = { bob: 'short', ponytail: 'long', twin: 'long' };
+/** (And the detailed women's cuts, mobHairKinds.ts, as one of its short, long or bun.) */
+const classicHair = (hair: Hair): Hair => CLASSIC_HAIR[hair] ?? (isDetailed(hair) ? detailedClassic(hair) : isMenHair(hair) ? 'short' : hair);
 
 /** The outfits only the shaped generation has, as the classic one draws them. */
-const CLASSIC_OUTFIT: Partial<Record<Outfit, Outfit>> = { dress: 'long', mini: 'plain', gown: 'long', shorts: 'plain', hoodie: 'plain', office: 'suit', track: 'plain', nurse: 'plain', doctor: 'long', apron: 'plain', puffer: 'plain', gym: 'plain', yakuza: 'suit', boss: 'suit', drunk: 'suit', bosozoku: 'long', yankee: 'school', chinpira: 'plain', hood: 'plain', irezumi: 'plain', nude: 'plain', nude_heels: 'plain' };
+const CLASSIC_OUTFIT: Partial<Record<Outfit, Outfit>> = { dress: 'long', mini: 'plain', gown: 'long', shorts: 'plain', hoodie: 'plain', office: 'suit', track: 'plain', nurse: 'plain', doctor: 'long', apron: 'plain', puffer: 'plain', gym: 'plain', yakuza: 'suit', boss: 'suit', drunk: 'suit', bosozoku: 'long', yankee: 'school', chinpira: 'plain', hood: 'plain', irezumi: 'plain', pinoy_school: 'school', baller: 'shorts', barong: 'suit', vendor: 'apron', jeep_crew: 'plain', trike_driver: 'plain', guard: 'police', cardigan: 'plain', powersuit: 'suit', blouson: 'plain', knit: 'plain', jinbei: 'plain', chef: 'plain', driver: 'police', doorman: 'police', trench: 'long', kappogi: 'plain', coverall: 'plain', hanten: 'plain', leotard: 'plain', leggings: 'plain', runner: 'shorts', bikini: 'plain', lingerie: 'plain', streetwalker: 'long', bunny: 'plain', bodycon: 'plain', catsuit: 'plain', crop: 'shorts', qipao: 'long', shirtless: 'plain', trunks: 'shorts', matsuri: 'plain', nude: 'plain', nude_heels: 'plain' };
 
 const templates = new Map<string, Template>();
 
@@ -407,7 +462,7 @@ function template(body: Body, hair: Hair, outfit: Outfit): Template {
   const o = wears(body, outfit) ? outfit : 'plain';
   const key = `${mobShape}${mobShape === 'shaped' ? shapedVariant() : ''}|${body}|${hair}|${o}`;
   let t = templates.get(key);
-  if (!t) templates.set(key, (t = mobShape === 'shaped' ? buildShaped(body, hair, o) : buildTemplate(body, CLASSIC_HAIR[hair] ?? hair, CLASSIC_OUTFIT[o] ?? o)));
+  if (!t) templates.set(key, (t = mobShape === 'shaped' ? buildShaped(body, hair, o) : buildTemplate(body, classicHair(hair), CLASSIC_OUTFIT[o] ?? o)));
   return t;
 }
 
@@ -667,9 +722,22 @@ const CLOTH_TOPS: readonly V3[] = ['#b5b1a5', '#7a7a78', '#232c44', '#4a5a6e', '
 const CLOTH_BOTTOMS: readonly V3[] = ['#36465e', '#232c40', '#333336', '#857660', '#5e5e60', '#4a3828', '#454a30', '#222224'].map(hex);
 const CLOTH_SUITS: readonly V3[] = ['#323236', '#20283c', '#5a5a5e', '#44362c'].map(hex);
 /** The body: skin (tag 1, a little lighter or darker by the figure), hair (19; an elder's grey), shoes (20). These go to the one colour when it's on. */
-const SKIN_TONE = hex('#b08e74');
-const HAIR_COLORS: readonly V3[] = ['#17161a', '#1e1a18', '#17161a', '#2e221a'].map(hex);
-const ELDER_HAIR: readonly V3[] = ['#7c7c7e', '#a6a6a4', '#5a5a5c'].map(hex);
+let SKIN_TONE = hex('#b08e74');
+/** The crowd's skin tone for the city (cityConfig.ts `skin`: Manila's is a deeper, tanned brown). Set once at startup, before the people's shader is built. */
+export const setSkinTone = (color: string): void => void (SKIN_TONE = hex(color));
+// Black mostly, some dark and some ordinary brown; grey for the old (and a salt-and-pepper for some of the heavy middle-aged, GREYING); and, for the
+// few who dye it (the night's trade, the gangs: a hair shade 50 higher), a chestnut, a light brown and a honey blonde. The late Showa city: a bleached head is rare and meant.
+const HAIR_COLORS: readonly V3[] = ['#17161a', '#1e1a18', '#17161a', '#2e221a', '#1a1816', '#3a2a1e', '#17161a', '#4a3626'].map(hex);
+const ELDER_HAIR: readonly V3[] = ['#7c7c7e', '#a6a6a4', '#5a5a5c', '#c4c4c2', '#8a8a88', '#3c3c3e'].map(hex);
+const GREY_HAIR: readonly V3[] = ['#6e6e70', '#8c8c8a', '#4a4a4c', '#5c5c5e'].map(hex);
+const BLACK_HAIR: readonly V3[] = ['#17161a', '#1e1a18', '#17161a', '#1a1816'].map(hex);
+const BROWN_HAIR: readonly V3[] = ['#2e221a', '#3a2a1e', '#4a3626', '#3e2c22'].map(hex);
+const WHITE_HAIR: readonly V3[] = ['#a6a6a4', '#c4c4c2', '#b4b4b2', '#d0d0cc'].map(hex);
+const DYED_BROWN: readonly V3[] = ['#4a3224', '#5e4030', '#6b4a30', '#7a5a34', '#8a6a3a'].map(hex);
+const DYED_BLONDE: readonly V3[] = ['#b89a5c', '#c0a468', '#a98c50'].map(hex);
+const OLD_DARK_HAIR: readonly V3[] = ['#1c1a1e', '#3a3642', '#4a4452'].map(hex);
+/** The heavy middle-aged men, some of whom are going grey (their rows of joints). */
+const GREYING: readonly number[] = (['stout', 'portly'] as const).map((b) => ALL_BODIES.indexOf(b));
 const SHOE_COLORS: readonly V3[] = ['#1c1b1c', '#2e2420', '#151516', '#3a2c22'].map(hex);
 const v3Glsl = (c: V3): string => `vec3(${c.map((v) => v.toFixed(4)).join(', ')})`;
 /** GLSL: one of `colors` by h in [0, 1). */
@@ -693,7 +761,7 @@ const SMOKE_RAISE = 0.15;
 
 const UMBRELLA_HOLD = { swing: -0.05, raise: 0.12, bend: 2.15, side: 0, twist: 0.45 } as const;
 /** The spine's lean the umbrella is built for (the body's own, plus a little: walkers lean more, standers less). */
-const umbrellaLean = (body: Body): number => (body === 'elder' ? 0.2 : 0.02) + 0.02;
+const umbrellaLean = (body: Body): number => (isOld(body) ? 0.2 : 0.02) + 0.02;
 
 /** The right forearm's matrix (bind pose to posed, figure frame) with the arm in UMBRELLA_HOLD, as poseBones builds it. */
 function holdForearm(body: Body): THREE.Matrix4 {
@@ -801,7 +869,7 @@ const holdReach = (s: Pick<FigureSpec, 'body' | 'reach'>): number => s.reach ?? 
 function skeleton(s: FigureSpec, umbrella = false, hip = PROPORTIONS[s.body].ys * 0.9): Skeleton {
   const still: Limb = { swing: 0, raise: 0.1, bend: 0.12 };
   const leg: Limb = { swing: 0, raise: 0.0, bend: 0 };
-  const sk: Skeleton = { lean: s.body === 'elder' ? 0.2 : 0.02, drop: 0, armL: { ...still }, armR: { ...still }, legL: { ...leg }, legR: { ...leg } };
+  const sk: Skeleton = { lean: isOld(s.body) ? 0.2 : 0.02, drop: 0, armL: { ...still }, armR: { ...still }, legL: { ...leg }, legR: { ...leg } };
   const gest = (l: Limb, swing: number, raise: number, bend: number, side = 0, twist = 0): void => {
     l.swing = swing;
     l.raise = raise;
@@ -968,8 +1036,9 @@ function poseBones(T: Template, s: FigureSpec, umbrella = false): THREE.Matrix4[
 
 // ---- Templates by index, and figures as data ----
 
-export const BODY_LIST: readonly Body[] = ['man', 'woman', 'child', 'elder'];
-const HAIR_LIST: readonly Hair[] = ['short', 'long', 'bun', 'hat', 'cap', 'none', 'bob', 'ponytail', 'twin'];
+export const BODY_LIST: readonly Body[] = ALL_BODIES;
+// (The detailed women's cuts come last: a new kind goes at the end, so no existing template's index moves.)
+const HAIR_LIST: readonly Hair[] = ['short', 'long', 'bun', 'hat', 'cap', 'none', 'bob', 'ponytail', 'twin', ...DETAILED_HAIR, ...MEN_HAIR];
 export const POSE_LIST: readonly Pose[] = ['stand', 'walk', 'talk', 'phone', 'pockets', 'wave', 'hold', 'sit', 'strap', 'gait', 'ride'];
 
 /** Body templates are 0 to TEMPLATE_COUNT - 1 (body, outfit, hair); the umbrellas follow, one per body. */
@@ -1094,7 +1163,7 @@ export function smokerJoints(body: Body): SmokerJoints {
   const head = top - T.pivot[HEAD][1];
   const mouth: V3 = [0, T.pivot[HEAD][1] + head * MOUTH[0], T.pivot[HEAD][2] + head * MOUTH[1]];
   // Solved standing (an elder stoops): a coarse search, then closing in.
-  const lean = body === 'elder' ? 0.2 : 0.02;
+  const lean = isOld(body) ? 0.2 : 0.02;
   const to = headPoint(T.pivot, lean, mouth, new THREE.Vector3()).add(new THREE.Vector3(SMOKE_AT_MOUTH[0] * k, SMOKE_AT_MOUTH[1] * k, SMOKE_AT_MOUTH[2] * k));
   const at = new THREE.Vector3();
   const miss = (swing: number, bend: number, twist: number): number => armPoint(T.pivot, T.armOut, lean, { swing, raise: SMOKE_RAISE, bend, twist }, grip, at).distanceTo(to);
@@ -1133,7 +1202,7 @@ export function smokerJoints(body: Body): SmokerJoints {
 export function smokerReach(body: Body, up = 1): { hand: [number, number, number]; mouth: [number, number, number] } {
   const J = smokerJoints(body);
   const T = plainFigure(body);
-  const lean = body === 'elder' ? 0.2 : 0.02;
+  const lean = isOld(body) ? 0.2 : 0.02;
   const mix = (a: number, b: number): number => a + (b - a) * up;
   const l: Limb = { swing: mix(0.14, J.reach.swing), raise: mix(0.12, J.reach.raise), bend: mix(0.62, J.reach.bend), twist: mix(0.15, J.reach.twist ?? 0) };
   return { hand: armPoint(T.pivot, T.armOut, lean, l, J.grip, new THREE.Vector3()).toArray(), mouth: headPoint(T.pivot, lean, J.mouth, new THREE.Vector3()).toArray() };
@@ -1379,7 +1448,8 @@ function writeFigure(o: Float32Array, k: number, s: FigureSpec, ground: ((x: num
   o[k + 20] = always ? -1 : HOURS.indexOf(s.hours!);
   o[k + 21] = MANNERS.indexOf(s.manner ?? 'plain');
   o[k + 22] = s.out ?? 0;
-  o[k + 23] = always ? 15 : seasonsOf(o2);
+  // (The seasons' bits, and over them 16 times the hair's colour.)
+  o[k + 23] = (always ? 15 : seasonsOf(o2)) + 16 * (s.hairTone ?? 0);
 }
 
 /**
@@ -1989,7 +2059,7 @@ export const MOB_POSE_GLSL = /* glsl */ `
         armR = still;
         legL = leg0;
         legR = leg0;
-        lean = body == 3 ? 0.2 : 0.02;
+        lean = ${oldGlsl('body')} ? 0.2 : 0.02;
         drop = 0.0;
         spineRoll = 0.0;
         headYaw = aPose.w;
@@ -2438,7 +2508,13 @@ export function ghostMaterial(light?: GhostLight, look: MobLook = 'solid'): THRE
         float hq = fract(sin(dot(aTint, vec3(12.9898, 78.233, 37.719)) * 91.7 + aFig.w * 3.17) * 43758.5453);
         if (tag > 18.5) {
           float hh = fract(hq * 5.31 + 0.53);
-          vec3 own = tag < 19.5 ? (body == 3 ? (${pickGlsl(ELDER_HAIR, 'hh')}) : (${pickGlsl(HAIR_COLORS, 'hh')})) : (${pickGlsl(SHOE_COLORS, 'hh')});
+          vec3 natural = ${pickGlsl(HAIR_COLORS, 'hh')};
+          vec3 own;
+          // (A figure's hair colour is in aWhen.w over the seasons' bits, by who it is: peopleDemographics.ts hairTone; 0, as it was.)
+          float tone = floor(aWhen.w / 16.0 + 0.001);
+          if (tag < 19.5 && tone > 0.5) own = tone < 1.5 ? (${pickGlsl(BLACK_HAIR, 'hh')}) : tone < 2.5 ? (${pickGlsl(BROWN_HAIR, 'hh')}) : tone < 3.5 ? (${pickGlsl(GREY_HAIR, 'hh')}) : tone < 4.5 ? (${pickGlsl(WHITE_HAIR, 'hh')}) : tone < 5.5 ? (${pickGlsl(DYED_BROWN, 'hh')}) : tone < 6.5 ? (${pickGlsl(DYED_BLONDE, 'hh')}) : (${pickGlsl(OLD_DARK_HAIR, 'hh')});
+          else if (tag < 19.5) own = ${oldGlsl('body')} ? (${pickGlsl(ELDER_HAIR, 'hh')}) : (${GREYING.map((i) => `body == ${i}`).join(' || ')}) && hh > 0.62 ? (${pickGlsl(GREY_HAIR, 'fract(hh * 9.1)')}) : natural;
+          else own = ${pickGlsl(SHOE_COLORS, 'hh')};
           vC = mix(own * sh, uFlat.rgb, uFlat.a);
         } else if (tag > 15.5) {
           float hb = fract(hq * 7.13 + 0.37);
@@ -2608,25 +2684,64 @@ export function footingOf(roads: readonly Road3[]): (x: number, z: number) => Fo
 /** Who hangs about in an alley. */
 const ALLEY_PEOPLE: PeopleMix = { hood: 3, chinpira: 2, yakuza: 1.2, yankee: 1, drunk: 1, plain: 1, long: 0.5, irezumi: 0.3, bosozoku: 0.3 };
 
-function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body: Body | undefined, mix: PeopleMix, night = 0.15): FigureSpec {
-  const b: Body = body ?? (rnd.chance(0.45) ? 'man' : rnd.chance(0.85) ? 'woman' : 'elder');
-  const woman = b === 'woman';
-  // What they wear, by the place's mix.
-  const outfit = pickOutfit(mix, rnd.int(0, 1 << 30), (o) => wears(b, o));
-  let hair: Hair = woman ? rnd.pick(['long', 'long', 'bob', 'ponytail', 'bun', 'short', 'hat'] as const) : b === 'elder' ? rnd.pick(['none', 'hat', 'cap'] as const) : rnd.pick(['short', 'short', 'short', 'none', 'cap', 'hat'] as const);
-  if (outfit === 'maid' || ((outfit === 'school' || outfit === 'track' || outfit === 'gym') && woman)) hair = rnd.pick(['long', 'ponytail', 'bob', 'twin', 'short', 'bun'] as const);
+/**
+ * Whether the city's crowd draws on the demographics (district/peopleDemographics.ts, read by peopleDemoPick.ts: ages, builds, the men's and women's cuts,
+ * hair colour, the night's trade by place) or is as it was before (2026-10-10). The showrooms draw every build by name either way.
+ */
+const CITY_BUILDS = true;
+/** The women's detailed cuts the crowd draws from a group: the first few of each (a figure type in range is a draw: peopleDemographics.ts `WOMEN_DETAILED_SHARE`). */
+const CROWD_CUTS_PER_GROUP = 3;
+
+function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body: Body | undefined, mix: PeopleMix, night = 0.15, district = ''): FigureSpec {
+  const kind0: Body = body ?? (rnd.chance(0.45) ? 'man' : rnd.chance(0.85) ? 'woman' : 'elder');
+  const outfitSeed = rnd.int(0, 1 << 30);
+  const h = (a: number, c: number): number => hash(a, c);
+  // The demographics (peopleDemographics.ts): a sex, an age before the outfit (the old wear their own clothes) and again after it (a school uniform is a teen's), then a build.
+  // (Every number from a hash of the outfit's seed: none from the cell's, so every other number in a crowd stays.)
+  const womanKind = kind0 === 'woman' || (kind0 === 'elder' && hash(Math.round(x * 10), Math.round(z * 10), 0xe1d) / 4294967296 < 0.5);
+  const sex = womanKind ? 'woman' : 'man';
+  const demo = CITY_BUILDS && kind0 !== 'child' && (kind0 === 'man' || kind0 === 'woman' || kind0 === 'elder');
+  const age0: Age = body === 'elder' ? 'old' : demo ? ageOf('', district, outfitSeed, h) : 'adult';
+  const kind: Body = demo ? (age0 === 'old' ? (womanKind ? 'w_elder' : 'elder') : womanKind ? 'woman' : 'man') : kind0;
+  // What they wear, by the place's mix (the night's trade only where and when it is: nightTradeHere, and the material's `deep` hours).
+  const outfit = pickOutfit(mix, outfitSeed, (o) => wears(kind, o) && (!demo || nightTradeHere(o, district, outfitSeed, h)));
+  const aged = demo ? ageOf(outfit, district, outfitSeed, h) : 'adult';
+  const age: Age = age0 === 'old' ? 'old' : aged === 'old' ? 'middle' : aged;
+  let b: Body = demo ? buildFor(sex, outfit, age, district, outfitSeed, h) : kind;
+  if (!wears(b, outfit)) b = kind;
+  const woman = baseBody(b) === 'woman';
+  const elder = baseBody(b) === 'elder';
+  let hair: Hair = woman ? rnd.pick(['long', 'long', 'bob', 'ponytail', 'bun', 'short', 'hat'] as const) : elder ? rnd.pick(['none', 'hat', 'cap'] as const) : rnd.pick(['short', 'short', 'short', 'none', 'cap', 'hat'] as const);
+  if (outfit === 'maid' || ((outfit === 'school' || outfit === 'pinoy_school' || outfit === 'track' || outfit === 'gym') && woman)) hair = rnd.pick(['long', 'ponytail', 'bob', 'twin', 'short', 'bun'] as const);
   if (outfit === 'gown' || outfit === 'office') hair = woman ? rnd.pick(['long', 'bun', 'bob'] as const) : hair;
   if (outfit === 'kimono' || outfit === 'yukata') hair = woman ? 'bun' : rnd.pick(['short', 'none'] as const);
   if (outfit === 'work' || outfit === 'police') hair = woman ? 'short' : rnd.pick(['short', 'none'] as const);
   if (outfit === 'suit' && !woman) hair = rnd.pick(['short', 'short', 'none'] as const);
   // The shady ones: their hair picks the look (real/mobShape.ts: a punch perm, a crop, slicked back; the old boss in
   // white under a hat; a politician's sash now and then on a fat cat).
-  if (outfit === 'yakuza') hair = b === 'elder' ? rnd.pick(['hat', 'hat', 'short', 'none'] as const) : rnd.pick(['short', 'short', 'none', 'cap', 'cap'] as const);
+  if (outfit === 'yakuza') hair = elder ? rnd.pick(['hat', 'hat', 'short', 'none'] as const) : rnd.pick(['short', 'short', 'none', 'cap', 'cap'] as const);
   if (outfit === 'chinpira' || (outfit === 'bosozoku' && !woman)) hair = rnd.pick(['short', 'none', 'cap', 'hat'] as const);
   if (outfit === 'boss') hair = rnd.chance(0.06) ? 'cap' : rnd.pick(['short', 'none'] as const);
   if (outfit === 'hood' && !woman) hair = rnd.pick(['short', 'short', 'none', 'cap'] as const);
   if (outfit === 'yankee') hair = woman ? rnd.pick(['long', 'long', 'ponytail', 'bob'] as const) : rnd.pick(['short', 'none'] as const);
   if (outfit === 'drunk' || outfit === 'irezumi') hair = rnd.pick(['short', 'short', 'none'] as const);
+  // The Filipino ones (under review): a vendor in a salakot or bareheaded, a tricycle driver in a cap, a guard bareheaded (his cap is his uniform's; none: a shotgun).
+  if (outfit === 'vendor') hair = rnd.pick(woman ? ['hat', 'hat', 'bun', 'long', 'ponytail'] as const : ['hat', 'hat', 'short', 'none'] as const);
+  if (outfit === 'trike_driver') hair = 'cap';
+  // (A driver's and a doorman's peaked cap is their uniform's, as the guard's; the runners keep their hair up; a festival's headband sits on short hair or a tail.)
+  if ((outfit === 'runner' || outfit === 'leotard') && woman) hair = rnd.pick(['ponytail', 'ponytail', 'bob', 'short', 'bun'] as const);
+  if (outfit === 'matsuri') hair = woman ? rnd.pick(['ponytail', 'bun', 'short'] as const) : rnd.pick(['short', 'none', 'none'] as const);
+  if (outfit === 'guard' || outfit === 'driver' || outfit === 'doorman') hair = woman ? rnd.pick(['short', 'bun', 'ponytail'] as const) : rnd.pick(['short', 'short', 'none'] as const);
+  // A man's own haircut now and then in place of the plain short one (mobMenHair.ts); an outfit's own cut or hat overrides it in the template.
+  // An old woman keeps her hair up or short.
+  if (woman && isOld(b)) hair = (['bun', 'bun', 'short', 'hat', 'bob'] as const)[hash(outfitSeed, 0xe1e) % 5];
+  // A man's own haircut and a woman's detailed one, by who they are (peopleDemographics.ts), in place of the plain; an outfit's own cut or a hat overrides it in the template.
+  if (demo && baseBody(b) === 'man' && hair === 'short') hair = (menCutFor(outfit, age, district, outfitSeed, h) as Hair | null) ?? hair;
+  if (demo && woman && (hair === 'long' || hair === 'bob' || hair === 'ponytail' || hair === 'bun' || hair === 'short' || hair === 'twin') && hash(outfitSeed, 0xde7) / 4294967296 < WOMEN_DETAILED_SHARE) {
+    const groups = WOMEN_CUT_GROUPS[womenGroupKey(outfit, age)] ?? [];
+    const group = groups.length ? HAIR_GROUPS.find(([name]) => name === groups[hash(outfitSeed, 0xde8) % groups.length]) : undefined;
+    if (group) hair = group[1].slice(0, CROWD_CUTS_PER_GROUP)[hash(outfitSeed, 0xde9) % Math.min(CROWD_CUTS_PER_GROUP, group[1].length)];
+  }
   // A bag in the left hand: they gesture with the right.
   const carries = (outfit === 'suit' && !woman) || (outfit === 'school' && b !== 'child') || outfit === 'drunk' || (outfit === 'yankee' && woman);
   return {
@@ -2644,8 +2759,10 @@ function randomPerson(rnd: Rng, x: number, z: number, yaw: number, pose: Pose, b
     side: carries || rnd.chance(0.5) ? 1 : -1,
     look: (rnd.float() - 0.5) * 0.6,
     // When they're out and how they carry themselves (district/peopleHours.ts), and their own threshold for being out.
-    ...whenOf(outfit, b, night, rnd.float()),
+    ...whenOf(outfit, isOld(b) ? 'elder' : baseBody(b), night, rnd.float()),
     out: rnd.float(),
+    // (Hair colour: black, brown, grey, white or dyed, by who: peopleDemographics.ts.)
+    ...(demo ? { hairTone: hairTone(sex, age, outfit, district, outfitSeed, h) } : {}),
   };
 }
 
@@ -2661,7 +2778,7 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
   const out: FigureSpec[] = [];
   const mix = plan.style.people ?? DISTRICT_PEOPLE[plan.kind] ?? CITY_PEOPLE;
   const night = nightLife(plan.style, plan.kind);
-  const person = (rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body?: Body): FigureSpec => randomPerson(rnd, x, z, yaw, pose, body, mix, night);
+  const person = (rnd: Rng, x: number, z: number, yaw: number, pose: Pose, body?: Body): FigureSpec => randomPerson(rnd, x, z, yaw, pose, body, mix, night, plan.kind);
   const cell = plan.rect;
   const mine = (x: number, z: number): boolean => x >= cell.x && z >= cell.y && x < cell.x + cell.w && z < cell.y + cell.h;
   const inRect = (q: Rect, x: number, z: number, m: number): boolean => x > q.x - m && x < q.x + q.w + m && z > q.y - m && z < q.y + q.h + m;
@@ -2691,7 +2808,8 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
   };
   /** A walk along (dx, dz) for L metres at a stroll (an elder's slower), and the time away between walks. */
   // (One in twenty-five is in a hurry: they run.)
-  const walkOf = (rnd: Rng, L: number, dx: number, dz: number, slow = false): FigureSpec['walk'] => ({ ex: dx * L, ez: dz * L, speed: !slow && rnd.chance(0.04) ? 2.7 + rnd.float() * 0.5 : (slow ? 0.95 : 1.2) + rnd.float() * 0.35, gap: 3 + rnd.float() * 20 });
+  // (Nobody runs across the road: a crossing is always at a walk, `crossing` leaves the one in twenty-five out.)
+  const walkOf = (rnd: Rng, L: number, dx: number, dz: number, slow = false, crossing = false): FigureSpec['walk'] => ({ ex: dx * L, ez: dz * L, speed: !slow && !crossing && rnd.chance(0.04) ? 2.7 + rnd.float() * 0.5 : (slow ? 0.95 : 1.2) + rnd.float() * 0.35, gap: 3 + rnd.float() * 20 });
   /** People walking from (x, z) along (dx, dz): one, a couple, a parent and child, or two friends side by side. */
   const walkers = (rnd: Rng, x: number, z: number, dx: number, dz: number, L: number, roomy: boolean): void => {
     const yaw = Math.atan2(dx, dz);
@@ -2701,7 +2819,7 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
     const at = (o: number): [number, number] => [x + rx * o, z + rz * o];
     if (roll < 0.6 || !roomy) {
       const who = person(rnd, x, z, yaw, 'walk');
-      out.push({ ...who, seed, walk: walkOf(rnd, L, dx, dz, who.body === 'elder') });
+      out.push({ ...who, seed, walk: walkOf(rnd, L, dx, dz, isOld(who.body)) });
     } else if (roll < 0.78) {
       const walk = walkOf(rnd, L, dx, dz);
       const [x1, z1] = at(-0.33);
@@ -2787,7 +2905,7 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
     const rnd = rng(hash(Math.round(q.x * 3), Math.round(q.y * 3), 0x5ad1, r.vertical ? 1 : 2));
     const [a, b] = r.vertical ? [q.y, q.y + q.h] : [q.x, q.x + q.w];
     const shady = (x: number, z: number, yaw: number, pose: Pose): FigureSpec => {
-      const who = randomPerson(rnd, x, z, yaw, pose, rnd.chance(0.85) ? 'man' : 'woman', ALLEY_PEOPLE, night);
+      const who = randomPerson(rnd, x, z, yaw, pose, rnd.chance(0.85) ? 'man' : 'woman', ALLEY_PEOPLE, night, plan.kind);
       return { ...who, hours: who.hours === 'always' || who.hours === 'commute' ? 'late' : who.hours, manner: who.manner === 'drunk' ? 'drunk' : 'shady' };
     };
     for (const side of [-1, 1]) {
@@ -2851,13 +2969,15 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
             if (!mine(px, pz)) continue;
             const who = person(rnd, px, pz, yaw, 'walk');
             if (signal) {
-              // Off the kerb within the first few seconds of the walk light, across in time.
+              // Off the kerb within the first few seconds of the walk light, across at a walk in time: someone who
+              // couldn't make it across in the light waits for the next one.
               const delay = rnd.float() * 3;
-              const speed = Math.max(1.25 + rnd.float() * 0.3, L / Math.max(4, signal.length - delay - 1));
+              const speed = 1.25 + rnd.float() * 0.3;
+              if (L / speed > signal.length - delay - 1) continue;
               const wait = 3 + rnd.float() * Math.min(18, signal.cycle - L / speed - delay - 6);
               const at = (((signal.start + delay - wait) % signal.cycle) + signal.cycle) % signal.cycle;
               out.push({ ...who, look: 0, walk: { ex: dx * L, ez: dz * L, speed, gap: 0, signal: { cycle: signal.cycle, at, wait } } });
-            } else out.push({ ...who, seed: rnd.float(), walk: walkOf(rnd, L, dx, dz, who.body === 'elder') });
+            } else out.push({ ...who, seed: rnd.float(), walk: walkOf(rnd, L, dx, dz, isOld(who.body), true) });
           }
         }
       }
@@ -2883,8 +3003,10 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
           const yaw = Math.atan2(ex, ez);
           for (let i = rnd.int(1, 3); i > 0; i--) {
             const px = x0 + (rnd.float() - 0.5) * 1.6, pz = z0 + sz * rnd.float() * 0.8;
-            const delay = rnd.float() * 2.5;
-            const speed = Math.max(1.3, L / (ph.length - delay - 1));
+            const delay = rnd.float() * 0.5;
+            const speed = 1.3 + rnd.float() * 0.2;
+            // (At a walk, the diagonal only fits in the scramble's light for a short junction: the rest don't cross.)
+            if (L / speed > ph.length - delay - 1) continue;
             const wait = 3 + rnd.float() * 15;
             const at = (((ph.start + delay - wait) % ph.cycle) + ph.cycle) % ph.cycle;
             out.push({ ...person(rnd, px, pz, yaw, 'walk'), look: 0, walk: { ex, ez, speed, gap: 0, signal: { cycle: ph.cycle, at, wait } } });
@@ -2977,7 +3099,7 @@ export function cellCrowd(plan: CellPlan3, detail: CellDetail, plazas: readonly 
   // stand (no draw from the cell's random numbers, so everything else stays as it was). Not someone holding a hand.
   return out.map((s): FigureSpec => {
     if (s.pose === 'hold') return s;
-    const what = smokeOf({ body: s.body, outfit: outfitOf(s), hair: s.hair }, !s.walk ? 'stand' : s.walk.speed > 1.9 ? 'run' : 'walk', u01(hash(Math.round(s.x * 10), Math.round(s.z * 10), 0x5a0c)));
+    const what = smokeOf({ body: baseBody(s.body), outfit: outfitOf(s), hair: s.hair }, !s.walk ? 'stand' : s.walk.speed > 1.9 ? 'run' : 'walk', u01(hash(Math.round(s.x * 10), Math.round(s.z * 10), 0x5a0c)));
     return what ? { ...s, smokes: what } : s;
   });
 }
@@ -3005,6 +3127,9 @@ export function setPassengerMaterial(m: THREE.Material | null): void {
  * along). Who's aboard is a pure function of `seed`; they never fade. Null when there's no material (the
  * showroom) or nobody aboard.
  */
+/** Every passengers' mesh built (trains, buses, platforms), so the debug menu's People can hide them with the street's. */
+export const PASSENGER_MESHES: THREE.Mesh[] = [];
+
 export function passengerMesh(seats: readonly PassengerSpot[], standing: readonly PassengerSpot[], seed: number, fill: { readonly seat: number; readonly stand: number }, mix: PeopleMix = CITY_PEOPLE, poses: readonly Pose[] = ['strap', 'strap', 'stand', 'phone']): THREE.Mesh | null {
   if (!passengerMaterial) return null;
   const rnd = rng(hash(seed, 0x9a55));
@@ -3030,5 +3155,6 @@ export function passengerMesh(seats: readonly PassengerSpot[], standing: readonl
   const mesh = new THREE.Mesh(geo, passengerMaterial);
   mesh.renderOrder = 2;
   mesh.name = 'passengers';
+  PASSENGER_MESHES.push(mesh);
   return mesh;
 }

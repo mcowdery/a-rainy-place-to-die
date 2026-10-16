@@ -1,15 +1,15 @@
 // The trains turning back at the Toto Line's south stub: shots at moments through the turn.
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ channel: 'msedge', headless: false, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: false, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   page.on('pageerror', (e) => console.log('pageerror', e.message));
-  await page.goto(`${base}district.html?debug=1&clock=12:00&weather=clear&fly=1&cam=3328,75,2085,0,-89`);
+  await page.goto(`${base}?debug=1&clock=12:00&weather=clear&fly=1&cam=3328,75,2085,0,-89`);
   await page.waitForTimeout(50_000);
   // Find the times (in the line's clock) when train 0 is entering the crossover, standing at the stub's end, and leaving.
   const times = await page.evaluate(() => {

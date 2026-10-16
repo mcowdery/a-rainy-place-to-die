@@ -1,21 +1,27 @@
 # The world
 
-Tōto as the story sees it. For how the city is built, see [docs/city-plan.md](../docs/city-plan.md) and
+Tokyo as the story sees it. For how the city is built, see [docs/city-plan.md](../docs/city-plan.md) and
 CLAUDE.md; this file is about what each place means to the story.
 
 The **story nodes** under each district are every npc, story door and hotspot in the city today: the places
 a scene can start. `npm run vn:keys` prints the live list (and each node's scene, if it has one).
 Walk-through doors and spawns aren't listed; spawns are where a scene can send you (`exit:`).
 
-## 東都 Tōto
+## 東京 Tokyo
 
-A coastal capital on a bay, about 4.7 × 3.3 km of city: two cores (Kaburo's neon and Asagiri's towers) ringed by
+The city was 東都 Tōto until 2026-10-12; the names below that still carry it (the lines, the
+terminal, the university and the companies) are brands, and stay;
+the city, the bay, the port, the police and the expressway are Tokyo's own now ([names.md](names.md)). Between 2 and 6 in the morning the streets are empty
+([mythos.md](mythos.md), The dead hours).
+
+The capital on its bay, about 4.7 × 3.3 km of city in the game: two cores (Kaburo's neon and Asagiri's towers) ringed by
 newer districts, then homes and the old town, then hills to the north and west and the bay to the south.
 The river 隅川 Sumikawa runs down from the northern hills to the bay, with the old town across it. The Toto
-Line, the Kawabata Line, the monorail, two subway lines and the Seikō Line join it up; the Tōto Expressway
+Line, the Kawabata Line, the monorail, two subway lines and the Seikō Line join it up; the Shuto Expressway
 loops over the core and runs out along the port. The last train leaves at 00:40.
 
-**Open:** what's wrong with the city (who really runs it, what everyone knows and nobody says).
+**Open:** what's wrong with the city (who really runs it, what everyone knows and nobody says). Part of it is
+answered since 2026-10-12: everyone knows the small hours aren't safe, and nobody goes out in them.
 
 ## 歌舞路 Kaburo: the neon core
 
@@ -23,8 +29,11 @@ After Kabukichō. The crossing and the mega-sign, Host Street, the Love District
 the station edge. Where the story starts: the MC's bed is a manga café booth here.
 
 - Bar Kanpai: a small snack bar.
-- Hotel Rouge: the castle love hotel, the Love District's flagship. Walk-in: lobby, room panel, themed rooms;
-  the Rouge Suite (303) is a story door.
+- Hotel Rouge: the castle love hotel, the Love District's flagship (the user may rename it: the name is one constant, `HOTEL` in
+  `rougePlan.ts`). Walk-in on three floors, **every room real and openable**: the lobby and room panel, a front office, a
+  garage, the back hall, 101 Dungeon (stone, iron and torchlight: a cross at the foot of the bed, a barred cell with the shower in it, stocks), a laundry; 201 Castle, 202 Marine, 203 Space, 205 Resort, 206 Mirror, housekeeping;
+  301 Onsen, 302 Karaoke, 303 the Rouge Suite, 305 Retro, 306 Sakura, the manager's office. The user means it for a
+  murder scene (investigate every room, interview people): the Rouge Suite (303) is the story's.
 - Hoshikuzu Yokocho: forty tiny bars along narrow alleys; BAR 黒猫 Kuroneko and its mama.
 - Ryujin Kogyo: the yakuza front company whose dragon crowns the mega-sign.
 - LIVE HOUSE 地下室: the basement venue where the underground idols play.
@@ -43,7 +52,7 @@ the station edge. Where the story starts: the MC's bed is a manga café booth he
 |---|---|---|---|
 | `bar_kanpai.mama` | npc | Mama-san (the bar's mama) | s90, a VN prototype kept as an example (not canon) |
 | `bar_kanpai.door` | door | Bar Kanpai | — |
-| `hotel_rouge.room_303` | door | Room 303 · Rouge Suite | — |
+| `hotel_rouge.room_303` | door | Room 303 · Rouge Suite (the desk) | — |
 | `yokocho.kuroneko` | door | BAR 黒猫 | — |
 | `yokocho.mama` | npc | Kuroneko's mama | — |
 | `ryujin_kogyo.door` | door | Ryujin Kogyo | — |
@@ -162,10 +171,10 @@ fence.
 
 ## 川端 Kawabata: the old town across the river
 
-Wooden houses and apāto on narrow lanes, the temple quarter, Tōto Tower, the riverside. Old money and old
+Wooden houses and apāto on narrow lanes, the temple quarter, Tokyo Tower, the riverside. Old money and old
 loyalties.
 
-- Kōpo Kawabata: the detective's room 201, with the case board.
+- Kōpo Kawabata: the detective's room 201, with the case board (the office itself is now in Kaburo, `kirishima`; this flat is kept, for a home later).
 - **To build: a church**, with an interior you can walk into. **Proposed:** a small Catholic church in the old
   town, near Tōkō-ji and Mack's office: pews, candles, a stained-glass window, a confessional (noir needs a
   confessional). Japan's Catholics go back to the hidden Christians. How it's used in the story stays subtle.
@@ -174,6 +183,8 @@ loyalties.
 | Node | Kind | Name | Scene |
 |---|---|---|---|
 | `kopo.case_board` | hotspot | The case board (the detective's) | — |
+| `kirishima.case_board` | hotspot | The case board (霧島探偵事務所, Kaburo) | — |
+| `kirishima.mailbox` | hotspot | The tenement's mailboxes | — |
 | `kopo.mailbox` | hotspot | The mailboxes | — |
 | `rindo.gate` | door | The Rindō-gumi's gate | — |
 | `rindo.guard` | npc | Young man at the gate | — |
@@ -184,7 +195,7 @@ loyalties.
 | `riverside.yatai` | npc | Oden stall keeper | — |
 | `riverside.boat` | hotspot | The houseboat | — |
 
-## 東都港 Tōto Port and the islands
+## 東京港 Tokyo Port and the islands
 
 Warehouses, the container terminal, the fish market, warehouse nightlife; over the bridges, Shiomi-jima's TV
 station, wheel and hall, Ebisu-jima's car meets, and the airport on Hanejima.

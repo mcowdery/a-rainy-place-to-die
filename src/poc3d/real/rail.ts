@@ -1,3 +1,4 @@
+import { filipino } from '../district/cityConfig';
 import * as THREE from 'three';
 import { splitByTile } from './tiles';
 import { passengerMesh, type PassengerSpot } from './people';
@@ -61,15 +62,17 @@ const nearJunction = (x: number, z: number): boolean => {
 };
 
 /**
- * Whether a column at (x, z) stands on a carriageway (a road without a median: the median is where a column belongs,
- * the pavements are clear of it). The grid roads run along the multiples of the cell size.
+ * Whether a column at (x, z) stands on a carriageway (a median is where a column belongs; the
+ * pavements are clear of it). The grid roads run along the multiples of the cell size.
  */
 function onCarriageway(x: number, z: number, under: RoadUnder): boolean {
   for (const vertical of [true, false]) {
     const road = under(x, z, vertical);
-    if (!road || road.median) continue;
+    if (!road) continue;
     const lateral = Math.abs(vertical ? x - Math.round(x / 128) * 128 : z - Math.round(z / 128) * 128);
-    if (lateral < road.half) return true;
+    // With a median the column may stand on it; where the line swings off the road's middle (a corner's arc) it
+    // lands on the carriageway beside it.
+    if (road.median ? lateral > road.medianHalf + 0.8 && lateral < road.half : lateral < road.half) return true;
   }
   return false;
 }
@@ -456,7 +459,7 @@ function obox(mb: MeshBuilder, x: number, z: number, hx: number, hz: number, a0:
   if (bottom) mb.quad(P(a0, b0, y0), L(b1 - b0), T(a1 - a0));
 }
 
-type Train = { cars: THREE.Group; set: TrainSet2 | null; dir: number; legs: Leg[]; period: number; offset: number };
+type Train = { cars: THREE.Group; set: TrainSet2 | null; dir: number; legs: Leg[]; period: number; offset: number; lastS?: number; moving?: boolean };
 
 /** A ride in the new cars (?transit=new): you walk about inside while it runs (real/cabinRider.ts). */
 interface Ride2 {
@@ -493,8 +496,8 @@ export class TrainSystem {
     const first = byS0[0]?.names ?? { jp: '', en: '' };
     const last = byS0[byS0.length - 1]?.names ?? { jp: '', en: '' };
     const old = carSet(line.color, city, line.kind === 'monorail');
-    // The monorail keeps its own cars for now.
-    const makers = cars && line.kind !== 'monorail' ? { up: carSet2(line.color, cars, { dest: last }), down: carSet2(line.color, cars, { dest: first }) } : null;
+    const mono = line.kind === 'monorail';
+    const makers = cars ? { up: carSet2(line.color, cars, { dest: last, monorail: mono }), down: carSet2(line.color, cars, { dest: first, monorail: mono }) } : null;
     const setsByGroup = new Map<THREE.Group, TrainSet2>();
     const set = (dir = 1): THREE.Group => {
       if (!makers) return old();
@@ -583,12 +586,12 @@ export class TrainSystem {
           : st.next
             ? `next: ${st.next.jp} ${st.next.en}`
             : '';
-      return `${this.line.name} ${this.line.nameEn} · ${last.jp} 行き  ·  ${where}`;
+      return `${this.line.name} ${this.line.nameEn} · ${filipino() ? `for ${last.jp}` : `${last.jp} 行き`}  ·  ${where}`;
     }
     if (!this.ride) return null;
     const { to, t } = this.ride;
     const state = t < 0 ? 'doors closing' : t < this.ride.T ? 'next' : 'arriving at';
-    return `${this.line.name} ${this.line.nameEn} · ${to.names.jp} 行き  ·  ${state}: ${to.names.jp} ${to.names.en}  ·  [E] skip`;
+    return `${this.line.name} ${this.line.nameEn} · ${filipino() ? `for ${to.names.jp}` : `${to.names.jp} 行き`}  ·  ${state}: ${to.names.jp} ${to.names.en}  ·  [E] skip`;
   }
 
   /** Ride from one station to another with the camera in the middle car; resolves on arrival. */
@@ -616,6 +619,22 @@ export class TrainSystem {
     return (Math.atan2(-dx, -dz) * 180) / Math.PI;
   }
 
+  /**
+   * How loud the nearest train running on this line is from (x, y, z), 0-1 (0 beyond ~70 m, falling off with the cube, none standing at a
+   * station): the pass-by the audio plays when one goes over a street. A ride's own train isn't counted.
+   */
+  passLevel(x: number, y: number, z: number): number {
+    let best = 0;
+    for (const tr of this.trains) {
+      if (!tr.cars.visible || !tr.moving) continue;
+      for (const car of tr.cars.children) {
+        const d = Math.hypot(car.position.x - x, (car.position.y - y) * 1.5, car.position.z - z);
+        best = Math.max(best, 1 - Math.min(1, d / 70));
+      }
+    }
+    return best * best * best;
+  }
+
   update(dt: number, camera: THREE.Camera): void {
     this.time += dt;
     const rideDir = this.ride ? Math.sign(this.ride.to.s - this.ride.from.s) : this.ride2 ? this.ride2.timeline.dir : 0;
@@ -626,6 +645,8 @@ export class TrainSystem {
         tr.dir = p.dir;
         tr.set?.setScreens(null, p.dir > 0 ? this.dests.up : this.dests.down);
       }
+      tr.moving = tr.lastS !== undefined && Math.abs(p.s - tr.lastS) > 1e-4;
+      tr.lastS = p.s;
       tr.cars.visible = this.running && !(rideDir !== 0 && tr.dir === rideDir);
       if (tr.cars.visible) {
         this.pose(tr.cars, p.s, tr.dir, true);

@@ -191,7 +191,7 @@ export function adMaterial(u: CityUniforms, atlas: { readonly texture: THREE.Tex
         flat varying float vLamps;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vAUv = aUv;
-        vLit = aSign.y > 0.5 && aSign.y < 1.5 ? 1.0 : 0.0;
+        vLit = aSign.y > 0.5 && aSign.y < 1.5 ? 1.0 : aSign.y > 2.5 && aSign.y < 3.5 ? 2.0 : 0.0;
         vLamps = aSign.y > 9.5 ? aSign.y - 10.0 : 0.0;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
@@ -204,8 +204,9 @@ export function adMaterial(u: CityUniforms, atlas: { readonly texture: THREE.Tex
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec3 ad = texture2D(tAds, vAUv).rgb;
         diffuseColor.rgb = ad;
-        // Lightboxes (posters, taxi roofs) glow from behind, evenly.
-        totalEmissiveRadiance += ad * 0.9 * uNeon * vLit;
+        // Lightboxes (posters, taxi roofs) glow from behind, evenly; a vehicle's inside ads (sign 3) glow by day and night
+        // alike, under the car's own lights.
+        totalEmissiveRadiance += ad * (vLit > 1.5 ? 0.8 : 0.9 * uNeon * vLit);
         if (vLamps > 0.5) {
           // Floodlit billboards: lit only by their lamps on the top edge. Where on the panel we are, from the
           // atlas slot (x across, y down from the top), in metres (the panel is ~3 m per lamp, 2:1).

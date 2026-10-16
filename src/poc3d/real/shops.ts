@@ -95,6 +95,18 @@ export const TRADES: readonly TradeDef[] = [
  * Words that name no trade (LIVE, ネオン, 公園...) leave the shop to its zone's mood.
  */
 const WORDS: readonly (readonly [string, Trade])[] = [
+  // Manilaya's signs (content/manila zones), first so they name their trades before the Japanese words can match inside them.
+  ['SARI-SARI', TRADE.grocer], ['WATER REFILL', TRADE.grocer], ['FRESH BANGUS', TRADE.grocer], ['TIANGGE', TRADE.grocer], ['FISH PORT', TRADE.grocer],
+  ['CARINDERIA', TRADE.noodles], ['KAINAN', TRADE.noodles], ['DIM SUM', TRADE.noodles], ['NOODLES', TRADE.noodles], ['LECHON', TRADE.izakaya],
+  ['SISIG', TRADE.izakaya], ['RESTAURANT', TRADE.noodles], ['GRILL', TRADE.izakaya], ['BEER GARDEN', TRADE.bar], ['COCKTAILS', TRADE.bar],
+  ['VIDEOKE', TRADE.karaoke], ['LIVE BAND', TRADE.lounge], ['GO-GO', TRADE.lounge], ['MILKTEA', TRADE.cafe], ['HOPIA', TRADE.bakery], ['PANDESAL', TRADE.bakery],
+  ['BOTIKA', TRADE.drugstore], ['PHARMACY', TRADE.drugstore], ['HERBAL', TRADE.drugstore], ['7 DAYS', TRADE.konbini],
+  ['CELLPHONE', TRADE.electronics], ['ELECTRONICS', TRADE.electronics], ['LOAD', TRADE.electronics], ['TOYS', TRADE.hobby], ['BARATILYO', TRADE.hobby],
+  ['PAWN', TRADE.estate], ['FOR RENT', TRADE.estate], ['FOR SALE', TRADE.estate], ['COPY CENTER', TRADE.estate], ['PRINTING', TRADE.estate], ['TUTORIAL', TRADE.estate],
+  ['VULCANIZING', TRADE.warehouse], ['WHOLESALE', TRADE.warehouse], ['WAREHOUSE', TRADE.warehouse], ['CONTAINER', TRADE.warehouse], ['BONDED', TRADE.warehouse],
+  ['FABRIC', TRADE.craft], ['GOLD', TRADE.craft], ['JEWELRY', TRADE.craft], ['HERITAGE', TRADE.craft],
+  ['CONDO', TRADE.lobby], ['DORM', TRADE.lobby], ['CHURCH', TRADE.lobby], ['MUSEUM', TRADE.lobby], ['PLAZA', TRADE.lobby], ['CUSTOMS', TRADE.lobby], ['STOCK EXCHANGE', TRADE.bank], ['INSURANCE', TRADE.lobby], ['CALL CENTER', TRADE.lobby],
+  ['BARBERSHOP', TRADE.salon], ['LAUNDRY', TRADE.laundry], ['BOOKS', TRADE.books], ['SKY DECK', TRADE.lobby],
   ['レトロゲーム', TRADE.hobby], ['ゲームセンター', TRADE.arcade], ['GAME', TRADE.arcade], ['ゲーム', TRADE.arcade],
   ['メイド', TRADE.maid], ['おかえりなさいませ', TRADE.maid], ['萌え', TRADE.maid], ['耳かき', TRADE.maid],
   ['ネットカフェ', TRADE.books], ['漫画喫茶', TRADE.books], ['カプセル', TRADE.hotel],

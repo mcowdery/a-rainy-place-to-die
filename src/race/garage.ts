@@ -185,7 +185,7 @@ function render(): void {
         : `<button class="buy" data-act="apply" ${draft.neon == null || profile.yen < cost ? 'disabled' : ''}>Fit neon · ${yen(PRICES.neon)}</button>`
     }`;
   }
-  panel.innerHTML = `<div class="car">${viewing ? `${model(viewing).maker} ${model(viewing).name}` : `${m.maker} ${m.name}`}</div><div class="tabs">${tabs}</div><div class="body">${body}</div><a class="drive" data-act="street" href="district.html?spawn=city_garage.front&car=home">◂ Back to the street</a><a class="drive" href="race.html">Drive ▸ the passes</a>`;
+  panel.innerHTML = `<div class="car">${viewing ? `${model(viewing).maker} ${model(viewing).name}` : `${m.maker} ${m.name}`}</div><div class="tabs">${tabs}</div><div class="body">${body}</div><a class="drive" data-act="street" href="./?spawn=city_garage.front&car=home">◂ Back to the street</a><a class="drive" href="race.html">Drive ▸ the passes</a>`;
   const num = document.getElementById('num') as HTMLInputElement | null;
   num?.addEventListener('change', () => {
     const n = Math.max(1, Math.min(99, Math.round(Number(num.value))));

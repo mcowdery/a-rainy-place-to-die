@@ -1,0 +1,25 @@
+{
+  "file": "videotape_partway_v1.png",
+  "item": "videotape_partway",
+  "brand": null,
+  "copy": null,
+  "notes": "Tape on both reels: it has been played some of the way.",
+  "prompt": "top-down flat lay photograph, shot on 35mm film, soft directional light from the upper left, fine film grain, muted colours, true to life wear and patina, sharp focus, a single unlabelled black VHS videocassette that has been stopped part-way through, seen straight down from directly above, through its clear window both reels are wound with dark brown magnetic tape, a thick spool of tape on the left reel and a thinner spool of tape on the right reel, the label area a completely blank white paper sticker, scuffed edges, fine scratches on the window and a little dust, the object with its long side horizontal, centred and whole in the frame with a wide margin all round, isolated on a plain matte mid-grey seamless background with a soft shadow, nothing else in the picture, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    1216,
+    832
+  ],
+  "steps": 12,
+  "seed": 65656613,
+  "studioJob": "c3365b68-d65b-4e58-b908-a073cbf3bd11-u2",
+  "generated": "2026-10-12T10:03:30.067Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/106_videotape_partway.png",
+  "decided": "2026-10-12T10:08:13.230Z",
+  "batch": "carry_props_02",
+  "purpose": "A redo of the videotape from carry-props-01 (story/phone.md), after the user's note on it: 'shouldn't it have some tape showing on the right side as well? I'm not sure'. A rewound VHS has all its tape on the left reel and none on the right, which is what the first pictures showed; one stopped part-way has tape on both. Both are offered: the tape as it lands in Minato's letterbox (rewound), and as it is once he has watched some of it (stopped part-way), which is how Mack finds it. Label blank: the game writes on it. Nothing goes into the game without the user's approval.",
+  "use": "sign",
+  "district": null
+}

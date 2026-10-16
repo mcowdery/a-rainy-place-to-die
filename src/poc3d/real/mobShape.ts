@@ -1,7 +1,12 @@
 import type { Outfit } from '../district/peopleMix';
 import { FACE_CHEEK, FACE_EYE, FACE_MARK } from './emoteGlsl';
-import { ALL_BONES, ARM_L, ARM_R, armSwing, blend, BONES, clavicle, digitBone, fingerTip, handBone, hipHalf, shoulderHalf, spineBone, toeBone, toeDigit, FOOT_L, FOOT_R, FORE_L, FORE_R, HEAD, one, PELVIS, pivotsOf, PROPORTIONS, SHIN_L, SHIN_R, SPINE, TemplateBuilder, THIGH_L, THIGH_R, type Body, type Hair, type Row, type Template, type V3, type Weight } from './mobRig';
+import { buildDetailedHair, hairCap } from './mobHair';
+import { isDetailed } from './mobHairKinds';
+import { MEN_CUTS } from './mobMenHair';
+import { isMenHair } from './mobMenHairKinds';
+import { baseBody, isBuild, type BaseBody, ALL_BONES, ARM_L, ARM_R, armSwing, blend, BONES, clavicle, digitBone, fingerTip, handBone, hipHalf, shoulderHalf, spineBone, toeBone, toeDigit, FOOT_L, FOOT_R, FORE_L, FORE_R, HEAD, one, PELVIS, pivotsOf, PROPORTIONS, SHIN_L, SHIN_R, SPINE, TemplateBuilder, THIGH_L, THIGH_R, type Body, type Hair, type Row, type Template, type V3, type Weight } from './mobRig';
 import { bareDetail } from './mobBare';
+import { applyPaint, bandPainter, briefsPainter, combine, dressPainter, legPainter, loinclothPainter, onePiecePainter, singletPainter, topPainter, waistPainter, type Dye, type Painter, type Surface } from './mobTight';
 import '@bare';
 import { type Bulge, clamp01, displace, loftAt, openingOf, rayEllipse, rowAt, smooth, smoothMax, softenNormals, stitchRings, table, tube, weld, zip } from './mobMesh';
 
@@ -82,7 +87,7 @@ const SHADES = 0.3;
 const INK = SKY - 0.5;
 
 /** Each body's head against life size (a little over, with the hair's volume on top; children's larger). */
-const HEAD_K: Record<Body, number> = { man: 1.06, woman: 1.1, child: 1.12, elder: 1 };
+const HEAD_K: Record<BaseBody, number> = { man: 1.06, woman: 1.1, child: 1.12, elder: 1 };
 /**
  * Teens: whoever wears the school uniform, its track suit or its gym clothes (or is a school's delinquent: 'yankee') is built as the adult, slighter (a girl's bust less, the head a little
  * larger against the body), then scaled down whole, joints and all: [across, up]. real/people.ts gives them joints
@@ -91,7 +96,7 @@ const HEAD_K: Record<Body, number> = { man: 1.06, woman: 1.1, child: 1.12, elder
 export const TEEN_SCALE: Record<'woman' | 'man', readonly [number, number]> = { woman: [0.89, 0.915], man: [0.88, 0.905] };
 const TEEN_HEAD = 1.05;
 const TEEN_BUST = 0.6;
-export const isTeen = (body: Body, outfit: Outfit): body is 'woman' | 'man' => (outfit === 'school' || outfit === 'track' || outfit === 'gym' || outfit === 'yankee') && (body === 'woman' || body === 'man');
+export const isTeen = (body: Body, outfit: Outfit): body is 'woman' | 'man' => (outfit === 'school' || outfit === 'pinoy_school' || outfit === 'track' || outfit === 'gym' || outfit === 'yankee') && (body === 'woman' || body === 'man');
 
 /** A scale on every head, for trying sizes in the mob showroom (set before the templates are built: they're cached). */
 let headScale = 1;
@@ -258,21 +263,73 @@ const ELDER: readonly Row[] = [
   [1.492, 0.06, 0.056, -0.012],
 ];
 
-/** A heavy man (the boss): a paunch carried out in front over the belt, a thick waist and back, a full chest. */
-const HEAVY: readonly Row[] = [
-  [0.8, 0.07, 0.07, 0],
-  [0.84, 0.148, 0.106, -0.004],
-  [0.9, 0.174, 0.13, 0.002],
-  [0.97, 0.18, 0.156, 0.022],
-  [1.04, 0.181, 0.172, 0.04],
-  [1.12, 0.181, 0.172, 0.044],
-  [1.2, 0.182, 0.154, 0.036],
-  [1.28, 0.19, 0.132, 0.024],
-  [1.35, 0.198, 0.114, 0.012],
-  [1.41, 0.203, 0.1, -0.002],
-  [1.442, 0.186, 0.09, -0.006],
-  [1.47, 0.114, 0.072, -0.01],
-  [1.492, 0.066, 0.06, -0.012],
+/**
+ * The man's other builds (2026-10-10; the user: the boss's and the politician's 'fat' was the same model with a bigger belly,
+ * 'not really fat'). Each is a body of its own (mobRig.ts `Build`, `PROPORTIONS`: height, girth, the joints), its torso's rows
+ * in the man's metres before the height scales them. A stout man is fat all through: a belly that hangs in front of the belt,
+ * soft full chest, a wide back, wide hips and thighs, thick arms and neck, a rounder head with jowls. A portly one is the
+ * middle-aged paunch with sloping shoulders. A lean one is narrow and long. A bulky one is a big man: a barrel chest, wide
+ * shoulders, thick arms and neck, no belly. A tall one and a short one are the man in other heights.
+ */
+const STOUT: readonly Row[] = [
+  [0.8, 0.095, 0.095, 0],
+  [0.84, 0.18, 0.14, -0.004],
+  [0.9, 0.215, 0.185, 0],
+  [0.97, 0.232, 0.235, 0.034],
+  [1.04, 0.24, 0.255, 0.068],
+  [1.12, 0.24, 0.255, 0.072],
+  [1.2, 0.228, 0.222, 0.056],
+  [1.28, 0.224, 0.19, 0.042],
+  [1.35, 0.214, 0.15, 0.02],
+  [1.41, 0.206, 0.118, 0],
+  [1.442, 0.186, 0.102, -0.004],
+  [1.47, 0.125, 0.082, -0.008],
+  [1.492, 0.075, 0.068, -0.01],
+];
+const PORTLY: readonly Row[] = [
+  [0.8, 0.075, 0.075, 0],
+  [0.84, 0.15, 0.11, -0.005],
+  [0.9, 0.18, 0.14, -0.002],
+  [0.97, 0.19, 0.178, 0.02],
+  [1.04, 0.192, 0.2, 0.04],
+  [1.12, 0.19, 0.2, 0.044],
+  [1.2, 0.186, 0.17, 0.032],
+  [1.28, 0.188, 0.14, 0.02],
+  [1.35, 0.192, 0.118, 0.01],
+  [1.41, 0.19, 0.1, -0.002],
+  [1.442, 0.176, 0.088, -0.006],
+  [1.47, 0.11, 0.07, -0.01],
+  [1.492, 0.062, 0.058, -0.012],
+];
+const LEAN: readonly Row[] = [
+  [0.8, 0.06, 0.06, 0],
+  [0.84, 0.118, 0.085, -0.005],
+  [0.9, 0.137, 0.095, -0.01],
+  [0.97, 0.13, 0.088, -0.005],
+  [1.04, 0.118, 0.08, 0],
+  [1.12, 0.122, 0.083, 0.006],
+  [1.2, 0.136, 0.09, 0.01],
+  [1.28, 0.152, 0.094, 0.012],
+  [1.35, 0.165, 0.09, 0.008],
+  [1.41, 0.17, 0.08, -0.002],
+  [1.442, 0.156, 0.072, -0.006],
+  [1.47, 0.098, 0.058, -0.01],
+  [1.492, 0.054, 0.048, -0.012],
+];
+const BULKY: readonly Row[] = [
+  [0.8, 0.085, 0.085, 0],
+  [0.84, 0.16, 0.12, -0.005],
+  [0.9, 0.19, 0.14, -0.005],
+  [0.97, 0.195, 0.15, 0],
+  [1.04, 0.192, 0.15, 0.008],
+  [1.12, 0.2, 0.152, 0.014],
+  [1.2, 0.225, 0.158, 0.02],
+  [1.28, 0.25, 0.16, 0.022],
+  [1.35, 0.265, 0.15, 0.014],
+  [1.41, 0.268, 0.128, -0.002],
+  [1.442, 0.236, 0.108, -0.006],
+  [1.47, 0.16, 0.085, -0.01],
+  [1.492, 0.075, 0.066, -0.012],
 ];
 
 interface BodyShape {
@@ -285,7 +342,7 @@ interface BodyShape {
   readonly field: readonly Bulge[];
 }
 
-const BODY: Record<Body, BodyShape> = {
+const BODY: Record<BaseBody, BodyShape> & Partial<Record<Body, BodyShape>> = {
   man: {
     torso: MAN,
     xs: 1,
@@ -321,19 +378,98 @@ const BODY: Record<Body, BodyShape> = {
       { c: [0.075, 0.9, -0.125], r: [0.085, 0.085, 0.08], push: [0, 0, -0.012] },
     ],
   },
+  // The man's builds (STOUT and the rest, above).
+  stout: {
+    torso: STOUT,
+    xs: 1,
+    seg: 20,
+    field: [
+      // The belly hanging in front of the belt and the full soft chest above it; a broad back; the buttocks.
+      { c: [0, 1.0, 0.25], r: [0.2, 0.17, 0.13], push: [0, -0.024, 0.03], round: 1.4 },
+      { c: [0.09, 1.27, 0.2], r: [0.1, 0.085, 0.08], push: [0.004, -0.006, 0.022], round: 1.3 },
+      { c: [0.07, 1.2, -0.17], r: [0.12, 0.14, 0.08], push: [0, 0, -0.016], round: 1.2 },
+      { c: [0.09, 0.9, -0.15], r: [0.1, 0.1, 0.09], push: [0, 0, -0.02] },
+    ],
+  },
+  portly: {
+    torso: PORTLY,
+    xs: 1,
+    seg: 18,
+    field: [
+      { c: [0, 1.02, 0.19], r: [0.16, 0.15, 0.1], push: [0, -0.012, 0.022], round: 1.3 },
+      { c: [0.07, 1.26, 0.13], r: [0.09, 0.08, 0.07], push: [0, 0, 0.008] },
+      { c: [0.075, 0.9, -0.13], r: [0.09, 0.09, 0.08], push: [0, 0, -0.014] },
+    ],
+  },
+  lean: {
+    torso: LEAN,
+    xs: 1,
+    seg: 16,
+    field: [
+      { c: [0.07, 1.3, 0.1], r: [0.08, 0.07, 0.06], push: [0, 0, 0.008] },
+      { c: [0.08, 1.3, -0.08], r: [0.08, 0.09, 0.06], push: [0, 0, -0.008] },
+    ],
+  },
+  tall: { torso: MAN, xs: 0.96, seg: 16, field: [] },
+  short: { torso: MAN, xs: 1.02, seg: 16, field: [] },
+  bulky: {
+    torso: BULKY,
+    xs: 1,
+    seg: 18,
+    field: [
+      // Big pectorals, the shoulder blades and trapezius, the buttocks.
+      { c: [0.1, 1.29, 0.15], r: [0.1, 0.085, 0.07], push: [0.002, 0, 0.022], round: 1.2 },
+      { c: [0.11, 1.3, -0.1], r: [0.1, 0.1, 0.07], push: [0, 0, -0.016] },
+      { c: [0.1, 1.4, 0], r: [0.1, 0.05, 0.09], push: [0, 0.012, 0] },
+      { c: [0.08, 0.9, -0.13], r: [0.09, 0.09, 0.08], push: [0, 0, -0.016] },
+    ],
+  },
+};
+// (The man's own field, for the builds that are the man in other heights.)
+BODY.tall = { torso: MAN, xs: 0.96, seg: 16, field: BODY.man.field };
+BODY.short = { torso: MAN, xs: 1.02, seg: 16, field: BODY.man.field };
+// The woman's builds: her own torso with its width (the weight) scaled, a belly where she is plump or heavy, and the size of her bust and her hips
+// (BUILD_FIGURE: as a named character's FigureShape's `bust` and `hips`). The old: an elder man's three (the elder's torso, and the stout man's), an elder woman's two.
+const womanBuild = (xs: number, extra: readonly Bulge[] = []): BodyShape => ({ ...BODY.woman, xs, field: [...BODY.woman.field, ...extra] });
+const belly = (push: number): Bulge => ({ c: [0, 1.03, 0.12], r: [0.15, 0.13, 0.1], push: [0, -0.01, push], round: 1.3 });
+BODY.w_petite = womanBuild(0.94);
+BODY.w_slim = womanBuild(0.9);
+BODY.w_tall = womanBuild(0.96);
+BODY.w_curvy = womanBuild(1.04);
+BODY.w_busty = womanBuild(1.0);
+BODY.w_pear = womanBuild(1.0);
+BODY.w_plump = womanBuild(1.2, [belly(0.022)]);
+BODY.w_heavy = womanBuild(1.45, [belly(0.045)]);
+BODY.w_flat = womanBuild(0.92);
+BODY.w_elder = womanBuild(0.95);
+BODY.w_elder_plump = womanBuild(1.2, [belly(0.02)]);
+BODY.e_frail = { ...BODY.elder, xs: 0.9 };
+BODY.e_stout = { ...BODY.stout!, xs: 0.93 };
+BODY.e_tall = { ...BODY.elder, xs: 0.96 };
+/** Each woman build's bust and hips against the usual woman's (1): how large or small each is. */
+const BUILD_FIGURE: Partial<Record<Body, { readonly bust: number; readonly hips: number }>> = {
+  w_petite: { bust: 0.8, hips: 0.92 },
+  w_slim: { bust: 0.7, hips: 0.9 },
+  w_tall: { bust: 1.0, hips: 1.0 },
+  w_curvy: { bust: 1.35, hips: 1.12 },
+  w_busty: { bust: 1.65, hips: 1.0 },
+  w_pear: { bust: 0.8, hips: 1.2 },
+  w_plump: { bust: 1.3, hips: 1.06 },
+  w_heavy: { bust: 1.5, hips: 1.1 },
+  w_flat: { bust: 0.3, hips: 0.95 },
+  w_elder: { bust: 0.75, hips: 1.0 },
+  w_elder_plump: { bust: 1.05, hips: 1.05 },
+};
+/** A build's neck against the arm's thickness (a fat man's is thick and short), and the jowls and double chin of a heavy face (head units from the neck joint). */
+const NECK_K: Partial<Record<Body, number>> = { stout: 1.3, portly: 1.08, bulky: 1.3 };
+const JOWLS: Partial<Record<Body, readonly Bulge[]>> = {
+  stout: [
+    { c: [0.055, 0.03, 0.05], r: [0.05, 0.05, 0.06], push: [0.012, -0.004, 0.012], round: 1.3 },
+    { c: [0, 0.0, 0.055], r: [0.07, 0.035, 0.05], push: [0, -0.014, 0.018], round: 1.3 },
+  ],
+  portly: [{ c: [0.05, 0.03, 0.05], r: [0.05, 0.05, 0.06], push: [0.006, -0.002, 0.006], round: 1.3 }],
 };
 
-/** The boss's (on a man's or an elder's joints: only the flesh is his own), and how much thicker his limbs and neck are. */
-const HEAVY_BODY: Omit<BodyShape, 'xs'> = {
-  torso: HEAVY,
-  seg: 20,
-  field: [
-    // The paunch hanging a little over the belt; the buttocks.
-    { c: [0, 1.04, 0.2], r: [0.17, 0.15, 0.11], push: [0, -0.012, 0.026], round: 1.4 },
-    { c: [0.075, 0.9, -0.125], r: [0.09, 0.09, 0.08], push: [0, 0, -0.014] },
-  ],
-};
-const HEAVY_LIMB = 1.13;
 /**
  * A woman's buttocks in full, over the plain seat every body has: each a round cheek, the two meeting in the cleft.
  * In full only with what's worn skin-tight or not at all (FORM_FITTING). In ordinary clothes, trousers, shorts and
@@ -377,6 +513,8 @@ const BARE_FRONT: readonly Bulge[] = [
  * across, `wide` from the middle out (m; a little short of the thigh, so it turns up again before it), `depth` deep, the middle between the two up at `notch` of that; from the front back over the first `to` of
  * the way, deepest midway (short front to back: about as long as it is wide and deep, not a ridge).
  */
+/** How much of that form shows under skin-tight clothes (the user, 2026-10-10: it should still be present, flattened a little by the cloth, 'but not much'; taking it away altogether was wrong). */
+const TIGHT_FRONT = 0.8;
 const BARE_UNDER = { rows: [0.04, 0.08, 0.12, 0.16, 0.2, 0.25, 0.3, 0.4, 0.55, 0.75], sag: 0.0035, depth: 0.016, notch: 0.45, to: 0.34, wide: 0.0165 } as const;
 // (Deeper, and running on down to where the legs part, at the user's word: 'a deeper butt crack in general', and
 // more of one low down. Narrow ones, the cheeks touching, were tried and turned down.)
@@ -564,6 +702,12 @@ const BARE_ROWS: readonly Row[] = [
   [0.075, 0.035, 0.018, 0.046],
   [0.11, 0.029, 0.014, 0.042],
   [0.127, 0.002, 0.002, 0.041],
+];
+/** A flip-flop's strap lying across the top of the foot (a little over BARE_ROWS' top). */
+const STRAP_ROWS: readonly Row[] = [
+  [0.0, 0.018, 0.004, 0.1],
+  [0.022, 0.029, 0.004, 0.089],
+  [0.04, 0.03, 0.004, 0.08],
 ];
 /** How far the bare foot comes down with no sole under it, to stand on the floor. */
 const BARE_DROP = 0.024;
@@ -862,7 +1006,7 @@ function cutOf(body: Body, hair: Hair, outfit: Outfit): Cut | null {
   return null;
 }
 /** Which of a character's looks (its colours, what it carries): by the hair asked for, a man's four kinds first. */
-const VARIANT: Record<Hair, number> = { short: 0, none: 1, cap: 2, hat: 3, long: 0, bob: 1, bun: 2, ponytail: 3, twin: 2 };
+const VARIANT: Partial<Record<Hair, number>> = { short: 0, none: 1, cap: 2, hat: 3, long: 0, bob: 1, bun: 2, ponytail: 3, twin: 2 };
 /** A regent: the pompadour rolled forward over the brow, rows along z: [z, half width, half height, centre y]. */
 const REGENT: readonly Row[] = [
   [-0.07, 0.003, 0.003, 0.214],
@@ -902,6 +1046,15 @@ const FEDORA: readonly Row[] = [
   [0.215, 0.088, 0.106, -0.01],
   [0.252, 0.082, 0.098, -0.012],
   [0.262, 0.002, 0.002, -0.012],
+];
+/** A vendor's salakot: a low cone over a very wide, shallow brim. */
+const SALAKOT: readonly Row[] = [
+  [0.15, 0.094, 0.112, -0.008],
+  [0.128, 0.23, 0.24, -0.008],
+  [0.136, 0.232, 0.242, -0.008],
+  [0.17, 0.15, 0.16, -0.01],
+  [0.225, 0.08, 0.092, -0.012],
+  [0.268, 0.003, 0.003, -0.012],
 ];
 /** A woman's hat: a round crown and a wide brim turned down. */
 const SUNHAT: readonly Row[] = [
@@ -974,38 +1127,56 @@ const CASE: readonly Row[] = [
  * evening dress); sandals with a kimono (zori, white tabi) and a yukata (geta, bare feet); boots with work clothes;
  * else a woman's flats and everyone else's shoes.
  */
-type Footwear = 'shoe' | 'flat' | 'pump' | 'boot' | 'sandal' | 'bare';
+type Footwear = 'shoe' | 'flat' | 'pump' | 'boot' | 'sandal' | 'flipflop' | 'bare';
 function footwearOf(body: Body, outfit: Outfit): Footwear {
   // (Nothing on is barefoot; `nude_heels` is the same in high heels: a cabaret's dancer.)
-  if (outfit === 'nude') return 'bare';
+  if (outfit === 'nude' || outfit === 'bikini' || outfit === 'trunks') return 'bare';
+  // (A festival's straw sandals; a bunny's, a streetwalker's and a cabaret's heels are below.)
+  if (outfit === 'matsuri') return 'sandal';
   // (A street thug's and a tattooed man's setta, on bare feet; a biker's boots.)
-  if (outfit === 'kimono' || outfit === 'yukata' || outfit === 'chinpira' || outfit === 'irezumi') return 'sandal';
+  if (outfit === 'kimono' || outfit === 'yukata' || outfit === 'chinpira' || outfit === 'irezumi' || outfit === 'jinbei') return 'sandal';
   if (outfit === 'work' || outfit === 'bosozoku') return 'boot';
+  // (Tsinelas, rubber flip-flops: a ballplayer's, a jeepney crew's, a market vendor's, a tricycle driver's.)
+  if (outfit === 'baller' || outfit === 'jeep_crew' || outfit === 'vendor' || outfit === 'trike_driver') return 'flipflop';
   if (body !== 'woman') return 'shoe';
-  return outfit === 'suit' || outfit === 'office' || outfit === 'gown' || outfit === 'nude_heels' ? 'pump' : 'flat';
+  return outfit === 'suit' || outfit === 'office' || outfit === 'gown' || outfit === 'nude_heels' || HEELED.includes(outfit) ? 'pump' : 'flat';
 }
 
+/** The women's outfits worn in heels: the night's. */
+const HEELED: readonly Outfit[] = ['lingerie', 'streetwalker', 'bunny', 'bodycon', 'catsuit', 'qipao', 'powersuit'];
+/** The outfits with a peaked cap of their own (the hair asked for is bareheaded or short; the cap is part of the uniform). */
+const CAPPED: readonly Outfit[] = ['guard', 'driver', 'doorman'];
+/** The outfits of which the navel shows (the belly is bare). */
+const NAVEL_SHOWS: readonly Outfit[] = ['bikini', 'lingerie', 'streetwalker', 'crop', 'runner'];
+/** The outfits worn with bare legs (shorts, trunks; a woman's nude-form clothes are painted over bare legs). */
+const BARE_LEGGED: readonly Outfit[] = ['shorts', 'baller', 'gym', 'nude', 'nude_heels', 'trunks', 'matsuri', 'runner', 'jinbei'];
 /** The outfits worn with trousers (a woman's legs and hips in the bottoms' shade, not bare under a skirt). */
-const TROUSERED: readonly Outfit[] = ['plain', 'work', 'police', 'otaku', 'hoodie', 'track', 'nurse', 'doctor', 'apron', 'puffer', 'shorts', 'gym', 'yakuza', 'chinpira', 'bosozoku', 'boss', 'hood', 'drunk', 'irezumi'];
+const TROUSERED: readonly Outfit[] = ['plain', 'work', 'police', 'otaku', 'hoodie', 'track', 'nurse', 'doctor', 'apron', 'puffer', 'shorts', 'gym', 'yakuza', 'chinpira', 'bosozoku', 'boss', 'hood', 'drunk', 'irezumi', 'barong', 'vendor', 'jeep_crew', 'trike_driver', 'guard', 'baller', 'matsuri', 'blouson', 'knit', 'jinbei', 'chef', 'driver', 'trench', 'kappogi', 'coverall', 'hanten'];
 /** Of those, the ones a man wears tucked in (the rest hang out over his trousers). */
-const TUCKED: readonly Outfit[] = ['police', 'doctor', 'yakuza', 'bosozoku', 'boss', 'drunk', 'irezumi'];
+const TUCKED: readonly Outfit[] = ['guard', 'driver', 'police', 'doctor', 'yakuza', 'bosozoku', 'boss', 'drunk', 'irezumi'];
 /** A man's tops tucked in at the belt, where no jacket covers the hips (else the top runs on down to them). */
 const BELTED: readonly Outfit[] = ['office', 'yakuza', 'bosozoku', 'drunk', 'irezumi', 'yankee'];
 /** The outfits that leave the arms bare (sleeveless, or a short sleeve lofted over the upper arm). */
-const BARE_ARMS: readonly Outfit[] = ['dress', 'mini', 'gown', 'shorts', 'nurse', 'gym', 'chinpira', 'nude', 'nude_heels'];
+const BARE_ARMS: readonly Outfit[] = ['pinoy_school', 'baller', 'vendor', 'jeep_crew', 'trike_driver', 'guard', 'dress', 'mini', 'gown', 'shorts', 'nurse', 'gym', 'chinpira', 'nude', 'nude_heels', 'leotard', 'runner', 'bikini', 'lingerie', 'streetwalker', 'bunny', 'bodycon', 'crop', 'shirtless', 'trunks', 'matsuri', 'jinbei'];
 
 /**
  * What shows a woman's bottom in full, the cleft with it: nothing on. (Where skin-tight or revealing clothes are
  * added later, yoga pants, underwear, what the shadier streets wear at night, they go here.)
  */
-const FORM_FITTING: readonly Outfit[] = ['nude', 'nude_heels'];
+/**
+ * The women's skin-tight and revealing clothes (the user, 2026-10-10: the nude model is the more fitting body for
+ * them): the body of `nude` without what is drawn on it (the hooks of mobBare.ts are only `nude`'s), with the garment
+ * painted on it (real/mobTight.ts) and what stands off the body lofted over. Their bottoms show in full, the cleft with it.
+ */
+export const NUDE_FORM: readonly Outfit[] = ['leotard', 'leggings', 'runner', 'bikini', 'lingerie', 'streetwalker', 'bunny', 'bodycon', 'catsuit', 'crop', 'qipao'];
+const FORM_FITTING: readonly Outfit[] = ['nude', 'nude_heels', ...NUDE_FORM];
 /** What a woman wears a skirt or a robe with (no waistband on her hips under it, and never the cleft). */
-const SKIRTED: readonly Outfit[] = ['long', 'suit', 'maid', 'school', 'kimono', 'yukata', 'dress', 'mini', 'gown', 'office', 'nurse', 'yankee'];
+const SKIRTED: readonly Outfit[] = ['long', 'suit', 'maid', 'school', 'kimono', 'yukata', 'dress', 'mini', 'gown', 'office', 'nurse', 'yankee', 'pinoy_school', 'cardigan', 'powersuit'];
 
 /** What's on the legs, by body and outfit. */
 function legsOf(body: Body, outfit: Outfit, bottom: number): { rows: readonly Row[]; shade: number } {
   // (Shorts, gym clothes: bare legs, the shorts or bloomers lofted over the thighs. Nothing on: bare legs.)
-  const bare = outfit === 'shorts' || outfit === 'gym' || outfit === 'nude' || outfit === 'nude_heels';
+  const bare = BARE_LEGGED.includes(outfit) || (body === 'woman' && NUDE_FORM.includes(outfit));
   if (body !== 'woman') return bare ? { rows: BARE_LEG, shade: SKIN } : { rows: TROUSERS, shade: bottom };
   const rows = footwearOf(body, outfit) === 'pump' ? SHAPELY : FLAT_LEG;
   if (TROUSERED.includes(outfit) && !bare) return { rows, shade: bottom };
@@ -1016,19 +1187,22 @@ function legsOf(body: Body, outfit: Outfit, bottom: number): { rows: readonly Ro
 /** The hair under a hat, a cap, a hard hat: only what shows below it. */
 const UNDER_HAT = 0.158;
 
-export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
+export function buildShaped(shape: Body, hair: Hair, outfit: Outfit): Template {
+  // (A build is a man for everything but his size and flesh: `shape` has those, `body` what he wears and does.)
+  const body = baseBody(shape);
+  const build = isBuild(shape);
   // (The uncensored edition's detail on a bare woman: src/poc3d/real/mobBare.ts.)
   const bareHooks = bareDetail();
-  const P = PROPORTIONS[body];
+  const P = PROPORTIONS[shape];
   const woman = body === 'woman';
-  // (The boss is a heavy man: his own flesh on the body's joints.)
-  const heavy = outfit === 'boss' && (body === 'man' || body === 'elder');
-  const S: BodyShape = heavy ? { ...HEAVY_BODY, xs: BODY[body].xs } : BODY[body];
-  const limb = heavy ? HEAVY_LIMB : 1;
+  const S: BodyShape = BODY[shape] ?? BODY[body];
   const ys = P.ys;
   const xs = S.xs;
+  // (A build's feet and hands grow with its height and girth, but not as far as its legs and arms do.)
+  const FK = build ? (0.7 + 0.3 * P.leg) * Math.pow(ys, 0.6) : P.leg;
+  const HK = build ? (0.75 + 0.25 * P.arm) * Math.pow(ys, 0.5) : P.arm;
   const tb = new TemplateBuilder();
-  const { pivot, armOut } = pivotsOf(body);
+  const { pivot, armOut } = pivotsOf(shape);
   /** (A character's chest and arms as runs of points, to be made one surface: `weld`.) */
   let chestRun: [number, number] | null = null;
   const armRuns: [number, number, number][] = [];
@@ -1040,7 +1214,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const waist = 1.06 * ys;
   const hipY = 0.9 * ys;
   // (A figure's own hips: wider or narrower below the waist, and the tops of the thighs with them.)
-  const hipK = woman ? (figure?.hips ?? 1) : 1;
+  const hipK = woman ? (figure?.hips ?? BUILD_FIGURE[shape]?.hips ?? 1) : 1;
   const hipAt = (y: number): number => {
     const k = clamp01((1.07 - y) / 0.14);
     return 1 + (hipK - 1) * k * k * (3 - 2 * k);
@@ -1050,11 +1224,15 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const chestAt = (y: number): number => (fine ? table(CHEST_FINE, y) : 1);
   const T = smooth(S.torso).map(([y, a, b, z]): Row => [y * ys, a * xs * hipAt(y) * chestAt(y), b * xs * (1 + (hipAt(y) - 1) * 0.5), z * xs]);
   // (A schoolgirl's bust is less: the bulges on the front of the chest.)
-  const bust = (b: Bulge): number => (body === 'woman' && b.c[1] > 1.15 && b.c[2] > 0 ? (figure?.bust ?? 1) * (isTeen(body, outfit) ? TEEN_BUST : 1) : 1);
+  const bust = (b: Bulge): number => (body === 'woman' && b.c[1] > 1.15 && b.c[2] > 0 ? (figure?.bust ?? BUILD_FIGURE[shape]?.bust ?? 1) * (isTeen(body, outfit) ? TEEN_BUST : 1) : 1);
   // (A woman's bottom: in full, with its cleft, only in what's skin-tight or with nothing on; round, the two sides
   // run together, in everything else; a teen's always the plain seat.)
   const skirted = woman && SKIRTED.includes(outfit);
-  const unclothed = outfit === 'nude' || outfit === 'nude_heels';
+  // (`naked`: nothing on, which is all the uncensored edition's hooks draw on; `nudeForm`: the same body's form under
+  // clothes that cling or bare most of it, a woman's.)
+  const naked = outfit === 'nude' || outfit === 'nude_heels';
+  const nudeForm = woman && NUDE_FORM.includes(outfit);
+  const unclothed = naked || nudeForm;
   const fitted = FORM_FITTING.includes(outfit);
   const cheeks = !woman || isTeen(body, outfit) ? 0 : fitted ? 1 : skirted ? ROUND_SEAT : (ROUND_SEAT);
   const cheek: Bulge[] = cheeks > 0 ? [{ ...CHEEK, r: woman && unclothed ? [CHEEK.r[0], BARE_CHEEK_LOW, CHEEK.r[2]] : CHEEK.r, push: [CHEEK.push[0] * cheeks, CHEEK.push[1] * cheeks, CHEEK.push[2] * cheeks] }] : [];
@@ -1076,7 +1254,10 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   // A woman with nothing on: her breasts as they are without clothes (bareBreast, in place of the clothed bust and
   // the cloth across it), and the cleft behind runs deeper (BARE_CLEFT).
   const bareWoman = woman && unclothed;
-  const frontLook = FRONT_LOOKS[0];
+  // (Under clothes the form between her legs is still there, pressed a little by the cloth: TIGHT_FRONT of what it is
+  // with nothing on. The garment covers it: painted with the torso and, under her, with what is built between the legs.)
+  const frontPress = naked ? 1 : TIGHT_FRONT;
+  const frontLook = { ...FRONT_LOOKS[0], depth: FRONT_LOOKS[0].depth * frontPress };
   const cleftLook = CLEFT_LOOKS[0];
   // (Her bare breast, at the height asked for: BUST_LOOKS.)
   const bustRise = BUST_LOOKS[0].rise / ys;
@@ -1087,14 +1268,27 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const bones: readonly Bulge[] = detail && woman ? [...COLLAR_BONES, ...RIB_CAGE] : [];
   const form: readonly Bulge[] = bareWoman ? [...shaped.filter((b) => !onChest(b)), bareBreast, ...bones] : [...shaped, ...bones];
   const field: Bulge[] = [...form, ...cheek].map(scaled);
-  const bodyField: Bulge[] = cleft ? [...field.map((b, i): Bulge => (i >= form.length ? { ...b, cleft: true } : b)), ...(bareWoman ? [...(detail ? [scaled(SPINE_FURROW)] : []), scaled(BARE_CLEFT), ...(frontLook.tall > 0 ? BARE_FRONT.map((b): Bulge => scaled({ ...b, c: [b.c[0], b.c[1] - b.r[1] * (1 - frontLook.tall), b.c[2]], r: [b.r[0], b.r[1] * frontLook.tall, b.r[2]] })) : [])] : [])] : field;
+  const bodyField: Bulge[] = cleft ? [...field.map((b, i): Bulge => (i >= form.length ? { ...b, cleft: true } : b)), ...(bareWoman ? [...(detail ? [scaled(SPINE_FURROW)] : []), scaled(BARE_CLEFT), ...(frontLook.tall > 0 ? BARE_FRONT.map((b): Bulge => scaled({ ...b, c: [b.c[0], b.c[1] - b.r[1] * (1 - frontLook.tall), b.c[2]], r: [b.r[0], b.r[1] * frontLook.tall, b.r[2]], push: [b.push[0] * frontPress, b.push[1] * frontPress, b.push[2] * frontPress] })) : [])] : [])] : field;
   const torsoAt = (y: number): [number, number, number] => rowAt(T, y);
   const hips = (r: Row): Weight => blend(SPINE, PELVIS, clamp01((r[0] - (waist - 0.05 * ys)) / (0.1 * ys)));
   /** A skirt's or coat's skinning: below the hip joints each side follows its thigh (more of it lower down). */
   const drape = (r: Row, _i: number, x: number): Weight => {
     if (r[0] >= hipY) return hips(r);
-    const k = Math.min(1, (hipY - r[0]) / (0.3 * ys));
-    return [x < 0 ? THIGH_L : THIGH_R, PELVIS, 0.25 + 0.65 * k];
+    // Round the hips (to where the legs part) it goes with them as the body's own skin does (`thighShare`), or a jacket's
+    // hem and the body slid through one another in the stride, in teeth.
+    if (r[0] >= crotch * ys && woman) {
+      const share = thighShare(x, r[0], 0) * clamp01(Math.abs(x) / 0.025);
+      return share > 0 ? blend(x < 0 ? THIGH_L : THIGH_R, PELVIS, share) : hips(r);
+    }
+    // Over a thigh the cloth goes with it almost wholly from a hand's breadth under the hip (it went a third of the way
+    // down at half strength, so a leg swung back came out through the skirt at the top of the thigh); down the middle,
+    // front and back, it stays between the legs, partway.
+    const k = Math.min(1, (hipY - r[0]) / (0.12 * ys));
+    // (Ramped over the width of a thigh, not stepped at the middle: the two halves going opposite ways at the front
+    // folded the skirt there, and the faces turned from view in a slit.)
+    const o = clamp01(Math.abs(x) / 0.085);
+    const over = o * o * (3 - 2 * o);
+    return [x < 0 ? THIGH_L : THIGH_R, PELVIS, Math.min(0.95, 0.2 + k * (0.1 + 0.75 * over))];
   };
   /** A loft over the torso: it takes the body's form with it. */
   const over = (rows: readonly Row[], weight: (r: Row, i: number, x: number) => Weight, shade: number, seg: number, n = 2.4, arc?: readonly [number, number]): void => {
@@ -1117,26 +1311,118 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     return [y * ys, w + g, d + g, z];
   };
 
+  // ---- Skin-tight and revealing clothes (real/mobTight.ts) ----
+  // Which of an outfit's looks this one is, by its hair (a figure has one template per hair): colours and trims.
+  const look = [...hair].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % 4;
+  const tightDye = ((): Dye => {
+    const pick = (a: readonly number[]): number => a[look];
+    switch (outfit) {
+      case 'bikini': return { skin: SKIN, cloth: pick([GOWN, NAVY, WHITES - 0.1, SKY]), trim: WHITES - 0.1 };
+      case 'lingerie': return { skin: SKIN, cloth: pick([BLACK, GOWN, WHITES - 0.1, VIOLET]), trim: WHITES - 0.25, hose: SKIN - 0.42 };
+      case 'streetwalker': return { skin: SKIN, cloth: pick([BLACK, GOWN, BLACK, VIOLET - 0.1]), trim: WHITES - 0.3, hose: SKIN - 0.5 };
+      case 'bunny': return { skin: SKIN, cloth: pick([BLACK, GOWN, NAVY - 0.2, VIOLET - 0.1]), trim: WHITES, hose: SKIN - 0.5 };
+      case 'bodycon': return { skin: SKIN, cloth: pick([GOWN, BLACK, VIOLET, NAVY - 0.15]), trim: WHITES - 0.2 };
+      case 'qipao': return { skin: SKIN, cloth: pick([GOWN, NAVY, VIOLET, SKY - 0.15]), trim: SASH };
+      case 'catsuit': return { skin: SKIN, cloth: BLACK, trim: BLACK, hose: BLACK };
+      case 'leggings': return { skin: SKIN, cloth: CLOTH_BOTTOM - 0.3, trim: CLOTH_BOTTOM - 0.3, hose: CLOTH_BOTTOM - 0.3 };
+      case 'runner': return { skin: SKIN, cloth: CLOTH_TOP, trim: WHITES - 0.2, hose: woman ? BLACK : CLOTH_BOTTOM };
+      case 'crop': return { skin: SKIN, cloth: CLOTH_TOP, trim: WHITES - 0.2, hose: CLOTH_BOTTOM };
+      default: return { skin: SKIN, cloth: CLOTH_TOP, trim: WHITES - 0.12, hose: SKIN - 0.4 };
+    }
+  })();
+  const surface = (): Surface => ({ pos: tb.pos, b0: tb.b0, b1: tb.b1, w: tb.w, shade: tb.shade, get idx() { return tb.idx; }, set idx(v: number[]) { tb.idx = v; }, ys, xs, centreZ: (y) => rowAt(T, y)[2], skin: SKIN });
+  /** The garment on the torso and hips, painted over its points from `from` to `to`. */
+  const torsoPainter = (): Painter | null => {
+    const d = tightDye;
+    const crop: Painter = briefsPainter({ ...d, cloth: d.hose! }, { front: 1.0, side: 1.0, back: 1.0, cut: 0 });
+    return ((): Painter | null => {
+      switch (outfit) {
+        case 'leotard': return onePiecePainter(d, { cut: 0.075, neck: 1.36, back: 1.39, strap: true });
+        case 'bikini': return combine(topPainter(d, 'halter'), briefsPainter(d, { front: 0.95, side: 0.99, back: 0.97, cut: 0.055 }));
+        case 'lingerie':
+        case 'streetwalker': return combine(topPainter(d, 'bra', true), briefsPainter(d, { front: 0.96, side: 0.985, back: 0.975, cut: 0.045, edge: 0.012 }));
+        case 'bunny': return onePiecePainter(d, { cut: 0.09, neck: 1.335, back: 1.35, strap: false, scoop: 0.04 });
+        case 'bodycon': return dressPainter(d, { neck: 1.3, strap: false });
+        case 'qipao': return dressPainter(d, { neck: 1.455, strap: false });
+        case 'catsuit': return dressPainter(d, { neck: 1.46, strap: false });
+        case 'crop': return combine(topPainter(d, 'bandeau'), crop);
+        case 'runner': return woman ? combine(topPainter(d, 'racer'), crop) : combine(waistPainter(bottomShade, 0.93), singletPainter(d, 0.93));
+        case 'shirtless': return waistPainter(bottomShade, 0.95, WHITES - 0.5);
+        case 'trunks': return waistPainter(bottomShade, 0.95, bottomShade - 0.15);
+        case 'leggings': return bandPainter(d.hose!, 0, WAISTLINE);
+        case 'matsuri': return loinclothPainter({ skin: SKIN, cloth: WHITES - 0.05, trim: WHITES }, 0.95);
+        default: return null;
+      }
+    })();
+  };
+  const dressTorso = (from: number, to: number): void => {
+    const paint = torsoPainter();
+    if (paint) applyPaint(surface(), from, to, paint);
+  };
+  /** The same on a leg, points from `from` to `to`. */
+  const legPainterOf = (): Painter | null => {
+    const d = tightDye;
+    const own = ((): Painter | null => {
+      switch (outfit) {
+        case 'lingerie': return combine(bandPainter(d.trim, 0.585, 0.615), legPainter(d.hose!, 0.6));
+        case 'streetwalker': return combine(bandPainter(d.trim, 0.645, 0.675), legPainter(d.hose!, 0.66));
+        case 'bunny': return legPainter(d.hose!, 0.9);
+        case 'catsuit': return legPainter(d.cloth, 0.9);
+        case 'leggings': return legPainter(d.hose!, 0.9);
+        case 'crop': return legPainter(d.hose!, 0.9, 0.78);
+        case 'runner': return legPainter(d.hose!, 0.9, 0.74);
+        default: return null;
+      }
+    })();
+    return own;
+  };
+  const dressLeg = (from: number, to: number): void => {
+    const paint = legPainterOf();
+    if (paint) applyPaint(surface(), from, to, paint);
+  };
+
   // What the top is: its hem over the hips, and how much skin shows at the neck.
   const trousers = !woman || TROUSERED.includes(outfit);
   // (A man's shirt tucked in at the belt with office clothes.)
   const hem = woman ? 1.02 : BELTED.includes(outfit) ? 0.99 : 0.855;
-  const untucked = !woman && (outfit === 'school' || (TROUSERED.includes(outfit) && !TUCKED.includes(outfit)));
+  const untucked = !woman && outfit !== 'matsuri' && (outfit === 'school' || outfit === 'pinoy_school' || (TROUSERED.includes(outfit) && !TUCKED.includes(outfit)));
   // A kimono's or a yukata's cloth: a yukata pale cotton, a woman's kimono violet, a man's navy.
   const robe = outfit === 'yukata' ? WHITES - 0.25 : woman ? VIOLET : NAVY - 0.15;
   // The shady ones: which of the character's looks this is, and the jacket or coat worn open over the top (its
   // sleeves on the arms). A mobster's suit black, the figure's own, navy, or the old boss's off-white; a biker's
   // coat white, black, plum or navy; a school gang leader's long black-navy uniform coat; a drunk's suit.
-  const v = VARIANT[hair];
+  const v = VARIANT[hair] ?? 0;
   const coatShade =
     outfit === 'yakuza' ? [BLACK, SUIT, NAVY + 0.1, WHITES - 0.15][v]
     : outfit === 'bosozoku' ? [WHITES - 0.1, BLACK - 0.15, VIOLET, NAVY + 0.2][v]
     : outfit === 'yankee' && !woman ? NAVY - 0.45
     : outfit === 'drunk' ? SUIT
+    // (A doorman's long coat, a belted trench: the figure's sleeves are of it too.)
+    : outfit === 'doorman' ? [GOWN, NAVY - 0.2, PACK + 0.1, SUIT][look]
+    : outfit === 'trench' ? [TAN, TAN - 0.25, SUIT + 0.35, NAVY + 0.15][look]
     : null;
   // (The boss with a hat or a cap asked for is a politician out canvassing: a sash and white gloves.)
   const politician = outfit === 'boss' && v >= 2;
-  const whiteTop = outfit === 'office' || outfit === 'nurse' || outfit === 'gym' || (outfit === 'school' && body !== 'child') || outfit === 'bosozoku' || outfit === 'drunk' || outfit === 'irezumi' || (outfit === 'yankee' && !woman);
+  // The period's everyday clothes and uniforms: their cloths, by the look.
+  const POWER = [SUIT, NAVY, GOWN - 0.15, BROWN][look];
+  const JINBEI = [NAVY - 0.1, SKY - 0.1, SUIT + 0.2, TAN - 0.3][look];
+  const COVER = [SKY - 0.35, NAVY - 0.2, PACK + 0.25, TAN - 0.3][look];
+  const DRIVER = [SKY - 0.45, NAVY - 0.25, SUIT, SKY - 0.3][look];
+  const BLOUSON = [NAVY + 0.1, PACK + 0.25, SKY - 0.1, TAN - 0.15][look];
+  const HANTEN = [NAVY - 0.15, SUIT, BROWN - 0.15, PACK + 0.15][look];
+  const STREET = [TAN, PINK, VIOLET, SKY - 0.2][look];
+  // The cloth of the arm itself (under a sleeve lofted over it): else the top of the shoulder showed bare between the
+  // jacket and the sleeve, and again when an arm swung.
+  const sleeveShade: number | null =
+    outfit === 'streetwalker' ? STREET
+    : outfit === 'matsuri' ? NAVY - 0.1
+    : outfit === 'cardigan' ? CLOTH_TOP - 0.05
+    : outfit === 'driver' ? DRIVER
+    : outfit === 'blouson' ? BLOUSON
+    : outfit === 'hanten' ? HANTEN
+    : outfit === 'kappogi' ? WHITES - 0.05
+    : null;
+  const whiteTop = outfit === 'office' || outfit === 'nurse' || outfit === 'gym' || (outfit === 'school' && body !== 'child') || outfit === 'pinoy_school' || outfit === 'bosozoku' || outfit === 'drunk' || outfit === 'irezumi' || (outfit === 'yankee' && !woman) || outfit === 'cardigan' || outfit === 'chef' || outfit === 'driver' || outfit === 'doorman';
   const topShade =
     whiteTop ? WHITES
     // A mobster's loud shirt (dark red, plum, white, black); a street thug's aloha shirt (ochre, dusty blue, red, green).
@@ -1154,10 +1440,18 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     // (A maid's dress is dark navy; a police uniform is coloured whole at the end.)
     : outfit === 'maid' ? NAVY - 0.45
     : outfit === 'police' ? TOP
+    // (Filipino: a barong's pale cloth; a security guard's dusty blue-grey shirt; a ballplayer's jersey in the figure's colour.)
+    : outfit === 'barong' ? WHITES + 0.1
+    : outfit === 'guard' ? SKY
+    : outfit === 'jinbei' ? JINBEI
+    : outfit === 'powersuit' ? POWER
+    : outfit === 'coverall' ? COVER
     // (Nothing on: the body as it is, nothing lofted over it and nothing added to it, barefoot; or, a cabaret's
     // dancer, in her heels. A mannequin's body, smooth; a woman's has her breasts' own shape (bareBreast) and her navel (NAVEL);
     // the uncensored edition adds more: mobBare.ts.)
     : outfit === 'nude' || outfit === 'nude_heels' ? SKIN
+    // (Clothes painted on the bare body: the body is skin and the garment is laid over it below.)
+    : (nudeForm && outfit !== 'leggings') || outfit === 'shirtless' || outfit === 'trunks' || outfit === 'matsuri' || (outfit === 'runner' && !woman) ? SKIN
     // Everything else (plain clothes, a hoodie, a down jacket, a T-shirt, what's under an apron or a coat): a top in a colour of the figure's own.
     : CLOTH_TOP;
   const bottomShade =
@@ -1169,6 +1463,15 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     : outfit === 'suit' || outfit === 'office' || outfit === 'doctor' ? SUIT - 0.1
     // (A schoolboy's dark trousers.)
     : outfit === 'school' && body !== 'child' ? NAVY - 0.5
+    : outfit === 'pinoy_school' ? NAVY - 0.35
+    : outfit === 'baller' ? CLOTH_TOP - 0.15
+    : outfit === 'barong' ? SUIT - 0.1
+    : outfit === 'guard' ? NAVY - 0.4
+    : outfit === 'coverall' ? COVER
+    : outfit === 'jinbei' ? JINBEI
+    : outfit === 'driver' ? DRIVER - 0.1
+    : outfit === 'blouson' && look === 2 ? SKY - 0.35
+    : outfit === 'doorman' ? coatShade! - 0.1
     // (Suit trousers with a jacket, a biker's in his coat's cloth; a thug's white slacks; a gang leader's black-navy.)
     : outfit === 'yakuza' || outfit === 'bosozoku' || outfit === 'drunk' ? coatShade! - 0.1
     : outfit === 'boss' ? topShade - 0.1
@@ -1186,7 +1489,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     return ((fineHips ? BARE_THIGH_GAP : THIGH_GAP) / 2) * k * k * (3 - 2 * k);
   };
   const thighK = (y: number): number => 1 + (hipK - 1) * clamp01((y / ys - 0.45) / 0.4);
-  const legRows0 = L.rows.map(([y, a, b, z]): Row => [y * ys, a * P.leg * limb - apart(y * ys) / 2, b * P.leg * limb, z * P.leg]);
+  const legRows0 = L.rows.map(([y, a, b, z]): Row => [y * ys, a * P.leg - apart(y * ys) / 2, b * P.leg, z * P.leg]);
   const legRows = hipK === 1 ? legRows0 : legRows0.map(([y, a, b, z]): Row => [y, a * thighK(y), b * (1 + (thighK(y) - 1) * 0.5), z]);
   const legX = (s: number, y: number): number => {
     if (!woman) return s * P.hipX * (0.86 + 0.14 * Math.min(1, y / (0.92 * ys)));
@@ -1289,7 +1592,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
       }
       zip(tb, hipAngles.map((_, j) => hipRing + (HIP_ROWS.length - 1) * M + j), chest, true);
       displace(tb, t0, bodyField);
-      if (bareWoman) {
+      if (bareWoman && naked) {
         bareHooks?.nipples({ tb, xs, ys, T, bodyField, bareBreast });
       }
       // The cleft's line, a little darker down the middle of the seat.
@@ -1309,6 +1612,8 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     }
     // The waistband of a woman's trousers, where her top goes into them.
     if (woman && trousers && !unclothed && !skirted && outfit !== 'police' && outfit !== 'bosozoku') over([wrap(0.997, 0.001), wrap(1.0, 0.005), wrap(1.03, 0.005), wrap(1.033, 0.001)], hips, bottomShade - 0.12, 18, 2.4);
+    // Clothes that cling or bare most of the body: painted on it.
+    if (nudeForm || (!woman && (outfit === 'runner' || outfit === 'matsuri' || outfit === 'shirtless' || outfit === 'trunks'))) dressTorso(t0, mark());
     // An evening dress is off the shoulders: skin above the bust.
     if (outfit === 'gown') for (let i = t0; i < mark(); i++) if (tb.pos[i * 3 + 1] / ys > 1.365) tb.shade[i] = SKIN;
     // A tattooed man's chest and shoulders are bare above his undershirt (its straps are lofted over them): inked,
@@ -1326,7 +1631,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   if (neckUp) pivot[HEAD] = [pivot[HEAD][0], pivot[HEAD][1] + neckUp, pivot[HEAD][2]];
   const teen = isTeen(body, outfit);
   const hk = P.head * HEAD_K[body] * headScale * (teen ? TEEN_HEAD : 1);
-  const nk = P.arm * 0.9 * (heavy ? 1.2 : 1);
+  const nk = P.arm * 0.9 * (NECK_K[shape] ?? 1);
   const neck = NECK.map(([y, a, b, z]): Row => [y * ys + (y > 1.47 ? neckUp : 0), a * nk, b * nk, z * nk]);
   const n0 = mark();
   tb.loft(neck, () => 0, (_, i) => (i === 0 ? one(SPINE) : i === 1 ? blend(HEAD, SPINE, 0.4) : i === 2 ? blend(HEAD, SPINE, 0.8) : one(HEAD)), SKIN, detail ? 16 : 8);
@@ -1338,13 +1643,15 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const h0 = mark();
   tb.loft(skull, () => 0, () => one(HEAD), SKIN, 12, 2.1);
   displace(tb, h0, headField(FACE));
+  // (A heavy man's face: jowls and a double chin.)
+  if (JOWLS[shape]) displace(tb, h0, headField(JOWLS[shape]!));
 
   // ---- Hair ----
   // A character's own cut; and no hat with it, nor under a hood, a tie or a headband round the head.
   const cut = cutOf(body, hair, outfit);
   const hooded = outfit === 'hood' && hair !== 'cap';
   const bare = cut !== null || hooded || outfit === 'drunk' || outfit === 'bosozoku' || outfit === 'yankee';
-  const hatted = ((hair === 'hat' || hair === 'cap') && !bare) || outfit === 'work' || outfit === 'police' || outfit === 'apron' || hooded;
+  const hatted = ((hair === 'hat' || hair === 'cap') && !bare) || outfit === 'work' || outfit === 'police' || CAPPED.includes(outfit) || outfit === 'apron' || hooded;
   // (No long-haired child: one asked for gets the ordinary haircut.)
   const girl = body === 'child' && (hair === 'bun' || hair === 'bob' || hair === 'ponytail' || hair === 'twin');
   const feminine = woman || girl;
@@ -1352,8 +1659,9 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   if (cut) style = CUTS[cut];
   else if (hair !== 'none') {
     if (feminine) {
-      style = hair === 'long' ? H_LONG : hair === 'bob' || hair === 'hat' ? H_BOB : hair === 'bun' ? H_UP : hair === 'ponytail' || hair === 'twin' || hair === 'cap' ? H_BACK : H_CROP;
-    } else if (body === 'elder') style = H_THIN;
+      style = isDetailed(hair) ? hairCap(hair) : hair === 'long' ? H_LONG : hair === 'bob' || hair === 'hat' ? H_BOB : hair === 'bun' ? H_UP : hair === 'ponytail' || hair === 'twin' || hair === 'cap' ? H_BACK : H_CROP;
+    } else if (isMenHair(hair)) style = MEN_CUTS[hair].cap;
+    else if (body === 'elder') style = H_THIN;
     // (A man and a boy have the one haircut: the kinds only women and girls wear differently come out the same on them.)
     else style = H_SHORT;
   }
@@ -1426,7 +1734,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
    * A lock of hair: a flat blade along a path (head units from the neck joint), `width` its half width at each
    * point (to nothing at its tip), `thick` its half thickness. Four sides: sharp, as anime draws hair.
    */
-  const lock = (path: readonly V3[], width: readonly number[], thick: number, headOnly = false): void => {
+  const lock = (path: readonly V3[], width: readonly number[], thick: number, headOnly = false, tone?: number): void => {
     const start = mark();
     const n = path.length;
     for (let i = 0; i < n; i++) {
@@ -1455,7 +1763,8 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
         tb.b0.push(HEAD);
         tb.b1.push(SPINE);
         tb.w.push(1 - k);
-        tb.shade.push(HAIR);
+        // (A strand with a tone of its own: the hair's tag, the shade the colour is multiplied by.)
+        tb.shade.push(tone === undefined ? HAIR : 1900 + tone);
       }
     }
     // Faces out: whichever way round the rings came, away from the path.
@@ -1493,7 +1802,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const ROUND = [1.3, 1.72, 2.14, 2.56, 2.98, -2.9, -2.48, -2.06, -1.64, -1.26];
   const hairFrom = mark();
   if (style) {
-    if (cut === 'combover') shell(style, PATE, true);
+    if (cut === 'combover' || (!feminine && isMenHair(hair) && MEN_CUTS[hair].pate && !hatted)) shell(style, PATE, true);
     // (Under a hood none shows at the brow.)
     else shell(style, hatted ? UNDER_HAT : null, hooded);
     // Ears where the hair leaves them out.
@@ -1503,7 +1812,9 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   } else if (hair === 'none' || hatted) {
     for (const sd of [-1, 1]) tb.loft(EAR.map(([z, a, b, y]): Row => [z * hk, a * hk, b * hk, neckY + y * hk]), () => sd * 0.085 * hk, () => one(HEAD), SKIN, 5, 2, 'z');
   }
-  if (style && !hatted && body !== 'elder') {
+  // The detailed cuts (mobHair.ts) have no fringe and no blade locks: their hair is built by the kit below.
+  const detailed = feminine && isDetailed(hair);
+  if (style && !hatted && body !== 'elder' && !detailed) {
     if (feminine) {
       // Bangs to the brows, longer at the temples.
       fringe([-0.66, -0.4, -0.13, 0.15, 0.42, 0.68], (phi) => 0.112 - 0.05 * Math.pow(Math.abs(phi) / 0.68, 2), 0.036);
@@ -1512,6 +1823,14 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
       if (hair === 'bob') layer(ROUND, () => -0.04, 0.066, 0.036);
     }
     // (A man's and a boy's haircut has no locks: the cap is all of it.)
+  }
+  // A man's own cut (mobMenHair.ts): what stands on its cap, unless a hat, a hood or an outfit's cut is on it.
+  if (!feminine && isMenHair(hair) && !hatted && !bare) {
+    MEN_CUTS[hair].build?.({
+      lock,
+      onHead,
+      loft: (rows, x, seg = 8) => tb.loft(headRows(rows), () => x * hk, () => one(HEAD), HAIR, seg),
+    });
   }
   // A regent's pompadour, rolled forward over the brow.
   if (cut === 'regent') tb.loft(REGENT.map(([z, a, h, y]): Row => [z * hk, a * hk, h * hk, neckY + y * hk]), () => 0, () => one(HEAD), HAIR, 10, 2.4, 'z');
@@ -1525,8 +1844,15 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   if (feminine && style && !hooded) {
     // A little girl's twin tails are short bunches (below): no long locks with them.
     const bunches = body === 'child' && hair === 'twin';
-    // A long lock in front of each ear (a bob and a crop have their sides already).
-    if (hair !== 'short' && hair !== 'bob' && hair !== 'hat' && !bunches) {
+    if (detailed && isDetailed(hair) && !hatted) {
+      buildDetailedHair(hair, {
+        lock,
+        onHead,
+        loft: (rows, x, seg = 8) => tb.loft(headRows(rows), () => x * hk, () => one(HEAD), HAIR, seg),
+      });
+    }
+    // A long lock in front of each ear (a bob and a crop have their sides already; the detailed cuts have strands).
+    if (hair !== 'short' && hair !== 'bob' && hair !== 'hat' && !bunches && !detailed) {
       for (const sd of [-1, 1]) lock([onHead(-sd * 1.02, 0.17, 0.03), onHead(-sd * 1.0, 0.1, 0.034), [sd * 0.094, 0.0, 0.03], [sd * 0.09, -0.13, 0.05]], [0.02, 0.024, 0.02, 0], 0.022);
     }
     if (hair === 'long') {
@@ -1560,10 +1886,11 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const hairTo = mark();
   // (A straw sun hat; a brown fedora.)
   // (The old boss's is off-white, as his suit.)
-  if (hair === 'hat' && !bare) tb.loft(headRows(feminine ? SUNHAT : FEDORA), () => 0, () => one(HEAD), feminine ? TAN + 0.35 : outfit === 'yakuza' ? WHITES - 0.1 : TAN - 0.6, 14);
-  if (hair === 'cap' && !bare) {
+  // (A vendor's hat is the salakot, whoever wears it; a security guard's cap is his uniform's, with the outfit.)
+  if (hair === 'hat' && !bare && !CAPPED.includes(outfit)) tb.loft(headRows(outfit === 'vendor' ? SALAKOT : feminine ? SUNHAT : FEDORA), () => 0, () => one(HEAD), outfit === 'vendor' ? TAN + 0.3 : feminine ? TAN + 0.35 : outfit === 'yakuza' ? WHITES - 0.1 : TAN - 0.6, 14);
+  if (hair === 'cap' && !bare && !CAPPED.includes(outfit)) {
     // (A schoolchild's cap is yellow.)
-    const capShade = body === 'child' && outfit === 'school' ? SASH : outfit === 'police' ? HAT : CLOTH_BOTTOM;
+    const capShade = (body === 'child' && (outfit === 'school' || outfit === 'pinoy_school')) ? SASH : outfit === 'police' ? HAT : CLOTH_BOTTOM;
     tb.loft(headRows(CAP), () => 0, () => one(HEAD), capShade, 12, 2.1);
     tb.loft(headRows(VISOR), () => 0, () => one(HEAD), capShade, 8);
   }
@@ -1575,7 +1902,15 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const gym = outfit === 'gym';
   // Shorts over the thighs: to just above the knee, a woman's short. Gym clothes: a girl's bloomers (to the top
   // of the thigh), a boy's short shorts, in the school's red.
-  const legCut = outfit === 'shorts' || gym ? (gym ? (woman ? crotch : 0.64) : woman ? 0.74 : 0.5) * ys : null;
+  // (A ballplayer's are long and baggy: to the knee.)
+  const baller = outfit === 'baller';
+  const legCut = outfit === 'shorts' || gym || baller ? (gym ? (woman ? crotch : 0.64) : baller ? (woman ? 0.6 : 0.45) : woman ? 0.74 : 0.5) * ys
+    // (A man's running shorts and trunks, short; a woman's matsuri pants.)
+    : !woman && outfit === 'runner' ? 0.62 * ys
+    : !woman && outfit === 'trunks' ? 0.66 * ys
+    : woman && outfit === 'matsuri' ? 0.78 * ys
+    : outfit === 'jinbei' ? (woman ? 0.76 : 0.52) * ys
+    : null;
   // A woman's legs: more points round them, more sections through the thigh (so it curves), and only up to where
   // they part: there each joins her hips. Her shorts and bloomers are the leg itself in their colour from the cut up
   // (a section either side of it, so the edge is a line).
@@ -1604,6 +1939,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     let joined: [number[], number[]] | null = null;
     const bound = (r: Row): Weight => (r[0] > 0.88 * ys ? blend(thigh, PELVIS, 0.6) : blend(thigh, shin, clamp01((r[0] - (knee - 0.06 * ys)) / (0.1 * ys))));
     tb.loft(rows, x, bound, L.shade, legSeg);
+    if (nudeForm) dressLeg(l0, mark());
     if (woman) {
       if (legCut !== null) for (let i = l0; i < mark(); i++) if (tb.pos[i * 3 + 1] > legCut - 1e-5) tb.shade[i] = bottomShade;
       // (The top of the leg is shared with the pelvis as the hips are: thighShare.)
@@ -1742,7 +2078,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
       const s1 = mark();
       // (A woman's shorts: the hem standing a little off the leg. A man's and a child's are lofted over the thighs,
       // up only to under the shirt's hem, a little slimmer there, so they don't come through it.)
-      if (!woman) tb.loft([[legCut, w + 0.011, d + 0.011, z0], ...grown(0.005, legCut / ys + 0.012, 0.87)], x, bound, bottomShade, 8);
+      if (!woman) tb.loft([[legCut, w + (baller ? 0.03 : 0.011), d + (baller ? 0.03 : 0.011), z0], ...grown(baller ? 0.022 : 0.005, legCut / ys + 0.012, outfit === 'runner' || outfit === 'trunks' || outfit === 'jinbei' ? 0.93 : 0.87)], x, bound, bottomShade, 8);
       else if (!gym) {
         const [w1, d1, z1] = rowAt(rows, legCut + 0.02 * ys);
         tb.loft([[legCut - 0.004 * ys, w + 0.008, d + 0.008, z0], [legCut + 0.02 * ys, w1 + 0.003, d1 + 0.003, z1]], x, bound, bottomShade, LEG_SEG);
@@ -1753,28 +2089,37 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     }
     // Knee boots with a short skirt; a stripe down the outside of a track suit's leg.
     if (outfit === 'mini') tb.loft(grown(0.005, 0, 0.43), x, bound, SHOE, legSeg);
+    // Bell-bottoms with the knit: the trouser leg flares from the knee to the hem.
+    if (outfit === 'knit') tb.loft(rows.filter((r) => r[0] >= 0.05 * ys && r[0] <= 0.5 * ys).map(([y, a, b, z]): Row => { const k = clamp01((0.48 * ys - y) / (0.4 * ys)); return [y, a + 0.004 + 0.032 * k * k, b + 0.004 + 0.032 * k * k, z]; }), x, bound, bottomShade, legSeg);
+    // Leg warmers over an aerobics leotard; a streetwalker's boots to under the knee.
+    if (outfit === 'leotard') tb.loft(grown(0.013, 0.14, 0.44), x, bound, tightDye.trim, legSeg);
+    if (outfit === 'streetwalker') tb.loft(grown(0.005, 0, 0.5), x, bound, SHOE, legSeg);
     if (outfit === 'track') tb.loft(grown(0.004, 0.09, 0.88), x, bound, LENS, 2, 2, 'y', s < 0 ? [Math.PI - 0.3, Math.PI + 0.3] : [-0.3, 0.3]);
+    // (A Filipino schoolgirl's white socks; a schoolboy's trousers cover his.)
+    if (woman && outfit === 'pinoy_school') tb.loft(grown(0.004, 0, 0.22), x, bound, WHITES, legSeg);
     // A schoolgirl's knee socks.
     if (woman && outfit === 'school') tb.loft(rows.filter((r) => r[0] <= 0.43 * ys).map(([y, a, b, z]): Row => [y, a + 0.003, b + 0.003, z]), x, bound, NAVY - 0.1, legSeg);
     // (kz along the foot, kw across and up: a woman's boots and sandals are smaller than a man's.)
     const shoe = (R: readonly Row[], kz: number, kw: number, shade: number): void =>
-      tb.loft(R.map(([z, a, h, y]): Row => [z * P.leg * kz, a * P.leg * kw, h * P.leg * kw, y * P.leg * kw]), () => fx, () => one(foot), shade, 8, 2.8, 'z');
+      tb.loft(R.map(([z, a, h, y]): Row => [z * FK * kz, a * FK * kw, h * FK * kw, y * FK * kw]), () => fx, () => one(foot), shade, 8, 2.8, 'z');
     // (A nurse's white shoes; the old boss's, with his white suit.)
-    const shoeShade = outfit === 'nurse' || outfit === 'gym' || (outfit === 'yakuza' && v === 3) ? WHITES : SHOE;
+    const shoeShade = outfit === 'nurse' || outfit === 'gym' || outfit === 'runner' || outfit === 'leotard' || (outfit === 'yakuza' && v === 3) ? WHITES : SHOE;
     if (footwear === 'pump') {
       shoe(PUMP_ROWS, 1, 1, SHOE);
-      tb.loft(HEEL.map(([y, a, b, z]): Row => [y * P.leg, a, b, z * P.leg]), () => fx, () => one(foot), SHOE, 5);
+      tb.loft(HEEL.map(([y, a, b, z]): Row => [y * FK, a, b, z * FK]), () => fx, () => one(foot), SHOE, 5);
     } else if (footwear === 'flat') shoe(FLAT_ROWS, 1, 1, shoeShade);
     else if (footwear === 'boot') shoe(BOOT_ROWS, woman ? 0.76 : 1, woman ? 0.8 : 1, SHOE);
-    else if (footwear === 'sandal') {
+    else if (footwear === 'sandal' || footwear === 'flipflop') {
       const k = woman ? 1 : 1.22;
       shoe(SOLE_ROWS, k, k, SHOE);
       shoe(BARE_ROWS, k, k, outfit === 'kimono' ? WHITE : SKIN);
+      // (Tsinelas: a thin dusty-blue strap across the top of the foot.)
+      if (footwear === 'flipflop') shoe(STRAP_ROWS, k, k, SKY - 0.25);
     } else if (footwear === 'bare') {
       const k = woman ? 1 : 1.22;
       if (detail) {
         // A character's foot: its own form, and toes (the big toe on the inside).
-        const fk = P.leg * k;
+        const fk = FK * k;
         tb.loft(FOOT_FINE.map(([z, a, h, y]): Row => [z * fk, a * fk, h * fk, y * fk]), () => fx, () => one(foot), SKIN, 12, 2.6, 'z');
         // The ankle: a collar from the top of the foot up onto the leg's own section, so the leg rises out of the foot
         // (it stood on it, a ring round the join).
@@ -1862,8 +2207,9 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
         face(strip[n][0], strip[n + 1][1], strip[n + 1][0], outAt(n));
       }
     }
-    bareHooks?.anus({ tb, bareWoman, pts, idx, dist, outAt, put, face, scaled });
+    if (naked) bareHooks?.anus({ tb, bareWoman, pts, idx, dist, outAt, put, face, scaled });
   }
+  const underFrom = mark();
   if (bareWoman && legTops.length === 2) {
     // The skin under her, between the legs (BARE_UNDER): columns from the hips' lowest ring in front back to its
     // middle point behind, the outermost each side the crease along that leg's inner points; with the pelvis.
@@ -1942,7 +2288,15 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
         }
       }
     }
-    bareHooks?.pubic({ tb, mark, frontLook, hipAngles, hipRing, hipFront, hipSide, baseRing, underMid });
+    if (naked) bareHooks?.pubic({ tb, mark, frontLook, hipAngles, hipRing, hipFront, hipSide, baseRing, underMid });
+  }
+  // The garment goes under her too: what was built between her legs is covered by it (a leotard, briefs, a catsuit), not left out of it.
+  if (nudeForm && underFrom < mark()) {
+    const torsoPaint = torsoPainter(), legPaint = legPainterOf();
+    // (The garment's own cloth first: a costume's or briefs' crotch over the tights. Only what is built between the
+    // legs: painting the inner tops of the thighs with it too hung a box of cloth under her.)
+    const both = torsoPaint && legPaint ? combine(torsoPaint, legPaint) : (torsoPaint ?? legPaint);
+    if (both) applyPaint(surface(), underFrom, mark(), both);
   }
 
   // ---- Arms and hands ----
@@ -1951,14 +2305,14 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const ax = (y: number): number =>
     (y >= 1.42 ? P.shoulderX * 0.97 : y >= 1.13 ? P.elbowX + ((y - 1.13) / 0.29) * (P.shoulderX - P.elbowX) : P.wristX + ((y - 0.865) / 0.265) * (P.elbowX - P.wristX)) - armIn;
   // (A tattooed man's are inked to the wrist; a jacket's or a coat's sleeves; a politician's white gloves.)
-  const armShade = BARE_ARMS.includes(outfit) ? SKIN : outfit === 'irezumi' ? INK : (coatShade ?? (outfit === 'doctor' ? WHITES : outfit === 'long' && !woman ? TAN : topShade));
-  const handShade = politician ? WHITES : SKIN;
+  const armShade = outfit === 'catsuit' ? BLACK : sleeveShade !== null ? sleeveShade : BARE_ARMS.includes(outfit) ? SKIN : outfit === 'irezumi' ? INK : (coatShade ?? (outfit === 'doctor' ? WHITES : outfit === 'long' && !woman ? TAN : topShade));
+  const handShade = politician || outfit === 'driver' || outfit === 'doorman' ? WHITES : SKIN;
   for (const [s, arm, fore] of [[-1, ARM_L, FORE_L], [1, ARM_R, FORE_R]] as const) {
-    const ak = P.arm * (woman ? 0.88 : 1) * limb;
+    const ak = P.arm * (woman ? 0.88 : 1);
     if (detail) {
       // A character's arm and hand, one surface from the knuckles to the shoulder; fingers and a thumb on the palm.
       const hl = woman || body === 'child' ? 1 : 1.14;
-      const hk = P.arm * limb;
+      const hk = P.arm;
       const handY = (y: number): number => (0.868 - (0.868 - y) * hl) * ys;
       const curl = (y: number): number => 0.012 * Math.pow(clamp01((0.868 - y / ys) / (0.14 * hl)), 2);
       const handX = (y: number): number => P.wristX + 0.003 * clamp01((0.868 * ys - y) / (0.03 * ys)) - armIn - curl(y);
@@ -2025,7 +2379,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
     const hl = woman || body === 'child' ? 1 : 1.14;
     const curl = (y: number): number => 0.012 * Math.pow(clamp01((0.868 - y / ys) / (0.14 * hl)), 2);
     const h0 = mark();
-    tb.loft(HAND.map(([y, a, b, z]): Row => [(0.868 - (0.868 - y) * hl) * ys, a * P.arm, b * P.arm, z]), (r) => s * (P.wristX + 0.003 - armIn - curl(r[0])), () => one(fore), handShade, 6);
+    tb.loft(HAND.map(([y, a, b, z]): Row => [(0.868 - (0.868 - y) * hl) * ys, a * HK, b * HK, z]), (r) => s * (P.wristX + 0.003 - armIn - curl(r[0])), () => one(fore), handShade, 6);
     displace(tb, h0, [{ c: [s * (P.wristX - armIn), (0.868 - 0.05 * hl) * ys, 0.03], r: [0.04, 0.03 * hl * ys, 0.03], push: [0, 0, 0.01] }]);
   }
 
@@ -2044,10 +2398,12 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   const caseInHand = (k: number): void => tb.loft(CASE.map(([y, a, b, z]): Row => [y * ys, a, b * k, z]), () => -(P.wristX + 0.012), () => one(FORE_L), BROWN, 8, 6);
   const armRows = (rows: readonly Row[], s: number, shade: number, arm: number, fore: number): void =>
     tb.loft(rows.map(([y, a, b, z]): Row => [y * ys, a * P.arm, b * P.arm, z * P.arm]), (r) => s * ax(r[0] / ys), (r) => (r[0] > 1.4 * ys ? blend(arm, SPINE, 0.6) : r[0] > 1.18 * ys ? one(arm) : one(fore)), shade, 8);
-  const gs = woman ? 0.95 : P.arm;
+  // (A woman's skirt is as wide as her body: its weight and the width of her hips.)
+  const gs = woman ? 0.95 * xs * (1 + (hipK - 1) * 0.6) : P.arm;
   /** A skirt from a hem (explicit rows below the hips) up over the hips to the waist. */
   const skirt = (below: readonly Row[], shade: number, seg: number, n: number, top = 1.05): void =>
-    over([...below.map(([y, a, b, z]): Row => [y * ys, a * gs, b * gs, z * gs]), wrap(0.86, 0.014), wrap(0.93, 0.011), wrap(1.0, 0.008), wrap(top, 0.006)], drape, shade, seg, n);
+    // (A woman's: twice the columns round her, so the cloth can follow each thigh and fold between them without the front turning from view.)
+    over([...below.map(([y, a, b, z]): Row => [y * ys, a * gs, b * gs, z * gs]), wrap(0.86, 0.014), wrap(0.93, 0.011), wrap(1.0, 0.008), wrap(top, 0.006)], drape, shade, woman ? Math.max(seg, 32) : seg, n);
   const F = Math.PI / 2;
   const ARMS = [[-1, ARM_L, FORE_L], [1, ARM_R, FORE_R]] as const;
   const shortSleeves = (shade: number): void => {
@@ -2186,12 +2542,12 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
    * A jacket or a coat worn open: from its skirt (`below`: a long coat's rows under the hips; none, a jacket's hem
    * at the hip) up over the shoulders to the neck, the front left open `gap` either side of the middle. Its rows.
    */
-  const openCoat = (below: readonly Row[], shade: number, gap: number, g = 0.02): Row[] => {
+  const openCoat = (below: readonly Row[], shade: number, gap: number, g = 0.02, hem = 0.8): Row[] => {
     const hip = wrap(0.9, g);
     // (Its sections close together over a woman's bust, so it lies over it.)
     const chest = woman ? [1.12, 1.17, 1.21, 1.25, 1.29, 1.33, 1.375] : [1.12, 1.2, 1.28, 1.35];
     const rows: Row[] = [
-      ...(below.length ? below.map(([y, a, b, z]): Row => [y * ys, a * gs, b * gs, z * gs]) : ([[0.8 * ys, hip[1] - 0.006, hip[2] - 0.006, hip[3]], [0.806 * ys, hip[1], hip[2], hip[3]]] as Row[])),
+      ...(below.length ? below.map(([y, a, b, z]): Row => [y * ys, a * gs, b * gs, z * gs]) : ([[hem * ys, hip[1] - 0.006, hip[2] - 0.006, hip[3]], [(hem + 0.006) * ys, hip[1], hip[2], hip[3]]] as Row[])),
       hip,
       wrap(0.98, g),
       wrap(1.05, g),
@@ -2218,6 +2574,32 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   /** A gold chain round the neck, down into the open collar. */
   const chain = (y0: number): void => {
     for (const sd of [-1, 1]) ribbon([[1.468, F + sd * 0.3], [(1.468 + y0) / 2, F + sd * 0.15], [y0, F]], 0.003, () => 0.013, SASH + 0.15);
+  };
+
+  /** A towel on the neck (a vendor's, a jeepney crew's): a roll round it, one end or both hanging down the chest. */
+  const towel = (both: boolean): void => {
+    const cloth = WHITES - 0.12;
+    over([wrap(1.45, 0.02), wrap(1.47, 0.026), wrap(1.495, 0.02)], () => one(SPINE), cloth, 12, 2.4);
+    for (const c of both ? [F - 0.32, F + 0.32] : [F - 0.32]) over([1.16, 1.22, 1.28, 1.34, 1.4, 1.45].map((y) => wrap(y, 0.022)), () => one(SPINE), cloth - 0.12, 2, 2.4, [c - 0.1, c + 0.1]);
+  };
+
+  /**
+   * A sleeve over the arm from `lo` to `hi` (the man's heights), standing off it by `g`, easing down to nothing over
+   * the top of the shoulder so it meets the jacket's own shoulder and not a step beside it (the double shoulder).
+   */
+  const sleeve = (lo: number, hi: number, g: number, shade: number, seg = 8): void => {
+    const n = ARM.filter((r) => r[0] >= lo && r[0] <= hi).length;
+    overArm(lo, hi, (i) => g * clamp01((n - 1 - i) / 3), shade, seg);
+  };
+  /**
+   * A short jacket or a sweater over the body, closed: its hem at `from` (the man's height, standing a little off the
+   * hips), its sections at `heights` growing by `g(y)` (closely spaced over a woman's chest so it lies over her bust).
+   */
+  const jacketOver = (from: number, heights: readonly number[], g: (y: number) => number, shade: number): void => {
+    const ys2 = woman ? [...heights.filter((y) => y < 1.1), 1.12, 1.16, 1.2, 1.23, 1.26, 1.29, 1.32, 1.35, 1.38, ...heights.filter((y) => y > 1.4)] : heights;
+    const rows = [wrap(from, 0.002), wrap(from + 0.006, g(from) + 0.004), ...ys2.map((y) => wrap(y, g(y)))];
+    if (woman) overChest(rows, hips, shade);
+    else over(rows, hips, shade, S.seg, 2.4);
   };
 
   if (outfit === 'long') {
@@ -2370,7 +2752,7 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
   } else if (outfit === 'shorts') {
     // A T-shirt (the shorts are with the legs).
     shortSleeves(topShade);
-  } else if (outfit === 'hoodie' || outfit === 'hood') {
+  } else if (outfit === 'hoodie' || outfit === 'hood' || outfit === 'leggings') {
     // A loose body over the hips, the hood down behind the neck, the pocket on the front.
     // (More sections over a woman's hips, so it lies over her bottom.)
     if (woman) overChest([wrap(0.868, 0.004), ...[0.875, 0.91, 0.95, 1.0, 1.06, 1.12, 1.16, 1.2, 1.23, 1.26, 1.29, 1.32, 1.35, 1.38, 1.43].map((y) => wrap(y, 0.016))], hips, topShade);
@@ -2430,6 +2812,150 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
       tb.loft(headRows([[0.196, 0.066, 0.056, 0.014], [0.21, 0.072, 0.062, 0.016], [0.262, 0.084, 0.05, 0.02], [0.266, 0, 0, 0.02]]), () => 0, () => one(HEAD), WHITES + 0.2, 12, 2.6);
       cross(0, neckY + 0.238 * hk, 0.068 * hk, hk * 1.2, HEAD);
     }
+  } else if (outfit === 'cardigan') {
+    // A knit cardigan hanging open over a white blouse or shirt (its collar showing), long sleeves in the knit; a
+    // woman's skirt to the knee.
+    const knit = CLOTH_TOP - 0.05;
+    if (woman) skirt([[0.52, 0.15, 0.116, 0], [0.54, 0.155, 0.12, 0], [0.7, 0.172, 0.13, -0.004]], bottomShade, 16, 2.4);
+    over([wrap(1.44, 0.006), wrap(1.475, 0.008)], () => one(SPINE), WHITES, 10, 2.4, [F - 1.2, F + 1.2]);
+    openCoat([], knit, 0.2, 0.016, 0.86);
+  } else if (outfit === 'powersuit') {
+    // The 80s career woman: a boxy double-breasted jacket with shoulder pads (the cloth is the torso's own), a straight
+    // short skirt in the same, the blouse's V, gold buttons; heels.
+    skirt([[0.6, 0.178, 0.134, -0.003], [0.62, 0.178, 0.134, -0.003]], POWER, 16, 2.4);
+    over([wrap(0.93, 0.002), wrap(0.938, 0.024), wrap(1.0, 0.021), wrap(1.07, 0.016)], hips, POWER, S.seg, 2.4);
+    const upper = ARM.filter((r) => r[0] >= 1.3 && r[0] <= 1.46).length;
+    overArm(1.3, 1.46, (i) => 0.006 + (0.034 * i) / Math.max(1, upper - 1), POWER, 8);
+    panel(1.26, 1.46, (y) => 0.012 + (y - 1.26) * 0.24, 1, WHITES);
+    for (const sd of [-1, 1]) for (const y of [1.0, 1.1, 1.2]) disc(y, F + sd * 0.26, 0.012, 0.014, SASH);
+  } else if (outfit === 'blouson') {
+    // A short zip jacket (a bomber, a denim jacket by its look) with ribbed cuffs and hem and a collar, over a tee; jeans.
+    const J = BLOUSON;
+    jacketOver(0.93, [1.0, 1.12, 1.3, 1.42, 1.455], (y) => (y < 1.0 ? 0.02 : 0.026), J);
+    over([wrap(0.93, 0.003), wrap(0.965, 0.022)], hips, J - 0.2, S.seg, 2.4);
+    sleeve(0.9, 1.45, 0.018, J);
+    overArm(0.88, 0.99, () => 0.024, J - 0.2, 8);
+    collar(J - 0.05);
+    panel(0.97, 1.44, () => 0.007, 1, J - 0.3, 0.03, 0.004);
+  } else if (outfit === 'knit') {
+    // A chunky knit sweater with a roll neck and ribbed cuffs, loose over the hips; bell-bottoms (with the legs).
+    jacketOver(0.88, [0.95, 1.06, 1.2, 1.32, 1.42], (y) => (y < 1.0 ? 0.02 : 0.018), topShade);
+    over([wrap(0.88, 0.004), wrap(0.905, 0.024)], hips, topShade - 0.18, S.seg, 2.4);
+    sleeve(0.9, 1.45, 0.014, topShade);
+    overArm(0.88, 0.96, () => 0.02, topShade - 0.18, 8);
+    collar(topShade - 0.05);
+  } else if (outfit === 'jinbei') {
+    // A summer jinbei: a short-sleeved wrap top crossed at the chest and tied at the waist, shorts to above the knee,
+    // sandals.
+    shortSleeves(JINBEI);
+    panel(1.26, 1.47, (y) => 0.01 + (y - 1.26) * 0.2, 1, JINBEI - 0.25);
+    over([wrap(0.96, 0.012), wrap(1.0, 0.014)], hips, JINBEI - 0.3, S.seg, 2.4);
+  } else if (outfit === 'chef') {
+    // A cook's whites: a double-breasted tunic over the hips, a long white apron tied at the waist, a towel round the
+    // head.
+    over([wrap(0.8, 0.006), wrap(0.806, 0.024), wrap(0.9, 0.022), wrap(1.0, 0.019), wrap(1.06, 0.014)], hips, WHITES, S.seg, 2.4);
+    for (const sd of [-1, 1]) for (const y of [1.14, 1.24, 1.34]) disc(y, F + sd * 0.2, 0.011, 0.015, 0.4);
+    over([[0.5 * ys, 0.17 * gs, 0.132 * gs, 0.008], [0.7 * ys, 0.18 * gs, 0.138 * gs, 0.006], wrap(0.86, 0.026), wrap(0.95, 0.024), wrap(1.04, 0.022)], drape, WHITES - 0.08, 12, 2.4, [F - 0.95, F + 0.95]);
+    over([wrap(1.03, 0.024), wrap(1.065, 0.024)], hips, WHITES - 0.35, S.seg, 2.4);
+    headband(WHITES, 0.014);
+  } else if (outfit === 'driver') {
+    // A driver's or conductor's uniform: a jacket worn open over a white shirt and tie, white gloves, a peaked cap.
+    openCoat([], DRIVER, 0.26, 0.018, 0.86);
+    over([wrap(1.44, 0.006), wrap(1.475, 0.008)], () => one(SPINE), WHITES, 10, 2.4, [F - 1.2, F + 1.2]);
+    panel(1.08, 1.43, () => 0.014, 1, APRON - 0.15, 0.006);
+    if (!woman) over([wrap(0.955, 0.014), wrap(1.0, 0.014)], hips, 0.4, S.seg, 2.4);
+    tb.loft(headRows([[0.155, 0.088, 0.11, -0.006], [0.18, 0.096, 0.118, -0.01], [0.212, 0.108, 0.128, -0.014], [0.226, 0.104, 0.123, -0.015], [0.232, 0.003, 0.003, -0.015]]), () => 0, () => one(HEAD), DRIVER - 0.1, 12, 2.1);
+    tb.loft(headRows(VISOR.map(([y, a, b, z]): Row => [y + 0.02, a * 1.05, b * 1.1, z + 0.004])), () => 0, () => one(HEAD), DRIVER - 0.3, 8);
+  } else if (outfit === 'doorman') {
+    // A hotel's or theatre's doorman: a long double-breasted coat to the knee in the house colour, two rows of gold
+    // buttons and gold epaulettes, white gloves, a peaked cap.
+    const coat = coatShade!;
+    const rows = [[0.42 * ys, 0.215 * gs, 0.165 * gs, 0], [0.44 * ys, 0.217 * gs, 0.167 * gs, 0], [0.7 * ys, 0.2 * gs, 0.15 * gs, 0], wrap(0.9, 0.022), wrap(1.04, 0.022), wrap(1.2, 0.022), wrap(1.28, 0.024), wrap(1.34, 0.022), wrap(1.42, 0.018), wrap(1.452, 0.018), [1.47 * ys, 0.112 * gs, 0.09 * gs, -0.008], [1.5 * ys, 0.09 * gs, 0.08 * gs, -0.014]] as Row[];
+    over(rows, drape, coat, 16, 2.2);
+    for (const sd of [-1, 1]) for (const y of [0.74, 0.88, 1.02, 1.16, 1.3]) disc(y, F + sd * 0.3, 0.011, 0.024, SASH, 6, rows, drape);
+    for (const sd of [-1, 1]) disc(1.435, sd < 0 ? Math.PI - 0.28 : 0.28, 0.026, 0.026, SASH, 6, rows, hips);
+    tb.loft(headRows([[0.155, 0.088, 0.11, -0.006], [0.18, 0.096, 0.118, -0.01], [0.212, 0.108, 0.128, -0.014], [0.226, 0.104, 0.123, -0.015], [0.232, 0.003, 0.003, -0.015]]), () => 0, () => one(HEAD), coat, 12, 2.1);
+    tb.loft(headRows(VISOR.map(([y, a, b, z]): Row => [y + 0.02, a * 1.05, b * 1.1, z + 0.004])), () => 0, () => one(HEAD), coat - 0.2, 8);
+  } else if (outfit === 'trench') {
+    // A belted trench coat to the calf, a collar turned up, a belt knotted at the waist, shoulder straps.
+    const coat = coatShade!;
+    const chest = woman ? [1.12, 1.16, 1.2, 1.23, 1.26, 1.29, 1.32, 1.35, 1.38] : [1.2, 1.28, 1.34];
+    over([[0.34 * ys, 0.205 * gs, 0.158 * gs, 0], [0.36 * ys, 0.207 * gs, 0.16 * gs, 0], [0.62 * ys, 0.2 * gs, 0.15 * gs, 0], wrap(0.9, 0.022), wrap(1.04, 0.022), ...chest.map((y) => wrap(y, 0.022)), wrap(1.42, 0.018), wrap(1.452, 0.018), [1.47 * ys, 0.112 * gs, 0.09 * gs, -0.008], [1.515 * ys, 0.086 * gs, 0.078 * gs, -0.016]], drape, coat, 18, 2.2);
+    over([wrap(1.0, 0.03), wrap(1.05, 0.03)], hips, coat - 0.3, S.seg, 2.4);
+    disc(1.025, F, 0.02, 0.032, SASH - 0.3, 6, T, hips);
+    for (const sd of [-1, 1]) {
+      disc(1.42, F + sd * 0.6, 0.016, 0.02, coat - 0.3, 5, T, hips);
+      disc(1.2, F + sd * 0.2, 0.012, 0.028, coat - 0.35, 6, T, hips);
+    }
+  } else if (outfit === 'kappogi') {
+    // A shopkeeper's white kappogi: a long smock apron with long sleeves over dark clothes, tied at the waist, a
+    // cloth over the hair.
+    const smock = WHITES - 0.05;
+    const chest = woman ? [1.12, 1.16, 1.2, 1.23, 1.26, 1.29, 1.32, 1.35, 1.38] : [1.2, 1.34];
+    over([[0.44 * ys, 0.19 * gs, 0.15 * gs, 0], [0.46 * ys, 0.192 * gs, 0.152 * gs, 0], [0.7 * ys, 0.19 * gs, 0.148 * gs, 0], wrap(0.9, 0.02), wrap(1.04, 0.02), ...chest.map((y) => wrap(y, 0.022)), wrap(1.42, 0.016), wrap(1.452, 0.012), wrap(1.478, 0.01)], drape, smock, 16, 2.2);
+    sleeve(0.9, 1.45, 0.014, smock);
+    over([wrap(1.03, 0.026), wrap(1.07, 0.026)], hips, smock - 0.3, S.seg, 2.4);
+    tb.loft(headRows([[0.148, 0.098, 0.116, -0.006], [0.2, 0.094, 0.11, -0.01], [0.244, 0.056, 0.066, -0.012], [0.258, 0.003, 0.003, -0.012]]), () => 0, () => one(HEAD), smock, 12, 2.1);
+  } else if (outfit === 'coverall') {
+    // Workers' coveralls in one cloth from the collar to the ankles (the torso and the legs are coloured so): a collar,
+    // a zip down the front, two chest pockets, a belt.
+    collar(COVER - 0.05, 0.5);
+    panel(0.97, 1.44, () => 0.007, 1, COVER - 0.35, 0.012, 0.004);
+    over([wrap(0.99, 0.013), wrap(1.03, 0.013)], hips, COVER - 0.25, S.seg, 2.4);
+  } else if (outfit === 'hanten') {
+    // A padded winter hanten: a quilted jacket to mid thigh, wide sleeves, a broad pale band down the front and round
+    // the neck.
+    const J = HANTEN;
+    jacketOver(0.8, [0.86, 0.94, 1.02, 1.1, 1.18, 1.26, 1.34, 1.42, 1.455], (y) => (Math.round(y * 100) % 2 ? 0.022 : 0.028), J);
+    sleeve(0.9, 1.45, 0.02, J);
+    panel(0.83, 1.46, () => 0.016, 1, WHITES - 0.3, 0.03, 0.006);
+    collar(WHITES - 0.3, 0.45);
+  } else if (outfit === 'leotard' || outfit === 'runner') {
+    // A sweatband, on the leotard's trim (the leg warmers are with the legs).
+    headband(outfit === 'leotard' ? tightDye.trim : WHITES - 0.12, 0.012);
+  } else if (outfit === 'bunny') {
+    // A cabaret's bunny: a white collar and cuffs, a bow tie, tall ears on a band, a white tail (the tights are
+    // painted with the legs, the heels with the feet).
+    over([wrap(1.445, 0.008), wrap(1.474, 0.008)], () => one(SPINE), WHITES, 12, 2.4);
+    disc(1.43, F, 0.022, 0.012, tightDye.cloth);
+    for (const [sd, arm, fore] of ARMS) armRows(CUFF, sd, WHITES, arm, fore);
+    for (const sd of [-1, 1]) {
+      tb.loft(headRows([[0.16, 0.022, 0.012, -0.04], [0.22, 0.027, 0.014, -0.055], [0.3, 0.031, 0.014, -0.072], [0.4, 0.029, 0.013, -0.094], [0.48, 0.017, 0.009, -0.114], [0.52, 0.004, 0.004, -0.124]]), (r) => sd * (0.05 + Math.max(0, (r[0] - neckY) / hk - 0.16) * 0.2) * hk, () => one(HEAD), tightDye.cloth, 8, 2.1);
+    }
+    const [, td, tz] = torsoAt(0.93 * ys);
+    const tail = tz - td - 0.065;
+    tb.loft([[0.9 * ys, 0.004, 0.004, tail], [0.918 * ys, 0.03, 0.03, tail - 0.005], [0.944 * ys, 0.037, 0.037, tail - 0.012], [0.97 * ys, 0.03, 0.03, tail - 0.005], [0.985 * ys, 0.004, 0.004, tail]], () => 0, () => one(PELVIS), WHITES, 8, 2);
+  } else if (outfit === 'streetwalker') {
+    // A short jacket worn open over her underwear, its collar turned up in fur (the boots are with the legs).
+    const jacket = STREET;
+    openCoat([], jacket, 0.5, 0.02, 0.86);
+    collar(WHITES - 0.25, 0.55);
+  } else if (outfit === 'bodycon') {
+    // A short tight skirt on the painted bodice.
+    skirt([[0.66, 0.176, 0.134, -0.004], [0.68, 0.178, 0.136, -0.004]], tightDye.cloth, 16, 2.4);
+  } else if (outfit === 'qipao') {
+    // A mandarin collar, short sleeves, a close skirt to under the knee with a slit up one side, and a few gold
+    // flowers on the dress (the bodice is painted with the body).
+    collar(tightDye.cloth);
+    const tight: Row[] = [[0.36, 0.132, 0.1, 0], [0.385, 0.137, 0.105, 0], [0.5, 0.158, 0.12, 0], [0.6, 0.178, 0.132, -0.002]];
+    over(tight.map(([y, a, b, z]): Row => [y * ys, a * gs, b * gs, z * gs]), drape, tightDye.cloth, 18, 2.4, [0.28, 2 * Math.PI - 0.28]);
+    skirt([[0.6, 0.178, 0.132, -0.002]], tightDye.cloth, 16, 2.4);
+    shortSleeves(tightDye.cloth);
+    for (const [y, t, r] of [[1.33, F + 0.5, 0.026], [1.2, F - 0.34, 0.02], [1.05, F + 0.42, 0.024], [0.96, F - 0.5, 0.02], [1.2, -F + 0.5, 0.022], [1.0, -F - 0.4, 0.022]] as const) disc(y, t, r, 0.004, tightDye.trim, 6);
+  } else if (outfit === 'catsuit') {
+    // A high collar (the suit is painted, the sleeves black).
+    collar(BLACK + 0.1);
+  } else if (outfit === 'shirtless') {
+    // A towel over the neck for the heat.
+    towel(false);
+  } else if (outfit === 'matsuri') {
+    // A festival: a happi coat worn open (navy, a white ring on the back), a hachimaki; a woman's chest bound in
+    // a white sarashi, her short pants with the legs; a man in a fundoshi under it.
+    const coat = NAVY - 0.1;
+    openCoat([], coat, 0.42, 0.018, 0.86);
+    disc(1.22, -F, 0.07, 0.006, WHITES - 0.1, 12);
+    headband(WHITES, 0.012);
+    if (woman) overChest([1.14, 1.17, 1.2, 1.23, 1.26, 1.29, 1.32, 1.35].map((y) => wrap(y, 0.008)), () => one(SPINE), WHITES - 0.05);
   } else if (outfit === 'doctor') {
     // A white coat to the knee (white whatever the figure's colour), worn open: what's under it shows down the front.
     const w0 = woman ? 0.198 : 0.212;
@@ -2580,11 +3106,76 @@ export function buildShaped(body: Body, hair: Hair, outfit: Outfit): Template {
       disc(1.385, F + 0.52, 0.009, 0.005, SASH + 0.3);
       disc(1.33, F - 0.55, 0.015, 0.005, WHITES, 4);
     }
+  } else if (outfit === 'pinoy_school') {
+    // A Filipino public school's uniform (Manila; under review): the white short-sleeved blouse (with the torso), a dark blue
+    // skirt to the knee or trousers, a girl's neckerchief or a boy's tie, white socks (with the legs) and a rucksack.
+    if (woman) skirt([[0.52, 0.19, 0.158, 0.004], [0.54, 0.19, 0.158, 0.004], [0.7, 0.184, 0.15, 0]], NAVY - 0.1, 16, 2.6);
+    shortSleeves(WHITES);
+    over([wrap(1.44, 0.006), wrap(1.475, 0.008)], () => one(SPINE), WHITES, 10, 2.4, [F - 1.2, F + 1.2]);
+    if (woman || body === 'child') panel(1.3, 1.46, (y) => 0.012 + (y - 1.3) * 0.45, 1, APRON, 0.012);
+    else panel(1.08, 1.43, () => 0.014, 1, APRON - 0.1, 0.012);
+    const bagY = [1.07, 1.09, 1.34, 1.37].map((y) => y * ys);
+    const bagBack = Math.min(...bagY.map((y) => torsoAt(y)[2] - torsoAt(y)[1]));
+    const bk = body === 'child' ? 0.75 : 1;
+    tb.loft(bagY.map((y, i): Row => [y, (i % 3 === 0 ? 0.11 : 0.125) * bk, (i % 3 === 0 ? 0.05 : 0.065) * bk, bagBack - 0.065 * bk]), () => 0, () => one(SPINE), BROWN - 0.1, 10, 3);
+    for (const sd of [-1, 1]) over([1.2, 1.28, 1.34, 1.4, 1.45].map((y) => wrap(y, 0.013)), () => one(SPINE), BROWN - 0.3, 2, 2.4, [F - sd * 0.52 - 0.07, F - sd * 0.52 + 0.07]);
+  } else if (outfit === 'baller') {
+    // A basketball jersey (sleeveless, in the figure's own colour, a pale neck band and a number block on the back and
+    // the chest) over long baggy shorts in the same (with the legs), and tsinelas. (Manila; under review.)
+    overArm(1.38, 1.48, () => 0.003, topShade, 8);
+    over([wrap(1.44, 0.006), wrap(1.475, 0.008)], () => one(SPINE), WHITES - 0.1, 10, 2.4, [F - 1.2, F + 1.2]);
+    panel(1.1, 1.3, () => 0.055, -1, WHITES - 0.1, 0.01);
+    panel(1.22, 1.3, () => 0.034, 1, WHITES - 0.1, 0.01);
+  } else if (outfit === 'barong') {
+    // A barong tagalog (Manila; under review): a pale, long, sheer shirt worn out over dark trousers, its hem standing a little
+    // off the hips, a collar, and the embroidered panel down either side of the placket.
+    over([wrap(0.8, 0.008), wrap(0.806, 0.022), wrap(0.9, 0.019), wrap(0.99, 0.016), wrap(1.06, 0.012)], hips, topShade - 0.05, S.seg, 2.4);
+    for (const sd of [-1, 1]) over([0.84, 0.92, 1.0, 1.08, 1.16, 1.24, 1.32, 1.4].map((y) => wrap(y, 0.012)), hips, topShade - 0.45, 2, 2.4, [F + sd * 0.17 - 0.05, F + sd * 0.17 + 0.05]);
+    over([wrap(1.44, 0.006), wrap(1.475, 0.008)], () => one(SPINE), topShade, 10, 2.4, [F - 1.2, F + 1.2]);
+  } else if (outfit === 'vendor') {
+    // A market or street vendor (Manila; under review): a T-shirt, a pale cloth apron tied at the waist, a towel on the neck with
+    // one end down the chest, and (hair asked for: hat) a salakot.
+    shortSleeves(topShade);
+    over([[0.58 * ys, 0.17 * gs, 0.132 * gs, 0.008], [0.7 * ys, 0.18 * gs, 0.138 * gs, 0.006], wrap(0.86, 0.016), wrap(0.95, 0.014), wrap(1.04, 0.012)], drape, WHITES - 0.25, 12, 2.4, [F - 0.95, F + 0.95]);
+    over([wrap(1.03, 0.014), wrap(1.065, 0.014)], hips, WHITES - 0.4, S.seg, 2.4);
+    towel(false);
+  } else if (outfit === 'jeep_crew') {
+    // A jeepney's driver or his barker (Manila; under review): a sleeveless shirt, a towel on the neck with both ends hanging, a
+    // belt and a pouch for the fares, tsinelas.
+    overArm(1.38, 1.48, () => 0.003, topShade, 8);
+    towel(true);
+    over([wrap(0.955, 0.012), wrap(0.995, 0.012)], hips, 0.4, S.seg, 2.4);
+    panel(0.86, 0.98, () => 0.07, 1, BROWN - 0.1, 0.012, 0.022);
+  } else if (outfit === 'trike_driver') {
+    // A tricycle driver (Manila; under review): a polo shirt with its collar and placket and short sleeves, a cap (the hair asked
+    // for is a cap), tsinelas.
+    shortSleeves(topShade);
+    collar(topShade - 0.05, 0.5);
+    panel(1.2, 1.44, () => 0.014, 1, topShade - 0.2, 0.01);
+  } else if (outfit === 'guard') {
+    // A private security guard, a shop door's (Manila; under review): a blue-grey short-sleeved uniform shirt tucked into a black
+    // belt, dark trousers, a peaked cap, a badge; a holstered pistol on the right hip, or (the hair asked for is none, a hat,
+    // a bob or a ponytail) a pump shotgun carried low in the right hand instead.
+    shortSleeves(topShade);
+    over([wrap(0.955, 0.014), wrap(1.0, 0.014)], hips, 0.4, S.seg, 2.4);
+    disc(1.32, F + 0.5, 0.012, 0.006, SASH + 0.3);
+    tb.loft(headRows([[0.155, 0.088, 0.11, -0.006], [0.18, 0.096, 0.118, -0.01], [0.212, 0.108, 0.128, -0.014], [0.226, 0.104, 0.123, -0.015], [0.232, 0.003, 0.003, -0.015]]), () => 0, () => one(HEAD), NAVY - 0.3, 12, 2.1);
+    tb.loft(headRows(VISOR.map(([y, a, b, z]): Row => [y + 0.02, a * 1.05, b * 1.1, z + 0.004])), () => 0, () => one(HEAD), NAVY - 0.5, 8);
+    if (v % 2 === 1) {
+      const g = (r: readonly Row[], shade: number): void => {
+        tb.loft(r.map(([z, a, h, y]): Row => [z, a, h, y * ys]), () => P.wristX + 0.004, () => one(FORE_R), shade, 8, 2.8, 'z');
+      };
+      g([[-0.22, 0.003, 0.003, 0.88], [-0.2, 0.014, 0.03, 0.88], [-0.05, 0.02, 0.034, 0.88], [0.0, 0.02, 0.03, 0.87], [0.12, 0.016, 0.022, 0.87], [0.14, 0.011, 0.012, 0.87], [0.62, 0.011, 0.012, 0.87], [0.63, 0.003, 0.003, 0.87]], 0.3);
+      g([[0.2, 0.002, 0.002, 0.855], [0.21, 0.017, 0.015, 0.855], [0.4, 0.017, 0.015, 0.855], [0.41, 0.002, 0.002, 0.855]], BROWN - 0.25);
+    } else {
+      tb.loft([[0.84 * ys, 0.022, 0.045, 0.01], [0.86 * ys, 0.026, 0.05, 0.01], [0.97 * ys, 0.026, 0.05, 0.01], [0.99 * ys, 0.02, 0.042, 0.01]], () => P.hipX + 0.115, () => one(PELVIS), 0.4, 8, 6);
+      tb.loft([[0.99 * ys, 0.012, 0.02, -0.018], [1.03 * ys, 0.012, 0.02, -0.032]], () => P.hipX + 0.115, () => one(PELVIS), 0.35, 6, 6);
+    }
   }
   if (bareWoman) {
-    bareHooks?.areola({ tb, mark, xs, ys, T, bareBreast, disc });
-    // Her navel (NAVEL): on the middle of the belly.
-    ribbon(NAVEL.stroke.map(([dy, da]): [number, number] => [NAVEL.y + dy, F + da]), NAVEL.stroke.map((p) => p[2]), () => NAVEL.off, NAVEL.shade);
+    if (naked) bareHooks?.areola({ tb, mark, xs, ys, T, bareBreast, disc });
+    // Her navel (NAVEL): on the middle of the belly, where nothing covers it.
+    if (naked || NAVEL_SHOWS.includes(outfit)) ribbon(NAVEL.stroke.map(([dy, da]): [number, number] => [NAVEL.y + dy, F + da]), NAVEL.stroke.map((p) => p[2]), () => NAVEL.off, NAVEL.shade);
   }
   if (outfit === 'police') {
     // The uniform in police blue, cap to trouser hems: everything but the skin, the hair and the shoes.

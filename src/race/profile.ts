@@ -2,6 +2,7 @@ import type { Parts as DamageParts } from '../poc3d/district/crash';
 import type { CarType } from '../poc3d/models/vehicles';
 import { model, type Parts } from './catalog';
 import type { Medal } from './trial';
+import { money } from '../money';
 
 /**
  * Your racing life, kept in the browser (localStorage `rainyplace.race.v1.profile`): your yen, the cars you own
@@ -131,4 +132,4 @@ export const PAY = {
 
 export const trialPay = (medal: Medal | null, newBest: boolean): number => (medal ? PAY.medal[medal] : PAY.finish) + (newBest ? PAY.newBest : 0);
 
-export const yen = (n: number): string => `¥${Math.round(n).toLocaleString('en-US')}`;
+export const yen = (n: number): string => money(n);

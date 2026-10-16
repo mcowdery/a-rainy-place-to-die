@@ -1,11 +1,11 @@
 // What the expressway costs: triangles, draws and GPU time at a few viewpoints, with it shown and hidden.
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({
+const browser = await launchBrowser({
   channel: 'msedge',
   headless: false,
   args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-frame-rate-limit', '--disable-gpu-vsync'],
@@ -13,7 +13,7 @@ const browser = await chromium.launch({
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   for (const spot of ['kaburo_crossing.view', 'city_garage.bay', 'city_hall.observatory', 'west_exit.plaza']) {
-    await page.goto(`${base}district.html?diag=1&debug=1&clock=22:00&weather=clear&res=100&spawn=${spot}`);
+    await page.goto(`${base}?diag=1&debug=1&clock=22:00&weather=clear&res=100&spawn=${spot}`);
     await page.waitForFunction(() => window.__perf && window.__scene, null, { timeout: 180_000 });
     await page.waitForTimeout(25_000);
     const measure = () => page.evaluate(async () => {

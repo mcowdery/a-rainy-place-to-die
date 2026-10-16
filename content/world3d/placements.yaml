@@ -21,7 +21,7 @@
 - id: hotel_rouge
   stamp: hotel_rouge
   cell: [30, 10]
-  offset: [44, 97]
+  offset: [39, 88]
 - id: live_house
   stamp: live_house
   cell: [27, 11]
@@ -57,7 +57,7 @@
 - id: stella_production
   stamp: stella_production
   cell: [22, 9]
-  offset: [40, 76]
+  offset: [40, 66]
 - id: police_hq
   stamp: police_hq
   cell: [20, 12]
@@ -69,7 +69,7 @@
 - id: law_firm
   stamp: law_firm
   cell: [23, 12]
-  offset: [50, 87]
+  offset: [50, 77]
 - id: hakkodo
   stamp: hakkodo
   cell: [23, 10]
@@ -81,7 +81,7 @@
 - id: hotel_totoinn
   stamp: hotel_totoinn
   cell: [24, 12]
-  offset: [60, 93]
+  offset: [60, 83]
 - id: club_shirasagi
   stamp: club_shirasagi
   cell: [21, 12]
@@ -171,7 +171,7 @@
   stamp: city_garage
   cell: [26, 12]
   offset: [10, 91]
-# Tōto Port (docs/city-plan.md): the fish market by the river mouth, the disco on the warehouse strip, the tuning
+# Tokyo Port (docs/city-plan.md): the fish market by the river mouth, the disco on the warehouse strip, the tuning
 # shop by route 1's ramps, the ferry terminal and the quay cranes on the seawall.
 - id: fish_market
   stamp: fish_market
@@ -391,3 +391,8 @@
   stamp: construction
   cell: [32, 15]
   offset: [14, 38]
+# 霧島探偵事務所, the detective's office: a narrow tenement in Kaburo's back alleys, near Cash One.
+- id: kirishima
+  stamp: kirishima
+  cell: [26, 10]
+  offset: [96, 52]

@@ -1,8 +1,8 @@
-# 東都埠頭 Tōto Wharf (the harbour drift lot). Format: src/race/course.ts, kind wharf.
+# 東京埠頭 Tokyo Wharf (the harbour drift lot). Format: src/race/course.ts, kind wharf.
 # A container terminal's back lot at night, closed off: stacks of containers to drift round, the gantry cranes
 # along the quay, sodium floodlights, the black water beyond. Drift attack: six zones round the stacks against the
 # clock (race/driftAttack.ts); free drive to practise. World x east, z south, metres; the sea to the south.
-name: 東都埠頭 Tōto Wharf
+name: 東京埠頭 Tokyo Wharf
 blurb: The container terminal's back lot after dark. Drift the zones round the stacks against the clock, under the cranes.
 kind: wharf
 atmosphere:

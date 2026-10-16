@@ -113,6 +113,10 @@ script fetches only the files below.
 | `JumpForward_16` | `cmu_16.glb` | 16_05 | forward jump |
 | `Jump_118` | `cmu_118.glb` | 118_01 | Jump |
 | `Jump_13` | `cmu_13.glb` | 13_39 | jump |
+| `DiveRoll_127_23`, `DiveRoll_127_24` | `cmu_127.glb` | 127_23, 127_24 | dive over roll run (as the KIT mirror lists them; the CMU page not read) |
+| `JumpOver_127_25`, `JumpOver_127_27` | `cmu_127.glb` | 127_25, 127_27 | run and jump over (same) |
+| `RunOver_127_33`, `RunOver_127_35` | `cmu_127.glb` | 127_33, 127_35 | run over (same) |
+| `RunDuck_127_29`, `RunDuck_127_37` | `cmu_127.glb` | 127_29, 127_37 | run duck underneath (same) |
 
 Each trial is `http://mocap.cs.cmu.edu/subjects/<subject>/<trial>.amc` with its subject's skeleton
 `<subject>.asf`. Subject 105's files say she is a woman (`emotionWalksFemale` in their header); the database doesn't
@@ -159,3 +163,25 @@ one whose end is most like its start; turned to run towards +z; the travel taken
 between its end and its start (and what turn the stride had) spread over it, so it loops; sampled at 30 frames a
 second from the capture's 60. An idle is the stretch of standing, four to seven seconds long, whose end is most like its start, closed the same way. Bones are under the cast's names (`Chest4`, which the cast has no bone for, keeps a name
 of its own). The fingers weren't captured.
+
+# Cover, vaults and rolls: Mixamo (Adobe)
+
+`mixamo_picked.glb` holds 17 clips from **Mixamo** (https://www.mixamo.com, Adobe), downloaded 2026-10-16 (the Action Adventure Pack by hand and
+the rest with Mixamo's own site through a downloader that logs in as the user), fitted to the cast's skeleton by `scripts/anims/mixamo_export.py`
+and `mixamo.mjs` (the cast's bone names at rest in Mixamo's T-pose, the clip's way over the floor taken out and kept as `extras.travel`, fingers
+carried), and picked with `scripts/anims/mixamo_pick.mjs`. Mixamo's terms (its FAQ, 2022; the current terms weren't read): free to use in games,
+commercial or not, no credit needed, the raw files not to be passed on, no machine-learning training on them. Credited here anyway. The rest
+of Mixamo's library (2,346 clips) is kept out of the repository (`licences.md`).
+
+| Clip | Mixamo's description |
+| --- | --- |
+| `MX_AA_stand_to_cover`, `MX_AA_stand_to_cover_2` | Action Adventure Pack: stand to cover (standing, and into a crouch) |
+| `MX_AA_cover_to_stand`, `MX_AA_cover_to_stand_2` | Action Adventure Pack: cover to stand (from a crouch, and standing) |
+| `MX_AA_left_cover_sneak`, `MX_AA_right_cover_sneak` | Action Adventure Pack: left and right cover sneak |
+| `MX_AA_crouched_sneaking_left`, `MX_AA_crouched_sneaking_right` | Action Adventure Pack: crouched sneaking left and right |
+| `MX_Crouched_For_Cover_Against_Object` | Crouched For Cover Against Object |
+| `MX_Crouch_Idle` | Crouch Idle |
+| `MX_Male_Jumping_Over_An_Obstacle_With_1_Hand_Planted`, `..._With_2_Hands_Planted` | Male Jumping Over An Obstacle With 1 / 2 Hand(s) Planted |
+| `MX_Jumping_Over_Obstacle_Getting_Ready_To_Fight` | Jumping Over Obstacle Getting Ready To Fight |
+| `MX_Starting_To_Climb_Onto_A_Box_Or_Short_Fence` | Starting To Climb Onto A Box Or Short Fence |
+| `MX_Sprint_To_Forward_Roll_To_Sprinting`, `MX_Dive_Roll_From_Standing`, `MX_Quick_Roll_Eveade_To_Run` | Sprint To Forward Roll To Sprinting; Dive Roll From Standing; Quick Roll Eveade To Run |

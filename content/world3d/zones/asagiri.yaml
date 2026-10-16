@@ -17,7 +17,7 @@ zones:
     id: skyscraper_row
     name: Skyscraper Row
     night: 0.08
-    people: { suit: 8, plain: 2, long: 2, police: 0.2 }
+    people: { suit: 8, plain: 2, long: 2, police: 0.2, powersuit: 2.5, trench: 1.2, cardigan: 0.6, driver: 0.3, doorman: 0.3 }
     cars: { luxury: 24, sedan: 26, taxi2: 20, taxi: 8, minivan: 14, kei: 4, van: 4, police: 4 }
     plan:
       floors: [[14, 24, 35], [26, 40, 45], [42, 55, 20]]
@@ -47,7 +47,7 @@ zones:
     id: tower_plaza
     name: Tower Plaza
     night: 0.1
-    people: { suit: 6, plain: 3, long: 2 }
+    people: { suit: 6, plain: 3, long: 2, powersuit: 2, trench: 1, cardigan: 0.6, doorman: 0.2, driver: 0.2 }
     plan:
       floors: [[44, 60, 70], [30, 40, 30]]
       lotW: [26, 40]
@@ -101,7 +101,7 @@ zones:
     id: omoide_lane
     name: Omoide Lane
     night: 0.9
-    people: { suit: 4, plain: 4, long: 2 }
+    people: { suit: 4, plain: 4, long: 2, chef: 1, kappogi: 1, jinbei: 0.5, hanten: 0.6, cardigan: 0.6, bodycon: 0.3, qipao: 0.2, streetwalker: 0.2 }
     plan:
       floors: [[2, 3, 80], [4, 5, 20]]
       lotW: [3, 5]

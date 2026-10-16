@@ -6,7 +6,7 @@
 //   (Paths from the repository's root, no leading slash.)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { ROOT, shotServer } from '../scripts/shotServer.mjs';
 const [out, left, right, list] = process.argv.slice(2);
 if (!out || !left || !right) {
@@ -74,7 +74,7 @@ window.__far = {
 );
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const W = 1920;
 const H = 1080;
 const page = await browser.newPage({ viewport: { width: W, height: H } });

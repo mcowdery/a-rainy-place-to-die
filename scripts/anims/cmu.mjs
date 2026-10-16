@@ -73,6 +73,17 @@ const TRIALS = [
   ['16_05', 'JumpForward_16', { take: true }],
   ['118_01', 'Jump_118', { take: true }],
   ['13_39', 'Jump_13', { take: true, upright: 'start' }],
+  // Obstacle takes from subject 127 (2026-10-12, for a cover mechanic: a dive roll, a vault or a hop over something low,
+  // and ducking under): a run at an obstacle and past it, whole and on the spot (the KIT mirror's names: 23-24 "dive over
+  // roll run", 25-28 "run and jump over", 33-36 "run over", 29-32 and 37-38 "run duck underneath").
+  ['127_23', 'DiveRoll_127_23', { take: true }],
+  ['127_24', 'DiveRoll_127_24', { take: true }],
+  ['127_25', 'JumpOver_127_25', { take: true }],
+  ['127_27', 'JumpOver_127_27', { take: true }],
+  ['127_33', 'RunOver_127_33', { take: true }],
+  ['127_35', 'RunOver_127_35', { take: true }],
+  ['127_29', 'RunDuck_127_29', { take: true }],
+  ['127_37', 'RunDuck_127_37', { take: true }],
 ];
 
 /** The cast's bone, the capture's bone whose joint it sits at, and (if not the same) the one whose turn it takes. */

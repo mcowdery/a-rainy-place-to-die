@@ -17,7 +17,7 @@ import { liveHouseColliders, liveHouseFloor, liveHouseHoles, liveHouseLights } f
 import { deptHoles } from '../real/deptStore';
 import { siteHoles } from '../real/kasumiGrounds';
 import { homeSheltersFor } from '../real/homesCast';
-import { rougeShelters } from '../real/rougeInterior';
+import { rougeShelters, ROUGE_DOOR } from '../real/rougeInterior';
 import type { Building3 } from './plan';
 import type { Placed3 } from './stamps';
 
@@ -120,7 +120,7 @@ function kindShelters(p: Placed3): Shelter[] {
       // The station building and the platforms under their canopy, out over the tracks.
       return [{ rect: localRect(f, 0, 60, -17.8, 24), y0: -1, y1: 16.6 }];
     case 'love_hotel':
-      return [{ rect: localRect(f, 9, 15, 1.6, 4), y0: 0, y1: 3.3 }, ...rougeShelters(b)];
+      return [{ rect: localRect(f, (ROUGE_DOOR.u0 + ROUGE_DOOR.u1) / 2 - 3, (ROUGE_DOOR.u0 + ROUGE_DOOR.u1) / 2 + 3, 1.6, 4), y0: 0, y1: 3.3 }, ...rougeShelters(b)];
     case 'subway':
       return subwayShelters(b);
     case 'rotary':

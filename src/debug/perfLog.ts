@@ -21,7 +21,7 @@ const HITCH_COOLDOWN_MS = 2000;
 const TRACE_MS = 5000;
 /** Skip the first seconds after switching on (shader compiles and the first chunks are not what we're after). */
 const SETTLE_MS = 6000;
-const FIELDS = 8; // t, interval, cpu, gpu, calls, tris, x, z
+const FIELDS = 11; // t, interval, cpu, gpu, calls, tris, x, z, chunks integrated, JS heap (MB), js
 const RING = 720;
 /** Events kept in memory (the dev server keeps every one in the session's file). */
 const MAX_EVENTS = 50;
@@ -29,8 +29,10 @@ const MAX_EVENTS = 50;
 export interface PerfFrame {
   /** performance.now() at the loop's start. */
   now: number;
-  /** The frame's JavaScript, ms. */
+  /** The frame's JavaScript to the end of the render call, ms (the call can block while the GPU is behind). */
   cpu: number;
+  /** Just the JavaScript before the render call (the update: no waiting on the GPU), ms. */
+  js: number;
   /** The latest GPU time of the main render, ms (0 if the timer isn't available). */
   gpu: number;
   calls: number;
@@ -39,6 +41,10 @@ export interface PerfFrame {
   z: number;
   /** Render resolution scale (auto resolution moves it). */
   res: number;
+  /** Chunks turned into meshes this frame. */
+  built: number;
+  /** The shader programs compiled so far: a rise in a frame means it compiled one (a stall of a few hundred ms). */
+  programs: number;
 }
 
 export interface PerfContext {
@@ -84,7 +90,8 @@ export function installPerfLog(opts: {
   let count = 0;
   // On by default on the dev server (F10 or ?perflog=0 turns it off); in a build only with ?perflog=1.
   const flag = new URLSearchParams(location.search).get('perflog');
-  const dev = import.meta.env.DEV;
+  // (Not in a benchmark run, which must not write into the user's sessions: it keeps its events in memory, and is off unless ?perflog=1.)
+  const dev = import.meta.env.DEV && !new URLSearchParams(location.search).has('bench');
   let on = flag === '1' || (dev && flag !== '0');
   let startedAt = 0;
   let session = '';
@@ -103,6 +110,13 @@ export function installPerfLog(opts: {
   const cells = new Map<string, CellStat>();
   const events: unknown[] = [];
   let cur: CellStat | null = null;
+  // What changed lately, for an event to carry: a shader compiled, the weather or time of day or mode switched.
+  const markers: { t: number; what: string }[] = [];
+  let programs = -1;
+  const mark = (t: number, what: string): void => {
+    markers.push({ t, what });
+    if (markers.length > 40) markers.shift();
+  };
 
   const stamp = (): string => {
     const d = new Date();
@@ -169,10 +183,11 @@ export function installPerfLog(opts: {
     if (frames > 0) post('summary', summary(), beacon);
   };
 
-  const avgOver = (ms: number, now: number): { n: number; interval: number; cpu: number; gpu: number; calls: number; tris: number; res: number } => {
+  const avgOver = (ms: number, now: number): { n: number; interval: number; js: number; cpu: number; gpu: number; calls: number; tris: number; res: number } => {
     let n = 0;
     let interval = 0;
     let cpu = 0;
+    let js = 0;
     let gpu = 0;
     let calls = 0;
     let tris = 0;
@@ -182,12 +197,13 @@ export function installPerfLog(opts: {
       n++;
       interval += ring[o + 1];
       cpu += ring[o + 2];
+      js += ring[o + 10];
       gpu += ring[o + 3];
       calls += ring[o + 4];
       tris += ring[o + 5];
     }
     const d = Math.max(1, n);
-    return { n, interval: interval / d, cpu: cpu / d, gpu: gpu / d, calls: calls / d, tris: tris / d, res: 0 };
+    return { n, interval: interval / d, js: js / d, cpu: cpu / d, gpu: gpu / d, calls: calls / d, tris: tris / d, res: 0 };
   };
 
   const verdict = (interval: number, cpu: number, gpu: number): string => {
@@ -204,7 +220,7 @@ export function installPerfLog(opts: {
     for (let k = Math.min(count, RING); k >= 1; k--) {
       const o = ((head - k + RING) % RING) * FIELDS;
       if (now - ring[o] > ms) continue;
-      out.push([Math.round(ring[o] - now), +ring[o + 1].toFixed(1), +ring[o + 2].toFixed(1), +ring[o + 3].toFixed(1), ring[o + 4], ring[o + 5], Math.round(ring[o + 6]), Math.round(ring[o + 7])]);
+      out.push([Math.round(ring[o] - now), +ring[o + 1].toFixed(1), +ring[o + 2].toFixed(1), +ring[o + 3].toFixed(1), ring[o + 4], ring[o + 5], Math.round(ring[o + 6]), Math.round(ring[o + 7]), ring[o + 8], +ring[o + 9].toFixed(1), +ring[o + 10].toFixed(1)]);
     }
     return out;
   };
@@ -223,14 +239,18 @@ export function installPerfLog(opts: {
       fps: +(1000 / a.interval).toFixed(1),
       avgIntervalMs: +a.interval.toFixed(1),
       avgCpuMs: +a.cpu.toFixed(1),
+      // (cpu runs to the end of the render call, which blocks while the GPU is behind; js is the update before it)
+      avgJsBeforeRenderMs: +a.js.toFixed(1),
       avgGpuMs: +a.gpu.toFixed(1),
       avgCalls: Math.round(a.calls),
       avgTriangles: Math.round(a.tris),
       verdict: verdict(a.interval, a.cpu, a.gpu),
       context: ctx,
       // [msBeforeNow, interval, cpu, gpu, calls, tris, x, z] per frame
-      traceFields: ['t', 'interval', 'cpu', 'gpu', 'calls', 'tris', 'x', 'z'],
+      traceFields: ['t', 'interval', 'cpu', 'gpu', 'calls', 'tris', 'x', 'z', 'chunksIntegrated', 'heapMB', 'jsBeforeRender'],
       trace: trace(ms, now),
+      // [msBeforeNow, what] in the trace's span, plus anything in the 2 s before it: a stall can follow a change.
+      changes: markers.filter((m) => now - m.t <= ms + 2000).map((m) => [Math.round(m.t - now), m.what]),
     };
     events.push(e);
     if (events.length > MAX_EVENTS) events.shift();
@@ -248,6 +268,8 @@ export function installPerfLog(opts: {
     hist.fill(0);
     cells.clear();
     cur = null;
+    markers.length = 0;
+    programs = -1;
     events.length = 0;
   };
 
@@ -304,6 +326,12 @@ export function installPerfLog(opts: {
       ring[o + 5] = f.tris;
       ring[o + 6] = f.x;
       ring[o + 7] = f.z;
+      ring[o + 8] = f.built;
+      ring[o + 10] = f.js;
+      ring[o + 9] = ((performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0) / 1e6;
+      // (A heap that drops between frames is a garbage collection; compiles show in the programs count.)
+      if (programs >= 0 && f.programs !== programs) mark(f.now, `shader programs ${programs} → ${f.programs}`);
+      programs = f.programs;
       head = (head + 1) % RING;
       count = Math.min(count + 1, RING);
       if (f.now < startedAt + SETTLE_MS) return;
@@ -314,10 +342,14 @@ export function installPerfLog(opts: {
       // The place is looked up once a second, not every frame.
       if (!cur || f.now - ctxAt > 1000) {
         ctxAt = f.now;
+        const before = ctx;
         try {
           ctx = opts.context();
         } catch {
           /* keep the last */
+        }
+        for (const k of ['weather', 'time', 'mode', 'season'] as const) {
+          if (before !== ctx && before[k] !== undefined && before[k] !== ctx[k]) mark(f.now, `${k} ${String(before[k])} → ${String(ctx[k])}`);
         }
         const key = `${ctx.cell}|${ctx.mode}`;
         cur = cells.get(key) ?? null;

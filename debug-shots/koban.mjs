@@ -1,6 +1,6 @@
 // 歌舞路交番 Kaburo Kōban: from the square at night and by day, its side wall, inside; and the GPS line to it.
 //   node debug-shots/koban.mjs <out dir> [query]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync } from 'fs';
 import { writeGallery } from './gallery.mjs';
@@ -9,12 +9,12 @@ mkdirSync(out, { recursive: true });
 const extra = process.argv[3] ? `&${process.argv[3]}` : '';
 const server = await shotServer({ server: { port: 0, hmr: false, watch: null }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.addInitScript(() => { try { localStorage.setItem('citypop.thirdPerson', '0'); } catch {} });
 const open = async (q) => {
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1${q}${extra}`);
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1${q}${extra}`);
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
   await page.evaluate(() => { document.getElementById('overlay').hidden = true; });
   await page.waitForTimeout(5000);

@@ -1,5 +1,6 @@
 import { liftRaw } from './terrain';
 import { addBuilding } from '../real/buildings';
+import type { AdSites } from '../real/adSites';
 import { addDistrictAds } from '../real/districtAds';
 import { addGround } from '../real/ground';
 import { paintLights, type Light } from '../real/lightmap';
@@ -10,6 +11,8 @@ import { taxiPhotos } from '../real/taxiAdLayout';
 import type { RawGeometry } from '../real/rawGeometry';
 import { sightline } from '../real/sightline';
 import { addSigns, signLights, SignBuilder, type SignLayout } from '../real/signs';
+import { addSignExtras, extraLights } from '../real/signKinds';
+import { openHours } from '../real/hours';
 import type { Building3 } from './plan';
 import { landmarkLights } from './landmarks';
 import type { DistrictModel } from './model';
@@ -25,7 +28,8 @@ import { scrambleKeys, Signals } from './traffic';
  * - ghosts: the crowd of people, as numbers (people.ts packFigures) for the instanced crowd (real/crowd.ts).
  * Coordinates are relative to the cell centre.
  */
-export type Stage = 'base' | 'near' | 'ghosts';
+/** `light`: the lightmap tile alone, painted again for the hour (shops opening and shutting: real/hours.ts). */
+export type Stage = 'base' | 'near' | 'ghosts' | 'light';
 
 export interface ChunkBuilt {
   readonly mx: number;
@@ -57,13 +61,37 @@ export class ChunkBuilder {
   constructor(
     private readonly model: DistrictModel,
     private readonly layout: SignLayout,
+    /** False for a city without ad art (cityConfig.ts `ads`): no billboards, posters or taxi photo ads. */
+    private readonly ads = true,
+    /** Where the billboards and posters go (real/adSites.ts); none without it. */
+    private readonly adSites: AdSites | null = null,
   ) {
     this.signals = new Signals(scrambleKeys(model.placed, CELL));
   }
 
-  build(mx: number, my: number, stage: Stage): ChunkBuilt {
+  /** This cell's lightmap tile, with its neighbours' lights that reach across the border: the shops' and signs' only while they're open at `hour`. */
+  private lightTile(mx: number, my: number, hour: number): Uint8Array {
+    const m = this.model;
+    const lights: Light[] = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const d = m.detail(mx + dx, my + dy);
+        if (d) lights.push(...d.lights);
+        lights.push(...signLights(m.signs(mx + dx, my + dy)), ...extraLights(m.signExtras(mx + dx, my + dy)));
+        for (const q of m.stamps(mx + dx, my + dy)) {
+          lights.push(...signLights(q.signs));
+          lights.push(...landmarkLights(q));
+          for (const n of q.nodes) if (n.kind === 'door') lights.push({ x: n.x, z: n.z, r: 6, color: [1.0, 0.7, 0.4], i: 0.9 });
+        }
+      }
+    }
+    return paintLights(this.g, mx * CELL, my * CELL, CELL, lights.filter((l) => l.hours === undefined || openHours(l.hours, l.seed ?? 0, hour)));
+  }
+
+  build(mx: number, my: number, stage: Stage, hour = 21): ChunkBuilt {
     const t0 = performance.now();
     const m = this.model;
+    if (stage === 'light') return { mx, my, stage, meshes: {}, lightmap: this.lightTile(mx, my, hour), ms: performance.now() - t0 };
     const plan = m.plan(mx, my)!;
     const cx = (mx + 0.5) * CELL;
     const cz = (my + 0.5) * CELL;
@@ -79,27 +107,12 @@ export class ChunkBuilder {
       return r;
     };
     if (stage === 'base') {
-      addGround(this.mb.reset(), plan, m.plazas(mx, my), m.scrambles(mx, my), m.holes(mx, my), m.detail(mx, my)!.open);
+      addGround(this.mb.reset(), plan, m.plazas(mx, my), m.scrambles(mx, my), m.holes(mx, my), m.detail(mx, my)!.open, m.coveredIn(mx, my));
       const base = lift(this.mb.raw(cx, cz));
       const mb = this.mb.reset();
       for (const b of buildings) addBuilding(mb, b, false);
       const far = lift(mb.raw(cx, cz));
-      // Lightmap tile: this cell's lights plus any from the neighbours that reach across the border.
-      const lights: Light[] = [];
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const d = m.detail(mx + dx, my + dy);
-          if (d) lights.push(...d.lights);
-          const p = m.plan(mx + dx, my + dy);
-          if (p) lights.push(...signLights(p.signs));
-          for (const q of m.stamps(mx + dx, my + dy)) {
-            lights.push(...signLights(q.signs));
-            lights.push(...landmarkLights(q));
-            for (const n of q.nodes) if (n.kind === 'door') lights.push({ x: n.x, z: n.z, r: 6, color: [1.0, 0.7, 0.4], i: 0.9 });
-          }
-        }
-      }
-      const lightmap = paintLights(this.g, mx * CELL, my * CELL, CELL, lights);
+      const lightmap = this.lightTile(mx, my, hour);
       return { mx, my, stage, meshes: { base, far }, lightmap, ms: performance.now() - t0 };
     }
     if (stage === 'near') {
@@ -110,16 +123,17 @@ export class ChunkBuilder {
       const detail = m.detail(mx, my)!;
       addProps(mb, detail, undefined, 'fixed');
       const pf = this.pf.reset();
-      addProps(pf, detail, { sb, layout: this.layout, photos: taxiPhotos(tb) }, 'swap');
+      addProps(pf, detail, { sb, layout: this.layout, photos: this.ads ? taxiPhotos(tb) : undefined }, 'swap');
       const pm = this.pm.reset();
       addProps(pm, detail, undefined, 'swap', true);
-      // Sightlines for billboards and rooftop letters: this cell's and the neighbours' buildings.
+      // Sightlines for the rooftop letters: this cell's and the neighbours' buildings.
       const around: Building3[] = [];
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) around.push(...m.buildings(mx + dx, my + dy));
       const seen = sightline(around);
-      addSigns([...plan.signs, ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb, seen);
+      addSigns([...m.signs(mx, my), ...m.stamps(mx, my).flatMap((p) => p.signs)], buildings, this.layout, sb, mb, seen);
+      addSignExtras(m.signExtras(mx, my), this.layout, sb, mb);
       const ab = this.ab.reset();
-      addDistrictAds(ab, mb, buildings, plan.signs, m.detail(mx, my)!.props, undefined, seen, plan.open);
+      if (this.ads && this.adSites) addDistrictAds(ab, mb, this.adSites.sites(mx, my));
       return { mx, my, stage, meshes: { near: lift(mb.raw(cx, cz)), props: lift(pf.raw(cx, cz)), propsMid: lift(pm.raw(cx, cz)), signs: lift(sb.raw(cx, cz)), ads: lift(ab.raw(cx, cz)), taxiAds: lift(tb.raw(cx, cz)) }, ms: performance.now() - t0 };
     }
     // People as numbers (the main thread draws them instanced), standing on the lie of the land.

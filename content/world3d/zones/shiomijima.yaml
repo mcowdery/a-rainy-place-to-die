@@ -15,7 +15,7 @@ zones:
     id: shiomi_events
     name: Shiomi event quarter
     night: 0.6
-    people: { plain: 5, long: 2, yukata: 2, otaku: 1 }
+    people: { plain: 5, long: 2, yukata: 2, otaku: 1, matsuri: 1, jinbei: 1, shirtless: 0.3, kappogi: 0.4 }
     plan:
       floors: [[3, 5, 50], [6, 10, 35], [12, 18, 15]]
       lotW: [20, 36]

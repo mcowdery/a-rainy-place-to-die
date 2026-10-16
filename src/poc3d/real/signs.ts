@@ -1,10 +1,13 @@
 import * as THREE from 'three';
 import { hash, rng } from '../../core/hash';
 import { cellWidth, isWide } from '../../core/wide';
-import { frontSpan, type Building3, type Sign3 } from '../district/plan';
+import { eraSign } from '../district/era';
+import { frontSpan, type Building3, type Sign3, type SignLook } from '../district/plan';
 import { styleFor, frontFrame, tierFront, tiers } from './buildings';
 import type { CityUniforms } from './city';
 import { EM, glyph, textAdvance } from './letters';
+import { HOURS, HOURS_GLSL, hoursOf, withHours } from './hours';
+import { roofSign } from './roofSigns';
 import type { Light } from './lightmap';
 import { EMIT, KIND, lin, scale3, type MeshBuilder } from './meshBuilder';
 import { ALWAYS_SEEN, type Sightline } from './sightline';
@@ -20,15 +23,31 @@ import { sphereOf, toGeometry, type RawGeometry } from './rawGeometry';
 
 type C3 = [number, number, number];
 
-/** Rooftop billboard words (invented names only). */
-const ROOF_WORDS = ['KABURO', 'HOTEL', 'SAUNA', 'CABARET', 'PARADISE', 'NEON', 'CLUB', 'LIVE', '大吉', '夢', '銀河', '酒', 'ゲーム', 'カラオケ', 'ホテル'];
-const NEON = [0xff5fc8, 0x4fe3ff, 0xffe45f, 0x6bff8a, 0xff4f4f, 0xb48cff];
 
 /** Atlas pixels per metre of sign face (text 64 px = 0.72 m tall). */
 const PX_PER_M = 32 / 0.36;
 const CELL_PX = 32;
 const H_SLOT = 80;
 const V_CHAR = 72;
+/** The tallest a sign atlas may be before it goes twice as wide. */
+const MAX_ATLAS = 16384;
+
+/** How long a blade with this text is, in metres (the atlas slot's height: SignLayout). */
+export const bladeLength = (text: string): number => ([...text].filter((c) => c !== ' ').length * V_CHAR + 24) / PX_PER_M;
+/** How wide a fascia plate with this text is, in metres, before it's held to 5.4 m and its shopfront (addSigns). */
+export const plateWidth = (text: string): number => ((cellWidth(text) + 1) * CELL_PX) / PX_PER_M;
+
+/**
+ * How a text is drawn in the atlas besides plain letters: `tube`, the letters' outlines (neon tubing bent round each
+ * letter); `icon`, a pictogram by name (ICONS: a cocktail glass, a beer mug...), its text the name.
+ */
+export type SignForm = 'tube' | 'icon';
+export interface SignText {
+  readonly text: string;
+  readonly vertical: boolean;
+  readonly form?: SignForm;
+}
+const keyOf = (text: string, vertical: boolean, form?: SignForm): string => (form ? `${form}:${text}` : `${vertical ? 'v' : 'h'}:${text}`);
 
 interface Slot {
   x: number;
@@ -43,42 +62,50 @@ interface Slot {
  */
 export class SignLayout {
   protected readonly slots = new Map<string, Slot>();
-  protected readonly want = new Map<string, { text: string; vertical: boolean; w: number; h: number }>();
+  protected readonly want = new Map<string, SignText & { w: number; h: number }>();
   readonly width: number;
   readonly height: number;
 
-  constructor(texts: readonly { text: string; vertical: boolean }[]) {
-    const W = 2048;
+  constructor(texts: readonly SignText[]) {
     const want = this.want;
     for (const t of texts) {
-      const key = `${t.vertical ? 'v' : 'h'}:${t.text}`;
+      const key = keyOf(t.text, t.vertical, t.form);
       if (want.has(key)) continue;
       const n = [...t.text].filter((c) => c !== ' ').length;
-      want.set(key, t.vertical ? { ...t, w: 80, h: n * V_CHAR + 24 } : { ...t, w: (cellWidth(t.text) + 1) * CELL_PX, h: H_SLOT });
+      want.set(key, t.form === 'icon' ? { ...t, w: H_SLOT, h: H_SLOT } : t.vertical && !t.form ? { ...t, w: 80, h: n * V_CHAR + 24 } : { ...t, w: (cellWidth(t.text) + 1) * CELL_PX, h: H_SLOT });
     }
-    // Shelf packing, tallest first; the first 8x8 pixels stay black (blank sides/backs sample there).
+    // Shelf packing, tallest first; the first 8x8 pixels stay black (blank sides/backs sample there). 2048 wide, or 4096
+    // when that would be taller than a texture may be (16384: ANGLE's D3D11, Edge and Chrome on Windows).
     const items = [...want.entries()].sort((a, b) => b[1].h - a[1].h);
-    let x = 16;
-    let y = 0;
-    let shelf = 16;
-    const PAD = 8;
-    for (const [key, it] of items) {
-      if (x + it.w + PAD > W) {
-        x = 0;
-        y += shelf + PAD;
-        shelf = 0;
+    const pack = (W: number): number => {
+      this.slots.clear();
+      let x = 16;
+      let y = 0;
+      let shelf = 16;
+      const PAD = 8;
+      for (const [key, it] of items) {
+        if (x + it.w + PAD > W) {
+          x = 0;
+          y += shelf + PAD;
+          shelf = 0;
+        }
+        this.slots.set(key, { x, y, w: it.w, h: it.h });
+        x += it.w + PAD;
+        shelf = Math.max(shelf, it.h);
       }
-      this.slots.set(key, { x, y, w: it.w, h: it.h });
-      x += it.w + PAD;
-      shelf = Math.max(shelf, it.h);
-    }
+      return y + shelf + PAD;
+    };
+    let W = 2048;
+    let used = pack(W);
+    if (used > MAX_ATLAS) used = pack((W = 4096));
     this.width = W;
-    this.height = 2 ** Math.ceil(Math.log2(Math.max(64, y + shelf + PAD)));
+    // (Only as tall as it's filled, to the next 64 rows: WebGL2 doesn't need a power of two, mipmaps and all.)
+    this.height = Math.max(64, Math.ceil(used / 64) * 64);
   }
 
   /** UV rect (u0, v0 top, u1, v1 bottom) and size in metres of a text's slot. */
-  rect(text: string, vertical: boolean): { u0: number; v0: number; u1: number; v1: number; w: number; h: number } | null {
-    const s = this.slots.get(`${vertical ? 'v' : 'h'}:${text}`);
+  rect(text: string, vertical: boolean, form?: SignForm): { u0: number; v0: number; u1: number; v1: number; w: number; h: number } | null {
+    const s = this.slots.get(keyOf(text, vertical, form));
     if (!s) return null;
     return { u0: s.x / this.width, v0: s.y / this.height, u1: (s.x + s.w) / this.width, v1: (s.y + s.h) / this.height, w: s.w / PX_PER_M, h: s.h / PX_PER_M };
   }
@@ -88,48 +115,64 @@ export class SignLayout {
   }
 }
 
-/** The sign atlas texture: every text of the layout rendered sharp (red) and blurred for the neon halo (green). */
+/**
+ * The sign atlas texture: every text of the layout rendered sharp (red) and blurred for the neon halo (green), two
+ * channels a pixel (RG8: half the memory four would take). Drawn a band of rows at a time, so it never needs canvases
+ * the size of the whole atlas (they were half a gigabyte at load).
+ */
 export class SignAtlas extends SignLayout {
   readonly texture: THREE.DataTexture;
 
-  constructor(texts: readonly { text: string; vertical: boolean }[]) {
+  constructor(texts: readonly SignText[]) {
     super(texts);
     const W = this.width;
     const H = this.height;
-    const want = this.want;
+    const want = [...this.want];
+    const BAND = 2048;
+    // (Room over and under a band for the blur to reach across its edges.)
+    const EDGE = 32;
     const sharp = document.createElement('canvas');
     sharp.width = W;
-    sharp.height = H;
+    sharp.height = BAND + 2 * EDGE;
     const blur = document.createElement('canvas');
     blur.width = W;
-    blur.height = H;
+    blur.height = BAND + 2 * EDGE;
     const gs = sharp.getContext('2d', { willReadFrequently: true })!;
     const gb = blur.getContext('2d', { willReadFrequently: true })!;
-    for (const g of [gs, gb]) {
-      g.fillStyle = '#000';
-      g.fillRect(0, 0, W, H);
-    }
-    for (const [key, it] of want) {
-      const s = this.slots.get(key)!;
-      gs.fillStyle = '#fff';
+    const data = new Uint8Array(W * H * 2);
+    for (let y0 = 0; y0 < H; y0 += BAND) {
+      const rows = Math.min(BAND, H - y0);
+      for (const g of [gs, gb]) {
+        g.fillStyle = '#000';
+        g.fillRect(0, 0, W, BAND + 2 * EDGE);
+      }
       gs.save();
-      if (it.vertical) drawVertical(gs, it.text, s);
-      else drawHorizontal(gs, it.text, s);
+      gs.translate(0, EDGE - y0);
+      for (const [key, it] of want) {
+        const s = this.slots.get(key)!;
+        if (s.y > y0 + rows + EDGE || s.y + s.h < y0 - EDGE) continue;
+        gs.fillStyle = '#fff';
+        gs.save();
+        if (it.form === 'icon') drawIcon(gs, it.text, s);
+        else if (it.form === 'tube') drawHorizontal(gs, it.text, s, true);
+        else if (it.vertical) drawVertical(gs, it.text, s);
+        else drawHorizontal(gs, it.text, s);
+        gs.restore();
+      }
       gs.restore();
+      // The halo: the sharp text blurred in one pass (a filter on every text draw was very slow).
+      gb.filter = 'blur(7px)';
+      gb.drawImage(sharp, 0, 0);
+      gb.filter = 'none';
+      const a = gs.getImageData(0, EDGE, W, rows).data;
+      const b = gb.getImageData(0, EDGE, W, rows).data;
+      const o = y0 * W * 2;
+      for (let i = 0; i < W * rows; i++) {
+        data[o + i * 2] = a[i * 4];
+        data[o + i * 2 + 1] = Math.min(255, b[i * 4] * 1.6);
+      }
     }
-    // The halo: the sharp text blurred in one pass (a filter on every text draw was very slow).
-    gb.filter = 'blur(7px)';
-    gb.drawImage(sharp, 0, 0);
-    gb.filter = 'none';
-    const a = gs.getImageData(0, 0, W, H).data;
-    const b = gb.getImageData(0, 0, W, H).data;
-    const data = new Uint8Array(W * H * 4);
-    for (let i = 0; i < W * H; i++) {
-      data[i * 4] = a[i * 4];
-      data[i * 4 + 1] = Math.min(255, b[i * 4] * 1.6);
-      data[i * 4 + 3] = 255;
-    }
-    this.texture = new THREE.DataTexture(data, W, H);
+    this.texture = new THREE.DataTexture(data, W, H, THREE.RGFormat);
     this.texture.generateMipmaps = true;
     this.texture.minFilter = THREE.LinearMipmapLinearFilter;
     this.texture.magFilter = THREE.LinearFilter;
@@ -138,7 +181,7 @@ export class SignAtlas extends SignLayout {
   }
 }
 
-function drawHorizontal(g: CanvasRenderingContext2D, text: string, s: Slot): void {
+function drawHorizontal(g: CanvasRenderingContext2D, text: string, s: Slot, tube = false): void {
   g.font = `bold 60px 'Arial Narrow', 'Arial', 'Yu Gothic', 'Meiryo', sans-serif`;
   g.textBaseline = 'middle';
   g.textAlign = 'left';
@@ -147,7 +190,91 @@ function drawHorizontal(g: CanvasRenderingContext2D, text: string, s: Slot): voi
   const k = Math.min(1.3, target / Math.max(1, w));
   g.translate(s.x + CELL_PX / 2 + (target - w * k) / 2, s.y + s.h / 2 + 2);
   g.scale(k, 1);
-  g.fillText(text, 0, 0);
+  if (!tube) return void g.fillText(text, 0, 0);
+  // Tubing: each letter's outline, round at the bends.
+  g.strokeStyle = '#fff';
+  g.lineWidth = 5;
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  g.strokeText(text, 0, 0);
+}
+
+/** Pictograms bent in neon tubing (an 80 px slot, drawn in strokes). */
+const ICONS: Readonly<Record<string, (g: CanvasRenderingContext2D) => void>> = {
+  cocktail: (g) => {
+    g.beginPath();
+    g.moveTo(14, 16); g.lineTo(66, 16); g.lineTo(40, 44); g.closePath();
+    g.moveTo(40, 44); g.lineTo(40, 64);
+    g.moveTo(26, 66); g.lineTo(54, 66);
+    g.moveTo(50, 22); g.lineTo(60, 8);
+    g.stroke();
+    g.beginPath();
+    g.arc(33, 24, 4, 0, Math.PI * 2);
+    g.stroke();
+  },
+  beer: (g) => {
+    g.strokeRect(18, 22, 32, 44);
+    g.beginPath();
+    g.moveTo(50, 30); g.lineTo(60, 30); g.lineTo(60, 54); g.lineTo(50, 54);
+    g.moveTo(16, 22); g.quadraticCurveTo(22, 10, 30, 18); g.quadraticCurveTo(36, 8, 44, 16); g.quadraticCurveTo(52, 10, 52, 22);
+    g.stroke();
+  },
+  coffee: (g) => {
+    g.beginPath();
+    g.moveTo(16, 36); g.lineTo(54, 36); g.lineTo(50, 60); g.lineTo(20, 60); g.closePath();
+    g.moveTo(54, 40); g.quadraticCurveTo(66, 44, 52, 54);
+    g.moveTo(10, 66); g.lineTo(62, 66);
+    for (const x of [28, 40]) {
+      g.moveTo(x, 30); g.quadraticCurveTo(x - 6, 22, x, 16); g.quadraticCurveTo(x + 6, 10, x, 4);
+    }
+    g.stroke();
+  },
+  note: (g) => {
+    g.beginPath();
+    g.ellipse(24, 60, 8, 6, -0.4, 0, Math.PI * 2);
+    g.moveTo(32, 58); g.lineTo(32, 16); g.lineTo(60, 10); g.lineTo(60, 52);
+    g.moveTo(32, 26); g.lineTo(60, 20);
+    g.stroke();
+    g.beginPath();
+    g.ellipse(52, 54, 8, 6, -0.4, 0, Math.PI * 2);
+    g.stroke();
+  },
+  heart: (g) => {
+    g.beginPath();
+    g.moveTo(40, 66); g.bezierCurveTo(4, 40, 14, 8, 40, 26); g.bezierCurveTo(66, 8, 76, 40, 40, 66);
+    g.stroke();
+  },
+  moon: (g) => {
+    g.beginPath();
+    g.arc(40, 40, 26, 0.6, Math.PI * 2 - 0.6);
+    g.arc(52, 40, 20, Math.PI * 2 - 0.9, 0.9, true);
+    g.closePath();
+    g.stroke();
+  },
+  star: (g) => {
+    g.beginPath();
+    for (let i = 0; i <= 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const r = i % 2 ? 12 : 28;
+      g.lineTo(40 + Math.cos(a) * r, 42 + Math.sin(a) * r);
+    }
+    g.stroke();
+  },
+  arrow: (g) => {
+    g.beginPath();
+    g.moveTo(8, 32); g.lineTo(46, 32); g.lineTo(46, 18); g.lineTo(72, 40); g.lineTo(46, 62); g.lineTo(46, 48); g.lineTo(8, 48); g.closePath();
+    g.stroke();
+  },
+};
+export const ICON_NAMES = Object.keys(ICONS);
+
+function drawIcon(g: CanvasRenderingContext2D, name: string, s: Slot): void {
+  g.translate(s.x, s.y);
+  g.strokeStyle = '#fff';
+  g.lineWidth = 5;
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  ICONS[name]?.(g);
 }
 
 function drawVertical(g: CanvasRenderingContext2D, text: string, s: Slot): void {
@@ -176,13 +303,32 @@ const signCommon = /* glsl */ `
   uniform sampler2D tSigns;
   uniform float uTime;
   uniform float uNeon;
+  uniform float uHour;
   uniform float uFlicker;
   varying vec2 vSUv;
   varying vec3 vInk;
   varying vec3 vPlate;
   flat varying vec2 vSign;
+  varying vec2 vOutP;
+  uniform float uOut[64];
+  uniform vec3 uOutMap;
+  // 1 where the power is out (district/brownout.ts's cells, packed 24 to a float).
+  float blackoutAt(vec2 p) {
+    if (uOutMap.x < 0.5) return 0.0;
+    vec2 c = floor(p / uOutMap.z);
+    if (c.x < 0.0 || c.y < 0.0 || c.x >= uOutMap.x || c.y >= uOutMap.y) return 0.0;
+    float i = c.y * uOutMap.x + c.x;
+    float w = floor(i / 24.0);
+    return mod(floor(uOut[int(w)] / exp2(i - w * 24.0)), 2.0);
+  }
   float sh2(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+  ${HOURS_GLSL}
+  // Whether a sign's shop is open: its hours class is the sign id's hundred-thousands (hours.ts withHours).
+  float openAt(float id) { return openHours(floor(id / 100000.0), id); }
 `;
+
+/** When signs are lit: their shops' hours (hours.ts). */
+export { HOURS, hoursOf, withHours } from './hours';
 
 /**
  * Material for textured signs: neon text on a dark plate (style 0), a lit lightbox (1), print (2), or a decal (3:
@@ -196,6 +342,9 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
     shader.uniforms.uTime = u.uTime;
     shader.uniforms.uNeon = u.uNeon;
     shader.uniforms.uFlicker = u.uFlicker;
+    shader.uniforms.uHour = u.uHour;
+    shader.uniforms.uOut = u.uOut;
+    shader.uniforms.uOutMap = u.uOutMap;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec2 aUv;
@@ -205,24 +354,49 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
         varying vec2 vSUv;
         varying vec3 vInk;
         varying vec3 vPlate;
-        flat varying vec2 vSign;`)
+        flat varying vec2 vSign;
+        varying vec2 vOutP;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        vSUv = aUv; vInk = aInk; vPlate = aPlate; vSign = aSign;`);
+        vSUv = aUv; vInk = aInk; vPlate = aPlate; vSign = aSign;
+        vOutP = (modelMatrix * vec4(position, 1.0)).xz;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${signCommon}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec2 st = texture2D(tSigns, vSUv).rg;
         float flk = uFlicker > 0.5 && sh2(vec2(vSign.x, floor(uTime * 12.0))) > 0.992 ? 0.08 : 1.0;
-        float on = uNeon * flk;
-        if (vSign.y > 2.5) {
+        float on = uNeon * flk * (1.0 - blackoutAt(vOutP)) * openAt(vSign.x);
+        if (vSign.y > 4.5) {
+          // A barber's pole (5): red, white and blue stripes winding up it, turning (aUv: round it, up it, 0 to 1).
+          float t = fract(vSUv.x * 2.0 + vSUv.y * 2.5 - uTime * 0.5);
+          vec3 c = t < 0.3 ? vec3(0.72, 0.04, 0.05) : t < 0.5 ? vec3(0.85, 0.85, 0.82) : t < 0.8 ? vec3(0.04, 0.1, 0.55) : vec3(0.85, 0.85, 0.82);
+          diffuseColor.rgb = c;
+          totalEmissiveRadiance += c * 0.7 * on;
+        } else if (vSign.y > 3.5) {
+          // A red LED board (4): the text scrolls through the window the quad shows of its slot (aPlate: the slot's
+          // left edge and width in u, and how much of it a second), drawn in dots on a fixed grid.
+          vec2 ts = vec2(textureSize(tSigns, 0));
+          vec2 g = vSUv * ts / 5.0;
+          vec2 cellUv = (floor(g) + 0.5) * 5.0 / ts;
+          float us = vPlate.x + fract((cellUv.x - vPlate.x) / vPlate.y + uTime * vPlate.z) * vPlate.y;
+          float lit = textureLod(tSigns, vec2(us, cellUv.y), 0.0).r;
+          float dotMask = 1.0 - smoothstep(0.28, 0.42, length(fract(g) - 0.5));
+          diffuseColor.rgb = vec3(0.02);
+          totalEmissiveRadiance += vInk * (lit > 0.45 ? 3.2 : 0.05) * dotMask * on;
+        } else if (vSign.y > 2.5) {
           if (st.r < 0.4) discard;
           diffuseColor.rgb = vInk;
+          // Lettering on a window (3.25): the room's light behind it at night.
+          if (vSign.y > 3.1) totalEmissiveRadiance += vInk * 0.35 * on;
         } else if (vSign.y < 0.5) {
           diffuseColor.rgb = mix(vPlate, vInk * 0.6, st.r);
-          totalEmissiveRadiance += vInk * (st.r * 3.0 + st.g * 0.35) * on;
+          // Red, violet and pink tubes are dimmer by luminance than cyan, gold or green, and fell under the bloom's threshold:
+          // lifted to the same luminance (up to twice), they glow alike.
+          float inkLum = dot(vInk, vec3(0.299, 0.587, 0.114));
+          totalEmissiveRadiance += vInk * clamp(0.62 / max(inkLum, 0.05), 1.0, 2.0) * (st.r * 3.0 + st.g * 0.35) * on;
         } else if (vSign.y > 1.5) {
-          // Print (vinyl wraps, stickers): lit by the scene, no glow.
+          // Print (vinyl wraps, stickers): lit by the scene, no glow; a shop's painted board (2.25) has a little lamp over it.
           diffuseColor.rgb = mix(vPlate, vInk, st.r);
+          if (vSign.y > 2.1) totalEmissiveRadiance += diffuseColor.rgb * 0.3 * on;
         } else {
           diffuseColor.rgb = mix(vPlate, vInk, st.r);
           // Dark lettering on a lit plate stays dark; white lettering on a coloured plate outshines it.
@@ -230,7 +404,7 @@ export function signMaterial(u: CityUniforms, atlas: SignAtlas): THREE.MeshStand
           totalEmissiveRadiance += mix(vPlate * 0.9, vInk * inkGlow, st.r) * on;
         }`);
   };
-  m.customProgramCacheKey = () => 'signs-v2';
+  m.customProgramCacheKey = () => 'signs-v10';
   return m;
 }
 
@@ -355,16 +529,36 @@ export function signBox(sb: SignBuilder, p: C3, r: C3, n: C3, u0: number, u1: nu
 }
 
 export interface SignStyle {
-  /** 0 neon on dark plate, 1 lightbox. */
+  /** 0 neon on dark plate, 1 lightbox, 2.25 a shop's painted board (lit by a lamp over it), 3 cut-out letters (3.25 on a window, backlit at night), 4 a red LED board, 5 a barber's pole. */
   readonly style: number;
   readonly ink: C3;
   readonly plate: C3;
   readonly channel: boolean;
 }
 
+/** Painted boards (unlit, lit by the street): cream with dark letters, or dark wood with cream ones. */
+const PRINT: readonly (readonly [plate: number, ink: number])[] = [[0xd8cfb8, 0x1c1a18], [0x3a2a1e, 0xe8dcc0], [0xe4e0d4, 0x8a1c18]];
+
+/** How a sign of this look and colour is made (`seed` picks a painted board's colours). */
+export function lookStyle(look: SignLook, hex: number, seed = 0): SignStyle {
+  const color = lin(hex);
+  switch (look) {
+    case 'neon': return { style: 0, ink: color, plate: lin(0x141418), channel: false };
+    case 'channel': return { style: 0, ink: color, plate: lin(0x141418), channel: true };
+    case 'lightbox': return { style: 1, ink: scale3(color, 0.35), plate: lin(0xe8e6de), channel: false };
+    case 'inverse': return { style: 1, ink: lin(0xfaf8f0), plate: scale3(color, 0.8), channel: false };
+    case 'print': {
+      const [plate, ink] = PRINT[seed % PRINT.length];
+      return { style: 2.25, ink: lin(ink), plate: lin(plate), channel: false };
+    }
+  }
+}
+
 export function signStyle(s: Sign3): SignStyle {
   const rnd = rng(hash(Math.round(s.x * 10), Math.round(s.z * 10), Math.round(s.y * 10), 0x5160));
   const color = lin(s.color);
+  // What its siting chose (signSites.ts); stamps' signs and anything else without a look, from its own hash as before.
+  if (s.look) return lookStyle(s.look, s.color, rnd.int(0, PRINT.length - 1));
   const latin = [...s.text].every((c) => !isWide(c.codePointAt(0)!));
   const channel = !s.vertical && latin && rnd.chance(0.45);
   const roll = rnd.float();
@@ -375,15 +569,42 @@ export function signStyle(s: Sign3): SignStyle {
 
 const RETURN: C3 = [0.05, 0.05, 0.06];
 
+/**
+ * How big a fascia is drawn, in metres (addSigns: its plate, or its channel letters): its natural size (tubing thinner
+ * than plain letters, a pictogram as wide as it is tall) held to 5.4 m and its shopfront. Pure (no canvas), for the
+ * siting too (a frame of bulbs round it).
+ */
+export function fasciaSize(s: Sign3): { w: number; h: number } {
+  if (signStyle(s).channel) {
+    // (Channel letters' width from their characters, not measured: no canvas here. A wide one is an em, a Latin one
+    // about 0.8 of one, a space 0.4.)
+    const adv = [...s.text].reduce((a, c) => a + (c === ' ' ? 0.4 : isWide(c.codePointAt(0)!) ? 1 : 0.8) * EM, 0);
+    const k = Math.min(0.62 / EM, Math.min(5.2, s.maxW ?? 5.2) / adv);
+    return { w: adv * k, h: EM * k };
+  }
+  const ph = H_SLOT / PX_PER_M;
+  let h = s.form === 'tube' ? 0.6 : ph;
+  let w = plateWidth(s.text) * (h / ph);
+  const maxW = Math.min(5.4, s.maxW ?? 5.4);
+  const total = w + (s.icon ? h : 0);
+  if (total > maxW) {
+    w *= maxW / total;
+    h *= maxW / total;
+  }
+  return { w: w + (s.icon ? h : 0), h };
+}
+
 const signId = (s: Sign3): number => hash(Math.round(s.x * 10), Math.round(s.z * 10), Math.round(s.y * 10)) % 100000;
 
 /** Each sign's glow on the street below it, for the lightmap. */
 export function signLights(signs: readonly Sign3[]): Light[] {
-  return signs.map((s) => {
+  // (A painted board gives no light.)
+  return signs.filter((s) => s.look !== 'print').map((s) => {
     const st = signStyle(s);
     const glow = st.style === 0 ? st.ink : st.plate;
     const out = s.vertical ? 0.4 : 1.2;
-    return { x: s.x + s.nx * out, z: s.z + s.nz * out, r: s.vertical ? 4.5 : 4, color: glow, i: st.style === 0 ? 0.3 : 0.42 };
+    const hours = s.hours ?? HOURS.always;
+    return { x: s.x + s.nx * out, z: s.z + s.nz * out, r: s.vertical ? 4.5 : 4, color: glow, i: st.style === 0 ? 0.3 : 0.42, hours, seed: withHours(s.seed ?? signId(s), hours) };
   });
 }
 
@@ -398,14 +619,14 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
     const r: C3 = [s.nz, 0, -s.nx];
     if (st.channel) {
       const p: C3 = [s.x - s.nx * 0.4, 0, s.z - s.nz * 0.4];
-      channelLetters(mb, s.text, p, r, n, 3.62, 0.62, 5.2, st.ink, signId(s), 0.02);
+      channelLetters(mb, s.text, p, r, n, 3.62, 0.62, Math.min(5.2, s.maxW ?? 5.2), st.ink, withHours(s.seed ?? signId(s), s.hours ?? HOURS.always), 0.02, s.hours);
       continue;
     }
-    const rect = atlas.rect(s.text, s.vertical);
+    const rect = atlas.rect(s.text, s.vertical, s.form);
     if (!rect) continue;
     sb.ink = st.ink;
     sb.plate = st.plate;
-    sb.sign = [signId(s), st.style];
+    sb.sign = [withHours(s.seed ?? signId(s), s.hours ?? HOURS.always), st.style];
     const uv = [rect.u0, rect.v0, rect.u1, rect.v1] as const;
     // The anchor sits 0.4 m off the facade; build from the facade point.
     const p: C3 = [s.x - s.nx * 0.4, 0, s.z - s.nz * 0.4];
@@ -417,9 +638,12 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
       signBox(sb, p, r, n, -0.03, 0.03, s.y - 0.12, s.y - 0.04, 0, 0.14, atlas.blankUv, {});
       signBox(sb, p, r, n, -0.03, 0.03, s.y - rect.h + 0.04, s.y - rect.h + 0.12, 0, 0.14, atlas.blankUv, {});
     } else {
-      const w = Math.min(rect.w, 5.4);
-      const h = rect.h * (w / rect.w);
-      signBox(sb, p, r, n, -w / 2, w / 2, 3.62 - h / 2, 3.62 + h / 2, 0.02, 0.2, atlas.blankUv, { n: uv });
+      // (With a pictogram first, on the same plate, in the same colour.)
+      const { w, h } = fasciaSize(s);
+      const ic = s.icon ? atlas.rect(s.icon, false, 'icon') : null;
+      const iw = ic ? h : 0;
+      if (ic) signBox(sb, p, r, n, -w / 2, -w / 2 + iw, 3.62 - h / 2, 3.62 + h / 2, 0.02, 0.2, atlas.blankUv, { n: [ic.u0, ic.v0, ic.u1, ic.v1] });
+      signBox(sb, p, r, n, -w / 2 + iw, w / 2, 3.62 - h / 2, 3.62 + h / 2, 0.02, 0.2, atlas.blankUv, { n: uv });
     }
   }
   for (const b of buildings) rooftopBillboard(mb, b, seen);
@@ -429,7 +653,7 @@ export function addSigns(signs: readonly Sign3[], buildings: readonly Building3[
  * Extruded letters centred at p (a facade point) along r, facing n: letter height hgt metres centred on
  * height yc, scaled to fit maxW, standing off the wall by `off`. Faces glow (neon channel); returns dark.
  */
-function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: number, hgt: number, maxW: number, color: C3, id: number, off: number): void {
+export function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: number, hgt: number, maxW: number, color: C3, id: number, off: number, hours = -1): void {
   let s = hgt / EM;
   const adv = textAdvance(text);
   if (adv * s > maxW) s = maxW / adv;
@@ -453,7 +677,7 @@ function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: 
       const U: C3 = [0, y1 - y0, 0];
       mb.kind = KIND.emit;
       mb.color = color;
-      mb.style = [EMIT.neon, 0, 0, 0];
+      mb.style = [EMIT.neon, 0, hours + 1, 0];
       mb.quad(P(u0, y0, o1), R, U);
       mb.kind = KIND.plain;
       mb.color = RETURN;
@@ -472,23 +696,32 @@ function channelLetters(mb: MeshBuilder, text: string, p: C3, r: C3, n: C3, yc: 
  * Whether a building carries the channel-letter rooftop billboard (so photo billboards go elsewhere): only
  * where the letters can be seen from the street (see sightline.ts).
  */
+/** Whether some taller buildings carry the big neon channel letters on their roofs (cityConfig.ts `rooftopSigns`: Tokyo's skyline, not Manila's). Set once at startup, in the workers too. */
+let ROOFTOP_SIGNS = true;
+export const setRooftopSigns = (on: boolean): void => void (ROOFTOP_SIGNS = on);
+
+/** The share of tall enough buildings with letters on the roof: the district's (`rooftopLetters`: none over homes, the old town, the campus). */
+const roofChance = (b: Building3): number => b.zone?.style.rooftopLetters ?? 0.3;
+
 export function hasRooftopLetters(b: Building3, seen: Sightline = ALWAYS_SEEN): boolean {
-  return b.h >= 18 && b.hue === undefined && rng(hash(b.id, 0xb111)).chance(0.3) && seen(b, b.h + 3);
+  return ROOFTOP_SIGNS && b.h >= 18 && b.hue === undefined && rng(hash(b.id, 0xb111)).chance(roofChance(b)) && !styleFor(b).home && seen(b, b.h + 3);
 }
 
 /** Rooftop billboard: big channel letters on a steel frame near the front edge of some taller buildings. */
 function rooftopBillboard(mb: MeshBuilder, b: Building3, seen: Sightline): void {
   if (!hasRooftopLetters(b, seen)) return;
-  const rnd = rng(hash(b.id, 0xb111));
-  rnd.chance(0.3);
   const ts = tiers(b);
   const tt = ts[ts.length - 1];
   const top = tt[3] + styleFor(b).parapet;
   const f = frontFrame(b);
   const tf = tierFront(b, tt);
   const inset = tf.inset + 1.2;
-  const word = rnd.pick(ROOF_WORDS);
-  const color = lin(rnd.pick(NEON));
+  // What the building is, named (roofSigns.ts); a word another year hadn't is that year's own: a カラオケ on the roof in 1964
+  // is a スナック. district/era.ts.
+  const st = styleFor(b);
+  const roof = roofSign(b.id, b.x, b.z, st.trade, b.sign?.name ?? null);
+  const word = eraSign(roof.text);
+  const color = lin(roof.color);
   // On the top tier's face, clear of a corner cut when the top is the cut tier.
   const [s0, s1] = ts.length === 1 ? frontSpan(b) : [0, f.fw];
   const fwTop = ts.length === 1 ? s1 - s0 : tf.fw;
@@ -505,5 +738,6 @@ function rooftopBillboard(mb: MeshBuilder, b: Building3, seen: Sightline): void 
   mb.frameBox(centre, f.r, f.n, -width / 2, width / 2, base - 0.25, base - 0.05, -0.35, -0.15);
   mb.frameBox(centre, f.r, f.n, -width / 2, width / 2, base + EM * s * 0.55, base + EM * s * 0.55 + 0.15, -0.35, -0.15);
   for (let u = -width / 2; u <= width / 2 + 0.01; u += Math.max(1.5, width / 4)) mb.frameBox(centre, f.r, f.n, u - 0.07, u + 0.07, top - 0.9, base + EM * s * 0.6, -0.35, -0.2);
-  channelLetters(mb, word, centre, f.r, f.n, base + (EM * s) / 2, EM * s, fwTop * 0.9, color, b.id, -0.1);
+  // (Lit while its building's trade is open: hours.ts.)
+  channelLetters(mb, word, centre, f.r, f.n, base + (EM * s) / 2, EM * s, fwTop * 0.9, color, b.id, -0.1, hoursOf(st.trade));
 }

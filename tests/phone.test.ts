@@ -172,3 +172,18 @@ describe('Phone engine', () => {
     expect(Phone.time(p.clock)).toBe('00:00');
   });
 });
+
+describe('Beat channels', () => {
+  const beat = (extra: string): string => `id: x\nname: X\nnumber: 03-5550-0100\nbeats:\n  - id: a\n${extra}    messages: [{ text: hi }]\n`;
+  it('defaults to the messenger and accepts the era\'s channels', () => {
+    const errors: string[] = [];
+    expect(parseContact('x.yaml', beat(''), errors, () => true)?.beats[0].channel).toBe('chat');
+    for (const ch of ['pager', 'call', 'machine', 'paper']) expect(parseContact('x.yaml', beat(`    channel: ${ch}\n`), errors, () => true)?.beats[0].channel).toBe(ch);
+    expect(errors).toEqual([]);
+  });
+  it('rejects an unknown channel', () => {
+    const errors: string[] = [];
+    expect(parseContact('x.yaml', beat('    channel: telegram\n'), errors, () => true)).toBeNull();
+    expect(errors.join('\n')).toContain('channel must be one of');
+  });
+});

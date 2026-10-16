@@ -24,10 +24,10 @@ import { CELL, type CellPlan3, type Road3 } from './plan';
  * A fourth way, `pursuit`, is not yours to pick: it's how the cars in a chase drive (district/chaseCar.ts): flat out,
  * corners as fast as they'll go, no lights, no giving way, round anything on either side.
  */
-export type AutoMode = 'traffic' | 'careful' | 'fast' | 'pursuit';
+export type AutoMode = 'traffic' | 'careful' | 'fast' | 'pursuit' | 'race';
 /** The ways you can pick (N at the wheel, the Maps app). */
 export const AUTO_MODES: readonly AutoMode[] = ['traffic', 'careful', 'fast'];
-export const AUTO_NAMES: Readonly<Record<AutoMode, string>> = { traffic: 'with the traffic', careful: 'slow, no rules', fast: 'fast', pursuit: 'pursuit' };
+export const AUTO_NAMES: Readonly<Record<AutoMode, string>> = { traffic: 'with the traffic', careful: 'slow, no rules', fast: 'fast', pursuit: 'pursuit', race: 'racing' };
 
 interface Style {
   /** Cruising speed (m/s) in a narrow lane, on a street, on an avenue. */
@@ -59,6 +59,8 @@ const STYLE: Readonly<Record<AutoMode, Style>> = {
   careful: { cruise: [4, 6.5, 6.5], pull: 1.8, brake: 2.2, hard: 7, throttle: 0.3, gap: 1.2, s0: 2.4, lights: false, creep: 3, minor: 5, pass: 'any', corner: 2.6 },
   fast: { cruise: [7, 19, 26], pull: 4.4, brake: 4.6, hard: 8, throttle: 1, gap: 0.8, s0: 3, lights: false, creep: 6, minor: 11, pass: 'same', corner: 2.6 },
   pursuit: { cruise: [9, 23, 31], pull: 6, brake: 6, hard: 9, throttle: 1, gap: 0.45, s0: 2, lights: false, creep: 14, minor: 18, pass: 'any', corner: 5.2, reckless: true },
+  // A street race's driver (streetRaceField.ts): the pursuit's, quicker, taking the corners wide and fast (`lanePath`'s `turnScale`).
+  race: { cruise: [11, 27, 36], pull: 7, brake: 7.5, hard: 10, throttle: 1, gap: 0.45, s0: 2, lights: false, creep: 20, minor: 24, pass: 'any', corner: 8, reckless: true },
 };
 
 /** A road as the driver needs it: where its centreline is, how wide, its pavements and its median. */
@@ -69,6 +71,8 @@ export interface RoadInfo {
   readonly width: number;
   readonly sidewalk: number;
   readonly median: number;
+  /** A slip lane along each kerb (half of this each side): the lanes keep inside it. */
+  readonly slip: number;
   readonly avenue: boolean;
 }
 
@@ -82,6 +86,7 @@ export function roadFinder(plan: (mx: number, my: number) => CellPlan3 | null, b
     width: r.vertical ? r.rect.w : r.rect.h,
     sidewalk: r.sidewalk,
     median: r.median,
+    slip: r.slip ?? 0,
     avenue: r.kind === 'boulevard',
   });
   return (x, z, vertical) => {
@@ -104,7 +109,7 @@ export function roadFinder(plan: (mx: number, my: number) => CellPlan3 | null, b
 function laneOf(r: RoadInfo | null): { o: number; kerb: number; cls: 0 | 1 | 2; shift: number; oncoming: boolean } {
   // (Off the road: the way out to it from where the car stands.)
   if (!r) return { o: 0, kerb: 0, cls: 0, shift: 0, oncoming: false };
-  const c = r.width / 2 - r.sidewalk;
+  const c = r.width / 2 - r.sidewalk - r.slip / 2;
   // Two lanes each way (an avenue): the kerb lane, as the traffic keeps to; the inner one is the next over.
   if (c >= 9) {
     const w = (c - r.median / 2) / 2;
@@ -167,10 +172,11 @@ const TURN_R = { left: 5.2, right: 8.5 } as const;
 
 /**
  * The line to drive for a GPS route (its first and last points are where you were and the place itself; between
- * them it runs down road centrelines), from where the car is now. `hl`: the car's half length (for the stop lines).
+ * them it runs down road centrelines), from where the car is now. `hl`: the car's half length (for the stop lines);
+ * `turnScale`: how much wider than the traffic's its corners are (a racer cuts them wide and fast).
  * Null if there's nothing to drive (you're there).
  */
-export function lanePath(route: readonly Pt[], from: { readonly x: number; readonly z: number }, road: RoadFinder, hl = 2.2): LanePath | null {
+export function lanePath(route: readonly Pt[], from: { readonly x: number; readonly z: number }, road: RoadFinder, hl = 2.2, turnScale = 1): LanePath | null {
   // The centreline's corners.
   const C: Pt[] = [];
   for (const p of route.slice(1, -1)) if (!C.length || Math.hypot(p[0] - C[C.length - 1][0], p[1] - C[C.length - 1][1]) > 0.5) C.push(p);
@@ -257,7 +263,7 @@ export function lanePath(route: readonly Pt[], from: { readonly x: number; reado
     const endA = A.len + (kx - C[i][0]) * A.d[0] + (kz - C[i][1]) * A.d[1];
     const startB = (kx - C[i][0]) * B.d[0] + (kz - C[i][1]) * B.d[1];
     // The arc's tangent length, no more than the legs have room for.
-    let R: number = right ? TURN_R.right : TURN_R.left;
+    let R: number = (right ? TURN_R.right : TURN_R.left) * turnScale;
     const room = Math.max(0.5, Math.min(endA * 0.45, (B.len - startB) * 0.45));
     let tl = R * Math.tan(ang / 2);
     if (tl > room) {

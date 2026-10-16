@@ -8,7 +8,7 @@ he sends money to, a man who keeps his head down. The player works his shifts am
 - **The woman.** One night a container's seal is broken from inside. A woman (adult, from the mainland,
   promised a factory job) runs into the stacks, and he hides her in his crane cab.
 - **The triad** wants its cargo back. The Japanese customs officer who waves the containers through wants the
-  problem gone. The dock worker brings it to Mack, because Mack is the only man in Tōto who isn't paid.
+  problem gone. The dock worker brings it to Mack, because Mack is the only man in Tokyo who isn't paid.
 - **The ledger.** The triad's manifests list women by number and price. Mack goes through them looking for one
   name, Megumi's, and finds a page torn out at the right month. Not proof of anything; enough to keep him
   looking.

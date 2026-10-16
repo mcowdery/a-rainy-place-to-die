@@ -1,4 +1,5 @@
 import type { Destination } from './travel';
+import { currency, money } from '../../money';
 
 /**
  * Taxis: wave one down at the kerb (hold T), it pulls in; E gets you in the back, and you tell the driver
@@ -53,7 +54,7 @@ export class TaxiPicker {
     this.choose = choose;
     this.list.replaceChildren();
     const title = document.createElement('div');
-    title.textContent = `TAXI · どちらまで? Where to? · you have ¥${wallet.toLocaleString('en-US')}${late ? ' · late-night fares (+20%)' : ''} · Esc to stay`;
+    title.textContent = `TAXI · ${currency() === '₱' ? 'Saan po?' : 'どちらまで?'} Where to? · you have ${money(wallet)}${late ? ' · late-night fares (+20%)' : ''} · Esc to stay`;
     Object.assign(title.style, { color: '#ffd34f', marginBottom: '10px', letterSpacing: '1px' });
     this.list.append(title);
     const rows = places
@@ -73,7 +74,7 @@ export class TaxiPicker {
       const f = fare(m, late);
       btn.textContent = d.name;
       const note = document.createElement('span');
-      note.textContent = `${(m / 1000).toFixed(1)} km · ~¥${f.toLocaleString('en-US')}`;
+      note.textContent = `${(m / 1000).toFixed(1)} km · ~${money(f)}`;
       Object.assign(note.style, { float: 'right', color: f > wallet ? '#ff6a78' : '#8a88a0' });
       btn.append(note);
       Object.assign(btn.style, { display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', margin: '2px 0', background: '#14141e', border: '1px solid #26243a', color: '#e8e6f0', font: 'inherit', cursor: 'pointer' });

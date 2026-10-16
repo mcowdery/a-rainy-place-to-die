@@ -1,10 +1,10 @@
 // The river's lights at night (bridge lamps, houseboats): node debug-shots/riverlights.mjs
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const VIEWS = [
   ['warmup', '4799.5,24.2,1506.4,-70,-18'],
   ['bridge', '4841,20.2,793.5,44,-22'],
@@ -14,7 +14,7 @@ try {
   for (const [name, cam] of VIEWS) {
     const page = await browser.newPage({ viewport: { width: 1600, height: 640 } });
     page.on('pageerror', (e) => console.log('pageerror', String(e)));
-    await page.goto(`${base}district.html?debug=1&diag=1&clock=19:10&weather=clear&moonShape=gibbous&fly=1&res=100&cam=${cam}`);
+    await page.goto(`${base}?debug=1&diag=1&clock=19:10&weather=clear&moonShape=gibbous&fly=1&res=100&cam=${cam}`);
     await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 180_000, polling: 500 });
     await page.evaluate(() => { document.getElementById('overlay').hidden = true; document.getElementById('hud').style.display = 'none'; });
     await page.waitForFunction(() => !document.body.innerText.includes("building the city"), null, { timeout: 180_000 });

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { FirstPersonRig } from '../models/firstPerson';
 import { MeleeSound } from '../models/meleeSound';
-import { MuzzleFlashes } from '../models/muzzleFlash';
+import { MuzzleFlashes, type FlashMount } from '../models/muzzleFlash';
 import { GunSound } from '../../race/gunSound';
 import type { GunVoice } from '../../race/gunVoices';
 import { castVolumes, type BodyHit } from '../../race/shooting';
@@ -50,6 +50,8 @@ export interface CityShot {
   readonly by?: string;
   /** The shooter's own velocity (m/s): the flash and the spent case go with it. */
   readonly vel?: THREE.Vector3;
+  /** The gun the flash rides on while the shooter moves (a car's). */
+  readonly mount?: FlashMount;
 }
 
 /** What a ray met: the point, and what's there (a car's hit volume, or the world's). */
@@ -313,8 +315,8 @@ export class CityGunfire {
   }
 
   /** A shot's flash, its smoke and its spent case (a speck of brass thrown out to the right of the bore and up). */
-  private muzzleBlast(muzzle: THREE.Vector3, bore: THREE.Vector3, size: number, puffs: number, vel?: THREE.Vector3): void {
-    this.flashes.fire(muzzle, bore, size, vel);
+  private muzzleBlast(muzzle: THREE.Vector3, bore: THREE.Vector3, size: number, puffs: number, vel?: THREE.Vector3, mount?: FlashMount): void {
+    this.flashes.fire(muzzle, bore, size, vel, mount);
     for (let i = 0; i < puffs; i++)
       this.dust.add({ p: muzzle.clone().addScaledVector(bore, 0.15 + i * 0.12), v: bore.clone().multiplyScalar(2 + Math.random() * 3).add(rand(0.6)), t: 0, life: 0.5 + Math.random() * 0.5, size: 0.02, r: 0.66, g: 0.65, b: 0.63, heavy: false, thin: 0.4 });
     const right = new THREE.Vector3().crossVectors(bore, UP).normalize();
@@ -340,7 +342,7 @@ export class CityGunfire {
     const bore = s.dir.clone().normalize();
     if (s.sound === 'pistol') this.gunSound.play([{ kind: 'pistol', at: s.muzzle }], s.listener);
     else this.blast(s.muzzle, s.listener);
-    this.muzzleBlast(s.muzzle, bore, pellets > 1 ? 1.8 : 1, 2, s.vel);
+    this.muzzleBlast(s.muzzle, bore, pellets > 1 ? 1.8 : 1, 2, s.vel, s.mount);
     this.skipOwn = !!s.skipOwn;
     this.probe = this.probes(s.muzzle.x, s.muzzle.z, s.muzzle.x + bore.x * range, s.muzzle.z + bore.z * range, range * s.spread * 2.5 + 1);
     const bodies = s.bodies ?? this.bodies;
@@ -420,7 +422,8 @@ export class CityGunfire {
   }
 
   /** Which recordings the pistol and the shotgun are, the guns' level (1 as built) and a recorded shot's street echo (0-1): race/gunSound.ts. */
-  setSound(voice: GunVoice, level: number, echo: number, shotgun: 'a' | 'b' | 'synth' = 'a'): void {
+  setSound(voice: GunVoice, level: number, echo: number, shotgun: 'a' | 'b' | 'synth' = 'a', reload = 1): void {
+    this.gunSound.reloadLevel = reload;
     this.gunSound.voice = voice;
     this.gunSound.shotgunVoice = shotgun;
     this.gunSound.setLevel(level, echo);
@@ -445,13 +448,13 @@ export class CityGunfire {
     const raised = rig.aim > 0.9;
     const bore = raised ? out : view;
     const pellets = gun.pellets ?? 1;
-    const spread = (gun.spread ?? 0.01) * (raised ? 1 : 2);
+    const spread = (gun.spread ?? 0.01) * (raised ? 1 : 2) * (1 + rig.bloom * 1.5);
     if (gun.kind === 'pistol') this.gunSound.play([{ kind: 'pistol', at: muzzle }], listener);
     else {
       this.blast(muzzle, listener);
       if (gun.lever) this.gunSound.play([{ kind: 'lever', at: muzzle }], listener);
     }
-    this.muzzleBlast(muzzle, out, pellets > 1 ? 1.8 : 1, 4);
+    this.muzzleBlast(muzzle, out, pellets > 1 ? 1.8 : 1, 4, undefined, rig.muzzleMount());
     const range = pellets > 1 ? PELLET_RANGE : BULLET_RANGE;
     this.skipOwn = false;
     this.probe = this.probes(muzzle.x, muzzle.z, muzzle.x + bore.x * range, muzzle.z + bore.z * range, range * spread * 2.5 + 1);

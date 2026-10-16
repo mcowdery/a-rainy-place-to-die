@@ -6,6 +6,7 @@ import type { Light } from './lightmap';
 import { localFrame, localRect, toWorld, type LocalFrame } from './localFrame';
 import { KIND } from './meshBuilder';
 import type { TreeSpecies } from '../models/trees';
+import { filipino, treeSet } from '../district/cityConfig';
 import type { Prop } from './props';
 
 /**
@@ -130,8 +131,6 @@ class Layout {
   }
 }
 
-const PLAZA_TREES = { zelkova: 40, camphor: 25, ginkgo: 20, sakura: 15 } as const;
-const PARK_TREES = { zelkova: 18, camphor: 16, sakura: 34, ginkgo: 10, pine: 8, dogwood: 10, dogwoodBloom: 4 } as const;
 
 function pickWeighted<K extends string>(rnd: Rng, w: Readonly<Record<K, number>>): K {
   const entries = Object.entries(w) as [K, number][];
@@ -147,6 +146,7 @@ export function openLayout(lot: OpenLot3, buildings: readonly Building3[]): Open
     case 'parking': parking(L); break;
     case 'playground': playground(L, 0, 0, L.W, L.D, true); break;
     case 'vacant': vacant(L); break;
+    case 'court': court(L); break;
     case 'yard': yard(L); break;
     case 'plaza': plaza(L); break;
     case 'park': park(L); break;
@@ -232,11 +232,73 @@ function playground(L: Layout, u0: number, t0: number, u1: number, t1: number, o
   for (let i = 0; i < trees; i++) {
     const [u, t] = spots[(i * 2 + (swingLeft ? 1 : 0)) % spots.length];
     const [x, z] = L.at(u, t);
-    const species = rnd.pick(['sakura', 'dogwood', 'zelkova'] as const);
-    L.propW('tree', x, z, 0, 1, { radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8, species, size: (species === 'dogwood' ? 1 : 0.55) + rnd.float() * 0.15, grate: false });
+    const species = rnd.pick(treeSet().playground);
+    L.propW('tree', x, z, 0, 1, { radius: 0.3, variant: hash(Math.round(x), Math.round(z)) % 8, species, size: (treeSet().playgroundFull.includes(species) ? 1 : 0.55) + rnd.float() * 0.15, grate: false });
   }
   L.lamp(u0 + w / 2 + gate / 2 + 0.6, t0 + 0.6, 8);
   L.crowd.push({ rect: L.rect(u0 + 1, u1 - 1, t0 + 1, t1 - 1), density: 0.35 });
+}
+
+/**
+ * A basketball court (the barangay's): a painted concrete court the length of the lot, a goal at each end, a chain-link
+ * fence round it (open to the street), a bench, a lamp, and players. In the Philippines the court is the neighbourhood's
+ * square: games, fiestas, wakes and the election count.
+ */
+function court(L: Layout): void {
+  const { W, D, rnd } = L;
+  L.ground.push({ rect: L.lot.rect, top: 0.04, kind: KIND.asphalt, hex: 0x86867c });
+  const along = W >= D;
+  const [u0, u1, t0, t1] = along ? [1.0, W - 1.0, 1.8, D - 0.7] : [1.2, W - 1.2, 1.6, D - 0.5];
+  const surface = rnd.pick([0x3a6a86, 0x4a7a4a, 0x8a3a30, 0x5a5a8a]);
+  L.ground.push({ rect: L.rect(u0, u1, t0, t1), top: 0.05, kind: KIND.asphalt, hex: surface });
+  const line = (a: number, b: number, c: number, d: number): void => void L.paint.push({ rect: L.rect(a, b, c, d), y: 0.06, hex: 0xe8e8e0 });
+  const lw = 0.08;
+  line(u0, u1, t0, t0 + lw * 2);
+  line(u0, u1, t1 - lw * 2, t1);
+  line(u0, u0 + lw * 2, t0, t1);
+  line(u1 - lw * 2, u1, t0, t1);
+  const key = 4.9;
+  const keyLen = 5.8;
+  if (along) {
+    const mid = (t0 + t1) / 2;
+    line((u0 + u1) / 2 - lw, (u0 + u1) / 2 + lw, t0, t1);
+    for (const [a, dir] of [[u0, 1], [u1, -1]] as const) {
+      const e = a + dir * Math.min(keyLen, (u1 - u0) * 0.3);
+      line(Math.min(a, e), Math.max(a, e), mid - key / 2, mid - key / 2 + lw * 2);
+      line(Math.min(a, e), Math.max(a, e), mid + key / 2 - lw * 2, mid + key / 2);
+      line(e - lw, e + lw, mid - key / 2, mid + key / 2);
+      L.prop('hoop', a + dir * 0.1, mid, dir, 0, { radius: 0.2, half: 0.4 });
+    }
+  } else {
+    const mid = (u0 + u1) / 2;
+    line(u0, u1, (t0 + t1) / 2 - lw, (t0 + t1) / 2 + lw);
+    for (const [a, dir] of [[t0, 1], [t1, -1]] as const) {
+      const e = a + dir * Math.min(keyLen, (t1 - t0) * 0.3);
+      line(mid - key / 2, mid - key / 2 + lw * 2, Math.min(a, e), Math.max(a, e));
+      line(mid + key / 2 - lw * 2, mid + key / 2, Math.min(a, e), Math.max(a, e));
+      line(mid - key / 2, mid + key / 2, e - lw, e + lw);
+      L.prop('hoop', mid, a + dir * 0.1, 0, dir, { radius: 0.2, half: 0.4 });
+    }
+  }
+  // Chain-link round it, open to the street.
+  L.run('fence', 0.15, 0.4, 0.15, D - 0.15, 1, 0.08);
+  L.run('fence', W - 0.15, 0.4, W - 0.15, D - 0.15, 1, 0.08);
+  L.run('fence', 0.15, D - 0.15, W - 0.15, D - 0.15, 1, 0.08);
+  L.prop('bench', along ? u0 + 2 : 0.7, along ? 0.9 : t0 + 2, along ? 0 : 1, along ? -1 : 0, { half: 0.8, radius: 0.35 });
+  L.lamp(0.6, 0.6, 12, [1.0, 0.92, 0.7], 0.9);
+  L.lamp(W - 0.6, D - 0.6, 12, [1.0, 0.92, 0.7], 0.9);
+  // Manila: a covered court, steel trusses and a corrugated roof over the whole court.
+  if (filipino() && rnd.chance(0.6)) {
+    const [cx, cz] = L.at(W / 2, D / 2);
+    const [nx, nz] = L.dir(0, 1);
+    // Along the lot's face when it is the wide way (the props' right vector (nz, -nx) runs along the face).
+    const alongFace = W >= D;
+    const half = (alongFace ? W : D) / 2 - 0.3;
+    const span = (alongFace ? D : W) / 2 - 0.3;
+    if (alongFace) L.propW('trusses', cx, cz, nx, nz, { radius: 0.1, solid: false, half, size: span });
+    else L.propW('trusses', cx, cz, -nz, nx, { radius: 0.1, solid: false, half, size: span });
+  }
+  L.crowd.push({ rect: L.rect(u0 + 1, u1 - 1, t0 + 1, t1 - 1), density: 0.6 });
 }
 
 /** A vacant lot (空き地): gravel and weeds behind a post-and-chain fence, with a for-sale board. */
@@ -342,7 +404,7 @@ function plaza(L: Layout): void {
       const roll = rnd.float();
       if (roll > 0.72 || !clear(px, pz, 3)) continue;
       if (roll < 0.52) {
-        const species = pickWeighted(rnd, PLAZA_TREES);
+        const species = pickWeighted(rnd, treeSet().plaza) as TreeSpecies;
         L.propW('tree', px, pz, 0, 1, { radius: 0.3, variant: hash(Math.round(px), Math.round(pz)) % 8, species, size: 0.75 + rnd.float() * 0.2 });
         if (rnd.chance(0.3)) L.propW('bench', px + 1.6, pz, 1, 0, { half: 0.8, radius: 0.35 });
       } else {
@@ -510,13 +572,13 @@ function park(L: Layout): void {
     for (let i = 0; i < 3; i++) {
       const bx = cx + dx * (hs / 2 + 1.4 + i * 1.5);
       const bz = cz + dz * (hs / 2 + 1.4 + (i % 2) * 1.2);
-      L.propW('tree', bx, bz, 0, 1, { radius: 0.8, variant: rnd.int(0, 99), species: 'azalea', size: 0.9 + rnd.float() * 0.4, grate: false });
+      L.propW('tree', bx, bz, 0, 1, { radius: 0.8, variant: rnd.int(0, 99), species: treeSet().shrubs.hub, size: 0.9 + rnd.float() * 0.4, grate: false });
     }
   }
   for (const [gx, gz, along] of [[cx, q.y + 1.2, 'x'], [cx, q.y + q.h - 1.2, 'x'], [q.x + 1.2, cz, 'z'], [q.x + q.w - 1.2, cz, 'z']] as const) {
     for (const sgn of [-1, 1]) {
       const o = sgn * (gate / 2 + 0.2);
-      L.propW('tree', along === 'x' ? gx + o : gx, along === 'z' ? gz + o : gz, 0, 1, { radius: 0.5, variant: rnd.int(0, 99), species: 'box', size: 0.9, grate: false });
+      L.propW('tree', along === 'x' ? gx + o : gx, along === 'z' ? gz + o : gz, 0, 1, { radius: 0.5, variant: rnd.int(0, 99), species: treeSet().shrubs.gate, size: 0.9, grate: false });
     }
   }
   const bloom = rnd.chance(0.35);
@@ -533,7 +595,7 @@ function park(L: Layout): void {
       // mix, a third of it more cherries); the park's sakura are all in bloom or none are.
       const nearPond = pond && overlaps(pad({ x: px, y: pz, w: 0, h: 0 }, 9), pond);
       const byPath = paths.some((p) => overlaps(pad({ x: px, y: pz, w: 0, h: 0 }, 4.5), p));
-      let species: TreeSpecies = nearPond && rnd.chance(0.6) ? 'pine' : byPath && rnd.chance(0.85) ? 'sakura' : pickWeighted(rnd, PARK_TREES);
+      let species: TreeSpecies = nearPond && rnd.chance(0.6) ? treeSet().parkPond : byPath && rnd.chance(0.85) ? treeSet().parkPath : (pickWeighted(rnd, treeSet().park) as TreeSpecies);
       if (species === 'sakura' && bloom) species = 'sakuraBloom';
       L.propW('tree', px, pz, 0, 1, { radius: 0.3, variant: hash(Math.round(px), Math.round(pz)) % 8, species, size: 0.75 + rnd.float() * 0.35, grate: false });
     }

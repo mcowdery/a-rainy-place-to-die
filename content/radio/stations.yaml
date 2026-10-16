@@ -4,8 +4,8 @@
 # no real broadcasters.
 stations:
   - id: jazz
-    name: TŌTO JAZZ
-    jp: 東都ジャズ
+    name: TOKYO JAZZ
+    jp: 東京ジャズ
     freq: '79.5'
     blurb: Jazz through the night.
     tracks:
@@ -59,10 +59,11 @@ stations:
       - { file: asagiri_morning.ogg, title: "Asagiri Morning", artist: "Asagiri Jazz Workshop" }
       - { file: wangan_mambo.ogg, title: "Wangan Mambo", artist: "Wangan Latin Jazz Club" }
       - { file: sakura_waltz.ogg, title: "Sakura Waltz", artist: "Kissa House Trio" }
-      - { file: toto_express.ogg, title: "Tōto Express", artist: "Tōto Swing Orchestra" }
+      - { file: toto_express.ogg, title: "Tokyo Express", artist: "Tokyo Swing Orchestra" }
       - { file: a_letter_from_yunagi.ogg, title: "A Letter from Yūnagi", artist: "Asagiri Jazz Workshop" }
       - { file: takanodai_stroll.ogg, title: "Takanodai Stroll", artist: "Kissa House Trio" }
   - id: noir
+    cities: [toto, manila]
     name: RADIO NOCTURNE
     jp: ラジオ・ノクターン
     freq: '90.9'
@@ -73,14 +74,14 @@ stations:
       - { file: kasumi_blue.ogg, title: "Kasumi Blue", artist: "Yotaka Trio" }
       - { file: room_201.ogg, title: "Room 201", artist: "The Kasumi Quartet" }
       - { file: harbor_fog.ogg, title: "Harbor Fog", artist: "深夜楽団" }
-      - { file: tail_lights.ogg, title: "Tail Lights", artist: "東都ナイト・アンサンブル" }
+      - { file: tail_lights.ogg, title: "Tail Lights", artist: "東京ナイト・アンサンブル" }
       - { file: stakeout.ogg, title: "Stakeout", artist: "Harbor Lights Orchestra" }
       - { file: cigarette_and_neon.ogg, title: "Cigarette and Neon", artist: "Harbor Lights Orchestra" }
       - { file: dead_letter.ogg, title: "Dead Letter", artist: "深夜楽団" }
       - { file: blue_hour_kawabata.ogg, title: "Blue Hour, Kawabata", artist: "The Kasumi Quartet" }
       - { file: rindo.ogg, title: "竜胆 Rindō", artist: "深夜楽団" }
-      - { file: the_informant.ogg, title: "The Informant", artist: "東都ナイト・アンサンブル" }
-      - { file: three_am_expressway.ogg, title: "3 A.M. Expressway", artist: "東都ナイト・アンサンブル" }
+      - { file: the_informant.ogg, title: "The Informant", artist: "東京ナイト・アンサンブル" }
+      - { file: three_am_expressway.ogg, title: "3 A.M. Expressway", artist: "東京ナイト・アンサンブル" }
   - id: city_pop_radio
     name: City Pop Radio
     jp: シティポップ・ラジオ
@@ -89,7 +90,7 @@ stations:
     tracks:
       - { file: shuden_no_ato_de.ogg, title: "終電のあとで", artist: "サンセット・パレード" }
       - { file: neon_no_ame.ogg, title: "ネオンの雨", artist: "真夜中シアター" }
-      - { file: toto_bay_drive.ogg, title: "東都ベイ・ドライブ", artist: "ルナ・パシフィカ" }
+      - { file: toto_bay_drive.ogg, title: "東京ベイ・ドライブ", artist: "ルナ・パシフィカ" }
   - id: cypher
     name: MIDNIGHT CYPHER
     jp: ミッドナイト・サイファー
@@ -102,10 +103,10 @@ stations:
       - { file: yoru_mart_3am.ogg, title: "ヨルマート午前三時", artist: "MC 夜風" }
       - { file: neon_moyou.ogg, title: "ネオン模様", artist: "真夜中シアター feat. MC 夜風" }
       - { file: ebisujima_night.ogg, title: "恵比寿島ナイト", artist: "恵比寿島クルー" }
-      - { file: toto_city_lights.ogg, title: "Tōto City Lights", artist: "Harbor Kid" }
+      - { file: toto_city_lights.ogg, title: "Tokyo City Lights", artist: "Harbor Kid" }
       - { file: denko_breaks.ogg, title: "電光ブレイクス", artist: "DJ デンコー" }
       - { file: ame_no_kosaten.ogg, title: "雨の交差点", artist: "レディ・カスミ" }
-      - { file: asa_made_boogie.ogg, title: "朝までブギー", artist: "東都ブギー・エクスプレス" }
+      - { file: asa_made_boogie.ogg, title: "朝までブギー", artist: "東京ブギー・エクスプレス" }
       - { file: b_men_no_yoru.ogg, title: "B面の夜", artist: "DJ 終電" }
   - id: last_call
     name: LAST CALL
@@ -124,11 +125,12 @@ stations:
       - { file: blue_neon_black_coffee.ogg, title: "Blue Neon, Black Coffee", artist: "Dolores Vane" }
       - { file: giri_no_ame.ogg, title: "義理の雨", artist: "竜崎剛" }
   - id: harana
-    # Non-canon and temporary (2026-10-05): Tagalog love songs, nothing to do with the game's world. To be removed.
+    # Manila's station (the user's call, 2026-10-09: Filipino music lives in Manila, not in Tōto; the songs stay in the phone's music app).
+    cities: [manila]
     name: HARANA FM
-    jp: ハラナFM
+    jp: HARANA FM
     freq: '96.3'
-    blurb: Tagalog love songs. (Non-canon, temporary.)
+    blurb: Tagalog love songs and serenades, all night.
     tracks:
       - { file: sayo_lang_titibok.ogg, title: "Sa'yo Lang Titibok", artist: "Lino Amihan" }
       - { file: dahan_dahan_lang.ogg, title: "Dahan-Dahan Lang", artist: "Lino Amihan" }

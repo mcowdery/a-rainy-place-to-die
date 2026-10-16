@@ -1,4 +1,5 @@
 import type { RaceDef, RaceState } from './cityRace';
+import { money } from '../../money';
 
 /**
  * The city race's screens (district/cityRace.ts): the host's challenge (the races on offer, 1-9 to pick, Esc to
@@ -48,7 +49,7 @@ export class RaceHud {
       return `<div style="margin:10px 0;padding:8px 10px;border:1px solid #3a3050;border-radius:6px;background:#1a1626">
         <div style="font-weight:700">${i + 1} · ${r.name} <span style="opacity:.6;font-weight:400">· ${dist}</span></div>
         <div style="opacity:.75;margin:3px 0">${r.blurb}</div>
-        <div style="opacity:.85">vs ${r.rival.name} · win ¥${r.pay.win.toLocaleString('en-US')}</div></div>`;
+        <div style="opacity:.85">vs ${r.rival.name} · win ${money(r.pay.win)}</div></div>`;
     });
     this.card.innerHTML = `<div style="font-weight:800;letter-spacing:.1em">${host}</div>
       <div style="opacity:.7;margin-top:2px">"Want to run? Pick one."</div>${lines.join('')}
@@ -102,7 +103,7 @@ export class RaceHud {
     this.card.innerHTML = `<div style="font-size:30px;font-weight:900;color:${r.won ? '#7cffb0' : '#ff8a8a'}">${r.won ? 'YOU WIN' : 'YOU LOSE'}</div>
       <div style="opacity:.8;margin:4px 0 12px">${r.why}</div>
       <div>You · ${t(r.you)}</div><div>${rivalName} · ${t(r.rival)}</div>
-      <div style="margin-top:10px;font-weight:700">+ ¥${pay.toLocaleString('en-US')}</div>
+      <div style="margin-top:10px;font-weight:700">+ ${money(pay)}</div>
       <div style="opacity:.6;font-size:12px;margin-top:10px">Enter or Esc</div>`;
     this.card.style.display = 'block';
     this.open = true;

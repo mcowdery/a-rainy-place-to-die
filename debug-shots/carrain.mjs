@@ -2,14 +2,14 @@
 // the bonnet and roof (beads), the door and the windscreen (drops running down), and from a few metres off.
 // node debug-shots/carrain.mjs <out dir> [name]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/carrain';
 const name = process.argv[3] ?? 'shot';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 // Camera relative to the car (forward, left, up) and what it looks at (the same frame).
 const VIEWS = [
   ['bonnet', [2.6, 0.9, 1.5], [1.5, 0, 0.8]],
@@ -26,7 +26,7 @@ for (const [when, clock] of [['day', '13:00'], ['night', '21:00']]) {
   page.on('console', (m) => {
     if (m.type() === 'error' && !/404/.test(m.text())) console.log('CONSOLE', m.text().slice(0, 400));
   });
-  await page.goto(`${server.resolvedUrls.local[0]}district.html?debug=1&diag=1&spawn=city_garage.front&car=home&weather=rain&rain=0.5&wet=1&res=100&clock=${clock}`, { timeout: 240000 });
+  await page.goto(`${server.resolvedUrls.local[0]}?debug=1&diag=1&spawn=city_garage.front&car=home&weather=rain&rain=0.5&wet=1&res=100&clock=${clock}`, { timeout: 240000 });
   await page.waitForFunction(() => window.__district && document.getElementById('overlay')?.textContent === 'click to walk', null, { timeout: 240000, polling: 500 });
   await page.evaluate(() => {
     document.getElementById('overlay').hidden = true;

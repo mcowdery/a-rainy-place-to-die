@@ -1,0 +1,25 @@
+{
+  "file": "page_blank_v1.png",
+  "item": "page_blank",
+  "brand": null,
+  "copy": null,
+  "notes": "The leaf the handwriting goes on. Dark ground so the pale sheet cuts out cleanly.",
+  "prompt": "top-down flat lay photograph, shot on 35mm film, soft even light, fine film grain, muted colours, true to life wear and patina, sharp focus, a single loose sheet of cream ruled notebook paper with six punched holes down its left edge, completely blank, yellowed with age, faint foxing and a pale ring stain, a soft crease across it, one dog-eared corner, thumbed and slightly grubby along the outer edge, lying flat and seen straight down from directly above, the sheet upright, centred and whole in the frame with a narrow margin all round, isolated on a plain matte dark grey seamless background, nothing else in the picture, no text, no lettering, no logos, no watermark",
+  "lora": null,
+  "model": "krea-2-turbo",
+  "size": [
+    832,
+    1216
+  ],
+  "steps": 12,
+  "seed": 1444939196,
+  "studioJob": "81605c4d-ca00-4ceb-8125-f07823c5840a-u1",
+  "generated": "2026-10-12T09:34:41.310Z",
+  "status": "approved",
+  "approvedAs": "assets/ads/source/98_page_blank.png",
+  "decided": "2026-10-12T09:55:03.075Z",
+  "batch": "carry_props_01",
+  "purpose": "Photographed-looking base pictures for what Mack carries in place of the phone (story/phone.md): the pager (ポケベル), the ring-bound notebook and the things tucked into it. Each is one object seen straight down on a plain ground, to be cut out and used as a surface the game draws on: every display, page, card and label is BLANK, because digits, handwriting and print are composited in the engine. Design reference: the mock-up at https://claude.ai/artifact/HmLoAUjpEfS679J4BH87pJ. Nothing here goes into the game without the user's approval.",
+  "use": "sign",
+  "district": null
+}

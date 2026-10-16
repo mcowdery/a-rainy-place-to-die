@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { ChaseState } from './chase';
+import { money } from '../../money';
 
 /**
  * A chase's screens (district/chase.ts): the countdown, the line at the
@@ -8,7 +9,7 @@ import type { ChaseState } from './chase';
  * word on each of your hits, and the result (Enter again, Esc done).
  */
 const clock = (t: number): string => `${Math.floor(t / 60)}:${Math.floor(t % 60).toString().padStart(2, '0')}`;
-const yen = (n: number): string => `¥${n.toLocaleString('en-US')}`;
+const yen = (n: number): string => money(n);
 
 export interface ChaseMark {
   readonly name: string;

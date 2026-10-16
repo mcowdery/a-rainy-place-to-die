@@ -1,21 +1,21 @@
-// Mack's moves from the animation library in the city itself (district.html): does the library arrive and reach his
+// Mack's moves from the animation library in the city itself (index.html): does the library arrive and reach his
 // rig, which clips play standing, walking and running, and a picture of him walking in third person.
 //   node debug-shots/citymoves.mjs <out dir> [the city's address, to check a server that's already running]
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2] ?? 'debug-shots/citymoves';
 mkdirSync(out, { recursive: true });
 const server = process.argv[3] ? null : await shotServer({ server: { port: 0, hmr: false }, logLevel: 'silent' });
 if (server) await server.listen();
 const base = process.argv[3] ?? server.resolvedUrls.local[0];
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e).slice(0, 300)));
 page.on('console', (m) => { if ((m.type() === 'error' || m.type() === 'warning') && !/404|GPU stall|WebGL/.test(m.text())) console.log(m.type().toUpperCase(), m.text().slice(0, 300)); });
 const fetched = [];
 page.on('response', (r) => { if (/anims/.test(r.url())) fetched.push(`${r.status()} ${r.url().replace(/^.*\/(assets|src|@fs)/, '$1').slice(0, 80)}`); });
-await page.goto(`${base}district.html?debug=1&time=day`, { timeout: 240000 });
+await page.goto(`${base}?debug=1&time=day`, { timeout: 240000 });
 await page.waitForFunction(() => window.__mack && window.__mack(), null, { timeout: 240000, polling: 500 });
 console.log('his rig is in; waiting for the library');
 const got = await page.waitForFunction(() => window.__mack().moves, null, { timeout: 60000, polling: 500 }).then(() => true, () => false);

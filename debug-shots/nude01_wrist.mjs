@@ -5,7 +5,7 @@
 //   (Paths from the repository's root, no leading slash: Git Bash turns an argument that starts with one into a Windows path.)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { ROOT, shotServer } from '../scripts/shotServer.mjs';
 const [out, ...files] = process.argv.slice(2);
 if (!out || files.length === 0) {
@@ -66,7 +66,7 @@ window.__mesh.ready = true;
 );
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 // (SIZE in the environment: each still's side in pixels, for a closer look.)
 const W = Number(process.env.SIZE ?? 300);
 const page = await browser.newPage({ viewport: { width: W, height: W } });

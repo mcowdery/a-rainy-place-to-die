@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { airliner2, AIRLINES } from './airliner';
 
 /**
- * 東都空港 Tōto Airport's airfield on Hanejima (the whole-city plan: docs/city-plan.md). The island's landside
+ * 東京空港 Tokyo Airport's airfield on Hanejima (the whole-city plan: docs/city-plan.md). The island's landside
  * (the terminal, the control tower, its streets) is generated like any district; its south half is the airfield,
  * drawn here and fenced off (outside the district, so nothing walks or drives onto it): the runway with its
  * markings and edge lights, the approach lights out over the water with their sequenced strobes, the parallel

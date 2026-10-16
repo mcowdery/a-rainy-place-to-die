@@ -24,12 +24,12 @@ import type { ScreenLight } from './screenLight';
 /**
  * Asagiri's set pieces, all in the building's local frame (u along the street face, t inward; see
  * localFrame.ts). Story anchors: Stella Production (the idol agency: glamour out front, a staff entrance
- * and a car-park ramp round the side), the Toto Metropolitan Police HQ, and THE PEAK (a CEO's penthouse
+ * and a car-park ramp round the side), the Tokyo Metropolitan Police HQ, and THE PEAK (a CEO's penthouse
  * tower). Flavour: Toto Bank, a law firm, the Hakkodo ad agency, two business hotels, the Shirasagi
- * members' club, and Toto City Hall (twin towers; an elevator to the observatory on tower A).
+ * members' club, and Tokyo City Hall (twin towers; an elevator to the observatory on tower A).
  * Each kind has a builder, collision rects and lightmap lights; city hall also has a raised floor.
  */
-// (The kit landmarks' registry: Tōto Port's set pieces live in port.ts and are registered here too.)
+// (The kit landmarks' registry: Tokyo Port's set pieces live in port.ts and are registered here too.)
 export const ASAGIRI_KINDS = ['idol_agency', 'police_hq', 'residence', 'bank', 'law_firm', 'ad_agency', 'biz_hotel', 'members_club', 'city_hall', 'dept_store', 'sento', 'garage', ...PORT_KINDS, ...DENKO_KINDS, ...NORTH_KINDS, ...KAWABATA_KINDS, ...SUBURB_KINDS, ...RESIDENCE_KINDS, ...KABURO_KIT_KINDS, ...KASUMI_KINDS] as const;
 export type AsagiriKind = (typeof ASAGIRI_KINDS)[number];
 
@@ -44,7 +44,7 @@ const art = import.meta.glob(
 ) as Record<string, string>;
 const artUrl = (name: string): string => Object.entries(art).find(([k]) => k.includes(name))![1];
 
-// ---- Toto City Hall: the observatory ----
+// ---- Tokyo City Hall: the observatory ----
 export const DECK_Y = 172;
 /**
  * Your garage by the Toto Line: a brick railway-arch workshop, three bays along a 20 m face, 14 m deep. The
@@ -459,7 +459,7 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
     k.box(0x3a3a3e, 2.4, 2.6, -1.8, 1.2, 12, 40);
     k.plane(blade, 3.2, 19, 2.62, -0.5, 26, '+u', 1.25);
     k.plane(blade, 3.2, 19, 2.38, -0.5, 26, '-u', 1.25);
-    // The crown: TOTO in neon on the roof edge, the name under it.
+    // The crown: TOKYO in neon on the roof edge, the name under it.
     k.plane(k.canvas(1400, 220, (g) => {
       g.clearRect(0, 0, 1400, 220);
       neonText(g, 'TOTO', 700, 100, "900 170px 'Arial Black', 'Arial', sans-serif", '#ff5f6a');
@@ -545,7 +545,7 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
     return tick;
   },
 
-  // ---- TOTO METROPOLITAN POLICE HQ: solid, blocky stone; flags, a guard post, patrol cars, the mast ----
+  // ---- TOKYO METROPOLITAN POLICE HQ: solid, blocky stone; flags, a guard post, patrol cars, the mast ----
   police_hq(k) {
     const STONE = 0xbdb29c;
     k.box(0x8a8478, 4, 46, 10, 42, 0, 12);
@@ -575,8 +575,8 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
     k.plane(k.canvas(1200, 160, (g) => {
       g.fillStyle = '#8a8478';
       g.fillRect(0, 0, 1200, 160);
-      text(g, '東都警視庁', 600, 62, "bold 84px 'Yu Mincho', 'MS Mincho', serif", '#2a2620');
-      text(g, 'TOTO METROPOLITAN POLICE DEPARTMENT', 600, 132, "bold 38px 'Times New Roman', serif", '#2a2620');
+      text(g, '警視庁', 600, 62, "bold 84px 'Yu Mincho', 'MS Mincho', serif", '#2a2620');
+      text(g, 'TOKYO METROPOLITAN POLICE DEPARTMENT', 600, 132, "bold 38px 'Times New Roman', serif", '#2a2620');
     }), 14, 1.87, 25, 6.98, 8.5, 'out', 1.0);
     // Forecourt: flagpoles, a guard post and a barrier on the drive, patrol cars.
     for (const [fu, color] of [[12, '#ffffff'], [16, '#1a3a8a'], [20, '#ffffff']] as const) {
@@ -796,7 +796,7 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
     }), 0.45, 1.2, 18.6, -0.12, 1.7, 'out', 1.0);
   },
 
-  // ---- TOTO CITY HALL: twin stone towers on a civic podium; the observatory on tower A ----
+  // ---- TOKYO CITY HALL: twin stone towers on a civic podium; the observatory on tower A ----
   city_hall(k) {
     const STONE = 0xcac2b2;
     // Plaza: paving, planters, lamp posts; the podium.
@@ -835,7 +835,7 @@ const BUILDERS: Record<AsagiriKind, Builder> = {
     k.plane(k.canvas(1400, 160, (g) => {
       g.fillStyle = '#8a867c';
       g.fillRect(0, 0, 1400, 160);
-      text(g, '東都市庁舎  TOTO CITY HALL', 700, 84, "bold 86px 'Yu Mincho', 'Times New Roman', serif", '#2a2620');
+      text(g, '東京市庁舎  TOKYO CITY HALL', 700, 84, "bold 86px 'Yu Mincho', 'Times New Roman', serif", '#2a2620');
     }), 20, 2.3, 40, 13.97, 20, 'out', 1.0);
     k.box(0x2a2a2e, 55, 63, 10, 14, 3.4, 3.8);
     k.glow([1.2, 1.1, 0.9], 55.3, 62.7, 10.3, 13.8, 3.37, 3.4);

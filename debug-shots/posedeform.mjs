@@ -1,7 +1,7 @@
 // How a posed character's skin bends at its joints (showroom/poser.ts, real/characterPose.ts): the bare body's hips
 // and ankles close up through a few turns of each, from the side, behind and the front, in one sheet a joint.
 //   node debug-shots/posedeform.mjs [out dir] [hips,ankles,seat,bent]
-import { chromium } from 'playwright-core';
+import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 import { mkdirSync, readFileSync } from 'fs';
 const out = process.argv[2] ?? 'debug-shots/posedeform';
@@ -9,7 +9,7 @@ const which = (process.argv[3] ?? 'hips,ankles').split(',');
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 page.on('console', (m) => { if (m.text().startsWith('WELD')) console.log(m.text()); });

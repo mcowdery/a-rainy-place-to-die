@@ -1,7 +1,7 @@
 // Runs the 3D PoC benchmark in the installed Microsoft Edge and prints a results table.
 //   node scripts/bench3d.mjs            headless (GPU flags on; check the reported GPU)
 //   node scripts/bench3d.mjs --headed   visible window, real desktop GPU path
-import { chromium } from 'playwright-core';
+import { launchBrowser } from './launchBrowser.mjs';
 import { shotServer } from './shotServer.mjs';
 
 const headed = process.argv.includes('--headed');
@@ -16,7 +16,7 @@ const configs = [
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' }, { gpu: 'exclusive' });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({
+const browser = await launchBrowser({
   channel: 'msedge',
   headless: !headed,
   args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-frame-rate-limit', '--disable-gpu-vsync'],

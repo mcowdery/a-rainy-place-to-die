@@ -5,16 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "play": "node scripts/play.mjs",
     "dev:uncensored": "vite --mode uncensored",
     "dev:demo": "vite --mode demo",
     "build": "tsc && vite build",
     "build:uncensored": "tsc && vite build --mode uncensored",
     "build:demo": "tsc && vite build --mode demo",
     "build:all": "node scripts/buildAll.mjs",
+    "build:share": "node scripts/buildShare.mjs",
     "audit": "node scripts/audit.mjs",
     "typecheck": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "audit:streets": "vitest run --config tests/audit/vitest.config.ts",
     "krea:login": "node scripts/krea/ads.mjs login",
     "ads:status": "node scripts/krea/ads.mjs status",
     "ads:generate": "node scripts/krea/ads.mjs generate",
@@ -30,7 +33,8 @@
     "phone:clip": "node scripts/phone/record_clip.mjs",
     "radio:index": "node scripts/radio/index.mjs",
     "model:pick": "node C:/Users/mcowd/Documents/proj/claude-model-guard/scripts/pickModel.mjs",
-    "glb:check": "node scripts/glbCheck.mjs"
+    "glb:check": "node scripts/glbCheck.mjs",
+    "build:desktop": "node scripts/buildDesktop.mjs"
   },
   "dependencies": {
     "three": "^0.186.1",
@@ -42,6 +46,8 @@
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
     "@types/three": "^0.186.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "ffmpeg-static": "^5.3.0",
     "playwright-core": "^1.63.0",
     "typescript": "^7.0.2",
@@ -50,5 +56,24 @@
   },
   "allowScripts": {
     "ffmpeg-static@5.3.0": true
+  },
+  "main": "desktop/main.cjs",
+  "description": "A Rainy Place to Die",
+  "build": {
+    "appId": "com.rainyplace.game",
+    "productName": "A Rainy Place to Die",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/main.cjs",
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "dir"
+    },
+    "electronDist": "node_modules/electron/dist"
   }
 }

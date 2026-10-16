@@ -1,7 +1,7 @@
-# TOTO METROPOLITAN POLICE HQ (東都警視庁): serious, institutional, solid stone. A landmark built by
+# TOKYO METROPOLITAN POLICE HQ (警視庁): serious, institutional, solid stone. A landmark built by
 # real/asagiri.ts (50 m front, 44 m deep): the tower with its comms mast, flags, a guard post, patrol cars.
 id: police_hq
-name: 東都警視庁 Police HQ
+name: 警視庁 Police HQ
 footprint: [50, 44]
 height: 158
 front: south

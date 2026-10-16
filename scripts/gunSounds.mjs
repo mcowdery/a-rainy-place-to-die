@@ -5,14 +5,14 @@
 //   index.html to play them (/debug-shots/guns/ on the dev server), and prints each one's peak, loudness, length and
 //   where its energy is. `old` is the pistol as it was before the report was rebuilt in layers, for comparison.
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+import { launchBrowser } from './launchBrowser.mjs';
 import { shotServer } from './shotServer.mjs';
 
 const out = process.argv[2] ?? 'debug-shots/guns';
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' }, { gpu: 'off' });
 await server.listen();
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const browser = await launchBrowser({ channel: 'msedge', headless: true });
 const page = await browser.newPage();
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.goto(`${server.resolvedUrls.local[0]}mob.html`, { waitUntil: 'domcontentloaded' });
