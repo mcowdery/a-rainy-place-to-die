@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CoatPhysics } from './coatPhysics';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { edition } from '@edition';
 import { faceDepth, isFaceless, shadowFace } from './faceShadow';
@@ -140,6 +141,8 @@ export class Character {
    * don't slide. */
   readonly strideLength: number;
   private readonly model: THREE.Object3D;
+  /** A coat that hangs (its skirt bones simulated after the pose; `?coat=0` turns it off), if the model has the bones. */
+  private readonly coat: CoatPhysics | null;
   private readonly legLength: number;
   /** An authored clip playing in place of the idle and the walk (`play`). */
   private mixer: THREE.AnimationMixer | null = null;
@@ -160,6 +163,8 @@ export class Character {
   private constructor(readonly name: string, model: THREE.Object3D, seed: number) {
     this.root.name = `character:${name}`;
     this.root.add(model);
+    model.updateMatrixWorld(true);
+    this.coat = new URLSearchParams(globalThis.location?.search ?? '').get('coat') === '0' ? null : CoatPhysics.of(model);
     this.seed = (Math.floor(seed * 7919) % 233280) + 1;
     this.blinkIn = 0.5 + this.random() * 4;
     model.traverse((o) => {
@@ -323,8 +328,13 @@ export class Character {
     }
   }
 
-  /** Advances the idle (or the clip that's playing) by dt seconds. */
+  /** Advances the idle (or the clip that's playing) by dt seconds, then the coat if it has one. */
   update(dt: number): void {
+    this.pose(dt);
+    this.coat?.update(dt);
+  }
+
+  private pose(dt: number): void {
     this.t += dt;
     this.face(dt);
     if (this.mixer && this.action) {
