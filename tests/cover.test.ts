@@ -256,6 +256,36 @@ describe('Cover: in cover', () => {
     expect(out.c.update(input({ ...out.at, space: true }))!.layers[0].name).toBe(CLIPS.exitLow);
   });
 
+  it('aiming peeks him out: the cover pose fades, then there are no layers (peek 1); letting go brings it back; no sidling meanwhile', () => {
+    const { c, at } = into(WALL);
+    // Aim held: the pose fades over about 0.18 s.
+    let f = c.update(input({ ...at, aim: true }))!;
+    expect(f.peek).toBeGreaterThan(0);
+    expect(f.peek).toBeLessThan(1);
+    expect(f.layers[0].weight).toBeLessThan(1);
+    f = run(c, at, 0.5, () => ({ aim: true }))!;
+    expect(f.peek).toBe(1);
+    expect(f.layers).toHaveLength(0);
+    expect(f.x).toBeCloseTo(at.x, 5);
+    // Sidling is out while he peeks: D doesn't move him.
+    f = run(c, at, 0.6, () => ({ aim: true, right: true }))!;
+    expect(f.z).toBeCloseTo(at.z, 5);
+    expect(f.state).toBe('hold');
+    // Let go: back to the pose over the same time.
+    f = run(c, at, 0.5, () => ({}))!;
+    expect(f.peek).toBe(0);
+    expect(f.layers[0].weight).toBeCloseTo(1, 5);
+  });
+
+  it('Space while peeking still steps out of cover; moves outside cover have no peek', () => {
+    const { c, at } = into(WALL);
+    run(c, at, 0.4, () => ({ aim: true }));
+    const f = c.update(input({ ...at, space: true, aim: true }))!;
+    expect(f.state).toBe('exit');
+    expect(f.peek).toBe(0);
+    expect(new Cover([], table).update(input({ space: true, forward: true, run: true }))!.peek).toBe(0);
+  });
+
   it('holding keeps the pose still: the same place and no drift', () => {
     const { c, at } = into(WALL);
     const f = run(c, at, 1.5)!;

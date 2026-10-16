@@ -162,12 +162,10 @@ export class FightMode extends FpMode {
   private readonly cover = new Cover([], clipTable);
   private spacePressed = false;
   private lastAct: ActionFrame | null = null;
-  /** An action has him, how long his hands stay free after one (`Tuning.recover`), and whether the gun is to be drawn again after: it goes
-   * away for the action, so it comes out as it does from the holster, and the weapon's pose waits, not snapping up the moment a roll ends
-   * (the user, 2026-10-16: "he transitions to his fighting stance way too quickly"). */
+  /** An action has him, and how long the melee pose is held back after one (`Tuning.recover`), so it doesn't snap up the moment a roll ends
+   * (the user, 2026-10-16: "he transitions to his fighting stance way too quickly"). The gun stays in his hand through an action (`FirstPersonRig.gunInHand`). */
   private acting = false;
   private recover = 0;
-  private reArm = false;
 
   /** What's to be got right by feel (the roll's speed, run-in and distance: the panel's sliders). */
   get tuning(): Tuning {
@@ -195,36 +193,23 @@ export class FightMode extends FpMode {
     if (this.held || !this.rig || !this.anims) {
       this.cover.cancel();
       this.acting = false;
-      this.rearm();
+      this.recover = 0;
       return null;
     }
     const k = this.keys;
-    this.lastAct = this.cover.update({ dt, x, z, viewYaw: this.yaw, space, forward: k.has('KeyW'), back: k.has('KeyS'), left: k.has('KeyA'), right: k.has('KeyD'), run: k.has('ShiftLeft') || k.has('ShiftRight') });
+    // (Aiming a gun in cover peeks him out of it: models/cover.ts.)
+    this.lastAct = this.cover.update({ dt, x, z, viewYaw: this.yaw, space, forward: k.has('KeyW'), back: k.has('KeyS'), left: k.has('KeyA'), right: k.has('KeyD'), run: k.has('ShiftLeft') || k.has('ShiftRight'), aim: this.rig.armed && this.rig.aiming });
     const act = this.lastAct;
     if (act && !this.acting) {
       this.acting = true;
       this.recover = 0;
-      if (this.rig.armed) {
-        this.reArm = true;
-        this.rig.armed = false;
-        this.rig.aiming = false;
-      }
     } else if (!act && this.acting) {
       this.acting = false;
       this.recover = this.tuning.recover;
-      if (this.recover <= 0) this.rearm();
     } else if (!act && this.recover > 0) {
-      this.recover -= dt;
-      if (this.recover <= 0) this.rearm();
+      this.recover = Math.max(0, this.recover - dt);
     }
     return act;
-  }
-
-  /** Hands back to the weapon: the gun is drawn again (its own draw), the melee pose is let back. */
-  private rearm(): void {
-    this.recover = 0;
-    if (this.reArm && this.rig) this.rig.armed = true;
-    this.reArm = false;
   }
 
   protected override paceOf(running: boolean): number {
@@ -561,7 +546,7 @@ export class FightMode extends FpMode {
       ...super.script(),
       hand: (h: Hand) => this.pick(h),
       /** The cover / vault / roll state (models/cover.ts): 'free' or what it's doing, and how it has the body. */
-      coverState: () => ({ state: this.cover.current, third: this.third, body: this.lastAct ? [+this.lastAct.x.toFixed(2), +this.lastAct.z.toFixed(2)] : null }),
+      coverState: () => ({ state: this.cover.current, third: this.third, body: this.lastAct ? [+this.lastAct.x.toFixed(2), +this.lastAct.z.toFixed(2)] : null, peek: this.lastAct ? +this.lastAct.peek.toFixed(2) : null, armed: this.rig?.armed ?? null, aiming: this.rig?.aiming ?? null }),
       attack: (dir: Dir = null) => b.attack(dir),
       strike: (o: { zone?: Zone; doing?: Doing; hand?: 'l' | 'r' } = {}) => b.strike(o),
       aim: () => ({ zone: this.zone, stance: b.melee.stance, auto: this.autoStance, doing: this.doing() }),

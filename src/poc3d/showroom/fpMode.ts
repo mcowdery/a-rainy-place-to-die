@@ -519,9 +519,10 @@ export class FpMode {
     this.camera.updateMatrixWorld();
     // In third person he faces the way he goes, not where the camera looks, unless he has a weapon up.
     const going = move.lengthSq() > 0 && !locked ? this.speed : 0;
-    // (An action turns him to its heading, whatever the view: in third person, standing as he is.)
-    if (act) this.facing.face(act.heading);
-    const eyes = this.facing.update(dtW, this.camera, act ? 'free' : this.facing.modeFor(this.third, rig, dtW), act ? 0 : move.x * going, act ? 0 : move.z * going);
+    // (An action turns him to its heading, whatever the view: in third person, standing as he is. Peeked out of cover, aiming, he's turned to the view.)
+    const driven = !!act && act.peek < 1;
+    if (driven) this.facing.face(act!.heading);
+    const eyes = this.facing.update(dtW, this.camera, driven ? 'free' : this.facing.modeFor(this.third, rig, dtW), driven ? 0 : move.x * going, driven ? 0 : move.z * going);
     if (this.heldPhase !== null) (rig as unknown as { walk: number }).walk = this.heldPhase;
     if (this.heldAir) [rig.air, rig.airV] = this.heldAir;
     else [rig.air, rig.airV] = [this.airY, this.airVy];

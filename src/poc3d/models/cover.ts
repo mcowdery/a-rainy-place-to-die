@@ -16,6 +16,12 @@
  *   also make that animation faster"). The clip has a run-in before the roll itself (half its travel in its first half second), so from a
  *   stand some of it is skipped, and the body is moved by the clip's own travel curve; how fast, how much to skip and how far are `Tuning`.
  *
+
+ * **Peeking**: in cover, holding the aim button (`aim`: the right button, with a gun in hand) pops him out of the cover pose into the ordinary aim
+ * stance, over the shoulder with the crosshair and the shot as anywhere (the page does that: `ActionFrame.peek` says how far, 0 to 1; the cover
+ * clips fade out as it rises and at 1 there are none, so the rig's own armed pose is what you see); let go and the pose fades back. No sidling while
+ * peeking; Space still steps out. The roll and the vault put the gun away, the cover moves don't.
+ *
  * The Mixamo clips are authored with the wall along their +z (the way a clip's rest pose faces): the entry steps toward it
  * and turns, the exit steps away from it, the sneaks go along x. So the body's heading is set to point +z at the wall
  * and each clip plays as authored, which turns him however the clip does; the page moves the body to where this says.
@@ -150,6 +156,8 @@ export interface ActionFrame {
   readonly state: State;
   /** Standing or crouched, for the camera and the gun. */
   readonly crouched: boolean;
+  /** How far he's peeked out of cover to aim (0 to 1: the cover pose fades as it rises; at 1 there are no layers and the page's own aim stance is what's seen). */
+  readonly peek: number;
 }
 
 export type State = 'enter' | 'hold' | 'slide' | 'exit' | 'vault' | 'roll';
@@ -166,6 +174,8 @@ export interface CoverInput {
   readonly left: boolean;
   readonly right: boolean;
   readonly run: boolean;
+  /** Aiming a gun (the right button held, a gun in hand): in cover that peeks him out. */
+  readonly aim?: boolean;
 }
 
 /** The clips each move uses (names in assets/anims/mixamo_picked.glb). */
@@ -188,6 +198,8 @@ export const VAULT_TOP = 1.25;
 /** How far from the face the body stands in cover (m), how far ahead he looks for something, how far a roll goes. */
 export const STAND_OFF = 0.38;
 export const REACH = 2.2;
+/** How long the peek out of cover and back takes (s). */
+const PEEK_TIME = 0.18;
 /** A clip fades in and out over this long (s), and a roll's out: it ends in a run, and the way back to standing is slower. */
 const FADE = 0.14;
 const ROLL_OUT = 0.3;
@@ -211,6 +223,8 @@ export class Cover {
   private sidleClip = '';
   private since = 99;
   private vaultN = 0;
+  /** How far he's peeked out of cover (0 to 1). */
+  private peekK = 0;
   /** A roll's start in its clip (s), how fast it plays and the share of the clip's travel done by its start. */
   private rollLead = 0;
   private rollSpeed = 1;
@@ -373,7 +387,7 @@ export class Cover {
       pos = { x: this.from.x + (this.to.x - this.from.x) * k, z: this.from.z + (this.to.z - this.from.z) * k };
     }
     const at = s === 'roll' ? this.rollLead + this.t * this.rollSpeed : this.t;
-    const frame: ActionFrame = { ...pos, heading: this.head, layers: [{ name: this.clip, time: Math.min(at, this.len(this.clip)), weight: this.weights() }], state: s, crouched: this.low && s !== 'exit' };
+    const frame: ActionFrame = { ...pos, heading: this.head, layers: [{ name: this.clip, time: Math.min(at, this.len(this.clip)), weight: this.weights() }], state: s, crouched: this.low && s !== 'exit', peek: 0 };
     if (this.t >= this.dur) {
       if (s === 'enter') {
         this.state = 'hold';
@@ -391,6 +405,7 @@ export class Cover {
     const enter = this.low ? CLIPS.enterLow : CLIPS.enterHigh;
     if (i.space) {
       // Over it from crouched cover with W; else out, the way the clip steps away from the wall.
+      this.peekK = 0;
       if (this.low && i.forward) return this.vaultOut(i);
       const at = { x: i.x, z: i.z };
       this.begin('exit', this.low ? CLIPS.exitLow : CLIPS.exitHigh, at, at, this.head, this.low);
@@ -401,7 +416,10 @@ export class Cover {
     const lz = -Math.sin(this.head);
     const push = (i.right ? 1 : 0) - (i.left ? 1 : 0);
     const a = push * (Math.cos(i.viewYaw) * lx + -Math.sin(i.viewYaw) * lz);
-    const want = Math.abs(a) < 0.2 ? 0 : Math.sign(a);
+    // The peek out of cover, up while he aims and back when he lets go; no sidling through it.
+    const goal = i.aim ? 1 : 0;
+    this.peekK += Math.sign(goal - this.peekK) * Math.min(Math.abs(goal - this.peekK), i.dt / PEEK_TIME);
+    const want = Math.abs(a) < 0.2 || this.peekK > 0 ? 0 : Math.sign(a);
     let pos = { x: i.x, z: i.z };
     this.since += i.dt;
     if (want !== 0) {
@@ -417,14 +435,15 @@ export class Cover {
       this.state = 'slide';
       this.sidleClip = pick;
       this.since = 0;
-      return { ...pos, heading: this.head, layers: [{ name: pick, time: this.t % (info?.seconds ?? 1), weight: 1 }], state: 'slide', crouched: this.low };
+      return { ...pos, heading: this.head, layers: [{ name: pick, time: this.t % (info?.seconds ?? 1), weight: 1 }], state: 'slide', crouched: this.low, peek: 0 };
     }
     this.state = 'hold';
     // Held: the entry's last frame (and, crouched, the idle fading in over it); a sidle that has just stopped fades out.
     const layers: Layer[] = [{ name: enter, time: Math.max(0, this.len(enter) - 0.001), weight: 1 }];
     if (this.low) layers.push({ name: CLIPS.idleLow, time: this.t % this.len(CLIPS.idleLow), weight: clamp01(this.t / 0.3) });
     if (this.since < FADE && this.sidleClip) layers.push({ name: this.sidleClip, time: this.t % this.len(this.sidleClip), weight: 1 - this.since / FADE });
-    return { ...pos, heading: this.head, layers, state: 'hold', crouched: this.low };
+    const k = 1 - this.peekK;
+    return { ...pos, heading: this.head, layers: this.peekK >= 1 ? [] : layers.map((l) => ({ ...l, weight: l.weight * k })), state: 'hold', crouched: this.low, peek: this.peekK };
   }
 
   /** Over the low wall he's crouched behind: the vault's clip, to the far side. */
