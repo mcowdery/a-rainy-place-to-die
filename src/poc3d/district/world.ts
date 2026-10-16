@@ -24,6 +24,7 @@ import { roadUnder } from './rail';
 import { inPark, inPond } from './parkLand';
 import { stationKerb } from '../real/station';
 import type { Rect } from '../../core/coords';
+import { PROP_COVER, type Obstacle } from '../models/cover';
 import type { Interior } from '../real/interiors';
 import { doorOpen } from '../real/swingDoors';
 import { cityFromUrl } from './cityConfig';
@@ -550,6 +551,43 @@ export class District {
       }
     }
     return this.stampColliders.some(inRects) || inRects(this.extraColliders);
+  };
+
+  /**
+   * The solid things within `radius` of (x, z) as boxes with heights, at street level, for cover (models/cover.ts): buildings (their own
+   * heights; a cut corner is whole here), set pieces and other colliders (tall), the cell's solids, and props by kind (`PROP_COVER`: parked cars,
+   * hedges, fences, vending machines; a run's capsule as the box that holds it). Asked when Space is pressed, and as he sidles along a wall.
+   */
+  coverObstacles = (x: number, z: number, radius: number): Obstacle[] => {
+    const out: Obstacle[] = [];
+    const near = (x0: number, x1: number, z0: number, z1: number): boolean => x1 > x - radius && x0 < x + radius && z1 > z - radius && z0 < z + radius;
+    const rect = (q: Rect, h: number): void => {
+      if (near(q.x, q.x + q.w, q.y, q.y + q.h)) out.push({ x0: q.x, x1: q.x + q.w, z0: q.y, z1: q.y + q.h, h });
+    };
+    const mx = Math.floor(x / CELL);
+    const my = Math.floor(z / CELL);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (const b of this.model.plan(mx + dx, my + dy)?.buildings ?? []) {
+          if (near(b.x - b.w / 2, b.x + b.w / 2, b.z - b.d / 2, b.z + b.d / 2)) out.push({ x0: b.x - b.w / 2, x1: b.x + b.w / 2, z0: b.z - b.d / 2, z1: b.z + b.d / 2, h: b.h });
+        }
+        const d = this.model.detail(mx + dx, my + dy);
+        if (!d) continue;
+        for (const q of d.solids) rect(q, 3);
+        for (const p of d.props) {
+          const h = PROP_COVER[p.kind];
+          if (!h || p.solid === false) continue;
+          // (A run lies along the right vector (nz, -nx): its capsule's half-length and radius, as the box round it.)
+          const along = (p.half ?? 0) + p.radius;
+          const ex = Math.abs(p.nz) * along + Math.abs(p.nx) * p.radius;
+          const ez = Math.abs(p.nx) * along + Math.abs(p.nz) * p.radius;
+          if (near(p.x - ex, p.x + ex, p.z - ez, p.z + ez)) out.push({ x0: p.x - ex, x1: p.x + ex, z0: p.z - ez, z1: p.z + ez, h });
+        }
+      }
+    }
+    for (const rs of this.stampColliders) for (const q of rs) rect(q, 3);
+    for (const q of this.extraColliders) rect(q, 3);
+    return out;
   };
 
   /**

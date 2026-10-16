@@ -84,6 +84,31 @@ export function blockedBy(obstacles: readonly Obstacle[], x: number, z: number, 
   return obstacles.some((o) => x > o.x0 - r && x < o.x1 + r && z > o.z0 - r && z < o.z1 + r);
 }
 
+/**
+ * How high a prop stands, as cover (m), by kind, for the city (district/world.ts `coverObstacles`); a kind that isn't here is no cover (lamps, poles, trees, signals:
+ * thin, and a ray at a trunk is a stand against a pole, not cover; benches and wheel stops are under LOW). A parked car is 1.4: crouched behind, never
+ * vaulted (VAULT_TOP is 1.25); a vending machine or a shipping container is stood against.
+ */
+export const PROP_COVER: Readonly<Record<string, number>> = {
+  car: 1.4,
+  hedge: 1.1,
+  fence: 1.2,
+  planter: 0.8,
+  pots: 0.65,
+  vending: 1.8,
+  payphone: 2.2,
+  paymachine: 1.3,
+  container: 2.6,
+  toilet: 2.3,
+  cart: 1.0,
+  sarisari: 2.2,
+  garbage: 0.9,
+  barangay: 2.0,
+  board: 1.5,
+  shrine: 1.0,
+  bike: 0.0,
+};
+
 /** What a clip does over the floor (assets/anims/mixamo_picked.json: the builder's `extras`). */
 export interface ClipInfo {
   /** Where the hips went over the clip, in the clip's frame (x to his left, z the way the rest pose faces), metres. */

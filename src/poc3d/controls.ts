@@ -59,6 +59,11 @@ export class FirstPerson {
   floorAt: FloorAt | null = null;
   /** Movement off (riding a train): the view still turns, the camera is placed by someone else. */
   held = false;
+  /** Movement off for an action that moves him itself (cover, a vault, a roll): like `held`, but the page's own, so nothing else's `held` clashes with it. */
+  moveLock = false;
+  /** Whether Space jumps (the city: no, it's cover, a vault or a roll there; `?jump=1` for the jump back), and what a press of Space on foot calls. */
+  jumpEnabled = true;
+  onSpace: (() => void) | null = null;
   /** Mouse look off (driving: the driving camera takes the mouse). */
   mouseLook = true;
   /** Invert the mouse's up and down (mouse up looks down). */
@@ -96,7 +101,9 @@ export class FirstPerson {
       this.keys.add(e.code);
       if (e.code === 'Space' && this.look.isLocked) {
         e.preventDefault();
-        if (!this.fly && !this.held && this.air === 0) this.vy = JUMP_V;
+        if (!this.fly && !this.held && this.air === 0 && this.jumpEnabled) this.vy = JUMP_V;
+        // (Space is the page's where it takes it: cover, a vault or a roll, models/cover.ts.)
+        if (!this.fly && !this.held && !e.repeat) this.onSpace?.();
       }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -231,7 +238,7 @@ export class FirstPerson {
     const f = Number(k.has('KeyW') || k.has('ArrowUp')) - Number(k.has('KeyS') || k.has('ArrowDown'));
     const r = Number(k.has('KeyD') || k.has('ArrowRight')) - Number(k.has('KeyA') || k.has('ArrowLeft'));
     const pos = this.camera.position;
-    if (this.held) {
+    if (this.held || this.moveLock) {
       this.air = this.vy = 0;
       return;
     }
@@ -285,9 +292,14 @@ export class FirstPerson {
     }
   }
 
-  /** Off the ground (a jump): no footfalls. */
+  /** Off the ground (a jump), or in an action that moves him: no footfalls. */
   get airborne(): boolean {
-    return this.air > 0 || this.vy !== 0;
+    return this.air > 0 || this.vy !== 0 || this.moveLock;
+  }
+
+  /** Whether a key is down (by code). */
+  isDown(code: string): boolean {
+    return this.keys.has(code);
   }
 
   /** The view's pitch (radians, up positive) when it's a shift of the image rather than the camera's own
