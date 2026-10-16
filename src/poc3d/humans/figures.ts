@@ -45,8 +45,12 @@ export interface Family {
 }
 
 const LIST = Object.values(import.meta.glob('/scripts/blender/mob_figures.json', { eager: true, import: 'default' }) as Record<string, { figures: Listed[] }>)[0]?.figures ?? [];
+/** The enemies, rolled from recipes by scripts/blender/enemy_figures.py (a line-up a faction; not on the street). */
+const ENEMY_LIST = Object.values(import.meta.glob('/scripts/blender/enemy_figures.json', { eager: true, import: 'default' }) as Record<string, { figures: Listed[] }>)[0]?.figures ?? [];
 const TEXTURED = byModel(import.meta.glob('/assets/humans/*.glb', { eager: true, query: '?url', import: 'default' }) as Record<string, string>);
 registerCharacters(TEXTURED);
+/** The textured model's file, for loading it again under another name with another look (humans/fallen.ts). */
+export const texturedUrl = (name: string): string | undefined => TEXTURED[name];
 const CONVERTED = import.meta.glob('/assets/mob/*.json', { import: 'default' }) as Record<string, () => Promise<MobModelDoc>>;
 const convertedPath = (name: string): string => `/assets/mob/${name}.json`;
 
@@ -56,10 +60,11 @@ const CAST: readonly [string, boolean, number][] = [['salaryman', true, 38], ['m
 /** The women made by hand (scripts/blender/human_bijin.py): name, age, height in metres. */
 const BIJIN: readonly [string, number, number][] = [['bijin_office', 26, 1.6], ['bijin_club', 28, 1.64], ['bijin_casual', 21, 1.57], ['bijin_elegant', 33, 1.66], ['bijin_ponytail', 23, 1.62]];
 
-const TITLES: Record<string, string> = { mw: 'women', mm: 'men', ms: 'students', mk: 'children', mhbody: "body types (the mob's looks only)" };
+const TITLES: Record<string, string> = { mw: 'women', mm: 'men', ms: 'students', mk: 'children', mhbody: "body types (the mob's looks only)", rk: "Ryujin Kogyo's men", cp: 'chinpira' };
 
 function listed(prefix: string): Human[] {
-  return LIST.filter((f) => f.name.split('_')[0] === prefix)
+  return [...LIST, ...ENEMY_LIST]
+    .filter((f) => f.name.split('_')[0] === prefix)
     .map((f) => ({
       name: f.name,
       label: f.name.slice(prefix.length + 1),

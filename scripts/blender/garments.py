@@ -20,7 +20,11 @@ In a character definition ("garments": [...]):
   {"type": "haircut", "color": "#16130f", "hairline": [...], "volume": {...}, "cards": {...}, ...}
       a short cut combed back, in place of a hair asset: a shell from the scalp, thicker where the
       hair is longer, with a strand texture along its flow, and short alpha cards along the same flow
-      to break up its edges (see build_haircut)
+      to break up its edges (see build_haircut); with "curl": {...} a punch perm instead: the shell's maps are
+      tight curls (see curl_maps), with no cards
+  {"type": "chain", "color": "#b08a3e", ...}
+      a neck chain lying on whatever is worn (a gold chain): a tube round the base of the neck, lower at the
+      front; drop (metres it hangs at the front below the back), radius, back_up, roughness (see build_chain)
   {"type": "jacket", "over": ["<asset>", ...], "color": "#151313", ...}
       a leather rider jacket shaped from the skin itself (made by prepare(), before the clothes mask
       the body; see prepare_jacket): worn open, a stand collar, zips, a turned-in lip on its edges,
@@ -811,6 +815,44 @@ def hair_shell_maps(tmpdir, color, size=256, seed=3, sheen=0.7):
     return out
 
 
+def curl_maps(tmpdir, color, size=256, seed=3, count=150, radius=(9, 14), sheen=0.75):
+    """Tileable maps for a punch perm: tight curls packed over the scalp, each a small dome with a dark gap round it,
+    as a colour and a tangent-space normal map (strong, so they read under the game's lights)."""
+    import os
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[0:size, 0:size].astype(np.float32)
+    h = np.zeros((size, size), dtype=np.float32)
+    for _ in range(int(count)):
+        cx, cy = rng.uniform(0, size, 2)
+        r = rng.uniform(*radius)
+        dx = (xx - cx + size / 2) % size - size / 2
+        dy = (yy - cy + size / 2) % size - size / 2
+        d = np.hypot(dx, dy) / r
+        # A curl is a ring more than a dome: brightest a little in from its edge.
+        dome = np.clip(1 - d * d, 0, 1) ** 0.5 * (0.75 + 0.25 * np.sin(np.clip(d, 0, 1) * math.pi))
+        h = np.maximum(h, dome)
+    h += 0.08 * rng.random((size, size)).astype(np.float32)
+    h = (h - h.min()) / (h.max() - h.min())
+    col = np.array(hex_rgb(color)[:3], dtype=np.float32)
+    rgb = col[None, None, :] * (0.3 + sheen * h[..., None] ** 1.3)
+    srgb = np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * np.power(np.maximum(rgb, 0), 1 / 2.4) - 0.055)
+    gx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 2.5
+    gy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 2.5
+    n = np.stack([-gx, -gy, np.ones_like(h)], axis=2)
+    n /= np.linalg.norm(n, axis=2, keepdims=True)
+    out = []
+    for nm, px, colour in (('curl_color', srgb, True), ('curl_normal', n * 0.5 + 0.5, False)):
+        img = bpy.data.images.new(nm, size, size, alpha=False)
+        if not colour:
+            img.colorspace_settings.name = 'Non-Color'
+        img.pixels.foreach_set(np.concatenate([px, np.ones((size, size, 1), np.float32)], axis=2).astype(np.float32).ravel())
+        img.filepath_raw = os.path.join(tmpdir or '.', nm + '.png')
+        img.file_format = 'PNG'
+        img.save()
+        out.append(img)
+    return out
+
+
 def build_haircut(g, name, rig, body, meshes, L, tmpdir):
     """A short haircut combed back (see above). Settings:
       "color", "roughness", "specular", "normal" (the strand normal map's strength), "sheen", "seed"
@@ -925,6 +967,16 @@ def build_haircut(g, name, rig, body, meshes, L, tmpdir):
         if h < floor:
             v.co = mwi @ (p + sn * (floor - h))
     bm.normal_update()
+    # A perm's outline isn't a smooth shell: each vertex pushed out a little at random, once smoothed (the curls'
+    # lumps at the mesh's own scale; the texture has the curls themselves).
+    curl_g = g.get('curl')
+    if curl_g is not None and curl_g.get('lumps', 0) > 0:
+        bump = rng.uniform(0, curl_g['lumps'], len(bm.verts))
+        bump = np.array([0.5 * bump[i] + 0.5 * (bump[nbrs[i]].mean() if nbrs[i] else bump[i]) for i in range(len(bump))])
+        for i, v in enumerate(bm.verts):
+            if not edge[i]:
+                v.co += v.normal * bump[i]
+        bm.normal_update()
 
     # The flow: away from a pole just above the forehead, over the crown and down the back and sides.
     pole_el = math.radians(g.get('pole', 45))
@@ -945,7 +997,12 @@ def build_haircut(g, name, rig, body, meshes, L, tmpdir):
     bm.free()
     me = sh.data
     me.materials.clear()
-    col_img, nrm_img = hair_shell_maps(tmpdir, g.get('color', '#16130f'), seed=int(g.get('seed', 11)), sheen=g.get('sheen', 0.7))
+    curl = g.get('curl')
+    if curl is not None:
+        # A punch perm: curls, not strands combed back (and no cards: build() leaves them out).
+        col_img, nrm_img = curl_maps(tmpdir, g.get('color', '#16130f'), seed=int(g.get('seed', 11)), count=curl.get('count', 150), radius=curl.get('radius', (9, 14)), sheen=g.get('sheen', 0.75))
+    else:
+        col_img, nrm_img = hair_shell_maps(tmpdir, g.get('color', '#16130f'), seed=int(g.get('seed', 11)), sheen=g.get('sheen', 0.7))
     mat = material(name + '.haircut', g.get('color', '#16130f'), g.get('roughness', 0.5))
     nt = mat.node_tree
     bsdf = next(nd for nd in nt.nodes if nd.type == 'BSDF_PRINCIPLED')
@@ -967,7 +1024,7 @@ def build_haircut(g, name, rig, body, meshes, L, tmpdir):
 
     # Cards over it along the same flow: roots anywhere on the hair, each running back for a few
     # centimetres just above the shell, stopping at the hairline.
-    cd = g.get('cards', {})
+    cd = g.get('cards', {}) if curl is None else None
     if cd is not None:
         shell = Surface([sh])
         hexc = g.get('card_color', g.get('color', '#16130f')).lstrip('#')
@@ -1762,6 +1819,60 @@ def prepare(gs, name, rig, basemesh, tmpdir=None):
     return out
 
 
+def build_chain(g, name, rig, body, meshes):
+    """A neck chain (see the header): a closed tube laid on the outermost of what's worn round the base of the neck,
+    the back higher than the front by `drop`; weighted from the body."""
+    surf = Surface([m for m in meshes if m.type == 'MESH'] + [body])
+    c = Vector(bone_head(rig, 'neck_01'))
+    drop = g.get('drop', 0.07)
+    back_up = g.get('back_up', 0.01)
+    r = g.get('radius', 0.0035)
+    pts = []
+    n = 72
+    for i in range(n):
+        a = 2 * math.pi * i / n
+        d = Vector((math.sin(a), -math.cos(a), 0))
+        # Front (a = 0, -Y) lowest; the back a little above the neck's base.
+        z = c.z + back_up - drop * (0.5 + 0.5 * math.cos(a)) ** 1.5
+        o = Vector((c.x, c.y, z))
+        hit, nr = surf.cast(o + d * 0.35, -d, 0.5)
+        if hit is None:
+            continue
+        pts.append(hit + nr * (r + 0.0015))
+    if len(pts) < 12:
+        raise SystemExit('chain: nothing to lie on round the neck')
+    me = bpy.data.meshes.new(name + '.chain')
+    verts, faces = [], []
+    sides = 6
+    m = len(pts)
+    for i, p in enumerate(pts):
+        t = (pts[(i + 1) % m] - pts[i - 1]).normalized()
+        u = t.cross(Vector((0, 0, 1)))
+        if u.length < 1e-4:
+            u = t.cross(Vector((1, 0, 0)))
+        u.normalize()
+        v = t.cross(u).normalized()
+        for k in range(sides):
+            a = 2 * math.pi * k / sides
+            verts.append(p + (u * math.cos(a) + v * math.sin(a)) * r)
+    for i in range(m):
+        j = (i + 1) % m
+        for k in range(sides):
+            k2 = (k + 1) % sides
+            faces.append((i * sides + k, j * sides + k, j * sides + k2, i * sides + k2))
+    me.from_pydata([tuple(x) for x in verts], [], faces)
+    me.update()
+    obj = bpy.data.objects.new(name + '.chain', me)
+    bpy.context.scene.collection.objects.link(obj)
+    mat = material(name + '.chain', g.get('color', '#b08a3e'), g.get('roughness', 0.3))
+    bsdf = next(nd for nd in mat.node_tree.nodes if nd.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs['Metallic'].default_value = 1.0
+    me.materials.append(mat)
+    me.polygons.foreach_set('use_smooth', [True] * len(me.polygons))
+    transfer_weights(obj, [body], rig)
+    return obj
+
+
 def build(g, name, rig, body, meshes, L=None, tmpdir=None):
     if g['type'] == 'jacket':
         return []  # made in prepare()
@@ -1773,4 +1884,6 @@ def build(g, name, rig, body, meshes, L=None, tmpdir=None):
         return [build_hair_cards(g, name, rig, body, meshes, L, tmpdir)]
     if g['type'] == 'haircut':
         return build_haircut(g, name, rig, body, meshes, L, tmpdir)
+    if g['type'] == 'chain':
+        return [build_chain(g, name, rig, body, meshes)]
     raise SystemExit('Unknown garment ' + g['type'])

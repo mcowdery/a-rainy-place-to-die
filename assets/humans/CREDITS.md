@@ -43,3 +43,31 @@ tee, has MakeHuman's logo painted out.
   user decides**, or they are swapped for an asset whose own files say CC0.
 - Dropped for that reason: `culturalibre_hair_01` (AGPL3 in its files; its pack entry says CC0 but describes it as
   "Female hair from an old Makehuman assets 2015", author unknown). The hostess has `long01` instead.
+
+## The dead hours' fallen (`shade_*.glb`, `giant_bare.glb`)
+
+Built by `scripts/blender/fallen_figures.py` (humans.md), from the same CC0 MakeHuman packs, read 2026-10-16 in each
+asset's own file or, for the system assets that carry no header, MPFB's `data/packs/makehuman_system_assets.json`
+("license": "CC0"): the bodies shaped by MakeHuman's own targets; the skins `middleage_asian_male`,
+`young_asian_female`, `old_asian_male` and the eyes `high-poly` (system assets); `shade_hatman`: `male_elegantsuit01`,
+`shoes04`, `fedora01` (system assets) and a coat made by `garments.py`; `shade_woman`: the hair `long01` (system) and
+`toigo_shift_dress` (`author MRT`, `license CC0`); `giant_bare`: `toigo_wool_pants` (`license CC0`). The possessed are
+the crowd's own figures, as above.
+
+## The enemies (`rk_*.glb` Ryujin Kogyo's men, `cp_*.glb` chinpira)
+
+Built by `scripts/blender/enemy_figures.py` (humans.md) from its recipes, read 2026-10-16 the same way:
+
+- `toigo_male_double-breasted_suit`, `toigo_male_suit_3`, `toigo_suit_with_dinner_jacket`, `toigo_harem_pants`,
+  `toigo_wool_pants`, `toigo_round_glasses_leopard`: `author MRT`, `license CC0` in their files.
+- `spamrakuen_sagerfrogs_glasses_01` (`author: spamrakuen`, `license: CC0`), `joepal_medical_mouth_protection` (`author
+  Joel Palmius`, `license CC0`), `namuhekam_male_polo_shirt` (`author: Namuhekam`, `license: CC0`),
+  `elvs_crude_t-shirt_male` (`author Makehuman edited by Elvaerwyn`, `license CC0`), the hair `cortu_short_messy_hair`
+  (`Cortu Johnstone - CC0`).
+- System assets (CC0, as above): `male_elegantsuit01`, `male_casualsuit03`, `male_casualsuit05`, `male_casualsuit06`
+  (its MakeHuman logo painted out), `shoes04`, `shoes06`, the hair `short01`, `short02`, `short04`, the skins, eyes,
+  `eyebrow009`, `eyelashes01`.
+- Made here (`garments.py`): the punch perm and the slicked-back cut (`haircut`), the gold chain (`chain`); the aloha
+  shirts' hibiscus print is drawn by `build_character.py` (`print`).
+- Left out on their licences: `frankyaye_glasses_library_male` and `kwnet_at_optical_glasses` (`license AGPL3` in their
+  files) and `elvs_male_flat_cap1` (CC BY 4.0: allowed with a credit, but not needed).

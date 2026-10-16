@@ -4,7 +4,7 @@ import { Gore } from './gore';
 import { KILL_CHANCE, KILL_MOVES, KillRun, pickKill, type KillCtx, type KillMove, type KillQuery } from './killMoves';
 import { goreSetting, Melee, partFactor, segmentDistance, sweepHit, type Capsule, type Dir, type Doing, type MeleeWeapon, type Zone } from './melee';
 import { MeleeSound } from './meleeSound';
-import { ELITE, HEALTH, sideOf, Thug, type GuardSide, type Side } from './thug';
+import { ELITE, HEALTH, sideOf, Thug, type GuardSide, type Side, type ThugOpts } from './thug';
 
 /**
  * A fight against a group (models/thug.ts), from Mack's first-person body (models/firstPerson.ts), for any page
@@ -78,6 +78,9 @@ export class Brawl {
   /** Your posture (blocking fills it), and how long you're reeling (a guard broken, a blow deflected). */
   posture = 0;
   stun = 0;
+  /** What happens when you're up again after going down: a fresh group round you unless a page says otherwise (the
+   * dead hours' street starts over: humans/main.ts). */
+  afterDown: (() => void) | null = null;
   private sincePosture = 99;
   private clock = 0;
   private guardAt = -99;
@@ -173,6 +176,34 @@ export class Brawl {
         if (k < this.group.n) this.group.place(t, k);
         else t.root.visible = false;
       });
+    }
+  }
+
+  /** One more fighter, standing where he is (one of the page's own people turning on you: the dead hours' possessed,
+   * humans/fallen.ts): `name`'s model at (x, z) facing `yaw`. He stays until the cast changes. */
+  async join(name: string, x: number, z: number, yaw: number, opts: ThugOpts = {}): Promise<Thug | null> {
+    const cast = this.castGen;
+    const t = await Thug.load(name, this.thugs.length + 1, opts);
+    if (cast !== this.castGen) return null;
+    this.thugs.push(t);
+    this.scene.add(t.root);
+    t.place(x, this.floorAt(x, z), z, yaw);
+    return t;
+  }
+
+  /** You're hurt by something that isn't a blow swept against you (a shade's touch): `what` for the HUD. */
+  hurt(damage: number, what: string, shake = 0.65): void {
+    this.health -= damage;
+    this.sinceHurt = 0;
+    this.sound.hurt();
+    this.shakeV = Math.max(this.shakeV, shake);
+    this.hurtEl.style.opacity = '1';
+    this.lastHit = what;
+    if (this.health <= 0) {
+      this.health = 0;
+      this.down = 3;
+      this.melee.cancel();
+      this.lastHit = 'you went down';
     }
   }
 
@@ -602,23 +633,12 @@ export class Brawl {
               this.lastHit = 'blocked';
               this.addMyPosture(dmg * 0.8);
             } else {
-              this.health -= dmg;
-              this.sinceHurt = 0;
-              this.sound.hurt();
-              this.shakeV = Math.max(this.shakeV, mv.id === 'kick' ? 0.9 : 0.65);
-              this.hurtEl.style.opacity = '1';
-              this.lastHit = `hit by a ${mv.id}${from.dot(ahead) < 0 ? ' from behind' : ''}`;
+              this.hurt(dmg, `hit by a ${mv.id}${from.dot(ahead) < 0 ? ' from behind' : ''}`, mv.id === 'kick' ? 0.9 : 0.65);
               // A kick knocks you out of your own move.
               if (mv.id === 'kick') this.melee.cancel();
               // A shove the way the blow went.
               const push = s.b.clone().sub(rec.seg[1]).setY(0);
               if (push.lengthSq() > 1e-6) view.eye.addScaledVector(push.normalize(), mv.id === 'kick' ? 0.35 : 0.08);
-              if (this.health <= 0) {
-                this.health = 0;
-                this.down = 3;
-                this.melee.cancel();
-                this.lastHit = 'you went down';
-              }
             }
           }
         }
@@ -642,7 +662,8 @@ export class Brawl {
       this.hurtEl.style.opacity = '1';
       if (this.down <= 0) {
         this.health = YOUR_HEALTH;
-        this.spawn(Math.max(3, this.thugs.length), view);
+        if (this.afterDown) this.afterDown();
+        else this.spawn(Math.max(3, this.thugs.length), view);
       }
     } else this.hurtEl.style.opacity = String(Math.max(0, Number(this.hurtEl.style.opacity) - realDt * 1.6));
     g.viewer.copy(view.eye);

@@ -74,6 +74,8 @@ export interface ThugOpts {
   readonly weapon?: ThugWeapon;
   /** For the boss bar. */
   readonly name?: string;
+  /** Drawn bigger than the model was built (the dead hours' giant): his reach and his moves grow with him. */
+  readonly scale?: number;
 }
 
 /** An elite's numbers: health, posture, his moves' pace and tell, his ranges, how often he reads your swing and
@@ -234,6 +236,12 @@ export class Thug implements MeleeTarget {
   readonly weapon: ThugWeapon;
   readonly name: string;
   readonly maxHealth: number;
+  /** How much bigger than built he's drawn (`ThugOpts.scale`). */
+  private readonly scaleBy: number;
+  /** His own time, if he has one: each frame's dt goes through it (the possessed stutter: held, then rushed on). */
+  warp: ((dt: number) => number) | null = null;
+  /** Laid over his pose each frame he fights, after it's made (the possessed's head hung over, their twitches). */
+  afterPose: (() => void) | null = null;
   /** An elite's posture (0 to `ELITE.posture`), its guard, when it next shifts, a shift on its way. */
   posture = 0;
   guard: GuardSide = 'high';
@@ -265,6 +273,8 @@ export class Thug implements MeleeTarget {
         this.rest.set(o as THREE.Bone, o.quaternion.clone());
       }
     });
+    this.scaleBy = opts.scale ?? 1;
+    if (this.scaleBy !== 1) model.scale.setScalar(this.scaleBy);
     model.updateMatrixWorld(true);
     const inv = new THREE.Quaternion();
     for (const [n, b] of this.bones) {
@@ -594,6 +604,7 @@ export class Thug implements MeleeTarget {
   /** Steps him on against you. */
   update(dt: number, f: FightCtx): ThugEvents {
     const ev: ThugEvents = { tell: false };
+    if (this.warp) dt = this.warp(dt);
     for (const s of Object.values(this.springs) as Spring[]) {
       s.v += (-SPRING_K * s.x - SPRING_C * s.v) * dt;
       s.x += s.v * dt;
@@ -682,8 +693,8 @@ export class Thug implements MeleeTarget {
       this.yaw += THREE.MathUtils.clamp(dy, -6 * dt, 6 * dt);
       const busy = this.tell > 0 || this.melee.move !== null;
       const elite = this.tier === 'elite';
-      const range = elite ? ELITE.range[this.weapon] : RANGE;
-      const close = elite ? ELITE.close[this.weapon] : CLOSE;
+      const range = (elite ? ELITE.range[this.weapon] : RANGE) * this.scaleBy;
+      const close = (elite ? ELITE.close[this.weapon] : CLOSE) * this.scaleBy;
       if (!busy) {
         if (dist > range) step.addScaledVector(dirYou, Math.min(WALK, (dist - range) * 4));
         else if (dist < close) step.addScaledVector(dirYou, -0.9);
@@ -727,10 +738,14 @@ export class Thug implements MeleeTarget {
     this.moving += ((step.length() > 0.05 ? 1 : 0) - this.moving) * Math.min(1, dt * 8);
     this.walkPhase += dt * Math.PI * 2 * 1.7 * this.moving;
     this.poseFight(f.you, this.tell > 0 ? 1 - this.tell / (this.tier === 'elite' ? ELITE.tell : TELL) : 0, dt);
+    this.afterPose?.();
     return ev;
   }
 
   private pick(): MoveId {
+    // (One drawn much bigger kicks more than he punches: his fists, keyed from his eyes, don't reach down to a face
+    // 1.5 m below them. Moves of his own are still to make.)
+    if (this.scaleBy > 1.2 && this.rand() < 0.7) return 'kick';
     const blows = this.tier === 'elite' ? ELITE_BLOWS[this.weapon] : BLOWS;
     const total = blows.reduce((a, [, w]) => a + w, 0);
     let r = this.rand() * total;
@@ -824,7 +839,9 @@ export class Thug implements MeleeTarget {
     // His view: from his eyes toward your face.
     const eye = this.eye();
     const to = you.clone().sub(eye);
-    const pitch = THREE.MathUtils.clamp(Math.atan2(to.y, Math.hypot(to.x, to.z)), -0.45, 0.45);
+    // (One drawn bigger looks further down to you: from a giant's eyes your face is well below the usual reach.)
+    const lim = this.scaleBy > 1 ? 1.1 : 0.45;
+    const pitch = THREE.MathUtils.clamp(Math.atan2(to.y, Math.hypot(to.x, to.z)), -lim, lim);
     const viewQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, this.yaw + Math.PI, 0, 'YXZ'));
     const s = this.size;
     const place = (key: HandKey, side: 'l' | 'r'): void => {

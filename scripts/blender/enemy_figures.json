@@ -1,0 +1,2611 @@
+{
+ "about": "Rolled by scripts/blender/enemy_figures.py --generate from its RECIPES; built by the same script into assets/humans/.",
+ "figures": [
+  {
+   "name": "rk_01",
+   "mob": "man",
+   "role": "executive",
+   "body": {
+    "gender": 1,
+    "years": 60,
+    "height_cm": 169,
+    "muscle": 0.52,
+    "weight": 0.52,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-square": 0.35,
+     "chin-prominent-incr": 0.41,
+     "chin-width-incr": 0.35,
+     "chin-bones-incr": 0.45,
+     "lr-cheek-bones-incr": 0.42,
+     "lr-cheek-volume-decr": 0.38,
+     "eyebrows-trans-down": 0.52,
+     "eyebrows-angle-down": 0.37,
+     "lr-eye-eyefold-down": 0.26,
+     "lr-eye-height2-decr": 0.16,
+     "lr-eye-bag-incr": 0.31,
+     "forehead-nubian-incr": 0.52,
+     "nose-hump-incr": 0.27,
+     "nose-scale-vert-incr": 0.14,
+     "mouth-angles-down": 0.29,
+     "mouth-upperlip-volume-decr": 0.24,
+     "nose-scale-horiz-decr": 0.14,
+     "head-scale-horiz-incr": 0.17,
+     "head-age-incr": 0.8
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#86837d",
+   "face": {
+    "kind": "hard",
+    "expression": "scowl",
+    "tone": [
+     0.86,
+     0.8,
+     0.74
+    ],
+    "crease": 0.85,
+    "stubble": 0.74,
+    "moustache": false,
+    "bags": 0.6,
+    "scar": null,
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.002,
+     "drop": 0.0042,
+     "peak": 0.45,
+     "thick": 0.0091,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 17
+    }
+   },
+   "clothes": [
+    {
+     "asset": "toigo_male_double-breasted_suit",
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#3a3428",
+       "contrast": 0.85,
+       "lum": [
+        0,
+        0.45
+       ],
+       "orig": true
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    }
+   ],
+   "garments": [
+    {
+     "type": "haircut",
+     "reach": 0.16,
+     "roughness": 0.42,
+     "specular": 0.5,
+     "normal": 1.6,
+     "sheen": 0.95,
+     "hairline": [
+      [
+       0,
+       33
+      ],
+      [
+       25,
+       33
+      ],
+      [
+       40,
+       31
+      ],
+      [
+       52,
+       22
+      ],
+      [
+       62,
+       18
+      ],
+      [
+       70,
+       12
+      ],
+      [
+       78,
+       0
+      ],
+      [
+       84,
+       -8
+      ],
+      [
+       90,
+       4
+      ],
+      [
+       96,
+       10
+      ],
+      [
+       104,
+       8
+      ],
+      [
+       110,
+       -10
+      ],
+      [
+       116,
+       -30
+      ],
+      [
+       124,
+       -42
+      ],
+      [
+       140,
+       -50
+      ],
+      [
+       160,
+       -54
+      ],
+      [
+       180,
+       -54
+      ]
+     ],
+     "tile": [
+      3.4,
+      3.4
+     ],
+     "curl": {
+      "count": 80,
+      "radius": [
+       15,
+       22
+      ],
+      "lumps": 0.004
+     },
+     "volume": {
+      "sides": 0.011,
+      "back": 0.014,
+      "nape": 0.005,
+      "crown": 0.02,
+      "front": 0.016,
+      "edge": 0.0015,
+      "edge_deg": 4
+     },
+     "color": "#86837d",
+     "seed": 831
+    }
+   ]
+  },
+  {
+   "name": "rk_02",
+   "mob": "man",
+   "role": "executive",
+   "body": {
+    "gender": 1,
+    "years": 56,
+    "height_cm": 175,
+    "muscle": 0.53,
+    "weight": 0.72,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-age-incr": 0.75,
+     "head-fat-incr": 0.26,
+     "lr-cheek-trans-down": 0.43,
+     "neck-double-incr": 0.55,
+     "lr-eye-bag-incr": 0.61,
+     "lr-eye-bag-height-incr": 0.33,
+     "lr-eye-eyefold-down": 0.44,
+     "eyebrows-trans-down": 0.34,
+     "nose-scale-horiz-incr": 0.38,
+     "nose-point-down": 0.23,
+     "nose-volume-incr": 0.17,
+     "mouth-angles-down": 0.4,
+     "forehead-nubian-incr": 0.31,
+     "chin-width-incr": 0.36,
+     "lr-cheek-bones-incr": 0.21,
+     "nose-hump-decr": 0.16,
+     "lr-eye-scale-incr": 0.13,
+     "chin-prominent-incr": 0.21,
+     "chin-height-decr": 0.25
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#58554f",
+   "face": {
+    "kind": "oldboss",
+    "expression": "scowl",
+    "tone": [
+     0.97,
+     0.89,
+     0.85
+    ],
+    "crease": 0.85,
+    "stubble": 0,
+    "moustache": false,
+    "bags": 0.6,
+    "scar": null,
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0012,
+     "drop": 0.0039,
+     "peak": 0.45,
+     "thick": 0.0093,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 59
+    }
+   },
+   "clothes": [
+    {
+     "asset": "toigo_male_double-breasted_suit",
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#1a1a1c",
+       "contrast": 0.85,
+       "lum": [
+        0,
+        0.45
+       ],
+       "orig": true
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    },
+    {
+     "asset": "toigo_round_glasses_leopard",
+     "roughness": 0.3,
+     "clear": 0.003
+    }
+   ],
+   "garments": [
+    {
+     "type": "haircut",
+     "reach": 0.15,
+     "roughness": 0.45,
+     "specular": 0.5,
+     "hairline": [
+      [
+       0,
+       24
+      ],
+      [
+       30,
+       24
+      ],
+      [
+       50,
+       22
+      ],
+      [
+       62,
+       20
+      ],
+      [
+       70,
+       12
+      ],
+      [
+       78,
+       0
+      ],
+      [
+       84,
+       -8
+      ],
+      [
+       90,
+       4
+      ],
+      [
+       96,
+       10
+      ],
+      [
+       104,
+       8
+      ],
+      [
+       110,
+       -10
+      ],
+      [
+       116,
+       -30
+      ],
+      [
+       124,
+       -42
+      ],
+      [
+       140,
+       -50
+      ],
+      [
+       160,
+       -54
+      ],
+      [
+       180,
+       -54
+      ]
+     ],
+     "cards": {
+      "count": 300,
+      "length": [
+       0.035,
+       0.07
+      ],
+      "lift": 0.0018,
+      "width": 0.016
+     },
+     "color": "#58554f",
+     "seed": 585
+    }
+   ]
+  },
+  {
+   "name": "rk_03",
+   "mob": "man",
+   "role": "executive",
+   "body": {
+    "gender": 1,
+    "years": 62,
+    "height_cm": 171,
+    "muscle": 0.59,
+    "weight": 0.58,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-age-incr": 0.8,
+     "head-fat-incr": 0.27,
+     "lr-cheek-trans-down": 0.39,
+     "neck-double-incr": 0.59,
+     "lr-eye-bag-incr": 0.61,
+     "lr-eye-bag-height-incr": 0.4,
+     "lr-eye-eyefold-down": 0.43,
+     "eyebrows-trans-down": 0.37,
+     "nose-scale-horiz-incr": 0.31,
+     "nose-point-down": 0.24,
+     "nose-volume-incr": 0.22,
+     "mouth-angles-down": 0.42,
+     "forehead-nubian-incr": 0.33,
+     "chin-width-incr": 0.31,
+     "lr-cheek-bones-incr": 0.22,
+     "nose-scale-vert-decr": 0.15,
+     "head-scale-horiz-decr": 0.23
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#86837d",
+   "face": {
+    "kind": "oldboss",
+    "expression": "scowl",
+    "tone": [
+     0.9,
+     0.84,
+     0.78
+    ],
+    "crease": 0.85,
+    "stubble": 0,
+    "moustache": false,
+    "bags": 0.6,
+    "scar": null,
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0013,
+     "drop": 0.0037,
+     "peak": 0.45,
+     "thick": 0.0106,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 79
+    }
+   },
+   "clothes": [
+    {
+     "asset": "toigo_male_double-breasted_suit",
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#3a3428",
+       "contrast": 0.85,
+       "lum": [
+        0,
+        0.45
+       ],
+       "orig": true
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    },
+    {
+     "asset": "toigo_round_glasses_leopard",
+     "roughness": 0.3,
+     "clear": 0.003
+    }
+   ],
+   "garments": [
+    {
+     "type": "haircut",
+     "reach": 0.16,
+     "roughness": 0.42,
+     "specular": 0.5,
+     "normal": 1.6,
+     "sheen": 0.95,
+     "hairline": [
+      [
+       0,
+       33
+      ],
+      [
+       25,
+       33
+      ],
+      [
+       40,
+       31
+      ],
+      [
+       52,
+       22
+      ],
+      [
+       62,
+       18
+      ],
+      [
+       70,
+       12
+      ],
+      [
+       78,
+       0
+      ],
+      [
+       84,
+       -8
+      ],
+      [
+       90,
+       4
+      ],
+      [
+       96,
+       10
+      ],
+      [
+       104,
+       8
+      ],
+      [
+       110,
+       -10
+      ],
+      [
+       116,
+       -30
+      ],
+      [
+       124,
+       -42
+      ],
+      [
+       140,
+       -50
+      ],
+      [
+       160,
+       -54
+      ],
+      [
+       180,
+       -54
+      ]
+     ],
+     "tile": [
+      3.4,
+      3.4
+     ],
+     "curl": {
+      "count": 80,
+      "radius": [
+       15,
+       22
+      ],
+      "lumps": 0.004
+     },
+     "volume": {
+      "sides": 0.011,
+      "back": 0.014,
+      "nape": 0.005,
+      "crown": 0.02,
+      "front": 0.016,
+      "edge": 0.0015,
+      "edge_deg": 4
+     },
+     "color": "#86837d",
+     "seed": 344
+    }
+   ]
+  },
+  {
+   "name": "rk_04",
+   "mob": "man",
+   "role": "soldier",
+   "body": {
+    "gender": 1,
+    "years": 28,
+    "height_cm": 175,
+    "muscle": 0.62,
+    "weight": 0.54,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-square": 0.26,
+     "chin-prominent-incr": 0.31,
+     "chin-width-incr": 0.37,
+     "chin-bones-incr": 0.36,
+     "lr-cheek-bones-incr": 0.35,
+     "lr-cheek-volume-decr": 0.43,
+     "eyebrows-trans-down": 0.44,
+     "eyebrows-angle-down": 0.33,
+     "lr-eye-eyefold-down": 0.29,
+     "lr-eye-height2-decr": 0.14,
+     "lr-eye-bag-incr": 0.27,
+     "forehead-nubian-incr": 0.42,
+     "nose-hump-incr": 0.24,
+     "nose-scale-vert-incr": 0.17,
+     "mouth-angles-down": 0.25,
+     "mouth-upperlip-volume-decr": 0.21,
+     "head-scale-horiz-incr": 0.12,
+     "nose-scale-horiz-incr": 0.13,
+     "mouth-scale-vert-decr": 0.19,
+     "head-age-incr": 0.05
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#18130f",
+   "face": {
+    "kind": "hard",
+    "expression": "scowl",
+    "tone": [
+     0.96,
+     0.89,
+     0.81
+    ],
+    "crease": 0.54,
+    "stubble": 0.75,
+    "moustache": false,
+    "bags": 0.25,
+    "scar": null,
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0012,
+     "drop": 0.0031,
+     "peak": 0.45,
+     "thick": 0.0109,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 6
+    }
+   },
+   "clothes": [
+    {
+     "asset": "male_elegantsuit01",
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#161618",
+       "contrast": 0.85,
+       "lum": [
+        0,
+        0.45
+       ],
+       "orig": true
+      },
+      {
+       "op": "colorize",
+       "color": "#2a2224",
+       "contrast": 0.6,
+       "lum": [
+        0.45,
+        1
+       ],
+       "orig": true
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    }
+   ],
+   "garments": [],
+   "hair": "short04"
+  },
+  {
+   "name": "rk_05",
+   "mob": "man",
+   "role": "soldier",
+   "body": {
+    "gender": 1,
+    "years": 41,
+    "height_cm": 169,
+    "muscle": 0.71,
+    "weight": 0.46,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-scale-horiz-decr": 0.23,
+     "head-invertedtriangular": 0.22,
+     "lr-cheek-volume-decr": 0.95,
+     "lr-cheek-bones-incr": 0.54,
+     "chin-width-decr": 0.22,
+     "chin-prominent-incr": 0.36,
+     "lr-eye-corner2-up": 0.21,
+     "eyebrows-angle-down": 0.42,
+     "eyebrows-trans-down": 0.32,
+     "lr-eye-eyefold-down": 0.29,
+     "mouth-upperlip-volume-decr": 0.29,
+     "mouth-lowerlip-volume-decr": 0.3,
+     "nose-scale-vert-incr": 0.28,
+     "nose-hump-incr": 0.43,
+     "nose-point-width-decr": 0.18,
+     "forehead-temple-decr": 0.25,
+     "chin-height-incr": 0.12,
+     "lr-eye-scale-decr": 0.12,
+     "mouth-scale-vert-decr": 0.19,
+     "head-scale-horiz-incr": 0.22,
+     "head-age-incr": 0.38
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#18130f",
+   "face": {
+    "kind": "gaunt",
+    "expression": "scowl",
+    "tone": [
+     0.86,
+     0.8,
+     0.74
+    ],
+    "crease": 0.68,
+    "stubble": 0,
+    "moustache": false,
+    "bags": 0.41,
+    "scar": "near3(P(L['eye_r'],-0.012,0.0,-0.035),0.0028,0.03,0.022)",
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0005,
+     "drop": 0.0024,
+     "peak": 0.45,
+     "thick": 0.0105,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 66
+    }
+   },
+   "clothes": [
+    {
+     "asset": "toigo_male_suit_3",
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#22242a",
+       "contrast": 0.85,
+       "lum": [
+        0,
+        0.45
+       ],
+       "orig": true
+      },
+      {
+       "op": "colorize",
+       "color": "#3a2a2a",
+       "contrast": 0.6,
+       "lum": [
+        0.45,
+        1
+       ],
+       "orig": true
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    },
+    {
+     "asset": "spamrakuen_sagerfrogs_glasses_01",
+     "roughness": 0.2,
+     "clear": 0.003,
+     "ops": [
+      {
+       "op": "opaque"
+      },
+      {
+       "op": "colorize",
+       "color": "#121212",
+       "contrast": 0.4
+      }
+     ]
+    }
+   ],
+   "garments": [
+    {
+     "type": "haircut",
+     "reach": 0.16,
+     "roughness": 0.42,
+     "specular": 0.5,
+     "normal": 1.6,
+     "sheen": 0.95,
+     "hairline": [
+      [
+       0,
+       33
+      ],
+      [
+       25,
+       33
+      ],
+      [
+       40,
+       31
+      ],
+      [
+       52,
+       22
+      ],
+      [
+       62,
+       18
+      ],
+      [
+       70,
+       12
+      ],
+      [
+       78,
+       0
+      ],
+      [
+       84,
+       -8
+      ],
+      [
+       90,
+       4
+      ],
+      [
+       96,
+       10
+      ],
+      [
+       104,
+       8
+      ],
+      [
+       110,
+       -10
+      ],
+      [
+       116,
+       -30
+      ],
+      [
+       124,
+       -42
+      ],
+      [
+       140,
+       -50
+      ],
+      [
+       160,
+       -54
+      ],
+      [
+       180,
+       -54
+      ]
+     ],
+     "tile": [
+      3.4,
+      3.4
+     ],
+     "curl": {
+      "count": 80,
+      "radius": [
+       15,
+       22
+      ],
+      "lumps": 0.004
+     },
+     "volume": {
+      "sides": 0.011,
+      "back": 0.014,
+      "nape": 0.005,
+      "crown": 0.02,
+      "front": 0.016,
+      "edge": 0.0015,
+      "edge_deg": 4
+     },
+     "color": "#18130f",
+     "seed": 389
+    }
+   ]
+  },
+  {
+   "name": "rk_06",
+   "mob": "man",
+   "role": "flash",
+   "body": {
+    "gender": 1,
+    "years": 43,
+    "height_cm": 174,
+    "muscle": 0.51,
+    "weight": 0.54,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-scale-horiz-decr": 0.19,
+     "head-invertedtriangular": 0.22,
+     "lr-cheek-volume-decr": 0.95,
+     "lr-cheek-bones-incr": 0.62,
+     "chin-width-decr": 0.2,
+     "chin-prominent-incr": 0.26,
+     "lr-eye-corner2-up": 0.19,
+     "eyebrows-angle-down": 0.42,
+     "eyebrows-trans-down": 0.25,
+     "lr-eye-eyefold-down": 0.23,
+     "mouth-upperlip-volume-decr": 0.4,
+     "mouth-lowerlip-volume-decr": 0.3,
+     "nose-scale-vert-incr": 0.29,
+     "nose-hump-incr": 0.38,
+     "nose-point-width-decr": 0.23,
+     "forehead-temple-decr": 0.32,
+     "chin-height-decr": 0.15,
+     "mouth-scale-horiz-decr": 0.12,
+     "head-age-incr": 0.42
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#18130f",
+   "face": {
+    "kind": "gaunt",
+    "expression": "scowl",
+    "tone": [
+     0.9,
+     0.84,
+     0.78
+    ],
+    "crease": 0.71,
+    "stubble": 0,
+    "moustache": false,
+    "bags": 0.44,
+    "scar": null,
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0018,
+     "drop": 0.0034,
+     "peak": 0.45,
+     "thick": 0.0098,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 10
+    }
+   },
+   "clothes": [
+    {
+     "asset": "toigo_suit_with_dinner_jacket",
+     "ops": [
+      {
+       "op": "grade",
+       "gain": [
+        0.92,
+        0.88,
+        0.8
+       ],
+       "saturation": 0.8
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    },
+    {
+     "asset": "toigo_round_glasses_leopard",
+     "roughness": 0.3,
+     "clear": 0.003
+    }
+   ],
+   "garments": [
+    {
+     "type": "haircut",
+     "reach": 0.16,
+     "roughness": 0.42,
+     "specular": 0.5,
+     "normal": 1.6,
+     "sheen": 0.95,
+     "hairline": [
+      [
+       0,
+       33
+      ],
+      [
+       25,
+       33
+      ],
+      [
+       40,
+       31
+      ],
+      [
+       52,
+       22
+      ],
+      [
+       62,
+       18
+      ],
+      [
+       70,
+       12
+      ],
+      [
+       78,
+       0
+      ],
+      [
+       84,
+       -8
+      ],
+      [
+       90,
+       4
+      ],
+      [
+       96,
+       10
+      ],
+      [
+       104,
+       8
+      ],
+      [
+       110,
+       -10
+      ],
+      [
+       116,
+       -30
+      ],
+      [
+       124,
+       -42
+      ],
+      [
+       140,
+       -50
+      ],
+      [
+       160,
+       -54
+      ],
+      [
+       180,
+       -54
+      ]
+     ],
+     "tile": [
+      3.4,
+      3.4
+     ],
+     "curl": {
+      "count": 80,
+      "radius": [
+       15,
+       22
+      ],
+      "lumps": 0.004
+     },
+     "volume": {
+      "sides": 0.011,
+      "back": 0.014,
+      "nape": 0.005,
+      "crown": 0.02,
+      "front": 0.016,
+      "edge": 0.0015,
+      "edge_deg": 4
+     },
+     "color": "#18130f",
+     "seed": 102
+    },
+    {
+     "type": "chain",
+     "color": "#a8843c",
+     "drop": 0.07
+    }
+   ]
+  },
+  {
+   "name": "rk_07",
+   "mob": "man",
+   "role": "guard",
+   "body": {
+    "gender": 1,
+    "years": 30,
+    "height_cm": 179,
+    "muscle": 0.94,
+    "weight": 0.76,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-square": 0.4,
+     "head-scale-horiz-incr": 0.17,
+     "chin-width-incr": 0.56,
+     "chin-bones-incr": 0.56,
+     "nose-scale-horiz-incr": 0.34,
+     "nose-flaring-incr": 0.48,
+     "nose-compression-compress": 0.32,
+     "nose-volume-incr": 0.2,
+     "eyebrows-trans-down": 0.52,
+     "forehead-nubian-incr": 0.73,
+     "lr-eye-eyefold-down": 0.3,
+     "lr-eye-height2-decr": 0.17,
+     "mouth-angles-down": 0.35,
+     "mouth-lowerlip-volume-incr": 0.18,
+     "lr-cheek-bones-incr": 0.28,
+     "measure-neck-circ-incr": 0.5,
+     "neck-scale-horiz-incr": 0.47,
+     "chin-prominent-decr": 0.13,
+     "head-age-incr": 0.1
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#1c1610",
+   "face": {
+    "kind": "brute",
+    "expression": "scowl",
+    "tone": [
+     0.96,
+     0.89,
+     0.81
+    ],
+    "crease": 0.56,
+    "stubble": 0.48,
+    "moustache": false,
+    "bags": 0.43,
+    "scar": "near3(P(L['eye_r'],-0.004,0.0,0.012),0.0025,0.03,0.014)",
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0013,
+     "drop": 0.003,
+     "peak": 0.45,
+     "thick": 0.0089,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 17
+    }
+   },
+   "clothes": [
+    {
+     "asset": "male_elegantsuit01",
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#121214",
+       "contrast": 0.85,
+       "lum": [
+        0,
+        0.45
+       ],
+       "orig": true
+      },
+      {
+       "op": "colorize",
+       "color": "#1c1c1e",
+       "contrast": 0.6,
+       "lum": [
+        0.45,
+        1
+       ],
+       "orig": true
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    },
+    {
+     "asset": "spamrakuen_sagerfrogs_glasses_01",
+     "roughness": 0.2,
+     "clear": 0.003,
+     "ops": [
+      {
+       "op": "opaque"
+      },
+      {
+       "op": "colorize",
+       "color": "#121212",
+       "contrast": 0.4
+      }
+     ]
+    }
+   ],
+   "garments": [],
+   "shaved": true
+  },
+  {
+   "name": "rk_08",
+   "mob": "man",
+   "role": "guard",
+   "body": {
+    "gender": 1,
+    "years": 36,
+    "height_cm": 182,
+    "muscle": 0.88,
+    "weight": 0.83,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-square": 0.47,
+     "head-scale-horiz-incr": 0.15,
+     "chin-width-incr": 0.69,
+     "chin-bones-incr": 0.56,
+     "nose-scale-horiz-incr": 0.36,
+     "nose-flaring-incr": 0.37,
+     "nose-compression-compress": 0.3,
+     "nose-volume-incr": 0.22,
+     "eyebrows-trans-down": 0.48,
+     "forehead-nubian-incr": 0.82,
+     "lr-eye-eyefold-down": 0.28,
+     "lr-eye-height2-decr": 0.15,
+     "mouth-angles-down": 0.34,
+     "mouth-lowerlip-volume-incr": 0.23,
+     "lr-cheek-bones-incr": 0.27,
+     "measure-neck-circ-incr": 0.45,
+     "neck-scale-horiz-incr": 0.42,
+     "forehead-scale-vert-decr": 0.13,
+     "lr-eye-scale-incr": 0.12,
+     "nose-scale-vert-decr": 0.23,
+     "head-age-incr": 0.25
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#1c1610",
+   "face": {
+    "kind": "brute",
+    "expression": "scowl",
+    "tone": [
+     0.9,
+     0.84,
+     0.78
+    ],
+    "crease": 0.63,
+    "stubble": 0.8,
+    "moustache": false,
+    "bags": 0.5,
+    "scar": "near3(P(L['eye_r'],-0.004,0.0,0.012),0.0025,0.03,0.014)",
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0008,
+     "drop": 0.002,
+     "peak": 0.45,
+     "thick": 0.0095,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 43
+    }
+   },
+   "clothes": [
+    {
+     "asset": "male_elegantsuit01",
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#121214",
+       "contrast": 0.85,
+       "lum": [
+        0,
+        0.45
+       ],
+       "orig": true
+      },
+      {
+       "op": "colorize",
+       "color": "#1c1c1e",
+       "contrast": 0.6,
+       "lum": [
+        0.45,
+        1
+       ],
+       "orig": true
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    },
+    {
+     "asset": "spamrakuen_sagerfrogs_glasses_01",
+     "roughness": 0.2,
+     "clear": 0.003,
+     "ops": [
+      {
+       "op": "opaque"
+      },
+      {
+       "op": "colorize",
+       "color": "#121212",
+       "contrast": 0.4
+      }
+     ]
+    }
+   ],
+   "garments": [],
+   "hair": "short04"
+  },
+  {
+   "name": "cp_01",
+   "mob": "man",
+   "role": "aloha",
+   "body": {
+    "gender": 1,
+    "years": 22,
+    "height_cm": 169,
+    "muscle": 0.56,
+    "weight": 0.44,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-scale-horiz-decr": 0.24,
+     "head-invertedtriangular": 0.2,
+     "lr-cheek-volume-decr": 0.93,
+     "lr-cheek-bones-incr": 0.6,
+     "chin-width-decr": 0.22,
+     "chin-prominent-incr": 0.28,
+     "lr-eye-corner2-up": 0.19,
+     "eyebrows-angle-down": 0.51,
+     "eyebrows-trans-down": 0.3,
+     "lr-eye-eyefold-down": 0.2,
+     "mouth-upperlip-volume-decr": 0.35,
+     "mouth-lowerlip-volume-decr": 0.35,
+     "nose-scale-vert-incr": 0.27,
+     "nose-hump-incr": 0.37,
+     "nose-point-width-decr": 0.18,
+     "forehead-temple-decr": 0.3,
+     "chin-height-incr": 0.11,
+     "nose-scale-horiz-decr": 0.13,
+     "head-age-incr": 0
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#18130f",
+   "face": {
+    "kind": "gaunt",
+    "expression": "sneer",
+    "tone": [
+     0.96,
+     0.89,
+     0.81
+    ],
+    "crease": 0.47,
+    "stubble": 0.55,
+    "moustache": false,
+    "bags": 0.17,
+    "scar": null,
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0008,
+     "drop": 0.0024,
+     "peak": 0.45,
+     "thick": 0.0096,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 63
+    }
+   },
+   "clothes": [
+    {
+     "asset": "namuhekam_male_polo_shirt",
+     "roughness": 0.8,
+     "ops": [
+      {
+       "op": "print",
+       "tile": 0.24,
+       "seed": 3,
+       "base": "#1e2633",
+       "flowers": [
+        "#8a4a32",
+        "#b0956a"
+       ],
+       "leaf": "#2e3a2c"
+      }
+     ]
+    },
+    {
+     "asset": "toigo_harem_pants",
+     "roughness": 0.85,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#141416",
+       "contrast": 0.7
+      }
+     ]
+    },
+    {
+     "asset": "shoes06",
+     "roughness": 0.6,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#c8c4bc",
+       "contrast": 0.6
+      }
+     ]
+    }
+   ],
+   "garments": [
+    {
+     "type": "haircut",
+     "reach": 0.15,
+     "roughness": 0.45,
+     "specular": 0.5,
+     "hairline": [
+      [
+       0,
+       24
+      ],
+      [
+       30,
+       24
+      ],
+      [
+       50,
+       22
+      ],
+      [
+       62,
+       20
+      ],
+      [
+       70,
+       12
+      ],
+      [
+       78,
+       0
+      ],
+      [
+       84,
+       -8
+      ],
+      [
+       90,
+       4
+      ],
+      [
+       96,
+       10
+      ],
+      [
+       104,
+       8
+      ],
+      [
+       110,
+       -10
+      ],
+      [
+       116,
+       -30
+      ],
+      [
+       124,
+       -42
+      ],
+      [
+       140,
+       -50
+      ],
+      [
+       160,
+       -54
+      ],
+      [
+       180,
+       -54
+      ]
+     ],
+     "cards": {
+      "count": 300,
+      "length": [
+       0.035,
+       0.07
+      ],
+      "lift": 0.0018,
+      "width": 0.016
+     },
+     "color": "#18130f",
+     "seed": 953
+    },
+    {
+     "type": "chain",
+     "color": "#a8843c",
+     "drop": 0.07
+    }
+   ]
+  },
+  {
+   "name": "cp_02",
+   "mob": "man",
+   "role": "aloha",
+   "body": {
+    "gender": 1,
+    "years": 25,
+    "height_cm": 170,
+    "muscle": 0.47,
+    "weight": 0.54,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-square": 0.31,
+     "chin-prominent-incr": 0.3,
+     "chin-width-incr": 0.31,
+     "chin-bones-incr": 0.45,
+     "lr-cheek-bones-incr": 0.36,
+     "lr-cheek-volume-decr": 0.44,
+     "eyebrows-trans-down": 0.42,
+     "eyebrows-angle-down": 0.34,
+     "lr-eye-eyefold-down": 0.24,
+     "lr-eye-height2-decr": 0.15,
+     "lr-eye-bag-incr": 0.3,
+     "forehead-nubian-incr": 0.49,
+     "nose-hump-incr": 0.2,
+     "nose-scale-vert-incr": 0.16,
+     "mouth-angles-down": 0.25,
+     "mouth-upperlip-volume-decr": 0.2,
+     "forehead-scale-vert-incr": 0.24,
+     "chin-height-decr": 0.24,
+     "head-scale-horiz-decr": 0.13,
+     "head-age-incr": 0
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#6e5232",
+   "face": {
+    "kind": "hard",
+    "expression": "scowl",
+    "tone": [
+     0.9,
+     0.84,
+     0.78
+    ],
+    "crease": 0.51,
+    "stubble": 0,
+    "moustache": false,
+    "bags": 0.21,
+    "scar": "near3(P(L['eye_l'],0.012,0.0,-0.035),0.0028,0.03,0.022)",
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0007,
+     "drop": 0.0033,
+     "peak": 0.45,
+     "thick": 0.0104,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 5
+    }
+   },
+   "clothes": [
+    {
+     "asset": "namuhekam_male_polo_shirt",
+     "roughness": 0.8,
+     "ops": [
+      {
+       "op": "print",
+       "tile": 0.24,
+       "seed": 6,
+       "base": "#2c3a3a",
+       "flowers": [
+        "#9a8a6a",
+        "#6a3030"
+       ],
+       "leaf": "#1e2a26"
+      }
+     ]
+    },
+    {
+     "asset": "toigo_wool_pants",
+     "roughness": 0.85,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#2a2a2c",
+       "contrast": 0.7
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    },
+    {
+     "asset": "spamrakuen_sagerfrogs_glasses_01",
+     "roughness": 0.2,
+     "clear": 0.003,
+     "ops": [
+      {
+       "op": "opaque"
+      },
+      {
+       "op": "colorize",
+       "color": "#121212",
+       "contrast": 0.4
+      }
+     ]
+    }
+   ],
+   "garments": [],
+   "hair": "cortu_short_messy_hair"
+  },
+  {
+   "name": "cp_03",
+   "mob": "man",
+   "role": "aloha",
+   "body": {
+    "gender": 1,
+    "years": 25,
+    "height_cm": 164,
+    "muscle": 0.43,
+    "weight": 0.31,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-square": 0.17,
+     "chin-prognathism-incr": 0.16,
+     "chin-prominent-incr": 0.25,
+     "eyebrows-angle-down": 0.54,
+     "eyebrows-trans-down": 0.31,
+     "lr-eye-corner2-up": 0.23,
+     "lr-eye-eyefold-down": 0.18,
+     "lr-cheek-volume-decr": 0.3,
+     "lr-cheek-bones-incr": 0.29,
+     "mouth-angles-down": 0.21,
+     "nose-scale-horiz-incr": 0.17,
+     "forehead-nubian-incr": 0.24,
+     "chin-height-decr": 0.23,
+     "nose-scale-vert-incr": 0.13,
+     "head-age-incr": 0
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#1c1610",
+   "face": {
+    "kind": "punk",
+    "expression": "scowl",
+    "tone": [
+     0.9,
+     0.84,
+     0.78
+    ],
+    "crease": 0.51,
+    "stubble": 0,
+    "moustache": false,
+    "bags": 0.21,
+    "scar": null,
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0007,
+     "drop": 0.002,
+     "peak": 0.45,
+     "thick": 0.0105,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 35
+    }
+   },
+   "clothes": [
+    {
+     "asset": "namuhekam_male_polo_shirt",
+     "roughness": 0.8,
+     "ops": [
+      {
+       "op": "print",
+       "tile": 0.24,
+       "seed": 6,
+       "base": "#2c3a3a",
+       "flowers": [
+        "#9a8a6a",
+        "#6a3030"
+       ],
+       "leaf": "#1e2a26"
+      }
+     ]
+    },
+    {
+     "asset": "toigo_wool_pants",
+     "roughness": 0.85,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#2a2a2c",
+       "contrast": 0.7
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    }
+   ],
+   "garments": [
+    {
+     "type": "haircut",
+     "reach": 0.16,
+     "roughness": 0.42,
+     "specular": 0.5,
+     "normal": 1.6,
+     "sheen": 0.95,
+     "hairline": [
+      [
+       0,
+       33
+      ],
+      [
+       25,
+       33
+      ],
+      [
+       40,
+       31
+      ],
+      [
+       52,
+       22
+      ],
+      [
+       62,
+       18
+      ],
+      [
+       70,
+       12
+      ],
+      [
+       78,
+       0
+      ],
+      [
+       84,
+       -8
+      ],
+      [
+       90,
+       4
+      ],
+      [
+       96,
+       10
+      ],
+      [
+       104,
+       8
+      ],
+      [
+       110,
+       -10
+      ],
+      [
+       116,
+       -30
+      ],
+      [
+       124,
+       -42
+      ],
+      [
+       140,
+       -50
+      ],
+      [
+       160,
+       -54
+      ],
+      [
+       180,
+       -54
+      ]
+     ],
+     "tile": [
+      3.4,
+      3.4
+     ],
+     "curl": {
+      "count": 80,
+      "radius": [
+       15,
+       22
+      ],
+      "lumps": 0.004
+     },
+     "volume": {
+      "sides": 0.011,
+      "back": 0.014,
+      "nape": 0.005,
+      "crown": 0.02,
+      "front": 0.016,
+      "edge": 0.0015,
+      "edge_deg": 4
+     },
+     "color": "#1c1610",
+     "seed": 50
+    },
+    {
+     "type": "chain",
+     "color": "#a8843c",
+     "drop": 0.07
+    }
+   ]
+  },
+  {
+   "name": "cp_04",
+   "mob": "man",
+   "role": "striped",
+   "body": {
+    "gender": 1,
+    "years": 27,
+    "height_cm": 174,
+    "muscle": 0.43,
+    "weight": 0.47,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-square": 0.2,
+     "chin-prognathism-incr": 0.17,
+     "chin-prominent-incr": 0.24,
+     "eyebrows-angle-down": 0.56,
+     "eyebrows-trans-down": 0.41,
+     "lr-eye-corner2-up": 0.3,
+     "lr-eye-eyefold-down": 0.19,
+     "lr-cheek-volume-decr": 0.39,
+     "lr-cheek-bones-incr": 0.24,
+     "mouth-angles-down": 0.18,
+     "nose-scale-horiz-incr": 0.14,
+     "forehead-nubian-incr": 0.23,
+     "nose-scale-vert-decr": 0.23,
+     "forehead-scale-vert-decr": 0.22,
+     "mouth-scale-horiz-decr": 0.21,
+     "head-age-incr": 0.03
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#1c1610",
+   "face": {
+    "kind": "punk",
+    "expression": "sneer",
+    "tone": [
+     0.96,
+     0.89,
+     0.81
+    ],
+    "crease": 0.53,
+    "stubble": 0.54,
+    "moustache": false,
+    "bags": 0.24,
+    "scar": null,
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0014,
+     "drop": 0.0021,
+     "peak": 0.45,
+     "thick": 0.009,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 21
+    }
+   },
+   "clothes": [
+    {
+     "asset": "male_casualsuit03",
+     "roughness": 0.85,
+     "ops": []
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    },
+    {
+     "asset": "spamrakuen_sagerfrogs_glasses_01",
+     "roughness": 0.2,
+     "clear": 0.003,
+     "ops": [
+      {
+       "op": "opaque"
+      },
+      {
+       "op": "colorize",
+       "color": "#121212",
+       "contrast": 0.4
+      }
+     ]
+    }
+   ],
+   "garments": [
+    {
+     "type": "haircut",
+     "reach": 0.16,
+     "roughness": 0.42,
+     "specular": 0.5,
+     "normal": 1.6,
+     "sheen": 0.95,
+     "hairline": [
+      [
+       0,
+       33
+      ],
+      [
+       25,
+       33
+      ],
+      [
+       40,
+       31
+      ],
+      [
+       52,
+       22
+      ],
+      [
+       62,
+       18
+      ],
+      [
+       70,
+       12
+      ],
+      [
+       78,
+       0
+      ],
+      [
+       84,
+       -8
+      ],
+      [
+       90,
+       4
+      ],
+      [
+       96,
+       10
+      ],
+      [
+       104,
+       8
+      ],
+      [
+       110,
+       -10
+      ],
+      [
+       116,
+       -30
+      ],
+      [
+       124,
+       -42
+      ],
+      [
+       140,
+       -50
+      ],
+      [
+       160,
+       -54
+      ],
+      [
+       180,
+       -54
+      ]
+     ],
+     "tile": [
+      3.4,
+      3.4
+     ],
+     "curl": {
+      "count": 80,
+      "radius": [
+       15,
+       22
+      ],
+      "lumps": 0.004
+     },
+     "volume": {
+      "sides": 0.011,
+      "back": 0.014,
+      "nape": 0.005,
+      "crown": 0.02,
+      "front": 0.016,
+      "edge": 0.0015,
+      "edge_deg": 4
+     },
+     "color": "#1c1610",
+     "seed": 264
+    },
+    {
+     "type": "chain",
+     "color": "#a8843c",
+     "drop": 0.07
+    }
+   ]
+  },
+  {
+   "name": "cp_05",
+   "mob": "man",
+   "role": "striped",
+   "body": {
+    "gender": 1,
+    "years": 28,
+    "height_cm": 168,
+    "muscle": 0.53,
+    "weight": 0.43,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-scale-horiz-decr": 0.18,
+     "head-invertedtriangular": 0.24,
+     "lr-cheek-volume-decr": 0.65,
+     "lr-cheek-bones-incr": 0.63,
+     "chin-width-decr": 0.2,
+     "chin-prominent-incr": 0.27,
+     "lr-eye-corner2-up": 0.22,
+     "eyebrows-angle-down": 0.51,
+     "eyebrows-trans-down": 0.34,
+     "lr-eye-eyefold-down": 0.22,
+     "mouth-upperlip-volume-decr": 0.38,
+     "mouth-lowerlip-volume-decr": 0.35,
+     "nose-scale-vert-incr": 0.29,
+     "nose-hump-incr": 0.34,
+     "nose-point-width-decr": 0.23,
+     "forehead-temple-decr": 0.26,
+     "nose-scale-horiz-incr": 0.12,
+     "lr-eye-scale-decr": 0.21,
+     "chin-height-decr": 0.1,
+     "head-age-incr": 0.05
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#7a5c38",
+   "face": {
+    "kind": "gaunt",
+    "expression": "sneer",
+    "tone": [
+     0.95,
+     0.92,
+     0.87
+    ],
+    "crease": 0.54,
+    "stubble": 0.71,
+    "moustache": false,
+    "bags": 0.25,
+    "scar": null,
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0013,
+     "drop": 0.0033,
+     "peak": 0.45,
+     "thick": 0.0088,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 44
+    }
+   },
+   "clothes": [
+    {
+     "asset": "male_casualsuit03",
+     "roughness": 0.85,
+     "ops": []
+    },
+    {
+     "asset": "shoes06",
+     "roughness": 0.6,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#c8c4bc",
+       "contrast": 0.6
+      }
+     ]
+    }
+   ],
+   "garments": [
+    {
+     "type": "chain",
+     "color": "#a8843c",
+     "drop": 0.07
+    }
+   ],
+   "hair": "cortu_short_messy_hair"
+  },
+  {
+   "name": "cp_06",
+   "mob": "man",
+   "role": "tee",
+   "body": {
+    "gender": 1,
+    "years": 26,
+    "height_cm": 172,
+    "muscle": 0.46,
+    "weight": 0.37,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-square": 0.5,
+     "head-scale-horiz-incr": 0.17,
+     "chin-width-incr": 0.63,
+     "chin-bones-incr": 0.63,
+     "nose-scale-horiz-incr": 0.48,
+     "nose-flaring-incr": 0.42,
+     "nose-compression-compress": 0.39,
+     "nose-volume-incr": 0.29,
+     "eyebrows-trans-down": 0.62,
+     "forehead-nubian-incr": 0.96,
+     "lr-eye-eyefold-down": 0.3,
+     "lr-eye-height2-decr": 0.14,
+     "mouth-angles-down": 0.3,
+     "mouth-lowerlip-volume-incr": 0.19,
+     "lr-cheek-bones-incr": 0.36,
+     "measure-neck-circ-incr": 0.54,
+     "neck-scale-horiz-incr": 0.45,
+     "chin-height-decr": 0.17,
+     "mouth-scale-horiz-incr": 0.13,
+     "head-age-incr": 0
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#141210",
+   "face": {
+    "kind": "brute",
+    "expression": "scowl",
+    "tone": [
+     0.86,
+     0.8,
+     0.74
+    ],
+    "crease": 0.52,
+    "stubble": 0,
+    "moustache": false,
+    "bags": 0.38,
+    "scar": null,
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0005,
+     "drop": 0.0027,
+     "peak": 0.45,
+     "thick": 0.0104,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 95
+    }
+   },
+   "clothes": [
+    {
+     "asset": "male_casualsuit06",
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#e6e4de",
+       "contrast": 0.3,
+       "rect": [
+        0,
+        0,
+        1,
+        0.42
+       ]
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    }
+   ],
+   "garments": [
+    {
+     "type": "haircut",
+     "reach": 0.16,
+     "roughness": 0.42,
+     "specular": 0.5,
+     "normal": 1.6,
+     "sheen": 0.95,
+     "hairline": [
+      [
+       0,
+       33
+      ],
+      [
+       25,
+       33
+      ],
+      [
+       40,
+       31
+      ],
+      [
+       52,
+       22
+      ],
+      [
+       62,
+       18
+      ],
+      [
+       70,
+       12
+      ],
+      [
+       78,
+       0
+      ],
+      [
+       84,
+       -8
+      ],
+      [
+       90,
+       4
+      ],
+      [
+       96,
+       10
+      ],
+      [
+       104,
+       8
+      ],
+      [
+       110,
+       -10
+      ],
+      [
+       116,
+       -30
+      ],
+      [
+       124,
+       -42
+      ],
+      [
+       140,
+       -50
+      ],
+      [
+       160,
+       -54
+      ],
+      [
+       180,
+       -54
+      ]
+     ],
+     "tile": [
+      3.4,
+      3.4
+     ],
+     "curl": {
+      "count": 80,
+      "radius": [
+       15,
+       22
+      ],
+      "lumps": 0.004
+     },
+     "volume": {
+      "sides": 0.011,
+      "back": 0.014,
+      "nape": 0.005,
+      "crown": 0.02,
+      "front": 0.016,
+      "edge": 0.0015,
+      "edge_deg": 4
+     },
+     "color": "#141210",
+     "seed": 848
+    }
+   ]
+  },
+  {
+   "name": "cp_07",
+   "mob": "man",
+   "role": "tee",
+   "body": {
+    "gender": 1,
+    "years": 20,
+    "height_cm": 174,
+    "muscle": 0.36,
+    "weight": 0.38,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-scale-horiz-decr": 0.19,
+     "head-invertedtriangular": 0.25,
+     "lr-cheek-volume-decr": 0.74,
+     "lr-cheek-bones-incr": 0.45,
+     "chin-width-decr": 0.18,
+     "chin-prominent-incr": 0.28,
+     "lr-eye-corner2-up": 0.17,
+     "eyebrows-angle-down": 0.48,
+     "eyebrows-trans-down": 0.24,
+     "lr-eye-eyefold-down": 0.25,
+     "mouth-upperlip-volume-decr": 0.42,
+     "mouth-lowerlip-volume-decr": 0.34,
+     "nose-scale-vert-incr": 0.25,
+     "nose-hump-incr": 0.42,
+     "nose-point-width-decr": 0.2,
+     "forehead-temple-decr": 0.3,
+     "lr-eye-scale-decr": 0.23,
+     "mouth-scale-horiz-incr": 0.1,
+     "chin-height-incr": 0.2,
+     "mouth-scale-vert-decr": 0.17,
+     "head-age-incr": 0
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#18130f",
+   "face": {
+    "kind": "gaunt",
+    "expression": "scowl",
+    "tone": [
+     0.96,
+     0.89,
+     0.81
+    ],
+    "crease": 0.45,
+    "stubble": 0.76,
+    "moustache": false,
+    "bags": 0.15,
+    "scar": "near3(P(L['eye_l'],0.004,0.0,0.012),0.0025,0.03,0.014)",
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0007,
+     "drop": 0.0044,
+     "peak": 0.45,
+     "thick": 0.0104,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 59
+    }
+   },
+   "clothes": [
+    {
+     "asset": "elvs_crude_t-shirt_male",
+     "roughness": 0.85,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#1a1a1c",
+       "contrast": 0.6
+      }
+     ]
+    },
+    {
+     "asset": "toigo_harem_pants",
+     "roughness": 0.85,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#2a2620",
+       "contrast": 0.7
+      }
+     ]
+    },
+    {
+     "asset": "shoes06",
+     "roughness": 0.6,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#c8c4bc",
+       "contrast": 0.6
+      }
+     ]
+    },
+    {
+     "asset": "spamrakuen_sagerfrogs_glasses_01",
+     "roughness": 0.2,
+     "clear": 0.003,
+     "ops": [
+      {
+       "op": "opaque"
+      },
+      {
+       "op": "colorize",
+       "color": "#121212",
+       "contrast": 0.4
+      }
+     ]
+    },
+    {
+     "asset": "joepal_medical_mouth_protection",
+     "roughness": 0.85,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#1a1a1c",
+       "contrast": 0.5
+      }
+     ]
+    }
+   ],
+   "garments": [],
+   "hair": "short01"
+  },
+  {
+   "name": "cp_08",
+   "mob": "man",
+   "role": "tee",
+   "body": {
+    "gender": 1,
+    "years": 21,
+    "height_cm": 171,
+    "muscle": 0.42,
+    "weight": 0.35,
+    "race": {
+     "asian": 1
+    },
+    "targets": {
+     "head-square": 0.21,
+     "chin-prognathism-incr": 0.19,
+     "chin-prominent-incr": 0.26,
+     "eyebrows-angle-down": 0.61,
+     "eyebrows-trans-down": 0.3,
+     "lr-eye-corner2-up": 0.27,
+     "lr-eye-eyefold-down": 0.18,
+     "lr-cheek-volume-decr": 0.4,
+     "lr-cheek-bones-incr": 0.27,
+     "mouth-angles-down": 0.19,
+     "nose-scale-horiz-incr": 0.17,
+     "forehead-nubian-incr": 0.2,
+     "chin-height-incr": 0.22,
+     "lr-eye-scale-decr": 0.12,
+     "forehead-scale-vert-decr": 0.11,
+     "head-age-incr": 0
+    },
+    "decimate": 0.6
+   },
+   "hair_color": "#7a5c38",
+   "face": {
+    "kind": "punk",
+    "expression": "sneer",
+    "tone": [
+     0.9,
+     0.84,
+     0.78
+    ],
+    "crease": 0.46,
+    "stubble": 0,
+    "moustache": false,
+    "bags": 0.16,
+    "scar": "near3(P(L['eye_l'],0.012,0.0,-0.035),0.0028,0.03,0.022)",
+    "brow": {
+     "height": 0.0115,
+     "arch": 0.0006,
+     "drop": 0.0042,
+     "peak": 0.45,
+     "thick": 0.0098,
+     "tail": 0.5,
+     "strands": 0.3,
+     "inner": 0.013,
+     "outer": 0.03,
+     "soft": 0.0016,
+     "seed": 75
+    }
+   },
+   "clothes": [
+    {
+     "asset": "elvs_crude_t-shirt_male",
+     "roughness": 0.85,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#d8d4cc",
+       "contrast": 0.6
+      }
+     ]
+    },
+    {
+     "asset": "toigo_harem_pants",
+     "roughness": 0.85,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#141416",
+       "contrast": 0.7
+      }
+     ]
+    },
+    {
+     "asset": "shoes04",
+     "roughness": 0.35,
+     "ops": [
+      {
+       "op": "colorize",
+       "color": "#111012",
+       "contrast": 0.8
+      }
+     ]
+    }
+   ],
+   "garments": [],
+   "hair": "cortu_short_messy_hair"
+  }
+ ]
+}

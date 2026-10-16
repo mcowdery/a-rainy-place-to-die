@@ -161,7 +161,11 @@ What it changes in this file, which was written for a city that didn't know:
   enough to be routine).
 - **Open:** how the city lives with it: the last train (00:40) and the last orders before two, shutters, taxis
   that won't take a fare after half past one, the night shift that sleeps at work, the police, who must have a
-  line on it and (bought as they are) the wrong one. What happens to someone caught out.
+  line on it and (bought as they are) the wrong one.
+- **Someone caught out becomes one of the possessed** (the user, 2026-10-16): the people still on the streets after
+  two are taken over, and walk the empty city with the rest of what's out there. In the game they're the crowd's own
+  figures made over (ashen, black-eyed, moving wrong: the MakeHuman test page's dead hours, `.claude/rules/humans.md`).
+  **Open:** whether they come back at dawn, and what they remember.
 - **Open:** how this sits with the season machines ([timeline.md](timeline.md)): four great battles a year meant
   to be rare and frightening, beside a hunt that can happen every night. **Proposed:** the dead hours' things
   are the small fry, and the puppets' kind of fight (strength that counts); the season's machine is what comes
