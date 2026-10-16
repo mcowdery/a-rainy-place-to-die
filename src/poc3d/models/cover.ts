@@ -11,7 +11,9 @@
  *   with A and D (the camera's sides), and Space again steps out;
  * - something low (0.55 to 1.45 m): **down behind it**, sidling crouched; W with Space from there goes **over** it, and so
  *   does Space with W held, or running, at it from further off, if it's no higher than 1.25 m (one hand planted);
- * - nothing there: a **roll** the way he's going (a dive from a stand, a forward roll from a run).
+ * - nothing there: a **roll** the way he's running (Shift and a direction), and only then: the dive from a stand didn't look
+ *   right (the user, 2026-10-16: "removed the roll from a still position... It doesn't look good"), so standing or walking, Space in
+ *   the open does nothing.
  *
  * The Mixamo clips are authored with the wall along their +z (the way a clip's rest pose faces): the entry steps toward it
  * and turns, the exit steps away from it, the sneaks go along x. So the body's heading is set to point +z at the wall
@@ -135,7 +137,6 @@ export const CLIPS = {
   sidleLow: ['MX_AA_crouched_sneaking_left', 'MX_AA_crouched_sneaking_right'],
   vault: ['MX_Male_Jumping_Over_An_Obstacle_With_1_Hand_Planted', 'MX_Male_Jumping_Over_An_Obstacle_With_2_Hands_Planted'],
   rollRun: 'MX_Sprint_To_Forward_Roll_To_Sprinting',
-  rollStand: 'MX_Dive_Roll_From_Standing',
 } as const;
 
 /** Heights (m): from here up a wall is stood against; from the low one up, something to crouch behind; the vault's top. */
@@ -148,8 +149,6 @@ export const REACH = 2.2;
 export const ROLL = 3.2;
 /** A clip fades in and out over this long (s). */
 const FADE = 0.14;
-/** How long a roll plays of its clip (s): the dive from a stand has a long recovery after it. */
-const ROLL_PLAY = { standing: 2.4 } as const;
 
 const ease = (u: number): number => u * u * (3 - 2 * u);
 const clamp01 = (u: number): number => Math.max(0, Math.min(1, u));
@@ -266,7 +265,7 @@ export class Cover {
       this.begin('enter', low ? CLIPS.enterLow : CLIPS.enterHigh, here, dest, toWall, low);
       return true;
     }
-    // A roll the way he's going (the keys, else where he looks): a forward roll from a run, a dive from a stand.
+    // A roll the way he's running (the keys, Shift held), and only running: standing or walking, nothing.
     let dx = fx;
     let dz = fz;
     const f = (i.forward ? 1 : 0) - (i.back ? 1 : 0);
@@ -278,12 +277,12 @@ export class Cover {
       dx /= m;
       dz /= m;
     }
+    if (!(i.run && (f || r))) return false;
     const wall = rayObstacles(this.obstacles, i.x, i.z, dx, dz, ROLL + 0.5);
     const room = Math.min(ROLL, wall ? wall.dist - 0.5 : ROLL);
     if (room < 0.9) return false;
-    const running = i.run && (f || r);
-    const clip = running ? CLIPS.rollRun : CLIPS.rollStand;
-    this.play = running ? this.len(clip) : Math.min(ROLL_PLAY.standing, this.len(clip));
+    const clip = CLIPS.rollRun;
+    this.play = this.len(clip);
     this.begin('roll', clip, here, { x: i.x + dx * room, z: i.z + dz * room }, heading(dx, dz), false, this.play);
     return true;
   }

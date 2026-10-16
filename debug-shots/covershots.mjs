@@ -1,13 +1,13 @@
 // Space on foot on the fight page (models/cover.ts): cover against a tall block, crouched behind a low wall, a vault, a roll.
 // Each move is set up at a spot in the yard, Space pressed, and photographed a few times as it plays (third person is forced
 // for it), into <out dir>/<move>_<n>.png, with the controller's state printed beside each.
-//   node debug-shots/covershots.mjs <out dir> [move ...]      moves: hug, low, vault, roll, sprint
+//   node debug-shots/covershots.mjs <out dir> [move ...]      moves: hug, low, vault, sprint
 import { mkdirSync } from 'node:fs';
 import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const out = process.argv[2];
 const only = process.argv.slice(3);
-if (!out) { console.log('Usage: node debug-shots/covershots.mjs <out dir> [hug|low|vault|roll|sprint ...]'); process.exit(1); }
+if (!out) { console.log('Usage: node debug-shots/covershots.mjs <out dir> [hug|low|vault|sprint ...]'); process.exit(1); }
 mkdirSync(out, { recursive: true });
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
@@ -57,12 +57,6 @@ const MOVES = {
     await page.keyboard.press('Space');
     await series('vault', [200, 450, 700, 950, 1300]);
     await page.keyboard.up('KeyW');
-  },
-  // Open ground: a dive roll from standing.
-  async roll() {
-    await place(0, 6, 0);
-    await page.keyboard.press('Space');
-    await series('roll', [300, 700, 1200, 1800, 2400]);
   },
   // Open ground: a forward roll out of a run.
   async sprint() {

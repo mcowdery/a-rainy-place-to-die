@@ -30,6 +30,20 @@ profile.samples.forEach((id, i) => {
   const key = `${n.callFrame.functionName || '(anon)'} ${n.callFrame.url.split('/').slice(-2).join('/')}:${n.callFrame.lineNumber + 1}`;
   self.set(key, (self.get(key) ?? 0) + (dt[i] ?? 0) / 1000);
 });
+// Inclusive time (a function and everything under it), for our own code and three's big steps.
+const parent = new Map();
+for (const n of profile.nodes) for (const c of n.children ?? []) parent.set(c, n.id);
+const incl = new Map();
+profile.samples.forEach((id, i) => {
+  const seen = new Set();
+  for (let cur = id; cur !== undefined; cur = parent.get(cur)) {
+    const n = byId.get(cur);
+    const key = `${n.callFrame.functionName || '(anon)'} ${n.callFrame.url.split('/').slice(-2).join('/')}:${n.callFrame.lineNumber + 1}`;
+    if (!seen.has(key)) { seen.add(key); incl.set(key, (incl.get(key) ?? 0) + (dt[i] ?? 0) / 1000); }
+  }
+});
+console.log('top by inclusive time:');
+for (const [k, v] of [...incl].sort((a, b) => b[1] - a[1]).filter(([k]) => !/^\((root|program|idle)\)/.test(k)).slice(0, 22)) console.log(`${v.toFixed(0).padStart(6)} ms  ${k}`);
 const total = [...self.values()].reduce((a, b) => a + b, 0);
 console.log(`profile of a ${move}: ${total.toFixed(0)} ms sampled; top by self time:`);
 for (const [k, v] of [...self].sort((a, b) => b[1] - a[1]).slice(0, 16)) console.log(`${v.toFixed(0).padStart(6)} ms  ${k}`);

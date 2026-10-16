@@ -52,7 +52,7 @@ describe('rayObstacles', () => {
 
 describe('Cover: the clips are in the table', () => {
   it('every clip it names has a length and a travel', () => {
-    const names = [CLIPS.enterHigh, CLIPS.enterLow, CLIPS.exitHigh, CLIPS.exitLow, CLIPS.idleLow, ...CLIPS.sidleHigh, ...CLIPS.sidleLow, ...CLIPS.vault, CLIPS.rollRun, CLIPS.rollStand];
+    const names = [CLIPS.enterHigh, CLIPS.enterLow, CLIPS.exitHigh, CLIPS.exitLow, CLIPS.idleLow, ...CLIPS.sidleHigh, ...CLIPS.sidleLow, ...CLIPS.vault, CLIPS.rollRun];
     for (const n of names) {
       const c = (table as Record<string, { seconds: number; travel: number[] }>)[n];
       expect(c, n).toBeDefined();
@@ -115,9 +115,10 @@ describe('Cover: Space by what is ahead', () => {
     expect(c.update(input({ space: true, forward: true }))!.state).toBe('enter');
   });
 
-  it('nothing ahead: a roll the way he is going (a dive from a stand, a forward roll from a run)', () => {
-    const c = new Cover([], table);
-    expect(c.update(input({ space: true }))!.layers[0].name).toBe(CLIPS.rollStand);
+  it('nothing ahead: a roll only when running (Shift and a direction); standing or walking, Space does nothing', () => {
+    expect(new Cover([], table).update(input({ space: true }))).toBeNull();
+    expect(new Cover([], table).update(input({ space: true, forward: true }))).toBeNull();
+    expect(new Cover([], table).update(input({ space: true, run: true }))).toBeNull();
     const d = new Cover([], table);
     expect(d.update(input({ space: true, forward: true, run: true }))!.layers[0].name).toBe(CLIPS.rollRun);
   });
@@ -125,9 +126,9 @@ describe('Cover: Space by what is ahead', () => {
   it('the roll goes the way the keys say (D is the camera’s right), and stops short of a wall', () => {
     const c = new Cover([{ x0: -5, x1: 5, z0: 1.2, z1: 3, h: 3 }], table);
     // Looking east, D is south (+z): the wall is 1.2 m that way, and he keeps half a metre off it: not the 0.9 a roll needs.
-    expect(c.update(input({ space: true, right: true }))).toBeNull();
+    expect(c.update(input({ space: true, right: true, run: true }))).toBeNull();
     // Rolling the other way (A, north, -z): room.
-    const w = c.update(input({ space: true, left: true }))!;
+    const w = c.update(input({ space: true, left: true, run: true }))!;
     expect(w.state).toBe('roll');
     const end = run(c, { x: 0, z: 0 }, 4)!;
     expect(end.z).toBeLessThan(-2.5);
@@ -137,7 +138,7 @@ describe('Cover: Space by what is ahead', () => {
   it('a roll nearly into a wall is shortened to stop short of it', () => {
     const c = new Cover([{ x0: 3.5, x1: 4, z0: -5, z1: 5, h: 3 }], table);
     // 3.5 m to the wall, but it's farther than REACH (2.2): the roll plays and stops 0.5 m short.
-    c.update(input({ space: true }));
+    c.update(input({ space: true, forward: true, run: true }));
     const end = run(c, { x: 0, z: 0 }, 4)!;
     expect(end.x).toBeLessThanOrEqual(3.0 + 0.01);
     expect(end.x).toBeGreaterThan(2);

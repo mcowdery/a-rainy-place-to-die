@@ -31,7 +31,18 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const query = new URLSearchParams(location.search);
 
 const renderer = new THREE.WebGLRenderer({ antialias: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+// How much of the window's resolution the picture is drawn at (the panel's Resolution row, or `?scale=0.75`; kept in localStorage): the
+// page draws an HDR, 4x multisampled, bloomed picture, so the cost goes with the window's pixels, and an ultrawide has ten times a
+// 960x540's (measured: debug-shots/coverscale.mjs, debug-performance.md).
+let renderScale = 1;
+try {
+  renderScale = Number(new URLSearchParams(location.search).get('scale') ?? localStorage.getItem('rainyplace.fightScale') ?? 1) || 1;
+} catch {
+  /* no storage */
+}
+renderScale = Math.max(0.25, Math.min(1, renderScale));
+const pixelRatio = (): number => Math.min(window.devicePixelRatio, 1.5) * renderScale;
+renderer.setPixelRatio(pixelRatio());
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
@@ -186,6 +197,20 @@ composer.addPass(new OutputPass());
 const censor = new CensorPass();
 composer.addPass(censor);
 
+const SCALES = [1, 0.75, 0.5];
+/** The picture at a share of the window's resolution (the page is as sharp as it is smooth). */
+function setScale(k: number): void {
+  renderScale = k;
+  try {
+    localStorage.setItem('rainyplace.fightScale', String(k));
+  } catch {
+    /* no storage */
+  }
+  renderer.setPixelRatio(pixelRatio());
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setPixelRatio(pixelRatio());
+  composer.setSize(window.innerWidth, window.innerHeight);
+}
 const HANDS: readonly (readonly [Hand, string])[] = [['gun', 'guns (1)'], ['fists', 'fists (2)'], ['katana', 'katana (3)'], ['bat', 'bat (4)']];
 function renderPanel(): void {
   const panel = $('panel');
@@ -236,6 +261,8 @@ function renderPanel(): void {
   }
   section('Lighting');
   for (const m of MODES) button(m, mode === m, () => applyMode(m));
+  section('Resolution (less is smoother)');
+  for (const k of SCALES) button(`${Math.round(k * 100)}%`, Math.abs(renderScale - k) < 0.01, () => setScale(k));
   section('View');
   button(fp.active ? 'orbit the yard (V)' : 'Mack, first person (V)', fp.active, () => (fp.active ? fp.exit() : void enterFp()));
   button(fp.third ? 'third person (Q)' : 'first person (Q)', fp.third, () => (fp.third = !fp.third));
@@ -249,7 +276,7 @@ function renderPanel(): void {
   button('→ the model showroom', false, () => (location.href = 'models.html'));
 }
 /** What the panel shows, to redraw it when a key changes any of it. */
-const panelState = (): string => [fp.active, fp.third, fp.hand, fp.autoStance, fp.brawl.melee.stance, fp.brawl.melee.oneHand, fp.brawl.melee.style, fp.brawl.gore.level, fp.brawl.killChance, mode].join('|');
+const panelState = (): string => [fp.active, fp.third, fp.hand, fp.autoStance, fp.brawl.melee.stance, fp.brawl.melee.oneHand, fp.brawl.melee.style, fp.brawl.gore.level, fp.brawl.killChance, mode, renderScale].join('|');
 let panelShown = '';
 
 applyMode(MODES.find((m) => m === query.get('light')) ?? 'studio');

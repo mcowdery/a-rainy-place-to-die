@@ -508,7 +508,7 @@ export class FightMode extends FpMode {
       'sidestep: tap left or right twice (the arrows, or A / D) · E dodges too',
       'T fresh group · B a duel',
       this.brawl.killMoves ? 'Y gore · U kill-move chance' : 'Y gore',
-      'WASD move (Shift runs) · Space: against a wall or behind something low, cover (A / D along it, Space again out); W + Space over something low; in the open, a roll',
+      'WASD move (Shift runs) · Space: against a wall or behind something low, cover (A / D along it, Space again out); W + Space over something low; running (Shift + a direction), a roll',
       'Q third person (wheel zooms; the camera goes round him, he strikes the way he faces)',
       'F9 a snapshot for a report',
       'V orbit the yard',

@@ -1,11 +1,11 @@
 // How the cover moves cost, on the fight page: the time to fit each of their clips to the body the first time it's played
 // (a stall at the start of a first use), and the frame times while one plays.
-//   node debug-shots/coverperf.mjs
+//   node debug-shots/coverperf.mjs        (UNCAPPED=1: no vsync, so the frame cost shows instead of the 16.7 ms floor)
 import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
 const server = await shotServer({ server: { port: 0 }, logLevel: 'silent' });
 await server.listen();
-const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await launchBrowser({ channel: 'msedge', headless: true, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', ...(process.env.UNCAPPED ? ['--disable-gpu-vsync', '--disable-frame-rate-limit'] : [])] });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));
 await page.goto(`${server.resolvedUrls.local[0]}fight.html?hand=fists`);
