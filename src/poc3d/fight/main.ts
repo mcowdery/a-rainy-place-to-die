@@ -14,6 +14,7 @@ import { installSnap } from '../../debug/snap';
 import { GORE_LEVELS, STANCES } from '../models/melee';
 import { FightMode, KILL_CHANCES, type Hand } from './fightMode';
 import { buildWeaponRack } from './weaponRack';
+import type { Obstacle } from '../models/cover';
 
 /**
  * The fight test (fight.html): a yard for trying the melee (models/brawl.ts) as Mack in first person, apart from
@@ -98,6 +99,29 @@ wall(YARD + WALL_T * 2, WALL_T, 0, -(YARD + WALL_T) / 2);
 wall(WALL_T, YARD, -(YARD + WALL_T) / 2, 0);
 wall(WALL_T, YARD, (YARD + WALL_T) / 2, 0);
 
+// What's solid in the yard: its three walls and some crates, to hide behind, vault and walk round (models/cover.ts: Space
+// is cover, a vault or a roll here, not a jump). The thugs walk through them, as they do the walls.
+const crateMat = new THREE.MeshStandardMaterial({ color: 0x6b5a45, roughness: 0.85 });
+const OBSTACLES: Obstacle[] = [
+  { x0: -YARD / 2 - WALL_T * 2, x1: YARD / 2 + WALL_T * 2, z0: -YARD / 2 - WALL_T * 2, z1: -YARD / 2, h: WALL_H },
+  { x0: -YARD / 2 - WALL_T * 2, x1: -YARD / 2, z0: -YARD / 2, z1: YARD / 2, h: WALL_H },
+  { x0: YARD / 2, x1: YARD / 2 + WALL_T * 2, z0: -YARD / 2, z1: YARD / 2, h: WALL_H },
+];
+/** Crates and a low wall to try it on: [x0, x1, z0, z1, height]. */
+const CRATES: readonly (readonly [number, number, number, number, number])[] = [
+  [-3.2, -0.6, -6.4, -5.8, 0.9], // a low wall: crouch behind it, or W + Space over it
+  [2, 4, -4.6, -4, 1.1], // a crate to vault
+  [-7.2, -5.6, -3, -1.8, 1.4], // too high to vault, low enough to crouch behind
+  [4.6, 7, -2.2, -1.4, 2.2], // a high block: stand against it
+];
+for (const [x0, x1, z0, z1, h] of CRATES) {
+  OBSTACLES.push({ x0, x1, z0, z1, h });
+  const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, h, z1 - z0), crateMat);
+  m.position.set((x0 + x1) / 2, h / 2, (z0 + z1) / 2);
+  m.castShadow = m.receiveShadow = true;
+  scene.add(m);
+}
+
 const pmrem = new THREE.PMREMGenerator(renderer);
 const charEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 setCharacterEnvironment(charEnv);
@@ -110,6 +134,7 @@ scene.add(weaponRack);
 
 // Mack in first person, in the yard facing its north wall.
 const fp = new FightMode(scene, camera, renderer.domElement, controls, charEnv, () => 0);
+fp.setObstacles(OBSTACLES);
 const enterFp = (): Promise<void> => fp.enter(0, 3, 0);
 (window as unknown as { __fp: unknown }).__fp = fp.script();
 // For scripted shots that add to the scene (a wall of their own).

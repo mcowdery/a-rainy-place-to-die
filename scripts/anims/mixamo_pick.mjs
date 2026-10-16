@@ -1,6 +1,6 @@
 // Pulls chosen Mixamo clips out of the converted library into a small file the game takes.
 //
-//   node scripts/anims/mixamo_pick.mjs [--out assets/anims/mixamo_picked.glb] [--list] <clip or glob> ...
+//   node scripts/anims/mixamo_pick.mjs [--from <folder>] [--out assets/anims/mixamo_picked.glb] [--list] <clip or glob> ...
 //   e.g. node scripts/anims/mixamo_pick.mjs "MX_Standing_Cover_Against_Object" "MX_Male_Jumping_Over_*"
 //        node scripts/anims/mixamo_pick.mjs --list "*cover*"          (what a pattern would take, nothing written)
 //
@@ -13,18 +13,20 @@
 //
 // After picking, put the clips' credits in assets/anims/CREDITS.md (Mixamo, Adobe; the clip's description as Mixamo
 // calls it; the date downloaded) before the file is committed.
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NodeIO } from '@gltf-transform/core';
 import { prune } from '@gltf-transform/functions';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const REVIEW = join(ROOT, 'assets', 'anims', 'review');
+const fromAt = process.argv.indexOf('--from');
+// `--from <folder>`: the converted files to pick from (default assets/anims/review).
+const REVIEW = fromAt >= 0 ? resolve(ROOT, process.argv[fromAt + 1]) : join(ROOT, 'assets', 'anims', 'review');
 const args = process.argv.slice(2);
 const list = args.includes('--list');
 const outAt = args.includes('--out') ? args[args.indexOf('--out') + 1] : 'assets/anims/mixamo_picked.glb';
-const patterns = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--out');
+const patterns = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--out' && args[i - 1] !== '--from');
 if (!patterns.length) {
   console.log('Usage: node scripts/anims/mixamo_pick.mjs [--out <file.glb>] [--list] <clip or pattern> ...');
   process.exit(1);
@@ -33,7 +35,7 @@ const res = patterns.map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\
 const io = new NodeIO();
 
 const picked = new Map(); // glb file -> names
-for (const f of readdirSync(REVIEW).filter((f) => /^mixamo(_b\d+|_aa|_fix)?(_\d+)?\.glb$/.test(f))) {
+for (const f of readdirSync(REVIEW).filter((f) => /^mixamo(_b\d+|_aa|_fix|_picked)?(_\d+)?\.glb$/.test(f))) {
   const doc = await io.read(join(REVIEW, f));
   const names = doc.getRoot().listAnimations().map((a) => a.getName()).filter((n) => res.some((r) => r.test(n)));
   if (names.length) picked.set(f, names);
@@ -69,7 +71,7 @@ for (const [i, g] of groups.entries()) {
     const src = await io.read(join(REVIEW, f));
     for (const a of src.getRoot().listAnimations()) {
       if (!keep.has(a.getName())) continue;
-      const anim = doc.createAnimation(a.getName());
+      const anim = doc.createAnimation(a.getName()).setExtras(a.getExtras());
       for (const ch of a.listChannels()) {
         const s = ch.getSampler();
         const input = doc.createAccessor().setType(s.getInput().getType()).setArray(s.getInput().getArray().slice()).setBuffer(buffer);
@@ -83,5 +85,13 @@ for (const [i, g] of groups.entries()) {
   await doc.transform(prune()); // the accessors of the clips dropped
   await io.write(out, doc);
   console.log(`${out}: ${[...keep].length} clips, ${Math.round(statSync(out).size / 1024)} KB`);
+  // What each clip does over the floor and how it turns the pelvis (the builder's `extras`), as a table beside the file for
+  // whatever moves the body to match (src/poc3d/models/cover.ts reads assets/anims/mixamo_picked.json).
+  const table = {};
+  for (const a of doc.getRoot().listAnimations()) table[a.getName()] = a.getExtras();
+  const side = out.replace(/\.glb$/, '.json');
+  writeFileSync(side, `${JSON.stringify(table, null, 1)}
+`);
+  console.log(`${side}: ${Object.keys(table).length} clips' travel, length and turn`);
 }
 console.log('Now credit them in assets/anims/CREDITS.md (Mixamo / Adobe, each clip as Mixamo names it, the date).');

@@ -23,7 +23,10 @@ import { Document, NodeIO } from '@gltf-transform/core';
 import * as THREE from 'three';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const OUT = join(ROOT, 'assets', 'anims', 'review');
+const argv = process.argv.slice(2);
+// `--out <folder>`: where the glbs go (default assets/anims/review, which no build takes).
+const outAt = argv.indexOf('--out');
+const OUT = outAt >= 0 ? resolve(ROOT, argv[outAt + 1]) : join(ROOT, 'assets', 'anims', 'review');
 
 const ORDER = ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'head'];
 const PARENT = { pelvis: 'Root', spine_01: 'pelvis', spine_02: 'spine_01', spine_03: 'spine_02', neck_01: 'spine_03', head: 'neck_01' };
@@ -40,7 +43,7 @@ for (const s of ['l', 'r']) {
 
 const clipName = (file, prefix) => `MX_${prefix}${file.replace(/\s*\((\d+)\)/g, '_$1').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '')}`;
 
-const sources = process.argv.slice(2);
+const sources = argv.filter((a, i) => a !== '--out' && argv[i - 1] !== '--out');
 if (!sources.length) {
   console.log('Usage: node scripts/anims/mixamo.mjs <clips.json>[:prefix] ...');
   process.exit(1);
@@ -79,6 +82,18 @@ async function write(group, file) {
     // The way over the floor taken out, spread evenly from the first frame to the last.
     const dx = c.hips[n - 1][0] - c.hips[0][0];
     const dz = c.hips[n - 1][2] - c.hips[0][2];
+    // What the clip does over the floor, for whoever moves the body to match it: the way it carried the hips (metres, x to his left, z forward) and how long it lasts.
+    // (And how the clip turns the pelvis from the way the rest pose faces, in degrees, at twelve evenly spaced frames, so a
+    // body that has to face a given way at its end can be turned to make up the difference: models/cover.ts.)
+    const yaw = [];
+    for (let k = 0; k < 12; k++) {
+      const q = c.turns.pelvis[Math.round((k * (n - 1)) / 11)];
+      const v = new THREE.Vector3(0, 0, 1).applyQuaternion(new THREE.Quaternion(...q));
+      let a = (Math.atan2(v.x, v.z) * 180) / Math.PI;
+      if (k && Math.abs(a - yaw[k - 1]) > 180) a += a < yaw[k - 1] ? 360 : -360;
+      yaw.push(Math.round(a));
+    }
+    anim.setExtras({ travel: [+dx.toFixed(3), +dz.toFixed(3)], seconds: +(n / rate).toFixed(3), yaw });
     const hips = c.hips.map((p, i) => [p[0] - c.hips[0][0] - (dx * i) / Math.max(1, n - 1), p[1], p[2] - c.hips[0][2] - (dz * i) / Math.max(1, n - 1)]);
     add(nodes.get('pelvis'), 'translation', doc.createAccessor().setType('VEC3').setArray(Float32Array.from(hips.flat())).setBuffer(buffer));
     const world = Object.fromEntries(ORDER.map((b) => [b, c.turns[b].map((q) => new THREE.Quaternion(...q))]));

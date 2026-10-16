@@ -6,6 +6,7 @@ import type { GlassesKind } from '../models/sunglasses';
 import { FACE_SHADOW } from '../models/faceShadow';
 import { FirstPersonRig } from '../models/firstPerson';
 import { BodyFacing, footOffset, THIRD, ThirdPersonCamera, zoomed } from '../models/thirdPerson';
+import type { ActionFrame } from '../models/cover';
 import { withCityMoves } from '../models/cityMoves';
 import { GLASSES_LABELS, HELMET_LABELS, helmetLook, loadWardrobe, nextFace, nextGlasses, nextHelmet, nextOutfit, outfitById, saveWardrobe } from '../models/wardrobe';
 import { FACE_STYLE_LABELS, type FaceStyle } from '../models/faceShadow';
@@ -88,6 +89,8 @@ export class FpMode {
   private cineSaved: { p: THREE.Vector3; q: THREE.Quaternion } | null = null;
   /** Third person (Q): the camera behind him for each frame's render. */
   third = false;
+  /** Third person was forced by an action, and what it was before. */
+  private actThird: { before: boolean } | null = null;
   protected readonly thirdCam = new ThirdPersonCamera();
   /** What he's wearing (models/wardrobe.ts), and a change of clothes on its way (the model loading). */
   private wardrobe = loadWardrobe();
@@ -117,7 +120,7 @@ export class FpMode {
       this.keys.add(e.code);
       if (e.code === 'Space') {
         e.preventDefault();
-        if (!this.riding && !this.held && this.airY === 0 && this.rig && !this.rig.squatting) this.airVy = JUMP_V;
+        if (this.spaceJumps() && !this.riding && !this.held && this.airY === 0 && this.rig && !this.rig.squatting) this.airVy = JUMP_V;
       }
       if (this.onKey(e)) return;
       if (e.code === 'KeyG' && this.rig) this.rig.setKind(MACK_GUNS[(MACK_GUNS.indexOf(this.rig.kind) + 1) % MACK_GUNS.length]);
@@ -187,6 +190,24 @@ export class FpMode {
   }
 
   protected onMouseUp(_e: MouseEvent): void {}
+
+  /** Whether Space jumps (the fight page: it's cover, a vault and a roll there: models/cover.ts). */
+  protected spaceJumps(): boolean {
+    return true;
+  }
+
+  /** Whether a person can't stand at (x, z) on foot: the page's solid things (none here: nothing collides in the showroom). */
+  protected walkBlocked(_x: number, _z: number): boolean {
+    return false;
+  }
+
+  /**
+   * An action that has the body instead of walking (fight/fightMode.ts: cover, a vault, a roll): where he is, the heading
+   * to turn him to and the clips over his pose, or null to walk. Asked every frame on foot, before anything else.
+   */
+  protected actionStep(_dt: number, _x: number, _z: number): ActionFrame | null {
+    return null;
+  }
 
   /** Look and move held still (a kill move playing, or you're down). */
   protected get held(): boolean {
@@ -418,9 +439,24 @@ export class FpMode {
     if (!this.active || !rig || this.frozen) return;
     // Last frame's cinematic or third-person camera: back to the eyes.
     this.restoreEyes();
+    // An action (cover, a vault, a roll) has the body: in third person for as long as it does, where the view was before after.
+    const act = this.riding ? null : this.actionStep(dt, this.camera.position.x, this.camera.position.z);
+    if (act && !this.actThird) {
+      this.actThird = { before: this.third };
+      this.third = true;
+    } else if (!act && this.actThird) {
+      this.third = this.actThird.before;
+      this.actThird = null;
+    }
+    if (act) {
+      this.camera.position.x = act.x;
+      this.camera.position.z = act.z;
+      this.speed = 0;
+    }
+    rig.action = act?.layers ?? [];
     rig.setHeadless(!this.third && !(this.watch ?? MIRRORS[this.mirror]));
-    // On a bike the guns only.
-    rig.melee = this.riding ? null : this.meleeNow();
+    // On a bike the guns only (and none in an action: his hands are the clip's).
+    rig.melee = this.riding || act ? null : this.meleeNow();
     this.crosshair.update(rig.armed && !rig.melee, rig.aim, dt);
     if (this.riding) {
       const r = this.riding;
@@ -448,9 +484,15 @@ export class FpMode {
     if (this.keys.has('KeyD')) move.add(new THREE.Vector3(-fz, 0, fx));
     if (this.keys.has('KeyA')) move.sub(new THREE.Vector3(-fz, 0, fx));
     const locked = this.held;
-    const want = move.lengthSq() > 0 && !locked ? this.paceOf(this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) * (rig.aiming || (rig.melee?.guard ?? 0) > 0.5 ? 0.6 : 1) : 0;
+    const want = move.lengthSq() > 0 && !locked && !act ? this.paceOf(this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) * (rig.aiming || (rig.melee?.guard ?? 0) > 0.5 ? 0.6 : 1) : 0;
     this.speed += (want - this.speed) * Math.min(1, dt * 8);
-    if (move.lengthSq() > 0) this.camera.position.addScaledVector(move.normalize(), this.speed * dt);
+    if (move.lengthSq() > 0 && !act) {
+      // (Each way on its own, so he slides along what's in the way.)
+      const step = move.normalize().multiplyScalar(this.speed * dt);
+      const p = this.camera.position;
+      if (!this.walkBlocked(p.x + step.x, p.z)) p.x += step.x;
+      if (!this.walkBlocked(p.x, p.z + step.z)) p.z += step.z;
+    }
     const floor = this.floorAt(this.camera.position.x, this.camera.position.z);
     // (Any step and he's up off his heels.)
     if (want > 0) rig.squatting = false;
@@ -474,7 +516,9 @@ export class FpMode {
     this.camera.updateMatrixWorld();
     // In third person he faces the way he goes, not where the camera looks, unless he has a weapon up.
     const going = move.lengthSq() > 0 && !locked ? this.speed : 0;
-    const eyes = this.facing.update(dtW, this.camera, this.facing.modeFor(this.third, rig, dtW), move.x * going, move.z * going);
+    // (An action turns him to its heading, whatever the view: in third person, standing as he is.)
+    if (act) this.facing.face(act.heading);
+    const eyes = this.facing.update(dtW, this.camera, act ? 'free' : this.facing.modeFor(this.third, rig, dtW), act ? 0 : move.x * going, act ? 0 : move.z * going);
     if (this.heldPhase !== null) (rig as unknown as { walk: number }).walk = this.heldPhase;
     if (this.heldAir) [rig.air, rig.airV] = this.heldAir;
     else [rig.air, rig.airV] = [this.airY, this.airVy];

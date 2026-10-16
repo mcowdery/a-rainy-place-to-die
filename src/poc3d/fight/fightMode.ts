@@ -7,6 +7,8 @@ import { animLibrary, type AnimLibrary } from '../models/characterAnims';
 import { attacksOf, clipAttacksOf, GORE_LEVELS, saveGore, STANCES, ZONES, type Dir, type Doing, type GoreLevel, type Melee, type MeleeWeapon, type MoveId, type Stance, type Zone } from '../models/melee';
 import type { Thug } from '../models/thug';
 import { FpMode } from '../showroom/fpMode';
+import clipTable from '../../../assets/anims/mixamo_picked.json';
+import { blockedBy, Cover, type ActionFrame, type Obstacle } from '../models/cover';
 
 /**
  * The fight page's first person (fight.html): the showroom's (showroom/fpMode.ts: Mack's body, his guns, the
@@ -155,6 +157,39 @@ export class FightMode extends FpMode {
 
   /** The city's pace (controls.ts: a brisk game-walk and a run), and its legs for it (district/main.ts: his walk at
    * the walk, his run at the run), so a fight here moves as one there will. */
+  /** Space is cover, a vault and a roll, not a jump (models/cover.ts; the user, 2026-10-16): what in the yard is solid (cover, and walked into), the state, and Space pressed since last frame. */
+  private obstacles: readonly Obstacle[] = [];
+  private readonly cover = new Cover([], clipTable);
+  private spacePressed = false;
+  private lastAct: ActionFrame | null = null;
+
+  /** The yard's solid things: walked round, hidden behind, vaulted. */
+  setObstacles(list: readonly Obstacle[]): void {
+    this.obstacles = list;
+    this.cover.setObstacles(list);
+  }
+
+  protected override spaceJumps(): boolean {
+    return false;
+  }
+
+  protected override walkBlocked(x: number, z: number): boolean {
+    return blockedBy(this.obstacles, x, z, 0.32);
+  }
+
+  protected override actionStep(dt: number, x: number, z: number): ActionFrame | null {
+    const space = this.spacePressed;
+    this.spacePressed = false;
+    // (Not while he's down or a kill move has him, nor before the library's in: no clips, nothing to play.)
+    if (this.held || !this.rig || !this.anims) {
+      this.cover.cancel();
+      return null;
+    }
+    const k = this.keys;
+    this.lastAct = this.cover.update({ dt, x, z, viewYaw: this.yaw, space, forward: k.has('KeyW'), back: k.has('KeyS'), left: k.has('KeyA'), right: k.has('KeyD'), run: k.has('ShiftLeft') || k.has('ShiftRight') });
+    return this.lastAct;
+  }
+
   protected override paceOf(running: boolean): number {
     return running ? CITY_PACE.run : CITY_PACE.walk;
   }
@@ -277,6 +312,7 @@ export class FightMode extends FpMode {
   protected override onKey(e: KeyboardEvent): boolean {
     const b = this.brawl;
     b.sound.resume();
+    if (e.code === 'Space' && !e.repeat) this.spacePressed = true;
     if (e.code === 'Digit1') this.pick('gun');
     if (e.code === 'Digit2') this.pick('fists');
     if (e.code === 'Digit3') this.pick('katana');
@@ -295,7 +331,7 @@ export class FightMode extends FpMode {
     if (e.code === 'KeyL' && this.hand !== 'gun') void this.setStyle(b.melee.style === 'clips' ? 'keys' : 'clips');
     // A sidestep: a left or a right key tapped twice (not held: a repeat isn't a tap).
     const side = SIDE_KEYS[e.code];
-    if (side && !e.repeat && this.hand !== 'gun' && !this.riding) {
+    if (side && !e.repeat && this.hand !== 'gun' && !this.riding && !this.cover.active) {
       const now = performance.now();
       if (this.tapped && this.tapped.code === e.code && now - this.tapped.t < DOUBLE_TAP) {
         this.tapped = null;
@@ -440,6 +476,7 @@ export class FightMode extends FpMode {
   }
 
   override exit(): void {
+    this.cover.cancel();
     if (this.active) this.duelHud?.update(0, null, 0, false);
     this.stanceEl.style.opacity = '0';
     super.exit();
@@ -471,7 +508,7 @@ export class FightMode extends FpMode {
       'sidestep: tap left or right twice (the arrows, or A / D) · E dodges too',
       'T fresh group · B a duel',
       this.brawl.killMoves ? 'Y gore · U kill-move chance' : 'Y gore',
-      'WASD move (Shift runs) · Space jump',
+      'WASD move (Shift runs) · Space: against a wall or behind something low, cover (A / D along it, Space again out); W + Space over something low; in the open, a roll',
       'Q third person (wheel zooms; the camera goes round him, he strikes the way he faces)',
       'F9 a snapshot for a report',
       'V orbit the yard',
@@ -485,6 +522,8 @@ export class FightMode extends FpMode {
     return {
       ...super.script(),
       hand: (h: Hand) => this.pick(h),
+      /** The cover / vault / roll state (models/cover.ts): 'free' or what it's doing, and how it has the body. */
+      coverState: () => ({ state: this.cover.current, third: this.third, body: this.lastAct ? [+this.lastAct.x.toFixed(2), +this.lastAct.z.toFixed(2)] : null }),
       attack: (dir: Dir = null) => b.attack(dir),
       strike: (o: { zone?: Zone; doing?: Doing; hand?: 'l' | 'r' } = {}) => b.strike(o),
       aim: () => ({ zone: this.zone, stance: b.melee.stance, auto: this.autoStance, doing: this.doing() }),

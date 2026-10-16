@@ -31,6 +31,12 @@ export class BodyFacing {
   private readonly stand = new THREE.PerspectiveCamera();
   private readonly dir = new THREE.Vector3();
 
+  /** Turned to `yaw` now, whatever the view or the way he goes (an action that turns him: models/cover.ts). */
+  face(yaw: number): void {
+    this.yaw = yaw;
+    this.known = true;
+  }
+
   /** Turned to the view now. */
   snap(camera: THREE.Camera, pitch?: number): void {
     const f = camera.getWorldDirection(this.dir);
