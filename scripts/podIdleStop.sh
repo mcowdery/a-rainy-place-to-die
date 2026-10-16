@@ -12,6 +12,7 @@
 # Hard cap: the pod is stopped MAX_HOURS after it booted whatever it is doing (0 = no cap).
 #
 #   IDLE_MIN=45 GPU_BUSY_PCT=5 CPU_BUSY_CORES=0.5 MAX_HOURS=12 bash scripts/podIdleStop.sh
+#   echo 120 > /workspace/.idle-min   sets IDLE_MIN while it runs (0 = never; `node scripts/pod.mjs idle 2h` and the dashboard do this)
 #   touch /workspace/.keep-awake      pauses the watchdog until the file is removed (a long job you walk away from)
 #   DRY_RUN=1 ...                     logs what it would do and never stops anything
 #   Log: /var/log/podIdleStop.log: a line every 15 minutes with what it sees and why the pod counts as busy or idle
@@ -45,6 +46,11 @@ stop_pod() {
     || { runpodctl config --apiKey "$API_KEY" >/dev/null 2>&1; runpodctl stop pod "$POD_ID" >>"$LOG" 2>&1; }
 }
 
+# The user's setting (pod.mjs idle, the dashboard's buttons), re-read each minute so a change applies at once; 0 = never.
+IDLE_MIN_DEFAULT=$IDLE_MIN
+load_idle() { local want; want=$(tr -dc 0-9 < /workspace/.idle-min 2>/dev/null); IDLE_MIN=${want:-$IDLE_MIN_DEFAULT}; return 0; }
+load_idle
+
 if [ -z "$POD_ID" ] || [ -z "$API_KEY" ]; then log "no pod id or key found: the watchdog cannot stop this pod, exiting"; exit 1; fi
 prev_usec=$(cpu_usec); prev_at=$(date +%s)
 [ -z "$prev_usec" ] && log "warning: no cgroup CPU counter here, so CPU use is not part of the idle test (GPU and tools only)"
@@ -54,6 +60,7 @@ BOOT=$(date +%s); idle=0; tick=0
 while sleep 60; do
   if [ "$MAX_HOURS" != 0 ] && [ $(( $(date +%s) - BOOT )) -ge $(( MAX_HOURS * 3600 )) ]; then stop_pod "reached the ${MAX_HOURS} h cap"; exit 0; fi
   if [ -e /workspace/.keep-awake ]; then idle=0; continue; fi
+  load_idle
 
   gpu=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null | sort -n | tail -1 | tr -dc 0-9)
   tools=$(ps -eo comm= | grep -E -c "^($TOOLS)") || tools=0
@@ -71,5 +78,5 @@ while sleep 60; do
   if [ -n "$busy" ]; then idle=0; else idle=$((idle + 1)); fi
   tick=$((tick + 1))
   [ $((tick % 15)) = 0 ] && log "status: gpu ${gpu:-?}%, cpu ${cores} cores, tools ${tools}; ${busy:+busy:${busy}; }idle ${idle} min"
-  if [ "$idle" -ge "$IDLE_MIN" ]; then stop_pod "idle ${IDLE_MIN} min"; exit 0; fi
+  if [ "$IDLE_MIN" != 0 ] && [ "$idle" -ge "$IDLE_MIN" ]; then stop_pod "idle ${IDLE_MIN} min"; exit 0; fi
 done

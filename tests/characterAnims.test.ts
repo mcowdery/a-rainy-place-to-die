@@ -6,7 +6,7 @@ import { clipPace, relaxedHand, retarget, rigFrom } from '../src/poc3d/models/ch
  * A small skeleton: a root, a pelvis, a spine, one arm and one leg. `arm` is the way the upper arm points at rest,
  * `roll` turns every bone about its own length (the two skeletons' bone rolls differ), `size` scales it.
  */
-function skeleton(arm: THREE.Vector3, roll: number, size: number): THREE.Object3D {
+function skeleton(arm: THREE.Vector3, roll: number, size: number, thigh = 0.45): THREE.Object3D {
   const bones = new Map<string, THREE.Object3D>();
   const add = (name: string, parent: string | null, at: [number, number, number], q?: THREE.Quaternion): void => {
     const b = new THREE.Object3D();
@@ -27,8 +27,9 @@ function skeleton(arm: THREE.Vector3, roll: number, size: number): THREE.Object3
   add('hand_l', 'lowerarm_l', [0, 0.3, 0]);
   const down = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI).multiply(twist);
   add('thigh_l', 'pelvis', [0.1, 0, 0], new THREE.Quaternion().copy(twist).invert().multiply(down));
-  add('calf_l', 'thigh_l', [0, 0.45, 0]);
-  add('foot_l', 'calf_l', [0, 0.45, 0]);
+  // (the leg is 0.9 long; `thigh` is how much of it is above the knee)
+  add('calf_l', 'thigh_l', [0, thigh, 0]);
+  add('foot_l', 'calf_l', [0, 0.9 - thigh, 0]);
   const root = bones.get('Root')!;
   root.updateMatrixWorld(true);
   return root;
@@ -152,6 +153,39 @@ describe('retargeting a library clip', () => {
     expect(pelvis.z).toBeCloseTo(1.2, 3);
     expect(pelvis.y).toBeCloseTo(1.2 - 0.24, 3);
     expect(pelvis.x).toBeCloseTo(0, 3);
+  });
+
+  it('keeps the feet on the floor on legs of other proportions', () => {
+    // A crouch on the mannequin: the thigh swung a radian forward, the shin kept upright, the pelvis lowered so the
+    // foot stays where it was. The same angles on a long thigh and a short shin (the same leg length, so nothing is
+    // scaled) reach less far down: without planting, that foot would hang 17 cm off the floor.
+    const src = skeleton(T_POSE, 0, 1);
+    const dst = skeleton(T_POSE, 0, 1, 0.6);
+    const times = [0, 1];
+    const pelvisW = find(src, 'pelvis').getWorldQuaternion(new THREE.Quaternion());
+    const thighRest = find(src, 'thigh_l').getWorldQuaternion(new THREE.Quaternion());
+    const calfRest = find(src, 'calf_l').getWorldQuaternion(new THREE.Quaternion());
+    const thighNow = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -1).multiply(thighRest);
+    const local = (parent: THREE.Quaternion, world: THREE.Quaternion) => parent.clone().invert().multiply(world).toArray();
+    const drop = 0.45 * (1 - Math.cos(1));
+    const p = find(src, 'pelvis').position;
+    const crouch = new THREE.AnimationClip('crouch', 1, [
+      new THREE.QuaternionKeyframeTrack('thigh_l.quaternion', times, [...local(pelvisW, thighRest), ...local(pelvisW, thighNow)]),
+      new THREE.QuaternionKeyframeTrack('calf_l.quaternion', times, [...local(thighRest, calfRest), ...local(thighNow, calfRest)]),
+      new THREE.VectorKeyframeTrack('pelvis.position', times, [p.x, p.y, p.z, p.x, p.y - drop, p.z]),
+    ]);
+    const footY = (root: THREE.Object3D) => find(root, 'foot_l').getWorldPosition(new THREE.Vector3()).y;
+    pose(src, crouch, 1);
+    expect(footY(src)).toBeCloseTo(0.1, 4);
+    const fitted = retarget(crouch, rig(src), rig(dst));
+    // (the foot at the mannequin's height all through: halfway, this clip's straight-line drop has it 5 cm down)
+    for (const t of [0, 0.25, 0.5, 1]) {
+      pose(src, crouch, t);
+      pose(dst, fitted, t);
+      expect(Math.abs(footY(dst) - footY(src))).toBeLessThan(0.002);
+    }
+    // and the knee still bends as the mannequin's does
+    expect(pointing(dst, 'thigh_l', 'calf_l').distanceTo(pointing(src, 'thigh_l', 'calf_l'))).toBeLessThan(1e-3);
   });
 
   it('says how fast a walk covers the ground, by the length of the leg', () => {
