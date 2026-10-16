@@ -47,6 +47,10 @@ export class BodyFacing {
 
   private shots = -1;
   private hold = 0;
+  /** How much longer a shot keeps him turned to the view (s), for checks. */
+  get holdLeft(): number {
+    return this.hold;
+  }
   /**
    * How he should face this frame: in first person as the view; in third person the way he goes, unless he has a
    * gun up or has just fired (he turns to the shot and stays on it a moment). Fighting hand to hand or with a

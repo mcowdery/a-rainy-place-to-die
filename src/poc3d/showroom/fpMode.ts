@@ -489,8 +489,9 @@ export class FpMode {
     const want = move.lengthSq() > 0 && !locked && !act ? this.paceOf(this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) * (rig.aiming || (rig.melee?.guard ?? 0) > 0.5 ? 0.6 : 1) : 0;
     this.speed += (want - this.speed) * Math.min(1, dt * 8);
     if (move.lengthSq() > 0 && !act) {
-      // (Each way on its own, so he slides along what's in the way.)
-      const step = move.normalize().multiplyScalar(this.speed * dt);
+      // (Each way on its own, so he slides along what's in the way. `move` stays a unit vector: the body's facing takes his velocity from it.)
+      move.normalize();
+      const step = move.clone().multiplyScalar(this.speed * dt);
       const p = this.camera.position;
       if (!this.walkBlocked(p.x + step.x, p.z)) p.x += step.x;
       if (!this.walkBlocked(p.x, p.z + step.z)) p.z += step.z;
@@ -610,6 +611,8 @@ export class FpMode {
       watch: (angle: number | null, dist = 1.2) => (this.watch = angle === null ? null : { angle, dist }),
       headless: (on: boolean) => this.rig?.setHeadless(on),
       third: (on: boolean) => (this.third = on),
+      /** His heading (the body's facing, rad) and walking speed (m/s), for checking how he turns. */
+      facing: () => ({ yaw: this.facing.yaw, speed: this.speed, third: this.third, aim: this.rig?.aim ?? 0, aiming: this.rig?.aiming ?? false, hold: this.facing.holdLeft }),
       wear: (outfit: string, glasses: GlassesKind | null = this.wardrobe.glasses) => this.wear(outfit, glasses),
       face: (f: FaceStyle) => this.setFace(f),
       helmet: (h: (typeof this.wardrobe)['helmet']) => this.setHelmet(h),
