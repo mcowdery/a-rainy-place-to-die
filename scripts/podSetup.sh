@@ -23,6 +23,19 @@ BLENDER_DIR="$WORKDIR/blender"
 export DEBIAN_FRONTEND=noninteractive
 export PLAYWRIGHT_BROWSERS_PATH="$WORKDIR/.playwright"   # on the volume, so it is downloaded once
 
+# The idle-stop watchdog starts FIRST, before anything slow: a boot step that dies partway (an SSH drop, a Ctrl+C on
+# the machine that started it) used to leave the pod up with no idle stop and no 12 h cap (Oct 15: about 18 h billed).
+start_watchdog() {
+  [ -n "${NO_WATCHDOG:-}" ] && return 0
+  [ -f "$REPO_DIR/scripts/podIdleStop.sh" ] || return 0
+  echo "== idle-stop watchdog"
+  pkill -f podIdleStop.sh 2>/dev/null || true
+  sed -i 's/\r$//' "$REPO_DIR"/scripts/*.sh
+  nohup bash "$REPO_DIR/scripts/podIdleStop.sh" >/dev/null 2>&1 &
+  sleep 1; tail -1 /var/log/podIdleStop.log || true
+}
+start_watchdog
+
 echo "== apt packages (fonts, GL/Vulkan, tools)"
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
@@ -96,13 +109,8 @@ echo "== GPU"
 nvidia-smi -L || echo "no nvidia-smi: this pod has no GPU"
 ls /etc/vulkan/icd.d 2>/dev/null || echo "no Vulkan ICD files found"
 
-if [ -z "${NO_WATCHDOG:-}" ] && [ -f "$REPO_DIR/scripts/podIdleStop.sh" ]; then
-  echo "== idle-stop watchdog"
-  pkill -f podIdleStop.sh 2>/dev/null || true
-  sed -i 's/\r$//' "$REPO_DIR"/scripts/*.sh
-  nohup bash "$REPO_DIR/scripts/podIdleStop.sh" >/dev/null 2>&1 &
-  sleep 1; tail -1 /var/log/podIdleStop.log
-fi
+# A first-time setup has only just cloned the repo, so the watchdog couldn't start above: start it now.
+pgrep -f podIdleStop.sh >/dev/null 2>&1 || start_watchdog
 
 echo
 touch /tmp/pod-boot-done
