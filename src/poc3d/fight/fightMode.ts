@@ -9,6 +9,8 @@ import type { Thug } from '../models/thug';
 import { FpMode } from '../showroom/fpMode';
 import clipTable from '../../../assets/anims/mixamo_picked.json';
 import { blockedBy, Cover, type ActionFrame, type Obstacle, type Tuning } from '../models/cover';
+import { armGunman } from '../models/gunman';
+import type { GunBrain } from '../models/gunmanBrain';
 
 /**
  * The fight page's first person (fight.html): the showroom's (showroom/fpMode.ts: Mack's body, his guns, the
@@ -74,6 +76,10 @@ export class FightMode extends FpMode {
   private readonly stanceEl: HTMLDivElement;
   /** The animation library, once it's been asked for (the library's swings: `setStyle`). */
   private anims: AnimLibrary | null = null;
+  /** The environment map the characters are lit by (the gunmen's pistols have it too). */
+  private readonly charEnv: THREE.Texture | null;
+  /** The gunmen's heads (for checks: `__fp.gunmen()`). */
+  private readonly gunBrains: GunBrain[] = [];
   /** The view as last remembered (third person or not, the wheel's zoom): the city's own settings. */
   private remembered = '';
   /** Where a blow is aimed now (read from the view each frame: `readAim`). The stance is the keys' (R and C): the
@@ -92,7 +98,11 @@ export class FightMode extends FpMode {
 
   constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, dom: HTMLElement, controls: OrbitControls, env: THREE.Texture | null, floorAt: (x: number, z: number) => number) {
     super(scene, camera, dom, controls, env, floorAt);
+    this.charEnv = env;
     this.brawl = new Brawl(scene, floorAt, (from, dir, max) => this.probe(from, dir, max), document.body);
+    // The gunmen see you through this; a grenade near you drives you out of cover.
+    this.brawl.guns.player = () => this.playerInfo();
+    this.brawl.guns.onBlast = () => this.cover.cancel();
     this.dirEl = document.createElement('div');
     Object.assign(this.dirEl.style, { position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', opacity: '0', zIndex: '6', color: 'rgba(255,255,255,0.85)', font: 'bold 34px sans-serif', textShadow: '0 0 6px #000' });
     document.body.appendChild(this.dirEl);
@@ -176,6 +186,42 @@ export class FightMode extends FpMode {
   setObstacles(list: readonly Obstacle[]): void {
     this.obstacles = list;
     this.cover.setObstacles(list);
+    this.brawl.guns.obstacles = list;
+  }
+
+  /** What the gunmen see of you: where, how high you are (crouched in low cover, less), and whether you're in cover and not peeking out of it. */
+  private playerInfo(): { x: number; z: number; height: number; hidden: boolean } | null {
+    if (!this.active || !this.rig) return null;
+    const a = this.lastAct;
+    const eye = this.view().eye;
+    const inCover = !!a && (this.cover.current === 'hold' || this.cover.current === 'slide');
+    return { x: a?.x ?? eye.x, z: a?.z ?? eye.z, height: a && a.crouched && a.peek < 0.5 ? 1.0 : 1.8, hidden: inCover && !!a && a.peek < 0.6 };
+  }
+
+  /**
+   * A group with gunmen in it (the user: "enemy gunman who cover, shoot and flush me out, though I still want brawlers too"): `brawlers` fighters
+   * round you as ever and `gunmen` who go to the yard's far cover and shoot from it, throwing grenades when you've hidden too long.
+   */
+  spawnMixed(brawlers = 2, gunmen = 2): void {
+    this.gunBrains.length = 0;
+    this.brawl.spawn(brawlers, this.view());
+    const eye = this.view().eye;
+    // Spots at the far side of the yard (30 to 40 degrees apart), clear of the crates: they run from there to cover.
+    const spots: { x: number; z: number }[] = [];
+    for (let i = 0; i < gunmen && spots.length < gunmen; i++) {
+      for (let k = 0; k < 40; k++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = 9 + Math.random() * 4;
+        const x = Math.max(-9, Math.min(9, eye.x + Math.sin(a) * d));
+        const z = Math.max(-9, Math.min(9, eye.z + Math.cos(a) * d));
+        if (Math.hypot(x - eye.x, z - eye.z) < 8 || blockedBy(this.obstacles, x, z, 0.6) || spots.some((s) => Math.hypot(s.x - x, s.z - z) < 2.5)) continue;
+        spots.push({ x, z });
+        break;
+      }
+    }
+    const lib = this.anims;
+    if (!lib) return;
+    this.brawl.spawnGunmen(spots, this.view(), (t, i, model) => this.gunBrains.push(armGunman(t, lib, model, clipTable, 11 + i, this.charEnv)));
   }
 
   protected override spaceJumps(): boolean {
@@ -367,6 +413,7 @@ export class FightMode extends FpMode {
     }
     if (e.code === 'KeyF' && this.hand !== 'gun' && !this.riding) b.kick();
     if (e.code === 'KeyT') this.spawn();
+    if (e.code === 'Digit5') this.spawnMixed();
     if (e.code === 'KeyB') this.duel();
     if (e.code === 'KeyY') this.setGore(GORE_LEVELS[(GORE_LEVELS.indexOf(b.gore.level) + 1) % GORE_LEVELS.length]);
     if (e.code === 'KeyU' && b.killMoves) b.killChance = KILL_CHANCES[(KILL_CHANCES.findIndex((x) => x >= b.killChance - 1e-3) + 1) % KILL_CHANCES.length];
@@ -529,7 +576,7 @@ export class FightMode extends FpMode {
       '1 guns · 2 fists · 3 katana · 4 bat',
       ...inHand,
       'sidestep: tap left or right twice (the arrows, or A / D) · E dodges too',
-      'T fresh group · B a duel',
+      'T fresh group · B a duel · 5 two brawlers and two gunmen (who take cover, shoot over it and throw grenades when you hide too long)',
       this.brawl.killMoves ? 'Y gore · U kill-move chance' : 'Y gore',
       'WASD move (Shift runs) · Space: against a wall or behind something low, cover (A / D along it, Space again out); W + Space over something low; in the open, a roll (the way you hold, or ahead; sliders in the panel)',
       'Q third person (wheel zooms; the camera goes round him, he strikes the way he faces)',
@@ -545,6 +592,10 @@ export class FightMode extends FpMode {
     return {
       ...super.script(),
       hand: (h: Hand) => this.pick(h),
+      /** A group of `brawlers` and `gunmen`. */
+      mixed: (brawlers = 2, gunmen = 2) => this.spawnMixed(brawlers, gunmen),
+      /** The gunmen: what each is doing and where, and the grenades and shots so far. */
+      gunmen: () => ({ men: this.gunBrains.map((b) => b.state), shots: this.brawl.guns.shotsAtYou, hits: this.brawl.guns.hits, grenades: this.brawl.guns.grenades, hidden: +this.brawl.guns.hidden.toFixed(1), health: Math.round(this.brawl.health) }),
       /** The cover / vault / roll state (models/cover.ts): 'free' or what it's doing, and how it has the body. */
       coverState: () => ({ state: this.cover.current, third: this.third, body: this.lastAct ? [+this.lastAct.x.toFixed(2), +this.lastAct.z.toFixed(2)] : null, peek: this.lastAct ? +this.lastAct.peek.toFixed(2) : null, armed: this.rig?.armed ?? null, aiming: this.rig?.aiming ?? null }),
       attack: (dir: Dir = null) => b.attack(dir),

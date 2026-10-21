@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { FirstPersonRig } from './firstPerson';
 import { Gore } from './gore';
 import { KILL_CHANCE, KILL_MOVES, KillRun, pickKill, type KillCtx, type KillMove, type KillQuery } from './killMoves';
+import { rayBlockedAt } from './cover';
+import { GunFight } from './gunFight';
 import { goreSetting, Melee, partFactor, segmentDistance, sweepHit, type Capsule, type Dir, type Doing, type MeleeWeapon, type Zone } from './melee';
 import { MeleeSound } from './meleeSound';
 import { ELITE, HEALTH, sideOf, Thug, type GuardSide, type Side, type ThugOpts } from './thug';
@@ -71,6 +73,8 @@ export class Brawl {
    * kills, and a blow at a man whose guard is broken finishes him. */
   killMoves = false;
   killChance = KILL_CHANCE;
+  /** The gunmen's side of it (models/gunFight.ts): their shots, grenades and cover; the page gives it the obstacles and you. */
+  readonly guns: GunFight;
   run: KillRun | null = null;
   lastKill: string | null = null;
   lastHit = '';
@@ -118,6 +122,9 @@ export class Brawl {
     overlay: HTMLElement,
   ) {
     this.gore = new Gore(scene, floorAt, goreSetting(), overlay);
+    this.guns = new GunFight(scene);
+    this.guns.onHit = (what, damage) => this.hurt(damage, what, what === 'a grenade' ? 0.9 : 0.4);
+    this.guns.onSound = () => this.sound.blast();
     this.hurtEl = document.createElement('div');
     Object.assign(this.hurtEl.style, { position: 'fixed', inset: '0', pointerEvents: 'none', opacity: '0', zIndex: '6', background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(150,0,0,0.8) 100%)' });
     overlay.appendChild(this.hurtEl);
@@ -150,8 +157,9 @@ export class Brawl {
     this.gore.clear();
     this.bleed = [];
     this.run = null;
-    for (const t of this.thugs) if (t.tier === 'elite') t.root.visible = false;
-    const mooks = this.thugs.filter((t) => t.tier === 'mook');
+    for (const t of this.thugs) if (t.tier === 'elite' || t.role === 'gunman') t.root.visible = false;
+    this.guns.clear();
+    const mooks = this.thugs.filter((t) => t.tier === 'mook' && t.role === 'brawler');
     this.gen++;
     const place = (t: Thug, i: number): void => {
       // Spread over an arc ahead of you, a couple of them further round.
@@ -172,11 +180,36 @@ export class Brawl {
         this.loading--;
         this.thugs.push(t);
         this.scene.add(t.root);
-        const k = this.thugs.filter((x) => x.tier === 'mook').length - 1;
+        const k = this.thugs.filter((x) => x.tier === 'mook' && x.role === 'brawler').length - 1;
         if (k < this.group.n) this.group.place(t, k);
         else t.root.visible = false;
       });
     }
+  }
+
+  /**
+   * Gunmen at these spots (the page picks them: far from you and clear of the cover), each facing you, armed by `arm` once he's loaded; the ones
+   * from before are taken away. They're fighters like the others (your blows and shots, their health and falls), with a gunman's head
+   * (models/gunman.ts) in place of the brawler's.
+   */
+  spawnGunmen(spots: readonly { x: number; z: number }[], view: BrawlView, arm: (t: Thug, i: number, model: string) => void): void {
+    for (let i = this.thugs.length - 1; i >= 0; i--) {
+      if (this.thugs[i].role !== 'gunman') continue;
+      this.scene.remove(this.thugs[i].root);
+      this.thugs.splice(i, 1);
+    }
+    this.guns.clear();
+    const cast = this.castGen;
+    spots.forEach((p, i) => {
+      const model = this.cast[(i + 1) % this.cast.length];
+      void Thug.load(model, 100 + i, { role: 'gunman' }).then((t) => {
+        if (cast !== this.castGen) return;
+        this.thugs.push(t);
+        this.scene.add(t.root);
+        t.place(p.x, this.floorAt(p.x, p.z), p.z, Math.atan2(view.eye.x - p.x, view.eye.z - p.z));
+        arm(t, i, model);
+      });
+    });
   }
 
   /** One more fighter, standing where he is (one of the page's own people turning on you: the dead hours' possessed,
@@ -576,11 +609,16 @@ export class Brawl {
       this.shoot(rig, view.eye);
     }
     // Theirs.
+    this.guns.update(dt);
     const ctx = {
       you: view.eye,
       youYaw: view.yaw,
       others: this.thugs,
       floorAt: this.floorAt,
+      gun: this.guns.ctx(
+        this.thugs.flatMap((x) => (x.role === 'gunman' && x.root.visible && x.alive && x.brain?.at ? [x.brain.at] : [])),
+        { fire: (from) => this.guns.shot(from), grenade: (from, to) => this.guns.grenade(from, to) },
+      ),
       mayAttack: () => this.down <= 0 && this.lastAttack > ATTACK_GAP && this.thugs.filter((x) => x.tell > 0 || x.melee.move).length < MAX_ATTACKING,
       attacked: () => (this.lastAttack = 0),
     };
@@ -687,7 +725,8 @@ export class Brawl {
     const c2 = new THREE.Vector3();
     for (let i = 0; i < n; i++) {
       const dir = bore.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2).multiplyScalar(spread)).normalize();
-      const end = muzzle.clone().addScaledVector(dir, 40);
+      // (Stopped by what's in the way that's taller than it passes at: a gunman behind a crate is safe from a shot at his chest.)
+      const end = muzzle.clone().addScaledVector(dir, Math.min(40, rayBlockedAt(this.guns.obstacles, muzzle, dir, 40) ?? 40));
       let best: { t: Thug; part: Capsule; d: number; p: V3 } | null = null;
       for (const t of this.thugs) {
         if (!t.root.visible || t.state === 'dead' || t.state === 'scripted') continue;

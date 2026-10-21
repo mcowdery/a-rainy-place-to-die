@@ -3,6 +3,7 @@
 // With no --url it starts a dev server of its own (next free port) and stops it when the window closes.
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 
 const args = process.argv.slice(2)
@@ -30,7 +31,7 @@ if (!url) {
 url += extra.replace(/^\//, '')
 
 // A profile of its own, so the window is separate from the everyday browser and closing it ends this process.
-const profile = new URL('../.play-profile', import.meta.url).pathname.replace(/^\/(\w:)/, '$1')
+const profile = fileURLToPath(new URL('../.play-profile', import.meta.url))
 const win = spawn(exe, [
   `--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--window-size=1600,900',
   ...(fullscreen ? ['--start-fullscreen'] : []),

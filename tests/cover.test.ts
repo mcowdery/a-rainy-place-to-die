@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import table from '../assets/anims/mixamo_picked.json';
-import { blockedBy, CLIPS, Cover, DEFAULT_TUNING, HIGH, rayObstacles, STAND_OFF, type ActionFrame, type CoverInput, type Obstacle } from '../src/poc3d/models/cover';
+import { blockedBy, CLIPS, Cover, DEFAULT_TUNING, HIGH, rayBlockedAt, rayObstacles, STAND_OFF, type ActionFrame, type CoverInput, type Obstacle } from '../src/poc3d/models/cover';
 
 const DT = 1 / 60;
 /** The camera yaw that looks along +x. */
@@ -47,6 +47,32 @@ describe('rayObstacles', () => {
   it('blockedBy keeps a circle out of a box', () => {
     expect(blockedBy([WALL], 1.8, 0, 0.3)).toBe(true);
     expect(blockedBy([WALL], 1.6, 0, 0.3)).toBe(false);
+  });
+});
+
+describe('rayBlockedAt: bullets and cover', () => {
+  const dir = (dx: number, dy: number, dz: number): { x: number; y: number; z: number } => {
+    const m = Math.hypot(dx, dy, dz);
+    return { x: dx / m, y: dy / m, z: dz / m };
+  };
+  it('a ray over a low wall goes on; into it, or through it low down, stops', () => {
+    // A chest-high shot (1.35 m) over a 0.9 m crate passes; one at 0.5 m is stopped at its near face.
+    expect(rayBlockedAt([CRATE], { x: 0, y: 1.35, z: 0 }, dir(1, 0, 0), 20)).toBeNull();
+    expect(rayBlockedAt([CRATE], { x: 0, y: 0.5, z: 0 }, dir(1, 0, 0), 20)!).toBeCloseTo(2);
+    // A wall of 3 m stops either.
+    expect(rayBlockedAt([WALL], { x: 0, y: 1.35, z: 0 }, dir(1, 0, 0), 20)!).toBeCloseTo(2);
+  });
+  it('a falling ray (a shot at a man behind a crate) is stopped if it goes in below the top, passes if it clears it', () => {
+    // From a standing height (1.6 m) at someone crouched 6 m away behind a 1.1 m crate 4 m out: the ray is at 1.6 - 0.5*4/6 = 1.27 at the crate, over it.
+    expect(rayBlockedAt([{ ...CRATE, x0: 4, x1: 4.6, h: 1.1 }], { x: 0, y: 1.6, z: 0 }, dir(6, -0.5, 0), 6.1)).toBeNull();
+    // Aimed lower, at 0.7 m over 6 m, it's at 0.7 + ... below the top where it goes in: stopped.
+    expect(rayBlockedAt([{ ...CRATE, x0: 4, x1: 4.6, h: 1.1 }], { x: 0, y: 1.0, z: 0 }, dir(6, -0.4, 0), 6.1)!).toBeCloseTo(4, 0);
+  });
+  it('misses a box it never crosses, takes the nearest of two that stop it, and none beyond its reach', () => {
+    expect(rayBlockedAt([WALL], { x: 0, y: 1, z: 9 }, dir(1, 0, 0), 20)).toBeNull();
+    const far: Obstacle = { x0: 6, x1: 7, z0: -1, z1: 1, h: 3 };
+    expect(rayBlockedAt([far, WALL], { x: 0, y: 1, z: 0 }, dir(1, 0, 0), 20)!).toBeCloseTo(2);
+    expect(rayBlockedAt([WALL], { x: 0, y: 1, z: 0 }, dir(1, 0, 0), 1.5)).toBeNull();
   });
 });
 
