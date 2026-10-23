@@ -14,6 +14,8 @@
 //   node scripts/pod.mjs ssh [cmd]          a shell on the pod, or one command
 //   node scripts/pod.mjs pull <remote-path> [local-dir]
 //   node scripts/pod.mjs stop
+//   node scripts/pod.mjs guard              stops a pod stuck on "Starting" for POD_STUCK_MIN (20) minutes or up past
+//                                           POD_MAX_HOURS (12) + 30 min; status, run and the dashboard do the same check
 // The sync copies tracked and untracked files that git doesn't ignore, uncommitted work included; nothing is committed or
 // pushed. Only files that changed since the last sync of this checkout are sent, and files deleted here are deleted there.
 // A checkout under .claude/worktrees/<name> gets its own folder on the pod (/workspace/wt/<name>, sharing the main
@@ -21,7 +23,7 @@
 // The pod stops itself when idle (scripts/podIdleStop.sh); `stop` is for when you know you're done.
 // The RunPod key comes from RUNPOD_API_KEY or the Trame studio's .env (where scripts/props/mesh_endpoint.mjs reads it).
 // POD_NAME (default `rainy-place`, the pod's name starts with it), POD_KEY (default ~/.ssh/runpod_ed25519).
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync, unlinkSync, openSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, statSync, renameSync, unlinkSync, openSync, readdirSync } from 'node:fs';
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { homedir, tmpdir } from 'node:os';
@@ -39,6 +41,8 @@ const SOURCE_NAMES = ['*.mjs', '*.js', '*.ts', '*.py', '*.sh', '*.html', '*.css'
 const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 class Exit extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 const fail = (msg, code = 1) => { throw new Exit(code, msg); };
+/** RunPod has no free GPU of the wanted kinds in the volume's datacenter: worth retrying in a while. */
+class NoStock extends Exit { constructor(msg) { super(3, msg); } }
 
 /** The main checkout, which is where Trame sits beside, even from a worktree. */
 function mainRoot() {
@@ -87,7 +91,7 @@ async function createPod() {
   const pod = await api('pods', 'POST', spec)
     .catch((e) => (/gpuTypePriority/i.test(e.message) ? api('pods', 'POST', { ...spec, gpuTypePriority: 'availability' }) : Promise.reject(e)))
     .catch((e) => (/no instances currently available/i.test(e.message)
-      ? fail(`RunPod has no free GPU in ${volume.dataCenterId} right now (${spec.gpuTypeIds.map((g) => g.replace('NVIDIA ', '')).join(', ')}). Try again in a few minutes, or run this locally.`, 3)
+      ? Promise.reject(new NoStock(`RunPod has no free GPU in ${volume.dataCenterId} right now (${spec.gpuTypeIds.map((g) => g.replace('NVIDIA ', '')).join(', ')}). Try again in a few minutes, or run this locally.`))
       : Promise.reject(e)));
   console.log(`Created ${pod.name} (${pod.machine?.gpuTypeId}, ${pod.costPerHr}/hr) in ${volume.dataCenterId}.`);
   return pod;
@@ -101,6 +105,39 @@ const ssh = (p, cmd) => spawnSync('ssh', [...sshArgs(p), ...(cmd ? [cmd] : [])],
 const SYNC_DIR = join(homedir(), '.pod-sync');
 const LOCK = join(SYNC_DIR, 'start.lock');
 const lockAge = () => (existsSync(LOCK) ? Date.now() - statSync(LOCK).mtimeMs : Infinity);
+const START_STATE = join(SYNC_DIR, 'start-state.json');
+/** How long a start keeps trying while RunPod has no free GPU (minutes; the lock is kept fresh meanwhile). */
+const RETRY_MIN = Number(process.env.POD_RETRY_MIN ?? 30);
+const RETRY_EVERY_S = 45;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Starts the stopped pod, or makes a new one on the volume if its machine has no free GPU. True when a new pod was made. */
+async function tryAcquire() {
+  const p0 = await findPod().catch(() => null);
+  if (!p0) { await createPod(); return true; }
+  if (p0.desiredStatus === 'RUNNING') return false;
+  try { await api(`pods/${p0.id}/start`, 'POST'); return false; }
+  catch (e) {
+    if (!/not enough free GPUs|no longer any|not available/i.test(e.message)) throw e;
+    console.log("The stopped pod can't restart (its machine has no free GPU): making a new one on the same volume.");
+    await createPod(); return true;
+  }
+}
+/** tryAcquire, retried every RETRY_EVERY_S seconds for up to RETRY_MIN minutes while RunPod has no free GPU. The dashboard shows the wait (start-state.json). */
+async function acquirePod() {
+  const t0 = Date.now();
+  for (let n = 1; ; n++) {
+    try { return await tryAcquire(); }
+    catch (e) {
+      if (!(e instanceof NoStock) || Date.now() - t0 >= RETRY_MIN * 60_000) throw e;
+      if (n === 1) console.log(`${e.message}\nWaiting up to ${RETRY_MIN} minutes for one (POD_RETRY_MIN)...`);
+      writeFileSync(START_STATE, JSON.stringify({ since: t0, tries: n, until: t0 + RETRY_MIN * 60_000 }));
+      writeFileSync(LOCK, String(process.pid)); // keep the lock fresh: this start is alive
+      await logStock().catch(() => {});
+      await sleep(RETRY_EVERY_S * 1000);
+      if (n % 7 === 0) console.log(`still no free GPU after ${Math.round((Date.now() - t0) / 60_000)} minutes`);
+    }
+  }
+}
 /** Starts (or makes) the pod, boots it, returns it. Throws if another start is already under way. */
 async function startPod() {
   mkdirSync(SYNC_DIR, { recursive: true });
@@ -108,18 +145,12 @@ async function startPod() {
   writeFileSync(LOCK, String(process.pid));
   try {
 
-    const p0 = await findPod().catch(() => null);
-    let replaced = false;
-    if (!p0) { await createPod(); replaced = true; }
-    else if (p0.desiredStatus !== 'RUNNING') {
-      try { await api(`pods/${p0.id}/start`, 'POST'); }
-      catch (e) {
-        if (!/not enough free GPUs|no longer any|not available/i.test(e.message)) throw e;
-        console.log("The stopped pod can't restart (its machine has no free GPU): making a new one on the same volume.");
-        await createPod(); replaced = true;
-      }
-    }
-    const p = await waitReady();
+    const replaced = await acquirePod();
+    let p;
+    // A pod that never comes up (stuck on "Starting": no host, no address) has no watchdog, since the watchdog runs
+    // inside it, and was left behind for 31 h on Oct 16-17. Give it up: delete one made just now, stop a restarted one.
+    try { p = await waitReady(); }
+    catch (e) { await giveUp(replaced ? 'delete' : 'stop', 'it did not come up with SSH'); throw e; }
     if (replaced) { // the old stopped pod only holds a wiped container disk and would keep billing for it
       for (const old of (await api('pods')).filter((x) => x.name?.startsWith(NAME) && x.id !== p.id && x.desiredStatus !== 'RUNNING')) {
         await api(`pods/${old.id}`, 'DELETE'); console.log(`Deleted the stopped pod ${old.name} (${old.id}).`);
@@ -136,7 +167,64 @@ async function startPod() {
     await new Promise((res) => setTimeout(res, 15_000));
   }
     console.log(r.status === 0 ? '\nReady. Run things on it with: node scripts/pod.mjs run -- <command>   (VS Code: Remote-SSH -> rainy-pod)' : `\npodSetup --boot exited ${r.status}`);
-  } finally { try { unlinkSync(LOCK); } catch {} }
+    if (r.status !== 0 && !ensureWatchdog(p)) { // a boot step that died before the watchdog started left the pod unguarded
+      await giveUp('stop', `the boot step failed (exit ${r.status}) and the idle-stop watchdog isn't running`);
+      fail('The pod was stopped: its boot step failed and nothing would have stopped it. Start it again.');
+    }
+    await pushIdle(p);
+  } finally { try { unlinkSync(LOCK); } catch {} try { unlinkSync(START_STATE); } catch {} }
+}
+
+// ---- guards from this machine: the watchdog runs inside the pod, so it can't help a pod that never booted -----------
+/** Timestamped lines in ~/.pod-sync/guard.log for every pod this machine stopped or deleted (start.log has no times). */
+function guardLog(msg) {
+  try { mkdirSync(SYNC_DIR, { recursive: true }); appendFileSync(join(SYNC_DIR, 'guard.log'), `${new Date().toISOString()} ${msg}\n`); } catch {}
+}
+/** Stops (or deletes) the running pod after a failed start, saying why. Never throws. */
+async function giveUp(action, reason) {
+  try {
+    const p = (await api('pods')).find((x) => x.name?.startsWith(NAME) && x.desiredStatus === 'RUNNING');
+    if (!p) return;
+    if (action === 'delete') await api(`pods/${p.id}`, 'DELETE'); else await api(`pods/${p.id}/stop`, 'POST');
+    console.log(`${action === 'delete' ? 'Deleted' : 'Stopped'} ${p.name} (${p.id}): ${reason}.`);
+    guardLog(`${action} ${p.id} (${p.costPerHr}/hr): ${reason}`);
+  } catch (e) { console.log(`Could not ${action} the pod (${e.message}): stop it in RunPod's console, it bills while up.`); }
+}
+/** Is the idle-stop watchdog running on the pod? If not, starts it on its own. True when it runs. */
+function ensureWatchdog(p) {
+  const check = () => spawnSync('ssh', [...sshArgs(p), 'pgrep -f podIdleStop.sh >/dev/null'], { stdio: 'ignore', timeout: 30_000 }).status === 0;
+  if (check()) return true;
+  const w = `${MAIN}/scripts/podIdleStop.sh`;
+  spawnSync('ssh', [...sshArgs(p), `[ -f ${w} ] && sed -i 's/\\r$//' ${w} && setsid nohup bash ${w} </dev/null >/dev/null 2>&1 & sleep 2`], { stdio: 'ignore', timeout: 30_000 });
+  const ok = check();
+  console.log(ok ? 'Started the idle-stop watchdog on its own.' : 'The idle-stop watchdog is not running and could not be started.');
+  return ok;
+}
+/** How long the pod has been up (ms since its last start), or null. */
+function upFor(p) {
+  const since = Date.parse(String(p?.lastStartedAt ?? '').replace(' ', 'T').replace(' +0000 UTC', 'Z'));
+  return Number.isFinite(since) ? Date.now() - since : null;
+}
+/** The 12 h cap again, from here (0 = off), with half an hour's grace for the watchdog's own; and how long "Starting" may last. */
+const MAX_HOURS = Number(process.env.POD_MAX_HOURS ?? 12);
+const STUCK_MIN = Number(process.env.POD_STUCK_MIN ?? 20);
+/**
+ * Stops a pod the watchdog inside it can't be trusted with: one stuck on "Starting" (no host, no address) for STUCK_MIN
+ * minutes, or one up past the cap. Leaves a start that is under way alone (it gives up its own pod). Returns why, or null.
+ * Called by `status`, the dashboard's `status --json`, every agent `run`, and `guard` (for a scheduled task).
+ */
+async function enforceLimits(p) {
+  if (p?.desiredStatus !== 'RUNNING' || lockAge() < 15 * 60_000) return null;
+  const up = upFor(p);
+  if (up === null) return null;
+  let why = null;
+  if (!(p.publicIp && p.portMappings?.['22']) && STUCK_MIN > 0 && up > STUCK_MIN * 60_000) why = `stuck starting for ${span(up)} (no host or address)`;
+  else if (MAX_HOURS > 0 && up > (MAX_HOURS + 0.5) * 3600_000) why = `up ${span(up)}, past the ${MAX_HOURS} h cap, so its watchdog isn't working`;
+  if (!why) return null;
+  await api(`pods/${p.id}/stop`, 'POST');
+  guardLog(`stop ${p.id} (${p.costPerHr}/hr, about ${money((up / 3600000) * p.costPerHr)} this run): ${why}`);
+  console.error(`Stopped ${p.name} (${p.id}): ${why}.`);
+  return why;
 }
 // Each `run` writes a small file here while it works, so `status --json` (and the dashboard) can say what is on the pod.
 const RUNS = join(SYNC_DIR, 'runs');
@@ -155,13 +243,19 @@ const autostart = () => process.env.POD_AUTOSTART !== '0' && !existsSync(join(SY
 /** The pod, once it is up, booted and answering. Stopped: it is started (autostart) and the caller waits if it asked to (`wait`), else gets exit code 3 and runs locally meanwhile. */
 async function upPod({ wait = false } = {}) {
   let p = await findPod();
+  if (await enforceLimits(p).catch(() => null)) p = await findPod();
   if (ready(p)) return p;
   const starting = lockAge() < 15 * 60_000 || p.desiredStatus === 'RUNNING';
   if (!starting && !autostart()) fail('The pod is stopped and autostart is off (it bills while up): the user starts it with node scripts/pod.mjs start. Run this locally instead.', 3);
   if (wait) { // block until it is up: start it here, or wait for the start someone else began
     if (!starting) { console.log('The pod is stopped: starting it (about 2-4 minutes)...'); return await startPod(); }
-    for (let i = 0; i < 90; i++) { await new Promise((r) => setTimeout(r, 10_000)); p = await findPod(); if (ready(p)) return p; }
-    fail('The pod did not become ready in 15 minutes.', 3);
+    // someone else's start may be waiting for a GPU (acquirePod), so wait as long as it is allowed to, while its lock stays fresh
+    for (let i = 0; i < (RETRY_MIN + 15) * 6; i++) {
+      await sleep(10_000); p = await findPod().catch(() => p);
+      if (ready(p)) return p;
+      if (lockAge() >= 15 * 60_000 && p.desiredStatus !== 'RUNNING') fail('The start that was under way gave up (no free GPU?): see ~/.pod-sync/start.log. Run this locally.', 3);
+    }
+    fail(`The pod did not become ready in ${RETRY_MIN + 15} minutes.`, 3);
   }
   if (!starting) { // start it in the background and let this run go local; the next one finds it up
     const out = join(SYNC_DIR, 'start.log');
@@ -294,6 +388,87 @@ function runTitle(argv) {
   }
   return words.slice(0, 3).join(' ') || argv.join(' ');
 }
+// ---- how long it may sit idle before it stops itself (the Resources tab's buttons set it) --------------------------------
+const IDLE_FILE = join(SYNC_DIR, 'idle-min');
+const IDLE_DEFAULT = 45;
+/** Minutes of idleness before the pod stops itself; 0 = never (the 12-hour cap still applies). */
+function idleMin() {
+  const n = existsSync(IDLE_FILE) ? Number(readFileSync(IDLE_FILE, 'utf8').trim()) : NaN;
+  return Number.isFinite(n) && n >= 0 ? n : IDLE_DEFAULT;
+}
+const idleText = (n) => (n === 0 ? 'never (only the 12 h cap)' : n >= 60 && n % 60 === 0 ? `${n / 60} h` : `${n} min`);
+/** Hands the setting to the pod's watchdog, which re-reads /workspace/.idle-min every minute. */
+async function pushIdle(p) {
+  const file = '/workspace/.idle-min';
+  const cmd = existsSync(IDLE_FILE) ? `echo ${idleMin()} > ${file}` : `rm -f ${file}`;
+  if (p && sshOk(p)) spawnSync('ssh', [...sshArgs(p), cmd], { stdio: 'ignore', timeout: 20000 });
+}
+/** `idle [minutes | 2h | never | default]`: show or set it. Takes effect on a running pod at once, else at its next start. */
+async function idleCommand(args) {
+  mkdirSync(SYNC_DIR, { recursive: true });
+  const a = (args[0] ?? '').toLowerCase();
+  if (a) {
+    if (a === 'default') { try { unlinkSync(IDLE_FILE); } catch {} }
+    else {
+      const m = a === 'never' ? 0 : /^\d+(\.\d+)?(h|m|min)?$/.test(a) ? parseFloat(a) * (a.endsWith('h') ? 60 : 1) : NaN;
+      if (!Number.isFinite(m)) fail('usage: node scripts/pod.mjs idle [minutes | 2h | never | default]');
+      writeFileSync(IDLE_FILE, String(Math.round(m)));
+    }
+    const p = await findPod().catch(() => null);
+    if (p?.desiredStatus === 'RUNNING') await pushIdle(p);
+  }
+  console.log(`idle stop: ${idleText(idleMin())}${existsSync(IDLE_FILE) ? '' : ' (the default)'}`);
+}
+
+// ---- GPU stock: what RunPod has free, per datacenter, logged so the history says where the pod should live -----------
+const STOCK_LOG = join(SYNC_DIR, 'stock.jsonl');
+const STOCK_EVERY_MIN = 10;
+const GRAPHICS = /RTX|L40|L4$|A40/; // cards with graphics (the A100 and H100 classes lack it)
+const gpuName = (id) => id.replace(/^NVIDIA /, '').replace(/^GeForce /, '');
+async function stockNow() {
+  const r = await fetch('https://api.runpod.io/graphql', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey()}` }, body: JSON.stringify({ query: '{ dataCenters { id storageSupport gpuAvailability { gpuTypeId stockStatus } } }' }), signal: AbortSignal.timeout(15000) });
+  const j = await r.json();
+  if (!j.data) throw new Error(`RunPod stock query failed: ${JSON.stringify(j.errors ?? j).slice(0, 200)}`);
+  const dcs = {};
+  for (const d of j.data.dataCenters) {
+    const g = {};
+    for (const x of d.gpuAvailability) if (x.stockStatus && x.stockStatus !== 'None' && GRAPHICS.test(x.gpuTypeId) && !/MIG/.test(x.gpuTypeId)) g[gpuName(x.gpuTypeId)] = x.stockStatus;
+    if (Object.keys(g).length || d.id === 'US-IL-1') dcs[d.id] = { s: d.storageSupport ? 1 : 0, g };
+  }
+  return { t: new Date().toISOString(), dcs };
+}
+/** One sample onto the log, unless the last is under STOCK_EVERY_MIN old (so every caller may call it). */
+async function logStock({ force = false } = {}) {
+  mkdirSync(SYNC_DIR, { recursive: true });
+  if (!force && existsSync(STOCK_LOG) && Date.now() - statSync(STOCK_LOG).mtimeMs < STOCK_EVERY_MIN * 60_000) return null;
+  const sample = await stockNow();
+  appendFileSync(STOCK_LOG, JSON.stringify(sample) + '\n');
+  return sample;
+}
+/** `stock`: now, and the history: for each datacenter that can hold a volume, how often it had a graphics card free. `stock watch` keeps logging. */
+async function stockCommand(args) {
+  if (args[0] === 'watch') {
+    console.log(`logging RunPod stock every ${STOCK_EVERY_MIN} minutes to ${STOCK_LOG} (Ctrl+C stops)`);
+    for (;;) { try { await logStock({ force: true }); } catch (e) { console.error(e.message); } await sleep(STOCK_EVERY_MIN * 60_000); }
+  }
+  const now = await logStock({ force: true });
+  const show = (d) => Object.entries(d.g).map(([k, v]) => `${k} (${v})`).join(', ') || 'nothing';
+  console.log('Free graphics-capable GPUs now (volume-capable datacenters first):');
+  for (const [id, d] of Object.entries(now.dcs).sort((a, b) => b[1].s - a[1].s || a[0].localeCompare(b[0]))) console.log(`  ${id}${d.s ? '' : ' (no volumes)'}: ${show(d)}`);
+  const rows = readFileSync(STOCK_LOG, 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  if (rows.length < 2) { console.log('\nHistory: too few samples yet. They are logged while the dashboard is open, on every failed start, and by "stock watch".'); return; }
+  const hours = (Date.parse(rows.at(-1).t) - Date.parse(rows[0].t)) / 3600000;
+  console.log(`\nHistory: ${rows.length} samples over ${hours < 48 ? `${hours.toFixed(1)} h` : `${(hours / 24).toFixed(1)} days`} (share of samples with a card free; volume-capable datacenters only):`);
+  const ids = new Set(); for (const r of rows) for (const [id, d] of Object.entries(r.dcs)) if (d.s) ids.add(id);
+  const wanted = new Set(['RTX A5000', 'RTX 4090', 'RTX 6000 Ada Generation', 'L40S']);
+  const out = [...ids].map((id) => {
+    const any = rows.filter((r) => Object.keys(r.dcs[id]?.g ?? {}).length).length;
+    const cur = rows.filter((r) => Object.keys(r.dcs[id]?.g ?? {}).some((g) => wanted.has(g))).length;
+    return { id, any: any / rows.length, cur: cur / rows.length };
+  }).sort((a, b) => b.any - a.any);
+  for (const o of out.slice(0, 12)) console.log(`  ${o.id.padEnd(9)} any ${String(Math.round(o.any * 100)).padStart(3)}%   the pod's four cards ${String(Math.round(o.cur * 100)).padStart(3)}%`);
+}
+
 const money = (n) => '$' + (Math.round(n * 100) / 100).toFixed(2);
 const span = (ms) => { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
 /**
@@ -307,24 +482,31 @@ async function dashboardStatus() {
   const autoAction = auto ? 'autostart-off' : 'autostart-on';
   const runs = listRuns();
   const lock = lockAge() < 15 * 60_000;
+  await logStock().catch(() => {}); // a sample for the history, at most one in ten minutes
+  const idle = idleMin();
   let p = null;
   try { p = await findPod(); } catch (e) { if (!/No pod named/.test(e.message)) return { state: 'error', title, fields: [], actions: ['start'], note: e.message.slice(0, 200) }; }
   const fields = [];
   if (p?.machine?.gpuTypeId) fields.push({ label: 'GPU', value: p.machine.gpuTypeId.replace('NVIDIA ', '') });
+  fields.push({ label: 'Idle stop', value: idleText(idle) });
   fields.push({ label: 'Agents start it', value: auto ? 'yes: a heavy run starts a stopped pod' : 'no: only you start it' });
-  if (!p) return { state: lock ? 'starting' : 'stopped', title, fields, actions: lock ? [] : ['start', autoAction], note: 'No pod yet: Start makes one on the volume.' };
+  const idleActions = ['idle-45', 'idle-120', 'idle-360'];
+  const waiting = lock && existsSync(START_STATE) ? (() => { try { return JSON.parse(readFileSync(START_STATE, 'utf8')); } catch { return null; } })() : null;
+  const waitNote = waiting ? `Waiting for a free GPU in US-IL-1 (${Math.round((Date.now() - waiting.since) / 60000)} min so far, gives up after ${RETRY_MIN}).` : null;
+  if (!p) return { state: lock ? 'starting' : 'stopped', title, fields, actions: lock ? idleActions : ['start', autoAction, ...idleActions], note: waitNote ?? 'No pod yet: Start makes one on the volume.' };
+  const guarded = await enforceLimits(p).catch(() => null);
+  if (guarded) return { state: 'stopped', title, fields, actions: ['start', autoAction, ...idleActions], note: `Stopped it from here: ${guarded}. See ~/.pod-sync/guard.log.` };
   if (p.desiredStatus === 'RUNNING') {
-    const since = Date.parse(String(p.lastStartedAt ?? '').replace(' ', 'T').replace(' +0000 UTC', 'Z'));
-    const up = Number.isFinite(since) ? Date.now() - since : null;
+    const up = upFor(p);
     fields.unshift({ label: 'Cost', value: `${money(p.costPerHr)}/hr${up !== null ? `, about ${money((up / 3600000) * p.costPerHr)} this run` : ''}` });
     if (up !== null) fields.push({ label: 'Up for', value: span(up) });
     // Who is using it: one row per `run` in flight, tied to the agent session that started it (the Resources tab draws these).
     const activity = runs.map((r) => ({ session: r.session, title: r.title ?? r.command, detail: r.command, since: r.started, where: basename(r.checkout) }));
     const ready = spawnSync('ssh', [...sshArgs(p), 'test -f /tmp/pod-boot-done'], { stdio: 'ignore', timeout: 12000 }).status === 0;
-    return { state: ready ? 'running' : 'starting', title, fields, activity, actions: ready ? ['stop', autoAction] : [], note: ready ? 'Stops itself after 45 idle minutes.' : 'Booting: installing its libraries (about a minute).' };
+    return { state: ready ? 'running' : 'starting', title, fields, activity, actions: ready ? ['stop', autoAction, ...idleActions] : [], note: ready ? (idle === 0 ? 'Stops itself only at the 12 h cap.' : `Stops itself after ${idleText(idle)} idle.`) : 'Booting: installing its libraries (about a minute).' };
   }
-  fields.unshift({ label: 'Cost', value: lock ? 'starting' : 'nothing while stopped (only the 60 GB volume)' });
-  return { state: lock ? 'starting' : 'stopped', title, fields, actions: lock ? [] : ['start', autoAction], note: lock ? 'Starting (2-4 minutes, up to 11 if its host must be replaced).' : undefined };
+  fields.unshift({ label: 'Cost', value: lock ? 'starting' : 'nothing while stopped (only the 100 GB volume)' });
+  return { state: lock ? 'starting' : 'stopped', title, fields, actions: lock ? idleActions : ['start', autoAction, ...idleActions], note: lock ? (waitNote ?? 'Starting (2-4 minutes, up to 11 if its host must be replaced).') : undefined };
 }
 
 /**
@@ -374,8 +556,17 @@ if (cmd === 'status' && rest.includes('--json')) {
   const off = join(SYNC_DIR, 'autostart-off');
   if (rest[0] === 'on') { try { unlinkSync(off); } catch {} } else if (rest[0] === 'off') writeFileSync(off, 'agents do not start the pod while this file exists');
   console.log(`autostart for agents: ${autostart() ? 'on' : 'off'}`);
+} else if (cmd === 'idle') {
+  await idleCommand(rest);
+} else if (cmd === 'stock') {
+  await stockCommand(rest);
+} else if (cmd === 'guard') { // for a scheduled task: stops a pod stuck starting or past the cap, else says nothing is wrong
+  const p = await findPod().catch(() => null);
+  const why = p && (await enforceLimits(p));
+  if (!why) console.log(p?.desiredStatus === 'RUNNING' ? `${p.name} is up (${span(upFor(p) ?? 0)}), within its limits.` : 'No pod is up.');
 } else if (cmd === 'status') {
-  const p = await findPod();
+  let p = await findPod();
+  if (await enforceLimits(p).catch(() => null)) p = await findPod();
   console.log(JSON.stringify({ id: p.id, name: p.name, status: p.desiredStatus, gpu: p.machine?.gpuTypeId, cost: p.costPerHr, ip: p.publicIp, ssh: p.portMappings?.['22'], folder: remoteDir() }));
 } else if (cmd === 'running') {
   const p = await findPod().catch(() => null);
@@ -401,7 +592,7 @@ if (cmd === 'status' && rest.includes('--json')) {
   const r = spawnSync('scp', ['-r', '-i', KEY, '-o', 'StrictHostKeyChecking=accept-new', '-P', String(p.portMappings['22']), `root@${p.publicIp}:${rest[0]}`, dest], { stdio: 'inherit' });
   return r.status ?? 1;
 } else {
-  console.log('usage: node scripts/pod.mjs status | running | start | run [flags] -- <command...> | sync | ssh [cmd] | pull <remote> [dir] | stop');
+  console.log('usage: node scripts/pod.mjs status | running | start | run [flags] -- <command...> | sync | ssh [cmd] | pull <remote> [dir] | stop | guard | idle [minutes|2h|never|default] | stock [watch] | autostart [on|off] | play');
   return cmd ? 1 : 0;
 }
 return 0;

@@ -55,10 +55,45 @@ export function rawTransfer(rs: readonly (RawGeometry | null)[]): ArrayBuffer[] 
   return out;
 }
 
-export function toGeometry(r: RawGeometry): THREE.BufferGeometry {
+/** `release`: let go of the arrays once the GPU has them (`releaseAfterUpload`). */
+export function toGeometry(r: RawGeometry, release = false): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();
   for (const [name, a] of Object.entries(r.attrs)) g.setAttribute(name, new THREE.BufferAttribute(a.array, a.size));
   g.setIndex(new THREE.BufferAttribute(r.index, 1));
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(r.sphere[0], r.sphere[1], r.sphere[2]), r.sphere[3]);
+  if (release) releaseAfterUpload(g);
   return g;
+}
+
+function dropArray(this: THREE.BufferAttribute): void {
+  (this as unknown as { array: null }).array = null;
+}
+
+/**
+ * Lets a static geometry's arrays go once they're on the GPU. three keeps a CPU copy of every buffer it uploads, and the
+ * city's were most of the page's memory (2026-10-22: 2.2 GB of array buffers at rest, 1.7 GB of them the scene's geometry:
+ * the trains and viaducts ~0.9 GB, the chunks 0.3 GB), which made every full garbage collection longer. The bounding sphere is
+ * kept (culling needs it). Only for geometry nothing reads or changes on the CPU afterwards: no ray casts at it (a car's
+ * body is, for bullet marks), no merging or cloning it, no `needsUpdate`, no dynamic or instanced buffers (those are left
+ * alone). A lost WebGL context couldn't upload it again.
+ */
+export function releaseAfterUpload(g: THREE.BufferGeometry): void {
+  if (Object.keys(g.morphAttributes).length) return;
+  if (!g.boundingSphere) g.computeBoundingSphere();
+  const drop = (a: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null): void => {
+    if (!a || !(a instanceof THREE.BufferAttribute) || (a as THREE.InstancedBufferAttribute).isInstancedBufferAttribute) return;
+    if (a.usage !== THREE.StaticDrawUsage) return;
+    a.onUpload(dropArray);
+  };
+  for (const a of Object.values(g.attributes)) drop(a);
+  drop(g.index);
+}
+
+/** `releaseAfterUpload` for every mesh under `root` but skinned and instanced ones. */
+export function releaseTreeAfterUpload(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || (m as unknown as THREE.SkinnedMesh).isSkinnedMesh || (m as unknown as THREE.InstancedMesh).isInstancedMesh) return;
+    releaseAfterUpload(m.geometry);
+  });
 }

@@ -264,6 +264,12 @@ export class District {
 
   /** Each cell's pavement corners (real/ground.ts), for what's past their rounded kerbs. */
   private readonly kerbs = new Map<number, readonly PavementCorner[]>();
+  /**
+   * A plan's roads carried through the mouths of the streets that end at them (plan.ts throughMouths), by the plan's road list:
+   * `pavingOf` is asked many times a frame (footsteps, the payphones, probes while driving), and working it out each time was a
+   * search of every road against every other and a heap of fresh rects.
+   */
+  private readonly mouths = new WeakMap<readonly Road3[], Road3[]>();
   private kerbCorners(mx: number, my: number, reach: readonly Road3[]): readonly PavementCorner[] {
     const k = cellKey(mx, my);
     let c = this.kerbs.get(k);
@@ -301,7 +307,8 @@ export class District {
       if (t > top) [top, surface] = [t, s];
     };
     // (Streets ending at a road's side reach through its pavement: the mouth is road.)
-    const reach = throughMouths(p.roads);
+    let reach = this.mouths.get(p.roads);
+    if (!reach) this.mouths.set(p.roads, (reach = throughMouths(p.roads)));
     for (const r of p.roads) {
       if (!inR(r.rect)) continue;
       if (isRiverWalk(r)) raise(0.12, 'paving');
@@ -982,9 +989,9 @@ export class District {
     }
     if (r.stage === 'base') {
       if (c || d > UNLOAD_RADIUS) return false;
-      const base = new THREE.Mesh(toGeometry(r.meshes.base!), kit.city);
+      const base = new THREE.Mesh(toGeometry(r.meshes.base!, true), kit.city);
       base.receiveShadow = true;
-      const far = r.meshes.far ? new THREE.Mesh(toGeometry(r.meshes.far), kit.city) : null;
+      const far = r.meshes.far ? new THREE.Mesh(toGeometry(r.meshes.far, true), kit.city) : null;
       if (far) {
         far.castShadow = far.receiveShadow = true;
         if (kit.cityDepth) far.customDepthMaterial = kit.cityDepth;
@@ -1006,7 +1013,7 @@ export class District {
       if (!c || c.near || d > NEAR_DROP) return false;
       const near = new THREE.Group();
       if (r.meshes.near) {
-        const m = new THREE.Mesh(toGeometry(r.meshes.near), kit.city);
+        const m = new THREE.Mesh(toGeometry(r.meshes.near, true), kit.city);
         m.castShadow = m.receiveShadow = true;
         if (kit.cityDepth) m.customDepthMaterial = kit.cityDepth;
         near.add(m);
@@ -1014,7 +1021,7 @@ export class District {
       for (const k of ['props', 'propsMid'] as const) {
         const raw = r.meshes[k];
         if (!raw) continue;
-        const m = new THREE.Mesh(toGeometry(raw), kit.city);
+        const m = new THREE.Mesh(toGeometry(raw, true), kit.city);
         m.castShadow = m.receiveShadow = true;
         if (kit.cityDepth) m.customDepthMaterial = kit.cityDepth;
         m.visible = k === 'props';
@@ -1022,16 +1029,16 @@ export class District {
         c[k] = m;
       }
       if (r.meshes.signs) {
-        const m = new THREE.Mesh(toGeometry(r.meshes.signs), kit.signs);
+        const m = new THREE.Mesh(toGeometry(r.meshes.signs, true), kit.signs);
         m.castShadow = true;
         near.add(m);
       }
       if (r.meshes.ads) {
-        const m = new THREE.Mesh(toGeometry(r.meshes.ads), kit.ads);
+        const m = new THREE.Mesh(toGeometry(r.meshes.ads, true), kit.ads);
         m.castShadow = true;
         near.add(m);
       }
-      if (r.meshes.taxiAds) near.add(new THREE.Mesh(toGeometry(r.meshes.taxiAds), kit.taxiAds));
+      if (r.meshes.taxiAds) near.add(new THREE.Mesh(toGeometry(r.meshes.taxiAds, true), kit.taxiAds));
       c.group.add(near);
       near.updateMatrixWorld(true);
       c.near = near;

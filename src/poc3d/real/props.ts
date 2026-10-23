@@ -740,7 +740,12 @@ export function propDist(p: Prop, x: number, z: number): number {
 
 /** Collision: is a circle at (x, z) blocked by one of these props? (Runs and cars are capsules.) */
 export function propBlocked(props: readonly Prop[], x: number, z: number, r: number): boolean {
-  return props.some((p) => p.solid !== false && propDist(p, x, z) < p.radius + r);
+  // (A plain loop: a closure here was garbage on every collision probe.)
+  for (let i = 0; i < props.length; i++) {
+    const p = props[i];
+    if (p.solid !== false && propDist(p, x, z) < p.radius + r) return true;
+  }
+  return false;
 }
 
 const LEAVES = [0x2e4a26, 0x36522a, 0x2a4222, 0x3e5a2e];

@@ -56,6 +56,10 @@ PERM = {'type': 'haircut', 'reach': 0.16, 'roughness': 0.42, 'specular': 0.5, 'n
         'volume': {'sides': 0.011, 'back': 0.014, 'nape': 0.005, 'crown': 0.02, 'front': 0.016, 'edge': 0.0015, 'edge_deg': 4}}
 SLICK = {'type': 'haircut', 'reach': 0.15, 'roughness': 0.45, 'specular': 0.5, 'hairline': HAIRLINE, 'cards': {'count': 300, 'length': [0.035, 0.07], 'lift': 0.0018, 'width': 0.016}}
 
+# (The user, of the shells in the game: "these haircuts are the main problem ... the head is oblonged ... the hairline
+# looks bad", "very shiny"; of MakeHuman's short01: "I really like how this hair turned out". So nobody wears PERM or
+# SLICK for now: they stay here for a better perm later. MakeHuman's short03 is out too: a glossy swoop of fringe over
+# one eye.)
 # Clothes' recolours: a suit's cloth (the dark of its texture) and its shirt (the light), each kept to its own range.
 def suit(asset, cloth, shirt=None, contrast=0.85):
     ops = [{'op': 'colorize', 'color': cloth, 'contrast': contrast, 'lum': [0, 0.45], 'orig': True}]
@@ -88,28 +92,28 @@ CHAIN = {'type': 'chain', 'color': '#a8843c', 'drop': 0.07}
 RECIPES = {
     'rk': [
         {'role': 'executive', 'n': 3, 'years': [48, 66], 'height': [166, 178], 'muscle': [0.45, 0.6], 'weight': [0.5, 0.75],
-         'hair': ['slick', 'perm'], 'glasses': [ROUND_GOLD, ROUND_GOLD, None],
+         'hair': ['short04', 'short01'], 'glasses': [ROUND_GOLD, ROUND_GOLD, None],
          'clothes': [[suit('toigo_male_double-breasted_suit', c)] for c in ['#26262a', '#1a1a1c', '#3a3428', '#4a4846']], 'shoes': [LOAFERS]},
         {'role': 'soldier', 'n': 2, 'years': [28, 44], 'height': [168, 180], 'muscle': [0.55, 0.75], 'weight': [0.4, 0.6],
-         'hair': ['perm', 'short04', 'short02'], 'glasses': [DARK_GLASSES, None],
+         'hair': ['short01', 'short04', 'shaved'], 'glasses': [DARK_GLASSES, None],
          'clothes': [[suit(a, c, s)] for a in ['male_elegantsuit01', 'toigo_male_suit_3'] for c, s in [('#161618', '#2a2224'), ('#22242a', '#3a2a2a'), ('#1a1a1c', None)]], 'shoes': [LOAFERS]},
         {'role': 'flash', 'n': 1, 'years': [34, 48], 'height': [170, 178], 'muscle': [0.5, 0.65], 'weight': [0.45, 0.6],
-         'hair': ['perm'], 'glasses': [ROUND_GOLD], 'chain': True,
+         'hair': ['short04'], 'glasses': [ROUND_GOLD], 'chain': True,
          'clothes': [[{'asset': 'toigo_suit_with_dinner_jacket', 'ops': [{'op': 'grade', 'gain': [0.92, 0.88, 0.8], 'saturation': 0.8}]}]], 'shoes': [LOAFERS]},
         {'role': 'guard', 'n': 2, 'years': [30, 46], 'height': [178, 186], 'muscle': [0.8, 0.95], 'weight': [0.7, 0.85],
-         'hair': ['short04', 'shaved', 'perm'], 'glasses': [DARK_GLASSES],
+         'hair': ['short04', 'shaved', 'short01'], 'glasses': [DARK_GLASSES],
          'clothes': [[suit('male_elegantsuit01', '#121214', '#1c1c1e')]], 'shoes': [LOAFERS]},
     ],
     'cp': [
         {'role': 'aloha', 'n': 3, 'years': [21, 30], 'height': [164, 178], 'muscle': [0.4, 0.6], 'weight': [0.3, 0.55],
-         'hair': ['perm', 'bleached', 'slick'], 'glasses': [DARK_GLASSES, None, None], 'chain': True,
+         'hair': ['short04', 'bleached', 'shaved'], 'glasses': [DARK_GLASSES, None, None], 'chain': True,
          'clothes': [[{'asset': 'namuhekam_male_polo_shirt', 'roughness': 0.8, 'ops': [dict(op='print', tile=0.24, seed=i + 3, **a)]}, plain(p, c)] for i, a in enumerate(ALOHA) for p, c in [('toigo_harem_pants', '#141416'), ('toigo_wool_pants', '#2a2a2c')]],
          'shoes': [LOAFERS, SNEAKERS]},
         {'role': 'striped', 'n': 2, 'years': [22, 31], 'height': [166, 176], 'muscle': [0.4, 0.55], 'weight': [0.35, 0.5],
-         'hair': ['bleached', 'perm', 'short02'], 'glasses': [DARK_GLASSES, None], 'chain': True,
+         'hair': ['bleached', 'short01', 'short04'], 'glasses': [DARK_GLASSES, None], 'chain': True,
          'clothes': [[plain('male_casualsuit03')], [plain('male_casualsuit05')]], 'shoes': [LOAFERS, SNEAKERS]},
         {'role': 'tee', 'n': 3, 'years': [20, 28], 'height': [164, 176], 'muscle': [0.35, 0.55], 'weight': [0.3, 0.5],
-         'hair': ['bleached', 'short01', 'perm', 'short04'], 'glasses': [None, None, DARK_GLASSES], 'mask': 0.35,
+         'hair': ['bleached', 'short01', 'shaved', 'short04'], 'glasses': [None, None, DARK_GLASSES], 'mask': 0.35,
          'clothes': [[{'asset': 'male_casualsuit06', 'ops': [{'op': 'colorize', 'color': '#e6e4de', 'contrast': 0.3, 'rect': [0, 0, 1, 0.42]}]}], [plain('elvs_crude_t-shirt_male', '#d8d4cc', 0.6), plain('toigo_harem_pants', '#141416')], [plain('elvs_crude_t-shirt_male', '#1a1a1c', 0.6), plain('toigo_harem_pants', '#2a2620')]],
          'shoes': [SNEAKERS, LOAFERS]},
     ],
@@ -125,18 +129,23 @@ RECIPES = {
 FACES = {
     'hard': {'head-square': 0.3, 'chin-prominent-incr': 0.35, 'chin-width-incr': 0.35, 'chin-bones-incr': 0.4, 'lr-cheek-bones-incr': 0.4, 'lr-cheek-volume-decr': 0.45,
              'eyebrows-trans-down': 0.45, 'eyebrows-angle-down': 0.4, 'lr-eye-eyefold-down': 0.3, 'lr-eye-height2-decr': 0.15, 'lr-eye-bag-incr': 0.3,
-             'forehead-nubian-incr': 0.45, 'nose-hump-incr': 0.25, 'nose-scale-vert-incr': 0.15, 'mouth-angles-down': 0.3, 'mouth-upperlip-volume-decr': 0.25},
+             'eyebrows-trans-forward': 0.25, 'nose-hump-incr': 0.25, 'nose-scale-vert-incr': 0.15, 'mouth-angles-down': 0.3, 'mouth-upperlip-volume-decr': 0.25},
+    # (forehead-nubian, meant for a heavy brow, slopes the forehead back: at the brute's 0.8 it made a cone of the skull, tall
+    # and long behind, which shaved or under short hair read as an oblong head (the user, twice), and even at 0.35-0.45
+    # the others' heads were "still oblong a little". It's in no type now: the brow comes forward with the eyebrows' own
+    # target instead.)
     'brute': {'head-square': 0.45, 'head-scale-horiz-incr': 0.15, 'chin-width-incr': 0.6, 'chin-bones-incr': 0.6, 'nose-scale-horiz-incr': 0.4, 'nose-flaring-incr': 0.4,
-              'nose-compression-compress': 0.35, 'nose-volume-incr': 0.25, 'eyebrows-trans-down': 0.55, 'forehead-nubian-incr': 0.8, 'lr-eye-eyefold-down': 0.35,
+              'nose-compression-compress': 0.35, 'nose-volume-incr': 0.25, 'eyebrows-trans-down': 0.55, 'eyebrows-trans-forward': 0.4, 'lr-eye-eyefold-down': 0.35,
               'lr-eye-height2-decr': 0.15, 'mouth-angles-down': 0.35, 'mouth-lowerlip-volume-incr': 0.2, 'lr-cheek-bones-incr': 0.3, 'measure-neck-circ-incr': 0.5, 'neck-scale-horiz-incr': 0.4},
     'gaunt': {'head-scale-horiz-decr': 0.2, 'head-invertedtriangular': 0.25, 'lr-cheek-volume-decr': 0.8, 'lr-cheek-bones-incr': 0.55, 'chin-width-decr': 0.2, 'chin-prominent-incr': 0.3,
               'lr-eye-corner2-up': 0.2, 'eyebrows-angle-down': 0.5, 'eyebrows-trans-down': 0.3, 'lr-eye-eyefold-down': 0.25, 'mouth-upperlip-volume-decr': 0.35,
               'mouth-lowerlip-volume-decr': 0.3, 'nose-scale-vert-incr': 0.25, 'nose-hump-incr': 0.4, 'nose-point-width-decr': 0.2, 'forehead-temple-decr': 0.3},
     'oldboss': {'head-age-incr': 0.7, 'head-fat-incr': 0.25, 'lr-cheek-trans-down': 0.4, 'neck-double-incr': 0.5, 'lr-eye-bag-incr': 0.7, 'lr-eye-bag-height-incr': 0.35,
                 'lr-eye-eyefold-down': 0.45, 'eyebrows-trans-down': 0.4, 'nose-scale-horiz-incr': 0.35, 'nose-point-down': 0.25, 'nose-volume-incr': 0.2,
-                'mouth-angles-down': 0.45, 'forehead-nubian-incr': 0.35, 'chin-width-incr': 0.3, 'lr-cheek-bones-incr': 0.2},
-    'punk': {'head-square': 0.2, 'chin-prognathism-incr': 0.2, 'chin-prominent-incr': 0.25, 'eyebrows-angle-down': 0.55, 'eyebrows-trans-down': 0.35, 'lr-eye-corner2-up': 0.25,
-             'lr-eye-eyefold-down': 0.2, 'lr-cheek-volume-decr': 0.35, 'lr-cheek-bones-incr': 0.3, 'mouth-angles-down': 0.2, 'nose-scale-horiz-incr': 0.15, 'forehead-nubian-incr': 0.25},
+                'mouth-angles-down': 0.45, 'eyebrows-trans-forward': 0.2, 'chin-width-incr': 0.3, 'lr-cheek-bones-incr': 0.2},
+    # (The user, of one: "this guy still looks baby faced". Harder bones now, and older: `face` gives it head-age 0.3 at least.)
+    'punk': {'head-square': 0.3, 'chin-prognathism-incr': 0.2, 'chin-prominent-incr': 0.35, 'chin-bones-incr': 0.3, 'eyebrows-angle-down': 0.55, 'eyebrows-trans-down': 0.45, 'lr-eye-corner2-up': 0.25,
+             'lr-eye-eyefold-down': 0.3, 'lr-cheek-volume-decr': 0.55, 'lr-cheek-bones-incr': 0.45, 'mouth-angles-down': 0.25, 'nose-scale-horiz-incr': 0.15, 'nose-hump-incr': 0.2, 'eyebrows-trans-forward': 0.2},
 }
 FACES_OF = {'executive': ['oldboss', 'hard', 'oldboss'], 'soldier': ['hard', 'gaunt', 'brute'], 'flash': ['hard', 'gaunt'], 'guard': ['brute', 'brute', 'hard'],
             'aloha': ['punk', 'gaunt', 'hard'], 'striped': ['gaunt', 'punk', 'brute'], 'tee': ['punk', 'gaunt', 'brute']}
@@ -169,8 +178,11 @@ def face(recipe, years, rnd, kind):
         name = t + ('-incr' if rnd.random() < 0.5 else '-decr') if not t.startswith('head-scale') else t + ('-incr' if rnd.random() < 0.5 else '-decr')
         if name not in targets and name.replace('-incr', '-decr').replace('-decr', '-incr') not in targets:
             targets[name] = round(rnd.uniform(0.1, 0.25), 2)
+    # (A taller forehead is never one of the pulls: it lengthened the head. Dropped after the draw, so the draws, and
+    # every other pull, come out as they did.)
+    targets.pop('forehead-scale-vert-incr', None)
     # The years show in the face too.
-    targets['head-age-incr'] = round(max(targets.get('head-age-incr', 0), min(0.8, max(0.0, (years - 26) / 40))), 2)
+    targets['head-age-incr'] = round(max(targets.get('head-age-incr', 0), min(0.8, max(0.0, (years - 26) / 40)), 0.3 if kind == 'punk' else 0), 2)
     older = years >= 35
     marks = {
         'kind': kind,
@@ -218,6 +230,13 @@ def roll(prefix, recipe, k, rnd, hair, kind):
     return fig
 
 
+# Corrections to single figures, laid over what was rolled (each one found by looking).
+OVERRIDES = {
+    # (His oblong head was the brute's forehead-nubian, now out of the type; debug-shots/headlab.py showed it.) The low cut.
+    'cp_06': {'hair': 'short01'},
+}
+
+
 def generate():
     figures = []
     for prefix, recipes in RECIPES.items():
@@ -228,7 +247,13 @@ def generate():
             hairs = turn.sample(recipe['hair'], len(recipe['hair']))
             kinds = turn.sample(FACES_OF[recipe['role']], len(FACES_OF[recipe['role']]))
             for i in range(recipe['n']):
-                figures.append(roll(prefix, recipe, k, random.Random(f'{prefix}-{k}'), hairs[i % len(hairs)], kinds[i % len(kinds)]))
+                fig = roll(prefix, recipe, k, random.Random(f'{prefix}-{k}'), hairs[i % len(hairs)], kinds[i % len(kinds)])
+                over = OVERRIDES.get(fig['name'], {})
+                fig['body']['targets'].update(over.get('targets', {}))
+                if 'hair' in over:
+                    fig.pop('shaved', None)
+                    fig['hair'] = over['hair']
+                figures.append(fig)
                 k += 1
     with open(LIST, 'w', encoding='utf-8') as f:
         json.dump({'about': 'Rolled by scripts/blender/enemy_figures.py --generate from its RECIPES; built by the same script into assets/humans/.', 'figures': figures}, f, indent=1)
@@ -246,7 +271,12 @@ def definition(fig):
     skin_ops = [{'op': 'grade', 'saturation': 0.7 if years >= 50 else 0.85, 'gain': m['tone']}]
     masks = {'brows': {'brow': m['brow']}, 'bags': {'expr': BAGS, 'blur': 2}}
     if fig.get('hair'):
-        skin_ops.append({'op': 'colorize', 'color': color, 'contrast': 0.5, 'uvmask': 'under_hair', 'amount': 0.9})
+        # The scalp darkened under the hair, but only the scalp: above the brows or behind the ears, not below the jaw
+        # (short04's sideburns lie on the cheek, and the whole side of the face came out black; human_bijin.py's mask, begun
+        # well above the brow: lower, it showed through short04's receding notches at the temples as a dark smudge, grey
+        # on the grey-haired. The notches now show the forehead's own skin, as a receding hairline does).
+        masks['scalp'] = {'expr': "under_hair() * np.maximum(lin(z, L['brow'][2] + 0.045, L['brow'][2] + 0.06), lin(y, L['eye_l'][1] + 0.075, L['eye_l'][1] + 0.095)) * lin(z, L['chin'][2] - 0.05, L['chin'][2] - 0.03)", 'blur': 2}
+        skin_ops.append({'op': 'colorize', 'color': color, 'contrast': 0.5, 'uvmask': 'scalp', 'amount': 0.9})
     elif fig.get('shaved'):
         # Shaved close: the stubble a shadow over the scalp.
         skin_ops.append({'op': 'colorize', 'color': '#3a3430', 'contrast': 0.5, 'uvmask': 'under_hair', 'amount': 0.35})
@@ -278,6 +308,10 @@ def definition(fig):
     }
     if fig.get('hair'):
         d['hair'] = {'asset': fig['hair'], 'roughness': 0.6, 'double_sided': True, 'normal_map': False, 'max_tris': MAX_TRIS['hair'], 'ops': [{'op': 'colorize', 'color': color, 'contrast': 0.8}]}
+        if fig['hair'] == 'short04':
+            # Its long sideburns reached down beside the eyes, a hard black strip (the user: "some black on his face"):
+            # the hair below the top of the ear and in front of it is cut away.
+            d['hair']['delete_where'] = "z < L['brow'][2] + 0.012 and y < L['eye_l'][1] + 0.075"
     return d
 
 

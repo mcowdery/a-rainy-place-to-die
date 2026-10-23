@@ -1,5 +1,5 @@
 // The enemies' line-ups on the MakeHuman test page (humans.html; scripts/blender/enemy_figures.py): each faction's
-// line-up in the studio's light and at night, then every figure close (head and shoulders, front and three-quarters).
+// line-up in the studio's light and at night, then every figure close (head and shoulders: front, three-quarters, side).
 //   node debug-shots/enemyshots.mjs <out dir> [faction prefix: rk|cp]
 import { launchBrowser } from '../scripts/launchBrowser.mjs';
 import { shotServer } from '../scripts/shotServer.mjs';
@@ -40,6 +40,10 @@ for (const v of lineups) {
     await page.evaluate(([x, y, z]) => __view(x + 0.9, y, z + 0.95, x, y - 0.12, z), [p.x, y, p.z]);
     await wait(400);
     await page.screenshot({ path: `${out}/${p.name}_three_quarter.png`, clip: { x: 500, y: 100, width: 600, height: 700 } });
+    // (The side, where a long head shows: close, between him and the next man in the line-up, a metre off.)
+    await page.evaluate(([x, y, z]) => __view(x + 0.55, y, z + 0.02, x, y - 0.03, z), [p.x, y, p.z]);
+    await wait(400);
+    await page.screenshot({ path: `${out}/${p.name}_side.png`, clip: { x: 500, y: 100, width: 600, height: 700 } });
   }
   await page.keyboard.press('KeyL');
 }
