@@ -629,25 +629,50 @@ export class Expressway {
     return (i + 4096) * 8192 + (j + 4096);
   }
 
-  /** Every road sample within `reach` of (x, z): [road, index, distance]. */
-  private near(x: number, z: number, reach: number): [Road, number, number][] {
-    const out: [Road, number, number][] = [];
+  /** `near`'s answer, reused: it's asked many times a frame while driving, and a fresh Map and tuples each time were garbage. */
+  private readonly nearRoad: Road[] = [];
+  private readonly nearI: number[] = [];
+  private readonly nearD2: number[] = [];
+
+  /**
+   * The roads within `reach` of (x, z), each with its sample nearest the point: returns how many, and puts the roads and
+   * samples in `nearRoad` and `nearI` (good until the next call).
+   */
+  private near(x: number, z: number, reach: number): number {
+    const R = this.nearRoad;
+    const I = this.nearI;
+    const D = this.nearD2;
+    let n = 0;
     const gi = Math.floor(x / GRID);
     const gj = Math.floor(z / GRID);
     const span = Math.ceil(reach / GRID);
-    const best = new Map<Road, [number, number]>();
+    const reach2 = reach * reach;
     for (let di = -span; di <= span; di++) {
       for (let dj = -span; dj <= span; dj++) {
-        for (const [road, i] of this.grid.get(this.key(gi + di, gj + dj)) ?? []) {
-          const d = Math.hypot(road.x[i] - x, road.z[i] - z);
-          if (d > reach) continue;
-          const b = best.get(road);
-          if (!b || d < b[1]) best.set(road, [i, d]);
+        const list = this.grid.get(this.key(gi + di, gj + dj));
+        if (!list) continue;
+        for (let e = 0; e < list.length; e++) {
+          const road = list[e][0];
+          const i = list[e][1];
+          const dx = road.x[i] - x;
+          const dz = road.z[i] - z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 > reach2) continue;
+          // (A handful of roads at most: a straight search beats a Map.)
+          let k = 0;
+          while (k < n && R[k] !== road) k++;
+          if (k === n) {
+            R[n] = road;
+            I[n] = i;
+            D[n++] = d2;
+          } else if (d2 < D[k]) {
+            I[k] = i;
+            D[k] = d2;
+          }
         }
       }
     }
-    for (const [road, [i, d]] of best) out.push([road, i, d]);
-    return out;
+    return n;
   }
 
   /**
@@ -656,7 +681,10 @@ export class Expressway {
    */
   at(x: number, z: number, y: number, tol = 1.4): OnRoad | null {
     let best: OnRoad | null = null;
-    for (const [road, i] of this.near(x, z, this.maxHalf + 3)) {
+    const n = this.near(x, z, this.maxHalf + 3);
+    for (let k = 0; k < n; k++) {
+      const road = this.nearRoad[k];
+      const i = this.nearI[k];
       const dx = x - road.x[i];
       const dz = z - road.z[i];
       // Across the road (left positive), and along it: past the end of a spur or ramp is off it.
@@ -678,7 +706,10 @@ export class Expressway {
   pushBack(x: number, z: number, y: number, margin = 0.05): { px: number; pz: number; nx: number; nz: number } | null {
     if (this.at(x, z, y)) return null;
     let best: { px: number; pz: number; nx: number; nz: number; d: number } | null = null;
-    for (const [road, i] of this.near(x, z, this.maxHalf + 4)) {
+    const n = this.near(x, z, this.maxHalf + 4);
+    for (let k = 0; k < n; k++) {
+      const road = this.nearRoad[k];
+      const i = this.nearI[k];
       if (Math.abs(road.y[i] - y) > 1.6) continue;
       // A ramp's foot is at street level: no walls there (you drive on or off it from the street).
       if (road.y[i] < 0.35) continue;
@@ -707,7 +738,10 @@ export class Expressway {
 
   /** Is (x, z) under a raised part of the network, between `lo` and `hi` metres up (the street's walls)? */
   solidAbove(x: number, z: number, lo: number, hi: number): boolean {
-    for (const [road, i] of this.near(x, z, this.maxHalf + 2)) {
+    const n = this.near(x, z, this.maxHalf + 2);
+    for (let k = 0; k < n; k++) {
+      const road = this.nearRoad[k];
+      const i = this.nearI[k];
       const dx = x - road.x[i];
       const dz = z - road.z[i];
       const lateral = dx * road.tz[i] - dz * road.tx[i];
@@ -793,7 +827,10 @@ export class Expressway {
 
   /** Is the point inside another road than `road`, at about the same height (so no wall there)? */
   insideOther(road: Road, x: number, z: number, y: number): boolean {
-    for (const [r, i] of this.near(x, z, this.maxHalf + 2)) {
+    const n = this.near(x, z, this.maxHalf + 2);
+    for (let k = 0; k < n; k++) {
+      const r = this.nearRoad[k];
+      const i = this.nearI[k];
       if (r === road) continue;
       const dx = x - r.x[i];
       const dz = z - r.z[i];
@@ -807,7 +844,9 @@ export class Expressway {
   /** Is (x, z) within `margin` m of the side of a tunnel road (a spur or an entry)? The woods and the fringe's houses keep off them. */
   nearTunnel(x: number, z: number, margin: number): boolean {
     // (Reach from the spurs' own half-width: `maxHalf` is the widest road's, a parking area's.)
-    return this.near(x, z, margin + this.def.half).some(([road]) => road.kind === 'spur');
+    const n = this.near(x, z, margin + this.def.half);
+    for (let k = 0; k < n; k++) if (this.nearRoad[k].kind === 'spur') return true;
+    return false;
   }
 
   /** A spur's tunnel you're in (its last 14 m), or null. */

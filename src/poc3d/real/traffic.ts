@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Rect } from '../../core/coords';
 import { hash } from '../../core/hash';
-import { along, Signals, TURN, type BusLine, type Junction, type Route } from '../district/traffic';
+import { along, Signals, TURN, type BusLine, type Junction, type Route, type RoutePoint } from '../district/traffic';
 import type { Prop } from './props';
 import { addVehicle, addVehicleLow, addWheel, marksKey, PAINTS, wheelLayout, SPORT_TYPES, WORK_TYPES, type CarType } from '../models/vehicles';
 import { SignBuilder, type SignLayout } from './signs';
@@ -65,6 +65,8 @@ export interface Walker {
   /** How far they reach sideways (m): a person 0.3 (the default), a car stopped across the lane more. */
   readonly r?: number;
 }
+/** A stopped or driven car is in the traffic's way as three points along it (fractions of its half length). */
+const ALONG_CAR = [-0.6, 0, 0.6] as const;
 const BUS_DWELL = 12;
 const JEEP_LAYOUT = jeepLayout();
 const BUS_LEN = 10.5;
@@ -896,16 +898,28 @@ export class TrafficSystem {
     }
   }
 
-  /** The live vehicles in the grid squares within `rings` squares of (x, z). */
-  private *near(x: number, z: number, rings: number): Generator<Vehicle> {
+  /** `near`'s answer, reused (a generator a vehicle a frame was garbage). */
+  private readonly nearBuf: Vehicle[] = [];
+  /** What's in the traffic's way this frame (`update`): the people, then the points of the cars not in traffic, kept between frames. */
+  private readonly others: Walker[] = [];
+  private readonly otherPoints: { x: number; z: number; vx: number; vz: number; r: number }[] = [];
+  /** `nearest`'s working lists. */
+  private readonly nearestBuf: Vehicle[] = [];
+  private readonly nearestD: number[] = [];
+
+  /** The live vehicles in the grid squares within `rings` squares of (x, z): how many, in `nearBuf` (good until the next call). */
+  private near(x: number, z: number, rings: number): number {
+    const out = this.nearBuf;
+    let n = 0;
     const bx = Math.floor(x / BUCKET);
     const bz = Math.floor(z / BUCKET);
     for (let i = -rings; i <= rings; i++) {
       for (let j = -rings; j <= rings; j++) {
         const list = this.grid.get((bx + i + 2048) * 4096 + bz + j + 2048);
-        if (list) yield* list;
+        if (list) for (let e = 0; e < list.length; e++) out[n++] = list[e];
       }
     }
+    return n;
   }
 
   /** A vehicle off the road for the dead hours comes back: further along its route, out of sight of the camera. False if no such place. */
@@ -941,12 +955,22 @@ export class TrafficSystem {
    * don't slide, so that's the way it faces), the centre ahead of the axle. Round a turn the front swings
    * wide and the rear cuts in, as a car's does.
    */
-  private pose(v: Vehicle): { x: number; z: number; dx: number; dz: number; k: number } {
-    const r = along(v.route, v.s - v.axle);
+  private pose(v: Vehicle): RoutePoint {
+    const r = along(v.route, v.s - v.axle, this.onRoute);
     // (Its left is (dz, -dx); `pull` is how far over to the kerb it's let a beacon by.)
     const off = v.pull ?? 0;
-    return { x: r.x + r.dx * v.axle + r.dz * off, z: r.z + r.dz * v.axle - r.dx * off, dx: r.dx, dz: r.dz, k: r.k };
+    const p = this.posed;
+    p.x = r.x + r.dx * v.axle + r.dz * off;
+    p.z = r.z + r.dz * v.axle - r.dx * off;
+    p.dx = r.dx;
+    p.dz = r.dz;
+    p.k = r.k;
+    return p;
   }
+
+  /** Scratch for `pose` (its answer, good until the next call) and for `along` within the frame's decisions. */
+  private readonly posed: RoutePoint = { x: 0, z: 0, dx: 0, dz: 0, k: 0 };
+  private readonly onRoute: RoutePoint = { x: 0, z: 0, dx: 0, dz: 0, k: 0 };
 
   /** people: whoever might step into the road (the walker; later, pedestrians), with their velocity. */
   update(dt: number, camera: THREE.Vector3, people: readonly Walker[] = []): void {
@@ -977,21 +1001,34 @@ export class TrafficSystem {
       v.dz = p.dz;
     }
     // In the way besides people: the cars the player is driving or has left, each as three points along it.
-    const others: Walker[] = [...people];
+    // (The list and its points are kept from frame to frame: rebuilt fresh, a parked car's three points each frame were garbage.)
+    const others = this.others;
+    others.length = 0;
+    for (const p of people) others.push(p);
+    let m = 0;
     for (const o of V) {
       if (o.mode === 'traffic' || o.aloft) continue;
-      for (const f of [-0.6, 0, 0.6]) others.push({ x: o.x + o.dx * o.half * f, z: o.z + o.dz * o.half * f, vx: o.dx * o.v, vz: o.dz * o.v, r: o.width / 2 + 0.2 });
+      for (const f of ALONG_CAR) {
+        const w = (this.otherPoints[m++] ??= { x: 0, z: 0, vx: 0, vz: 0, r: 0 });
+        w.x = o.x + o.dx * o.half * f;
+        w.z = o.z + o.dz * o.half * f;
+        w.vx = o.dx * o.v;
+        w.vz = o.dz * o.v;
+        w.r = o.width / 2 + 0.2;
+        others.push(w);
+      }
     }
     this.bucket();
     // Driving decisions: every frame near the camera; beyond FAR_DECIDE (out where you can't tell), every third frame
     // in turn, each keeping its last acceleration between (the motion itself still integrates every frame).
     this.frame++;
-    V.forEach((v, i) => {
-      if (v.mode !== 'traffic' || !v.live) return;
+    for (let i = 0; i < V.length; i++) {
+      const v = V[i];
+      if (v.mode !== 'traffic' || !v.live) continue;
       const far = Math.abs(v.x - camera.x) + Math.abs(v.z - camera.z) > FAR_DECIDE;
-      if (far && (i + this.frame) % 3 !== 0) return;
+      if (far && (i + this.frame) % 3 !== 0) continue;
       v.acc = this.accel(v, far ? dt * 3 : dt, others, camera);
-    });
+    }
     this.wheels.begin();
     for (const v of V) {
       if (!v.live) {
@@ -1020,7 +1057,14 @@ export class TrafficSystem {
       // Hidden vehicles (most of them: beyond DRAW) skip three's per-frame matrix update, children and all.
       v.obj.matrixWorldAutoUpdate = v.obj.visible;
       if (!near || v.own) continue;
-      const p = v.mode === 'traffic' ? this.pose(v) : { x: v.x, z: v.z, dx: v.dx, dz: v.dz, k: v.curv };
+      const p = v.mode === 'traffic' ? this.pose(v) : this.posed;
+      if (v.mode !== 'traffic') {
+        p.x = v.x;
+        p.z = v.z;
+        p.dx = v.dx;
+        p.dz = v.dz;
+        p.k = v.curv;
+      }
       v.obj.position.set(p.x, groundY(p.x, p.z), p.z);
       v.obj.rotation.y = Math.atan2(p.dx, p.dz);
       // Nose dips under braking, lifts pulling away (eased, like a suspension settling); up and down hills, the
@@ -1063,7 +1107,7 @@ export class TrafficSystem {
       const half = (TURN.len * j.radius) / 2;
       if (ahead(j.s, v.s, L) < half) {
         // Coming out of it: speed up as the wheel unwinds (the pull the curvature here allows).
-        v0 = Math.min(v0, Math.sqrt(pull / Math.max(Math.abs(along(v.route, v.s).k), 1e-3)));
+        v0 = Math.min(v0, Math.sqrt(pull / Math.max(Math.abs(along(v.route, v.s, this.onRoute).k), 1e-3)));
         continue;
       }
       const dist = Math.max(0, ahead(v.s, j.s, L) - half - 1);
@@ -1093,7 +1137,9 @@ export class TrafficSystem {
     // The vehicle ahead in the lane, on any loop: in front, roughly the same heading, not off to the side.
     let lead: Vehicle | null = null;
     let leadGap = Infinity;
-    for (const o of this.near(v.x + v.dx * 35, v.z + v.dz * 35, 2)) {
+    const around = this.near(v.x + v.dx * 35, v.z + v.dz * 35, 2);
+    for (let e = 0; e < around; e++) {
+      const o = this.nearBuf[e];
       if (o === v) continue;
       const rx = o.x - v.x;
       const rz = o.z - v.z;
@@ -1102,7 +1148,10 @@ export class TrafficSystem {
       if (Math.abs(rx * v.dz - rz * v.dx) > (v.width + o.width) / 2 + 0.3) continue;
       if (o.dx * v.dx + o.dz * v.dz < 0.35) continue;
       const gap = fwd - v.half - o.half;
-      if (gap < leadGap) [lead, leadGap] = [o, gap];
+      if (gap < leadGap) {
+        lead = o;
+        leadGap = gap;
+      }
     }
     if (lead) obstacle(leadGap, lead.v * (lead.dx * v.dx + lead.dz * v.dz));
     // A beacon coming up behind, in this lane or beside it: ease over to the kerb and slow so it can go by (a siren
@@ -1117,17 +1166,20 @@ export class TrafficSystem {
       if (fwd > 3 && fwd < (bc.mode === 2 ? BEACON_REACH_SIREN : BEACON_REACH) && v.dx * bc.car.dx + v.dz * bc.car.dz > 0.6 && Math.abs(rx * bc.car.dz - rz * bc.car.dx) < 5) {
         a = Math.min(a, idm(d, v.v, Math.min(v0, bc.mode === 2 && fwd < 45 ? 1.5 : 5), Infinity, 0));
         const nearJunction = v.route.junctions.some((j) => ahead(v.s, j.stop, v.route.length) < 25);
-        if (!nearJunction && Math.abs(along(v.route, v.s).k) < 0.004) sidestep = BEACON_PULL;
+        if (!nearJunction && Math.abs(along(v.route, v.s, this.onRoute).k) < 0.004) sidestep = BEACON_PULL;
       }
     }
     // Signals.
     const js = v.route.junctions;
     let next = -1;
     let nextStop = Infinity;
-    js.forEach((j, i) => {
-      const dist = ahead(v.s, j.stop, L);
-      if (dist < nextStop && dist < 90) [next, nextStop] = [i, dist];
-    });
+    for (let i = 0; i < js.length; i++) {
+      const dist = ahead(v.s, js[i].stop, L);
+      if (dist < nextStop && dist < 90) {
+        next = i;
+        nextStop = dist;
+      }
+    }
     if (v.committed >= 0 && ahead(v.s, js[v.committed].s + js[v.committed].cross / 2 + 3, L) > L / 2) v.committed = -1;
     if (next >= 0 && next !== v.committed) {
       const j = js[next];
@@ -1206,26 +1258,37 @@ export class TrafficSystem {
    */
   private personAhead(v: Vehicle, people: readonly Walker[]): { k: number; speed: number } | null {
     const look = Math.min(48, (v.v * v.v) / (2 * 3) + v.half + 12);
-    let best: { k: number; speed: number } | null = null;
+    // (Kept as numbers, the lane point in scratch: an object and two pairs a metre a person were garbage.)
+    let bestK = Infinity;
+    let bestSpeed = 0;
     for (const p of people) {
       if ((p.x - v.x) ** 2 + (p.z - v.z) ** 2 > (look + 8) ** 2) continue;
-      for (let k = v.half - 0.3; k <= look && k < (best?.k ?? Infinity); k += 1) {
-        const q = along(v.route, v.s + k);
+      const reach = v.width / 2 + (p.r ?? 0.3) + 0.25;
+      for (let k = v.half - 0.3; k <= look && k < bestK; k += 1) {
+        const q = along(v.route, v.s + k, this.onRoute);
         const t = Math.min(2, Math.max(0, k - v.half) / Math.max(v.v, 1.5));
-        for (const [x, z] of [[p.x, p.z], [p.x + p.vx * t, p.z + p.vz * t]] as const) {
-          const ox = x - q.x;
-          const oz = z - q.z;
+        // Where they are, and where they'll be.
+        const ox = p.x - q.x;
+        const oz = p.z - q.z;
+        const fx = ox + p.vx * t;
+        const fz = oz + p.vz * t;
+        const now = Math.abs(ox * q.dx + oz * q.dz) < 0.6 && Math.abs(ox * q.dz - oz * q.dx) < reach;
+        const soon = Math.abs(fx * q.dx + fz * q.dz) < 0.6 && Math.abs(fx * q.dz - fz * q.dx) < reach;
+        if (now || soon) {
           // Their speed along the lane: follow someone going our way, stop for anyone else.
-          if (Math.abs(ox * q.dx + oz * q.dz) < 0.6 && Math.abs(ox * q.dz - oz * q.dx) < v.width / 2 + (p.r ?? 0.3) + 0.25) best = { k, speed: Math.max(0, p.vx * q.dx + p.vz * q.dz) };
+          bestK = k;
+          bestSpeed = Math.max(0, p.vx * q.dx + p.vz * q.dz);
         }
       }
     }
-    return best;
+    return bestK === Infinity ? null : { k: bestK, speed: bestSpeed };
   }
 
   /** Oncoming traffic on its way through junction j (moving, heading the other way, near the box). */
   private oncoming(v: Vehicle, j: Junction): boolean {
-    for (const o of this.near(j.x, j.z, 1)) {
+    const n = this.near(j.x, j.z, 1);
+    for (let e = 0; e < n; e++) {
+      const o = this.nearBuf[e];
       if (o === v || o.v < 1) continue;
       if (o.dx * v.dx + o.dz * v.dz > -0.8) continue;
       const rx = j.x - o.x;
@@ -1283,12 +1346,30 @@ export class TrafficSystem {
   /** The n vehicles nearest a point: position, velocity, acceleration, and whether it's a bus. */
   nearest(p: THREE.Vector3, n: number): { x: number; z: number; vx: number; vz: number; speed: number; acc: number; bus: boolean; type?: string }[] {
     // (Your own car has its own engine sound; a vehicle off the road for the dead hours makes none, wherever it stood.)
-    return this.vehicles
-      .filter((v) => !v.own && !v.off)
-      .map((v) => ({ v, d: (v.x - p.x) ** 2 + (v.z - p.z) ** 2 }))
-      .sort((a, b) => a.d - b.d)
-      .slice(0, n)
-      .map(({ v }) => ({ x: v.x, z: v.z, vx: v.dx * v.v, vz: v.dz * v.v, speed: v.v, acc: v.acc, bus: v.bus, type: v.carType }));
+    // (The n nearest kept in order as it goes: filtering, mapping and sorting every vehicle each frame was garbage.)
+    if (n <= 0) return [];
+    const best = this.nearestBuf;
+    const bestD = this.nearestD;
+    let m = 0;
+    for (const v of this.vehicles) {
+      if (v.own || v.off) continue;
+      const d = (v.x - p.x) ** 2 + (v.z - p.z) ** 2;
+      if (m === n && d >= bestD[n - 1]) continue;
+      let k = m < n ? m++ : n - 1;
+      while (k > 0 && bestD[k - 1] > d) {
+        best[k] = best[k - 1];
+        bestD[k] = bestD[k - 1];
+        k--;
+      }
+      best[k] = v;
+      bestD[k] = d;
+    }
+    const out = [];
+    for (let k = 0; k < m; k++) {
+      const v = best[k];
+      out.push({ x: v.x, z: v.z, vx: v.dx * v.v, vz: v.dz * v.v, speed: v.v, acc: v.acc, bus: v.bus, type: v.carType });
+    }
+    return out;
   }
 
   /** Whether a walker (or a driven car's piece) at (x, z) of radius r touches a vehicle (other than `except`). */

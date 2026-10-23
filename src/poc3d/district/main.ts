@@ -52,6 +52,7 @@ import { hasRooftopLetters } from '../real/signs';
 import { cityDepthMaterial, cityMaterial, cityUniforms, windowHours } from '../real/city';
 import { setSceneCity, windowSceneIndex } from '../real/windowScenes';
 import { Lightmap } from '../real/lightmap';
+import { releaseTreeAfterUpload } from '../real/rawGeometry';
 import { buildMegaSign } from '../real/megaSign';
 import { buildCinema70 } from '../real/cinema70';
 import { buildInn64, buildLiquor64, buildPachinko70 } from '../real/eraLandmarks';
@@ -571,6 +572,8 @@ async function run(): Promise<void> {
   }
   for (const t of trainLines.values()) {
     scene.add(t.group);
+    // (Its viaducts and cars are static geometry, only moved: the CPU's copies go once uploaded. Most of the page's memory was trains.)
+    releaseTreeAfterUpload(t.group);
     // (The viaduct stands still; the trains in the same group move.)
     t.group.children[0].updateMatrixWorld(true);
     t.group.children[0].matrixAutoUpdate = false;
@@ -584,6 +587,7 @@ async function run(): Promise<void> {
   await breathe();
   subway.group.visible = false;
   scene.add(subway.group);
+  releaseTreeAfterUpload(subway.group);
   const subwayViews: { view: SubwayStationView; x: number; z: number }[] = [];
   // Landmarks with a part below ground (the terminal's underground mall): their plaza stays shown (you see
   // it up the stairs), the part below only below ground or nearby.
@@ -2582,6 +2586,7 @@ async function run(): Promise<void> {
   const exTraffic = new ExpresswayTraffic(expressway, city, undefined, { signs, taxiAds, layout: atlas });
   scene.add(exView.group, exTraffic.group);
   freeze(exView.group);
+  releaseTreeAfterUpload(exView.group);
   const sodium = exView.group.getObjectByName('sodium') as THREE.Mesh | undefined;
   // The park between the river and the Yūnagi headland, which a new game looks out over (real/park.ts).
   // (By name: the Kurokami tunnel has a hill of its own now, at the Wangan's west end.)
@@ -2608,6 +2613,7 @@ async function run(): Promise<void> {
   if (park) {
     scene.add(park);
     freeze(park);
+    releaseTreeAfterUpload(park);
     // Its trees' trunks and lamp posts are solid; its headland is a hill you can't walk through (the lawn's ground is the
     // terrain's, not the mound's), as its ponds are water.
     district.extraColliders.push(...(park.userData.colliders as Rect[]));

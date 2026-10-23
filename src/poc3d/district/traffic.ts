@@ -588,8 +588,20 @@ function buildPath(
   return { s: Float64Array.from(S), x: Float64Array.from(X), z: Float64Array.from(Z), hx: Float64Array.from(HX), hz: Float64Array.from(HZ), k: Float64Array.from(K) };
 }
 
-/** Position, heading and curvature (1/m, positive turning right) at distance s along a route. */
-export function along(route: Route, s: number): { x: number; z: number; dx: number; dz: number; k: number } {
+/** Where `along` puts its answer. */
+export interface RoutePoint {
+  x: number;
+  z: number;
+  dx: number;
+  dz: number;
+  k: number;
+}
+
+/**
+ * Position, heading and curvature (1/m, positive turning right) at distance s along a route. Into `out` when given (the
+ * traffic asks it several times a vehicle a frame, and a fresh object each time was garbage).
+ */
+export function along(route: Route, s: number, out?: RoutePoint): RoutePoint {
   const L = route.length;
   const P = route.path;
   s = ((s % L) + L) % L;
@@ -605,6 +617,15 @@ export function along(route: Route, s: number): { x: number; z: number; dx: numb
   const hx = P.hx[lo] + (P.hx[hi] - P.hx[lo]) * f;
   const hz = P.hz[lo] + (P.hz[hi] - P.hz[lo]) * f;
   const n = Math.hypot(hx, hz) || 1;
-  return { x: P.x[lo] + (P.x[hi] - P.x[lo]) * f, z: P.z[lo] + (P.z[hi] - P.z[lo]) * f, dx: hx / n, dz: hz / n, k: P.k[lo] + (P.k[hi] - P.k[lo]) * f };
+  const x = P.x[lo] + (P.x[hi] - P.x[lo]) * f;
+  const z = P.z[lo] + (P.z[hi] - P.z[lo]) * f;
+  const k = P.k[lo] + (P.k[hi] - P.k[lo]) * f;
+  if (!out) return { x, z, dx: hx / n, dz: hz / n, k };
+  out.x = x;
+  out.z = z;
+  out.dx = hx / n;
+  out.dz = hz / n;
+  out.k = k;
+  return out;
 }
 
