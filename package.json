@@ -46,13 +46,13 @@
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
     "@types/three": "^0.186.0",
-    "electron": "^44.7.0",
+    "electron": "^44.9.1",
     "electron-builder": "^26.15.3",
     "ffmpeg-static": "^5.3.0",
-    "playwright-core": "^1.64.0",
+    "playwright-core": "^1.64.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
-    "vitest": "^5.0.4"
+    "vitest": "^5.0.5"
   },
   "allowScripts": {
     "ffmpeg-static@5.3.0": true
