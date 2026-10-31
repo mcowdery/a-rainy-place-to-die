@@ -23,6 +23,13 @@ Things decided or noticed that aren't done yet. Newest first within a section; s
 - [ ] **Git LFS**, if the pack keeps growing: every regenerated `.glb`, ad or track adds a full copy (the pack is about 510 MB, nearly all assets).
 - [x] **The nude Kana brief's references**: the brief is in `adult/assets/ads/briefs/`; `generated-art.md` still names it (a file name only), left.
 
+## Dev pod and tooling
+
+- [ ] **Phone test of the pod alerts.** `guard` now sends its spend warnings and pod stops through `agent-notify alert` (agent-concurrency-kit, pushed 2026-10-31); the sandbox test used a recorder, so nothing has reached the phone yet. Force one with `POD_BURN_WARN=0.005 node scripts/pod.mjs guard` and check the ntfy push arrives (mute and quiet hours are respected by design).
+- [ ] **Watch the `PodGuard` scheduled task** (Windows, every 15 min, runs `pod.mjs guard`). Created 2026-10-31; its first runs returned 0. Check its history a day later.
+- [ ] **A real pod start has not been run through the new guards** (watchdog first in `podSetup.sh`, delete or stop after a failed boot, `enforceLimits`). Tested only with a stubbed API. Next time the pod is started, watch `~/.pod-sync/guard.log` and `/var/log/podIdleStop.log`.
+- [ ] **Spend beyond the pod**: the Studio Usage page still shows serverless only, not pods or volumes. Suggested in the cost review, not built.
+
 ## Game
 
 - [ ] **A menu screen and a story**: the game has neither yet (it blocks the credits screen above).
