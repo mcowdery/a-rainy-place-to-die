@@ -180,6 +180,18 @@ async function startPod() {
 function guardLog(msg) {
   try { mkdirSync(SYNC_DIR, { recursive: true }); appendFileSync(join(SYNC_DIR, 'guard.log'), `${new Date().toISOString()} ${msg}\n`); } catch {}
 }
+/**
+ * Tells the user through agent-concurrency-kit's `agent-notify alert` (its channels: phone push, dashboard, toast; mute and
+ * quiet hours apply; the same key is sent once per `every`). POD_NOTIFY points at its notify.mjs; by default the kit
+ * is looked for beside this repo's parent folder. Best effort: a missing kit never stops a guard.
+ */
+function alertUser(key, title, body, every = '6h') {
+  try {
+    const kit = process.env.POD_NOTIFY ?? join(dirname(mainRoot()), 'agent-concurrency-kit', 'notify.mjs');
+    if (!existsSync(kit)) return;
+    spawnSync(process.execPath, [kit, 'alert', '--title', title, '--body', body, '--key', key, '--every', every], { stdio: 'ignore', timeout: 20_000 });
+  } catch { /* an alert is a bonus */ }
+}
 /** Stops (or deletes) the running pod after a failed start, saying why. Never throws. */
 async function giveUp(action, reason) {
   try {
@@ -224,6 +236,7 @@ async function enforceLimits(p) {
   await api(`pods/${p.id}/stop`, 'POST');
   guardLog(`stop ${p.id} (${p.costPerHr}/hr, about ${money((up / 3600000) * p.costPerHr)} this run): ${why}`);
   console.error(`Stopped ${p.name} (${p.id}): ${why}.`);
+  alertUser(`pod-stopped-${p.id}`, 'GPU pod stopped', `${p.name} was stopped from here: ${why}.`, '1h');
   return why;
 }
 // Each `run` writes a small file here while it works, so `status --json` (and the dashboard) can say what is on the pod.
@@ -617,7 +630,7 @@ if (cmd === 'status' && rest.includes('--json')) {
 } else if (cmd === 'guard') { // for a scheduled task: stops a pod stuck starting or past the cap, else says nothing is wrong
   const p = await findPod().catch(() => null);
   const why = p && (await enforceLimits(p));
-  try { const s = await spendReport(); for (const w of s.warnings) { console.log(`WARNING: ${w}`); guardLog(`spend warning: ${w}`); } } catch { /* spend is a bonus here */ }
+  try { const s = await spendReport(); for (const w of s.warnings) { console.log(`WARNING: ${w}`); guardLog(`spend warning: ${w}`); alertUser(/spending/.test(w) ? 'spend-burn' : /days/.test(w) ? 'spend-days' : 'spend-balance', 'RunPod spend', w); } } catch { /* spend is a bonus here */ }
   if (!why) console.log(p?.desiredStatus === 'RUNNING' ? `${p.name} is up (${span(upFor(p) ?? 0)}), within its limits.` : 'No pod is up.');
 } else if (cmd === 'status') {
   let p = await findPod();
