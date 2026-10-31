@@ -470,6 +470,51 @@ async function stockCommand(args) {
 }
 
 const money = (n) => '$' + (Math.round(n * 100) / 100).toFixed(2);
+
+// ---- spend: the account's balance, what it is burning now, and what the last week cost ------------------------------------
+const BURN_WARN = Number(process.env.POD_BURN_WARN ?? 2);        // $/h the account is spending right now
+const BALANCE_WARN = Number(process.env.POD_BALANCE_WARN ?? 20); // $ left
+const DAYS_WARN = Number(process.env.POD_DAYS_WARN ?? 5);        // days of balance left at the last week's rate
+/**
+ * RunPod's own numbers: balance and current spend per hour (GraphQL `myself`), and the last 7 days of billing for
+ * serverless endpoints, pods and network volumes (REST). Returns { balance, perHour, week: {endpoints, pods, volumes, total},
+ * perDay, daysLeft, warnings: [] }; a part RunPod doesn't answer is left out and named in `missing`.
+ */
+async function spendReport() {
+  const key = apiKey(); const missing = [];
+  let balance = null, perHour = null;
+  try {
+    const r = await fetch(`https://api.runpod.io/graphql?api_key=${key}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: 'query { myself { clientBalance currentSpendPerHr } }' }) });
+    const m = (await r.json())?.data?.myself; balance = m?.clientBalance ?? null; perHour = m?.currentSpendPerHr ?? null;
+  } catch { /* named below */ }
+  if (balance === null) missing.push('balance');
+  const end = new Date(), start = new Date(end.getTime() - 7 * 86400_000);
+  const iso = (d) => d.toISOString().replace(/\.\d+Z$/, 'Z');
+  const sum = async (kind, group) => {
+    try {
+      const rows = await api(`billing/${kind}?bucketSize=day&${group ? `grouping=${group}&` : ''}startTime=${iso(start)}&endTime=${iso(end)}`);
+      return Array.isArray(rows) ? rows.reduce((t, x) => t + (x.amount || 0), 0) : (missing.push(kind), 0);
+    } catch { missing.push(kind); return 0; }
+  };
+  const [endpoints, pods, volumes] = await Promise.all([sum('endpoints', 'endpointId'), sum('pods', 'podId'), sum('networkvolumes')]);
+  const total = endpoints + pods + volumes, perDay = total / 7;
+  const daysLeft = balance !== null && perDay > 0 ? balance / perDay : null;
+  const warnings = [];
+  if (perHour !== null && perHour >= BURN_WARN) warnings.push(`spending ${money(perHour)}/h right now (warns at ${money(BURN_WARN)}/h): a pod or endpoint is running`);
+  if (balance !== null && balance < BALANCE_WARN) warnings.push(`balance ${money(balance)} is under ${money(BALANCE_WARN)}`);
+  if (daysLeft !== null && daysLeft < DAYS_WARN) warnings.push(`about ${daysLeft.toFixed(1)} days of balance left at ${money(perDay)}/day`);
+  return { balance, perHour, week: { endpoints, pods, volumes, total }, perDay, daysLeft, warnings, missing };
+}
+function spendLines(s) {
+  const out = [
+    `Balance        ${s.balance === null ? '?' : money(s.balance)}${s.daysLeft !== null ? `  (about ${s.daysLeft.toFixed(1)} days at the last week's rate)` : ''}`,
+    `Spending now   ${s.perHour === null ? '?' : money(s.perHour) + '/h'}`,
+    `Last 7 days    ${money(s.week.total)}  = serverless ${money(s.week.endpoints)} + pods ${money(s.week.pods)} + volumes ${money(s.week.volumes)}  (${money(s.perDay)}/day)`,
+  ];
+  if (s.missing.length) out.push(`Not answered by RunPod: ${s.missing.join(', ')}`);
+  for (const w of s.warnings) out.push(`WARNING: ${w}`);
+  return out;
+}
 const span = (ms) => { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
 /**
  * What `status --json` prints, the shape agent-notify's Resources tab reads: { state, title, fields: [{label, value}],
@@ -488,6 +533,11 @@ async function dashboardStatus() {
   try { p = await findPod(); } catch (e) { if (!/No pod named/.test(e.message)) return { state: 'error', title, fields: [], actions: ['start'], note: e.message.slice(0, 200) }; }
   const fields = [];
   if (p?.machine?.gpuTypeId) fields.push({ label: 'GPU', value: p.machine.gpuTypeId.replace('NVIDIA ', '') });
+  try { // the account's money, so the dashboard shows a leak while it happens
+    const s = await spendReport();
+    if (s.balance !== null) fields.push({ label: 'Account', value: `${money(s.balance)} left${s.daysLeft !== null ? `, ~${s.daysLeft.toFixed(0)} days` : ''}; now ${s.perHour === null ? '?' : money(s.perHour) + '/h'}; week ${money(s.week.total)}` });
+    if (s.warnings.length) fields.push({ label: 'Spend warning', value: s.warnings[0] });
+  } catch { /* the dashboard still works without it */ }
   fields.push({ label: 'Idle stop', value: idleText(idle) });
   fields.push({ label: 'Agents start it', value: auto ? 'yes: a heavy run starts a stopped pod' : 'no: only you start it' });
   const idleActions = ['idle-45', 'idle-120', 'idle-360'];
@@ -560,9 +610,14 @@ if (cmd === 'status' && rest.includes('--json')) {
   await idleCommand(rest);
 } else if (cmd === 'stock') {
   await stockCommand(rest);
+} else if (cmd === 'spend') { // exit code 2 when a warning applies, for scripts and the scheduled task
+  const s = await spendReport();
+  console.log(spendLines(s).join('\n'));
+  return s.warnings.length ? 2 : 0;
 } else if (cmd === 'guard') { // for a scheduled task: stops a pod stuck starting or past the cap, else says nothing is wrong
   const p = await findPod().catch(() => null);
   const why = p && (await enforceLimits(p));
+  try { const s = await spendReport(); for (const w of s.warnings) { console.log(`WARNING: ${w}`); guardLog(`spend warning: ${w}`); } } catch { /* spend is a bonus here */ }
   if (!why) console.log(p?.desiredStatus === 'RUNNING' ? `${p.name} is up (${span(upFor(p) ?? 0)}), within its limits.` : 'No pod is up.');
 } else if (cmd === 'status') {
   let p = await findPod();
@@ -592,7 +647,7 @@ if (cmd === 'status' && rest.includes('--json')) {
   const r = spawnSync('scp', ['-r', '-i', KEY, '-o', 'StrictHostKeyChecking=accept-new', '-P', String(p.portMappings['22']), `root@${p.publicIp}:${rest[0]}`, dest], { stdio: 'inherit' });
   return r.status ?? 1;
 } else {
-  console.log('usage: node scripts/pod.mjs status | running | start | run [flags] -- <command...> | sync | ssh [cmd] | pull <remote> [dir] | stop | guard | idle [minutes|2h|never|default] | stock [watch] | autostart [on|off] | play');
+  console.log('usage: node scripts/pod.mjs status | running | start | run [flags] -- <command...> | sync | ssh [cmd] | pull <remote> [dir] | stop | guard | spend | idle [minutes|2h|never|default] | stock [watch] | autostart [on|off] | play');
   return cmd ? 1 : 0;
 }
 return 0;
